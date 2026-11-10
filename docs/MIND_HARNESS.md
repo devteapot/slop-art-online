@@ -1,6 +1,6 @@
 # Mind harness (2026-11-09)
 
-How the mind service chooses models, schedules sleep, thinks for animals, keeps fast judgments and bounds recall. Five items, each behind its own switch where it changes behavior, each with its own evidence. Branch `harness-1`. The evidence base is [MODEL_COST.md](MODEL_COST.md) Parts 1 and 2.
+How the mind service chooses models, schedules sleep, thinks for animals, keeps fast judgments, bounds recall and decides when to rethink. Six items, each behind its own switch where it changes behavior, each with its own evidence. Branch `harness-1` (items 1–5) and `rethink-1` (item 6). The evidence base is [MODEL_COST.md](MODEL_COST.md) Parts 1 and 2.
 
 | Item | What changed | Switch | Default |
 | --- | --- | --- | --- |
@@ -9,6 +9,7 @@ How the mind service chooses models, schedules sleep, thinks for animals, keeps 
 | 3. Cheaper animal minds | pick among built options; one mind per pack; think on salient change | `LIVING_ANIMAL_MINDS` | off |
 | 4. Jev judgments | `judged` graph condition; background refresh through TypeSafe | `LIVING_JEV` | off |
 | 5. Recall budget | token budget on recalled lines; no repeated `rel` property | `LIVING_RECALL_TOKENS` | `decide=800` |
+| 6. Rethink gate | a fast judge (Jev, or a cheap LLM) in front of non-urgent deliberations decides when the slow mind thinks | `LIVING_RETHINK` (`jev`, `llm`) | off |
 
 ## 1. Per-purpose model mixes
 
@@ -216,6 +217,178 @@ Real model, GLM Flash (the project's profile, `deliberate: high`). `today` again
 - **Result:** full recall acceptable 10/10, budgeted 9/10. The budgeted reply was better 5 times, worse 3 and tied 2, with equal mean scores (3.6). The one failure invented berries in a storage. With n = 10 no loss shows; the default is the more conservative 800.
 
 **Spark trials should test:** `decide=600` against `decide=800` on judged decision quality, and a budget for talk.
+
+## 6. Rethink gate
+
+Decided 2026-11-09 with the user: Jev (about 150 ms) is not real-time, so it never drives moment-to-moment choices; the behaviour graph stays the real-time layer. Jev's place is between the graph and the slow mind, deciding **when the slow mind should think**. Branch `rethink-1`.
+
+**Why.** Every trigger the authority raises becomes a full deliberation (think, then compile): a plan that finished, a plan with no applicable branch, failing actions, a quiet moment, dawn, a feeling, a call. The trials ([TRIALS.md](TRIALS.md) on `trials-1`) found the waste there: subjects re-deliberating every 25–60 s to re-ask residents who never answer, and plans resting on remembered things that are gone. In the replay below, the theft subjects deliberated back to back every 6–8 s.
+
+**Built** ([rethink.rs](../living/mind/src/mind/rethink.rs), [rethink.json](../living/configs/rethink.json)). The switch is `LIVING_RETHINK=jev` or `llm` (alias `glm`); it is off by default.
+
+- **Where:** in `schedule`, after the level of detail lets a request go and before `deliberate`. Only `kinds` (people) are gated.
+- **Never gated:**
+  - reasons the level of detail grades `Prompt` or `Now`: being attacked or threatened, a fight report, starving, badly hurt, other bodily alarms (a need crossing danger), calls of one's own kind, offers, family and join requests;
+  - a deliberation lane other than `routine`: anything a human player did, and reasons with combat words;
+  - the config's `urgent` substrings (deaths);
+  - the first thought after the service starts.
+- **Held, not dropped:** a held request stays pending in the authority, which merges every later reason into it (up to its 900-byte reason cap) and refreshes its scene. Each merge, and each new percept, asks the gate again. The deliberation that finally runs sees everything that gathered. A held character is `deferring`, as under the level of detail, so it still takes conversation turns.
+- **Re-raised triggers** with the same reasons and nothing perceived since the last judgment are held without asking. Example: "I finished my plan." is raised every 8 s while a sequence plan keeps finishing.
+- **Release:** a yes; an urgent merge; `max_hold_s` (600 s; the 2 s tick lets the request through); or a failing or slow judge (`fallback` past `timeout_ms`), which proceeds as without the gate.
+- **The state** is built in code, because Jev is weak at counting, times and numbers ([model jaggedness](https://docs.typesafe.ai/model-jaggedness.md)). It holds only the character's own plans and perception:
+  - the plan and its outline, the pending reasons and the needs as words (`hungry`, `badly hurt`);
+  - since the last thought: what it perceived, what succeeded and what failed, folded with counts;
+  - lines to people who did not answer in the last 10 minutes, with counts;
+  - the plans of its last three thoughts, with their ages.
+- **Percepts:** the authority deletes consolidated experiences, so the gate keeps its own ring per character (128 percepts, 30 minutes). It is fed by the experience insert callback that already exists, and only when the gate is on.
+- **Jev arm:** one `POST /v1/systemone` (`jev-1.14.0`) per character with three nouls over one state:
+  - `plan_broken`: has the plan stopped working?
+  - `unhandled`: has something happened that it does not handle?
+  - `would_repeat`: would thinking again end in the same plan as the recent thoughts?
+  - Combined in code: p = max(`plan_broken`, `unhandled`) × (1 − `would_repeat`), deliberating at p ≥ `jev.proceed_above` (0.3).
+- **The cheap-LLM arm:** the same state and one yes/no question with a probability on `glm-flash@low` (purpose `rethink`), deliberating at p ≥ `llm.proceed_above` (0.7).
+- **Configuration:** thresholds, questions, the combination, timeouts, `max_hold_s`, the urgent list and the state's limits are configuration, not code.
+- **Batching:** TypeSafe answers several questions against **one** `state`. Several characters in one state would mix private minds in one prompt, which this project rules out ([JEV_BEHAVIOR_RESEARCH.md](JEV_BEHAVIOR_RESEARCH.md)), and would grow the state, which Jev handles worse. So each character gets its own request, its three questions share one state, and requests run concurrently. There is no multi-state batch endpoint.
+- **Records:**
+  - every decision: a journal entry with purpose `rethink-gate` (verdict, p, the answers, threshold, reasons, how long it was held, the state, any error);
+  - the judge's exchange: purpose `rethink`, with `cost_usd` for Jev;
+  - a `rethink gate (<arm>): Stats {…}` log line every minute.
+- **Replay:** `living-mind rethink-replay --arm jev|llm --out FILE DIR...` rebuilds the same state at every deliberation of trial evidence directories (from `thoughts`, `experiences`, `graphs`, `samples` and `mind_rows`) and asks the same gate. [rethink_report.py](../living/tools/rethink_report.py) scores replays against blind labels, and live trial batches by rows and journals.
+- **SpacetimeDB:** no schema, reducer, view or subscription change. The gate reads rows the service already subscribes to (`brain`, `persona`, `my_deliberations`) from the client cache and uses the existing `experience` insert callback ([subscriptions](https://spacetimedb.com/docs/clients/subscriptions/), docs version 2.0.0, read 2026-11-09: row callbacks and local-cache reads cost no server work). What changes on the authority is that a held `deliberation` row lives longer and absorbs merges at the trigger rate, as under the level of detail: one row per character, rebuilt per merge (about 0.15 ms, LIVING_CORE "Minds at scale").
+
+**Replay** (`living-mind rethink-replay`, [rethink_report.py](../living/tools/rethink_report.py) `replay`). The gate was asked at every real deliberation of 16 Spark trial runs (b1: theft, hungry, hungry-village and teacher × 3; w1: life-default r1 and r3; w2: life-valley and life-pressure r1). Those are 714 trigger points. 64 were urgent or a first thought and are never judged, which leaves 650.
+
+| | Jev (`jev-1.14.0`) | GLM Flash `low` |
+| --- | ---: | ---: |
+| Latency p50 / p95 | 135 / 171 ms | 1,436 / 3,956 ms |
+| Input tokens per question | 1,420 | about 910 (+43 output) |
+| Cost per question | $0.00006 | $0.00016 |
+| All 650 questions | $0.039 | about $0.10 |
+| Held at the replay's threshold of 0.5 | 450 (69%) | 158 (24%) |
+
+The two arms agree on 48% of triggers. The disagreements run one way: 313 triggers that Jev holds and GLM lets through, against 22 the other way.
+
+*Blind judging.* 142 points were sampled across the four agreement cells (50, 35, 35 and 22) and weighted back to the 650. Two fresh Claude subagents judged them, 71 each, from the state and what the deliberation actually produced: its thought, new plan, speech and acts. They never saw a gate verdict. Each point was labelled `useful`, `marginal` or `wasted`, with a waste kind and whether skipping it would have hurt the character (the reasons waiting for a later thought).
+
+- **Of the 650 non-urgent deliberations:** 37% useful, 20% marginal and **42% wasted**. **16%** would have hurt to skip.
+- **The waste is mostly restated plans:** of the 93 wasted or marginal points (unweighted), 57 were restated plans, 15 phantom targets, 12 asking loops and 9 other.
+- **In the theft runs** the subjects re-deliberated back to back every 6–8 s with nothing new between thoughts.
+
+*Operating points.* Each row lists the share of triggers held; the share of wasted deliberations caught; the share of harmful-to-skip and of useful deliberations held; and the ratio of wasted caught to harmful held. A random gate holding h% catches h% of each kind, a ratio of 2.6.
+
+| Rule | Held | Wasted caught | Harmful held | Useful held | Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Jev, unless × 1.0, p ≥ 0.5 (as replayed) | 69% | 87% | 59% | 52% | 3.9 |
+| **Jev, unless × 1.0, p ≥ 0.3 (configured)** | **46%** | **62%** | **19%** | **30%** | **8.4** |
+| Jev, unless × 0.5, p ≥ 0.4 | 34% | 51% | 19% | 14% | 7.0 |
+| Jev, no `would_repeat`, p ≥ 0.6 | 37% | 56% | 25% | 17% | 5.8 |
+| GLM, p ≥ 0.5 (as replayed) | 24% | 32% | 13% | 10% | 6.3 |
+| **GLM, p ≥ 0.7 (configured)** | **41%** | **54%** | **30%** | **22%** | **4.7** |
+| GLM, p ≥ 0.8 | 48% | 58% | 36% | 31% | 4.3 |
+
+- **Both judges discriminate, Jev somewhat better.** At about the same hold rate (46% against 41%), Jev at 0.3 catches more waste (62% against 54%) and holds fewer harmful skips (19% against 30%).
+- **Asking loops:** Jev at 0.5 held 98% of them, GLM 44%.
+- **What the `would_repeat` question does.** It accounts for most of Jev's holds. It is also where Jev's harmful holds come from: plans plainly broken ("You keep turning back and forth", an empty pack at nightfall) were held because the last thoughts looked alike.
+- **The thresholds were chosen on this sample.** 0.3 for Jev and 0.7 for GLM give the two arms similar hold rates. The live run below is the out-of-sample check.
+- **Evidence:** `.local/living/rethink/` on the dev-box worktree: `replay-jev.jsonl`, `replay-llm.jsonl`, `judge-items.jsonl`, `judge-key.jsonl`, `labels1.jsonl` and `labels2.jsonl`.
+
+**Live run** ([rethink_report.py](../living/tools/rethink_report.py) `live`, batch `rlive`, 2026-11-09 22:58–23:48).
+
+- **Setup:** the trials' `life` trial (the shipped island, one mind-backed newcomer, instinct-only residents) in three arms (gate off, Jev at 0.3, GLM at 0.7), 3 replicates of 45 minutes each, all 9 at once.
+- **Where:** on the dev-box, in a local checkout of main plus `trials-1` plus this change (not pushed), with the variants `rethink-jev` and `rethink-glm`, private containers `rethink-trials-stdb` (2.14.1) and `rethink-trials-neo4j`.
+- **Models:** people on `glm-flash` as configured; paid calls.
+- **Units:** a game hour is 30 real seconds. Rates pool every run's own duration, so the runs cut short by a death count for the time they lived.
+
+| | Off | GLM gate | Jev gate |
+| --- | ---: | ---: | ---: |
+| Real hours (game hours) | 1.94 (232) | 2.25 (270) | 1.64 (196) |
+| Deliberations per game hour | 0.43 | 0.27 (−37%) | 0.21 (−50%) |
+| Think + compile tokens per game hour | 6,798 | 4,324 (−36%) | 3,495 (−49%) |
+| All mind tokens per game hour (with consolidation, without the gate) | 7,623 | 5,024 (−34%) | 4,167 (−45%) |
+| Gate calls per real hour (and tokens per game hour) | – | 49 (433) | 47 (570) |
+| Gate verdicts | – | 71 rethink, 40 hold, 1 fallback | 39 rethink, 38 hold, 2 urgent |
+| Mind $ per real hour | 0.137 | 0.096 | 0.080 |
+| Gate $ per real hour | – | 0.009 | 0.003 |
+| **Total $ per real hour** | **0.137** | **0.105 (−24%)** | **0.082 (−40%)** |
+| Survived 45 min | 2/3 | 3/3 | 1/3 |
+| Food gathered per game hour | 0.25 | 0.15 | 0.15 |
+| Techniques learned (per run) | 0, 4, 0 | 0, 0, 4 | 0, 0, 0 |
+| Structures built (per run) | 0, 2, 0 | 0, 0, 2 | 0, 0, 0 |
+| Asking loops (3+ unanswered lines to one person in 10 min) | 0, 1, 0 | 0, 0, 1 | 1, 1, 0 |
+
+- **The saving holds out of sample.** Jev held 49% of what it judged live (38 of 77), against 46% in the replay. GLM held 36% (40 of 111), against 41%. Re-raised triggers with nothing new were held without a call, beyond these counts.
+- **Jev's cost:** about $0.003 per real hour, under 6% of what the gate saves.
+- **The deaths are not the gate's.** All three were a wolf on the town road (Rook twice, Frost once) attacking from 5–10 tiles and killing in about 10 s. In the two Jev runs the attack went through as `urgent` within a second. The last holds before it were unrelated triggers ("no branch applies", "you feel something") 80–160 s earlier. The same wolf killed a b1 subject with no gate. A deliberation takes seconds and could not have changed those fights.
+- **Quality is not established.** Both gated arms gathered less food per game hour (0.15 against 0.25), and the Jev runs learned and built nothing (the off and GLM arms each had one run that learned 4 techniques and built 2 structures). With 3 runs per arm, 2 of them shortened by deaths, this is a possible cost, not an effect size. Asking loops were rare in these life runs in every arm; the replay, where they were common, is the better evidence for them.
+- **Evidence:** dev-box `~/dev/slop-rethink/.local/living/rethink/rlive/`, which holds each instance's journal (with every `rethink-gate` decision), `mind.log`, samples, experiences, `summary.json` and `rethink-report.json`. *(Removed by mistake on 2026-11-10 when the coordinator cleaned up the dev-box worktree; the raw journals are gone and the figures in this document are the remaining record.)*
+
+### Answer: does Jev's speed and typedness matter?
+
+- **Speed does not matter here.** The gate is off the real-time path: a held trigger waits by design, and GLM's 1.4 s (4 s at p95) is still small next to a deliberation.
+- **Typed, calibrated answers matter somewhat.** In the blind replay, Jev separated waste from harmful skips better at the same hold rate, 8.4 against 4.7 wasted caught per harmful held. A random gate scores 2.6.
+- **Cost:** Jev's question costs a third of GLM's. Its three nouls cost 1.5× GLM's input tokens and nothing for output.
+- **Any cheap classifier gets most of the saving:** GLM saved 24% live and Jev 40%. The difference is mostly where each was set, Jev holding more, and part of Jev's extra holds are the harmful ones.
+
+### Recommendation: iterate, not adopt yet
+
+The gate does what it was built for. It cuts deliberations by 37–50% and cost by 24–40%, it costs little (Jev under 6% of what it saves), urgent paths are untouched, and every skip is journaled. Adopting it as a default needs evidence that the held thoughts are not costing the minds. Next steps:
+
+1. **Narrow `would_repeat`.** The replay's harmful holds came from it overriding a plainly broken plan ("turning back and forth", an empty pack at nightfall). Try `unless` only when `plan_broken` is low, or a weight of 0.5 (34% held, 51% of waste caught, 19% of harmful skips held, 14% of useful).
+2. **Test quality with power.** Run the Spark trials with more replicates, longer lives and a preset without the road wolves, so food, learning and building can be compared. Add the gate to the hungry, theft and teacher trials, where the asking loops were.
+3. **Keep Jev over GLM** for this gate: better separation at a third of the price per question. Revisit if the TypeSafe dependency matters more than about $0.003 per person-hour.
+4. **The cost at scale is small.** 2,000 people at the live rate (about 47 Jev calls per person-hour at about 1,450 tokens) come to about $5.7 per hour of Jev. On TypeSafe's rate limits, that is 26 requests per second.
+
+### Verification (rethink-1)
+
+Dev-box worktree `~/dev/slop-rethink`, private SpacetimeDB 2.14.1 container `rethink-stdb` on `127.0.0.1:3397`, private `CARGO_TARGET_DIR`.
+
+| Surface | Run | Result |
+| --- | --- | --- |
+| `set -o pipefail; just living-check` | before the commit | exit 0 |
+| Mind unit tests | `cargo test -p living-mind` | rethink: state counts, combination, urgent bypass, ages as words, unchanged re-triggers |
+| verify-minds | `minds-full-232622` (all 17 cases, the new `rethink` and `rethink-llm` included) | all pass; `consolidation` stays the known XFAIL |
+| verify-llm | `llm-rethink-230523` (all 16 cases) | all pass |
+| After merging main (`townlife-2`, `trials-1`; conflicts in `mind.rs` only, additive) | `just living-check`; mind tests; `minds-merged-010653`: rethink, rethink-llm, wake, conversation, lod, roundtrip, jev | exit 0; 69 passed; all pass |
+| Final, after merging main `fe6ec66` (`feedback-1`, `iter-6`, `lives-1`, `soak-1`; no conflicts; the gate is unchanged, since feedback-1's gone-thing note is added inside `deliberate`, after the gate, which still sees the original failure) | `just living-check`; mind tests; `minds-final-091241` (all 17 cases); `llm-final-094629` (all 16) | exit 0; 71 passed; all pass, `consolidation` the known XFAIL; all pass |
+
+- **Failed attempts first:** the fake's Jev endpoint crashed on the gate's needs-in-words body, which exercised the fallback path; the case asserted before the mind had started; `max_hold_s` 25 released the request mid-case; a poll raced the fake mind; and the container's mount needed the `z` SELinux label on Fedora. All were fixed in the harness. The "unchanged" rule moved to a unit test, because whether a re-raised trigger finds a new percept depends on the world's timing.
+- **`maintain-verification-skill` on the minds surface, scoped to this change:**
+  - new `features/rethink.md`, the feature index row, the case list and description in `SKILL.md`;
+  - the fake server (`verify-llm`): a `rethink` purpose on the chat and Jev endpoints, `contains` rule matching, and per-question nouls; its reference was updated to match;
+  - source checked for the features the diff touches (deliberation scheduling, conversation turns while held, level of detail, the Jev endpoint); the live pass is the full suite above;
+  - no separate per-feature source readers.
+- **Not covered:** a paid `verify-minds` or `verify-llm` tier. The paid evidence is the replay and the live trials above.
+- **Measurement checkout:** the trials runner on this Fedora host needed two local changes: the `z` label on its `/wasm` mount, and the full Neo4j image name, since podman refuses short names. They stay in the measurement checkout; `trials-1` should take them.
+
+### Spend (rethink-1)
+
+| What | Provider | Calls | $ |
+| --- | --- | ---: | ---: |
+| Replay, Jev arm (650 questions) | TypeSafe | 650 | 0.039 |
+| Replay, GLM arm (650 questions; 222 journaled, priced from those) | Mistral | 650 | about 0.10 |
+| Live, 9 runs of up to 45 min (minds) | Mistral | – | 0.61 |
+| Live, gate calls | TypeSafe / Mistral | 77 / 112 | 0.005 / 0.020 |
+| **Total** | | | **about $0.78** |
+
+Claude side, not billed to a provider here: two blind judges (about 120k tokens each).
+
+### Files (rethink-1)
+
+- **New:**
+  - `living/mind/src/mind/rethink.rs`: the gate, the state builder, both arms, the replay;
+  - `living/configs/rethink.json`;
+  - `living/tools/rethink_report.py`;
+  - `.agents/skills/verify-minds/features/rethink.md`.
+- **Shared mind files, kept to the deliberation-trigger path:**
+  - `living/mind/src/mind.rs`: a module, an event, four fields, the gate call in `schedule`, the tick hook;
+  - `living/mind/src/mind/talk.rs`: `thinking` honours `deferring` with the level of detail off too;
+  - `living/mind/src/main.rs`: percept events when the gate is on, the `rethink-replay` subcommand.
+- **Harness:**
+  - `.agents/skills/verify-minds/scripts/verify_minds.py` (`rethink`, `rethink-llm`), `SKILL.md` and `features/README.md`;
+  - `.agents/skills/verify-llm/scripts/fake_llm.py` and `references/fake-llm.md`.
+- **Docs:** this section, the table at the top, and LIVING_CORE.md ("Deliberation hygiene").
+- **Not changed:** authority, rules, bindings, `models.json` and `judgments.json`.
+- **Other branches:** `townlife-2` also edits `mind.rs`, `talk.rs` and `main.rs`. This diff touches `schedule`, `run`, `thinking` and the experience callback only.
 
 ## Verification
 

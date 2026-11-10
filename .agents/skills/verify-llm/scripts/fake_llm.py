@@ -11,7 +11,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-PURPOSES = ('think', 'deliberate', 'consolidate', 'talk', 'internalize', 'reorganize', 'judge', 'choose')
+PURPOSES = ('think', 'deliberate', 'consolidate', 'talk', 'internalize', 'reorganize', 'judge', 'choose', 'rethink')
 SPEECH = 'verify fake: I will wait here.'
 CHOICES = [0]
 REPLIES = {
@@ -30,6 +30,7 @@ REPLIES = {
                    'retract': [], 'judgments': []},
     'judge': {'answer': 'no', 'p': 0.2, 'why': 'verify fake judgment'},
     'choose': {'pick': 0, 'why': 'verify fake choice'},
+    'rethink': {'rethink': False, 'p': 0.1},
     'internalize': {'summary': 'I lived through this.', 'remember': [], 'nodes': [], 'edges': [],
                     'retract': [], 'merge': [], 'relations': [], 'judgments': [], 'places': []},
 }
@@ -72,6 +73,8 @@ def purpose_of(body):
     effort = body.get('reasoning_effort')
     system = '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'system')
     # Calls the mind sends under another purpose's effort map, told apart by their prompt.
+    if 'should stop and think again' in system:
+        return 'rethink'
     if 'pick one of the numbered' in system:
         return 'choose'
     if 'Tidy the person' in system:
@@ -129,6 +132,7 @@ class Script:
             for rule in self.rules:
                 if (rule.get('purpose', purpose) == purpose
                         and rule.get('model', body.get('model')) == body.get('model')
+                        and rule.get('contains', '') in json.dumps(body, ensure_ascii=False)
                         and rule.get('times', 1) != 0):
                     action.update(rule)
                     if rule.get('times', 1) > 0:
@@ -227,30 +231,36 @@ class Handler(BaseHTTPRequestHandler):
         """TypeSafe's `POST /v1/systemone` (Jev): one state, independently answered questions.
         By default a noul's yes probability is how hurt the state's `body` is (1 - health /
         max_health; 0.2 without a body), a choice picks its first criterion and a score is 0. A
-        script rule with purpose `judge` may set `noul`, `status` or `delay_s`."""
+        script rule with purpose `judge` may set `noul`, `status` or `delay_s`. A rethink gate's
+        request (its state has `why_it_is_asked_to_think`) has purpose `rethink` instead: its
+        nouls default to 0.1, and a rule's `noul` may be one number or one per question."""
         try:
             body = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or b'{}')
         except ValueError:
             return self.respond(400, b'{"error":"invalid JSON body"}')
         script = self.server.script
+        state = body.get('state') or {}
+        purpose = 'rethink' if isinstance(state, dict) and 'why_it_is_asked_to_think' in state else 'judge'
         with script.lock:
             script.sequence += 1
             action = dict(script.data.get('defaults', {}))
             for rule in script.rules:
-                if rule.get('purpose') == 'judge' and rule.get('times', 1) != 0:
+                if rule.get('purpose') == purpose and rule.get('contains', '') in json.dumps(body, ensure_ascii=False) and rule.get('times', 1) != 0:
                     action.update(rule)
                     if rule.get('times', 1) > 0:
                         rule['times'] = rule.get('times', 1) - 1
                     break
-        state = body.get('state') or {}
         hurt = None
-        if isinstance(state, dict) and isinstance(state.get('body'), dict):
+        if purpose == 'judge' and isinstance(state, dict) and isinstance(state.get('body'), dict):
             b = state['body']
             hurt = round(1 - float(b.get('health', 100)) / max(1.0, float(b.get('max_health', 100))), 3)
         answers = {}
         for q, spec in (body.get('questions') or {}).items():
             kind = spec.get('type')
-            if kind == 'noul':
+            if kind == 'noul' and purpose == 'rethink':
+                p = action.get('noul', 0.1)
+                answers[q] = {'type': 'noul', 'noul': p.get(q, 0.1) if isinstance(p, dict) else p}
+            elif kind == 'noul':
                 answers[q] = {'type': 'noul', 'noul': action.get('noul', 0.2 if hurt is None else max(0.0, min(1.0, hurt)))}
             elif kind == 'choice':
                 first = next(iter(spec.get('criteria') or {'none': ''}))
@@ -259,7 +269,7 @@ class Handler(BaseHTTPRequestHandler):
                 answers[q] = {'type': 'score', 'score': 0.0, 'confidence': 1.0, 'probabilities': {'0': 1.0}}
         usage = {'input_tokens': len(json.dumps(body)) // 4, 'output_tokens': 10}
         with script.lock, script.log.open('a') as stream:
-            stream.write(json.dumps({'at_ms': int(time.time() * 1000), 'sequence': script.sequence, 'purpose': 'judge', 'model': body.get('model'),
+            stream.write(json.dumps({'at_ms': int(time.time() * 1000), 'sequence': script.sequence, 'purpose': purpose, 'model': body.get('model'),
                                      'body': body, 'answers': answers, 'status': action.get('status', 200)}) + '\n')
         time.sleep(max(0, float(action.get('delay_s', 0))))
         status = int(action.get('status', 200))
