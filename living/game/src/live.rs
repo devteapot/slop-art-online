@@ -635,9 +635,33 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   know-how[:SKILL]|none` shows a panel (know-how with SKILL selected);
 /// - `sync:NAME`: until `<dir>/NAME.go` exists (an outside driver sets the scene: the hour, the
 ///   weather, where I stand), then delete it; a number in the file turns the view to that yaw;
+/// - `key:NAME:down|up|tap` and `mouse:left|right|middle:down|up`: a key or button as the
+///   window would report it (`KeyE`, `KeyQ`, `Enter`, `ShiftLeft`, …), read by every input
+///   system this frame; `chat:open|close` opens or closes the text box, as Enter and Esc do;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
+/// A key of the `key:` step.
+fn key_code(name: &str) -> Option<KeyCode> {
+    Some(match name {
+        "KeyQ" => KeyCode::KeyQ,
+        "KeyE" => KeyCode::KeyE,
+        "KeyR" => KeyCode::KeyR,
+        "KeyF" => KeyCode::KeyF,
+        "KeyG" => KeyCode::KeyG,
+        "KeyB" => KeyCode::KeyB,
+        "KeyV" => KeyCode::KeyV,
+        "KeyW" => KeyCode::KeyW,
+        "KeyA" => KeyCode::KeyA,
+        "KeyS" => KeyCode::KeyS,
+        "KeyD" => KeyCode::KeyD,
+        "Enter" => KeyCode::Enter,
+        "Escape" => KeyCode::Escape,
+        "ShiftLeft" => KeyCode::ShiftLeft,
+        _ => return None,
+    })
+}
+
 #[derive(Resource)]
 pub struct Script {
     dir: std::path::PathBuf,
@@ -671,6 +695,7 @@ fn script(
     (mut skills, mut gestures, mut verbs): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>),
     (hud, loading): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>),
     target: Option<Res<crate::capture::Target>>,
+    (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     time: Res<Time>,
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -797,6 +822,40 @@ fn script(
                 info!("live script: waiting for {}", go.display());
             }
             there || s.since > 900.0
+        }
+        "key" => {
+            let (name, how) = arg.rsplit_once(':').unwrap_or((arg, "tap"));
+            match key_code(name) {
+                Some(k) if how == "down" => keys.press(k),
+                Some(k) if how == "up" => keys.release(k),
+                Some(k) => {
+                    keys.press(k);
+                    keys.release(k);
+                }
+                None => warn!("live script: unknown key {name}"),
+            }
+            true
+        }
+        "mouse" => {
+            let (name, how) = arg.rsplit_once(':').unwrap_or((arg, "down"));
+            let b = match name {
+                "left" => MouseButton::Left,
+                "right" => MouseButton::Right,
+                _ => MouseButton::Middle,
+            };
+            if how == "up" {
+                buttons.release(b);
+            } else {
+                buttons.press(b);
+            }
+            true
+        }
+        "chat" => {
+            // As Enter opens it and Esc closes it (the script's own keys may land after the
+            // chat's system has looked this frame).
+            input.chat_open = arg == "open";
+            input.chat.clear();
+            true
         }
         "dead" => hud.death.is_some() || s.since > 120.0,
         "rejoin" => {
