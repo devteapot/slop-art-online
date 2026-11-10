@@ -1,4 +1,5 @@
-//! The immediate gate's load (docs/GATE_216.md; driven by living/tools/gate.py). Four modes:
+//! The immediate gate's load (docs/GATE_216.md; driven by living/tools/gate.py), and the playtest
+//! soak's players (docs/SOAK.md; driven by living/tools/soak.py). Five modes:
 //!
 //! - `players`: scripted players over real WebSocket connections, subscribing what the game
 //!   client subscribes (the perception views, the static tables, the `terrain_chunk` and `lot`
@@ -10,7 +11,9 @@
 //!   through its own `my_skill_uses` view. The input's correlation id is the connection's call
 //!   sequence (`p`, `n`); a skill's is also its `skill_use.id`.
 //! - `relay`: a TCP relay that counts the bytes each connection receives (subscription traffic
-//!   per client on the wire). Connections are numbered in accept order.
+//!   per client on the wire). Connections are numbered in accept order. A `cut N` line on stdin
+//!   closes every open connection and refuses new ones for N seconds (a network outage).
+//! - `soak`: a handful of players who play an evening (`soak.rs`).
 //! - `watch`: two owner connections subscribing the private `clock` row, which every tick
 //!   writes: one with confirmed reads (the default, what clients get) and one without, so every
 //!   tick's delivery is timed with and without the commitlog's fsync.
@@ -24,6 +27,8 @@
 //! every character is alive, waits for a `placed` line, subscribes the windows round where each
 //! one stands, prints `{"event":"ready"}`, waits for `go`, plays until `stop`, then prints
 //! `{"event":"done",…}`.
+
+mod soak;
 
 use living_bindings::*;
 use serde_json::{json, Value};
@@ -711,6 +716,8 @@ fn players_mode() {
 // ---- relay -----------------------------------------------------------------------------------
 
 struct Conn {
+    /// Both ends, so a `cut` can close them.
+    ends: Option<(TcpStream, TcpStream)>,
     accepted_us: i64,
     down: Arc<AtomicU64>,
     up: Arc<AtomicU64>,
@@ -741,9 +748,16 @@ fn relay_mode(args: &[String]) {
     let listener = TcpListener::bind(&listen).expect("bind");
     let conns: Arc<Mutex<Vec<Conn>>> = Arc::default();
     let c2 = conns.clone();
+    // Until when new connections are refused (a `cut N` line: the network is down N seconds).
+    let refuse_until: Arc<Mutex<Option<Instant>>> = Arc::default();
+    let r2 = refuse_until.clone();
     std::thread::spawn(move || {
         for s in listener.incoming() {
             let Ok(client) = s else { continue };
+            if r2.lock().unwrap().is_some_and(|t| Instant::now() < t) {
+                let _ = client.shutdown(Shutdown::Both);
+                continue;
+            }
             let accepted_us = unix_us();
             let Ok(up) = TcpStream::connect(&upstream) else {
                 let _ = client.shutdown(Shutdown::Both);
@@ -751,7 +765,8 @@ fn relay_mode(args: &[String]) {
             };
             let _ = client.set_nodelay(true);
             let _ = up.set_nodelay(true);
-            let c = Conn { accepted_us, down: Arc::default(), up: Arc::default(), open: Arc::new(AtomicBool::new(true)) };
+            let ends = client.try_clone().ok().zip(up.try_clone().ok());
+            let c = Conn { ends, accepted_us, down: Arc::default(), up: Arc::default(), open: Arc::new(AtomicBool::new(true)) };
             let (a, b) = (client.try_clone().unwrap(), up.try_clone().unwrap());
             let (down, upc, open1, open2) = (c.down.clone(), c.up.clone(), c.open.clone(), c.open.clone());
             std::thread::spawn(move || pipe(up, client, down, open1));
@@ -766,10 +781,29 @@ fn relay_mode(args: &[String]) {
         let _ = writeln!(file, "{}", json!({"t": unix_us(), "c": rows}));
         let _ = file.flush();
     };
+    // stdin: `cut N` closes every open connection and refuses new ones for N seconds; end of
+    // input stops the relay.
     let (tx, rx) = mpsc::channel();
+    let (c3, r3) = (conns.clone(), refuse_until.clone());
     std::thread::spawn(move || {
-        let mut s = String::new();
-        let _ = std::io::stdin().read_to_string(&mut s);
+        for line in std::io::stdin().lock().lines() {
+            let Ok(line) = line else { break };
+            if let Some(n) = line.trim().strip_prefix("cut ").and_then(|n| n.trim().parse::<f64>().ok()) {
+                *r3.lock().unwrap() = Some(Instant::now() + Duration::from_secs_f64(n));
+                let mut closed = 0;
+                for c in c3.lock().unwrap().iter_mut() {
+                    if let Some((a, b)) = c.ends.take() {
+                        if c.open.load(Ordering::Relaxed) {
+                            closed += 1;
+                        }
+                        let _ = a.shutdown(Shutdown::Both);
+                        let _ = b.shutdown(Shutdown::Both);
+                    }
+                }
+                println!("{}", json!({"event": "cut", "closed": closed, "secs": n, "ts": unix_us()}));
+                let _ = std::io::stdout().flush();
+            }
+        }
         let _ = tx.send(());
     });
     loop {
@@ -874,8 +908,9 @@ fn main() {
         Some("relay") => relay_mode(&args[2..]),
         Some("watch") => watch_mode(),
         Some("observe") => observe_mode(),
+        Some("soak") => soak::run(),
         m => {
-            eprintln!("usage: gate-load players|relay|watch|observe (got {m:?})");
+            eprintln!("usage: gate-load players|relay|watch|observe|soak (got {m:?})");
             std::process::exit(2);
         }
     }
