@@ -327,7 +327,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
     let ids: Vec<(u32, Vec2)> = scene.shown.iter().map(|(id, (p, _))| (*id, *p)).collect();
     for (id, p) in ids {
         let mut show = Show::default();
-        let row = conn.db.seen_doing().id().find(&id);
+        let row = crate::net::find_doing(conn, id);
         let card = row.as_ref().and_then(|d| acts.by_code(d.code));
         // Animals have no house: asleep or resting they stay where they are, drawn.
         let animal = conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind != "person");

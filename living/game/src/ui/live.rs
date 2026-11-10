@@ -154,9 +154,9 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     // Exact where I perceive it exactly (my look at them, an appraisal), else the band.
     let band = |id: u32| match chars.get(&id).filter(|c| c.hp >= 0.0 && c.max_hp > 0.0) {
         Some(c) => Some((c.hp / c.max_hp).clamp(0.0, 1.0)),
-        None => conn.db.seen_fighters().id().find(&id).filter(|f| f.band <= 4).map(|f| living_rules::combat::band_fraction(f.band)),
+        None => crate::net::find_fighter(conn, id).filter(|f| f.band <= 4).map(|f| living_rules::combat::band_fraction(f.band)),
     };
-    let busy = |id: u32| conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
+    let busy = |id: u32| crate::net::find_fighter(conn, id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
 
     // What I heard.
     last.heard.retain(|_, e| Some(e.observer) == me);
@@ -265,7 +265,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         (Some(id), Some(m)) => {
             let inv = |item: &str| conn.db.my_inventory().iter().filter(|r| r.owner == id as u64 && r.item == item).map(|r| r.qty).sum::<u32>();
             let knows = |t: &str| conn.db.my_know_how().iter().any(|k| k.actor == id && k.technique == t);
-            let me_f = conn.db.seen_fighters().id().find(&id);
+            let me_f = crate::net::find_fighter(conn, id);
             let energy = m.energy;
             live_bar(&cards, |card| {
                 // A held guard: raised now (my fighter row says so) or my key is down.
