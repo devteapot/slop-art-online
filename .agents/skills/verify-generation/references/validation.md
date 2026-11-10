@@ -1,5 +1,9 @@
 # Validation record (generation)
 
+## 2026-11-10 fix-rules-small (dev-box)
+
+Own container `rules-small-stdb` (2.14.1). `generation.py --feature worlds` (`generation-rs-final`, head `9115e59`): all nine worlds pass, with the native digests, and repeatability passes every comparison, now required for resources, names, ages, genes and animal positions too (compared without ids). The 4096 m floor: three bad sizes refused, `resume_genesis` refused before creation, while a step is scheduled and once made, `stop_genesis` stalled the chain for 8 s, `resume_genesis` finished it (142 steps, no restarts). Owner SQL cannot stop the chain: 2.14.1 refuses "SQL writes to scheduled tables" (`generation-rs-floor1`).
+
 ## 2026-11-10 island food places (Mac)
 
 Own scratch container `hunger-verify` (2.14.1, port 3382) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; branch `hunger-1` (main `7e5de53` merged in). The island seed gains the places `berries` and `store` and `town_life.spread`; `town::seat` reads `spread` and looks each spot kind up once per settlement. The driver's place check now names every seed place, and a new check asserts that a spread place is spread.
