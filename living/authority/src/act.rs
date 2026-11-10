@@ -170,6 +170,8 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         sensed: Vec::new(),
         bold: false,
         room: 0,
+        community: 0,
+        home: String::new(),
     }
 }
 
@@ -290,7 +292,27 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
             }
         }
     }
+    // Where each side belongs and lives, for the rules on dealings (docs/WORLD_RULES.md).
+    actor.community = crate::records::community_party(ctx, id);
+    actor.home = crate::records::home_of(ctx, id);
+    match a.target.class {
+        3 => {
+            target.community = crate::records::community_party(ctx, a.target.id as u32);
+            target.home = crate::records::home_of(ctx, a.target.id as u32);
+        }
+        2 => {
+            target.owner = ctx.db.structure().id().find(a.target.id).map_or(0, |s| s.owner);
+            if target.owner != 0 {
+                target.home = crate::records::home_of(ctx, target.owner);
+            }
+        }
+        _ => {}
+    }
+    let records = if sc.skill_reads_records(&a.skill) { crate::records::of(ctx, id, now) } else { Vec::new() };
     SkillCtx {
+        records,
+        want: a.want.clone(),
+        want_qty: a.want_qty,
         actor,
         target,
         item: a.item.clone(),
@@ -304,6 +326,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         skill: a.skill.clone(),
         routine,
         raining: crate::town::raining(ctx),
+        record: None,
     }
 }
 
@@ -1009,13 +1032,17 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
             crate::combat::show(ctx, now, crate::combat::Seen { kind: living_rules::combat::seen::RELEASE, actor: a.id, target: a.victim, skill: sc.shapes().code(&a.skill), at: here, dir, ..Default::default() });
         }
     }
-    match apply(ctx, &a, effects, now) {
-        Ok(summary) => finish(ctx, a, true, &summary, now),
+    match apply(ctx, &a, &sctx, effects, now) {
+        Ok(summary) => {
+            // What the rules make of it having been done (`on_<skill>`).
+            crate::records::after_skill(ctx, &sctx, now);
+            finish(ctx, a, true, &summary, now)
+        },
         Err(why) => finish(ctx, a, false, &why, now),
     }
 }
 
-fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> Result<String, String> {
+fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effect>, now: u64) -> Result<String, String> {
     let me = a.id;
     let at = ctx.db.body().id().find(me).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let my_name = common::name_of(ctx, me);
@@ -1476,6 +1503,11 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 witnessed(ctx, now, p, "gate", me, 0, if open { "{a} opened the gate" } else { "{a} shut the gate" }, 0.3, &[me]);
                 notes.push(if open { "opened the gate".into() } else { "shut the gate".into() });
             }
+            e @ (Effect::Record { .. } | Effect::Amend { .. } | Effect::Close { .. } | Effect::Tell { .. } | Effect::Witness { .. }) => {
+                if let Some(note) = crate::records::apply(ctx, sctx, e, now)? {
+                    notes.push(note);
+                }
+            }
             Effect::Build { kind } => {
                 if !catalog::STRUCTURES.contains(&kind.as_str()) {
                     return Err(format!("cannot build {kind}"));
@@ -1907,8 +1939,9 @@ fn dashed(ctx: &ReducerContext, act: &Activity, now: u64) {
     let ends = now + (len / speed * 1000.0) as u64;
     crate::combat::set_act(ctx, act.id, skill, now, ends, ends + sc.num_of("combat_recover", skill, 0.0) as u64, 0, aim);
     crate::combat::accepted(ctx, act, now);
-    if let Ok(fx) = sc.done(skill, &skill_ctx(ctx, act.id, act, now)) {
-        let _ = apply(ctx, act, fx, now);
+    let sctx = skill_ctx(ctx, act.id, act, now);
+    if let Ok(fx) = sc.done(skill, &sctx) {
+        let _ = apply(ctx, act, &sctx, fx, now);
     }
 }
 
@@ -2004,6 +2037,8 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
         return;
     }
     let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((c.home_x, c.home_y));
+    // What the rules make of it, while the dead's records and things are still there.
+    crate::records::on_death(ctx, id, now);
     c.alive = false;
     c.died_ms = now;
     c.cause = cause.into();

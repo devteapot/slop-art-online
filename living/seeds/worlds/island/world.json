@@ -899,5 +899,228 @@
       "Brackenford"
     ]
   },
-  "store_holds": 120
+  "store_holds": 120,
+  "records": [
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Brackenford"
+        },
+        "toward": {
+          "community": "Kettlebridge"
+        }
+      },
+      "terms": {
+        "label": "rival town",
+        "value": -35,
+        "why": "the broken match, and Kettlebridge's sharp prices and pride; some have friends or kin there anyway"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Kettlebridge"
+        },
+        "toward": {
+          "community": "Brackenford"
+        }
+      },
+      "terms": {
+        "label": "rival town",
+        "value": -40,
+        "why": "the gate-due their carters call robbery, and the broken match"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Brackenford"
+        },
+        "toward": {
+          "community": "Coldwell"
+        }
+      },
+      "terms": {
+        "label": "outlaws",
+        "value": -60,
+        "why": "outlawed at the gate: households that lost their fields and live off the road"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Coldwell"
+        },
+        "toward": {
+          "community": "Brackenford"
+        }
+      },
+      "terms": {
+        "label": "the town that outlawed us",
+        "value": -50,
+        "why": "it took no side when the fields were taken and named us outlaws at its gate"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Brackenford"
+        },
+        "toward": {
+          "community": "Thornby"
+        }
+      },
+      "terms": {
+        "label": "debtors",
+        "value": -10,
+        "why": "forty baskets of grain owed since the Lean Year, paid slowly in fish, written on the ledger"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Thornby"
+        },
+        "toward": {
+          "community": "Brackenford"
+        }
+      },
+      "terms": {
+        "label": "creditors",
+        "value": -15,
+        "why": "the forty-basket debt from the Lean Year, kept on Brackenford's ledger"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Highshelf"
+        },
+        "toward": {
+          "community": "Kettlebridge"
+        }
+      },
+      "terms": {
+        "label": "the cairn-cutters",
+        "value": -45,
+        "why": "the cairn cutting closed the giants' trade with Kettlebridge"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Lanternquay"
+        },
+        "toward": {
+          "community": "Kettlebridge"
+        }
+      },
+      "terms": {
+        "label": "sellers of dear stone",
+        "value": -25,
+        "why": "Kettlebridge sells stone dear while the quay drowns"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Fernhollow"
+        },
+        "toward": {
+          "community": "Highshelf"
+        }
+      },
+      "terms": {
+        "label": "old friends",
+        "value": 45,
+        "why": "an old friendship from before the Settling"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Highshelf"
+        },
+        "toward": {
+          "community": "Fernhollow"
+        }
+      },
+      "terms": {
+        "label": "old friends",
+        "value": 45,
+        "why": "an old friendship from before the Settling"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Fernhollow"
+        },
+        "toward": {
+          "community": "Kettlebridge"
+        }
+      },
+      "terms": {
+        "label": "smoke-makers",
+        "value": -20,
+        "why": "the small folk distrust Kettlebridge's smoke and fires"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Elmwick"
+        },
+        "toward": {
+          "community": "Reedmoor"
+        }
+      },
+      "terms": {
+        "label": "rivals for the Lakemead",
+        "value": -25,
+        "why": "both claim the meadow"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Reedmoor"
+        },
+        "toward": {
+          "community": "Elmwick"
+        }
+      },
+      "terms": {
+        "label": "rivals for the Lakemead",
+        "value": -25,
+        "why": "both claim the meadow"
+      }
+    }
+  ]
 }

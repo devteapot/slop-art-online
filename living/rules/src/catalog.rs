@@ -44,19 +44,23 @@ pub struct SkillSpec {
     pub items: Vec<String>,
 }
 
-/// Every skill a world has, in the script's order of names.
+/// Every skill a world has, in the order the script declares them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Skills {
     list: Vec<SkillSpec>,
+    /// Indexes into `list` by name.
+    by_name: Vec<(String, usize)>,
     /// The world's skills are not known here (a build without the script runtime, such as the
     /// lab viewer, which only shows graphs the authority accepted): any skill name is taken.
     pub open: bool,
 }
 
 impl Skills {
-    pub fn new(mut list: Vec<SkillSpec>) -> Self {
-        list.sort_by(|a, b| a.name.cmp(&b.name));
-        Self { list, open: false }
+    /// The skills in the order given (the script's).
+    pub fn new(list: Vec<SkillSpec>) -> Self {
+        let mut by_name: Vec<(String, usize)> = list.iter().enumerate().map(|(i, s)| (s.name.clone(), i)).collect();
+        by_name.sort();
+        Self { list, by_name, open: false }
     }
 
     /// Whether a name is a skill here (any name, when the skills are not known).
@@ -65,7 +69,7 @@ impl Skills {
     }
 
     pub fn get(&self, name: &str) -> Option<&SkillSpec> {
-        self.list.binary_search_by(|s| s.name.as_str().cmp(name)).ok().map(|i| &self.list[i])
+        self.by_name.binary_search_by(|(n, _)| n.as_str().cmp(name)).ok().map(|i| &self.list[self.by_name[i].1])
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &SkillSpec> {
@@ -112,7 +116,7 @@ fn shipped() -> std::sync::Arc<Skills> {
 
 #[cfg(not(feature = "scripting"))]
 fn shipped() -> std::sync::Arc<Skills> {
-    std::sync::Arc::new(Skills { list: Vec::new(), open: true })
+    std::sync::Arc::new(Skills { open: true, ..Default::default() })
 }
 
 /// Adopt a world's skills (its installed script's).

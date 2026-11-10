@@ -87,6 +87,40 @@ fn judged_line() -> String {
 
 /// The revision of the world's rule script last read.
 static RULES_REV: std::sync::RwLock<Option<u32>> = std::sync::RwLock::new(None);
+/// Its source, for laws the mind service asks itself (`record_text`), compiled once per thread.
+static RULES_SOURCE: std::sync::RwLock<Option<(u32, Arc<String>)>> = std::sync::RwLock::new(None);
+
+thread_local! {
+    static COMPILED: std::cell::RefCell<Option<(u32, Arc<living_rules::script::Scripts>)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The world's rules compiled on this thread (the bundled rules until the world's are read).
+fn compiled() -> Option<Arc<living_rules::script::Scripts>> {
+    let (rev, src) = RULES_SOURCE.read().unwrap().clone().unwrap_or_else(|| (0, Arc::new(include_str!("../../scripts/skills.rhai").to_string())));
+    COMPILED.with(|c| {
+        if let Some((r, s)) = c.borrow().as_ref() {
+            if *r == rev {
+                return Some(s.clone());
+            }
+        }
+        let s = Arc::new(living_rules::script::Scripts::new(&src).ok()?);
+        *c.borrow_mut() = Some((rev, s.clone()));
+        Some(s)
+    })
+}
+
+/// How a party reads one of its records, in the world's rules' words (`{id:N}` still to be
+/// named as the reader knows N).
+pub fn record_text(r: &living_rules::records::RecordFacts) -> Option<String> {
+    compiled()?.record_text(r)
+}
+
+/// The acts a conversation turn may carry that the rules mark for it (`talk` in a skill's
+/// spec) and the turn's examples do not show already, one line each.
+pub fn talk_acts() -> String {
+    const SHOWN: [&str; 6] = ["conceive", "accept", "give", "offer", "teach", "host"];
+    living_rules::catalog::skills().iter().filter(|s| s.talk && !SHOWN.contains(&s.name.as_str())).map(living_rules::catalog::skill_line).collect::<Vec<_>>().join("\n")
+}
 
 /// What each combat skill is under the world's rule script (`<skill>_combat()`): which skills
 /// are real-time behavior rather than acts.
@@ -119,6 +153,7 @@ pub fn set_rules(revision: u32, source: &str) {
             log::info!("rules revision {revision}: {} skills", s.skills().len());
             living_rules::catalog::set_skills(s.skills().clone());
             *RULES_REV.write().unwrap() = Some(revision);
+            *RULES_SOURCE.write().unwrap() = Some((revision, Arc::new(source.to_string())));
             *SHAPES.write().unwrap() = Some(Arc::new(s.shapes().clone()));
             let w = WokenLaws { stage_cap: s.num_of("woken_stage", "cap", 0.0).max(0.0) as u32, wait_s: s.num_of("woken_stage", "wait_s", 0.0).max(0.0) };
             if w != woken_laws() {
@@ -561,6 +596,8 @@ pub struct Ctx<'a> {
     pub judgments: Vec<String>,
     pub places: Vec<String>,
     pub experiences: Vec<String>,
+    /// Agreements, demands and one's people's standing, as the world keeps them (its records).
+    pub dealings: Vec<String>,
 }
 
 fn common(c: &Ctx, out: &mut Segments) {
@@ -569,6 +606,12 @@ fn common(c: &Ctx, out: &mut Segments) {
     out.push(Stability::Dynamic, format!("\nNow {}\n", c.clock));
     if !c.body.is_empty() {
         out.push(Stability::Dynamic, format!("How your body feels: {}\n", c.body));
+    }
+    if !c.dealings.is_empty() {
+        out.push(Stability::Dynamic, "\n# Your dealings and your people's standing (as the world keeps them)\n");
+        for d in &c.dealings {
+            out.push(Stability::Dynamic, format!("- {d}\n"));
+        }
     }
     out.push(Stability::Character, "\n# People you know\n");
     if c.relations.is_empty() {
@@ -827,7 +870,11 @@ silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what yo
 (words change nothing in the world by themselves: what you agree to do now, do here; you will learn how it went), \
 \"settled\": null while the matter is still open, or what is now settled, in a few words (e.g. \"meet at the ford at dawn\", \"she will think about it\", \"I refused\", \"nothing more to say\"), \
 \"until\": null or when to take it up again (\"dawn\", \"morning\", \"noon\", \"evening\", \"night\", \"tomorrow\" or an hour 0-23), \
-\"end\": true if this is your last word for now}}"
+\"end\": true if this is your last word for now}}{}",
+        match talk_acts() {
+            a if a.is_empty() => String::new(),
+            a => format!("\nOther acts you may carry the same way (\"target\": {{\"id\": id of who you speak to}}), as the world's rules describe them:\n{a}"),
+        }
     ))
 }
 
@@ -928,6 +975,7 @@ mod tests {
             judgments: vec![format!("dynamic-stance-{name}")],
             places: vec![format!("place-{name}")],
             experiences: vec![format!("dynamic-experience-{name}")],
+            dealings: vec![format!("dynamic-dealing-{name}")],
         }
     }
 

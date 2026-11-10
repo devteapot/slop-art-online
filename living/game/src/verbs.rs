@@ -251,7 +251,12 @@ pub fn choices(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, s
         // that may hold things) every item there is.
         let mut cands: Vec<String> = Vec::new();
         let listed = spec.items.clone();
-        if checked {
+        // A skill that asks something in return offers what I carry and its own words: the
+        // rules let terms promise anything, and every item for every want is too long a list.
+        let asks = spec.args.iter().any(|a| a == "want");
+        if checked && asks {
+            cands.extend(pack.iter().map(|(i, _)| i.clone()));
+        } else if checked {
             cands.extend(pack.iter().map(|(i, _)| i.clone()));
             cands.extend(techniques.iter().cloned());
             if !matches!(aim, Aim::Me) {
@@ -272,10 +277,10 @@ pub fn choices(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, s
             let count = have(&item).filter(|_| !techniques.contains(&item)).map(|n| format!(" ×{n}")).unwrap_or_default();
             let label = format!("{} {}{count}{}", pretty(skill), pretty(&item), if words { " …" } else { "" });
             let c = Choice { item: Some(item.clone()), words, ..Choice::new(skill, label) };
-            // A trade names what I ask in return: one choice per thing there is to ask for.
-            if skill == "offer" {
-                for w in catalog::ITEMS.iter().map(|i| i.name).filter(|w| *w != item) {
-                    out.push(Choice { want: Some(w.to_string()), label: format!("offer {} for {}", pretty(&item), pretty(w)), ..c.clone() });
+            // A trade or terms name what I ask in return: one choice per thing to ask for.
+            if asks {
+                for w in catalog::ITEMS.iter().map(|i| i.name.to_string()).chain(spec.items.iter().cloned()).filter(|w| *w != item) {
+                    out.push(Choice { want: Some(w.clone()), label: format!("{} {} for {}", pretty(skill), pretty(&item), pretty(&w)), ..c.clone() });
                 }
             } else {
                 out.push(c);
@@ -889,6 +894,15 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
         v.toasts.push(Toast { text, ok, at: now });
         if let Some(i) = v.pending.iter().position(|p| p.act) {
             v.pending.remove(i);
+        }
+    }
+    // What the world's rules tell me of my dealings (an agreement kept or broken, a demand paid),
+    // from now on: rows already there when the client connected are history.
+    let told: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && e.kind == "record" && !v.seen.contains(&e.id)).collect();
+    for e in told {
+        v.seen.insert(e.id);
+        if (e.at_ms as f64) + 5_000.0 >= now_ms {
+            v.toasts.push(Toast { text: outcome_text(&e.text).1, ok: None, at: now });
         }
     }
     let n = v.toasts.len();

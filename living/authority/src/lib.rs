@@ -15,6 +15,7 @@ mod motion;
 mod perceive;
 mod perception;
 mod presence;
+mod records;
 mod seed;
 mod tables;
 mod tick;

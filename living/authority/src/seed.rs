@@ -441,6 +441,9 @@ pub struct Seed {
     /// Where settled residents work and which places they know (land worlds).
     #[serde(default)]
     pub town_life: crate::town::SeedTownLife,
+    /// Records the world starts with (a community's regard for another; docs/WORLD_RULES.md).
+    #[serde(default)]
+    pub records: Vec<crate::records::SeedRecord>,
 }
 
 #[derive(Deserialize, Default)]
@@ -813,6 +816,7 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
         }
     }
     communities(ctx, now);
+    crate::records::seed(ctx, &s.records, now);
     set_habitats(ctx, s);
     // Animals start in their species' groups (herds, packs), so a few wolves on a large map
     // are a pack that can breed rather than strangers who never meet.

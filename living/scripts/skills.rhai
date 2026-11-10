@@ -890,7 +890,225 @@ fn accept_check(a) {
     ""
 }
 fn accept_duration(a) { 1500 }
-fn accept_done(a) { [#{ op: "accept" }] }
+// Terms the person proposed to you come first; otherwise their standing trade.
+fn accept_done(a) {
+    let r = proposal_from(a);
+    if r == () { return [#{ op: "accept" }]; }
+    let t = r.terms;
+    [#{ op: "amend", id: r.id, status: "agreed", due_h: due_by_dark(a) },
+     #{ op: "tell", to: r.parties.from, salience: 0.8, text: `{actor} accepted your terms: ${terms_line(t, "from")}, by dusk.` },
+     #{ op: "tell", to: a.actor.id, text: `agreed with {target}: ${terms_line(t, "to")}, by dusk` },
+     #{ op: "witness", text: "{a} and {b} came to an agreement." }]
+}
+
+// ---- agreements, demands and regard (docs/WORLD_RULES.md) ---------------------------------
+// Built on the engine's records: a record has a kind, a status, parties by role, terms and a
+// time it falls due (world hours). The engine keeps them, indexed by party, hands a law the
+// actor's own (`a.records`, through its community too), and tells these rules when something
+// happens: `on_<skill>` after a skill is done (`on_give`, `on_store`, `on_host` here),
+// `on_expire` when a record falls due (`a.record`), `on_death`. A hook only makes, amends and
+// closes records and tells; it moves nothing. People make, keep and break agreements and
+// demands with the ordinary skills: nothing here is a role or a schedule.
+//   record ops   #{ op: "record", kind, status, parties: #{ role: id }, terms: #{...}, due_h }
+//                #{ op: "amend", id, status, terms (merged), due_h }
+//                #{ op: "close", id, status, keep_h }
+//   telling      #{ op: "tell", to: id, text, salience, ask } ({actor}, {target}, {id:N} become
+//                how the one told refers to them; ask: their mind thinks about it; told to the
+//                actor, it is the act's outcome)
+//                #{ op: "witness", text, salience } (those who see the actor; {a}, {b})
+// A record between a `holder` and a `toward` side whose terms have a `label` and a `value`
+// (-100..100) is a stance: relation filters and minds read it (a community's regard, seeded).
+
+// How long a proposal stands, a demand waits, and a closed record is remembered (world hours).
+fn proposal_h(x) { 4.0 }
+fn demand_h(x) { 3.0 }
+fn kept_h(x) { 12.0 }
+// An agreement falls due at dusk (20:00), or the next one when dusk is under two hours away.
+fn due_by_dark(a) { let h = 20.0 - a.hour; if h < 2.0 { h += 24.0; } h }
+
+fn other_role(me) { if me == "from" { "to" } else { "from" } }
+fn qty_of(n) { if n < 1 { 1 } else { n } }
+fn goods(item, n) { if item == "lodging" { "a night's lodging" } else { `${n} ${item}` } }
+fn words(t) { if t == "" { "" } else { ` ("${t}")` } }
+// What each side owes, as the side `me` reads it.
+fn terms_line(t, me) {
+    let other = other_role(me);
+    `you give ${goods(t[me + "_gives"], t[me + "_qty"])}, they give ${goods(t[other + "_gives"], t[other + "_qty"])}`
+}
+// Terms the target proposed to the actor, still standing.
+fn proposal_from(a) {
+    for r in a.records {
+        if r.open && r.kind == "agreement" && r.status == "offered" && r.me == "to" && r.parties.from == a.target.id { return r; }
+    }
+    ()
+}
+// How the actor's community regards another (its stance record's terms), or ().
+fn regard_toward(a, community) {
+    for r in a.records {
+        if r.kind == "regard" && r.me == "holder" && r.parties.toward == community { return r.terms; }
+    }
+    ()
+}
+
+fn offer_terms_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to make an agreement with"; }
+    if a.target.id == a.actor.id { return "not with yourself"; }
+    if young(a) { return "too young to make agreements"; }
+    if a.item == "" || a.want == "" { return "say what you will give (item, qty) and what they will give (want, want_qty)"; }
+    let open = 0;
+    for r in a.records { if r.open { open += 1; } }
+    if open >= 12 { return "you have too many dealings in hand already"; }
+    ""
+}
+fn offer_terms_duration(a) { 2000 }
+fn offer_terms_done(a) {
+    let t = #{ from_gives: a.item, from_qty: qty_of(a.qty), to_gives: a.want, to_qty: qty_of(a.want_qty), from_done: 0, to_done: 0, from_home: a.actor.home, to_home: a.target.home, words: a.text };
+    if a.item == "lodging" { t.from_qty = 1; }
+    if a.want == "lodging" { t.to_qty = 1; }
+    [#{ op: "record", kind: "agreement", status: "offered", parties: #{ from: a.actor.id, to: a.target.id }, terms: t, due_h: proposal_h(0) },
+     #{ op: "tell", to: a.target.id, ask: true, salience: 0.85, text: `{actor} proposes an agreement: ${terms_line(t, "to")}${words(a.text)}, by dusk. If you accept (accept, toward them), the world counts what each of you hands over or stores for the other.` },
+     #{ op: "tell", to: a.actor.id, text: `proposed to {target}: ${terms_line(t, "from")}${words(a.text)}` }]
+}
+
+// What the actor handed over or stored for someone, counted toward its agreements with them
+// and the demands they made of it.
+fn delivered(a, item, n, to_id, to_home) {
+    let fx = [];
+    for r in a.records {
+        if !r.open { continue; }
+        if r.kind == "agreement" && r.status == "agreed" {
+            let me = r.me;
+            let other = other_role(me);
+            let t = r.terms;
+            let them = r.parties[other];
+            let to_them = to_id == them || (to_home != "" && to_home == t[other + "_home"]);
+            if t[me + "_gives"] != item || !to_them { continue; }
+            let owed = t[me + "_qty"];
+            let done = t[me + "_done"];
+            if done >= owed { continue; }
+            done += n;
+            if done > owed { done = owed; }
+            let change = #{};
+            change[me + "_done"] = done;
+            fx.push(#{ op: "amend", id: r.id, terms: change });
+            let left = t[other + "_qty"] - t[other + "_done"];
+            if done >= owed && left <= 0 {
+                fx.push(#{ op: "close", id: r.id, status: "kept", keep_h: kept_h(0) });
+                fx.push(#{ op: "tell", to: them, salience: 0.75, text: `{actor} has delivered ${goods(item, owed)}: your agreement with them is kept on both sides.` });
+                fx.push(#{ op: "tell", to: a.actor.id, text: `with that your agreement with {id:${them}} is kept on both sides` });
+            } else if done >= owed {
+                fx.push(#{ op: "tell", to: them, ask: true, salience: 0.85, text: `{actor} has delivered all ${goods(item, owed)} you agreed on. You owe them ${goods(t[other + "_gives"], left)} by dusk.` });
+                fx.push(#{ op: "tell", to: a.actor.id, text: `you have delivered your part (${goods(item, owed)}); {id:${them}} owes you ${goods(t[other + "_gives"], left)}` });
+            } else {
+                fx.push(#{ op: "tell", to: them, salience: 0.4, text: `{actor} has delivered ${done} of the ${owed} ${item} you agreed on.` });
+            }
+        } else if r.kind == "demand" && r.me == "of" && to_id == r.parties.by && r.terms.item == item {
+            let done = r.terms.done + n;
+            if done >= r.terms.qty {
+                fx.push(#{ op: "amend", id: r.id, terms: #{ done: done } });
+                fx.push(#{ op: "close", id: r.id, status: "met", keep_h: kept_h(0) });
+                fx.push(#{ op: "tell", to: r.parties.by, salience: 0.7, text: `{actor} paid the ${r.terms.qty} ${item} you demanded.` });
+                fx.push(#{ op: "tell", to: a.actor.id, text: `you have paid what {id:${r.parties.by}} demanded` });
+            } else {
+                fx.push(#{ op: "amend", id: r.id, terms: #{ done: done } });
+            }
+        }
+    }
+    fx
+}
+fn on_give(a) { delivered(a, a.item, qty_of(a.qty), a.target.id, "") }
+fn on_store(a) { delivered(a, a.item, qty_of(a.qty), a.target.owner, a.target.home) }
+fn on_host(a) { delivered(a, "lodging", 1, a.target.id, "") }
+
+// A record fell due: a proposal not taken, an agreement kept by one side only or by neither,
+// a demand not paid. Whoever did not deliver is told so, and so is the other side.
+fn on_expire(a) {
+    let r = a.record;
+    if r.kind == "agreement" { return agreement_due(r); }
+    if r.kind == "demand" { return demand_due(r); }
+    []
+}
+fn agreement_due(r) {
+    let t = r.terms;
+    let f = r.parties.from;
+    let to = r.parties.to;
+    if r.status == "offered" {
+        return [#{ op: "close", id: r.id, status: "not taken", keep_h: 1.0 },
+                #{ op: "tell", to: f, salience: 0.5, text: `{id:${to}} did not take up your terms (${terms_line(t, "from")}).` }];
+    }
+    let f_ok = t.from_done >= t.from_qty;
+    let to_ok = t.to_done >= t.to_qty;
+    if f_ok && to_ok { return [#{ op: "close", id: r.id, status: "kept", keep_h: kept_h(0) }]; }
+    if f_ok || to_ok {
+        let kept = if f_ok { "from" } else { "to" };
+        let broke = other_role(kept);
+        let k = r.parties[kept];
+        let b = r.parties[broke];
+        let owed = goods(t[broke + "_gives"], t[broke + "_qty"] - t[broke + "_done"]);
+        return [#{ op: "amend", id: r.id, terms: #{ broken_by: broke } },
+                #{ op: "close", id: r.id, status: "broken", keep_h: kept_h(0) },
+                #{ op: "tell", to: k, salience: 0.85, text: `{id:${b}} has not delivered ${owed} by dusk as agreed, though you delivered your part: they broke your agreement.` },
+                #{ op: "tell", to: b, salience: 0.8, text: `Dusk has passed and you have not delivered ${owed} to {id:${k}}, who delivered their part: you broke your agreement.` }];
+    }
+    [#{ op: "close", id: r.id, status: "lapsed", keep_h: kept_h(0) },
+     #{ op: "tell", to: f, salience: 0.6, text: `Your agreement with {id:${to}} has lapsed at dusk: neither of you delivered all of your part.` },
+     #{ op: "tell", to: to, salience: 0.6, text: `Your agreement with {id:${f}} has lapsed at dusk: neither of you delivered all of your part.` }]
+}
+fn demand_due(r) {
+    let by = r.parties.by;
+    let of = r.parties.of;
+    let what = `${r.terms.qty} ${r.terms.item}`;
+    [#{ op: "close", id: r.id, status: "unpaid", keep_h: kept_h(0) },
+     #{ op: "tell", to: by, salience: 0.7, text: `{id:${of}} has not paid the ${what} you demanded.` },
+     #{ op: "tell", to: of, salience: 0.5, text: `You did not pay the ${what} {id:${by}} demanded.` }]
+}
+
+// How a party reads one of its records, for minds and players ({id:N} becomes how they refer to
+// N: a person, or a community). Read by the mind service and the client, never per tick.
+fn record_text(r) {
+    if r.kind == "agreement" {
+        let other = r.parties[other_role(r.me)];
+        let t = r.terms;
+        if r.status == "offered" {
+            return if r.me == "from" { `you proposed to {id:${other}}: ${terms_line(t, "from")}${words(t.words)}; they have not accepted yet` } else { `{id:${other}} proposed to you: ${terms_line(t, "to")}${words(t.words)}; accept (toward them) to agree` };
+        }
+        let mine = t[r.me + "_done"];
+        let theirs = t[other_role(r.me) + "_done"];
+        if r.status == "agreed" {
+            return `agreement with {id:${other}}, by dusk: ${terms_line(t, r.me)}${words(t.words)}; so far you delivered ${mine} of ${t[r.me + "_qty"]}, they ${theirs} of ${t[other_role(r.me) + "_qty"]}`;
+        }
+        return `agreement with {id:${other}} (${terms_line(t, r.me)}): ${r.status}`;
+    }
+    if r.kind == "demand" {
+        let what = `${r.terms.qty} ${r.terms.item}${words(r.terms.words)}`;
+        if r.me == "by" { return `you demanded ${what} of {id:${r.parties.of}}: ${if r.open { "not paid yet" } else { r.status }}`; }
+        return `{id:${r.parties.by}} demanded ${what} of you: ${if r.open { "not paid yet" } else { r.status }}`;
+    }
+    if r.kind == "regard" {
+        if r.me == "holder" { return `your people hold {id:${r.parties.toward}} as ${r.terms.label} (${r.terms.why})`; }
+        return `{id:${r.parties.holder}} holds your people as ${r.terms.label} (${r.terms.why})`;
+    }
+    `${r.kind}: ${r.status}`
+}
+
+fn demand_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to demand of"; }
+    if a.target.id == a.actor.id { return "not of yourself"; }
+    if young(a) { return "too young to make demands"; }
+    if a.item == "" { return "say what you demand (item, qty)"; }
+    for r in a.records {
+        if r.open && r.kind == "demand" && r.me == "by" && r.parties.of == a.target.id { return "you already have a demand of them standing"; }
+    }
+    ""
+}
+fn demand_duration(a) { 1500 }
+fn demand_done(a) {
+    let n = qty_of(a.qty);
+    [#{ op: "record", kind: "demand", status: "open", parties: #{ by: a.actor.id, of: a.target.id }, terms: #{ item: a.item, qty: n, done: 0, words: a.text }, due_h: demand_h(0) },
+     #{ op: "tell", to: a.target.id, ask: true, salience: 0.85, text: `{actor} demands ${n} ${a.item} of you${words(a.text)}. You may give it to them, or not.` },
+     #{ op: "witness", text: `{a} demanded ${n} ${a.item} of {b}.` },
+     #{ op: "tell", to: a.actor.id, text: `demanded ${n} ${a.item} of {target}; you will know whether they pay` }]
+}
 
 // ---- hospitality ----------------------------------------------------------------------
 // Taking someone in: a grown person offers another a bed in their household's house (the
@@ -944,7 +1162,7 @@ fn wakes(e) {
     if p[1] == "woken" && !["hurt", "theft"].contains(what) && !["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 0; }
     if ["speech", "hurt", "theft"].contains(what) { return 1; }
     // Kindness, dealings, lessons, asking to belong, and anything hostile.
-    if ["wave", "nod", "give", "offer", "accept", "teach", "tend", "heal", "join", "welcome", "host"].contains(what) { return 1; }
+    if ["wave", "nod", "give", "offer", "offer_terms", "demand", "accept", "teach", "tend", "heal", "join", "welcome", "host"].contains(what) { return 1; }
     if ["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 1; }
     0
 }
@@ -1159,8 +1377,18 @@ fn offer_spec() {
 }
 fn accept_spec() {
     #{ target: true, reach: 3.0, talk: true,
-       about: "Accept what a person beside you just proposed to you: a swap (both sides change hands at once, if both still have the goods) or terms (offer_terms: it becomes an agreement the world keeps account of).",
+       about: "Accept what a person beside you just proposed to you: their terms (offer_terms: it becomes an agreement the world keeps count of), or else their swap (both sides change hands at once, if both still have the goods).",
        takes: "a standing proposal from them to you", gives: "the swap done, or the agreement made" }
+}
+fn offer_terms_spec() {
+    #{ target: true, item: true, items: ["lodging"], args: ["qty", "want", "want_qty", "text"], reach: 3.0, talk: true,
+       about: "Propose an agreement to a person beside you, kept over time: you will deliver item × qty, they will deliver want × want_qty, by dusk; text: the terms in your words (\"stack it at my store\"). A delivery is handing it to them or storing it in their household's store; \"lodging\" is delivered by taking them in (host). If they accept, the world keeps count and tells you both when it is kept, or broken or lapsed at dusk. For a swap of goods in hand now, offer.",
+       takes: "a person beside you who accepts", gives: "an agreement both of you are told the outcome of" }
+}
+fn demand_spec() {
+    #{ target: true, item: true, args: ["qty", "text"], reach: 6.0, talk: true,
+       about: "Demand items of a person near you: a toll, a due, rent or a debt (text: why, in your words). They are told and may give them to you; refusing is simply not paying, and the world tells you when they have paid or have not, after a while. What you do then is up to you: a demand takes nothing by itself.",
+       takes: "a person near you", gives: "your demand, which they may pay" }
 }
 fn found_spec() { #{ args: ["text"], about: "Found a community with its home where you stand (text: its name); you become its first member.", takes: "a name, not being in a community", gives: "a new community of one" } }
 fn join_spec() { #{ target: true, reach: 3.0, about: "Ask a member of a community to let you join it; a member must welcome you.", takes: "a member beside you", gives: "your request, which they may answer" } }
