@@ -664,8 +664,8 @@ fn experiment_done(a) {
         if (t == "cooking" || t == "smoking") && !a.actor.near_fire { ok = false; }
         if ok { open.push(t); }
     }
-    if open.len() > 0 && a.roll < 0.3 {
-        let i = (a.roll / 0.3 * open.len()).to_int();
+    if open.len() > 0 && a.roll < 0.1 {
+        let i = (a.roll / 0.1 * open.len()).to_int();
         if i >= open.len() { i = open.len() - 1; }
         fx.push(#{ op: "learn", technique: open[i] });
     }
