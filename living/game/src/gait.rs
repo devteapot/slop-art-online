@@ -378,6 +378,7 @@ fn record(
     motions: Query<&crate::anim::Motion>,
     roam: Res<crate::envs::Roam>,
     scene: Option<NonSend<crate::world::Scene>>,
+    camera: Query<&GlobalTransform, With<Camera3d>>,
     mut feet: Local<HashMap<Entity, Tracked>>,
 ) {
     // The island's ground, else the look-dev environment's.
@@ -425,6 +426,11 @@ fn record(
             "action": motions.get(e).ok().and_then(|m| m.action.map(|a| (a.clip, a.start_ms))),
             // Connected play: the authority time my body is drawn at, and its segment then.
             "mine_ms": scene.as_ref().map(|s| s.mine_ms),
+            // The game camera's eye and its pitch below the horizon (degrees).
+            "eye": camera.single().ok().map(|c| {
+                let (p, f) = (c.translation(), c.forward());
+                [p.x, p.y, p.z, (-f.y).asin().to_degrees()]
+            }),
             "seg": scene.as_ref().map(|s| [s.mine_seg.0 as f64, s.mine_seg.1 as f64, s.mine_seg.2 as f64]),
             "clip": anim.map_or("", |a| a.showing()),
             // The shared phase, the gaits and their weights, and each foot's marker contact.
