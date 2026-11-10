@@ -13649,7 +13649,7 @@
             "cooking",
             "fire",
             "storage",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -15602,7 +15602,7 @@
           "knows": [
             "carpentry",
             "toolmaking",
-            "mending",
+            "wound_tending",
             "planting",
             "fire"
           ],
@@ -15923,7 +15923,7 @@
           "occupation": "child",
           "knows": [
             "planting",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Yarrow Underbank",
@@ -16225,7 +16225,7 @@
           "knows": [
             "fishing",
             "basketry",
-            "mending",
+            "wound_tending",
             "fire"
           ],
           "parents": [
@@ -16392,7 +16392,7 @@
           "occupation": "child",
           "knows": [
             "basketry",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Sorrel Fenwick"
@@ -16918,7 +16918,7 @@
             "planting",
             "cooking",
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -17338,7 +17338,7 @@
           "knows": [
             "cooking",
             "storage",
-            "mending",
+            "wound_tending",
             "fire",
             "basketry"
           ],
@@ -17865,7 +17865,7 @@
           "knows": [
             "carpentry",
             "toolmaking",
-            "mending",
+            "wound_tending",
             "planting",
             "fire"
           ],
@@ -18626,7 +18626,7 @@
           "knows": [
             "fishing",
             "basketry",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Osier Willow",
@@ -18745,7 +18745,7 @@
           "knows": [
             "cooking",
             "storage",
-            "mending",
+            "wound_tending",
             "fire",
             "basketry"
           ],
@@ -18919,7 +18919,7 @@
           "knows": [
             "carpentry",
             "toolmaking",
-            "mending",
+            "wound_tending",
             "planting",
             "fire"
           ],
@@ -20442,7 +20442,7 @@
           "household": "pike",
           "occupation": "child",
           "knows": [
-            "mending",
+            "wound_tending",
             "fire"
           ],
           "parents": [
@@ -21472,7 +21472,7 @@
           "occupation": "child",
           "knows": [
             "cooking",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Dele Oyelaran",
@@ -22441,7 +22441,7 @@
           "occupation": "trader",
           "knows": [
             "storage",
-            "mending",
+            "wound_tending",
             "fire",
             "writing"
           ],
@@ -22611,7 +22611,7 @@
           "household": "fenwick",
           "occupation": "child",
           "knows": [
-            "mending",
+            "wound_tending",
             "storage"
           ],
           "parents": [
@@ -22871,7 +22871,7 @@
             "planting",
             "storage",
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -23501,7 +23501,7 @@
           "occupation": "scribe",
           "knows": [
             "writing",
-            "mending",
+            "wound_tending",
             "fire",
             "toolmaking"
           ],
@@ -23702,7 +23702,7 @@
             "carpentry",
             "toolmaking",
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -23867,7 +23867,7 @@
           "occupation": "trader",
           "knows": [
             "storage",
-            "mending",
+            "wound_tending",
             "writing",
             "fire"
           ],
@@ -24021,7 +24021,7 @@
           "household": "marsh-end",
           "occupation": "child",
           "knows": [
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Tobiah Marsh",
@@ -24429,7 +24429,7 @@
           "knows": [
             "fishing",
             "fire",
-            "mending",
+            "wound_tending",
             "shelter"
           ],
           "parents": [
@@ -24918,7 +24918,7 @@
             "fishing",
             "smoking",
             "fire",
-            "mending",
+            "wound_tending",
             "cooking"
           ],
           "parents": [],
@@ -25463,7 +25463,7 @@
           "knows": [
             "medicine",
             "fire",
-            "mending",
+            "wound_tending",
             "cooking"
           ],
           "parents": [],
@@ -25646,7 +25646,7 @@
             "spear",
             "fire",
             "shelter",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Maren Vane"
@@ -25810,7 +25810,7 @@
           "knows": [
             "cooking",
             "fire",
-            "mending",
+            "wound_tending",
             "storage",
             "toolmaking"
           ],
@@ -26203,7 +26203,7 @@
           "occupation": "child",
           "knows": [
             "cooking",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Bramwell Tallow",
@@ -26364,7 +26364,7 @@
             "smoking",
             "fire",
             "shelter",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -26519,7 +26519,7 @@
             "cooking",
             "fire",
             "storage",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -26668,7 +26668,7 @@
           "occupation": "fisher",
           "knows": [
             "fishing",
-            "mending",
+            "wound_tending",
             "fire"
           ],
           "parents": [
@@ -27313,7 +27313,7 @@
             "writing",
             "fire",
             "storage",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -27495,7 +27495,7 @@
             "medicine",
             "cooking",
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -27683,7 +27683,7 @@
             "spear",
             "fire",
             "shelter",
-            "mending",
+            "wound_tending",
             "trapping"
           ],
           "parents": [],
@@ -27872,7 +27872,7 @@
             "cooking",
             "storage",
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -28145,7 +28145,7 @@
           "occupation": "fisher",
           "knows": [
             "fishing",
-            "mending",
+            "wound_tending",
             "fire",
             "shelter"
           ],
@@ -28526,7 +28526,7 @@
             "smoking",
             "fire",
             "shelter",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -28827,7 +28827,7 @@
           "household": "fenner-quay",
           "occupation": "child",
           "knows": [
-            "mending",
+            "wound_tending",
             "fishing"
           ],
           "parents": [
@@ -28940,7 +28940,7 @@
           "occupation": "trader",
           "knows": [
             "storage",
-            "mending",
+            "wound_tending",
             "fire",
             "cooking"
           ],
@@ -29099,7 +29099,7 @@
           "household": "harrow",
           "occupation": "child",
           "knows": [
-            "mending",
+            "wound_tending",
             "storage"
           ],
           "parents": [
@@ -29405,7 +29405,7 @@
           "occupation": "healer",
           "knows": [
             "medicine",
-            "mending",
+            "wound_tending",
             "fire",
             "cooking"
           ],
@@ -29769,7 +29769,7 @@
           "occupation": "fisher",
           "knows": [
             "fishing",
-            "mending",
+            "wound_tending",
             "fire",
             "shelter",
             "smoking"
@@ -29945,7 +29945,7 @@
             "smoking",
             "fire",
             "storage",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -30119,7 +30119,7 @@
           "occupation": "trader",
           "knows": [
             "storage",
-            "mending",
+            "wound_tending",
             "fire",
             "cooking",
             "fishing"
@@ -30529,7 +30529,7 @@
           "occupation": "fisher",
           "knows": [
             "fishing",
-            "mending",
+            "wound_tending",
             "fire",
             "shelter",
             "smoking"
@@ -30959,7 +30959,7 @@
             "planting",
             "cooking",
             "fire",
-            "mending",
+            "wound_tending",
             "storage"
           ],
           "parents": [
@@ -31219,7 +31219,7 @@
             "cooking",
             "fire",
             "storage",
-            "mending",
+            "wound_tending",
             "medicine"
           ],
           "parents": [],
@@ -31956,7 +31956,7 @@
             "planting",
             "cooking",
             "fire",
-            "mending",
+            "wound_tending",
             "storage"
           ],
           "parents": [],
@@ -32177,7 +32177,7 @@
             "planting",
             "storage",
             "fire",
-            "mending",
+            "wound_tending",
             "cooking"
           ],
           "parents": [],
@@ -32348,7 +32348,7 @@
             "cooking",
             "fire",
             "medicine",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -32515,7 +32515,7 @@
             "planting",
             "cooking",
             "fire",
-            "mending",
+            "wound_tending",
             "storage"
           ],
           "parents": [
@@ -32682,7 +32682,7 @@
           "knows": [
             "planting",
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -33206,7 +33206,7 @@
           "knows": [
             "fishing",
             "fire",
-            "mending",
+            "wound_tending",
             "smoking"
           ],
           "parents": [
@@ -33360,7 +33360,7 @@
           "occupation": "fisher",
           "knows": [
             "fishing",
-            "mending",
+            "wound_tending",
             "fire",
             "basketry"
           ],
@@ -33519,7 +33519,7 @@
           "household": "dunn",
           "occupation": "child",
           "knows": [
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -34088,7 +34088,7 @@
             "fishing",
             "smoking",
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -34509,7 +34509,7 @@
           "occupation": "fisher",
           "knows": [
             "fishing",
-            "mending",
+            "wound_tending",
             "basketry",
             "fire"
           ],
@@ -35292,7 +35292,7 @@
             "fishing",
             "smoking",
             "fire",
-            "mending",
+            "wound_tending",
             "basketry"
           ],
           "parents": [],
@@ -35477,7 +35477,7 @@
             "fire",
             "storage",
             "smoking",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -35645,7 +35645,7 @@
           "occupation": "child",
           "knows": [
             "basketry",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Nell Sedge"
@@ -35800,7 +35800,7 @@
           "household": "sedge",
           "occupation": "child",
           "knows": [
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Eadric Sedge",
@@ -36095,7 +36095,7 @@
           "household": "coombe-reed",
           "occupation": "child",
           "knows": [
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Jem Coombe",
@@ -36325,7 +36325,7 @@
           "occupation": "fisher",
           "knows": [
             "fishing",
-            "mending",
+            "wound_tending",
             "fire",
             "smoking",
             "basketry"
@@ -36648,7 +36648,7 @@
             "fishing",
             "smoking",
             "fire",
-            "mending",
+            "wound_tending",
             "shelter"
           ],
           "parents": [
@@ -37198,7 +37198,7 @@
             "fire",
             "basketry",
             "shelter",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -38669,7 +38669,7 @@
           "household": "ashby",
           "occupation": "child",
           "knows": [
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Hedric Ashby"
@@ -39149,7 +39149,7 @@
           "knows": [
             "archery",
             "trapping",
-            "mending",
+            "wound_tending",
             "fire",
             "shelter"
           ],
@@ -39980,7 +39980,7 @@
           "knows": [
             "carpentry",
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Orvin Hollis",
@@ -40428,7 +40428,7 @@
           "knows": [
             "carpentry",
             "fire",
-            "mending",
+            "wound_tending",
             "basketry"
           ],
           "parents": [],
@@ -40927,7 +40927,7 @@
             "fire",
             "basketry",
             "storage",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -41082,7 +41082,7 @@
             "fishing",
             "smoking",
             "fire",
-            "mending",
+            "wound_tending",
             "basketry",
             "shelter"
           ],
@@ -41251,7 +41251,7 @@
           "household": "fenlake",
           "occupation": "child",
           "knows": [
-            "mending",
+            "wound_tending",
             "fishing"
           ],
           "parents": [
@@ -41372,7 +41372,7 @@
             "fire",
             "smoking",
             "basketry",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -41705,7 +41705,7 @@
           "knows": [
             "fishing",
             "fire",
-            "mending",
+            "wound_tending",
             "basketry"
           ],
           "parents": [
@@ -41979,7 +41979,7 @@
             "fire",
             "smoking",
             "tanning",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -42594,7 +42594,7 @@
           "occupation": "child",
           "knows": [
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Edda Wray"
@@ -42743,7 +42743,7 @@
             "planting",
             "fire",
             "cooking",
-            "mending",
+            "wound_tending",
             "shelter"
           ],
           "parents": [],
@@ -43084,7 +43084,7 @@
           "occupation": "child",
           "knows": [
             "planting",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Orla Fenwick"
@@ -43390,7 +43390,7 @@
             "cooking",
             "fire",
             "basketry",
-            "mending"
+            "wound_tending"
           ],
           "parents": [],
           "sheet": {
@@ -43560,7 +43560,7 @@
           "occupation": "child",
           "knows": [
             "fire",
-            "mending"
+            "wound_tending"
           ],
           "parents": [
             "Bramwell Ashdown",
@@ -44109,7 +44109,7 @@
     "knows": [
       "fire",
       "fire_bolt",
-      "mending"
+      "wound_tending"
     ]
   },
   "weather": {
@@ -44121,8 +44121,8 @@
       "kind": "wolf",
       "count": 4,
       "near": "arrival",
-      "from_m": 250,
-      "to_m": 400,
+      "from_m": 370,
+      "to_m": 520,
       "bold": true,
       "instinct": "wolf_bold",
       "name": "the wolves of the low hills"
@@ -47881,5 +47881,228 @@
     "spread": [
       "berries"
     ]
-  }
+  },
+  "records": [
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Brackenford"
+        },
+        "toward": {
+          "community": "Kettlebridge"
+        }
+      },
+      "terms": {
+        "label": "rival town",
+        "value": -35,
+        "why": "the broken match, and Kettlebridge's sharp prices and pride; some have friends or kin there anyway"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Kettlebridge"
+        },
+        "toward": {
+          "community": "Brackenford"
+        }
+      },
+      "terms": {
+        "label": "rival town",
+        "value": -40,
+        "why": "the gate-due their carters call robbery, and the broken match"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Brackenford"
+        },
+        "toward": {
+          "community": "Coldwell"
+        }
+      },
+      "terms": {
+        "label": "outlaws",
+        "value": -60,
+        "why": "outlawed at the gate: households that lost their fields and live off the road"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Coldwell"
+        },
+        "toward": {
+          "community": "Brackenford"
+        }
+      },
+      "terms": {
+        "label": "the town that outlawed us",
+        "value": -50,
+        "why": "it took no side when the fields were taken and named us outlaws at its gate"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Brackenford"
+        },
+        "toward": {
+          "community": "Thornby"
+        }
+      },
+      "terms": {
+        "label": "debtors",
+        "value": -10,
+        "why": "forty baskets of grain owed since the Lean Year, paid slowly in fish, written on the ledger"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Thornby"
+        },
+        "toward": {
+          "community": "Brackenford"
+        }
+      },
+      "terms": {
+        "label": "creditors",
+        "value": -15,
+        "why": "the forty-basket debt from the Lean Year, kept on Brackenford's ledger"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Highshelf"
+        },
+        "toward": {
+          "community": "Kettlebridge"
+        }
+      },
+      "terms": {
+        "label": "the cairn-cutters",
+        "value": -45,
+        "why": "the cairn cutting closed the giants' trade with Kettlebridge"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Lanternquay"
+        },
+        "toward": {
+          "community": "Kettlebridge"
+        }
+      },
+      "terms": {
+        "label": "sellers of dear stone",
+        "value": -25,
+        "why": "Kettlebridge sells stone dear while the quay drowns"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Fernhollow"
+        },
+        "toward": {
+          "community": "Highshelf"
+        }
+      },
+      "terms": {
+        "label": "old friends",
+        "value": 45,
+        "why": "an old friendship from before the Settling"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Highshelf"
+        },
+        "toward": {
+          "community": "Fernhollow"
+        }
+      },
+      "terms": {
+        "label": "old friends",
+        "value": 45,
+        "why": "an old friendship from before the Settling"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Fernhollow"
+        },
+        "toward": {
+          "community": "Kettlebridge"
+        }
+      },
+      "terms": {
+        "label": "smoke-makers",
+        "value": -20,
+        "why": "the small folk distrust Kettlebridge's smoke and fires"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Elmwick"
+        },
+        "toward": {
+          "community": "Reedmoor"
+        }
+      },
+      "terms": {
+        "label": "rivals for the Lakemead",
+        "value": -25,
+        "why": "both claim the meadow"
+      }
+    },
+    {
+      "kind": "regard",
+      "status": "held",
+      "parties": {
+        "holder": {
+          "community": "Reedmoor"
+        },
+        "toward": {
+          "community": "Elmwick"
+        }
+      },
+      "terms": {
+        "label": "rivals for the Lakemead",
+        "value": -25,
+        "why": "both claim the meadow"
+      }
+    }
+  ]
 }

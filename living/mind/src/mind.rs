@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
 
 mod animal;
+mod dealings;
 mod judge;
 mod lived;
 pub mod lod;
@@ -64,6 +65,8 @@ struct ActorMind {
     retry_after: Option<Instant>,
     /// Parts of the last graph that were invalid and pruned (fed back next time).
     pruned: Vec<String>,
+    /// Merges refused since the last reorganization, and why (fed back in the next one).
+    refused_merges: Vec<String>,
     /// The last experience read for failures at remembered things (`weaken_missed`).
     missed_upto: u64,
     /// Integrations since the last reorganization ("sleep") of the mind.
@@ -1470,6 +1473,7 @@ impl Minds {
             judgments: recalled.judgments,
             places: self.places(actor),
             experiences,
+            dealings: self.dealings(actor),
         };
         let repertoire = self.repertoire_text(actor);
         // Think first, as the person and without the grammar; then compile the decision.
@@ -1804,6 +1808,7 @@ impl Minds {
             judgments: recalled.judgments,
             places: self.places(actor),
             experiences: meaningful.iter().map(|e| self.exp_line(e, &fmt, true)).collect(),
+            dealings: self.dealings(actor),
         };
         let animal = c.kind != "person";
         let system = match self.species.get(&c.kind).filter(|_| animal) {
@@ -1831,9 +1836,10 @@ impl Minds {
         let thought_ref = reference(actor, "consolidate");
         let known: Vec<u64> = meaningful.iter().map(|e| e.id).collect();
         let lookup = |id: u64| batch.iter().find(|e| e.id == id).map(|e| (e.at_ms, e.salience as f64, self.anchors(e)));
-        let (mut patch, notes) = memory::patch_from(&v, &known, &lookup);
+        let (mut patch, mut notes) = memory::patch_from(&v, &known, &lookup);
         memory::sugar_into(&v, &mut patch, &known);
-        self.canonical_people(&mut patch);
+        notes.extend(self.canonical_people(actor, &mut patch));
+        self.keep_refused_merges(actor, &notes);
         let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
         if c.stage <= 1 {
@@ -1920,7 +1926,10 @@ impl Minds {
     }
 
     /// `person:kael` → `person:7`: people are anchored by id so one person stays one concept.
-    fn canonical_people(&self, patch: &mut memory::Patch) {
+    /// Then merges are checked again (`memory::merge_refusal`) with people named by id and the
+    /// communities and places this mind has located; the refusals are returned as notes and
+    /// kept for the next reorganization.
+    fn canonical_people(&self, actor: u32, patch: &mut memory::Patch) -> Vec<String> {
         let people: Vec<(String, u32)> = self.conn.db.character().iter().filter(|c| c.kind == "person").map(|c| (c.name.to_lowercase(), c.id)).collect();
         let fix = |k: &mut String| {
             if let Some(rest) = k.strip_prefix("person:") {
@@ -1947,16 +1956,42 @@ impl Minds {
             fix(&mut m.0);
             fix(&mut m.1);
         }
-        patch.merges.retain(|(a, b)| {
-            let refused = memory::merge_refused(a, b);
-            if refused && a != b {
-                log::info!("merge {a} → {b} refused once people were named");
+        let known = self.known_anchors(actor);
+        let mut notes = Vec::new();
+        patch.merges.retain(|(a, b)| match memory::merge_refusal(a, b, &known) {
+            _ if a == b => false,
+            Some(why) => {
+                notes.push(format!("merge {a} → {b} refused: {why}"));
+                false
             }
-            !refused
+            None => true,
         });
         // Merge duplicate node ops created by the rewrite.
         let mut seen = std::collections::HashSet::new();
         patch.nodes.retain(|n| seen.insert(n.key.clone()));
+        notes
+    }
+
+    /// Communities by name and the places this mind has located, keyed as concepts are.
+    fn known_anchors(&self, actor: u32) -> memory::Known {
+        let named = |n: &str| memory::key(n).map(|k| k.trim_start_matches("place:").to_string());
+        memory::Known {
+            communities: self.conn.db.community().iter().filter_map(|c| Some((named(&c.name)?, c.id))).collect(),
+            places: self.conn.db.place().iter().filter(|p| p.actor == actor).filter_map(|p| Some((named(&p.name)?, p.x, p.y))).collect(),
+        }
+    }
+
+    /// Keep the merge refusals among a patch's notes for the next reorganization (a few, the latest).
+    fn keep_refused_merges(&self, actor: u32, notes: &[String]) {
+        let mut a = self.actors.lock().unwrap();
+        let kept = &mut a.entry(actor).or_default().refused_merges;
+        for n in notes.iter().filter(|n| n.starts_with("merge ") && n.contains(" refused: ")) {
+            if !kept.contains(n) {
+                kept.push(n.clone());
+            }
+        }
+        let over = kept.len().saturating_sub(12);
+        kept.drain(..over);
     }
 
     /// A model may echo the identity unchanged; only real changes become a new version.

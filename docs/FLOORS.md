@@ -211,7 +211,7 @@ Most of a per-character call is building the facts map (`script.rs:690-694`), no
 | Walkable tile classes | Rust inline | `map.rs:42-44` | H | stays Rust (it is the primitive); a floor's law can add costs, not redefine walking |
 | Sight day/night/torch, hearing | `Laws`, plus Rust bypasses | `rules/src/lib.rs:43-45`; `Laws` `script.rs:219-221`; bypasses `authority/src/brain.rs:646`, `act.rs:1167`, `combat.rs:106,492`, `motion.rs:361`; `rules/src/graph.rs:266`, `normalize.rs:622`; prompt text "~9 tiles" `mind/src/prompts.rs:76` | C, recomputed on a light or weather change | `laws()`; remove the bypasses; the prompt reads the law |
 | Separation, crowding | `Laws` | `script.rs:293-294` → `motion.rs:217-243` | C | `laws()` (exists) |
-| Reach per skill | Rust table | `rules/src/catalog.rs:26-80` | C | `<skill>_reach()` or a `reach()` table per compile |
+| Reach per skill | Rhai, read per compile (since `rules-2`) | `<skill>_spec()` in `skills.rhai` ([world rules](WORLD_RULES.md)) | C | done: a floor redefines a skill's spec, with its description |
 | Lunge, cooldown, recover, yield | Rhai, called per use | `skills.rhai:487`; `authority/src/combat.rs:176,187`, `act.rs:57,581,738,1106` | E → C | tables per compile |
 | Fire and shelter warmth radius | `Laws` | `script.rs:280-281` → `act.rs:131-152` | C | `laws()` (exists) |
 | Cold | Rhai boolean | `skills.rhai:83-85,134-136` | H (per change) | `cold(a)` (exists); a floor overrides it |

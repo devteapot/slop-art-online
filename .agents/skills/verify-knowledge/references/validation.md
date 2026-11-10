@@ -149,3 +149,13 @@ Fake replies prove memory plumbing and projection. They do not prove authentic m
 | `knowledge-pmem-real-132616` (paid) | Six candidates (ministral-14b, GLM Flash, DeepSeek Flash; direct and batch) internalized the same 11 rows. | `report.md`, `fidelity.json`, `cost.json`, `cand-*-nodes.txt`, `cand-*-edges.txt`, `journal/`. GLM batch wrote the resident as `person:29`, which led to the `perceived_people_only` guard. Results in `docs/PLAYER_MEMORY.md`. |
 
 Every attempt's `cleanup.json` reports database deletion, scratch Neo4j removal and journal removal. `knowledge-pmem-direct-134341` added phase 5 (death: rows deleted by the authority, last words still integrated) and passed all five. Not covered: two players at once, the game-day cadence in real time, buffer overflow over 2,000 rows, and recall replayed on the real graphs.
+
+## Merge guard (2026-11-10, Mac, branch `merge-guard` on bbf7271)
+
+| Run | Result | Evidence and notes |
+| --- | --- | --- |
+| `knowledge-mg-20261110-131913` | Every feature passed up to the new pattern check, which found no `FITS` edge. | The patch held both edges. Non-fixed types are stored as `RELATES {rel}`, so the query was fixed. Both refusals were in the thought's notes, and Teodor kept his name. |
+| `knowledge-mg2-20261110-132532`, `knowledge-mg3-20261110-133032` | Timed out waiting for the first decision (90 s) in `memory_integration`. | The only deliberation comes from the authority's reflect timer (170 s for Oren, counted from the world's start). The first run's cold build made it due early; warm reruns are faster. The wait is now 300 s. |
+| `knowledge-mg4-20261110-133517` | All 20 features passed, including "merges between different identities refused and told". | `requests-sleep.jsonl` (the batch request tells the consolidation's refused merge), `sleep-thought.json` (notes), `graph-sleep-merged.txt`, `graph-sleep-people.txt`, `graph-sleep-pattern.txt`. |
+
+Every attempt's `cleanup.json` reports database deletion, scratch Neo4j removal and journal removal. Not covered: the refusal list across a mind-service restart (it is kept in memory, as pruned graph parts are), and community and located-place refusals in a live world (unit tests only; land worlds clamp located places to 96 × 96, see docs/TRIALS.md).

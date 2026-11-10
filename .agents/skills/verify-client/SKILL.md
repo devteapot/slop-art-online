@@ -9,7 +9,7 @@ Read the [`verify` entry point](../verify/SKILL.md) first. It owns the shared la
 
 ## Run
 
-Preconditions: run from the repository root with the shared container up on `http://127.0.0.1:3300`. If it is down, run `docker start sao-living_spacetimedb_1`, then poll `curl -s http://127.0.0.1:3300/v1/ping` until it answers. `run.py` and `drive.py` require the container to be up before launch.
+Preconditions: run from the repository root with the shared container up on `http://127.0.0.1:3300`. If it is down, run `docker start sao-living_spacetimedb_1`, then poll `curl -s http://127.0.0.1:3300/v1/ping` until it answers. `run.py` and `drive.py` require the container to be up before launch. A worker's own server works too: set `LIVING_STDB_CONTAINER` and `LIVING_STDB_URL=http://127.0.0.1:<port>` as the [`verify` entry point](../verify/SKILL.md) says; the drop proxy forwards to that port (since 2026-11-10).
 
 ```bash
 R=client-$(date +%Y%m%d-%H%M%S)

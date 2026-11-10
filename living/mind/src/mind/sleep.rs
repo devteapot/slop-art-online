@@ -114,6 +114,8 @@ pub(super) struct Prep {
     route: String,
     at: Attention,
     msgs: Vec<Msg>,
+    /// How many refused merges the request tells of (cleared once it is applied).
+    told: usize,
     nodes: i64,
     edges: i64,
     faded: i64,
@@ -219,11 +221,11 @@ impl Minds {
         let concepts = store.concepts(actor, 60).await?;
         let facts = store.around(actor, &[], 120).await?;
         let lines: Vec<String> = facts.iter().map(|f| memory::render_keys(f, &fmt)).collect();
-        let msgs = vec![
-            Msg { role: "system", content: prompts::reorganize_system() },
-            Msg { role: "user", content: prompts::reorganize_user(&c.name, &self.persona_text(actor), &concepts, &lines) },
-        ];
-        Ok(Some(Prep { actor, name: c.name.clone(), route: self.profile(&c), at: self.attention(actor, None), msgs, nodes, edges, faded, now }))
+        let refused = self.actors.lock().unwrap().entry(actor).or_default().refused_merges.clone();
+        let mut user = prompts::reorganize_user(&c.name, &self.persona_text(actor), &concepts, &lines);
+        user.push_str(&refused_feedback(&refused));
+        let msgs = vec![Msg { role: "system", content: prompts::reorganize_system() }, Msg { role: "user", content: user }];
+        Ok(Some(Prep { actor, name: c.name.clone(), route: self.profile(&c), at: self.attention(actor, None), msgs, told: refused.len(), nodes, edges, faded, now }))
     }
 
     /// Apply a reorganization reply to the person's mind.
@@ -232,11 +234,20 @@ impl Minds {
         let actor = prep.actor;
         let v = llm::parse_json(&reply.content)?;
         let known: Vec<u64> = self.experiences(actor).iter().map(|e| e.id).collect();
-        let (mut patch, notes) = memory::patch_from(&v, &known, &|_| None);
+        let (mut patch, mut notes) = memory::patch_from(&v, &known, &|_| None);
         memory::sugar_into(&json!({"judgments": v["judgments"]}), &mut patch, &[]);
-        self.canonical_people(&mut patch);
+        notes.extend(self.canonical_people(actor, &mut patch));
+        // A person keeps the name this mind knows them by: a reorganization relabels them
+        // ("unresponsive townsfolk") by linking them to a pattern, not by renaming them.
+        self.name_people(actor, &mut patch);
         let thought_ref = reference(actor, "reorganize");
         store.apply(actor, &patch, &thought_ref, prep.now).await?;
+        {
+            let mut a = self.actors.lock().unwrap();
+            let kept = &mut a.entry(actor).or_default().refused_merges;
+            kept.drain(..prep.told.min(kept.len()));
+        }
+        self.keep_refused_merges(actor, &notes);
         let (nodes2, edges2) = store.size(actor).await?;
         let (nodes, edges, faded) = (prep.nodes, prep.edges, prep.faded);
         let summary = format!(
@@ -311,9 +322,31 @@ impl Minds {
     }
 }
 
+/// The merges refused since the last reorganization, told at the end of the next one's
+/// request, so the mind learns what it may merge (empty when there were none).
+fn refused_feedback(refused: &[String]) -> String {
+    if refused.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from(
+        "\n# Merges that were not made last time\nA merge folds one concept's ties into another, so different people, communities, places, things and kept memories stay separate concepts. To generalize them, add a pattern concept and link each to it.\n",
+    );
+    for r in refused {
+        out.push_str(&format!("- {r}\n"));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refused_merges_are_told_with_their_reason() {
+        assert_eq!(refused_feedback(&[]), "");
+        let f = refused_feedback(&["merge person:46 → person:50 refused: person:46 and person:50 are different (a person and a person): keep both, and link each to a shared concept to generalize".into()]);
+        assert!(f.starts_with("\n# Merges that were not made last time\n") && f.contains("- merge person:46 → person:50 refused: ") && f.contains("add a pattern concept and link each to it"), "{f}");
+    }
 
     fn cfg() -> Config {
         Config { mode: Mode::NightBatch, dusk: 20.0, dawn: 6.0, min_integrations: 2, min_gap: Duration::from_secs(1200), batch_gap: Duration::from_secs(60), poll: Duration::from_secs(1), give_up: None }

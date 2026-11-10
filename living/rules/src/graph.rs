@@ -548,12 +548,18 @@ fn check_with(n: &Node, depth: usize, count: &mut usize, max_nodes: usize, max_d
             }
         }
         Node::Do(a) => {
-            let spec = crate::catalog::skill(&a.skill).ok_or_else(|| format!("unknown skill `{}`", a.skill))?;
-            if spec.needs_target && a.target.is_none() {
-                return Err(format!("skill `{}` needs a target", a.skill));
-            }
-            if spec.needs_item && a.item.is_none() {
-                return Err(format!("skill `{}` needs an item", a.skill));
+            let all = crate::catalog::skills();
+            match all.get(&a.skill) {
+                Some(spec) => {
+                    if spec.needs_target && a.target.is_none() {
+                        return Err(format!("skill `{}` needs a target", a.skill));
+                    }
+                    if spec.needs_item && a.item.is_none() {
+                        return Err(format!("skill `{}` needs an item", a.skill));
+                    }
+                }
+                None if all.open => {}
+                None => return Err(format!("unknown skill `{}`", a.skill)),
             }
             if a.skill == "write" && a.text.as_deref().map_or(true, |t| t.trim().is_empty() || t.len() > MAX_TEXT) {
                 return Err("write needs text of 1..400 bytes".into());

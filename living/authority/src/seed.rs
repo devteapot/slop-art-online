@@ -441,6 +441,9 @@ pub struct Seed {
     /// Where settled residents work and which places they know (land worlds).
     #[serde(default)]
     pub town_life: crate::town::SeedTownLife,
+    /// Records the world starts with (a community's regard for another; docs/WORLD_RULES.md).
+    #[serde(default)]
+    pub records: Vec<crate::records::SeedRecord>,
 }
 
 #[derive(Deserialize, Default)]
@@ -813,6 +816,7 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
         }
     }
     communities(ctx, now);
+    crate::records::seed(ctx, &s.records, now);
     set_habitats(ctx, s);
     // Animals start in their species' groups (herds, packs), so a few wolves on a large map
     // are a pack that can breed rather than strangers who never meet.
@@ -990,7 +994,7 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
             let temperament = sp.as_ref().map(|s| s.temperament.clone()).filter(|t| !t.is_empty()).unwrap_or_else(living_rules::genes::person_temperament);
             let skills: Vec<String> = sp
                 .and_then(|s| s.skills)
-                .unwrap_or_else(|| living_rules::catalog::SKILLS.iter().map(|s| s.name.to_string()).collect());
+                .unwrap_or_else(|| common::scripts(ctx).skills().names().map(String::from).collect());
             // A skill that borrows another's knack (the rules' `<skill>_combat()`) draws none.
             let sc = common::scripts(ctx);
             let skills: Vec<String> = skills.into_iter().filter(|s| sc.shapes().knack(s) == s.as_str()).collect();

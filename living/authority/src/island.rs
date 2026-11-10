@@ -202,14 +202,8 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
             door: near(host::door(l)),
         })
         .collect();
-    // Newcomers arrive outside the (first) town's first gate, or on its plaza.
-    let town = land.settlements.iter().find(|s| s.kind == SiteKind::Town).or(land.settlements.first());
-    let arrive = town
-        .map(|s| match s.wall.as_ref().and_then(|w| w.gates.first().map(|g| (w, g))) {
-            Some((w, g)) => near((g.at.0 + g.out.0 * (w.thickness_m + 4.0), g.at.1 + g.out.1 * (w.thickness_m + 4.0))),
-            None => near(s.plaza.centre),
-        })
-        .unwrap_or_else(|| near((size as f32 / 2.0, size as f32 / 2.0)));
+    // Newcomers arrive on the first town's square, where its people are (`host::arrival`).
+    let arrive = host::arrival(land, &map);
     let info = LandInfo {
         id: 0,
         seed,
@@ -340,7 +334,8 @@ pub fn settle(ctx: &ReducerContext, h: &Hosted, seeded: &[Option<&SeedTown>], li
     }
 }
 
-/// Where a newcomer arrives: outside a land world's town, else the classic spot.
+/// Where a newcomer arrives: a land world's arrival point (its first town's square), else the
+/// classic spot.
 pub fn arrival(ctx: &ReducerContext) -> (f32, f32) {
     ctx.db.land().id().find(0).map_or((40.0, 60.0), |l| (l.arrive_x, l.arrive_y))
 }

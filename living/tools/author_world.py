@@ -776,6 +776,9 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
     tl.update(ways.get("work", {}))
     for r in world.get("routes", []):
         tl[r["occupation"]] = ["plaza"]
+    # Records the world starts with (a community's regard for another; docs/WORLD_RULES.md).
+    if world.get("records"):
+        seed["records"] = world["records"]
     seed_path.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n")
     n_rel = sum(len(s["relations"]) for s in sheets.values())
     print(f"wrote {seed_path.relative_to(ROOT)}: {len([s for s in world['settlements'] if s['name'] in casts])} settlements, {len(sheets)} residents; {n_rel} relations ({one} one-sided, {unshared} family/named/situation ties still one-sided), {sum(len(s['memories']) for s in sheets.values())} memories, {sum(len(s['stances']) for s in sheets.values())} stances, {sum(1 for s in sheets.values() if s.get('secret'))} secrets, {len(sits_all)} situations; {len(problems)} problems")

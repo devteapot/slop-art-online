@@ -10,7 +10,7 @@
 use super::context::Plan;
 use super::{ActorFacts, RegardIn, RoutineFacts, Scripts, SkillCtx, TargetFacts};
 use crate::catalog;
-use rhai::{Dynamic, Map, Scope};
+use rhai::{Dynamic, Scope};
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -111,6 +111,8 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     laws_and_tables(&mut p)?;
     needs(&mut p)?;
     skills(&mut p)?;
+    hooks(&mut p)?;
+    record_texts(&mut p)?;
     regard(&mut p)?;
     Ok(p.report)
 }
@@ -133,14 +135,13 @@ fn laws_and_tables(p: &mut Probe) -> Result<(), String> {
             }
         }
     }
-    if s.has("skill_io") {
-        for k in catalog::SKILLS {
-            let d = p.raw("skill_io", (k.name.to_string(),), &|| format!("for `{}`", k.name))?;
-            let ok = d.clone().try_cast::<Map>().is_some_and(|m| m.values().all(|v| v.is_string()));
-            if !ok {
-                return Err(format!("install refused: `skill_io(\"{}\")` must return a map of texts", k.name));
-            }
-        }
+    // Every skill the script has rules for (a duration or effects) is declared, with a
+    // description for minds.
+    let mut ruled: Vec<&str> = s.unary.iter().filter_map(|f| f.strip_suffix("_done").or_else(|| f.strip_suffix("_duration"))).filter(|n| !n.is_empty()).collect();
+    ruled.sort();
+    ruled.dedup();
+    if let Some(k) = ruled.iter().find(|k| s.skills.get(k).is_none()) {
+        return Err(format!("install refused: `{k}` has rules but no `{k}_spec()` (every skill declares its arguments and a description for minds)"));
     }
     Ok(())
 }
@@ -184,7 +185,7 @@ fn skills(p: &mut Probe) -> Result<(), String> {
     // Where an item is used: on nothing, a place, a person, and the structures items go into.
     let item_targets: Vec<&TargetFacts> = targets.iter().filter(|t| matches!(t.class.as_str(), "none" | "place") || t.id == 9 || ["storage", "campfire", "remains"].contains(&t.kind.as_str())).collect();
     for skill in &names {
-        let takes_item = catalog::skill(skill).is_none_or(|k| k.needs_item) || ["build", "craft"].contains(&skill.as_str());
+        let takes_item = s.skills.get(skill).is_none_or(|k| k.needs_item) || ["build", "craft"].contains(&skill.as_str());
         let mut samples: Vec<SkillCtx> = Vec::new();
         for a in &actors {
             for t in &targets {
@@ -235,13 +236,91 @@ fn skills(p: &mut Probe) -> Result<(), String> {
     Ok(())
 }
 
+/// Events the engine tells the rules of, besides a skill done (`on_<skill>`).
+pub const EVENTS: [&str; 2] = ["expire", "death"];
+
+/// Every hook, on the samples its event comes with: a skill's on that skill's samples, a record
+/// falling due on each sample record, a death on each body. A hook returns only record, tell
+/// and witness effects.
+fn hooks(p: &mut Probe) -> Result<(), String> {
+    let s = p.s;
+    let mut hooks: Vec<String> = s.unary.iter().filter_map(|f| f.strip_prefix("on_")).map(String::from).collect();
+    hooks.sort();
+    let actors = actors();
+    let targets = targets();
+    for event in &hooks {
+        if s.skills.get(event).is_none() && !EVENTS.contains(&event.as_str()) {
+            return Err(format!("install refused: `on_{event}`: the engine calls on_<skill> after a skill is done, on_expire and on_death"));
+        }
+        let mut samples: Vec<SkillCtx> = Vec::new();
+        match event.as_str() {
+            "expire" => {
+                for r in records() {
+                    for a in &actors[..2] {
+                        samples.push(SkillCtx { record: Some(r.clone()), ..sample("", a, &targets[3], "") });
+                    }
+                }
+            },
+            "death" => samples.extend(actors.iter().map(|a| sample("", a, &targets[0], ""))),
+            skill => {
+                for a in &actors {
+                    for t in &targets {
+                        for item in ["", "wood", "berries", "lodging"] {
+                            samples.push(SkillCtx { qty: 2, ..sample(skill, a, t, item) });
+                        }
+                    }
+                }
+            },
+        }
+        let f = format!("on_{event}");
+        for c in samples {
+            let d = p.ctx(&f, &c)?;
+            let fx = super::decode_effects(&f, d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+            if let Some(e) = fx.iter().find(|e| !e.of_a_hook()) {
+                return Err(format!("install refused: `{f}` returned {e:?}: a hook only makes, amends and closes records, tells and is seen"));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Records of each kind the shipped rules make, as a party to them sees them.
+pub fn records() -> Vec<crate::records::RecordFacts> {
+    use crate::records::{RecordFacts, COMMUNITY};
+    let t = |v: serde_json::Value| v.as_object().cloned().unwrap_or_default();
+    let deal = |from_done: i64, to_done: i64| t(serde_json::json!({"from_gives": "berries", "from_qty": 3, "to_gives": "wood", "to_qty": 10, "from_done": from_done, "to_done": to_done, "from_home": "10,10", "to_home": "", "words": "stack the wood at my store by dark", "due_h": 8.0}));
+    vec![
+        RecordFacts { id: 1, kind: "agreement".into(), status: "offered".into(), open: true, terms: deal(0, 0), parties: vec![("from".into(), 9), ("to".into(), 1)], me: "to".into(), by: 9, age_s: 30.0, due_s: Some(100.0) },
+        RecordFacts { id: 2, kind: "agreement".into(), status: "agreed".into(), open: true, terms: deal(0, 4), parties: vec![("from".into(), 1), ("to".into(), 9)], me: "from".into(), by: 1, age_s: 300.0, due_s: Some(200.0) },
+        RecordFacts { id: 3, kind: "agreement".into(), status: "agreed".into(), open: true, terms: deal(0, 10), parties: vec![("from".into(), 9), ("to".into(), 1)], me: "to".into(), by: 9, age_s: 300.0, due_s: Some(0.0) },
+        RecordFacts { id: 4, kind: "agreement".into(), status: "kept".into(), open: false, terms: deal(3, 10), parties: vec![("from".into(), 9), ("to".into(), 1)], me: "to".into(), by: 9, age_s: 900.0, due_s: Some(60.0) },
+        RecordFacts { id: 5, kind: "demand".into(), status: "open".into(), open: true, terms: t(serde_json::json!({"item": "berries", "qty": 2, "done": 0, "words": "the gate-due"})), parties: vec![("by".into(), 9), ("of".into(), 1)], me: "of".into(), by: 9, age_s: 20.0, due_s: Some(40.0) },
+        RecordFacts { id: 6, kind: "demand".into(), status: "open".into(), open: true, terms: t(serde_json::json!({"item": "wood", "qty": 1, "done": 0, "words": ""})), parties: vec![("by".into(), 1), ("of".into(), 9)], me: "by".into(), by: 1, age_s: 20.0, due_s: Some(0.0) },
+        RecordFacts { id: 7, kind: "regard".into(), status: "held".into(), open: true, terms: t(serde_json::json!({"label": "rival town", "value": -40, "why": "the broken match"})), parties: vec![("holder".into(), COMMUNITY | 2), ("toward".into(), COMMUNITY | 3)], me: "holder".into(), by: 0, age_s: 9_000.0, due_s: None },
+    ]
+}
+
+/// How each sample record reads to its party.
+fn record_texts(p: &mut Probe) -> Result<(), String> {
+    if !p.s.has("record_text") {
+        return Ok(());
+    }
+    for r in records() {
+        let d = p.raw("record_text", (super::context::record_map(&r),), &|| format!("for a {} record ({})", r.kind, r.status))?;
+        if !d.is_string() {
+            return Err(format!("install refused: `record_text` must return a text (a {} record)", r.kind));
+        }
+    }
+    Ok(())
+}
+
 fn regard(p: &mut Probe) -> Result<(), String> {
     if !p.s.has("perceived_of") {
         return Ok(());
     }
     for (observer, target) in [("person", "person"), ("wolf", "wolf"), ("wolf", "person"), ("person", "deer")] {
         for (known, revealed, own, night) in [(false, false, false, false), (true, false, false, true), (false, true, false, false), (true, true, true, false)] {
-            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "mending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night };
+            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "wound_tending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night };
             let d = p.raw("perceived_of", (super::regard_map(&r),), &|| format!("for a {observer} looking at a {target}"))?;
             super::decode_regard(d, &r).map_err(|e| format!("install refused: {e} (a {observer} looking at a {target})"))?;
         }
@@ -250,7 +329,9 @@ fn regard(p: &mut Probe) -> Result<(), String> {
 }
 
 fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx {
-    let mut c = SkillCtx { actor: a.clone(), target: t.clone(), item: item.into(), skill: skill.into(), season: "summer".into(), hour: 12.0, roll: 0.2, ..Default::default() };
+    let mut c = SkillCtx { actor: a.clone(), target: t.clone(), item: item.into(), skill: skill.into(), season: "summer".into(), hour: 12.0, roll: 0.2, want: "wood".into(), want_qty: 2, ..Default::default() };
+    // The actor's records come with it (the first body holds every kind).
+    c.records = if a.id == 1 { records() } else { Vec::new() };
     if t.class == "creature" && t.id == 0 {
         c.target.id = a.id as u64;
     }
@@ -277,7 +358,7 @@ pub fn actors() -> Vec<ActorFacts> {
     let all_known: Vec<String> = catalog::TECHNIQUES.iter().map(|t| t.name.to_string()).collect();
     let base = ActorFacts { id: 1, kind: "person".into(), hp: 70.0, hunger: 40.0, energy: 80.0, terrain: "grass".into(), age: 20.0, stage: "adult".into(), life: 0.3, kin_near: 2, pasture: 5.0, room: 25, ..Default::default() };
     vec![
-        ActorFacts { inv: all_items, knows: all_known, practice: [("strike".to_string(), 30)].into(), ..base.clone() },
+        ActorFacts { inv: all_items, knows: all_known, practice: [("strike".to_string(), 30)].into(), community: crate::records::COMMUNITY | 2, home: "10,10".into(), ..base.clone() },
         ActorFacts { id: 2, hp: 20.0, hunger: 100.0, energy: 0.0, terrain: "forest".into(), activity: "sleep".into(), stage: "elder".into(), age: 60.0, life: 0.95, near_shelter: true, hurt_by: 7, hurt_ago: Some(2_000.0), yielded_ago: Some(1_000.0), room: 12, ..base.clone() },
         ActorFacts { id: 3, hunger: 60.0, energy: 50.0, terrain: "dirt".into(), activity: "rest".into(), stage: "child".into(), age: 6.0, life: 0.1, inv: vec![("berries".into(), 2)], ..base.clone() },
         ActorFacts { id: 4, energy: 30.0, stage: "infant".into(), age: 0.5, life: 0.01, near_fire: true, ..base.clone() },
@@ -295,7 +376,7 @@ pub fn targets() -> Vec<TargetFacts> {
         TargetFacts { class: "place".into(), dist: 1.0, bearing: 0.5, ..Default::default() },
         // Oneself (the sample gives it the actor's id).
         TargetFacts { hp: 50.0, ..creature("person", 0, 50.0, 100.0) },
-        TargetFacts { inv: vec![("berries".into(), 2), ("armor".into(), 1), ("hide".into(), 3)], knows: vec!["fire".into()], company: 0, closing: 1.0, bearing: 0.2, yielded_ago: Some(3_000.0), ..creature("person", 9, 40.0, 100.0) },
+        TargetFacts { inv: vec![("berries".into(), 2), ("armor".into(), 1), ("hide".into(), 3)], knows: vec!["fire".into()], company: 0, closing: 1.0, bearing: 0.2, yielded_ago: Some(3_000.0), community: crate::records::COMMUNITY | 3, home: "40,12".into(), ..creature("person", 9, 40.0, 100.0) },
         TargetFacts { stage: "child".into(), activity: "sleep".into(), dist: 3.0, ..creature("person", 10, 100.0, 100.0) },
         TargetFacts { stage: "infant".into(), inv: vec![("berries".into(), 3)], near_fire: true, ..creature("person", 11, 100.0, 100.0) },
         TargetFacts { hurt_ago: 1e9, dist: 1.2, ..creature("wolf", 12, 55.0, 55.0) },
@@ -307,6 +388,10 @@ pub fn targets() -> Vec<TargetFacts> {
     }
     for kind in catalog::STRUCTURES {
         v.push(TargetFacts { class: "structure".into(), id: 30, kind: kind.to_string(), dist: 1.0, inv: vec![("berries".into(), 5), ("meat".into(), 2), ("wood".into(), 3)], ..Default::default() });
+        // Someone's household store.
+        if *kind == "storage" {
+            v.push(TargetFacts { class: "structure".into(), id: 31, kind: kind.to_string(), dist: 1.0, owner: 9, home: "40,12".into(), ..Default::default() });
+        }
     }
     v
 }
@@ -329,8 +414,10 @@ mod tests {
     const SKILLS: &str = include_str!("../../../scripts/skills.rhai");
 
     /// The rules with `overlay`'s functions in place of theirs, as a floor composes them.
+    /// The shipped rules with `overlay` (and a description for the test skill `zap`).
     fn refused(overlay: &str) -> String {
-        let s = Scripts::new(&crate::floors::compose(SKILLS, overlay).unwrap()).expect("compiles");
+        let overlay = format!("{overlay}\nfn zap_spec() {{ #{{ target: true, about: \"a test skill that zaps\" }} }}");
+        let s = Scripts::new(&crate::floors::compose(SKILLS, &overlay).unwrap()).expect("compiles");
         s.validate().expect_err("refused")
     }
 
