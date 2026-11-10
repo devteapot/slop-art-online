@@ -59,6 +59,8 @@ pub use lived::enabled as player_memory;
 struct ActorMind {
     consolidating: bool,
     deliberating: bool,
+    /// A deliberation is running now (`deliberate`): conversation turns wait for it (talk.rs).
+    running: bool,
     again: bool,
     last_consolidated: Option<Instant>,
     failures: u32,
@@ -1176,9 +1178,12 @@ impl Minds {
                     }
                     continue;
                 }
+                self.actors.lock().unwrap().entry(actor).or_default().running = true;
                 if let Err(e) = self.deliberate(&d).await {
                     log::warn!("deliberation for {} failed: {e:#}", self.name(actor));
                 }
+                self.actors.lock().unwrap().entry(actor).or_default().running = false;
+                self.clone().deliberation_ended(actor);
                 self.rethink_thought(actor, d.updated_ms);
                 if self.lod.on {
                     self.actors.lock().unwrap().entry(actor).or_default().last_deliberated = Some(Instant::now());
@@ -1580,6 +1585,7 @@ impl Minds {
                         reference: thought_ref.clone(),
                     };
                     log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
+                    self.deliberation_says(actor, &say, to);
                     let (tx, rx) = oneshot::channel();
                     self.conn.reducers.mind_say_then(actor, say, to, d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
@@ -1630,6 +1636,7 @@ impl Minds {
                         reference: thought_ref.clone(),
                     };
                     log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
+                    self.deliberation_says(actor, &say, to);
                     self.install(actor, g.to_json(), plan, say, to, d.updated_ms, t).await?;
                     return self.act(actor, acts, "deliberate").await;
                 }
