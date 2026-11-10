@@ -1332,12 +1332,102 @@ fn props(v: &Value) -> serde_json::Map<String, Value> {
     out
 }
 
-/// Anchors tie concepts to the world: oneself and a person cannot be merged away, and nothing
-/// is merged into oneself (that would make someone else's ties one's own). Checked again after
-/// name-style person keys become ids.
-pub fn merge_refused(from: &str, into: &str) -> bool {
-    let anchored = |k: &str| k == "self" || k.strip_prefix("person:").map_or(false, |r| r.parse::<u32>().is_ok());
-    from == into || anchored(from) || into == "self"
+/// What a key stands for when concepts are merged: one being, group, place or thing in the
+/// world ([`identity`]), or a general concept (`None`). Merging folds one node's ties into
+/// another, so two keys merge only when they stand for the same identity, or are both general:
+/// "townsfolk who don't answer" is a pattern that links to the people, not one that swallows them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Identity {
+    Me,
+    Person(u32),
+    /// A kept memory (`exp:<id>`).
+    Memory(u64),
+    /// Anything else written by its id alone: `bush:121571`, `wolf:12`.
+    Thing(u64),
+    /// A community by its name (`place:brackenford`).
+    Community(u32),
+    /// A place this mind has located (the `place` projection: a place node with coordinates).
+    Place(f32, f32),
+}
+
+/// Two located places this close are one place written twice.
+const SAME_PLACE_M: f32 = 6.0;
+
+impl Identity {
+    fn same(self, other: Identity) -> bool {
+        match (self, other) {
+            (Identity::Place(x, y), Identity::Place(a, b)) => (x - a).hypot(y - b) <= SAME_PLACE_M,
+            (a, b) => a == b,
+        }
+    }
+
+    fn what(self) -> &'static str {
+        match self {
+            Identity::Me => "you",
+            Identity::Person(_) => "a person",
+            Identity::Memory(_) => "a kept memory",
+            Identity::Thing(_) => "one particular thing",
+            Identity::Community(_) => "a community",
+            Identity::Place(..) => "a place you have located",
+        }
+    }
+}
+
+/// What the mind service knows that a key alone does not say, with names as keys (`brackenford`,
+/// `my_camp`): communities, and the places this mind has located. Empty for the check on keys
+/// alone in [`patch_from`].
+#[derive(Clone, Debug, Default)]
+pub struct Known {
+    pub communities: Vec<(String, u32)>,
+    pub places: Vec<(String, f32, f32)>,
+}
+
+/// The identity a key stands for, if any (see [`Identity`]).
+pub fn identity(k: &str, known: &Known) -> Option<Identity> {
+    if k == "self" {
+        return Some(Identity::Me);
+    }
+    let (prefix, tail) = k.split_once(':').unwrap_or(("", k));
+    if let Ok(n) = tail.parse::<u64>() {
+        return Some(match prefix {
+            "person" => u32::try_from(n).map_or(Identity::Thing(n), Identity::Person),
+            "exp" => Identity::Memory(n),
+            _ => Identity::Thing(n),
+        });
+    }
+    if matches!(prefix, "" | "place" | "community" | "town" | "village" | "band" | "settlement") {
+        if let Some((_, id)) = known.communities.iter().find(|(n, _)| n == tail) {
+            return Some(Identity::Community(*id));
+        }
+    }
+    if prefix == "place" {
+        if let Some((_, x, y)) = known.places.iter().find(|(n, ..)| n == tail) {
+            return Some(Identity::Place(*x, *y));
+        }
+    }
+    None
+}
+
+/// Why merging `from` into `into` would fold different identities together, as the mind is
+/// told it (`None`: the merge may go ahead). Duplicates of one identity merge, and so do general
+/// concepts, and a general key written as the same kind of anchor (`person:kael` into
+/// `person:5`, `place:the_town` into `place:brackenford`). Nothing is merged into oneself, and
+/// oneself, a person, a kept memory or a place is never swallowed by a general concept.
+/// Checked on keys alone in [`patch_from`], and again once people are named by id and
+/// communities and located places are known.
+pub fn merge_refusal(from: &str, into: &str, known: &Known) -> Option<String> {
+    let kind = |k: &str| k.split_once(':').map(|(p, _)| p.to_string());
+    match (identity(from, known), identity(into, known)) {
+        (_, Some(Identity::Me)) => Some(format!("{from} cannot become part of you: its ties are not yours")),
+        (Some(Identity::Me), _) => Some("you cannot be merged into anything else".into()),
+        (Some(a), Some(b)) if a.same(b) => None,
+        (Some(a), Some(b)) => Some(format!("{from} and {into} are different ({} and {}): keep both, and link each to a shared concept to generalize", a.what(), b.what())),
+        (Some(a), None) if kind(from) == kind(into) => Some(format!("{from} is {}, which a general concept cannot swallow: link it to {into}, or merge {into} into it if they are the same", a.what())),
+        (Some(a), None) => Some(format!("{from} is {}, which a general concept cannot swallow: link it to {into} instead", a.what())),
+        (None, Some(_)) if kind(from) == kind(into) => None,
+        (None, Some(b)) => Some(format!("{from} is not {into} itself ({}): link it to {into} instead", b.what())),
+        (None, None) => None,
+    }
 }
 
 /// Build a sanitized patch from a model reply; ids in `because` must be known experiences.
@@ -1346,8 +1436,11 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
     let mut notes = Vec::new();
     for m in v["merge"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
         let (Some(from), Some(into)) = (m["from"].as_str().and_then(key), m["into"].as_str().and_then(key)) else { continue };
-        if merge_refused(&from, &into) {
-            notes.push(format!("merge {from} → {into} refused"));
+        if from == into {
+            continue;
+        }
+        if let Some(why) = merge_refusal(&from, &into, &Known::default()) {
+            notes.push(format!("merge {from} → {into} refused: {why}"));
             continue;
         }
         patch.merges.push((from, into));
@@ -1752,14 +1845,77 @@ mod tests {
             {"from": "idea:my_strength", "into": "self"},
             {"from": "self", "into": "idea:me"},
             {"from": "person:kael", "into": "person:5"},
-            {"from": "idea:kael_seems_kind", "into": "idea:kael_is_friendly"}
+            {"from": "idea:kael_seems_kind", "into": "idea:kael_is_friendly"},
+            {"from": "idea:same", "into": "idea:same"}
         ]});
         let (p, notes) = patch_from(&v, &[], &|_| None);
         assert_eq!(p.merges, vec![("person:kael".into(), "person:5".into()), ("idea:kael_seems_kind".into(), "idea:kael_is_friendly".into())]);
-        assert_eq!(notes.len(), 3);
+        assert_eq!(notes.len(), 3, "a key merged into itself is no refusal to tell: {notes:?}");
+        assert!(notes.iter().all(|n| n.starts_with("merge ") && n.contains(" refused: ")), "{notes:?}");
         // A name-style person key becomes an id later; the check holds for the result too.
-        assert!(merge_refused("person:11", "person:5"));
-        assert!(merge_refused("person:11", "self"));
+        assert!(merge_refusal("person:11", "self", &Known::default()).is_some());
+    }
+
+    /// Night reorganization in the overnight trials (docs/TRIALS.md, lane A) folded residents
+    /// together (`person:46` and `person:78` into `person:50`, renamed "unresponsive
+    /// townsfolk") and stances about a person into the person.
+    #[test]
+    fn different_people_places_and_things_are_not_merged() {
+        let none = Known::default();
+        let refused = |a: &str, b: &str| merge_refusal(a, b, &none);
+        let why = refused("person:46", "person:50").expect("two residents");
+        assert!(why.contains("person:46 and person:50 are different (a person and a person)") && why.contains("link each to a shared concept"), "{why}");
+        assert!(refused("person:46", "idea:unresponsive_townsfolk").is_some(), "a pattern links to people, it does not swallow them");
+        assert!(refused("person:76", "person:passing_strangers").is_some());
+        assert!(refused("stance:kelta_worth_another_try", "person:31").is_some(), "a stance about a person is not the person");
+        assert!(refused("exp:17384", "idea:free_teaching_errand").is_some(), "a kept memory is not generalized away");
+        assert!(refused("exp:17384", "exp:21340").is_some());
+        assert!(refused("bush:91203", "bush:97615").is_some(), "two bushes");
+        assert!(refused("bush:79824", "stance:ghost_places").is_some());
+        // The same identity, and general concepts, still merge.
+        assert_eq!(refused("person:kael", "person:5"), None, "a name-style alias of a person");
+        assert_eq!(refused("stance:door_calling_wastes_breath", "idea:townsfolk_not_listening"), None);
+        assert_eq!(refused("place:branford", "place:brackenford"), None, "unknown places are general");
+        assert!(refused("place:bush_121571_east_of_town", "bush:121571").is_some(), "ids inside a name are not read; another kind of key links instead");
+        // Once communities and located places are known.
+        let known = Known { communities: vec![("brackenford".into(), 1), ("elmwick".into(), 2)], places: vec![("my_camp".into(), 100.0, 100.0), ("camp_by_the_road".into(), 103.0, 101.0), ("west_store".into(), 140.0, 100.0)] };
+        let refused = |a: &str, b: &str| merge_refusal(a, b, &known);
+        assert!(refused("place:elmwick", "place:brackenford").is_some(), "two towns");
+        assert_eq!(refused("place:the_town", "place:brackenford"), None, "another name for the town");
+        assert_eq!(refused("community:brackenford", "place:brackenford"), None, "one community under two keys");
+        assert!(refused("stance:brackenford_deaf_to_me", "place:brackenford").is_some());
+        assert_eq!(refused("place:camp_by_the_road", "place:my_camp"), None, "one place located twice, 3 m apart");
+        assert!(refused("place:west_store", "place:my_camp").is_some(), "40 m apart");
+        let why = refused("place:my_camp", "place:camp_east").expect("a located place into an unlocated one");
+        assert!(why.contains("merge place:camp_east into it"), "{why}");
+        assert_eq!(refused("place:camp_east", "place:my_camp"), None);
+    }
+
+    /// Replays recorded reorganization replies through the merge check, one line per proposed
+    /// merge (old guard and new verdict), for the trial evidence in docs/TRIALS.md. Input: JSON
+    /// lines `{"run", "reply" (the model's text), "communities": [[key, id]], "places": [[key,
+    /// x, y]]}` in `LIVING_MERGE_REPLAY`. Run with `cargo test -p living-mind merge_replay --
+    /// --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn merge_replay() {
+        let Ok(path) = std::env::var("LIVING_MERGE_REPLAY") else { return };
+        let old_refused = |a: &str, b: &str| a == b || a == "self" || b == "self" || a.strip_prefix("person:").is_some_and(|r| r.parse::<u32>().is_ok());
+        for line in std::fs::read_to_string(path).unwrap().lines() {
+            let row: Value = serde_json::from_str(line).unwrap();
+            let Ok(v) = crate::llm::parse_json(row["reply"].as_str().unwrap_or_default()) else { continue };
+            let known = Known {
+                communities: row["communities"].as_array().into_iter().flatten().map(|c| (c[0].as_str().unwrap().to_string(), c[1].as_u64().unwrap() as u32)).collect(),
+                places: row["places"].as_array().into_iter().flatten().map(|p| (p[0].as_str().unwrap().to_string(), p[1].as_f64().unwrap() as f32, p[2].as_f64().unwrap() as f32)).collect(),
+            };
+            for m in v["merge"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
+                let (Some(from), Some(into)) = (m["from"].as_str().and_then(key), m["into"].as_str().and_then(key)) else { continue };
+                let (single, _) = patch_from(&json!({"merge": [m]}), &[], &|_| None);
+                let verdict = if single.merges.is_empty() { merge_refusal(&from, &into, &Known::default()) } else { merge_refusal(&from, &into, &known) };
+                let kinds = [identity(&from, &known), identity(&into, &known)].map(|i| i.map(|i| format!("{i:?}").split('(').next().unwrap().to_string()).unwrap_or("general".into()));
+                println!("{}", json!({"run": row["run"], "from": from, "into": into, "old_refused": old_refused(&from, &into), "same": from == into, "refusal": verdict, "kinds": kinds}));
+            }
+        }
     }
 
     #[test]
