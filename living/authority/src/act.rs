@@ -835,17 +835,25 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
         crate::acts::next(ctx, a.id, now);
         return;
     }
-    if let Some(c) = ctx.db.character().id().find(a.id).filter(|_| !repeat) {
-        // Routine successes (gathering a berry, arriving somewhere) are not experiences worth
-        // recording; failures and meaningful acts are.
-        let notable = !ok || matches!(a.skill.as_str(), "build" | "craft" | "cook" | "give" | "store" | "take" | "attack" | "conceive" | "threaten" | "yield");
-        if c.ai && notable {
-            let at = ctx.db.body().id().find(a.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
-            let text = if ok { format!("You finished: {}. {}", a.label, why) } else { format!("You failed to {}: {}", a.label, why) };
-            percept(ctx, &c, now, "own", a.id, 0, at, text.trim().to_string(), if ok { 0.08 } else { 0.35 });
-        }
+    // Routine successes (gathering a berry, arriving somewhere) are not experiences worth
+    // recording; failures and meaningful acts are.
+    if !repeat && (!ok || matches!(a.skill.as_str(), "build" | "craft" | "cook" | "give" | "store" | "take" | "attack" | "conceive" | "threaten" | "yield")) {
+        tell(ctx, a.id, ok, &a.label, why, now);
     }
     common::wake(ctx, a.id);
+}
+
+/// Tell a character how its graph's action went, as an experience in its own log. A mind is
+/// told; so is a person playing the character when it failed (their command, refused or
+/// broken off), in the same words. Instinct-only creatures are not.
+fn tell(ctx: &ReducerContext, id: u32, ok: bool, what: &str, why: &str, now: u64) {
+    let Some(c) = ctx.db.character().id().find(id) else { return };
+    if !c.ai && (ok || !crate::presence::played(ctx, id)) {
+        return;
+    }
+    let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+    let text = if ok { format!("You finished: {what}. {why}") } else { format!("You failed to {what}: {why}") };
+    percept(ctx, &c, now, "own", id, 0, at, text.trim().to_string(), if ok { 0.08 } else { 0.35 });
 }
 
 /// A failure is news unless an identical one (`what` and `why`) came in the last
@@ -867,7 +875,7 @@ fn news(ctx: &ReducerContext, id: u32, what: &str, why: &str, now: u64) -> bool 
 
 /// A graph's action refused as it would start (`begin` said why). It is a failure like one
 /// after starting: counted against its routine and told to the controller, once per
-/// `repeat_failure_s` for the same action and reason, as failures are told. A guard's first
+/// `repeat_failure_s` for the same action and reason, as failures are told (`tell`). A guard's first
 /// choice refused on every look while a fallback runs counts once a window, not every look.
 /// Returns whether it was news (the evaluator then counts it in `fails`).
 pub fn refused(ctx: &ReducerContext, id: u32, node: u16, revision: u32, what: &str, why: &str, now: u64) -> bool {
@@ -875,10 +883,7 @@ pub fn refused(ctx: &ReducerContext, id: u32, node: u16, revision: u32, what: &s
         return false;
     }
     routine_outcome(ctx, id, revision, node, false, why, now);
-    if let Some(c) = ctx.db.character().id().find(id).filter(|c| c.ai) {
-        let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
-        percept(ctx, &c, now, "own", id, 0, at, format!("You failed to {what}: {why}"), 0.35);
-    }
+    tell(ctx, id, false, what, why, now);
     true
 }
 
