@@ -49,6 +49,9 @@ const FAR_M: f32 = 30.0;
 const GROUP_OVER: usize = 2;
 /// How often the hint's options are recomputed (s).
 const HINT_EVERY_S: f64 = 0.25;
+/// Most the hint's checks take in one frame (a unit is one or two script calls of about 50 µs);
+/// a job toward a person takes several frames.
+const HINT_BUDGET: std::time::Duration = std::time::Duration::from_micros(1_000);
 /// How long an act's outcome is awaited (ms) and shown (s).
 const AWAIT_MS: f64 = 180_000.0;
 const TOAST_S: f64 = 4.5;
@@ -202,97 +205,134 @@ fn pretty(s: &str) -> String {
 /// Every choice the rules allow toward `aim`, as far as my character knows, in the catalog's
 /// order. `target` is the target as I perceive it (none for myself); `skills` is the catalog.
 pub fn choices(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, skills: &[Skill]) -> Vec<Choice> {
-    let shapes = sc.shapes();
-    let pack: Vec<(String, u32)> = me.actor.inv.clone();
-    let techniques = me.actor.knows.clone();
-    let on_thing = matches!(aim, Aim::Thing { .. });
-    let my_kind = target.is_some_and(|t| t.class == "creature" && t.kind == me.actor.kind);
     let mut out = Vec::new();
     for spec in skills {
-        let skill = spec.name.as_str();
-        // Real-time skills (fighting, dashing) are the skill bar's; the rest are acts or behavior.
-        if shapes.get(skill).is_some_and(|s| s.real_time) {
-            continue;
-        }
-        let wants_target = *aim != Aim::Me;
-        if spec.target != wants_target {
-            continue;
-        }
-        let checked = has_check(sc, skill);
-        if !checked && (on_thing || (wants_target && !my_kind)) {
-            continue;
-        }
-        // An argument this client cannot give: a behavior graph (reworking one's ways).
-        if spec.args.iter().any(|a| a == "graph") {
-            continue;
-        }
-        let ctx = |item: &str, text: &str, tgt_holds: Option<&str>| {
-            let mut t = target.cloned().unwrap_or_else(|| TargetFacts { class: "none".into(), ..Default::default() });
-            // What a target holds is not perceived: assume it has what is asked of it.
-            if let Some(i) = tgt_holds {
-                if !t.inv.iter().any(|(k, _)| k == i) {
-                    t.inv.push((i.to_string(), 1));
-                }
-            }
-            // A skill that asks something in return is checked with something to ask for (each
-            // thing there is becomes its own choice below).
-            let want = if spec.args.iter().any(|a| a == "want") { catalog::ITEMS.iter().map(|i| i.name).find(|w| *w != item).unwrap_or_default() } else { "" };
-            SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, want: want.to_string(), want_qty: (!want.is_empty()) as u32, night: me.night, hour: me.hour, season: "summer".into(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
-        };
-        let allowed = |item: &str, text: &str| sc.check(skill, &ctx(item, text, (!item.is_empty()).then_some(item))).is_ok();
-        // Words: refused without, allowed with.
-        let words_needed = |item: &str| checked && !allowed(item, "") && allowed(item, "…");
-        if !spec.item {
-            if allowed("", "") {
-                out.push(Choice::new(skill, pretty(skill)));
-            } else if words_needed("") {
-                out.push(Choice { words: true, ..Choice::new(skill, format!("{} …", pretty(skill))) });
-            }
-            continue;
-        }
-        // Item candidates: what I carry, what I know, what the help names, and (for something
-        // that may hold things) every item there is.
-        let mut cands: Vec<String> = Vec::new();
-        let listed = spec.items.clone();
-        // A skill that asks something in return offers what I carry and its own words: the
-        // rules let terms promise anything, and every item for every want is too long a list.
-        let asks = spec.args.iter().any(|a| a == "want");
-        if checked && asks {
-            cands.extend(pack.iter().map(|(i, _)| i.clone()));
-        } else if checked {
-            cands.extend(pack.iter().map(|(i, _)| i.clone()));
-            cands.extend(techniques.iter().cloned());
-            if !matches!(aim, Aim::Me) {
-                cands.extend(catalog::ITEMS.iter().map(|i| i.name.to_string()));
-            }
-        }
-        cands.extend(listed);
-        let mut seen = HashSet::new();
-        cands.retain(|c| seen.insert(c.clone()));
-        let have = |i: &str| pack.iter().find(|(k, _)| k == i).map(|(_, n)| *n);
-        for item in cands {
-            let ok = allowed(&item, "");
-            let words = !ok && words_needed(&item);
-            if !ok && !words {
-                continue;
-            }
-            // How many I carry, unless it is the name of something I know (teach spear).
-            let count = have(&item).filter(|_| !techniques.contains(&item)).map(|n| format!(" ×{n}")).unwrap_or_default();
-            let label = format!("{} {}{count}{}", pretty(skill), pretty(&item), if words { " …" } else { "" });
-            let c = Choice { item: Some(item.clone()), words, ..Choice::new(skill, label) };
-            // A trade or terms name what I ask in return: one choice per thing to ask for.
-            if asks {
-                for w in catalog::ITEMS.iter().map(|i| i.name.to_string()).chain(spec.items.iter().cloned()).filter(|w| *w != item) {
-                    out.push(Choice { want: Some(w.clone()), label: format!("{} {} for {}", pretty(skill), pretty(&item), pretty(&w)), ..c.clone() });
-                }
-            } else {
-                out.push(c);
+        if let Some(p) = plan(sc, me, aim, target, spec) {
+            for unit in 0..p.units(spec) {
+                check_unit(sc, me, target, spec, &p, unit, &mut out);
             }
         }
     }
-    // What the rules check for this target first; skills they leave open (walk to, join) after.
-    out.sort_by_key(|c| !has_check(sc, &c.skill));
+    in_order(sc, &mut out);
     out
+}
+
+/// What the rules check for this target first; skills they leave open (walk to, join) after.
+fn in_order(sc: &Scripts, out: &mut [Choice]) {
+    out.sort_by_key(|c| !has_check(sc, &c.skill));
+}
+
+/// One skill's share of [`choices`]: whether the rules decide it (`<skill>_check`), whether it
+/// asks something in return, and the items to try (none for a skill that takes no item). Each
+/// item is checked on its own ([`check_unit`]), so the hint can spread a list over frames.
+struct Plan {
+    checked: bool,
+    asks: bool,
+    items: Vec<String>,
+}
+
+impl Plan {
+    /// The checks it takes: one, or one per item.
+    fn units(&self, spec: &Skill) -> usize {
+        if spec.item {
+            self.items.len()
+        } else {
+            1
+        }
+    }
+}
+
+/// Whether `spec` is offered toward `aim` at all, and what to try with it.
+fn plan(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, spec: &Skill) -> Option<Plan> {
+    let skill = spec.name.as_str();
+    // Real-time skills (fighting, dashing) are the skill bar's; the rest are acts or behavior.
+    if sc.shapes().get(skill).is_some_and(|s| s.real_time) {
+        return None;
+    }
+    let wants_target = *aim != Aim::Me;
+    if spec.target != wants_target {
+        return None;
+    }
+    let checked = has_check(sc, skill);
+    let on_thing = matches!(aim, Aim::Thing { .. });
+    let my_kind = target.is_some_and(|t| t.class == "creature" && t.kind == me.actor.kind);
+    if !checked && (on_thing || (wants_target && !my_kind)) {
+        return None;
+    }
+    // An argument this client cannot give: a behavior graph (reworking one's ways).
+    if spec.args.iter().any(|a| a == "graph") {
+        return None;
+    }
+    // A skill that asks something in return offers what I carry and its own words: the rules
+    // let terms promise anything, and every item for every want is too long a list.
+    let asks = spec.args.iter().any(|a| a == "want");
+    let mut items: Vec<String> = Vec::new();
+    if spec.item {
+        // Item candidates: what I carry, what I know, what the help names, and (for something
+        // that may hold things) every item there is.
+        if checked && asks {
+            items.extend(me.actor.inv.iter().map(|(i, _)| i.clone()));
+        } else if checked {
+            items.extend(me.actor.inv.iter().map(|(i, _)| i.clone()));
+            items.extend(me.actor.knows.iter().cloned());
+            if !matches!(aim, Aim::Me) {
+                items.extend(catalog::ITEMS.iter().map(|i| i.name.to_string()));
+            }
+        }
+        items.extend(spec.items.iter().cloned());
+        let mut seen = HashSet::new();
+        items.retain(|c| seen.insert(c.clone()));
+    }
+    Some(Plan { checked, asks, items })
+}
+
+/// The rules' checks for one unit of a skill's plan (the skill itself, or one of its items),
+/// adding what they allow to `out`.
+#[allow(clippy::too_many_arguments)]
+fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill, plan: &Plan, unit: usize, out: &mut Vec<Choice>) {
+    let skill = spec.name.as_str();
+    let ctx = |item: &str, text: &str, tgt_holds: Option<&str>| {
+        let mut t = target.cloned().unwrap_or_else(|| TargetFacts { class: "none".into(), ..Default::default() });
+        // What a target holds is not perceived: assume it has what is asked of it.
+        if let Some(i) = tgt_holds {
+            if !t.inv.iter().any(|(k, _)| k == i) {
+                t.inv.push((i.to_string(), 1));
+            }
+        }
+        // A skill that asks something in return is checked with something to ask for (each
+        // thing there is becomes its own choice below).
+        let want = if spec.args.iter().any(|a| a == "want") { catalog::ITEMS.iter().map(|i| i.name).find(|w| *w != item).unwrap_or_default() } else { "" };
+        SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, want: want.to_string(), want_qty: (!want.is_empty()) as u32, night: me.night, hour: me.hour, season: "summer".into(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
+    };
+    let allowed = |item: &str, text: &str| sc.check(skill, &ctx(item, text, (!item.is_empty()).then_some(item))).is_ok();
+    // Words: refused without, allowed with.
+    if !spec.item {
+        if allowed("", "") {
+            out.push(Choice::new(skill, pretty(skill)));
+        } else if plan.checked && allowed("", "…") {
+            out.push(Choice { words: true, ..Choice::new(skill, format!("{} …", pretty(skill))) });
+        }
+        return;
+    }
+    let item = plan.items[unit].as_str();
+    let ok = allowed(item, "");
+    let words = !ok && plan.checked && allowed(item, "…");
+    if !ok && !words {
+        return;
+    }
+    // How many I carry, unless it is the name of something I know (teach spear).
+    let have = me.actor.inv.iter().find(|(k, _)| k == item).map(|(_, n)| *n);
+    let count = have.filter(|_| !me.actor.knows.iter().any(|k| k == item)).map(|n| format!(" ×{n}")).unwrap_or_default();
+    let label = format!("{} {}{count}{}", pretty(skill), pretty(item), if words { " …" } else { "" });
+    let c = Choice { item: Some(item.to_string()), words, ..Choice::new(skill, label) };
+    // A trade or terms name what I ask in return: one choice per thing to ask for.
+    if plan.asks {
+        for w in catalog::ITEMS.iter().map(|i| i.name.to_string()).chain(spec.items.iter().cloned()).filter(|w| w != item) {
+            out.push(Choice { want: Some(w.clone()), label: format!("{} {} for {}", pretty(skill), pretty(item), pretty(&w)), ..c.clone() });
+        }
+    } else {
+        out.push(c);
+    }
 }
 
 /// Requests in words to a person: to be taught what I don't know.
@@ -429,6 +469,8 @@ pub struct Verbs {
     last: HashMap<String, Choice>,
     f_down: Option<f64>,
     hint_at: f64,
+    /// The hint being worked out ([`HintJob`]).
+    job: Option<HintJob>,
     seen: HashSet<u64>,
     errors_seen: usize,
 }
@@ -540,23 +582,82 @@ fn label_of(conn: &DbConnection, id: u32) -> String {
     conn.db.seen_characters().id().find(&id).map_or_else(|| "someone".into(), |c| c.label)
 }
 
+/// What the choices toward an aim are worked out from: its title, the target as I perceive it,
+/// whether the rules are asked at all (a creature I no longer perceive has no choices), and
+/// whether requests in words follow (a person of my kind).
+struct Toward {
+    title: String,
+    target: Option<TargetFacts>,
+    open: bool,
+    requests: bool,
+}
+
+fn toward(conn: &DbConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim) -> Toward {
+    match aim {
+        Aim::Me => Toward { title: "Yourself".into(), target: None, open: true, requests: false },
+        Aim::Thing { class, kind, at, id, amount, .. } => Toward { title: pretty(kind), target: Some(thing_facts(class, kind, *id, *amount, at.distance(my_at))), open: true, requests: false },
+        Aim::Creature { id } => match creature_facts(conn, rules, *id, 0.0) {
+            Some(t) => Toward { title: label_of(conn, *id), requests: t.kind == me.actor.kind && t.kind == "person", target: Some(t), open: true },
+            None => Toward { title: label_of(conn, *id), target: None, open: false, requests: false },
+        },
+    }
+}
+
 /// The choices toward an aim, with its title.
 fn options(conn: &DbConnection, rules: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim) -> (String, Vec<Choice>) {
-    match aim {
-        Aim::Me => ("Yourself".into(), choices(rules, me, aim, None, skills)),
-        Aim::Thing { class, kind, at, id, amount, .. } => {
-            let t = thing_facts(class, kind, *id, *amount, at.distance(my_at));
-            (pretty(kind), choices(rules, me, aim, Some(&t), skills))
-        }
-        Aim::Creature { id } => {
-            let Some(t) = creature_facts(conn, rules, *id, 0.0) else { return (label_of(conn, *id), Vec::new()) };
-            let person = t.kind == me.actor.kind;
-            let mut c = choices(rules, me, aim, Some(&t), skills);
-            if person && t.kind == "person" {
-                c.extend(requests(me));
+    let t = toward(conn, rules, me, my_at, aim);
+    if !t.open {
+        return (t.title, Vec::new());
+    }
+    let mut c = choices(rules, me, aim, t.target.as_ref(), skills);
+    if t.requests {
+        c.extend(requests(me));
+    }
+    (t.title, c)
+}
+
+/// The hint's choices being worked out a few rule checks at a time ([`HINT_BUDGET`]), so the
+/// checks toward a person (a hundred script calls and more, `teach` alone about 4 ms) never stall
+/// one frame. What the hint shows changes only once a job is done.
+struct HintJob {
+    aim: Aim,
+    me: Me,
+    toward: Toward,
+    /// The script revision it is checked against; the skill and the unit of its plan next.
+    revision: u32,
+    skill: usize,
+    unit: usize,
+    plan: Option<Plan>,
+    out: Vec<Choice>,
+}
+
+impl HintJob {
+    /// Check units until the budget is spent (at least one). Returns whether every skill is done.
+    fn step(&mut self, sc: &Scripts, skills: &[Skill], budget: std::time::Duration) -> bool {
+        let t0 = std::time::Instant::now();
+        let HintJob { aim, me, toward, skill, unit, plan: current, out, .. } = self;
+        while toward.open && *skill < skills.len() {
+            let spec = &skills[*skill];
+            let Some(p) = current.as_ref() else {
+                *current = plan(sc, me, aim, toward.target.as_ref(), spec);
+                *unit = 0;
+                if current.is_none() {
+                    *skill += 1;
+                }
+                continue;
+            };
+            if *unit >= p.units(spec) {
+                *current = None;
+                *skill += 1;
+                continue;
             }
-            (label_of(conn, *id), c)
+            check_unit(sc, me, toward.target.as_ref(), spec, p, *unit, out);
+            *unit += 1;
+            if t0.elapsed() >= budget {
+                return false;
+            }
         }
+        true
     }
 }
 
@@ -587,6 +688,27 @@ fn aim(
         return;
     };
     let now = time.elapsed_secs_f64();
+    // A hint under way goes on where it stopped; a script install starts it again.
+    if let Some(mut job) = v.job.take() {
+        if job.revision != rules.revision {
+            return;
+        }
+        if !job.step(sc, &rules.skills, HINT_BUDGET) {
+            v.job = Some(job);
+            return;
+        }
+        let HintJob { aim: a, toward, mut out, .. } = job;
+        in_order(sc, &mut out);
+        if toward.requests {
+            out.extend(requests(&job.me));
+        }
+        let key = a.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
+        v.likely = likely(sc, &a, &out, v.last.get(&key)).cloned();
+        v.has_options = !out.is_empty();
+        v.aim_name = toward.title;
+        v.aim = Some(a);
+        return;
+    }
     if now - v.hint_at < HINT_EVERY_S {
         return;
     }
@@ -612,13 +734,12 @@ fn aim(
     }
     let me_facts = me_facts(conn, me, scene.now_ms, sc, weather.authority.map(|(r, _)| r), &all, my_at);
     match aim {
+        // The hint follows once its job is done (this frame's share is started now).
         Some(a) => {
-            let (name, ch) = options(conn, sc, &rules.skills, &me_facts, my_at, &a);
-            let key = a.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
-            v.likely = likely(sc, &a, &ch, v.last.get(&key)).cloned();
-            v.has_options = !ch.is_empty();
-            v.aim_name = name;
-            v.aim = Some(a);
+            let toward = toward(conn, sc, &me_facts, my_at, &a);
+            let mut job = HintJob { aim: a, me: me_facts, toward, revision: rules.revision, skill: 0, unit: 0, plan: None, out: Vec::new() };
+            job.step(sc, &rules.skills, HINT_BUDGET);
+            v.job = Some(job);
         }
         None => {
             v.aim = None;
@@ -967,6 +1088,26 @@ mod tests {
 
     fn skills(c: &[Choice]) -> Vec<String> {
         c.iter().map(|c| format!("{}{}", c.skill, c.item.as_ref().map(|i| format!(":{i}")).unwrap_or_default())).collect()
+    }
+
+    #[test]
+    fn the_hint_spread_over_frames_finds_what_the_whole_list_finds() {
+        let sc = Scripts::new(SKILLS).unwrap();
+        let all = skills_of(&sc);
+        let m = me(&[("berries", 4), ("wood", 3)], &["spear", "archery"]);
+        for (aim, t) in [person(), bush()] {
+            let whole = choices(&sc, &m, &aim, Some(&t), &all);
+            let toward = Toward { title: String::new(), target: Some(t), open: true, requests: false };
+            let mut job = HintJob { aim, me: m.clone(), toward, revision: 0, skill: 0, unit: 0, plan: None, out: Vec::new() };
+            // With no budget each frame does one check unit.
+            let mut frames = 1;
+            while !job.step(&sc, &all, std::time::Duration::ZERO) {
+                frames += 1;
+            }
+            in_order(&sc, &mut job.out);
+            assert_eq!(job.out, whole);
+            assert!(frames > 1, "spread over frames ({frames})");
+        }
     }
 
     #[test]
