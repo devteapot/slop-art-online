@@ -832,7 +832,7 @@ def frames_analysis(path, win):
     rows = []
     for line in open(path):
         f = line.strip().split(",")
-        if len(f) == 3 and f[0].isdigit():
+        if len(f) == 3 and all(x.isdigit() for x in f):
             rows.append((int(f[0]) / 1e6, int(f[1]) / 1000, int(f[2]) / 1000))
     out = {}
     for wname, (a, b) in win.items():
