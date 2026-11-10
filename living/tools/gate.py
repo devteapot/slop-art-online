@@ -991,7 +991,18 @@ def cleanup(a):
                       "volume_present": VOLUME in sh("docker", "volume", "ls", "--format", "{{.Name}}").split()}, indent=2))
 
 
+def raise_open_files():
+    """Each relayed connection holds a few descriptors, and the relays run outside the shaped
+    namespaces, so a shell's soft limit (often 1,024) runs out near 170 players ("Too many open
+    files" in the relay). Raise it to the hard limit for this process and its children."""
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft != resource.RLIM_INFINITY and (hard == resource.RLIM_INFINITY or soft < hard):
+        resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+
+
 def main():
+    raise_open_files()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")

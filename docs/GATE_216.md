@@ -2,7 +2,7 @@
 
 2026-11-09. The first measurement of the [performance contract](PERFORMANCE_CONTRACT.md)'s immediate gate on the living core: 216 active characters for 30 minutes with a crowded battle, at 80 ms round trip, against every requirement the contract lists. Branch `gate-1`, code under test `14f3a72` (main) plus the measurement tools below. Earlier 216-character evidence came from the removed legacy stack ([short baseline](PERFORMANCE_BASELINE_25.md)).
 
-**Update (2026-11-10, branch `scale-1`).** Perceived state is now delivered once per frame per player, and the feeds' and views' hidden costs are gone ([scale change](#scale-change-frames-2026-11-10-branch-scale-1)). The 30-minute gate still fails 60 Hz and both latency lines, now at 4.7 steps a second in the battle with a bounded queue instead of 0.5 with a queue of minutes; housekeeping passes. The new verdict table and the next bottleneck are in that section; what follows here is the first measurement as it was.
+**Update (2026-11-10, branch `scale-1`).** Perceived state is now delivered once per frame per player, and the feeds' and views' hidden costs are gone ([scale change](#scale-change-frames-2026-11-10-branch-scale-1)). The 30-minute gate still fails 60 Hz and both latency lines: after merging main `fe6ec66` the battle runs at 4.0 steps a second with the queue at 0 instead of 0.5 with a queue of minutes, the calm's moves meet the client line (p95 133 ms) and miss the server line by 1.6 ms, and housekeeping passes. In arm B (30 fighters) moves meet the client line in the battle too. The new verdict table and the next bottleneck are in that section; what follows here is the first measurement as it was.
 
 **Result: the gate fails.** The 30-minute run fails 60 Hz cadence, both latency requirements and the slow-system deadlines, by orders of magnitude once the battle starts. The authority's single database thread saturates. Most of its time goes to per-sender perception views re-run for every player who perceives a change, in a cluster of 100 human-driven characters. That is about 1.1 of the container's 16 cores. Frame pacing on the one headless game client passes, but the world it drew was mostly frozen, so that pass is weak evidence. A real authority defect was also found: a tick panics and rolls back when a missile kills the owner of another missile in flight ([defect](#defect-found-the-missile-sweep-panics)).
 
@@ -329,6 +329,39 @@ The same workload as the gate (100 fighters, 116 walkers, 5 min warm-up, 30 min 
 | Slow systems at their deadlines (1 Hz housekeeping) | **fail**: 827 runs, interval p99 12.3 s | **pass** | 1,799 runs in 1,800 s; interval p50 1,000 ms, p99 1,250 ms, max 1,441 ms. |
 
 Inputs: 274 a second in the battle (base 337); 4,700 deaths and rejoins kept the battle group at 100. Memory: container 6.9 → 9.8 GB, service-wide (this container held every arm's databases, deleted after each run); WASM memory 84.3 MB throughout; commitlog 0.70 → 2.99 GB over the window (about 4.6 GB/hour at this throughput, reported apart from active memory).
+
+### After merging main `fe6ec66` (megacity-1, soak-1): the final measurements
+
+Main moved while this was measured: `megacity-1` (floors, a new island generator) and `soak-1`. The branch was merged with main at `fe6ec66` and measured again; the island itself changed (arrival at (304.5, 319.5), it was (512.5, 174.5)), so these runs compare only with each other. Before is main `fe6ec66`'s module (`14c12c2d2f`), after is the merge (`07677b08ae`), back to back on the same container, without anything else of mine on the host.
+
+| Arm B (30 fighters), battle (8 min) | main `gate-20261110-083859` | merge `gate-20261110-085253` |
+|---|---|---|
+| Steps/s; grid steps skipped | 23.6; 17,491 of 28,800 | 56.6; 1,690 of 28,797 |
+| Step interval p50 / p95 / p99 (ms) | 38.1 / 81.8 / 102.7 | 16.8 / 25.8 / 34.2 |
+| Tick transaction mean (ms) | 30.4 | 5.8 |
+| Views' time with materializing (ms/s) | 582 | 86 |
+| Move, server p95 / p99 (ms) | 99.0 / 124.0 | 52.2 / 67.9 |
+| Move, client p95 / p99 (ms) | 180.1 / 208.3 | **133.5 / 158.5** |
+| Skill outcome, server p95 / p99 (ms) | 150.5 / 188.5 | 79.7 / 113.6 |
+| Skill outcome, client p95 / p99 (ms) | 232.2 / 272.8 | 161.8 / 204.1 |
+| Queue wait, `human_move` mean (ms); queue at the end | 22.5; 5 | 2.5; 0 |
+| Host load (1 min, p50) | 15.1 | 15.8 |
+
+Calm (2 min): both hold 60 Hz (59.9 and 59.7 steps/s). Frames cost the calm tick about 0.9 ms (its transaction 3.37 → 4.23 ms: the frames and the sweep's extra rows), which moves the calm move's server p95 from 48.0 to 50.8 ms (p99 57.2 → 60.3): **just over the 50 ms line where main is just under it**. The client line passes in both (p95 128.8 and 132.0 ms).
+
+**The full gate on the merge** (`gate-20261110-090632`; 100 fighters, 116 walkers, 5 min warm-up, 30 min window), with nothing else of mine on the host (load p50 13.5–13.9):
+
+| Requirement (locked) | Verdict | Measured, 30-min window |
+|---|---|---|
+| 60 Hz authoritative simulation, battle included | **fail** | 12.7 steps/s overall: calm 55.7 (1,292 of 17,999 grid steps skipped), battle 4.0, last 10 min 2.4. Operation queue 0 at the end. Battle step interval p50 / p95 / p99 240 / 477 / 603 ms; tick code p50 77 ms (`tick.activity` 144, `tick.wakes` 88, `tick.frames` 48, `tick.perception` 42 ms/s). |
+| Server receipt → committed outcome ≤50 ms p95, ≤100 ms p99 | **fail** | Moves: calm p95 51.6 / p99 63.6 ms; window p95 425 / p99 547 ms. Skill outcomes: window p95 706 / p99 908 ms. |
+| Client input → outcome received at 80 ms RTT ≤150 ms p95, ≤250 ms p99 | **fail** | Moves: calm p95 132.7 / p99 150.3 ms (passes); window p95 506 / p99 628 ms; 0 unanswered. Skill outcomes: window p95 786 / p99 988 ms. |
+| Client 60 FPS, 99% of frames ≤ ~16.7 ms | **pass, weak** | Battle: 100.0% within 16.7 ms, no frame over 25 ms. |
+| Slow systems at their deadlines (1 Hz housekeeping) | **pass** | 1,800 runs in 1,800 s; interval p99 1,272 ms. |
+
+This run's calm, free of my verification load, answers the calm regression of `gate-20261110-001148`: move p95 51.6 ms at the server and 132.7 ms at the client, against 94.5 and 176.7 ms in the gate's own run. The battle and the last ten minutes are where `gate-20261110-001148` left them, and the world grew the same way (6,083 characters, 6,178 structures by the end).
+
+The harness found one more defect on the way: with the shell's soft limit of 1,024 open files, the relay ran out of descriptors after about 170 players ("Too many open files"), and the players' process then died with exit 101 and no message. `gate.py` now raises its soft limit to the hard one at start (an earlier unexplained exit 101 in this work was probably the same).
 
 ### Next measured bottleneck
 

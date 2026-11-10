@@ -6,6 +6,7 @@ Own scratch container `scale-verify` (image `v2.14.1`, port 3427) named by `LIVI
 
 - `client-scale-scoped-011217` (`run.py`, scoped default): 30 of 30. Private table visibility: 62 tables. Reducer permission matrix: 194 calls, 0 mismatches.
 - `client-scale-open-011435` (`LIVING_PERCEPTION=open`): 30 PASS and the known XFAIL (anonymous `experience` in the open build).
+- After merging main `fe6ec66` (megacity-1, soak-1): `client-scale-merge-scoped-091456` 30 of 30; private table visibility 63 tables; permission matrix 206 calls, 0 mismatches. The run before it stopped at the reducer inventory: megacity's `create_floor` (admin only, now in `ADMIN`) and `genesis_step` (scheduled only, now in `SCHEDULED` with `tick` and `housekeeping`) were not listed on main either.
 - The two runs before stopped at the driver's inventories: the four new private tables, and `judged` (table) and `mind_judged` (reducer) from the harness merge, which the driver did not list. Both inventories now name them; `mind_judged` is called with one judgment for the caller's own character and refused for others'.
 ## 2026-11-10 `guest`, and harness-1's `judged` and `mind_judged` (Mac)
 
