@@ -580,7 +580,8 @@ impl Minds {
             }
             if self.conn.db.persona().id().find(&c.id).is_none() {
                 if self.is_woken(c.id) {
-                    // Its mind is made from the world's facts and its ring (woken.rs, below).
+                    // Its mind is made from its authored sheet or the world's facts, and its ring
+                    // (woken.rs, below).
                     continue;
                 }
                 if let Some(bg) = self.authored(&c) {

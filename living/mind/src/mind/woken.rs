@@ -4,7 +4,9 @@
 //! resident someone engages to this service (`woken` row; `ai`, controlled by it). Before its
 //! first thought this service makes its mind, once:
 //!
-//! - **identity from the world's facts:** its background (town, occupation, household), its
+//! - **its authored sheet**, when its world's author wrote one (`background.sheet`): installed
+//!   as written, with no model call, as at bootstrap (docs/SEEDED_LIVES.md);
+//! - otherwise **identity from the world's facts:** its background (town, occupation, household), its
 //!   settlement and community, its family, its places (home, work, square, evening spot), the
 //!   lots they stand on, its know-how and inborn temperament, its relations if any. One
 //!   identity call writes who it is from them. The facts are written to its mind as they are
@@ -102,7 +104,13 @@ impl Minds {
             store.ensure_self(id, &c.name).await?;
         }
         if self.conn.db.persona().id().find(&id).is_none() {
-            self.woken_identity(&c, &w, &lots).await?;
+            match self.authored(&c) {
+                // A resident its world's author wrote is who the sheet says, installed as written
+                // with no model call (docs/SEEDED_LIVES.md); a model writes an identity from the
+                // world's facts only for a resident without one.
+                Some(bg) => self.sheet_persona(&c, &bg).await?,
+                None => self.woken_identity(&c, &w, &lots).await?,
+            }
         }
         let Some(store) = &self.store else {
             log::info!("{}: no memory store, so its {} perceptions from before it woke are not taken in", c.name, ring.len());
