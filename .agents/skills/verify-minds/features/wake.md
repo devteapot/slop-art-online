@@ -5,7 +5,7 @@ Since 2026-11-09 (docs/TOWN_LIFE.md, "Layer 2"). On the island (`rules.minds = f
 ## Sub-features
 
 - A player's `offer` to a resident keeping its post wakes it (`woken.why = offer`); the character is `ai`, controller the world admin.
-- The player's line to it while it deliberates is left to that deliberation (`talk.rs`), and the think step's `say` answers it: the player hears it as an experience.
+- The player's line to it while its first deliberation waits for its identity waits for that deliberation (`talk.rs` `thinking`), and the think step's `say` answers it: the player hears it as an experience. The line also gets a turn when the deliberation ends unless that `say` was addressed to the player, named them, or the player was the only one waiting.
 - Later lines get talk turns, answered through `mind_say`.
 - Its deliberation's acts accept the player's trade (a `trade` chronicle row) and teach the player a technique it knows and the player lacks (`know_how`).
 - A consolidation runs. Then a `mind_update` sent as the service sends it with a store (`replace: true`, one new place) keeps the places it knew before waking (`work`, `inn`, `square`, `evening`) and adds the new one. Without Neo4j the service itself projects with `replace: false`.
