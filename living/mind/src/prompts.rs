@@ -466,8 +466,8 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"edges\": [{{\"from\": \"person:4\", \"rel\": \"TOOK_FOOD_FROM\", \"to\": \"place:our_storage\", \"confidence\": 0.0-1.0, \"because\": [experience ids], \"props\": {{...}}}}],\n\
  \"retract\": [{{\"from\": \"self\", \"rel\": \"TRUSTS\", \"to\": \"person:4\"}}],\n\
  \"merge\": [{{\"from\": \"idea:kael_seems_kind\", \"into\": \"idea:kael_is_friendly\"}}],\n\
- \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\"}}],\n\
- \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\"}}],\n\
+ \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
+ \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\", \"because\": [experience ids]}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
  \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
         if lessons() { LESSON } else { "" },
@@ -499,7 +499,7 @@ Reply with ONE JSON object, compact (at most 12 nodes and 20 edges):\n\
  \"remember\": [{{\"exp\": experience id, \"gist\": \"...\"}}],\n\
  \"nodes\": [{{\"key\": \"person:4\", \"labels\": [\"Person\"], \"name\": \"Bram\", \"props\": {{...}}}}],\n\
  \"edges\": [{{\"from\": \"self\", \"rel\": \"SAW\", \"to\": \"person:4\", \"confidence\": 0.0-1.0, \"because\": [experience ids], \"props\": {{...}}}}],\n\
- \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"stranger|acquaintance|...\", \"note\": \"short\"}}],\n\
+ \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"stranger|acquaintance|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
  \"identity\": null}}",
         world_rules()
@@ -534,8 +534,8 @@ Reply with ONE JSON object, compact (at most 12 nodes and 20 edges):\n\
  \"edges\": [{{\"from\": \"self\", \"rel\": \"ASKED_ABOUT_FOOD\", \"to\": \"person:4\", \"confidence\": 0.0-1.0, \"because\": [experience ids], \"props\": {{...}}}}],\n\
  \"retract\": [{{\"from\": \"self\", \"rel\": \"...\", \"to\": \"...\"}}],\n\
  \"merge\": [{{\"from\": \"key\", \"into\": \"key\"}}],\n\
- \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"stranger|acquaintance|friend|rival|enemy|...\", \"note\": \"short\"}}],\n\
- \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\"}}],\n\
+ \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"stranger|acquaintance|friend|rival|enemy|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
+ \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\", \"because\": [experience ids]}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
  \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what their conduct showed\"}}}}",
         world_rules()
@@ -844,8 +844,8 @@ herd or pack, smells and sounds and what followed them. Record only a few such a
 story: identity is only temperament and mood, which shift a little after strong experiences (more fearful after being hurt, \
 bolder after success). Keys: \"self\", \"person:<id>\", \"kind:<wolf|deer|person|...>\", \"place:<name>\"; the ids of your own kind are in the text.\n\
 Reply with ONE JSON object: {{\"summary\": \"...\", \"nodes\": [...], \"edges\": [{{\"from\", \"rel\", \"to\", \"confidence\", \"because\": [ids]}}], \
-\"retract\": [...], \"relations\": [{{\"id\": creature id, \"trust\", \"affinity\", \"label\": \"pack|herd|mate|threat|prey|...\"}}], \
-\"judgments\": [{{\"key\": \"ford_smells_of_wolves\", \"value\": 0.0-1.0, \"why\": \"...\"}}], \"places\": [{{\"name\", \"x\", \"y\"}}], \
+\"retract\": [...], \"relations\": [{{\"id\": creature id, \"trust\", \"affinity\", \"label\": \"pack|herd|mate|threat|prey|...\", \"because\": [experience ids]}}], \
+\"judgments\": [{{\"key\": \"ford_smells_of_wolves\", \"value\": 0.0-1.0, \"why\": \"...\", \"because\": [experience ids]}}], \"places\": [{{\"name\", \"x\", \"y\"}}], \
 \"identity\": null or {{\"traits\": {{...}}, \"mood\": \"...\", \"why\": \"...\"}}}}"
     ))
 }
