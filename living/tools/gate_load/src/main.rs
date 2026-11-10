@@ -417,9 +417,12 @@ fn send_skill(p: &Player, log: &Log, skill: &str, target: u32, x: f32, y: f32, h
         let t = unix_us();
         let srv = ctx.event.timestamp.to_micros_since_unix_epoch();
         st.lock().unwrap().pending -= 1;
-        // The use this call recorded: mine, by a player, of this skill, at this call's time.
+        // The use this call recorded: mine, by a player, of this skill, at or after this call's
+        // receipt (the authority acts at the receipt or, for a call that waited behind a tick,
+        // at the tick's time: `common::now_ms`). The newest such row is this call's: the SDK
+        // applies this call's transaction before the callback, and later calls commit after it.
         let at = (srv / 1000) as u64;
-        let u = ctx.db.my_skill_uses().iter().filter(|u| u.source == "player" && u.skill == name && u.at_ms == at).max_by_key(|u| u.id);
+        let u = ctx.db.my_skill_uses().iter().filter(|u| u.source == "player" && u.skill == name && u.at_ms >= at).max_by_key(|u| u.id);
         lg.put(json!({"k": "res", "p": idx, "n": n, "ts": t, "srv": srv, "st": status(&res), "use": u.as_ref().map(|u| u.id), "acc": u.as_ref().map(|u| u.accepted_ms), "out": u.as_ref().map(|u| u.outcome.clone())}));
     });
     log.put(json!({"k": "in", "p": p.idx, "n": n, "r": "skill", "skill": skill, "target": target, "ts": t0, "sent": r.is_ok()}));

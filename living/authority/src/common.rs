@@ -73,8 +73,39 @@ pub fn span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
     PROFILE.with(|p| p.get()).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
 }
 
+thread_local! {
+    /// The transaction whose `now` was last asked for: its stamp, its `now`, a sequence number
+    /// unique to it (the key of caches valid within one transaction), and the latest `now` any
+    /// transaction has used.
+    static TX: std::cell::Cell<(i64, u64, u64, u64)> = const { std::cell::Cell::new((0, 0, 0, 0)) };
+}
+
+/// The transaction's time in ms, never earlier than a time an earlier transaction already used.
+///
+/// A client's reducer is stamped when the host receives it, before the database's queue
+/// (2.14.1 `module_host.rs` `call_reducer_params`), so a call that waited behind a tick runs
+/// with a time older than the tick's. Its writes would then begin in the past: `motion::anchor`
+/// restamps a body's segment earlier than where the tick left it (the body jumps ahead by its
+/// speed times the wait), and readiness and the input bucket are judged at a time already
+/// passed. The world has moved on to the tick's time, so a late call acts at that time.
 pub fn now_ms(ctx: &ReducerContext) -> u64 {
-    (ctx.timestamp.to_micros_since_unix_epoch() / 1000) as u64
+    let received = (ctx.timestamp.to_micros_since_unix_epoch() / 1000) as u64;
+    let st = stamp(ctx);
+    TX.with(|t| {
+        let (s, now, seq, latest) = t.get();
+        if s == st {
+            return now;
+        }
+        let now = received.max(latest);
+        t.set((st, now, seq + 1, now));
+        now
+    })
+}
+
+/// A number unique to the current transaction (after its first `now_ms`): the key of module
+/// caches valid within one transaction, which `now` alone no longer distinguishes.
+pub fn tx_seq() -> u64 {
+    TX.with(|t| t.get().2)
 }
 
 /// The transaction's timestamp in microseconds: the key of caches that are valid only
@@ -715,14 +746,15 @@ pub struct NearCreature {
 
 thread_local! {
     /// Bodies per chunk at one instant, shared by every evaluation in the same tick.
-    static CHUNK_BODIES: RefCell<(u64, HashMap<u32, Rc<Vec<(u32, Rc<str>, (f32, f32))>>>)> = RefCell::new((0, HashMap::new()));
+    static CHUNK_BODIES: RefCell<((u64, u64), HashMap<u32, Rc<Vec<(u32, Rc<str>, (f32, f32))>>>)> = RefCell::new(((0, 0), HashMap::new()));
 }
 
 fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<(u32, Rc<str>, (f32, f32))>> {
     CHUNK_BODIES.with(|c| {
         let mut c = c.borrow_mut();
-        if c.0 != now {
-            c.0 = now;
+        let key = (tx_seq(), now);
+        if c.0 != key {
+            c.0 = key;
             c.1.clear();
         }
         if let Some(v) = c.1.get(&chunk) {
@@ -736,7 +768,7 @@ fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<(u32, Rc<s
 
 /// Forget cached bodies (after a body is removed or moved to another chunk this instant).
 pub fn invalidate_bodies() {
-    CHUNK_BODIES.with(|c| c.borrow_mut().0 = 0);
+    CHUNK_BODIES.with(|c| c.borrow_mut().0 = (0, 0));
 }
 
 pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<NearCreature> {
