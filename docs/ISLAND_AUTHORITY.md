@@ -126,7 +126,7 @@ Backgrounds name the folk (`folk`, `body_scale`, `settlement`). **Bodies are not
 | A tile built (road, clearing, bridge, wall) | that chunk row | that chunk row | `terrain_chunk.id` | subscribers of that chunk | rare | none |
 | The next transaction after a tile edit | only the edited chunk rows | — | `terrain_chunk.id` | — | after each edit | none |
 | A gate opened or shut | that gate row, then all `gate` rows (109) | that gate row | `gate.id` | gate subscribers | rare | none |
-| Path search (`Map::path`) | the cached map | — | — | — | every throttled re-plan | at most `max_expansions × 8` entries per call, freed after |
+| Path search (`Map::path`; walks go leg by leg through `Map::route_leg`, see [walking routes](PATHS.md)) | the cached map and its walking regions | — | — | — | per walk, per leg (about 50 m) and per throttled re-plan | each search's entries, freed after; the regions about 7 MiB at 2048 m, once |
 | A client's window | `terrain_chunk`, `lot`, `body`, `resource_node`, `structure` by chunk | — | `id` / `chunk` btrees | that client | on crossing a chunk border | none |
 | The tick | due rows only (unchanged) | bodies, activities, vitals | `next_ms`, `ends_ms`, `slot` | body/vitals/activity subscribers | 60 Hz | population-bound |
 
@@ -347,7 +347,7 @@ Connected play costs about 1.5–3.5 ms more than look-dev with a similar crowd.
 
 ## Open risks
 
-- **Long paths:** `Map::path` keeps its 6,000-expansion budget. Across a 2 km island, a route around a lake or over a ford 400 m away can exhaust it, so a click-to-move to a far point fails ("no path there"). Hierarchical routing (road graph, then tiles) is needed before long travel.
+- **Long paths:** `Map::path` keeps its 6,000-expansion budget. Across a 2 km island, a route around a lake or over a ford 400 m away can exhaust it, so a click-to-move to a far point fails ("no path there"). Hierarchical routing (road graph, then tiles) is needed before long travel. *Fixed 2026-11-10: walks are planned leg by leg over regions and areas ([walking routes](PATHS.md)).*
 - **Module caches:** the map cache and the other caches rely on module instances being reused between transactions, which the docs call undefined behaviour. A fresh instance rebuilds the map from all 16,384 chunk rows (8.6 ms measured). The patch-and-revalidate scheme is correct for rollbacks in a single instance, but not if two instances ever run reducers concurrently.
 - **Generation in `init` grows with size:** 1.9 s at 2048 m. The reducer's fuel budget is fixed in standalone (120 × 10⁹ instructions) and ran out after 5.2 s on the dev-box, so a 4096 m land does not fit one `init` ([floors](FLOORS.md#scale), 2026-11-09). Island edits after creation are ordinary tile writes. A persistent game world updates the module in place and never regenerates (`--keep-data`), so a changed generator changes only new worlds. Its digests then differ from an old world's row, which is the intended signal.
 - **Gates are per tile:** shutting a gate means shutting every tile across it (109 gate tiles for the town's openings). A mind or player shutting "the gate" shuts one tile.

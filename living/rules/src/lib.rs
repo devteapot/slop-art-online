@@ -11,6 +11,7 @@ pub mod host;
 pub mod land;
 pub mod settle;
 pub mod map;
+pub mod nav;
 pub mod city;
 pub mod genes;
 pub mod life;

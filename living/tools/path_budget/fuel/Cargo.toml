@@ -1,0 +1,9 @@
+# Fuel (WASM instructions) and time of a walk's route legs under SpacetimeDB 2.14.1's wasmtime
+# configuration (docs/PATHS.md). Standalone: not part of living-check.
+[workspace]
+resolver = "2"
+members = ["guest", "host"]
+
+# The authority's profile (living/Cargo.toml): opt-level 3, no LTO.
+[profile.release]
+opt-level = 3

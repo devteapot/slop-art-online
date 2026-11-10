@@ -99,6 +99,9 @@ pub struct Map {
     /// open chunks needs no tile walk. Code that writes `tiles` directly does so while
     /// generating a world, before any sight test.
     pub opaque: std::sync::OnceLock<Vec<bool>>,
+    /// Walking regions per chunk for long routes (`crate::nav`), each built when a route
+    /// first needs it and dropped by `set`, `put_chunk` and `set_blocked`.
+    pub nav: crate::nav::Nav,
 }
 
 impl Map {
@@ -137,7 +140,17 @@ impl Map {
         if x >= 0 && y >= 0 && x < self.w as i32 && y < self.h as i32 {
             self.tiles[(y as u32 * self.w + x as u32) as usize] = t as u8;
             self.refresh_opaque(x as u32 / CHUNK, y as u32 / CHUNK);
+            self.nav.forget(self.w, x as u32 / CHUNK, y as u32 / CHUNK);
         }
+    }
+
+    /// Replace the tiles closed by structures (shut gates), dropping the walking regions of
+    /// the chunks whose tiles changed.
+    pub fn set_blocked(&mut self, blocked: std::collections::HashSet<u32>) {
+        for &i in self.blocked.symmetric_difference(&blocked) {
+            self.nav.forget(self.w, i % self.w / CHUNK, i / self.w / CHUNK);
+        }
+        self.blocked = blocked;
     }
 
     fn chunk_opaque(&self, cx: u32, cy: u32) -> bool {
@@ -207,6 +220,7 @@ impl Map {
             }
         }
         self.refresh_opaque(cx, cy);
+        self.nav.forget(self.w, cx, cy);
     }
 
     pub fn from_chunks(w: u32, h: u32, chunks: impl IntoIterator<Item = (u32, Vec<u8>)>) -> Self {
@@ -223,7 +237,7 @@ impl Map {
                 }
             }
         }
-        Self { w, h, tiles, blocked: Default::default(), opaque: Default::default() }
+        Self { w, h, tiles, blocked: Default::default(), opaque: Default::default(), nav: Default::default() }
     }
 
     /// Nearest walkable tile center to a point, searching outward.
@@ -300,15 +314,24 @@ impl Map {
 
     /// A* over the 8-connected tile grid followed by line-of-sight smoothing.
     /// Returns waypoints excluding the start, ending exactly at `to` when walkable.
+    /// The search gives up after `max_expansions` tiles; long routes go through
+    /// [`Map::route_leg`] instead.
     pub fn path(&self, from: (f32, f32), to: (f32, f32), max_expansions: usize) -> Option<Vec<(f32, f32)>> {
+        if self.line_clear(from, to) {
+            return self.walkable(to.0.floor() as i32, to.1.floor() as i32).then(|| vec![to]);
+        }
+        self.search(from, to, max_expansions, |_, _| true).map(|(p, _)| p)
+    }
+
+    /// The tile search behind [`Map::path`], over tiles `allow` admits (a route's corridor).
+    /// Returns the smoothed waypoints and the tiles expanded.
+    pub(crate) fn search(&self, from: (f32, f32), to: (f32, f32), max_expansions: usize, allow: impl Fn(i32, i32) -> bool) -> Option<(Vec<(f32, f32)>, usize)> {
         let start = (from.0.floor() as i32, from.1.floor() as i32);
         let goal = (to.0.floor() as i32, to.1.floor() as i32);
         if !self.walkable(goal.0, goal.1) {
             return None;
         }
-        if self.line_clear(from, to) {
-            return Some(vec![to]);
-        }
+        let walkable = |x: i32, y: i32| self.walkable(x, y) && allow(x, y);
         let w = self.w as i32;
         let idx = |p: (i32, i32)| (p.1 * w + p.0) as usize;
         // Cost so far and predecessor of each reached tile. A search touches at most
@@ -355,10 +378,10 @@ impl Map {
             }
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
                 let q = (p.0 + dx, p.1 + dy);
-                if !self.walkable(q.0, q.1) {
+                if !walkable(q.0, q.1) {
                     continue;
                 }
-                if dx != 0 && dy != 0 && (!self.walkable(p.0 + dx, p.1) || !self.walkable(p.0, p.1 + dy)) {
+                if dx != 0 && dy != 0 && (!walkable(p.0 + dx, p.1) || !walkable(p.0, p.1 + dy)) {
                     continue;
                 }
                 let step = if dx != 0 && dy != 0 { 14 } else { 10 };
@@ -400,17 +423,17 @@ impl Map {
             anchor = pts[j];
             i = j + 1;
         }
-        Some(out)
+        Some((out, expansions))
     }
 }
 
 /// Tiles reached by a path search: index → (cost so far, predecessor index).
-type Reached = std::collections::HashMap<u32, (u32, u32), std::hash::BuildHasherDefault<TileHasher>>;
+pub(crate) type Reached = std::collections::HashMap<u32, (u32, u32), std::hash::BuildHasherDefault<TileHasher>>;
 
 /// Multiplicative hash for tile indices (the default SipHash is several times slower here,
 /// and the keys are not attacker-chosen).
 #[derive(Default)]
-struct TileHasher(u64);
+pub(crate) struct TileHasher(u64);
 
 impl std::hash::Hasher for TileHasher {
     fn finish(&self) -> u64 {
@@ -527,7 +550,7 @@ pub fn generate(seed: u64) -> Map {
             }
         }
     }
-    Map { w: MAP_W, h: MAP_H, tiles, blocked: Default::default(), opaque: Default::default() }
+    Map { w: MAP_W, h: MAP_H, tiles, blocked: Default::default(), opaque: Default::default(), nav: Default::default() }
 }
 
 #[cfg(test)]
@@ -559,7 +582,7 @@ mod tests {
 
     #[test]
     fn sight_is_stopped_by_walls_rock_and_shut_gates_only() {
-        let mut m = Map { w: 32, h: 32, tiles: vec![Terrain::Grass as u8; 32 * 32], blocked: Default::default(), opaque: Default::default() };
+        let mut m = Map { w: 32, h: 32, tiles: vec![Terrain::Grass as u8; 32 * 32], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
         // A wall across x = 10 from y = 0 to y = 19, water at x = 20.
         for y in 0..20 {
             m.set(10, y, Terrain::Wall);
@@ -582,7 +605,7 @@ mod tests {
         assert!(!m.sight_clear((5.5, 5.5), (15.5, 5.5)), "a shut gate hides");
         // Exactly along a tile corner: the traversal must not slip diagonally between two
         // walls touching at a corner.
-        let mut c = Map { w: 8, h: 8, tiles: vec![Terrain::Grass as u8; 64], blocked: Default::default(), opaque: Default::default() };
+        let mut c = Map { w: 8, h: 8, tiles: vec![Terrain::Grass as u8; 64], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
         c.set(3, 4, Terrain::Wall);
         c.set(4, 3, Terrain::Wall);
         assert!(!c.sight_clear((2.5, 5.5), (5.5, 2.5)), "two walls meeting at a corner hide");
@@ -590,7 +613,7 @@ mod tests {
 
     #[test]
     fn sight_over_open_chunks_agrees_with_the_tile_walk() {
-        let mut m = Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), opaque: Default::default() };
+        let mut m = Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
         // Walls and rock in some chunks, none in others.
         let mut r: u64 = 7;
         let mut next = || {

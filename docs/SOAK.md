@@ -211,6 +211,7 @@ Headless `living-game` at its default 60 Hz cap, Metal, 733,001 frames.
 
 - **Cause:** `motion::start` calls `map.path(p, at, 6_000)` (`living/authority/src/motion.rs:556`). Longer routes run out of expansions and are refused. A refused target is also remembered as unreachable for a while (`no_path`/`unreachable`, same file), so asking again is refused without a search.
 - **Why the short hops fail** is not established. Likely causes are hops that land in water or buildings, and that memo.
+- **Status (2026-11-10, `path-1`): fixed.** The short hops failed for the same budget (255 of 319 "no path there"; the towns' building rows, rivers and ponds need 12,000–384,000 expansions to walk round) and for the memo (22 more). The 85 "destination unreachable" were hops into open water, correctly refused. A third cause was hidden behind these: a deliberate act gave up after 90 s of approach. Walks are now planned leg by leg over regions and areas of chunks, and a walk to a place lasts as long as its route: [walking routes](PATHS.md).
 - **What a fix must weigh:** raising the budget inside the reducer costs up to 84 ms of the single database thread per click. A coarse route (towns and roads), a search off the reducer, or a partial path toward the goal would avoid that.
 - **Owner:** steering and motion (`verify-core`).
 

@@ -98,7 +98,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     };
     // A deliberate act that cannot reach its target gives up after a while (and the next
     // one waiting may start in its place).
-    if let Some(a) = cur.clone().filter(|a| crate::acts::overdue(a, now)) {
+    if let Some(a) = cur.clone().filter(|a| crate::acts::overdue(ctx, a, now)) {
         act::cancel(ctx, a, now, Some("you could not get to it in time"));
         cur = ctx.db.activity().id().find(id);
     }
