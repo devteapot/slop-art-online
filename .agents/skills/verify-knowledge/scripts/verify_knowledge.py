@@ -381,7 +381,7 @@ class Run:
                   for p in [*sorted((ROOT / 'living/mind/src').rglob('*.rs')), binary]}
         (self.directory / 'source-hashes.json').write_text(json.dumps(hashes, indent=2))
         self.mind_proc = self.process('mind', [binary], env)
-        self.mind_env, self.mind_binary, self.oren, self.witness = env, binary, oren, witness
+        self.mind_env, self.mind_binary, self.oren, self.witness, self.teodor = env, binary, oren, witness, teodor
         (self.directory / 'mind-environment.json').write_text(json.dumps({key: env[key] for key in (
             'LIVING_SERVER', 'LIVING_DB', 'LIVING_RUN', 'LIVING_SEED', 'LIVING_ONLY', 'LIVING_NEO4J',
             'LIVING_NEO4J_URI', 'LIVING_MODELS', 'LIVING_LOD')}, indent=2))
@@ -409,7 +409,10 @@ class Run:
 
         # The mind's own first decision may still be on its way; installing the probe graph
         # while it lands would move the brain's revision twice and fail the install check.
-        self.wait(lambda: 'decided: knowledge proof wait' in (self.directory / 'mind.log').read_text(), 'the first decision', 90)
+        # Its first decision comes from the authority's reflect timer (`reflect_s` 150 s plus
+        # 20 s per `id % 7`, brain.rs), counted from the world's start, so with warm builds it
+        # can come well after the mind starts.
+        self.wait(lambda: 'decided: knowledge proof wait' in (self.directory / 'mind.log').read_text(), 'the first decision', 300)
         sequence = max(r['sequence'] for r in entries(self.directory / 'requests.jsonl'))
         self.admin('set_behavior', oren, json.dumps({'think': 'knowledge_marker amber ford flood millstone'}))
         def recalled_prompt():
@@ -447,7 +450,11 @@ class Run:
         the night covering the whole day, no gap and one integration due, and an inline limit low
         enough that the job's requests go up as a file. The reorganize request reaches the fake
         provider through `POST /v1/files` and `input_files`, its answer is applied, and the
-        thought records it came by batch."""
+        thought records it came by batch. Merges between different identities are refused
+        (memory.rs `merge_refusal`): one tried in the consolidation is told in the night's
+        reorganization request, the reorganization's own cross-person and stance-into-person
+        merges leave the graph as it was, its duplicate merge goes through, a pattern node
+        links to both people, and a person keeps their name."""
         self.mind_proc.terminate()
         self.mind_proc.wait(timeout=15)
         # Stopped on purpose: no longer an owned process whose exit fails a wait.
@@ -456,8 +463,21 @@ class Run:
         self.save()
         # Its own fake provider, whose consolidation adds twelve links: a person's mind is
         # reorganized only from 25 links (smaller minds only fade), and Oren's holds about 20.
+        teodor, witness = self.teodor, self.witness
         edges = [{'from': 'self', 'rel': 'KNOWS', 'to': f'idea:sleep_detail_{i}', 'confidence': 0.9} for i in range(12)]
-        script = {'replies': {'consolidate': {'summary': 'Night proof consolidation.', 'nodes': [{'key': f'idea:sleep_detail_{i}', 'labels': ['Idea']} for i in range(12)], 'edges': edges, 'identity': None},
+        edges.append({'from': 'self', 'rel': 'JUDGES', 'to': 'stance:teodor_worth_another_try', 'confidence': 0.8})
+        # Different people are never one concept: refused here, and told at the night's sleep.
+        told = {'from': f'person:{witness}', 'into': f'person:{teodor}'}
+        consolidate = {'summary': 'Night proof consolidation.', 'nodes': [{'key': f'idea:sleep_detail_{i}', 'labels': ['Idea']} for i in range(12)], 'edges': edges, 'merge': [told], 'identity': None}
+        reorganize = {'summary': 'The quiet ones settled into one pattern.',
+                      'merge': [{'from': f'person:{teodor}', 'into': f'person:{witness}'},
+                                {'from': 'stance:teodor_worth_another_try', 'into': f'person:{teodor}'},
+                                {'from': 'idea:sleep_detail_1', 'into': 'idea:sleep_detail_0'}],
+                      'nodes': [{'key': f'person:{teodor}', 'labels': ['Person'], 'name': 'unresponsive townsfolk'},
+                                {'key': 'idea:townsfolk_who_dont_answer', 'labels': ['Pattern'], 'name': "townsfolk who don't answer"}],
+                      'edges': [{'from': f'person:{p}', 'rel': 'FITS', 'to': 'idea:townsfolk_who_dont_answer', 'confidence': 0.7} for p in (teodor, witness)],
+                      'retract': [], 'judgments': []}
+        script = {'replies': {'consolidate': consolidate, 'reorganize': reorganize,
                               'think': {'thought': 'I rest.', 'intend': ['wait'], 'say': None},
                               'deliberate': {'thought': 'I will wait.', 'plan': 'knowledge proof wait', 'graph': {'wait': 120}, 'say': None, 'acts': []}}}
         (self.directory / 'fake-sleep-script.json').write_text(json.dumps(script, indent=2))
@@ -487,6 +507,21 @@ class Run:
         slept = [t for t in thoughts if t['kind'] == 'reorganize']
         assert slept and json.loads(slept[-1]['detail'])['how'] == 'batch'
         self.pass_feature('night reorganization as an uploaded batch job', ['requests-sleep.jsonl', 'mind-sleep.log', 'sleep-thought.json'])
+
+        request = '\n'.join(m['content'] for m in sent[-1]['body']['messages'] if m['role'] == 'user')
+        assert '# Merges that were not made last time' in request and f"merge person:{witness} → person:{teodor} refused: " in request, 'the consolidation\'s refused merge is told at sleep'
+        notes = json.loads(slept[-1]['detail'])['notes']
+        assert any(n.startswith(f'merge person:{teodor} → person:{witness} refused: ') and 'are different (a person and a person)' in n for n in notes), notes
+        assert any(n.startswith(f'merge stance:teodor_worth_another_try → person:{teodor} refused: ') for n in notes), notes
+        graph_filter = f"{{run: '{self.db}', actor: {self.oren}}}"
+        merged = self.cypher(f'MATCH (n:Concept {graph_filter})-[:MERGED_INTO]->(m:Concept) RETURN n.key AS source, m.key AS target ORDER BY source;', 'graph-sleep-merged').stdout
+        assert 'idea:sleep_detail_1' in merged, 'the duplicate merged'
+        assert f'person:{teodor}' not in merged and f'person:{witness}' not in merged and 'stance:teodor_worth_another_try' not in merged, merged
+        people = self.cypher(f"MATCH (n:Concept {graph_filter}) WHERE n.key IN ['person:{teodor}', 'person:{witness}', 'stance:teodor_worth_another_try'] AND NOT n:Merged RETURN n.key AS key, n.name AS name ORDER BY key;", 'graph-sleep-people').stdout
+        assert f'person:{teodor}' in people and f'person:{witness}' in people and 'stance:teodor_worth_another_try' in people and 'unresponsive townsfolk' not in people, people
+        pattern = self.cypher(f"MATCH (p:Concept {graph_filter})-[r:RELATES {{open: true, rel: 'FITS'}}]->(:Concept {{run: '{self.db}', actor: {self.oren}, key: 'idea:townsfolk_who_dont_answer'}}) RETURN p.key AS key ORDER BY key;", 'graph-sleep-pattern').stdout
+        assert f'person:{teodor}' in pattern and f'person:{witness}' in pattern, pattern
+        self.pass_feature('merges between different identities refused and told', ['requests-sleep.jsonl', 'sleep-thought.json', 'graph-sleep-merged.txt', 'graph-sleep-people.txt', 'graph-sleep-pattern.txt'])
 
     def cleanup(self):
         report = {'processes': [], 'db': self.db, 'container': self.state['container']}
