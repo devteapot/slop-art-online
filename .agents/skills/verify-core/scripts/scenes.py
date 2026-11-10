@@ -282,6 +282,9 @@ def grazing(s, deer=None):
     s.graph(deer, {"first": [{"do": "graze"}]})
     s.wait(lambda: any(r["skill"] == "graze" for r in s.rows(f"SELECT skill FROM activity WHERE id = {deer}")))
     s.rows(f"SELECT * FROM activity WHERE id = {deer}", "grazing")
+    # Grazing is shown (`graze_shows` in skills.rhai): a `doing` row anyone in view sees.
+    shown = s.wait(lambda: s.rows(f"SELECT * FROM doing WHERE id = {deer}", "graze-doing"), seconds=10)
+    s.expect("grazing has a visible doing row", bool(shown), shown)
     s.wait(lambda: s.needs(deer, "graze-after")["hunger"] < before["hunger"] - 10, seconds=15)
     s.expect("grazing actually reduces hunger", True)
 
@@ -732,6 +735,25 @@ def food(s):
              and after.get("berries", 0) == held.get("berries", 0), {"before": held, "after": after})
 
 
+def refusal(s):
+    """A routine whose action is refused as it would start is counted and told like any
+    failure: its `routine_stat` counts it with the reason, the character is told once (not
+    every second while the graph retries), and `fails` counts it. Before 2026-11-10 a refusal
+    at start left no trace while the graph retried it every second."""
+    a, = s.people(1)
+    s.call("mind_routines", a, [{"name": "snack", "graph": json.dumps({"do": {"skill": "eat", "item": "cooked_meat"}})}])
+    routine = next(r for r in s.rows(f"SELECT id, name FROM routine WHERE actor = {a}") if r["name"] == "snack")
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(a, {"seq": [{"routine": "snack"}, {"wait": 1}]})
+    time.sleep(10)
+    stat = s.rows(f"SELECT * FROM routine_stat WHERE id = {routine['id']}", "routine-stat")
+    s.expect("the routine's statistics count the refused start, with its reason", stat and stat[0]["failed"] >= 1 and stat[0]["last_fail"], stat)
+    told = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}", "feedback") if r["kind"] == "own" and r["at_ms"] >= t0 and "cooked_meat" in r["text"]]
+    s.expect("the character is told once in the repeat window, not every retry", len(told) == 1, told)
+    st = s.rows(f"SELECT fails, status FROM mind_state WHERE id = {a}", "mind-state")[0]
+    s.expect("the refusal counts in fails", st["fails"] >= 1, st)
+
+
 # Rules with short hours for the dealings scene, composed as a floor composes its laws
 # (living_rules::floors::compose): each replaced base function keeps its body as base_NAME.
 SHORT_HOURS = {
@@ -847,7 +869,7 @@ def dealings(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal}
 
 
 def main():

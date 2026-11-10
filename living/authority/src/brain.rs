@@ -504,6 +504,10 @@ impl<'a> Ev<'a> {
                 St::Run
             }
             Err(why) => {
+                // Refused at the start: a failure like any other, not an unseen retry.
+                if act::refused(self.ctx, self.me.id, id, rev, &desc, &why, self.now) {
+                    self.st.fails = self.st.fails.saturating_add(1);
+                }
                 self.last_fail = format!("{skill}: {why}");
                 St::Fail
             }
@@ -1209,8 +1213,12 @@ impl<'a> Ev<'a> {
         if self.st.last != self.orig.last && cur.last == self.orig.last {
             cur.last = self.st.last.clone();
         }
-        if self.st.fails == 0 && self.orig.fails > 0 && cur.fails == self.orig.fails {
+        // Refused starts counted here add to the row's fails; a deliberation about them
+        // resets it (unless a failure was reported meanwhile).
+        if self.st.fails == 0 && cur.fails == self.orig.fails {
             cur.fails = 0;
+        } else if self.st.fails > self.orig.fails {
+            cur.fails = cur.fails.saturating_add(self.st.fails - self.orig.fails);
         }
         if cur != before {
             ctx.db.mind_state().id().update(cur);

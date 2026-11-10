@@ -172,7 +172,7 @@ Times in ms. Phases (ms of work per second, base → change): slot evaluations 3
 
 **World creation:** `init.town.seat` took 158 ms in all for 8 settlements (92 ms for the walled town), checking paths from homes to candidate places. The island's `init` is otherwise unchanged (`init.land.generate` 2.2 s on a loaded box).
 
-**Rows:** about 942 `place` rows (four per resident), written once; `doing` holds one row per character performing a shown skill (176 a minute into a world, 44 on the default seed); `act_card` 17 rows; `weather` one row. `skill_use` stays bounded at 24 per character. No table grows with time.
+**Rows:** about 942 `place` rows (four per resident), written once; `doing` holds one row per character performing a shown skill (176 a minute into a world, 44 on the default seed); `act_card` one row per shown skill (18 since `graze` is shown, 2026-11-10); `weather` one row. `skill_use` stays bounded at 24 per character. No table grows with time.
 
 ## What the client must draw
 

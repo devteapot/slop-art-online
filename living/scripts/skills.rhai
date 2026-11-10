@@ -1509,5 +1509,7 @@ fn craft_shows() { #{ look: "work" } }
 fn read_shows() { #{ look: "work" } }
 fn tend_shows() { #{ look: "work" } }
 fn eat_shows() { #{ look: "eat" } }
+// Grazing looks like eating to a client that does not know it by name.
+fn graze_shows() { #{ look: "eat" } }
 fn sleep_shows() { #{ look: "sleep" } }
 fn rest_shows() { #{ look: "rest" } }
