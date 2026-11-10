@@ -124,6 +124,14 @@ class Script:
         self.log = log
         self.sequence = 0
 
+    def note(self, record):
+        """Log a batch poll or cancel, only for a script with a `batch` section (other
+        readers of the log expect request records)."""
+        if 'batch' not in self.data:
+            return
+        with self.lock, self.log.open('a') as stream:
+            stream.write(json.dumps({'at_ms': int(time.time() * 1000), **record}) + '\n')
+
     def receive(self, body, batch_job=None):
         purpose = purpose_of(body)
         with self.lock:
@@ -167,8 +175,16 @@ class Handler(BaseHTTPRequestHandler):
         m = re.fullmatch(r'/v1/batch/jobs/([\w-]+)', self.path)
         if m and m[1] in jobs:
             job = jobs[m[1]]
+            # The script's `batch.poll_errors`: each job's first n polls answer HTTP 500 (-1:
+            # every poll) without moving the job on.
+            fails = self.server.script.data.get('batch', {}).get('poll_errors', 0)
+            if fails < 0 or job['failed_polls'] < fails:
+                job['failed_polls'] += 1
+                self.server.script.note({'poll': m[1], 'status': 500})
+                return self.respond(500, b'{"error":"scripted poll failure"}')
             # A job is QUEUED for its first poll, then RUNNING, then SUCCESS.
             job['polls'] += 1
+            self.server.script.note({'poll': m[1], 'status': 200})
             status = 'QUEUED' if job['polls'] == 1 else 'RUNNING' if job['polls'] == 2 else 'SUCCESS'
             view = {'id': m[1], 'object': 'batch', 'status': status, 'model': job['model'],
                     'endpoint': job['endpoint'], 'total_requests': len(job['lines']),
@@ -204,12 +220,13 @@ class Handler(BaseHTTPRequestHandler):
             req.setdefault('model', body.get('model'))
             action, content = self.server.script.receive(req, batch_job=jid)
             usage = action.get('usage', {'total_tokens': int(action.get('tokens', 17)), 'prompt_tokens': 12,
-                                         'completion_tokens': 5, 'prompt_tokens_details': {'cached_tokens': 8}})
+                                         'completion_tokens': 5, 'prompt_tokens_details': {'cached_tokens': 8},
+                                         'completion_tokens_details': {'reasoning_tokens': 2}})
             lines.append({'id': f'{jid}-{len(lines)}', 'custom_id': r.get('custom_id'),
                           'response': {'status_code': 200, 'body': {'id': 'verify-local', 'object': 'chat.completion',
-                                       'choices': [{'message': {'role': 'assistant', 'content': content}}], 'usage': usage}},
+                                       'choices': [{'message': {'role': 'assistant', 'content': content}, 'finish_reason': action.get('finish_reason', 'stop')}], 'usage': usage}},
                           'error': None})
-        self.server.jobs[jid] = {'model': body.get('model'), 'endpoint': body.get('endpoint'), 'lines': lines, 'polls': 0,
+        self.server.jobs[jid] = {'model': body.get('model'), 'endpoint': body.get('endpoint'), 'lines': lines, 'polls': 0, 'failed_polls': 0,
                                  'via': 'file' if body.get('input_files') else 'inline'}
         self.respond(200, json.dumps({'id': jid, 'object': 'batch', 'status': 'QUEUED'}).encode())
 
@@ -289,6 +306,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(400, b'{"error":"invalid JSON body"}')
             if self.path == '/v1/batch/jobs':
                 return self.batch(body)
+            self.server.script.note({'cancel': self.path.split('/')[-2]})
             return self.respond(200, b'{"status":"CANCELLATION_REQUESTED"}')
         if self.path != '/v1/chat/completions':
             return self.respond(404, b'{}')
@@ -307,10 +325,11 @@ class Handler(BaseHTTPRequestHandler):
         time.sleep(max(0, float(action.get('delay_s', 0))))
         status = int(action.get('status', 200))
         envelope = {'id': 'verify-local', 'object': 'chat.completion',
-                    'choices': [{'message': {'role': 'assistant', 'content': content}}],
+                    'choices': [{'message': {'role': 'assistant', 'content': content}, 'finish_reason': action.get('finish_reason', 'stop')}],
                     'usage': action.get('usage', {'total_tokens': int(action.get('tokens', 17)),
                               'prompt_tokens': 12, 'completion_tokens': 5,
-                              'prompt_tokens_details': {'cached_tokens': 8}})}
+                              'prompt_tokens_details': {'cached_tokens': 8},
+                              'completion_tokens_details': {'reasoning_tokens': 2}})}
         payload = action.get('raw_http_body', json.dumps(envelope) if status == 200 else json.dumps({'error': 'scripted failure'}))
         self.respond(status, payload.encode(), action.get('headers'))
 

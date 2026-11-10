@@ -14,7 +14,7 @@
 use crate::common::{self, dist};
 use crate::tables::*;
 use living_rules::map::{chunk_of, Map};
-use living_rules::nav::RouteSpec;
+use living_rules::nav::{NoLeg, RouteSpec, Walk};
 use living_rules::steer::{self as geo, Want};
 use spacetimedb::{ReducerContext, Table};
 
@@ -64,6 +64,37 @@ fn leg(map: &Map, p: (f32, f32), to: (f32, f32), laws: &living_rules::script::La
     let leg = map.route_leg(p, to, &route_spec(laws))?;
     Some(leg.points.into_iter().map(|(x, y)| Waypoint { x, y }).collect())
 }
+
+/// The next leg of body `id`'s walk to a place, along the route it keeps in `walk_route`
+/// (searched afresh when it has none: a new walk).
+fn walk_leg(ctx: &ReducerContext, id: u32, map: &Map, p: (f32, f32), to: (f32, f32), laws: &living_rules::script::Laws) -> Result<Vec<Waypoint>, NoLeg> {
+    let row = ctx.db.walk_route().id().find(id);
+    let mut walk = row.as_ref().map(|r| Walk::from_vec(&r.route)).unwrap_or_default();
+    let leg = map.route_leg_along(p, to, &route_spec(laws), &mut walk);
+    let route = walk.to_vec();
+    match row {
+        Some(r) if r.route == route => {}
+        Some(_) if route.is_empty() => {
+            ctx.db.walk_route().id().delete(id);
+        }
+        Some(_) => {
+            ctx.db.walk_route().id().update(WalkRoute { id, route });
+        }
+        None if route.is_empty() => {}
+        None => {
+            ctx.db.walk_route().insert(WalkRoute { id, route });
+        }
+    }
+    Ok(leg?.points.into_iter().map(|(x, y)| Waypoint { x, y }).collect())
+}
+
+/// A walk is over, or another goal starts: its route is not kept.
+fn walk_over(ctx: &ReducerContext, id: u32) {
+    ctx.db.walk_route().id().delete(id);
+}
+
+/// What a walker is told when its walk gets no nearer for `NO_HEADWAY_LEGS` legs.
+const NO_HEADWAY: &str = "you were getting no nearer: the way kept turning back";
 
 /// What to steer for.
 #[derive(Clone, Copy, Debug)]
@@ -301,6 +332,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                 }
                 st.goal = GOAL_NONE;
                 st.reported = false;
+                walk_over(ctx, b.id);
                 dirty = true;
                 stand = Some(IDLE);
             } else {
@@ -312,9 +344,10 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                 // goal, plan the next from here.
                 let leg_end = b.path.last().map(|l| (l.x, l.y)).unwrap_or(goal);
                 if leg_end != goal && dist(p, leg_end) < REPLAN_AHEAD_M {
-                    match leg(&map, p, goal, &laws) {
-                        Some(path) => b.path = path,
-                        None => ev = Some(Event::Lost("the way is blocked".into())),
+                    match walk_leg(ctx, b.id, &map, p, goal, &laws) {
+                        Ok(path) => b.path = path,
+                        Err(NoLeg::NoHeadway) => ev = Some(Event::Lost(NO_HEADWAY.into())),
+                        Err(NoLeg::NoPath) => ev = Some(Event::Lost("the way is blocked".into())),
                     }
                 }
             }
@@ -480,6 +513,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
     }
     if let Some(Event::Lost(_)) = ev {
         st.goal = GOAL_NONE;
+        walk_over(ctx, b.id);
         dirty = true;
         b.path.clear();
         glide_stop(&map, b, t0, 0.3);
@@ -508,7 +542,9 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                     st.flags |= FLAG_STUCK;
                     replanned = true;
                     dirty = true;
-                    match leg(&map, p, dest, &laws) {
+                    // A walk to a place keeps its route (searched again if the map changed).
+                    let planned = if st.goal == GOAL_POINT { walk_leg(ctx, b.id, &map, p, dest, &laws).ok() } else { leg(&map, p, dest, &laws) };
+                    match planned {
                         Some(path) if !path.is_empty() => {
                             b.path = path;
                             let dir = angle(p, (b.path[0].x, b.path[0].y));
@@ -520,6 +556,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
             }
             if let Some(Event::Lost(_)) = ev {
                 st.goal = GOAL_NONE;
+                walk_over(ctx, b.id);
                 b.path.clear();
                 halt(b);
                 b.next_ms = IDLE;
@@ -575,11 +612,13 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
     let (mut st, exists) = load_steer(ctx, id);
     let before = b.chunk;
     b.path.clear();
+    // A new goal: any walk's route so far is not this one's.
+    walk_over(ctx, id);
     let mut at = goal.at;
     match goal.kind {
         GOAL_POINT => {
             if !map.free(at.0, at.1) {
-                at = map.nearest_walkable(at.0, at.1).ok_or("destination unreachable")?;
+                at = map.nearest_reachable(p, at.0, at.1).ok_or("destination unreachable")?;
             }
             if dist(p, at) <= 0.06 {
                 return Ok(None);
@@ -587,7 +626,7 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
             if unreachable(id, at, now) {
                 return Err("no path there".into());
             }
-            let Some(path) = leg(&map, p, at, &common::laws(ctx)) else {
+            let Ok(path) = walk_leg(ctx, id, &map, p, at, &common::laws(ctx)) else {
                 no_path(id, at, now);
                 return Err("no path there".into());
             };
@@ -793,6 +832,7 @@ pub fn place(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Result<
 
 pub fn remove(ctx: &ReducerContext, id: u32) {
     ctx.db.steer().id().delete(id);
+    walk_over(ctx, id);
 }
 
 pub fn spawn_body(ctx: &ReducerContext, id: u32, kind: &str, at: (f32, f32), now: u64) {

@@ -20,7 +20,7 @@ pub struct VfxPlugin;
 
 impl Plugin for VfxPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(Update, (spawn, persistent, animate).chain().after(crate::combat::actions));
+        app.add_systems(Startup, setup).add_systems(Update, (spawn, persistent, animate).chain().in_set(crate::phase::Phase::Present).after(crate::combat::actions));
     }
 }
 

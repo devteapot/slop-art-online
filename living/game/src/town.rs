@@ -187,9 +187,12 @@ impl Plugin for TownPlugin {
         app.init_resource::<Acts>()
             .init_resource::<Town>()
             .init_resource::<Scripted>()
-            // After the bodies are placed and before they are drawn (`live.rs`); combat's pick (who
-            // is under the cursor) is from the frame before.
-            .add_systems(Update, (read, input, shows).chain().after(crate::controls::target).before(crate::demo::run));
+            // Rows are read with the others, gestures sent with the other inputs (after combat's
+            // pick of who is under the cursor), and what residents do is decided before the
+            // bodies are drawn (`live.rs`).
+            .add_systems(Update, read.in_set(crate::phase::Phase::Mirror))
+            .add_systems(Update, input.in_set(crate::phase::Phase::Input).after(crate::combat::pick))
+            .add_systems(Update, shows.in_set(crate::phase::Phase::Present));
     }
 }
 

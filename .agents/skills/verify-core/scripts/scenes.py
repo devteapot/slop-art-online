@@ -282,6 +282,9 @@ def grazing(s, deer=None):
     s.graph(deer, {"first": [{"do": "graze"}]})
     s.wait(lambda: any(r["skill"] == "graze" for r in s.rows(f"SELECT skill FROM activity WHERE id = {deer}")))
     s.rows(f"SELECT * FROM activity WHERE id = {deer}", "grazing")
+    # Grazing is shown (`graze_shows` in skills.rhai): a `doing` row anyone in view sees.
+    shown = s.wait(lambda: s.rows(f"SELECT * FROM doing WHERE id = {deer}", "graze-doing"), seconds=10)
+    s.expect("grazing has a visible doing row", bool(shown), shown)
     s.wait(lambda: s.needs(deer, "graze-after")["hunger"] < before["hunger"] - 10, seconds=15)
     s.expect("grazing actually reduces hunger", True)
 
@@ -647,6 +650,112 @@ def sight(s):
 
 
 
+def body_at(s, actor, now=None, row=None):
+    """A body's position now, from its segment (straight-line; turns are short)."""
+    b = row or s.rows(f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {actor}")[0]
+    now = now or s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    t = max(0, min(now, b["next_ms"]) - b["t_ms"]) / 1000
+    return (b["x"] + b["vx"] * t, b["y"] + b["vy"] * t)
+
+
+def apart(s, a, b):
+    """Distance between two bodies at one moment (one query for both and the clock)."""
+    rows = s.rows(f"SELECT id, x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {a} OR id = {b}")
+    now = max(r["t_ms"] for r in rows)
+    now = max(now, s.rows("SELECT last_ms FROM clock")[0]["last_ms"])
+    at = {r["id"]: body_at(s, r["id"], now, r) for r in rows}
+    return round(math.dist(at[a], at[b]), 2)
+
+
+def flee(s):
+    """A deer flees a wolf 6 tiles off: it runs away from the wolf (the distance only grows)
+    until it is `flee_clear` (9) tiles farther than it began. Before 2026-11-10 the goal ran
+    from a point 9 tiles beyond the deer, so the deer ran at the wolf. Needs a world with deer
+    and wolves (`--seed stage1-acts`)."""
+    for c in s.rows("SELECT id, alive FROM character"):
+        if c["alive"]:
+            s.graph(c["id"], {"wait": 300})
+    deer = [c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'deer' AND alive = true")]
+    wolf = next(c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'wolf' AND alive = true"))
+    s.expect("world has deer and a wolf", bool(deer) and bool(wolf), {"deer": deer[:4], "wolf": wolf})
+    track, start = [], None
+    for d in deer[:6]:
+        here = body_at(s, d)
+        s.call("place_at", wolf, here[0] + 6.0, here[1])
+        time.sleep(0.5)
+        w = body_at(s, wolf)
+        start = math.dist(body_at(s, d), w)
+        if not 4.5 <= start <= 7.5:
+            continue
+        # Flight is real-time behaviour: a graph runs it (a one-off act may not).
+        s.graph(d, {"seq": [{"do": {"skill": "flee", "target": {"id": wolf}}}, {"wait": 300}]})
+        t0 = time.monotonic()
+        track, seen, goal = [], False, None
+        while time.monotonic() - t0 < 15:
+            track.append(apart(s, d, wolf))
+            act = s.rows(f"SELECT skill FROM activity WHERE id = {d}")
+            fleeing = any(r["skill"] == "flee" for r in act)
+            if fleeing and goal is None:
+                goal = s.rows(f"SELECT goal, target, gx, gy, keep FROM steer WHERE id = {d}", "steer")[0]
+            seen = seen or fleeing
+            if seen and not fleeing:
+                break
+        track.append(apart(s, d, wolf))
+        if goal is not None:
+            break
+        # Never started: nowhere to run from here (told "cornered"); try another deer.
+        s.graph(d, {"wait": 300})
+    (s.out / f"{s.name}-track.json").write_text(json.dumps({"deer": d, "wolf": wolf, "start": start, "track": track}, indent=2) + "\n")
+    s.rows(f"SELECT * FROM experience WHERE observer = {d}", "deer-feedback")
+    s.expect("the flight steers away from the wolf itself", goal and goal["goal"] == 4 and goal["target"] == wolf, goal)
+    falls = [(a, b) for a, b in zip(track, track[1:]) if b < a - 0.3]
+    s.expect("the distance to the wolf never falls while fleeing", track and not falls, {"start": start, "track": track, "falls": falls})
+    s.expect("the flight ends about flee_clear farther than it began", track and track[-1] >= start + 7.0, {"start": start, "end": track[-1] if track else None})
+
+
+def food(s):
+    """\"food\" is anything the rules give nutrition: a person carrying only smoked fish has
+    food, and eats and gives it as \"food\" (before 2026-11-10 `best_food` listed five foods and
+    missed smoked ones, so `has food` held while eat/give/store/take of food failed)."""
+    a, b = s.people(2)
+    s.call("place_near", b, a)
+    s.call("grant_items", a, "smoked_fish", 2)
+    before = s.needs(a, "before")["hunger"]
+    s.act(a, {"do": "eat", "item": "food"})
+    s.wait(lambda: s.inventory(a).get("smoked_fish", 0) == 1, seconds=15)
+    s.expect("eat food eats the smoked fish and feeds", s.needs(a, "after-eat")["hunger"] <= max(0, before - 10), s.inventory(a, "after-eat"))
+    s.act(a, {"do": "give", "item": "food", "target": {"id": b}})
+    s.wait(lambda: s.inventory(b).get("smoked_fish", 0) == 1, seconds=20)
+    s.expect("give food hands over the smoked fish", s.inventory(a, "giver-after").get("smoked_fish", 0) == 0 and s.inventory(b, "taker-after").get("smoked_fish") == 1)
+    # The most nourishing first: cooked meat (42) over smoked fish (24) over berries (12).
+    s.call("grant_items", a, "smoked_fish", 1)
+    s.call("grant_items", a, "cooked_meat", 1)
+    held = s.inventory(a, "before-best")
+    s.act(a, {"do": "eat", "item": "food"})
+    s.wait(lambda: s.inventory(a).get("cooked_meat", 0) == 0, seconds=15)
+    after = s.inventory(a, "after-best")
+    s.expect("eat food picks the most nourishing food held", after.get("smoked_fish") == held.get("smoked_fish")
+             and after.get("berries", 0) == held.get("berries", 0), {"before": held, "after": after})
+
+
+def refusal(s):
+    """A routine whose action is refused as it would start is counted and told like any
+    failure: its `routine_stat` counts it with the reason, the character is told once (not
+    every second while the graph retries), and `fails` counts it. Before 2026-11-10 a refusal
+    at start left no trace while the graph retried it every second."""
+    a, = s.people(1)
+    s.call("mind_routines", a, [{"name": "snack", "graph": json.dumps({"do": {"skill": "eat", "item": "cooked_meat"}})}])
+    routine = next(r for r in s.rows(f"SELECT id, name FROM routine WHERE actor = {a}") if r["name"] == "snack")
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(a, {"seq": [{"routine": "snack"}, {"wait": 1}]})
+    time.sleep(10)
+    stat = s.rows(f"SELECT * FROM routine_stat WHERE id = {routine['id']}", "routine-stat")
+    s.expect("the routine's statistics count the refused start, with its reason", stat and stat[0]["failed"] >= 1 and stat[0]["last_fail"], stat)
+    told = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}", "feedback") if r["kind"] == "own" and r["at_ms"] >= t0 and "cooked_meat" in r["text"]]
+    s.expect("the character is told once in the repeat window, not every retry", len(told) == 1, told)
+    st = s.rows(f"SELECT fails, status FROM mind_state WHERE id = {a}", "mind-state")[0]
+    s.expect("the refusal counts in fails", st["fails"] >= 1, st)
+
 
 # Rules with short hours for the dealings scene, composed as a floor composes its laws
 # (living_rules::floors::compose): each replaced base function keeps its body as base_NAME.
@@ -763,7 +872,7 @@ def dealings(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal}
 
 
 def main():

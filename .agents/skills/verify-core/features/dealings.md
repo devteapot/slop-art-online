@@ -5,7 +5,7 @@ The world's rules define social state on the engine's records (docs/WORLD_RULES.
 ## Sub-features
 
 - **Terms make a record.** `offer_terms` makes an `agreement` record (`offered`), and the other side is told the terms (an experience of kind `record`).
-- **Acceptance.** `accept` toward the proposer makes it `agreed`, due at dusk; the proposer is told, and onlookers see it.
+- **Acceptance.** `accept` toward the proposer makes it `agreed`, due at the first dusk at least `agreement_min_h` (12) hours away, told as "by dusk today" or "by dusk tomorrow"; the proposer is told, and onlookers see it. Cargo checks both cases (accepted at 7:00: 13 h, today; at 14:00: 30 h, tomorrow).
 - **Deliveries count.** A store into the proposer's store, or a give to the other side, is counted by the `on_store` and `on_give` hooks. When one side's part is done, the other is told what it owes. When both are done, the agreement is `kept` and both are told.
 - **Due:**
   - delivered by one side only: `broken` by the other, and each side is told in its own terms;

@@ -120,7 +120,17 @@ pub struct Cam {
     middle_moved: f32,
     /// Request an align (the demo; keys and the middle button set it too).
     pub align_request: bool,
+    /// How far the eye is raised over rising ground behind it (m), eased ([`CLEARANCE`]).
+    lift: f32,
 }
+
+/// The eye stays this far above the ground under it (m); it is lifted there smoothly, and
+/// never closer than [`CLEARANCE_MIN`].
+const CLEARANCE: f32 = 1.0;
+const CLEARANCE_MIN: f32 = 0.3;
+/// How fast the lift rises over a hill behind and settles again once past it (1/s).
+const LIFT_UP: f32 = 10.0;
+const LIFT_DOWN: f32 = 2.5;
 
 fn axes(yaw_deg: f32) -> (Vec2, Vec2) {
     let y = yaw_deg.to_radians();
@@ -279,7 +289,7 @@ pub fn follow(
     mut q: Query<(&mut Transform, &mut Projection, &Camera, &GlobalTransform, &mut DistanceFog), With<Camera3d>>,
     mut windows: Query<&mut Window>,
     ui: Res<crate::hud::UiWants>,
-    (town, combat): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>),
+    (town, combat, island): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>, Option<Res<crate::island::Island>>),
     time: Res<Time>,
 ) {
     let Ok((mut tf, mut proj, camera, gtf, mut fog)) = q.single_mut() else { return };
@@ -470,8 +480,13 @@ pub fn follow(
     let (up, _) = axes(cam.shown_yaw);
     let back = Vec3::new(-up.x, 0.0, -up.y) * pitch.cos() * dist;
     let mut eye = cam.focus + back + Vec3::Y * pitch.sin() * dist;
-    // Never under the ground.
-    eye.y = eye.y.max(scene.ground(eye.x, eye.z) + 1.0);
+    // Above the ground behind: the island's on a land world, else the tiles'. Rising ground lifts
+    // the eye smoothly and the view re-aims at the focus, rather than the eye popping up a hill
+    // after it was aimed (and the view tilting off me).
+    let ground = island.as_ref().map_or_else(|| scene.ground(eye.x, eye.z), |i| i.height(eye.x, eye.z));
+    let want = (ground + CLEARANCE - eye.y).max(0.0);
+    cam.lift += (want - cam.lift) * ease(if want > cam.lift { LIFT_UP } else { LIFT_DOWN });
+    eye.y = (eye.y + cam.lift).max(ground + CLEARANCE_MIN);
     tf.translation = eye;
     tf.look_at(cam.focus, Vec3::Y);
 

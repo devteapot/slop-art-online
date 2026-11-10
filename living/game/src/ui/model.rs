@@ -26,6 +26,9 @@ pub struct HudModel {
     pub map: MapInfo,
     /// The verbs' list, notes and panels (`verbs.rs`); all hidden by default.
     pub verbs: VerbsView,
+    /// The connection, when it is not live after having been: a notice of being offline and
+    /// reconnecting (no one is drawn meanwhile).
+    pub link: Option<String>,
     /// Model time (seconds), for fades.
     pub now: f64,
 }

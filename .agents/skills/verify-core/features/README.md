@@ -3,15 +3,17 @@
 | Feature | Driver and proof | File |
 | --- | --- | --- |
 | Tick, housekeeping, pause and resume | `scenes.py tick` | [tick.md](tick.md) |
-| Graph parsing, normalization, evaluation and routines | Cargo, mechanics and steering | [graphs.md](graphs.md) |
+| Graph parsing, normalization, evaluation and routines; a refused start counted and told | Cargo, mechanics, steering and `scenes.py refusal` | [graphs.md](graphs.md) |
 | Rhai skills, laws, crafting and exchanges | Cargo and 23 mechanics checks | [mechanics.md](mechanics.md) |
 | Hunger, energy, eating, infant appearance and cry routing | `scenes.py needs` and `scenes.py infant` | [needs.md](needs.md) |
+| "food" as anything with nutrition: eat and give of `food`, the most nourishing first | `scenes.py food` | [needs.md](needs.md) |
 | Birth, infancy, aging and death cleanup | `scenes.py lifecycle` and mechanics | [lifecycle.md](lifecycle.md) |
-| Species restrictions, grazing and migration floor | `scenes.py wildlife` and Cargo | [wildlife.md](wildlife.md) |
+| Species restrictions, grazing (shown as a `doing` row) and migration floor | `scenes.py wildlife` and Cargo | [wildlife.md](wildlife.md) |
 | Blows, threaten, yield and seize | Mechanics and `scenes.py seize` | [combat.md](combat.md) |
 | One-off acts, graph coexistence and feedback | Mechanics and Cargo | [acts.md](acts.md) |
 | Dealings on records: agreements kept, broken, lapsed and not taken; demands met and unpaid; regard read by a relation filter; hooks and install checks | `scenes.py dealings` on an island run, and Cargo | [dealings.md](dealings.md) |
 | Steering and `living/viewer/src/sync.rs` display-sync math | Five steering checks and three sync tests | [steering.md](steering.md) |
+| Flight from a creature: steering runs from the threat until `flee_clear` farther | `scenes.py flee` on a `stage1-acts` run | [steering.md](steering.md#flight) |
 | Town life: daily rhythm, places, weather, gestures, commotion, `act_card`/`doing` | `town.py` on an island run, and Cargo | [town.md](town.md) |
 | Hospitality (`host`): the skill's rules, the engine's house lookup, the `guest` row and its end in housekeeping, the theft exemption | verify-player's `host.py` on an island run | [town.md](town.md#hospitality) |
 | Town life layer 2 (rules side): the `wakes` and `woken_ring` laws, instinct-only residents' perception rings, waking 20 residents for a tick measurement | `wake_many.py` on an island run; the player-side scene is verify-player's `wake.py` | [town.md](town.md#layer-2-woken-residents-and-their-rings) |

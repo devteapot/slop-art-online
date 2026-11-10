@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-10 fix-rules-small (dev-box)
+
+Own container `rules-small-stdb` (2.14.1, port 3417), private `CARGO_TARGET_DIR`, head `9115e59` for the sweep. `cargo_checks.py` pass; `scenes.py` tick 6/6, food 4/4 (new), refusal 4/4 (new), seize, sight, needs pass (`core-rs-final`); flee 4/4 (new) and grazing 3/3 with its new `doing` check (`core-rs-final-stage`, stage1-acts); steering 5/5; mechanics 23/23; skirmish and dealings pass; `town.py` 20 of 21, failing "a resident faces someone who comes up behind them", the scene's recorded flake (above, on base worlds too). Not run: lives, infant, lifecycle, wildlife (its 20-minute migration).
+
 ## 2026-11-10 world rules on records (Mac)
 
 Branch `rules-2` (`eaee6b0`, from main `bbf7271`) in a worktree, the worker's own container `sao-rules2-stdb` (2.14.1, port 3342), private `CARGO_TARGET_DIR`. `scenes.py dealings` (new; island): 16 of 16 on `8bc4f14` and again on `eaee6b0` (`core-rules2-deal1/`, `core-rules2-final-dealings/`). Regression: `tick`, `needs`, `seize` 6/6 each (default seed, `core-rules2-final/`), `skirmish` 8/8 (island). `just living-check` exit 0, rules 120 passed. Not run: `town.py`, `lives.py`, `infant`, mechanics. Design and numbers: docs/WORLD_RULES.md.
@@ -260,3 +264,7 @@ Shared container `sao-living_spacetimedb_1` (v2.14.1), Mac checkout at `b7cf7fb`
 - Mechanics: `core-fm-mechanics` 22 of 23. The new check "blows land on the yielded, and striking them is news" failed in the driver, not the rule: the yield, the news and J's "though you had yielded" percept were all present, but J's health was read after the post-yield blow had landed. The check now reads the damage J was told. With that: `core-fm-mechanics-2` and `-3` 23 of 23.
 - `core-fm-skirmish` (island) 8/8; `core-fm-town` (island) 21/21; `core-fm-codes` 10/10.
 - Every database was deleted by cleanup and absent from `stdb list` afterwards.
+
+## 2026-11-10, branch fix-agreement-terms
+
+Shared container, laptop, island seed. `dealings` passed all 15 checks in `core-terms-202051-dealings` (the scene composes its own short `due_by_dark`, so it covers the hooks, not the new minimum). Cargo `agreements_and_demands_are_rules_on_records` checks the new deadline: accepted at 7:00, due in 13 h, told "by dusk today"; at 14:00, due in 30 h, "by dusk tomorrow". The description change was replayed against glm-flash on the two real backwards `offer_terms` decisions (docs/TRIALS.md, "Fast iterations").

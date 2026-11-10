@@ -20,6 +20,8 @@ import re
 import urllib.request
 from pathlib import Path
 
+from journal_io import restore
+
 ROOT = Path(__file__).resolve().parents[2]
 WHY = "# Why you are thinking now"
 
@@ -110,7 +112,7 @@ def main():
         for run in sorted(glob.glob(str(ROOT / f".local/living/journal/{lab}-*")))[-3:]:
             for f in glob.glob(run + "/*.jsonl"):
                 for line in open(f):
-                    r = json.loads(line)
+                    r = restore(json.loads(line), Path(f).parent)
                     if r.get("purpose") != a.purpose or not r.get("request"):
                         continue
                     u = r["request"]["messages"][-1]["content"]

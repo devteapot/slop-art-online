@@ -1,5 +1,13 @@
 # Internal mind validation
 
+## 2026-11-10 rules2-r2 fixes (dev-box)
+
+On the dev-box worktree `~/dev/slop-mind-small`, branch `fix-mind-small`, own container `mind-small-stdb` (2.14.1, port 3427, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only.
+
+- Full suite `minds-ms-full`, run beside the llm and knowledge suites (load 15–28): 16 cases pass, `consolidation` is its known XFAIL; `takeover` and `dealings` failed on timeouts.
+- `dealings` passed alone (`minds-ms-re-dealings`): a timing failure.
+- `takeover` failed alone too (`minds-ms-re-takeover`), and that one was the branch's fault: the joined player's character, with no sheet, background or seed entry, was sent to a model-written identity (an extra `consolidate` call), which pushed its second decision into the think node's 45 s quiet window. Fixed in 7a3b425 (nothing is written for such a person, as before); `minds-ms-re2` `takeover`, `wake` and `roundtrip` pass.
+
 ## 2026-11-10 dealings (Mac)
 
 Branch `rules-2` (`eaee6b0`), own container `sao-rules2-stdb` (2.14.1, port 3342), fake model. `dealings` (new) passed on the fourth attempt (`minds-rules2-4-dealings/`). The earlier attempts failed on the driver: the demander's own graph kept its body busy; the thinking cadence dropped the rules' ask after the mind's first thought, so the case now requests the next thought; and the fake rule did not allow for the quoted reason in the dealing's words. `acts`, `roundtrip`, `conversation` pass (`minds-rules2-1-*/`).
@@ -154,3 +162,7 @@ Frontmatter, Python syntax, relative links, executable scripts and existing Clau
 ## 2026-11-09, branch harness-1 (animals, night, jev)
 
 Private container `harness-stdb`. New cases: `night` and `jev` passed in `minds-h1-204530`; `animals` passed in `minds-h2-210016` after two fixes to the case (dawn reasons, since installing a graph counts as having just thought; the herd gathered in the open) and one to the fake server (a distinctive prompt wins over a purpose-named effort). The earlier cases were not rerun on this branch; the mind changes they touch (model routing through mixes, the `reorganize` purpose) are covered by verify-llm.
+
+## 2026-11-10, branch fix-host-example
+
+Shared container `sao-living_spacetimedb_1`, laptop. `conversation` passed in `minds-host-20261110-201010` with the new check: the recorded talk request contains `"do": "host"`. The unit test `talk_examples_show_every_shown_act` fails with "host is not shown in the talk turn's examples" when the example line is removed (main before this branch), and passes with it.

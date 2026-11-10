@@ -24,19 +24,19 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     }
     k.tick += 1;
     k.last_ms = now;
-    common::flush_counts(&mut k);
     let slot = (k.tick % 60) as u8;
     let k_tick = k.tick;
     common::set_profiling(k.profile);
     let _timer = common::span("tick");
-    ctx.db.clock().id().update(k);
 
     // 1. Steering updates that are due (events and cadence of moving bodies).
     let phase = common::span("tick.motion");
-    let due: Vec<Body> = ctx.db.body().next_ms().filter(..=now).collect();
+    // By id, each read when its turn comes: an earlier body's update this tick (a push, a
+    // death) may have changed or removed it, and a stale copy would overwrite that.
+    let due: Vec<u32> = ctx.db.body().next_ms().filter(..=now).map(|b| b.id).collect();
     let mut motions = 0u64;
-    for b in due {
-        let id = b.id;
+    for id in due {
+        let Some(b) = ctx.db.body().id().find(id).filter(|b| b.next_ms <= now) else { continue };
         motions += 1;
         if let Some(ev) = motion::advance(ctx, b, now) {
             act::on_motion(ctx, id, ev, now);
@@ -49,9 +49,12 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     drop(phase);
     // 2. Activity timers.
     let phase = common::span("tick.activity");
-    let due: Vec<Activity> = ctx.db.activity().ends_ms().filter(..=now).collect();
-    for a in due {
-        act::progress(ctx, a, now);
+    // By id too: finishing one activity can end, replace or delete another.
+    let due: Vec<u32> = ctx.db.activity().ends_ms().filter(..=now).map(|a| a.id).collect();
+    for id in due {
+        if let Some(a) = ctx.db.activity().id().find(id).filter(|a| a.ends_ms <= now) {
+            act::progress(ctx, a, now);
+        }
     }
     drop(phase);
     // Missiles in flight are swept along their paths; what players saw expires.
@@ -98,10 +101,10 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     }
     drop(phase);
     common::count(|k| k.motions += motions);
-    let mut k = common::clock(ctx);
-    if common::flush_counts(&mut k) {
-        ctx.db.clock().id().update(k);
-    }
+    // One clock write a tick: its stamp and the counts gathered since the last one (nothing
+    // else reads the clock row during the tick).
+    common::flush_counts(&mut k);
+    ctx.db.clock().id().update(k);
     Ok(())
 }
 
