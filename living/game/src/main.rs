@@ -30,6 +30,7 @@ mod loading;
 mod lookdev;
 mod net;
 mod perf;
+mod phase;
 mod post;
 mod probe;
 mod route;
@@ -129,11 +130,15 @@ fn main() {
                 (envs::hdr, envs::keys, envs::switch, island::stream, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway).chain(),
             );
     } else {
+        // A frame's order (phase.rs): net, mirror, input, flush, present, camera.
+        phase::configure(&mut app);
+        use phase::Phase;
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
-            .add_systems(
-                Update,
-                (net::pump, bodies::update, world::things, controls::target, world::terrain.run_if(live::tiles), demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
-            );
+            .add_systems(Update, net::pump.in_set(Phase::Net))
+            .add_systems(Update, (bodies::update, world::things, controls::target, world::terrain.run_if(live::tiles)).chain().in_set(Phase::Mirror))
+            .add_systems(Update, (demo::run, controls::movement).chain().in_set(Phase::Input))
+            .add_systems(Update, net::flush.in_set(Phase::Flush))
+            .add_systems(Update, (camera::follow, world::fade_trees, sight::update, controls::gizmos).chain().in_set(Phase::Camera));
         // Land worlds (the island the authority hosts) draw through the island renderer.
         app.add_plugins(live::LivePlugin);
         // Combat: skill input, perceived events, clips and effects (docs/COMBAT.md).
@@ -143,8 +148,6 @@ fn main() {
         app.add_plugins(town::TownPlugin);
         // Verbs: acts on what is in front of me and on myself, offered from the world's rules.
         app.add_plugins(verbs::VerbsPlugin);
-        // Inputs leave in the frame they were made (docs/LATENCY.md, step 1).
-        app.add_systems(Update, net::flush.after(controls::movement).after(combat::input).after(town::input).after(verbs::input).before(camera::follow));
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }

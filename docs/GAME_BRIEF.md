@@ -707,6 +707,37 @@ A player could move, fight and greet, but not gather, eat, craft, build, give, t
 - Storage contents are not perceived, so "take ›" lists every item there is.
 - A list shows 16 rows; the first 10 have number keys, the rest are picked with the mouse.
 
+## How the client feels: renewals, frame order, stale input, starts, hills (2026-11-10)
+
+A review of the client at `6c8d1002` found six causes of poor feel. Five are fixed on branch `fix-client-feel`; the sixth was measured and left as a plan. Presentation and input only: no table, reducer or rule changed, and the client still sends no positions. The keys and acts are unchanged.
+
+1. **My body no longer stops at every segment renewal.** The authority renews a moving body's segment at the first tick after its end (`next_ms`), anchored at that end (`motion.rs`, `resume_at`), so the renewal reached my body (drawn on the clock's lead) after it had reached the end. While a direction is held, my segment is now carried on for up to 150 ms past its end, and the renewal's small difference is blended as a late row's is (`sync.rs`, `Tracks::update_ahead`). Others are drawn as before.
+2. **A pressed skill's clip starts in the frame of the press.** A connected frame now runs in named phases: Net, Mirror, Input, Flush, Present, Camera (`phase.rs`). Bodies are drawn (Present) after this frame's presses (Input), so a skill's clip no longer waits a frame. Gestures from the keys were already on time.
+3. **Input state that went stale:**
+   - a guard key let go while the text box is open lowers the guard;
+   - the guard's arc shows the direction it was raised toward, not the cursor (the authority keeps the aim of the press; how the authority should take a look direction is still open);
+   - a refused movement intent ("too many movement inputs") is sent again after 40 ms, and a new connection or character sends what the keys hold;
+   - offline, no body is drawn, and a notice at the top says the connection was lost and is coming back (`ui/link.rs`).
+4. **Starts slide less.** A drawn gait takes up its segment's speed at once when it rises (the authority starts a body at full speed), and fades in over 0.08 s from standing instead of 0.2 s. It still eases down at a stop: freezing the gait mid-stride and blending it to standing slid both feet more than finishing the step does.
+5. **The camera no longer pops over hills.** `camera::follow` lifts the eye over the island's ground itself, eased (10/s up, 2.5/s down, at least 0.3 m clear), and aims after the lift; the lift that ran after the camera had aimed is gone.
+6. **Per-frame copies of the SDK cache: measured, not changed.** `iter()` and `find()` clone rows under a lock every frame (`my_experience` six times, `seen_characters` twice, the 70 kB script row once). At about 180 bodies in sight they cost at most 1.3% of the main thread's samples, about 0.2 ms a frame. The frame's hitches come from elsewhere: the F hint's rule checks (`verbs::options`, Rhai `Scripts::check`) every 0.25 s take about 8 ms each, 9–13% of the main thread, so about one frame in fourteen runs over 8 ms with 50 or 200 people in sight. Plans:
+   - **The hint first:** check only when what the hint depends on changes (the aimed thing or person, my pack, know-how and needs), or spread one check per frame over the candidates.
+   - **The copies, when a crowd makes them matter:** one typed resource per table, kept from the SDK's `on_insert`/`on_update`/`on_delete` callbacks (they also fire for a subscription's initial rows) and drained in the Mirror phase; systems borrow it. Speech, act outcomes and combat events become queues of new rows. The script row is recompiled on its update callback, not looked up every frame.
+
+**Evidence** (Mac M4 Pro, headless at 60 Hz, scratch island world `verify-feel-1`, the real client through the same script steps the keys use; `.local/living/fix-client-feel/`):
+
+| | Before | After |
+|---|---|---|
+| Renewals at an unchanged speed with a frame under 90% of the segment's speed (straight walks, `living/tools/root_steps.py`) | 6 of 22, lowest 38% | 2 of 15, lowest 51%, both at real direction changes |
+| Frames from a scripted skill press to its clip asked of my body | 1 (4 of 4 presses) | 0 (4 of 4) |
+| Guard after its key goes up while typing | stays up until its 8 s limit | lowered at the release (+9 ms) |
+| Stop refused after a burst of 40 direction changes | still walking 2 s later | stopped |
+| Drift of the supporting foot over 0.5 s, 16 starts | median 32.8 cm, p90 89 cm | median 28.6 cm, p90 50 cm |
+| The same over 16 stops | median 10.9 cm, p90 30 cm | median 2.9 cm, p90 30 cm |
+| Frames with my chest more than 2° off the view's centre, walking down a steep slope | 360 | 0 |
+
+New measurement aids: the feet log (`LIVING_GAME_FEET`) also records the authority time my body is drawn at, its segment, the one-shot asked of it and the camera's eye and pitch; the live script has `key:`, `mouse:` and `chat:` steps that drive the input systems as the window does.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**
