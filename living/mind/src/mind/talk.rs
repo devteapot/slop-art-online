@@ -766,6 +766,19 @@ impl Minds {
                 between.push(format!("You offered {other_name} {} {} for {} {}; they have not accepted yet.", o.give_qty, o.give_item, o.want_qty, o.want_item));
             }
         }
+        // What one has to act with: one's pack as one last looked (the latest deliberation
+        // scene's `you`; none before a first deliberation), one's know-how and one's home.
+        let pack = self.felt.lock().unwrap().get(&me).and_then(|(_, you)| you["pack"].as_object().cloned());
+        if let Some(pack) = pack {
+            let items: Vec<String> = pack.iter().filter_map(|(k, q)| q.as_f64().filter(|q| *q > 0.0).map(|q| format!("{k} {q}"))).collect();
+            between.push(if items.is_empty() { "You carry nothing.".into() } else { format!("You carry (as you last looked): {}.", items.join(", ")) });
+        }
+        let mut knows: Vec<String> = self.conn.db.know_how().iter().filter(|k| k.actor == me).map(|k| k.technique).collect();
+        knows.sort();
+        between.push(if knows.is_empty() { "You know no technique yet.".into() } else { format!("You know how to: {}.", knows.join(", ")) });
+        if c.home_x != 0.0 || c.home_y != 0.0 {
+            between.push(format!("Your home is at [{:.0}, {:.0}].", c.home_x, c.home_y));
+        }
         let t = prompts::TalkUser {
             name: &c.name,
             identity: &identity,

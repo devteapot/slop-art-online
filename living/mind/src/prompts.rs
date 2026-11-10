@@ -831,7 +831,8 @@ silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what yo
 \"say\": \"your words\" or null, \"to\": id of who you speak to, \
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
 {{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}}} to take a trade they offered, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
-{{\"do\": \"offer\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fire\"}} \
+{{\"do\": \"offer\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fire\"}}, \
+{{\"do\": \"host\", \"target\": {{\"id\": id of who you speak to}}}} to take them in as your household's guest until morning \
 (words change nothing in the world by themselves: what you agree to do now, do here; you will learn how it went), \
 \"settled\": null while the matter is still open, or what is now settled, in a few words (e.g. \"meet at the ford at dawn\", \"she will think about it\", \"I refused\", \"nothing more to say\"), \
 \"until\": null or when to take it up again (\"dawn\", \"morning\", \"noon\", \"evening\", \"night\", \"tomorrow\" or an hour 0-23), \
