@@ -360,6 +360,8 @@ pub struct Laws {
     pub alone_within: f32,
     /// A body within this angle of facing something already faces it (radians).
     pub face_slack: f32,
+    /// A flight ends this many tiles farther from the threat than where it began.
+    pub flee_clear: f32,
     /// How long a played character stands without any connection of its person before the
     /// world's minds take it over (seconds; docs/PLAYER_MEMORY.md).
     pub takeover_s: f32,
@@ -404,6 +406,7 @@ impl Default for Laws {
             pasture_regen: 0.006,
             alone_within: 6.0,
             face_slack: 0.35,
+            flee_clear: 9.0,
             takeover_s: 30.0,
         }
     }
@@ -970,6 +973,7 @@ impl Scripts {
             pasture_regen: g("pasture_regen", l.pasture_regen).clamp(0.0, 1.0),
             alone_within: g("alone_within", l.alone_within).clamp(0.0, 40.0),
             face_slack: g("face_slack", l.face_slack).clamp(0.0, 3.0),
+            flee_clear: g("flee_clear", l.flee_clear).clamp(1.0, 60.0),
             takeover_s: g("takeover_s", l.takeover_s).clamp(0.0, 3_600.0),
         };
         l

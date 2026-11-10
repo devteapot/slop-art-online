@@ -12,6 +12,7 @@
 | One-off acts, graph coexistence and feedback | Mechanics and Cargo | [acts.md](acts.md) |
 | Dealings on records: agreements kept, broken, lapsed and not taken; demands met and unpaid; regard read by a relation filter; hooks and install checks | `scenes.py dealings` on an island run, and Cargo | [dealings.md](dealings.md) |
 | Steering and `living/viewer/src/sync.rs` display-sync math | Five steering checks and three sync tests | [steering.md](steering.md) |
+| Flight from a creature: steering runs from the threat until `flee_clear` farther | `scenes.py flee` on a `stage1-acts` run | [steering.md](steering.md#flight) |
 | Town life: daily rhythm, places, weather, gestures, commotion, `act_card`/`doing` | `town.py` on an island run, and Cargo | [town.md](town.md) |
 | Hospitality (`host`): the skill's rules, the engine's house lookup, the `guest` row and its end in housekeeping, the theft exemption | verify-player's `host.py` on an island run | [town.md](town.md#hospitality) |
 | Town life layer 2 (rules side): the `wakes` and `woken_ring` laws, instinct-only residents' perception rings, waking 20 residents for a tick measurement | `wake_many.py` on an island run; the player-side scene is verify-player's `wake.py` | [town.md](town.md#layer-2-woken-residents-and-their-rings) |

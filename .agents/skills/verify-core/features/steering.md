@@ -25,6 +25,10 @@ Run the existing driver through the recorder using [SKILL.md](../SKILL.md). It s
 - Costs on real terrain: `living/tools/path_budget` (its own workspace) on a `path-world.json` (terrain chunk rows, from and to): `legs` walks to each target leg by leg (expansions, time, length against the plain search's optimum), `clicks` replays click-to-move requests, `cache` counts the whole map's regions and areas. `path_budget/fuel` measures fuel per leg under SpacetimeDB 2.14.1's wasmtime configuration.
 - Live, on an island run: `living/tools/walk_times.py --db verify-<run> --residents N --secs S` sends N residents walking to three far settlements each (admin `set_behavior`) and samples every body: walked distance, settlements reached, how many are moving. Run `living/tools/bench.py --db verify-<run>` meanwhile for the tick's cost (its `tick.routes` span is the warm-up). For players, see [verify-player](../../verify-player/features/player-character.md).
 
+## Flight
+
+- Live, on a `stage1-acts` run: `scenes.py flee` holds every graph on `wait`, puts a wolf 6 tiles from a deer and gives the deer the graph `flee` the wolf. It checks that the deer's `steer` row runs from the wolf itself (`goal` 4, `target` the wolf's id), that the distance sampled about every 0.5 s never falls, and that the flight ends about `flee_clear` (a law, 9) tiles farther than it began. A deer told "cornered" is put back on `wait` and the next deer is tried. Before 2026-11-10 the goal ran from a point 9 tiles beyond the deer, so the deer ran at the wolf.
+
 ## Gotchas
 
 - Pass an explicit `verify-core-*` database. The driver publishes and deletes it itself.

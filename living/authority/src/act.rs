@@ -525,21 +525,19 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             }
             target = Resolved::point(pick.ok_or("nowhere to wander")?);
         }
+        // The target stays the threat: steering runs from it (a creature as it moves). The
+        // ground away from it only decides whether there is anywhere to run.
         "flee" => {
             let from = target.at;
-            let d = dist(here, from).max(0.1);
+            let clear = common::laws(ctx).flee_clear;
             let map = common::map(ctx);
-            let mut pick = None;
-            for spread in [0.0f32, 0.6, -0.6, 1.2, -1.2] {
+            let open = [0.0f32, 0.6, -0.6, 1.2, -1.2].into_iter().any(|spread| {
                 let base = (here.1 - from.1).atan2(here.0 - from.0) + spread;
-                let p = (here.0 + base.cos() * 9.0, here.1 + base.sin() * 9.0);
-                if map.free(p.0, p.1) {
-                    pick = Some(p);
-                    break;
-                }
+                map.free(here.0 + base.cos() * clear, here.1 + base.sin() * clear)
+            });
+            if !open {
+                return Err("cornered".into());
             }
-            let _ = d;
-            target = Resolved { class: 4, id: target.id, at: pick.ok_or("cornered")?, kind: target.kind, name: target.name };
         }
         "eat" | "give" | "store" if item == "food" => {
             item = common::best_food(ctx, id as u64).ok_or("no food in your pack (food: gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt)")?;
@@ -656,7 +654,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 kind: motion::GOAL_FLEE,
                 target: if creature { target.id as u32 } else { 0 },
                 at: target.at,
-                keep: dist(here, target.at) + 9.0,
+                keep: dist(here, target.at) + common::laws(ctx).flee_clear,
                 speed: sp * 1.15,
                 flags: 0,
             },

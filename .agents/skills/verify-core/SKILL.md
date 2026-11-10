@@ -134,6 +134,13 @@ python3 "$V" launch --run "$W" --seed stage1-acts > ".local/living/verify/$W/lau
 python3 "$V" doctor --run "$W" > ".local/living/verify/$W/doctor.txt" 2>&1
 python3 "$C/scenes.py" wildlife --run "$W" > ".local/living/verify/$W/wildlife.txt" 2>&1
 python3 "$V" cleanup --run "$W"
+
+# A deer flees a wolf: the distance only grows (features/steering.md#flight).
+F=$R-flee
+mkdir -p ".local/living/verify/$F"
+python3 "$V" launch --run "$F" --seed stage1-acts > ".local/living/verify/$F/launch.txt" 2>&1
+python3 "$C/scenes.py" flee --run "$F" > ".local/living/verify/$F/flee.txt" 2>&1
+python3 "$V" cleanup --run "$F"
 ```
 
 Start lifecycle promptly after doctor while the seeded infant is still an infant. Wildlife holds initial character graphs on wait, drives grazing, kills deer and waits for the actual 20-minute migration cooldown. It then checks one more minute without another arrival. Run independent checks on separate databases during that wait. Do not accelerate the clock, patch species data or restart the service.

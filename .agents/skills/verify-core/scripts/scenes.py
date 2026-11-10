@@ -644,6 +644,68 @@ def sight(s):
 
 
 
+def body_at(s, actor, now=None, row=None):
+    """A body's position now, from its segment (straight-line; turns are short)."""
+    b = row or s.rows(f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {actor}")[0]
+    now = now or s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    t = max(0, min(now, b["next_ms"]) - b["t_ms"]) / 1000
+    return (b["x"] + b["vx"] * t, b["y"] + b["vy"] * t)
+
+
+def apart(s, a, b):
+    """Distance between two bodies at one moment (one query for both and the clock)."""
+    rows = s.rows(f"SELECT id, x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {a} OR id = {b}")
+    now = max(r["t_ms"] for r in rows)
+    now = max(now, s.rows("SELECT last_ms FROM clock")[0]["last_ms"])
+    at = {r["id"]: body_at(s, r["id"], now, r) for r in rows}
+    return round(math.dist(at[a], at[b]), 2)
+
+
+def flee(s):
+    """A deer flees a wolf 6 tiles off: it runs away from the wolf (the distance only grows)
+    until it is `flee_clear` (9) tiles farther than it began. Before 2026-11-10 the goal ran
+    from a point 9 tiles beyond the deer, so the deer ran at the wolf. Needs a world with deer
+    and wolves (`--seed stage1-acts`)."""
+    for c in s.rows("SELECT id, alive FROM character"):
+        if c["alive"]:
+            s.graph(c["id"], {"wait": 300})
+    deer = [c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'deer' AND alive = true")]
+    wolf = next(c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'wolf' AND alive = true"))
+    s.expect("world has deer and a wolf", bool(deer) and bool(wolf), {"deer": deer[:4], "wolf": wolf})
+    track, start = [], None
+    for d in deer[:6]:
+        here = body_at(s, d)
+        s.call("place_at", wolf, here[0] + 6.0, here[1])
+        time.sleep(0.5)
+        w = body_at(s, wolf)
+        start = math.dist(body_at(s, d), w)
+        if not 4.5 <= start <= 7.5:
+            continue
+        # Flight is real-time behaviour: a graph runs it (a one-off act may not).
+        s.graph(d, {"seq": [{"do": {"skill": "flee", "target": {"id": wolf}}}, {"wait": 300}]})
+        t0 = time.monotonic()
+        track, seen, goal = [], False, None
+        while time.monotonic() - t0 < 15:
+            track.append(apart(s, d, wolf))
+            act = s.rows(f"SELECT skill FROM activity WHERE id = {d}")
+            fleeing = any(r["skill"] == "flee" for r in act)
+            if fleeing and goal is None:
+                goal = s.rows(f"SELECT goal, target, gx, gy, keep FROM steer WHERE id = {d}", "steer")[0]
+            seen = seen or fleeing
+            if seen and not fleeing:
+                break
+        track.append(apart(s, d, wolf))
+        if goal is not None:
+            break
+        # Never started: nowhere to run from here (told "cornered"); try another deer.
+        s.graph(d, {"wait": 300})
+    (s.out / f"{s.name}-track.json").write_text(json.dumps({"deer": d, "wolf": wolf, "start": start, "track": track}, indent=2) + "\n")
+    s.rows(f"SELECT * FROM experience WHERE observer = {d}", "deer-feedback")
+    s.expect("the flight steers away from the wolf itself", goal and goal["goal"] == 4 and goal["target"] == wolf, goal)
+    falls = [(a, b) for a, b in zip(track, track[1:]) if b < a - 0.3]
+    s.expect("the distance to the wolf never falls while fleeing", track and not falls, {"start": start, "track": track, "falls": falls})
+    s.expect("the flight ends about flee_clear farther than it began", track and track[-1] >= start + 7.0, {"start": start, "end": track[-1] if track else None})
+
 
 # Rules with short hours for the dealings scene, composed as a floor composes its laws
 # (living_rules::floors::compose): each replaced base function keeps its body as base_NAME.
@@ -760,7 +822,7 @@ def dealings(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee}
 
 
 def main():

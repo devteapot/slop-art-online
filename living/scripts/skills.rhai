@@ -24,6 +24,8 @@ fn laws() {
         alone_within: 6.0,
         // A body within this many radians of facing something already faces it.
         face_slack: 0.35,
+        // A flight runs until it is this many tiles farther from the threat than it began.
+        flee_clear: 9.0,
         // Seconds a played character stands with no connection of its person before the
         // world's minds take it over (it keeps living; the person takes it back on return).
         takeover_s: 30.0,
