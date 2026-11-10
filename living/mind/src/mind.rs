@@ -490,7 +490,19 @@ impl Minds {
                 None => living_rules::graph::from_value_lenient(it["graph"].clone()),
             };
             match parsed {
-                Ok((g, _)) => edits.push(RoutineIn { name, graph: g.to_json() }),
+                Ok((g, _)) => {
+                    // The same graph again is no change: keep the installed version and how it has gone.
+                    let graph = g.to_json();
+                    let key = living_rules::normalize::routine_name(&name);
+                    let same = self.conn.db.routine().iter().any(|r| {
+                        r.actor == c.id && living_rules::normalize::routine_name(&r.name) == key && living_rules::graph::parse(&r.graph).map_or(false, |x| x.to_json() == graph)
+                    });
+                    if same {
+                        log::info!("{}: routine {name} unchanged, kept", c.name);
+                        continue;
+                    }
+                    edits.push(RoutineIn { name, graph })
+                }
                 Err(e) => log::info!("{}: routine {name} not kept: {e}", c.name),
             }
         }
