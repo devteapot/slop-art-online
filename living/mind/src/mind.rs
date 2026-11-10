@@ -26,6 +26,7 @@ mod judge;
 mod lived;
 pub mod lod;
 mod recall;
+pub mod rethink;
 mod sleep;
 mod talk;
 mod woken;
@@ -45,6 +46,8 @@ pub enum Event {
     Contact(u32),
     /// With `LIVING_PLAYER_MEMORY=1`: an experience of a character a person plays.
     Lived(Experience),
+    /// With the rethink gate on: a percept of one of this service's characters.
+    Percept(Experience),
     /// A resident was woken into a mind (docs/TOWN_LIFE.md, "Layer 2").
     Woken(u32),
 }
@@ -121,6 +124,11 @@ pub struct Minds {
     /// Each character's body as it last perceived it (its latest deliberation scene's `you`),
     /// for judgments between thoughts.
     felt: Mutex<HashMap<u32, (Instant, Value)>>,
+    /// The rethink gate in front of non-urgent deliberations (rethink.rs; `LIVING_RETHINK`).
+    rethink: Option<rethink::Gate>,
+    rethink_track: Mutex<HashMap<u32, rethink::Track>>,
+    rethink_stats: Mutex<rethink::Stats>,
+    rethink_logged: Mutex<Option<Instant>>,
 }
 
 fn flatten<E: std::fmt::Debug>(r: Result<Result<(), String>, E>) -> Result<(), String> {
@@ -195,12 +203,13 @@ impl Minds {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
         let jev = judge::Jev::from_env(&crate::root())?;
+        let rethink = rethink::Gate::from_env(&crate::root())?;
         if let Some(j) = &jev {
             prompts::set_judgments(j.grammar());
         }
         let only_env = std::env::var("LIVING_ONLY").ok();
         let only_woken = only_env.as_deref().is_some_and(|v| v.split(',').any(|x| x.trim() == "woken"));
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), only_woken, wakes: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg: lived::Config::from_env(), lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), only_woken, wakes: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg: lived::Config::from_env(), lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -1027,6 +1036,9 @@ impl Minds {
         if let Some(j) = &self.jev {
             log::info!("judgments on: {} via {} ({})", j.file.judgments.keys().cloned().collect::<Vec<_>>().join(", "), j.file.provider.url, j.file.provider.model);
         }
+        if let Some(g) = &self.rethink {
+            log::info!("rethink gate on: {:?} (deliberate at p >= {}, hold at most {} s)", g.mode, g.threshold(), g.file.max_hold_s);
+        }
         if self.lived_cfg.on {
             log::info!("player memory on: {:?}", self.lived_cfg);
             for e in self.conn.db.experience().iter().filter(|e| e.controller != self.me) {
@@ -1067,6 +1079,7 @@ impl Minds {
                         }
                     }
                     Some(Event::Lived(e)) => self.lived_add(e),
+                    Some(Event::Percept(e)) => self.rethink_percept(&e),
                     Some(Event::Woken(id)) => self.clone().awaken(id),
                     None => return Err(anyhow!("event channel closed")),
                 },
@@ -1075,6 +1088,7 @@ impl Minds {
                     self.clone().check_consolidation();
                     self.clone().check_sleep();
                     self.clone().check_judgments();
+                    self.clone().check_rethink();
                     self.clone().check_lived();
                     let this = self.clone();
                     tokio::spawn(async move { this.journal_cap_reports().await });
@@ -1150,9 +1164,19 @@ impl Minds {
                     }
                 }
                 seen = d.updated_ms;
+                // The rethink gate may hold a non-urgent request: it stays pending and gathers
+                // what comes next, and each new reason asks again (rethink.rs).
+                if !self.rethink_gate(&d).await {
+                    self.actors.lock().unwrap().entry(actor).or_default().deferring = true;
+                    if let Some(request) = self.pending.lock().unwrap().get_mut(&actor) {
+                        request.state = lod::PendingState::Ready;
+                    }
+                    continue;
+                }
                 if let Err(e) = self.deliberate(&d).await {
                     log::warn!("deliberation for {} failed: {e:#}", self.name(actor));
                 }
+                self.rethink_thought(actor, d.updated_ms);
                 if self.lod.on {
                     self.actors.lock().unwrap().entry(actor).or_default().last_deliberated = Some(Instant::now());
                     if let Some(request) = self.pending.lock().unwrap().get_mut(&actor) {
@@ -1164,10 +1188,11 @@ impl Minds {
                     tokio::time::sleep(Duration::from_millis(300)).await;
                 }
             }
+            let held = self.rethink_holding(actor);
             let mut a = self.actors.lock().unwrap();
             let m = a.entry(actor).or_default();
             m.deliberating = false;
-            m.deferring = false;
+            m.deferring = held;
         });
     }
 

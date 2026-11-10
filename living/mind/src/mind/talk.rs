@@ -447,12 +447,16 @@ impl Minds {
 
     /// Full deliberations take priority over conversation turns.
     fn thinking(&self, actor: u32) -> bool {
-        if self.lod.on {
-            // A request held back off stage is not a deliberation under way (lod.rs).
-            let (deliberating, deferring) = self.actors.lock().unwrap().get(&actor).map_or((false, false), |m| (m.deliberating, m.deferring));
-            return !deferring && (deliberating || self.pending.lock().unwrap().contains_key(&actor));
+        // A request held back (off stage, lod.rs, or by the rethink gate) is not a
+        // deliberation under way.
+        let (deliberating, deferring) = self.actors.lock().unwrap().get(&actor).map_or((false, false), |m| (m.deliberating, m.deferring));
+        if deferring {
+            return false;
         }
-        self.actors.lock().unwrap().get(&actor).map_or(false, |m| m.deliberating) || self.conn.db.my_deliberations().iter().any(|d| d.actor == actor)
+        if self.lod.on {
+            return deliberating || self.pending.lock().unwrap().contains_key(&actor);
+        }
+        deliberating || self.conn.db.my_deliberations().iter().any(|d| d.actor == actor)
     }
 
     async fn reply_turn(&self, me: u32, other: u32) -> Result<()> {

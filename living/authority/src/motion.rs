@@ -14,6 +14,7 @@
 use crate::common::{self, dist};
 use crate::tables::*;
 use living_rules::map::{chunk_of, Map};
+use living_rules::nav::RouteSpec;
 use living_rules::steer::{self as geo, Want};
 use spacetimedb::{ReducerContext, Table};
 
@@ -41,6 +42,28 @@ const FLAG_STUCK: u8 = 16;
 const MIN_STEP_MS: u64 = 40;
 /// A creature pursuit re-plans its coarse path at most this often.
 const REPLAN_MS: u64 = 1_000;
+/// A walk plans its next leg when the current leg's end is this close (`living_rules::nav`).
+pub const REPLAN_AHEAD_M: f32 = 16.0;
+
+/// Chunks whose walking regions a tick works out ahead of time, until the whole map's are
+/// built (`Map::warm_routes`): at most about 0.4 ms of a tick, the 2048 m island in about
+/// 5 s after the map is loaded. A route before then builds what it needs itself.
+const WARM_CHUNKS: usize = 64;
+
+pub fn warm_routes(ctx: &ReducerContext) {
+    common::map(ctx).warm_routes(WARM_CHUNKS);
+}
+
+/// How walks are routed: the world's road speed, legs of the default length.
+fn route_spec(laws: &living_rules::script::Laws) -> RouteSpec {
+    RouteSpec { road_speed: laws.road_speed, ..Default::default() }
+}
+
+/// The waypoints of the next leg of a walk from `p` to `to` (they end at `to` on the last).
+fn leg(map: &Map, p: (f32, f32), to: (f32, f32), laws: &living_rules::script::Laws) -> Option<Vec<Waypoint>> {
+    let leg = map.route_leg(p, to, &route_spec(laws))?;
+    Some(leg.points.into_iter().map(|(x, y)| Waypoint { x, y }).collect())
+}
 
 /// What to steer for.
 #[derive(Clone, Copy, Debug)]
@@ -286,8 +309,19 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                     b.path.push(Waypoint { x: goal.0, y: goal.1 });
                 }
                 advance_corners(&map, p, &mut b.path, laws.corner_radius);
+                // A long walk goes leg by leg: near the end of one that stops short of the
+                // goal, plan the next from here.
+                let leg_end = b.path.last().map(|l| (l.x, l.y)).unwrap_or(goal);
+                if leg_end != goal && dist(p, leg_end) < REPLAN_AHEAD_M {
+                    match leg(&map, p, goal, &laws) {
+                        Some(path) => b.path = path,
+                        None => ev = Some(Event::Lost("the way is blocked".into())),
+                    }
+                }
+            }
+            if !matches!(ev, Some(Event::Lost(_))) && st.goal == GOAL_POINT {
                 let w = (b.path[0].x, b.path[0].y);
-                let final_leg = b.path.len() == 1;
+                let final_leg = b.path.len() == 1 && w == goal;
                 let cruise = b.speed.max(0.1);
                 if final_leg && (agile || dg <= laws.slow_radius.max(0.3)) {
                     // The final approach: glide straight in, slowing, and stop on the spot
@@ -392,8 +426,8 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                                 if stale && now.saturating_sub(st.plan_ms) >= REPLAN_MS {
                                     st.plan_ms = now;
                                     dirty = true;
-                                    match map.path(p, tp, 6_000) {
-                                        Some(path) => b.path = path.into_iter().map(|(x, y)| Waypoint { x, y }).collect(),
+                                    match leg(&map, p, tp, &laws) {
+                                        Some(path) => b.path = path,
                                         None => {
                                             if b.path.is_empty() {
                                                 ev = Some(Event::Lost("cannot reach them".into()));
@@ -475,9 +509,9 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                     st.flags |= FLAG_STUCK;
                     replanned = true;
                     dirty = true;
-                    match map.path(p, dest, 6_000) {
+                    match leg(&map, p, dest, &laws) {
                         Some(path) if !path.is_empty() => {
-                            b.path = path.into_iter().map(|(x, y)| Waypoint { x, y }).collect();
+                            b.path = path;
                             let dir = angle(p, (b.path[0].x, b.path[0].y));
                             seg = geo::plan(&map, p, b.heading, v_cur, Want { dir, ..w }, &tune);
                         }
@@ -554,11 +588,11 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
             if unreachable(id, at, now) {
                 return Err("no path there".into());
             }
-            let Some(path) = map.path(p, at, 6_000) else {
+            let Some(path) = leg(&map, p, at, &common::laws(ctx)) else {
                 no_path(id, at, now);
                 return Err("no path there".into());
             };
-            b.path = path.into_iter().map(|(x, y)| Waypoint { x, y }).collect();
+            b.path = path;
         }
         GOAL_DIRECTION => {
             let n = (at.0 * at.0 + at.1 * at.1).sqrt();

@@ -1946,7 +1946,7 @@ fn finish_tiles(wk: Work) -> Land {
     let Work { mut land, tiles, sd, .. } = wk;
     let size_m = land.size;
     land.sd = sd;
-    land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default(), opaque: Default::default() };
+    land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
     land
 }
 
