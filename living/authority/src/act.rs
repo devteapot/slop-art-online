@@ -1880,7 +1880,10 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         if by_person && vc.kind == "person" {
             common::chronicle(ctx, now, "killing", attacker, victim, at, if yielded { format!("{an} killed {vn}, who had yielded") } else { format!("{an} killed {vn}") });
         }
-        die(ctx, victim, &if yielded { format!("killed by {an}, after yielding") } else { format!("killed by {an}") }, now, attacker);
+        // The death record names the killer as the victim knew them (`perceived_of`): "killed
+        // by a stranger" unless the name was known. The chronicle above keeps the real names.
+        let by = common::label_for(ctx, &vc, attacker);
+        die(ctx, victim, &if yielded { format!("killed by {by}, after yielding") } else { format!("killed by {by}") }, now, attacker);
         return format!("killed {vn} ({amount:.0})");
     }
     if defense == Aim::Facing {

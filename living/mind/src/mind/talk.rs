@@ -502,7 +502,7 @@ impl Minds {
             Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().trim().to_string(), o.get("to").map(id_of).unwrap_or(0).max(id_of(&v["to"]))),
             _ => (String::new(), 0),
         };
-        let say = if say.eq_ignore_ascii_case("null") || say == "..." { String::new() } else { say };
+        let say = if say.eq_ignore_ascii_case("null") || living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
         let to = if to != 0 && to != me && self.conn.db.character().id().find(&to).map_or(false, |c| c.kind == "person") { to } else { other };
         // What the speaker says is now settled closes the exchange (their own judgment).
         let outcome = flat(if v["settled"].is_null() || v["settled"] == json!(false) { &v["outcome"] } else { &v["settled"] }).trim().to_string();
@@ -699,6 +699,7 @@ impl Minds {
         let plan = self.conn.db.brain().id().find(&me).map(|b| b.plan).filter(|p| !p.is_empty());
         let doing = plan.clone().unwrap_or_else(|| "going about your day".into());
         let scene = format!("{} ({part}), {place}. What you are doing: {doing}.", fmt(now));
+        let body = self.body_text(c.id);
         // What this exchange brings to mind: the other person, what was said, the place, the hour.
         let mut cues = Cues::default();
         cues.key(format!("person:{other}"), 1.2);
@@ -773,6 +774,7 @@ impl Minds {
             lately: &lately,
             earlier: earlier.as_deref(),
             scene: &scene,
+            body: &body,
             conversation: &convo,
             heard: &heard.text,
             between: &between,

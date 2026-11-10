@@ -21,4 +21,4 @@ A defender with a desires graph whose first branch flees while `fight_risk` is a
 ## Gotchas
 
 - The defender's graph is a `desires` top level: a reply that keeps the current graph would otherwise have `keep_needs` rebuild a flat graph around the body's needs.
-- The mind does not subscribe to `vitals`; the body in the state is the last deliberation scene's.
+- The body in the state is read from the `vitals` the service subscribes to (its own characters, since feedback-1), at the moment of the request, with `felt` in words; the last deliberation scene's body is the fallback when no row has arrived.

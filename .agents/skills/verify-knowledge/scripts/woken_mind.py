@@ -113,7 +113,7 @@ class Proof(K.Run):
         login = subprocess.run([str(ROOT / 'living/tools/stdb'), 'login', 'show', '--token'], capture_output=True, text=True, check=True)
         tokens = re.findall(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', login.stdout)
         assert len(tokens) == 1
-        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER='http://127.0.0.1:3300', LIVING_DB=self.db, LIVING_RUN=self.db,
+        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/'), LIVING_DB=self.db, LIVING_RUN=self.db,
                    LIVING_SEED='island', LIVING_MODELS=str(self.directory / 'models.json'), LIVING_ONLY='woken', LIVING_TOKEN=tokens[0],
                    LIVING_NEO4J='on', LIVING_NEO4J_URI=self.state['uri'], LIVING_NEO4J_PASSWORD=self.state['password'],
                    LIVING_VERIFY_FAKE_KEY='local-only', LIVING_LLM_PER_MIN='0', LIVING_CONCURRENCY='8', LIVING_LOD='1',

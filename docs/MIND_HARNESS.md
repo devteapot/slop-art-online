@@ -261,7 +261,7 @@ Claude side, not billed to a provider here: one blind judge (about 130k tokens) 
 
 ## Known gaps and defects found
 
-- **No `vitals` subscription:** the mind service does not subscribe to `vitals`, so `repertoire_text`'s "how that need stands now" never shows. Judgments use the last deliberation scene instead.
+- **No `vitals` subscription** (fixed on `feedback-1`, [mind feedback](MIND_FEEDBACK.md#1-the-body-in-prompts)): the service now subscribes, as the owner, to the vitals of the characters it thinks for, so `repertoire_text`'s "how that need stands now" shows, prompts say how the body feels, and judgments read the body at the moment of the request.
 - **Real-time judgment is slower than the fights:** a 4 s refresh on a 2 s tick, plus about 1 s for Jev, against fights decided in 7–30 s. Faster refresh or event-triggered asks are the next step.
 - **Animal menus are single steps:** `choose` cannot chain a stalk, a signal and an attack.
 - **The 2.5 MiB inline limit** is from one measurement (MODEL_COST Part 2); the 2.4 MB threshold leaves 4% margin.

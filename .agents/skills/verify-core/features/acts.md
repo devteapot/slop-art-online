@@ -7,6 +7,7 @@
 - Missing know-how produces failure feedback with a reason.
 - Real-time behavior is rejected as a one-off act.
 - Rework creates a routine and refuses premature revision.
+- A target `{"id": n}` is what the scene lists under that id: a creature first, else a structure or a resource in sight (`brain.rs` `visible_thing`, since `feedback-1`). A depleted bush still resolves, so the gather rule answers ("the berry_bush is depleted"); only a thing out of sight is "no #n in sight". Proved through a real mind in `verify-minds` `acts`.
 
 ## How to get to it (user POV)
 

@@ -522,6 +522,15 @@ impl<'a> Ev<'a> {
         Some(Resolved { class: 3, id: id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name })
     }
 
+    /// A structure or resource in sight by its id.
+    fn visible_thing(&mut self, id: u64) -> Option<Resolved> {
+        let sc = self.scene();
+        if let Some((s, _)) = sc.structures.iter().find(|(s, _)| s.id == id) {
+            return Some(Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() });
+        }
+        sc.resources.iter().find(|(n, _)| n.id == id).map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
+    }
+
     fn smelled_creature(&mut self, id: u32) -> Option<Resolved> {
         let c = self.smelled().iter().find(|c| c.id == id)?.clone();
         let ch = self.ctx.db.character().id().find(id)?;
@@ -601,7 +610,10 @@ impl<'a> Ev<'a> {
             Target::Wander => Some(Resolved::point(self.at)),
             Target::Place(name) => self.place(name),
             Target::At([x, y]) => Some(Resolved::point((*x, *y))),
-            Target::Id(id) => self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }),
+            // An id is whatever the scene listed under it: a creature first, else a structure or
+            // a resource in sight (a depleted bush still resolves, so its own rule says it is bare
+            // instead of the body being told it is not there).
+            Target::Id(id) => self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }).or_else(|| self.visible_thing(*id as u64)),
             Target::Named(name) => {
                 let ids: Vec<u32> = self.scene().creatures.iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
                 let id = ids.into_iter().find(|id| self.ctx.db.character().id().find(*id).map_or(false, |c| c.name.eq_ignore_ascii_case(name)))?;
@@ -1024,18 +1036,42 @@ impl<'a> Ev<'a> {
             percept(self.ctx, &self.me, now, "saw", c.id, 0, c.pos, text, sal);
         }
 
-        // Structures.
+        // Structures. One made of several tiles (a town gate is a block of gate tiles) is noticed
+        // once: new tiles touching others of the same kind and owner are one thing, and nothing
+        // is said when any part of it was already familiar.
         let structures: Vec<(u64, String, u32, (f32, f32), f32)> = self.scene().structures.iter().map(|(s, d)| (s.id, s.kind.clone(), s.owner, (s.x, s.y), *d)).collect();
-        for (id, kind, owner, pos, dist) in structures {
-            if self.recently_seen(0x4000_0000 | (id as u32 & 0x3fff_ffff)) || self.familiarity(FAM_STRUCTURE | id).is_some() {
+        let mut new: Vec<usize> = Vec::new();
+        for (i, (id, _, _, _, _)) in structures.iter().enumerate() {
+            if !self.recently_seen(0x4000_0000 | (*id as u32 & 0x3fff_ffff)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
+                new.push(i);
+            }
+        }
+        let mut told = vec![false; structures.len()];
+        for &i in &new {
+            if told[i] {
                 continue;
             }
-            if owner == self.me.id {
+            let part = joined_tiles(&structures, i);
+            for &k in &part {
+                told[k] = true;
+            }
+            let (_, kind, owner, _, _) = &structures[i];
+            if *owner == self.me.id || part.iter().any(|k| !new.contains(k)) {
                 continue;
             }
-            let by = if owner != 0 && kind != "remains" { format!(" built by {}", common::label_for(self.ctx, &self.me, owner)) } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, owner)) } else { String::new() };
-            let text = format!("You notice a {kind}{by}, {dist:.0} tiles {}.", direction(at, pos));
-            percept(self.ctx, &self.me, now, "saw", owner, 0, pos, text, if kind == "remains" { 0.8 } else { 0.35 });
+            let nearest = *part.iter().min_by(|a, b| structures[**a].4.total_cmp(&structures[**b].4)).unwrap_or(&i);
+            let (_, _, _, pos, dist) = structures[nearest];
+            let by = if *owner != 0 && kind != "remains" { format!(" built by {}", common::label_for(self.ctx, &self.me, *owner)) } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
+            // Its extent as it lies on the ground (a town gate is a block of gate tiles).
+            let wide = if part.len() > 1 {
+                let (xs, ys): (Vec<f32>, Vec<f32>) = part.iter().map(|k| structures[*k].3).unzip();
+                let span = |v: &[f32]| (v.iter().cloned().fold(f32::MIN, f32::max) - v.iter().cloned().fold(f32::MAX, f32::min)).round() as i32 + 1;
+                format!(" about {} by {} tiles", span(&xs), span(&ys))
+            } else {
+                String::new()
+            };
+            let text = format!("You notice a {kind}{wide}{by}, {dist:.0} tiles {}.", direction(at, pos));
+            percept(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, if kind == "remains" { 0.8 } else { 0.35 });
         }
     }
 
@@ -1195,5 +1231,43 @@ fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
         },
         "any" | "" => true,
         other => label.contains(&other.to_lowercase()),
+    }
+}
+
+/// The tiles of one structure in a scene list (id, kind, owner, position, distance): those
+/// reached from `start` through neighbours (within 1.5 tiles) of the same kind and owner.
+fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], start: usize) -> Vec<usize> {
+    let (_, kind, owner, _, _) = &all[start];
+    let mut part = vec![start];
+    let mut k = 0;
+    while k < part.len() {
+        let p = all[part[k]].3;
+        for (j, (_, kd, ow, q, _)) in all.iter().enumerate() {
+            if kd == kind && ow == owner && !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
+                part.push(j);
+            }
+        }
+        k += 1;
+    }
+    part
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_row_of_gate_tiles_is_one_gate() {
+        let t = |id: u64, kind: &str, owner: u32, x: f32, y: f32| (id, kind.to_string(), owner, (x, y), 0.0f32);
+        // A town gate three tiles wide, a second gate further along the wall, two campfires
+        // side by side by different builders.
+        let all = vec![t(1, "gate", 0, 10.5, 4.5), t(2, "gate", 0, 11.5, 4.5), t(3, "gate", 0, 12.5, 4.5), t(4, "gate", 0, 30.5, 4.5), t(5, "campfire", 7, 2.5, 2.5), t(6, "campfire", 8, 3.5, 2.5)];
+        let mut first = super::joined_tiles(&all, 0);
+        first.sort();
+        assert_eq!(first, vec![0, 1, 2]);
+        assert_eq!(super::joined_tiles(&all, 3), vec![3]);
+        assert_eq!(super::joined_tiles(&all, 4), vec![4]);
+        // The island's first gate (verify-trial-fbbase, 24 tiles in a block about 7 by 8).
+        let block: Vec<(f32, f32)> = vec![(503.5, 177.5), (504.5, 178.5), (505.5, 177.5), (505.5, 178.5), (505.5, 179.5), (505.5, 180.5), (506.5, 175.5), (506.5, 176.5), (506.5, 177.5), (506.5, 178.5), (506.5, 179.5), (506.5, 180.5), (506.5, 181.5), (507.5, 177.5), (507.5, 178.5), (507.5, 179.5), (507.5, 180.5), (507.5, 181.5), (507.5, 182.5), (508.5, 178.5), (508.5, 179.5), (508.5, 180.5), (509.5, 179.5), (509.5, 180.5)];
+        let gate: Vec<_> = block.iter().enumerate().map(|(i, p)| t(100 + i as u64, "gate", 0, p.0, p.1)).collect();
+        assert_eq!(super::joined_tiles(&gate, 7).len(), 24);
     }
 }
