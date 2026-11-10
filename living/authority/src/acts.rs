@@ -78,7 +78,17 @@ pub fn next(ctx: &ReducerContext, actor: u32, now: u64) {
             Some(t) => match brain::resolve_for(ctx, actor, t, now) {
                 Some(r) => r,
                 None => {
-                    feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: no {} in sight.", graph::describe_target(t)), 0.5, true);
+                    // "Nearest" looks only as far as one sees: say how far that is, so a mind
+                    // searching a town with an 11-tile sight knows the answer covers only that.
+                    let range = match t {
+                        graph::Target::Nearest(_) => {
+                            let w = common::world(ctx);
+                            let when = if common::night(&w, now) { "at night" } else { "by day" };
+                            format!(" (you see about {:.0} tiles {when}; nothing of that kind is that close)", common::sight_for(ctx, actor, &w, now))
+                        }
+                        _ => String::new(),
+                    };
+                    feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: no {} in sight{range}.", graph::describe_target(t)), 0.5, true);
                     continue;
                 }
             },
