@@ -88,6 +88,38 @@ struct ActorMind {
     model_failures: u32,
 }
 
+/// Where a character's first identity comes from, when the service finds none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Origin {
+    /// Its world's author wrote it (installed as written).
+    Sheet,
+    /// A child, raised by its parents (`birth_persona`, written as a very young child).
+    Birth,
+    /// From what the world holds about it (its background row, else its name, know-how and
+    /// inborn temperament).
+    Background,
+    /// The seed's own persona for it (and animals' species nature).
+    Seed,
+}
+
+impl Origin {
+    /// By life stage before parentage: an authored resident's sheet may name parents at any
+    /// age (`seed.rs`, authored towns), and an adult with a parent recorded was given a
+    /// newborn's identity ("I am very small"). Only the young (infant or child) are born into one.
+    fn of(person: bool, sheet: bool, background: bool, stage: u8, parent: bool, seeded: bool) -> Self {
+        let young = stage <= 1;
+        match (person, sheet, parent && young, background, seeded) {
+            (false, ..) if parent => Self::Birth,
+            (false, ..) => Self::Seed,
+            (true, true, ..) => Self::Sheet,
+            (true, false, true, ..) => Self::Birth,
+            (true, false, false, true, _) => Self::Background,
+            (true, false, false, false, true) => Self::Seed,
+            (true, false, false, false, false) => Self::Background,
+        }
+    }
+}
+
 /// A deliberation whose model could not be reached (an outage, a refused or failed call): its
 /// request is kept, not skipped.
 #[derive(Debug)]
@@ -682,27 +714,19 @@ impl Minds {
                     // (woken.rs, below).
                     continue;
                 }
-                if let Some(bg) = self.authored(&c) {
-                    // Installed as written (no model call), concurrently with the rest.
-                    let me = self.clone();
-                    let c = c.clone();
-                    pending.push(tokio::spawn(async move {
-                        if let Err(e) = me.sheet_persona(&c, &bg).await {
-                            log::warn!("{}: authored identity not installed yet: {e:#}", c.name);
-                        }
-                    }));
-                } else if c.parent_a != 0 {
-                    self.birth_persona(&c).await?;
-                } else if c.kind == "person" && self.conn.db.background().id().find(&c.id).is_some() {
-                    let me = self.clone();
-                    let c = c.clone();
-                    pending.push(tokio::spawn(async move {
-                        if let Err(e) = me.background_persona(&c).await {
-                            log::warn!("{}: no identity from background yet: {e:#}", c.name);
-                        }
-                    }));
-                } else {
-                    self.seed_persona(&c).await?;
+                match self.origin(&c) {
+                    // An authored sheet is installed as written (no model call); a background
+                    // takes a model call. Both run concurrently with the rest.
+                    o @ (Origin::Sheet | Origin::Background) => {
+                        let me = self.clone();
+                        let c = c.clone();
+                        pending.push(tokio::spawn(async move {
+                            if let Err(e) = me.first_identity(&c, o).await {
+                                log::warn!("{}: no identity ({o:?}) yet: {e:#}", c.name);
+                            }
+                        }));
+                    }
+                    o => self.first_identity(&c, o).await?,
                 }
             }
         }
@@ -983,6 +1007,24 @@ impl Minds {
         let judgments = judgments.iter().filter_map(|j| Some(JudgmentIn { key: memory::key(j["key"].as_str()?.trim_start_matches("stance:"))?.replace(':', "_"), value: num(&j["value"]), why: j["why"].as_str().unwrap_or_default().into() })).collect();
         let places = places.iter().map(|p| PlaceIn { name: p["name"].as_str().unwrap_or_default().into(), x: num(&p["x"]), y: num(&p["y"]) }).collect();
         self.update(c.id, MindUpdate { persona: Some(persona), relations, beliefs: None, judgments, places, thought: Some(t), replace: false }).await
+    }
+
+    /// Where a character's first identity comes from (see [`Origin::of`]).
+    fn origin(&self, c: &Character) -> Origin {
+        let seeded = self.seed["people"].as_array().is_some_and(|ps| ps.iter().any(|p| p["name"] == c.name.as_str()));
+        Origin::of(c.kind == "person", self.authored(c).is_some(), self.conn.db.background().id().find(&c.id).is_some(), c.stage, c.parent_a != 0, seeded)
+    }
+
+    async fn first_identity(&self, c: &Character, origin: Origin) -> Result<()> {
+        match origin {
+            Origin::Sheet => match self.authored(c) {
+                Some(bg) => self.sheet_persona(c, &bg).await,
+                None => self.background_persona(c).await,
+            },
+            Origin::Birth => self.birth_persona(c).await,
+            Origin::Background => self.background_persona(c).await,
+            Origin::Seed => self.seed_persona(c).await,
+        }
     }
 
     /// A newborn's starting identity: its own temperament, raised by its parents.
@@ -1553,12 +1595,9 @@ impl Minds {
             if let Some(store) = &self.store {
                 store.ensure_self(c.id, &c.name).await?;
             }
-            if let Some(bg) = self.authored(&c) {
-                self.sheet_persona(&c, &bg).await?;
-            } else if c.parent_a != 0 {
-                self.birth_persona(&c).await?;
-            } else {
-                self.seed_persona(&c).await?;
+            // A woken resident's identity is made by its waking (woken.rs), from the world's facts.
+            if !self.is_woken(actor) {
+                self.first_identity(&c, self.origin(&c)).await?;
             }
             for _ in 0..20 {
                 if self.conn.db.persona().id().find(&actor).is_some() {
@@ -2219,6 +2258,24 @@ mod tests {
     /// A compile that put the decision's words in a say act (a real rules2-r2 reply's shape)
     /// speaks them when the decision said nothing; when it did, its speech stands. Either way
     /// no say act reaches the authority.
+    /// An adult with a parent on record (an authored resident whose sheet names them) is not
+    /// given a newborn's identity; a child is; a background or the seed's persona come next.
+    #[test]
+    fn a_first_identity_follows_life_stage_before_parentage() {
+        use Origin::*;
+        // (person, sheet, background, stage, parent, seeded)
+        assert_eq!(Origin::of(true, false, true, 2, true, false), Background, "an adult with parents and a background");
+        assert_eq!(Origin::of(true, false, false, 3, true, false), Background, "an elder with parents and nothing else: from the world's facts");
+        assert_eq!(Origin::of(true, false, false, 2, true, true), Seed, "an adult the seed describes");
+        assert_eq!(Origin::of(true, false, true, 1, true, false), Birth, "a child raised by its parents");
+        assert_eq!(Origin::of(true, false, false, 0, true, false), Birth, "a newborn");
+        assert_eq!(Origin::of(true, true, true, 2, true, false), Sheet, "an authored sheet wins");
+        assert_eq!(Origin::of(true, true, true, 1, true, false), Sheet);
+        assert_eq!(Origin::of(true, false, false, 1, false, false), Background, "a child with no parent on record");
+        assert_eq!(Origin::of(false, false, false, 2, true, false), Birth, "an animal born in the world");
+        assert_eq!(Origin::of(false, false, false, 2, false, false), Seed);
+    }
+
     #[test]
     fn a_request_whose_model_failed_waits_longer_each_time_up_to_five_minutes() {
         let secs: Vec<u64> = (1..=9).map(|n| model_backoff(n).as_secs()).collect();
