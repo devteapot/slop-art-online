@@ -96,10 +96,11 @@ enum Origin {
     Sheet,
     /// A child, raised by its parents (`birth_persona`, written as a very young child).
     Birth,
-    /// From what the world holds about it (its background row, else its name, know-how and
-    /// inborn temperament).
+    /// From its background row (town, occupation, household), by one identity call.
     Background,
-    /// The seed's own persona for it (and animals' species nature).
+    /// The seed's own persona for it, if the seed has one (and animals' species nature).
+    /// Nothing is written otherwise: a joined player's character, for one, is who its
+    /// conduct shows (docs/PLAYER_MEMORY.md).
     Seed,
 }
 
@@ -115,8 +116,7 @@ impl Origin {
             (true, true, ..) => Self::Sheet,
             (true, false, true, ..) => Self::Birth,
             (true, false, false, true, _) => Self::Background,
-            (true, false, false, false, true) => Self::Seed,
-            (true, false, false, false, false) => Self::Background,
+            (true, false, false, false, _) => Self::Seed,
         }
     }
 }
@@ -1031,7 +1031,7 @@ impl Minds {
         match origin {
             Origin::Sheet => match self.authored(c) {
                 Some(bg) => self.sheet_persona(c, &bg).await,
-                None => self.background_persona(c).await,
+                None => Ok(()),
             },
             Origin::Birth => self.birth_persona(c).await,
             Origin::Background => self.background_persona(c).await,
@@ -2278,13 +2278,14 @@ mod tests {
         use Origin::*;
         // (person, sheet, background, stage, parent, seeded)
         assert_eq!(Origin::of(true, false, true, 2, true, false), Background, "an adult with parents and a background");
-        assert_eq!(Origin::of(true, false, false, 3, true, false), Background, "an elder with parents and nothing else: from the world's facts");
+        assert_eq!(Origin::of(true, false, false, 3, true, false), Seed, "an elder with parents and nothing else: no newborn identity, and nothing invented");
         assert_eq!(Origin::of(true, false, false, 2, true, true), Seed, "an adult the seed describes");
         assert_eq!(Origin::of(true, false, true, 1, true, false), Birth, "a child raised by its parents");
         assert_eq!(Origin::of(true, false, false, 0, true, false), Birth, "a newborn");
         assert_eq!(Origin::of(true, true, true, 2, true, false), Sheet, "an authored sheet wins");
         assert_eq!(Origin::of(true, true, true, 1, true, false), Sheet);
-        assert_eq!(Origin::of(true, false, false, 1, false, false), Background, "a child with no parent on record");
+        assert_eq!(Origin::of(true, false, false, 1, false, false), Seed, "a child with no parent on record and no background");
+        assert_eq!(Origin::of(true, false, false, 2, false, false), Seed, "a joined player's character: who it is shows in what it does");
         assert_eq!(Origin::of(false, false, false, 2, true, false), Birth, "an animal born in the world");
         assert_eq!(Origin::of(false, false, false, 2, false, false), Seed);
     }
