@@ -451,7 +451,8 @@ impl Plugin for VerbsPlugin {
         app.init_non_send::<Rules>()
             .init_resource::<Verbs>()
             .init_resource::<Scripted>()
-            .add_systems(Update, (aim, input, outcomes).chain().after(crate::combat::pick).after(crate::town::shows).before(crate::camera::follow));
+            .add_systems(Update, (aim, input).chain().in_set(crate::phase::Phase::Input).after(crate::combat::pick))
+            .add_systems(Update, outcomes.in_set(crate::phase::Phase::Present));
     }
 }
 

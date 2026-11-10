@@ -46,7 +46,7 @@ impl Plugin for UiPlugin {
             .init_resource::<overhead::Stack>()
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
             .add_systems(Startup, (frame::spawn, overhead::spawn, numbers::spawn, chat::spawn, compass::spawn, death::spawn, verbs::spawn))
-            .add_systems(Update, (default_camera, scale, chat::keys));
+            .add_systems(Update, (default_camera, scale, chat::keys.in_set(crate::phase::Phase::Input).before(crate::controls::movement)));
         let widgets = (frame::vitals, frame::status, frame::skills, frame::hint, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, chat::update, compass::update, death::update, verbs::menu, verbs::toasts, verbs::panels, visibility);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));

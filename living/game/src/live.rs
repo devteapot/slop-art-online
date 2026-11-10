@@ -40,6 +40,7 @@ use crate::envs::Roam;
 use crate::island::{Island, LotRow};
 use crate::lookdev::{Fitted, Model};
 use crate::net::{Mode, Net};
+use crate::phase::Phase;
 use crate::anim::Motion;
 use crate::world::Scene;
 use bevy::prelude::*;
@@ -70,20 +71,23 @@ impl Plugin for LivePlugin {
         let island = resource_exists::<Island>;
         app.init_resource::<Live>()
             .init_resource::<LandWorld>()
-            .add_systems(Update, mirror.after(crate::net::pump).before(crate::bodies::update))
+            .add_systems(Update, mirror.in_set(Phase::Mirror).before(crate::bodies::update))
             .insert_resource(Roam { facing: Vec2::new(0.0, 1.0), ..default() })
             .add_systems(Startup, crate::lookdev::setup)
-            .add_systems(Update, (land, lots, bodies, me).chain().after(crate::controls::target).after(crate::town::shows).before(crate::demo::run))
+            // What each body plays is decided this frame (combat's actions, town's shows) before
+            // it is drawn.
+            .add_systems(Update, (land, lots, bodies, me).chain().in_set(Phase::Present).after(crate::combat::actions).after(crate::town::shows))
             .add_systems(
                 Update,
                 (crate::envs::hdr, crate::island::stream, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
                     .chain()
+                    .in_set(Phase::Present)
                     .after(me)
                     .run_if(island),
             )
-            .add_systems(Update, ground_cursor.after(crate::camera::follow).run_if(island));
+            .add_systems(Update, ground_cursor.in_set(Phase::Camera).after(crate::camera::follow).run_if(island));
         if let Some(s) = Script::from_env() {
-            app.insert_resource(s).add_systems(Update, script.after(me).before(crate::controls::movement));
+            app.insert_resource(s).add_systems(Update, script.in_set(Phase::Input).before(crate::controls::movement));
         }
     }
 }
@@ -333,15 +337,9 @@ fn bodies(
     let gone: Vec<u32> = live.shown.keys().copied().filter(|id| !scene.shown.contains_key(id)).collect();
     for id in gone {
         // Someone I saw die stays where they fell for a while, playing their death. The body row
-        // goes in the same update as the death's `my_combat` row, and `combat::ingest` runs after
-        // this system, so a death arriving this frame is read here from the row itself.
-        let fresh = || {
-            conn.db.my_combat().iter().any(|r| r.kind == living_rules::combat::seen::DEATH && r.actor == id).then(|| {
-                let animal = live.shown.get(&id).is_some_and(|s| !s.person);
-                crate::combat::death(animal, scene.now_ms)
-            })
-        };
-        if let Some(a) = combat.deaths.contains_key(&id).then(|| combat.actions.get(&id).copied()).flatten().or_else(fresh) {
+        // goes in the same update as the death's `my_combat` row, which `combat::ingest` has
+        // read this frame (Mirror) and `combat::actions` turned into the death clip (Present).
+        if let Some(a) = combat.deaths.contains_key(&id).then(|| combat.actions.get(&id).copied()).flatten() {
             if let Some(s) = live.shown.get(&id) {
                 if let Ok((_, _, _, _, mut motion, _)) = q.get_mut(s.entity) {
                     motion.action = Some(a);

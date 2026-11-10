@@ -26,6 +26,7 @@ use crate::controls::{Input, Target};
 use crate::net::Net;
 use crate::ui::model::SkillIcon;
 use crate::world::Scene;
+use crate::phase::Phase;
 use bevy::prelude::*;
 use living_bindings::*;
 use living_rules::combat::seen;
@@ -210,8 +211,11 @@ impl Plugin for CombatPlugin {
         app.init_resource::<Combat>()
             .init_resource::<Cards>()
             .init_resource::<Scripted>()
-            .add_systems(Update, (read_cards, ingest, pick, input, actions).chain().after(crate::controls::movement).before(crate::camera::follow))
-            .add_systems(Update, indicators.after(crate::camera::follow));
+            .add_systems(Update, (read_cards, ingest).chain().in_set(Phase::Mirror))
+            // After movement: a dash goes the way I move, a skill aims where I look.
+            .add_systems(Update, (pick, input).chain().in_set(Phase::Input).after(crate::controls::movement))
+            .add_systems(Update, actions.in_set(Phase::Present))
+            .add_systems(Update, indicators.in_set(Phase::Camera).after(crate::camera::follow));
     }
 }
 
