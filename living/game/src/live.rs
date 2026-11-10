@@ -322,7 +322,15 @@ fn bodies(
     mut q: Query<Drawn>,
     time: Res<Time>,
 ) {
-    let (Some(island), Some(conn)) = (island, net.conn.as_ref()) else { return };
+    let Some(island) = island else { return };
+    let Some(conn) = net.conn.as_ref() else {
+        // Offline: no body is drawn (`bodies::update` has cleared the tracks too).
+        for (_, s) in live.shown.drain() {
+            commands.entity(s.entity).despawn();
+        }
+        live.heights.clear();
+        return;
+    };
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.

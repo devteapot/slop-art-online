@@ -104,6 +104,9 @@ pub struct Combat {
     /// Which skill key is held (indicators), and since when.
     pub aiming: Option<String>,
     pub guarding: bool,
+    /// The direction a raised guard was sent toward (sim, unit): the authority keeps the aim
+    /// of the press, so the arc shows that, not the cursor.
+    guard_dir: Option<Vec2>,
     /// Count of presses (alternating strike clips).
     strikes: u32,
     /// Where a script aims an indicator (instead of the cursor).
@@ -368,6 +371,27 @@ pub fn input(
     let mut releases: Vec<String> = Vec::new();
     // The bar's skills by slot (the rules' `skill_bar()`).
     let slot = |i: usize| cards.slot(i).map(|card| card.skill.clone());
+    let shift = |b: &ButtonInput<KeyCode>, f: fn(&ButtonInput<KeyCode>, KeyCode) -> bool| f(b, KeyCode::ShiftLeft) || f(b, KeyCode::ShiftRight);
+    if !input.demo {
+        // A held guard is let go with its key, also while typing: the key went up either way,
+        // and a release missed would leave the guard raised until pressed again.
+        let went_up = [
+            mouse.just_released(MouseButton::Left),
+            mouse.just_released(MouseButton::Right),
+            keys.just_released(KeyCode::KeyQ),
+            keys.just_released(KeyCode::KeyE),
+            keys.just_released(KeyCode::KeyR),
+            shift(&keys, |b, k| b.just_released(k)),
+        ];
+        for (i, up) in went_up.into_iter().enumerate() {
+            if let Some(card) = cards.slot(i).filter(|card| up && card.aim == "facing") {
+                releases.push(card.skill.clone());
+            }
+        }
+    }
+    if !input.demo && typing {
+        c.aiming = None;
+    }
     if !input.demo && !typing {
         let held = |k| keys.pressed(k);
         // Held keys show their skill's indicator: RMB, Q, LMB, R, E.
@@ -384,7 +408,6 @@ pub fn input(
         } else {
             None
         };
-        let shift = |b: &ButtonInput<KeyCode>, f: fn(&ButtonInput<KeyCode>, KeyCode) -> bool| f(b, KeyCode::ShiftLeft) || f(b, KeyCode::ShiftRight);
         let went_down = [
             mouse.just_pressed(MouseButton::Left) && free_mouse,
             mouse.just_pressed(MouseButton::Right) && free_mouse,
@@ -393,25 +416,11 @@ pub fn input(
             keys.just_pressed(KeyCode::KeyR),
             shift(&keys, |b, k| b.just_pressed(k)),
         ];
-        let went_up = [
-            mouse.just_released(MouseButton::Left),
-            mouse.just_released(MouseButton::Right),
-            keys.just_released(KeyCode::KeyQ),
-            keys.just_released(KeyCode::KeyE),
-            keys.just_released(KeyCode::KeyR),
-            shift(&keys, |b, k| b.just_released(k)),
-        ];
         // In bar order, as before: LMB, RMB, Q, then R before E, then Shift.
         for i in [0, 1, 2, 4, 3, 5] {
             if went_down[i] {
                 if let Some(s) = slot(i) {
                     presses.push((s, None, None));
-                }
-            }
-            // A held guard is let go with its key.
-            if went_up[i] {
-                if let Some(card) = cards.slot(i).filter(|card| card.aim == "facing") {
-                    releases.push(card.skill.clone());
                 }
             }
         }
@@ -454,6 +463,7 @@ pub fn input(
         }
         if card.aim == "facing" {
             c.guarding = true;
+            c.guard_dir = Some((point - me).normalize_or(input.look.unwrap_or(Vec2::Y).normalize_or(Vec2::Y)));
         }
         c.predicted = Some((skill, now));
     }
@@ -462,6 +472,7 @@ pub fn input(
         net.report("release", r);
         if cards.by_name(&skill).is_some_and(|card| card.aim == "facing") {
             c.guarding = false;
+            c.guard_dir = None;
             if c.predicted.as_ref().is_some_and(|(s, _)| *s == skill) {
                 c.predicted = None;
             }
@@ -583,7 +594,6 @@ fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<
     let flat = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
     let soft = Color::srgba(1.0, 0.97, 0.88, 0.32);
     let warm = Color::srgba(1.0, 0.62, 0.32, 0.45);
-    let _ = &net;
     match card.aim.as_str() {
         "point" => {
             let (range, width, col) = (card.reach, card.radius, if look(card).bolt { warm } else { soft });
@@ -611,7 +621,11 @@ fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<
             }
         }
         "facing" => {
-            // The guard's arc in front (the rules' degrees either side).
+            // The guard's arc in front (the rules' degrees either side), toward where it was
+            // raised: the authority's aim on my fighter row once it holds it, else the direction
+            // sent. Only an indicator before the press follows the cursor.
+            let held = net.my_id.and_then(|me| net.conn.as_ref()?.db.seen_fighters().id().find(&me)).filter(|f| f.act == card.code && (f.aim_x != 0.0 || f.aim_y != 0.0)).map(|f| Vec2::new(f.aim_x, f.aim_y).normalize_or(dir));
+            let dir = if c.guarding { held.or(c.guard_dir).unwrap_or(dir) } else { dir };
             let a0 = dir.y.atan2(dir.x);
             let half = card.arc.to_radians();
             let n = 16;

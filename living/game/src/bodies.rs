@@ -339,7 +339,16 @@ pub fn update(
     mut limbs: Query<(&Limb, &mut Transform), Without<Creature>>,
     time: Res<Time>,
 ) {
-    let Some(conn) = &net.conn else { return };
+    let Some(conn) = &net.conn else {
+        // Offline: nothing is known to stand anywhere now. Bodies left as they were would freeze
+        // mid-step and read as people; they come back with the next connection's rows.
+        scene.tracks.retain(|_| false);
+        scene.shown.clear();
+        for (_, e) in scene.creatures.drain() {
+            commands.entity(e).despawn();
+        }
+        return;
+    };
     let now = scene.clock.frame(net.body_t.swap(0, std::sync::atomic::Ordering::Relaxed));
     let shadow = scene.shadow.frame(net.body_t_all.swap(0, std::sync::atomic::Ordering::Relaxed));
     scene.now_ms = now;

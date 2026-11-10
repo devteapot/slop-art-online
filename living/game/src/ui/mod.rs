@@ -6,6 +6,7 @@
 //! - `sample.rs`: fills it with sample values in look-dev (`LIVING_GAME_HUD`);
 //! - widgets: `frame.rs` (health, energy, status, skill bar, hint, target frame),
 //!   `overhead.rs` (nameplates and speech bubbles), `chat.rs`, `death.rs`, `compass.rs`,
+//!   `link.rs` (offline and reconnecting),
 //!   `verbs.rs` (the F hint's acts, the list of acts, notes of outcomes, inventory and know-how);
 //! - `theme.rs` (colours, type, panels) and `icons.rs` (procedural glyphs).
 //!
@@ -16,6 +17,7 @@ mod compass;
 mod death;
 mod frame;
 mod icons;
+mod link;
 mod live;
 pub mod model;
 mod numbers;
@@ -45,9 +47,9 @@ impl Plugin for UiPlugin {
             .init_resource::<model::Outbox>()
             .init_resource::<overhead::Stack>()
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
-            .add_systems(Startup, (frame::spawn, overhead::spawn, numbers::spawn, chat::spawn, compass::spawn, death::spawn, verbs::spawn))
+            .add_systems(Startup, (frame::spawn, overhead::spawn, numbers::spawn, chat::spawn, compass::spawn, death::spawn, verbs::spawn, link::spawn))
             .add_systems(Update, (default_camera, scale, chat::keys.in_set(crate::phase::Phase::Input).before(crate::controls::movement)));
-        let widgets = (frame::vitals, frame::status, frame::skills, frame::hint, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, chat::update, compass::update, death::update, verbs::menu, verbs::toasts, verbs::panels, visibility);
+        let widgets = (frame::vitals, frame::status, frame::skills, frame::hint, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, chat::update, compass::update, death::update, link::update, verbs::menu, verbs::toasts, verbs::panels, visibility);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
         } else {
