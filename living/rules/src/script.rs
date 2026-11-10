@@ -1524,10 +1524,17 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         assert!(due_h.is_some_and(|h| h > 0.0));
         assert!(tells(&fx).iter().any(|(to, t)| *to == 9 && t.contains("you give 10 wood, they give 3 berries")), "{fx:?}");
         let rec = |status: &str, me: &str, from_done: i64, to_done: i64| RecordFacts { id: 5, kind: "agreement".into(), status: status.into(), open: true, terms: { let mut t = terms.clone(); t.insert("from_done".into(), from_done.into()); t.insert("to_done".into(), to_done.into()); t }, parties: parties.clone(), me: me.into(), by: 1, ..Default::default() };
-        // The newcomer (9) accepts: the record is agreed, due at dusk.
-        c = SkillCtx { actor: me(9, "40,12"), target: person(1, "10,10"), hour: 14.0, skill: "accept".into(), records: vec![rec("offered", "to", 0, 0)], ..Default::default() };
+        // The newcomer (9) accepts: the record is agreed, due at the first dusk at least
+        // `agreement_min_h` (12) hours away: accepted at 7:00, tonight's (13 h); at 14:00,
+        // tomorrow's (30 h), told as such.
+        c = SkillCtx { actor: me(9, "40,12"), target: person(1, "10,10"), hour: 7.0, skill: "accept".into(), records: vec![rec("offered", "to", 0, 0)], ..Default::default() };
         let fx = s.done("accept", &c).unwrap();
-        assert!(matches!(&fx[0], Effect::Amend { id: 5, status: Some(st), due_h: Some(h), .. } if st == "agreed" && (*h - 6.0).abs() < 1e-3), "{fx:?}");
+        assert!(matches!(&fx[0], Effect::Amend { id: 5, status: Some(st), due_h: Some(h), .. } if st == "agreed" && (*h - 13.0).abs() < 1e-3), "{fx:?}");
+        assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t.ends_with("by dusk today.")), "{fx:?}");
+        c.hour = 14.0;
+        let fx = s.done("accept", &c).unwrap();
+        assert!(matches!(&fx[0], Effect::Amend { id: 5, status: Some(st), due_h: Some(h), .. } if st == "agreed" && (*h - 30.0).abs() < 1e-3), "{fx:?}");
+        assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t.ends_with("by dusk tomorrow.")), "{fx:?}");
         // Without terms standing it is an ordinary trade's accept.
         assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..c.clone() }).unwrap(), vec![Effect::Accept]);
         // The newcomer stores 10 wood in the resident's household store: its part is done and the
