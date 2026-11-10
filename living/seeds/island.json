@@ -44098,7 +44098,7 @@
   ],
   "animals": {
     "deer": 24,
-    "wolf": 6
+    "wolf": 0
   },
   "newcomer": {
     "items": {
@@ -44117,6 +44117,15 @@
     "rain_share": 0.2
   },
   "packs": [
+    {
+      "kind": "wolf",
+      "count": 5,
+      "near": "deer",
+      "from_m": 40,
+      "to_m": 120,
+      "instinct": "wolf",
+      "name": "the wolves of the deer meadows"
+    },
     {
       "kind": "wolf",
       "count": 4,

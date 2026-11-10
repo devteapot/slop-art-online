@@ -201,6 +201,15 @@ def check_seed(seed, rows):
         # A seed's `packs` place animals of a kind on purpose, beside its `animals` (docs/COMBAT.md).
         packed = sum(p.get("count", 0) for p in seed.get("packs", []) if p.get("kind") == kind)
         equal(f"{kind} count including dead founders", sum(c["kind"] == kind for c in chars.values()), count + packed)
+    for pack in seed.get("packs", []):
+        # A pack placed near an animal kind starts where that kind lives: each member's start
+        # (`home_x`, `home_y`) within the pack's reach (`to_m`, plus the 4 m spread) of one.
+        near = pack.get("near", "arrival")
+        if near in seed["animals"] and pack.get("name"):
+            members = [c for c in chars.values() if c["kind"] == pack["kind"] and bgs.get(c["id"], {}).get("pack") == pack["name"]]
+            prey = [(c["home_x"], c["home_y"]) for c in chars.values() if c["kind"] == near]
+            far = [c["id"] for c in members if not any(math.dist((c["home_x"], c["home_y"]), q) <= pack.get("to_m", 100) + 8 for q in prey)]
+            present(f"pack {pack['name']} starts near {near}", len(members) == pack["count"] and not far, {"members": len(members), "too_far": far})
     present("resources generated", len(rows["resource_node"]) > 0)
     for structure in seed.get("structures", []):
         owner = by_name.get(structure.get("owner"), {}).get("id", 0)

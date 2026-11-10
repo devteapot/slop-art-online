@@ -483,7 +483,9 @@ pub struct SeedNewcomer {
 }
 
 /// A group of animals placed `from_m`..`to_m` from a reference point (`near`: `arrival`, the
-/// newcomers' arrival point, or a settlement kind such as `town`), outside every settlement.
+/// newcomers' arrival point; a settlement kind such as `town`; or an animal kind such as
+/// `deer`, one of that kind already placed, so a pack starts where its prey lives), outside
+/// every settlement.
 /// `bold` animals do not fear people (the rules read it from their background); `instinct`
 /// names their starting graph in instincts.json.
 #[derive(Deserialize)]
@@ -531,7 +533,18 @@ pub fn newcomer_kit(ctx: &ReducerContext, id: u32, now: u64) {
 fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack], now: u64) {
     let settlements: Vec<Settlement> = ctx.db.settlement().iter().collect();
     for p in packs {
-        let reference = if p.near == "arrival" { Some(crate::island::arrival(ctx)) } else { settlements.iter().find(|s| s.kind == p.near).map(|s| (s.x, s.y)) };
+        let reference = if p.near == "arrival" {
+            Some(crate::island::arrival(ctx))
+        } else if let Some(s) = settlements.iter().find(|s| s.kind == p.near) {
+            Some((s.x, s.y))
+        } else if common::species(&p.near).is_some() {
+            // One of that kind, at random (a herd: they start together).
+            let there: Vec<u32> = ctx.db.character().kind().filter(p.near.as_str()).filter(|c| c.alive).map(|c| c.id).collect();
+            let pick = (!there.is_empty()).then(|| there[ctx.rng().gen_range(0..there.len())]);
+            pick.and_then(|id| ctx.db.body().id().find(id)).map(|b| (b.x, b.y))
+        } else {
+            None
+        };
         let Some(r) = reference else {
             log::warn!("pack of {}: no {} to place it near", p.kind, p.near);
             continue;
