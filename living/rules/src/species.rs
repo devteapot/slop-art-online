@@ -171,18 +171,18 @@ pub fn parse(json: &str) -> Result<BTreeMap<String, Species>, String> {
     serde_json::from_str(json).map_err(|e| format!("species: {e}"))
 }
 
-/// Skill reference limited to what this body can do.
+/// Skill reference limited to what this body can do, with what each skill takes and gives.
 pub fn skills_help(sp: &Species) -> String {
-    skills_help_io(sp, &|_| None)
+    skills_help_of(sp, &crate::catalog::skills())
 }
 
-/// Skill reference limited to what this body can do, with what each skill takes and gives.
-pub fn skills_help_io(sp: &Species, io: crate::catalog::SkillIo) -> String {
-    crate::catalog::SKILLS
+/// The same, from a given set of skills.
+pub fn skills_help_of(sp: &Species, skills: &crate::catalog::Skills) -> String {
+    skills
         .iter()
-        .filter(|s| sp.allows(s.name) && (sp.skills.is_some() || s.name != "graze"))
+        .filter(|s| sp.allows(&s.name) && (sp.skills.is_some() || s.listed))
         .filter(|s| s.name != "signal" || !sp.signals.is_empty())
-        .map(|s| crate::catalog::skill_line(s, if s.name == "signal" { "item: signal name" } else { "item" }, io))
+        .map(crate::catalog::skill_line)
         .collect::<Vec<_>>()
         .join("\n")
 }

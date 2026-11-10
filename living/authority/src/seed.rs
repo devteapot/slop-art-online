@@ -990,7 +990,7 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
             let temperament = sp.as_ref().map(|s| s.temperament.clone()).filter(|t| !t.is_empty()).unwrap_or_else(living_rules::genes::person_temperament);
             let skills: Vec<String> = sp
                 .and_then(|s| s.skills)
-                .unwrap_or_else(|| living_rules::catalog::SKILLS.iter().map(|s| s.name.to_string()).collect());
+                .unwrap_or_else(|| common::scripts(ctx).skills().names().map(String::from).collect());
             // A skill that borrows another's knack (the rules' `<skill>_combat()`) draws none.
             let sc = common::scripts(ctx);
             let skills: Vec<String> = skills.into_iter().filter(|s| sc.shapes().knack(s) == s.as_str()).collect();

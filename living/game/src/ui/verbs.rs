@@ -196,7 +196,7 @@ pub fn fill(mut model: ResMut<HudModel>, v: Res<Verbs>, rules: NonSend<Rules>, n
     });
     model.verbs.know_how = v.know_how.then(|| {
         let techniques = conn.db.my_know_how().iter().filter(|k| k.actor == me).map(|k| (k.technique, k.source)).collect();
-        // Every skill the world's rules have, the catalog's and the script's own.
+        // Every skill the world's rules have.
         let all = &rules.skills;
         let n = all.len();
         let selected = v.selected.min(n.saturating_sub(1));

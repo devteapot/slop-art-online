@@ -1,7 +1,6 @@
 //! Prompt construction. Context is assembled only from the character's own persona,
 //! relations, beliefs, judgments, places, episodes and the scene it currently perceives.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone, Copy)]
@@ -86,9 +85,8 @@ fn judged_line() -> String {
     JUDGED.get().filter(|g| !g.is_empty()).map(|g| format!("\n  Judgments of your own, refreshed in the background while you fight (false while there is none, or add \"else\": true): {g}")).unwrap_or_default()
 }
 
-type SkillIoTable = HashMap<String, (String, String)>;
-/// What each skill takes and gives, from the world's rule script (revision, table).
-static SKILL_IO: std::sync::RwLock<Option<(u32, Arc<SkillIoTable>)>> = std::sync::RwLock::new(None);
+/// The revision of the world's rule script last read.
+static RULES_REV: std::sync::RwLock<Option<u32>> = std::sync::RwLock::new(None);
 
 /// What each combat skill is under the world's rule script (`<skill>_combat()`): which skills
 /// are real-time behavior rather than acts.
@@ -110,17 +108,17 @@ pub fn woken_laws() -> WokenLaws {
     *WOKEN.read().unwrap()
 }
 
-/// Read what each skill takes and gives, and what each combat skill is, from the world's rule
-/// script (once per revision).
+/// Read the world's skills (what each is, takes and gives) and what each combat skill is from
+/// the world's rule script (once per revision).
 pub fn set_rules(revision: u32, source: &str) {
-    if SKILL_IO.read().unwrap().as_ref().is_some_and(|(r, _)| *r == revision) {
+    if *RULES_REV.read().unwrap() == Some(revision) {
         return;
     }
     match living_rules::script::Scripts::new(source) {
         Ok(s) => {
-            let table: SkillIoTable = living_rules::catalog::SKILLS.iter().filter_map(|k| s.skill_io(k.name).map(|io| (k.name.to_string(), io))).collect();
-            log::info!("rules revision {revision}: {} skills describe what they take and give", table.len());
-            *SKILL_IO.write().unwrap() = Some((revision, Arc::new(table)));
+            log::info!("rules revision {revision}: {} skills", s.skills().len());
+            living_rules::catalog::set_skills(s.skills().clone());
+            *RULES_REV.write().unwrap() = Some(revision);
             *SHAPES.write().unwrap() = Some(Arc::new(s.shapes().clone()));
             let w = WokenLaws { stage_cap: s.num_of("woken_stage", "cap", 0.0).max(0.0) as u32, wait_s: s.num_of("woken_stage", "wait_s", 0.0).max(0.0) };
             if w != woken_laws() {
@@ -141,20 +139,14 @@ pub fn shapes() -> Arc<living_rules::combat::Shapes> {
     SHAPES.write().unwrap().get_or_insert(bundled).clone()
 }
 
-fn skill_io() -> Arc<SkillIoTable> {
-    SKILL_IO.read().unwrap().as_ref().map(|(_, t)| t.clone()).unwrap_or_default()
-}
-
-/// A person's skill reference: each skill with what it takes and gives under the current rules.
+/// A person's skill reference: each skill under the world's rules, with what it takes and gives.
 pub fn skills_help() -> String {
-    let t = skill_io();
-    living_rules::catalog::skills_help_io(&|n| t.get(n).cloned())
+    living_rules::catalog::skills_help()
 }
 
 /// A species' skill reference, with what each skill takes and gives.
 pub fn species_skills_help(sp: &living_rules::species::Species) -> String {
-    let t = skill_io();
-    living_rules::species::skills_help_io(sp, &|n| t.get(n).cloned())
+    living_rules::species::skills_help(sp)
 }
 static SIZE: std::sync::OnceLock<(u32, u32)> = std::sync::OnceLock::new();
 

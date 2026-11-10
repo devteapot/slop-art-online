@@ -340,8 +340,9 @@ fn target_pos(ctx: &ReducerContext, t: &TargetRef, now: u64) -> Option<(f32, f32
     }
 }
 
-fn reach(skill: &str) -> f32 {
-    catalog::skill(skill).map(|s| s.reach).unwrap_or(0.0)
+/// How close a skill is done from (its spec's `reach`).
+fn reach(ctx: &ReducerContext, skill: &str) -> f32 {
+    common::scripts(ctx).skills().get(skill).map_or(0.0, |s| s.reach)
 }
 
 /// Walking speed from the rules (species, age, tiredness).
@@ -394,7 +395,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     let melee = shape.is_some_and(|s| s.melee);
     // A blow has no mode: a "hurt" or "kill" left on a skill that takes no item (a graph
     // stored before normalization dropped the word) means nothing and is not carried.
-    let item = if catalog::skill(skill).is_some_and(|k| !k.needs_item) && living_rules::normalize::force_word(item) { "" } else { item };
+    let item = if sc.skills().get(skill).is_some_and(|k| !k.needs_item) && living_rules::normalize::force_word(item) { "" } else { item };
     let cur = ctx.db.activity().id().find(id);
     if let Some(a) = &cur {
         // A new graph may continue what the character was already doing.
@@ -549,7 +550,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             return Err("you already face it".into());
         }
     }
-    let r = reach(skill);
+    let r = reach(ctx, skill);
     let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow") || aim == Aim::Dash || aside;
     // A skillshot at a point and a guard turn toward their point; they never walk to it.
     let in_place = target.class == 4 && matches!(aim, Aim::Point | Aim::Facing);
@@ -959,7 +960,7 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
                     motion::stop(ctx, id, now);
                     return finish(ctx, a, false, "it is gone", now);
                 };
-                let r = reach(&a.skill);
+                let r = reach(ctx, &a.skill);
                 let d = dist(here, tp);
                 // A creature's reach is checked on every look; a place's once the walk ends.
                 let close = if a.target.class == 3 { d <= r + 0.25 } else { d <= r + 1.2 };
@@ -981,7 +982,7 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
     let sc = common::scripts(ctx);
     let sctx = skill_ctx(ctx, a.id, &a, now);
     // Targets can change or leave while the action runs.
-    if a.target.class == 3 && sctx.target.dist > reach(&a.skill) + 1.0 {
+    if a.target.class == 3 && sctx.target.dist > reach(ctx, &a.skill) + 1.0 {
         return finish(ctx, a, false, "they moved away", now);
     }
     if let Err(why) = sc.check(&a.skill, &sctx) {
@@ -1090,7 +1091,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                     let p = |id: u32| ctx.db.body().id().find(id).map(|b| pos(&b, now));
                     if let (Some(pa), Some(pv)) = (p(me), p(victim)) {
                         let kind = ctx.db.character().id().find(me).map(|c| c.kind).unwrap_or_default();
-                        if dist(pa, pv) > reach(&a.skill) + common::scripts(ctx).num_of("lunge", &kind, 0.6) as f32 {
+                        if dist(pa, pv) > reach(ctx, &a.skill) + common::scripts(ctx).num_of("lunge", &kind, 0.6) as f32 {
                             missed(ctx, me, victim, pv, &a.skill, now);
                             notes.push("missed".into());
                             continue;

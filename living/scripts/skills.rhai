@@ -776,7 +776,7 @@ fn strike_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: tru
 fn bowshot_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
 fn firebolt_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
 fn block_combat() { #{ aim: "facing", timed: true, reflex: true, real_time: true, hold_ms: 8000, arc: 75.0, takes: 0.25 } }
-fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["mending"] } }
+fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
 fn dodge_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true } }
 fn attack_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
 fn shoot_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
@@ -842,9 +842,9 @@ fn firebolt_done(a) { [#{ op: "launch" }] + spent("firebolt") }
 fn firebolt_missile(a) { #{ speed: 16.0, range: 16.0, radius: 0.35 } }
 fn firebolt_hit(a) { [#{ op: "damage", amount: 24.0 * a.actor.factor * armor(a) }] }
 
-// Mending by hand: yourself or an ally in sight, quickly, even mid-fight.
+// Closing wounds by hand (wound_tending): yourself or an ally in sight, quickly, even mid-fight.
 fn heal_check(a) {
-    if !knows(a, "mending") { return "you don't know how to mend wounds" + learn_how("mending"); }
+    if !knows(a, "wound_tending") { return "you don't know how to close wounds by hand" + learn_how("wound_tending"); }
     if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to heal"; }
     if a.target.hp >= a.target.max_hp - 0.5 { return if a.target.id == a.actor.id { "you are not hurt" } else { "they are not hurt" }; }
     // An ally: not someone fighting you, nor someone you are fighting.
@@ -977,9 +977,9 @@ fn woken_ring(k) {
     }
 }
 
-// ---- what each skill takes and gives -------------------------------------------------
-// Read by minds to compose routines from skills: keep these beside the rules above, and
-// build them from the same numbers so they change when the rules do.
+// ---- text helpers for the skills' specs (below) -----------------------------------------
+// Specs are read by minds to compose routines from skills: build them from the same numbers
+// as the rules so they change when the rules do.
 
 fn list(parts) {
     let out = "";
@@ -1014,62 +1014,186 @@ fn source_of(item) {
         _ => if cost(item) == () { "someone who has it can give or trade it to you" } else { `craft it (${cost_text(item)})` },
     }
 }
-fn skill_io(skill) {
+// ---- what each skill is ----------------------------------------------------------------
+// `<skill>_spec()`, read once when the script compiles (the engine never asks per tick). Every
+// skill with rules (a duration or effects) declares one; graph normalization, the minds'
+// prompts, the client's verbs and the acts path all take skills from here, so a skill added
+// here needs no engine change. A floor overrides a skill's description by redefining its spec.
+//   target  it is aimed at something (true/false)
+//   item    it takes an item (true), or a word for what the item names ("technique")
+//   args    further arguments it reads, for prompts ("qty", "want", "text"...)
+//   reach   tiles within which it is done; an act walks into reach first
+//   about   what it is, for a mind: what it does, when it is useful, what it is not
+//   takes   what it uses up or needs, from the rules' own numbers
+//   gives   what comes of it
+//   listed  shown to people (false: only species that name it, e.g. grazing)
+//   talk    offered in a conversation turn among the acts one may do right there
+//   items   the item words it is given (choices for clients and prompts); accepted for it even
+//           when they are not items, structures or techniques
+
+fn goto_spec() {
     let l = laws();
-    switch skill {
-        "goto" => #{ takes: "a target in sight or a known place", gives: `you there; within ${l.fire_warmth} tiles of a campfire or ${l.shelter_warmth} of a shelter or house the night cold can't hurt you` },
-        "wander" => #{ takes: "", gives: "you at a nearby spot you may not have seen" },
-        "gather" => #{ takes: "a resource in reach with some left, room in your pack, a little energy",
-            gives: "1 unit into your pack: berry_bush→berries, tree→wood (faster with an axe), boulder→stone (faster with a pick), reeds→fiber, fishing_spot→fish (faster with a spear, two at a time with a net), clay_bank→clay" },
-        "eat" => #{ takes: "1 food item from your own pack (item: its name, or \"food\" for your best)", gives: `hunger down by its worth (${foods_text()}), a little health` },
-        "cook" => #{ takes: "1 raw fish or meat from your pack, a campfire in reach, knowing cooking", gives: "1 cooked_fish or cooked_meat: about twice as filling, keeps longer" },
-        "smoke" => #{ takes: "1 raw fish or meat from your pack, a campfire in reach, knowing smoking, 10 seconds", gives: "1 smoked_fish or smoked_meat: more filling than raw, keeps for weeks (food to carry far or trade)" },
-        "clear" => #{ takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" },
-        "graze" => #{ takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" },
-        "sleep" => #{ takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" },
-        "rest" => #{ takes: "8 seconds", gives: "a little energy" },
-        "wait" => #{ takes: "time", gives: "nothing: time passes" },
-        "host" => #{ takes: "a person beside you, and a house of your household's (at your home door), 2 s", gives: "they are your guest until 7 in the morning: they know where your house is (their place \"lodging\"), may sleep there, and may take from your household's store" },
-        "wave" => #{ takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them: a greeting, or an answer to theirs" },
-        "nod" => #{ takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them: a greeting, or an answer to theirs" },
-        "appraise" => #{ takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" },
-        "face" => #{ takes: "something or someone in sight", gives: "you turn where you stand to face it" },
-        "step_aside" => #{ takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" },
-        "keep" => #{ takes: "10 seconds at your post", gives: "you are seen at work there (a stall, a workshop, a gate)" },
-        "play" => #{ takes: "4 seconds, not a baby", gives: "a little fun; tires a little" },
-        "build" => #{ takes: `its materials from your pack (campfire ${cost_text("campfire")}; shelter ${cost_text("shelter")}; storage ${cost_text("storage")}; house ${cost_text("house")}; wall ${cost_text("wall")}; gate ${cost_text("gate")}; trap ${cost_text("trap")}; bridge ${cost_text("bridge")}) and knowing its technique`,
-            gives: `the structure here: a campfire warms within ${l.fire_warmth} tiles at night, a shelter or house within ${l.shelter_warmth} and makes sleep restful, a storage keeps items (food spoils slower), a trap catches game over time (take the meat from it), a bridge makes the water tile beside you a way across` },
-        "pave" => #{ takes: cost_text("road"), gives: "road under you (faster walking)" },
-        "craft" => #{ takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}; net ${cost_text("net")}; basket ${cost_text("basket")}; bow ${cost_text("bow")}; arrow ${cost_text("arrow")} for 3; salve ${cost_text("salve")}; leather ${cost_text("leather")}; armor ${cost_text("armor")}) and knowing how`,
-            gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster, a net catches two fish at a time, a basket carries 20 more, a bow shoots arrows, a salve helps tending, armor softens blows" },
-        "give" => #{ takes: "the items from your pack", gives: "the items in their pack" },
-        "store" => #{ takes: `the items from your pack, a storage in reach with room (a storage holds ${storage_holds(0)} things in all)`, gives: "the items in the storage, for anyone to take" },
-        "take" => #{ takes: "items in a storage, remains or a trap in reach, room in your pack", gives: "the items in your pack" },
-        "drop" => #{ takes: "the items from your pack", gives: "room in your pack; the items are left behind" },
-        "attack" => #{ takes: "a creature in reach, a little energy",
-            gives: "a blow (harder with a spear, strength and practice) that does its full damage: whoever it takes to 0 health dies. To frighten someone without harm, threaten. A creature killed leaves remains with meat and hide to take" },
-        "threaten" => #{ takes: "a creature within a few tiles, 2 seconds", gives: "no harm: they see you menacing them (weapon raised), and so does anyone watching" },
-        "seize" => #{ takes: "a person in reach who has yielded to force or is badly hurt, the items in their pack", gives: "the items in your pack; they and anyone watching see you take them" },
-        "yield" => #{ takes: "a second (target: whom you give in to; without one, whoever last hurt you)",
-            gives: `you stop resisting, guard down and hands up: for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in` },
-        "throw" => #{ takes: "your spear", gives: "a hard hit at range; the spear is gone" },
-        "shoot" => #{ takes: "a bow and 1 arrow, a creature within 9 tiles", gives: "a hit at range (softened by armor); the arrow is spent" },
-        "strike" => #{ takes: `a creature within reach, ${combat_cost("strike")} energy; ready again ${combat_cooldown("strike")} ms after you start`, gives: "a quick blow (harder with a spear, strength and practice) after a short windup they can see; out of reach by then, it misses; a raised guard in front of them takes most of it" },
-        "bowshot" => #{ takes: `a bow and 1 arrow, ${combat_cost("bowshot")} energy, a creature or a point to aim at (up to 22 tiles)`, gives: "an arrow that flies straight and hits the first creature in its path (softened by armor); the arrow is spent" },
-        "firebolt" => #{ takes: `knowing fire_bolt, ${combat_cost("firebolt")} energy, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`, gives: "a bolt of fire that burns the first creature it meets, hard" },
-        "heal" => #{ takes: `knowing mending, ${combat_cost("heal")} energy, yourself or a hurt ally in sight within 8 tiles; ready again after ${combat_cooldown("heal") / 1000} s`, gives: "their wounds mended at once, even in a fight" },
-        "tend" => #{ takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" },
-        "plant" => #{ takes: "2 berries, open grass or dirt outside winter, knowing planting", gives: "a new berry bush in time" },
-        "experiment" => #{ takes: "1 of the material", gives: "sometimes a new technique" },
-        "teach" => #{ takes: "a technique you know, a person beside you staying close for a while", gives: "they know it too" },
-        "write" => #{ takes: "1 wood, knowing writing", gives: "a tablet you keep or a sign left here, with your words" },
-        "read" => #{ takes: "a tablet you carry or a sign here, knowing writing", gives: "its words; a tablet describing a technique can teach it" },
-        "rework" => #{ takes: "a while sitting still; an old way must have been tried about 4 times, failed twice or kept 15 minutes (the top level: about two days)",
-            gives: "that way replaced by your new version (or dropped); how it goes starts counting afresh" },
-        "conceive" => #{ takes: "a willing adult partner choosing it too, both fed", gives: "a child in time" },
-        _ => #{ takes: "", gives: "" },
-    }
+    #{ target: true, reach: 0.8,
+       about: "Walk to something in sight or a place you know and stop beside it. An act aimed at a target walks there by itself, so you need goto only to be somewhere (home before dark, a meeting place). Not following someone who moves (follow), not running away (flee).",
+       takes: "a target in sight or a known place",
+       gives: `you there; within ${l.fire_warmth} tiles of a campfire or ${l.shelter_warmth} of a shelter or house the night cold can't hurt you` }
 }
+fn wander_spec() { #{ about: "Stroll to a random spot nearby, to look around when nothing you need is in sight. It searches for nothing in particular.", gives: "you at a nearby spot you may not have seen" } }
+fn gather_spec() {
+    #{ target: true, reach: 1.3,
+       about: "Take one unit from a resource beside you: berries from a berry_bush, wood from a tree, stone from a boulder, fiber from reeds, fish from a fishing_spot, clay from a clay_bank. The way to get food and materials from the land. Taking from a storage, remains or a trap is take.",
+       takes: "a resource in reach with some left, room in your pack, a little energy",
+       gives: "1 unit into your pack: berry_bush→berries, tree→wood (faster with an axe), boulder→stone (faster with a pick), reeds→fiber, fishing_spot→fish (faster with a spear, two at a time with a net), clay_bank→clay" }
+}
+fn eat_spec() {
+    #{ item: "a food you carry, or \"food\" for your best",
+       about: "Eat one food item from your own pack. Only what you carry: food in a storage must be taken out first, food someone else has must be given to you.",
+       takes: "1 food item from your own pack",
+       gives: `hunger down by its worth (${foods_text()}), a little health` }
+}
+fn cook_spec() { #{ target: true, item: true, reach: 1.5, about: "Cook raw fish or meat at a campfire beside you: about twice as filling, and it keeps longer. Needs cooking.", takes: "1 raw fish or meat from your pack, a campfire in reach, knowing cooking", gives: "1 cooked_fish or cooked_meat" } }
+fn smoke_spec() { #{ target: true, item: true, reach: 1.5, about: "Smoke raw fish or meat at a campfire beside you so it keeps for weeks: food to store, carry far or trade. Needs smoking.", takes: "1 raw fish or meat from your pack, a campfire in reach, knowing smoking, 10 seconds", gives: "1 smoked_fish or smoked_meat: more filling than raw" } }
+fn clear_spec() { #{ about: "Turn the forest where you stand into open ground. For making room to build; gathering at a tree is the quicker way to get wood.", takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" } }
+fn graze_spec() { #{ listed: false, about: "Eat grass where you stand (grazing animals).", takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" } }
+fn sleep_spec() { #{ about: "Sleep until rested. Night is the time for it; beside a shelter or house it is much faster and the night cold can't hurt you. A short break is rest.", takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" } }
+fn rest_spec() { #{ about: "Sit a few seconds and recover a little energy. Sleep restores far more.", takes: "8 seconds", gives: "a little energy" } }
+fn wait_spec() { #{ args: ["qty"], about: "Pause where you are (qty: seconds, at most 120).", takes: "time", gives: "nothing: time passes" } }
+
+fn build_spec() {
+    let l = laws();
+    #{ item: true, items: ["campfire", "shelter", "storage", "house", "trap", "wall", "gate", "bridge"], reach: 1.5,
+       about: "Build a structure where you stand (campfire, shelter, storage, house, trap), or a wall, gate or bridge on the tile beside you that you point at (target {\"at\": [x, y]}; a bridge goes on water). There is no repairing or mending of anything: a structure stands until it is gone.",
+       takes: `its materials from your pack (campfire ${cost_text("campfire")}; shelter ${cost_text("shelter")}; storage ${cost_text("storage")}; house ${cost_text("house")}; wall ${cost_text("wall")}; gate ${cost_text("gate")}; trap ${cost_text("trap")}; bridge ${cost_text("bridge")}) and knowing its technique`,
+       gives: `the structure here: a campfire warms within ${l.fire_warmth} tiles at night, a shelter or house within ${l.shelter_warmth} and makes sleep restful, a storage keeps items (food spoils slower), a trap catches game over time (take the meat from it), a bridge makes the water tile beside you a way across` }
+}
+fn pave_spec() { #{ about: "Lay road on the tile you stand on. Walking on road is faster: worth it on ways walked often.", takes: cost_text("road"), gives: "road under you" } }
+fn open_spec() { #{ target: true, reach: 1.8, about: "Open a gate. Only members of the gate's community may; anyone else must ask one of them.", takes: "a gate in reach, belonging to your community", gives: "the gate open: anyone may pass" } }
+fn close_spec() { #{ target: true, reach: 1.8, about: "Close a gate: closed, it blocks the way like a wall. Only members of its community may.", takes: "a gate in reach, belonging to your community", gives: "the gate shut" } }
+fn craft_spec() {
+    #{ item: true, items: ["spear", "cloak", "torch", "axe", "pick", "net", "basket", "bow", "arrow", "salve", "leather", "armor"],
+       about: "Make a tool, weapon or garment from materials in your pack. Each needs its technique. Structures are built (build); nothing is repaired.",
+       takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}; net ${cost_text("net")}; basket ${cost_text("basket")}; bow ${cost_text("bow")}; arrow ${cost_text("arrow")} for 3; salve ${cost_text("salve")}; leather ${cost_text("leather")}; armor ${cost_text("armor")}) and knowing how`,
+       gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster, a net catches two fish at a time, a basket carries 20 more, a bow shoots arrows, a salve helps tending, armor softens blows" }
+}
+
+fn give_spec() {
+    #{ target: true, item: true, args: ["qty"], reach: 1.8, talk: true,
+       about: "Hand items from your pack to someone beside you. Nothing is asked in return; for an exchange now, offer. It is also how you pay what you agreed to or what is demanded of you: the world counts it.",
+       takes: "the items from your pack, room in their pack", gives: "the items in their pack" }
+}
+fn store_spec() {
+    #{ target: true, item: true, args: ["qty"], reach: 1.5,
+       about: "Put items from your pack into a storage beside you. Storing into someone's household store is how goods are delivered to them while they are away.",
+       takes: `the items from your pack, a storage in reach with room (a storage holds ${storage_holds(0)} things in all)`, gives: "the items in the storage" }
+}
+fn take_spec() {
+    #{ target: true, item: true, args: ["qty"], reach: 1.5,
+       about: "Take items from a storage, remains or a trap beside you. From another household's store, unless you are their guest or of their community, it is theft: its owner and anyone watching see it.",
+       takes: "items in a storage, remains or a trap in reach, room in your pack", gives: "the items in your pack" }
+}
+fn drop_spec() { #{ item: true, args: ["qty"], about: "Set items down where you stand and leave them, e.g. to free your pack. What is dropped is kept for no one.", takes: "the items from your pack", gives: "room in your pack; the items are left behind" } }
+
+fn attack_spec() {
+    #{ target: true, reach: 1.4,
+       about: "Strike a creature beside you. Every blow does its full damage and whoever reaches 0 health dies; there is no holding back. To frighten someone without harm, threaten. Killing game yields meat and hide.",
+       takes: "a creature in reach, a little energy",
+       gives: "a blow (harder with a spear, strength and practice); a creature killed leaves remains with meat and hide to take" }
+}
+fn strike_spec() {
+    #{ target: true, reach: 1.6,
+       about: "A quick blow at a creature in reach, after a short windup they can see. It does its full damage like any blow; 0 health is death.",
+       takes: `a creature within reach, ${combat_cost("strike")} energy; ready again ${combat_cooldown("strike")} ms after you start`,
+       gives: "a quick blow (harder with a spear, strength and practice); out of reach by then, it misses; a raised guard in front of them takes most of it" }
+}
+fn bowshot_spec() {
+    #{ target: true, reach: 22.0,
+       about: "Loose an arrow toward a creature or a point (target {\"at\": [x, y]}): it flies straight and hits the first creature in its path, whoever that is.",
+       takes: `a bow and 1 arrow, ${combat_cost("bowshot")} energy, a creature or a point to aim at (up to 22 tiles)`,
+       gives: "a hit at range (softened by armor); the arrow is spent" }
+}
+fn firebolt_spec() {
+    #{ target: true, reach: 16.0,
+       about: "Hurl a bolt of fire toward a creature or a point: it burns the first creature it meets, hard. Needs the fire_bolt technique.",
+       takes: `knowing fire_bolt, ${combat_cost("firebolt")} energy, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`,
+       gives: "a bolt of fire that burns the first creature it meets" }
+}
+fn throw_spec() { #{ target: true, reach: 7.0, about: "Throw your spear at a creature up to 7 tiles away. The spear is gone afterwards.", takes: "your spear", gives: "a hard hit at range" } }
+fn shoot_spec() { #{ target: true, reach: 9.0, about: "Shoot an arrow from your bow at a creature up to 9 tiles away.", takes: "a bow and 1 arrow, a creature within 9 tiles", gives: "a hit at range (softened by armor); the arrow is spent" } }
+fn threaten_spec() {
+    #{ target: true, reach: 3.0,
+       about: "Menace a creature within a few tiles for 2 s, weapon raised. No harm is done, but they and anyone watching see it: a way to make a warning or a demand felt without a blow.",
+       takes: "a creature within a few tiles, 2 seconds", gives: "no harm: they see you menacing them, and so does anyone watching" }
+}
+fn seize_spec() {
+    #{ target: true, item: true, args: ["qty"], reach: 1.8,
+       about: "Take items from a person's pack against their will: only from someone who has yielded to you or is badly hurt. Everyone who sees it knows it was taken by force.",
+       takes: "a person in reach who has yielded to force or is badly hurt, the items in their pack", gives: "the items in your pack; they and anyone watching see you take them" }
+}
+fn yield_spec() {
+    #{ reach: 12.0,
+       about: "Give in: guard down, hands up (target: whom you yield to; without one, whoever last hurt you). It says you surrender; it does not stop blows by itself.",
+       takes: "a second",
+       gives: `for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in` }
+}
+fn dodge_spec() { #{ about: "Dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses. For fights, not travel.", takes: `${combat_cost("dodge")} energy`, gives: "a quick dash of a few tiles" } }
+fn block_spec() { #{ args: ["qty"], about: "Raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it). Blows from the front do a quarter of their damage; from behind it does not help.", takes: `${combat_cost("block")} energy, holding still`, gives: "a guard in front of you" } }
+fn heal_spec() {
+    #{ reach: 8.0,
+       about: "Close wounds at once with your hands, your own or an ally's in sight within 8 tiles, even in a fight. Needs the wound_tending technique. It heals bodies only: it does not mend tools, hinges, nets or anything else.",
+       takes: `knowing wound_tending, ${combat_cost("heal")} energy, yourself or a hurt ally in sight within 8 tiles; ready again after ${combat_cooldown("heal") / 1000} s`,
+       gives: "their wounds closed at once" }
+}
+fn tend_spec() {
+    #{ target: true, reach: 1.5,
+       about: "Tend someone's wounds by hand (a person beside you, or \"self\"): slow, and not while they are fighting. Anyone can tend; a salve helps if you know medicine. heal is the quick way, for those who know wound_tending.",
+       takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" }
+}
+
+fn follow_spec() { #{ target: true, reach: 2.0, about: "Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone. It does not make them follow you.", takes: "a creature in sight", gives: "you beside them as they go" } }
+fn flee_spec() { #{ target: true, about: "Run away from a creature or place until you are clear of it.", takes: "something to run from", gives: "distance between you and it" } }
+
+fn offer_spec() {
+    #{ target: true, item: true, args: ["qty", "want", "want_qty"], reach: 3.0, talk: true,
+       about: "Propose a swap now to a person beside you: item × qty you give for want × want_qty you ask. If they accept, both sides change hands at once. For goods in hand; for work, or for something delivered later, offer_terms.",
+       takes: "the goods in your pack when they accept", gives: "their goods in your pack, if they accept" }
+}
+fn accept_spec() {
+    #{ target: true, reach: 3.0, talk: true,
+       about: "Accept what a person beside you just proposed to you: a swap (both sides change hands at once, if both still have the goods) or terms (offer_terms: it becomes an agreement the world keeps account of).",
+       takes: "a standing proposal from them to you", gives: "the swap done, or the agreement made" }
+}
+fn found_spec() { #{ args: ["text"], about: "Found a community with its home where you stand (text: its name); you become its first member.", takes: "a name, not being in a community", gives: "a new community of one" } }
+fn join_spec() { #{ target: true, reach: 3.0, about: "Ask a member of a community to let you join it; a member must welcome you.", takes: "a member beside you", gives: "your request, which they may answer" } }
+fn welcome_spec() { #{ target: true, reach: 3.0, talk: true, about: "Welcome into your community a person who asked to join it.", takes: "a person beside you who asked to join", gives: "they are a member" } }
+fn leave_spec() { #{ about: "Leave your community.", takes: "", gives: "you belong to no community" } }
+fn host_spec() {
+    #{ target: true, reach: 3.0, talk: true,
+       about: "Take a person in as your household's guest until morning: a bed in your house and food from its store. Needs a house at your home door.",
+       takes: "a person beside you, and a house of your household's (at your home door), 2 s",
+       gives: "they are your guest until 7 in the morning: they know where your house is (their place \"lodging\"), may sleep there, and may take from your household's store" }
+}
+
+fn conceive_spec() { #{ target: true, reach: 2.0, talk: true, about: "Start a family with a willing adult partner: it happens when both of you choose it toward each other within 2 minutes, while fed.", takes: "a willing adult partner choosing it too, both fed", gives: "a child in time" } }
+fn teach_spec() { #{ target: true, item: "technique", reach: 2.0, talk: true, about: "Teach a technique you know to a person beside you. It takes a while and both must stay close; afterwards they know it and you still do.", takes: "a technique you know, a person beside you staying close for a while", gives: "they know it too" } }
+fn experiment_spec() { #{ item: "material", about: "Tinker with a material from your pack hoping to work out a new technique. It uses up the material and often fails; learning from someone who knows is surer.", takes: "1 of the material", gives: "sometimes a new technique" } }
+fn write_spec() { #{ item: true, items: ["tablet", "sign"], args: ["text", "topic"], about: "Write on a tablet you keep or a sign you leave here (text: your words; topic: a technique you know, so that readers can learn it). Needs writing.", takes: "1 wood, knowing writing", gives: "a tablet you keep or a sign left here, with your words" } }
+fn read_spec() { #{ reach: 1.5, about: "Read a tablet you carry, or a sign beside you (target {\"nearest\": \"sign\"}). Needs writing.", takes: "a tablet you carry or a sign here, knowing writing", gives: "its words; a tablet describing a technique can teach it" } }
+fn plant_spec() { #{ about: "Plant 2 berries where you stand to grow a new berry bush. Needs planting.", takes: "2 berries, open grass or dirt outside winter, knowing planting", gives: "a new berry bush in time" } }
+fn signal_spec() { #{ item: "signal name", about: "Make one of your species' signals; others nearby hear it.", takes: "a moment", gives: "your call, heard by those nearby" } }
+fn rework_spec() {
+    #{ item: "a routine's name, or \"top level\"", args: ["graph", "retire"],
+       about: "Sit and rework one of your ways (graph: the new version, or retire: true to drop it). It takes a while, and the old way must have been lived with first.",
+       takes: "a while sitting still; an old way must have been tried about 4 times, failed twice or kept 15 minutes (the top level: about two days)",
+       gives: "that way replaced by your new version (or dropped); how it goes starts counting afresh" }
+}
+
+fn wave_spec() { #{ target: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
+fn nod_spec() { #{ target: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
+fn appraise_spec() { #{ target: true, reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
+fn face_spec() { #{ target: true, reach: 15.0, about: "Turn where you stand to face someone or something you can see (a person coming up to you or speaking, a fight, a sound).", takes: "something or someone in sight", gives: "you turn to face it" } }
+fn step_aside_spec() { #{ target: true, reach: 3.0, about: "Step a pace aside to let someone coming toward you pass, in a narrow street or a doorway.", takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" } }
+fn keep_spec() { #{ about: "Keep your post a while (a stall, a workshop, a gate, a door): stand at it and attend to whoever comes by.", takes: "10 seconds at your post", gives: "you are seen at work there" } }
+fn play_spec() { #{ about: "Play a little while where you are (run about, skip, make up a game).", takes: "4 seconds, not a baby", gives: "a little fun; tires a little" } }
 
 // ---- gestures and town life (docs/TOWN_LIFE.md) ---------------------------------------
 // A gesture is seen, not heard: its target must be in sight within the gesture's reach.

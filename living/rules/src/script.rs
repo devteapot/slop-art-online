@@ -449,6 +449,10 @@ pub struct Scripts {
     unary: HashSet<String>,
     shapes: crate::combat::Shapes,
     shows: crate::social::Shows,
+    /// Every skill the script declares (`<skill>_spec()`).
+    skills: std::sync::Arc<crate::catalog::Skills>,
+    /// Functions of no parameter.
+    nullary: HashSet<String>,
     /// What each function reads of its parameters.
     fields: fields::Fields,
     /// The context fields each law is called with, by law.
@@ -510,7 +514,7 @@ fn engine_with(l: Limits) -> Engine {
 
 /// Constant laws the engine looks up by a name, and the names it asks them for.
 fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
-    let skills: Vec<String> = s.shapes.names().map(String::from).chain(crate::catalog::SKILLS.iter().map(|k| k.name.to_string())).collect();
+    let skills: Vec<String> = s.shapes.names().map(String::from).chain(s.skills.names().map(String::from)).collect();
     let kinds: Vec<String> = crate::catalog::CREATURES.iter().map(|k| k.to_string()).collect();
     let items: Vec<String> = crate::catalog::ITEMS.iter().map(|i| i.name.to_string()).collect();
     let resources: Vec<String> = crate::catalog::RESOURCES.iter().map(|(k, _)| k.to_string()).collect();
@@ -551,8 +555,9 @@ impl Scripts {
         let ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
         let fns = ast.iter_functions().map(|f| f.name.to_string()).collect();
         let unary = ast.iter_functions().filter(|f| f.params.len() == 1).map(|f| f.name.to_string()).collect();
+        let nullary = ast.iter_functions().filter(|f| f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
-        let mut s = Self { engine, ast, fns, unary, shapes: Default::default(), shows: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default() };
         // Required entry points.
         for f in ["rates", "move_speed"] {
             if !s.fns.contains(f) {
@@ -561,6 +566,7 @@ impl Scripts {
         }
         s.shapes = s.read_shapes()?;
         s.shows = s.read_shows()?;
+        s.skills = std::sync::Arc::new(s.read_specs()?);
         for (f, names) in name_laws(&s) {
             for n in names {
                 s.num_of(&f, &n, 0.0);
@@ -656,6 +662,31 @@ impl Scripts {
             Vec::new()
         };
         crate::combat::Shapes::new(shapes, bar)
+    }
+
+    /// What each skill is (`<skill>_spec()`): its arguments, reach and description, read once
+    /// here. A script that declares no skill at all (one installed before skills were declared
+    /// in the script, 2026-11-10) is given the shipped script's, so its world keeps its skills
+    /// until the next install.
+    fn read_specs(&self) -> Result<crate::catalog::Skills, String> {
+        let mut list = Vec::new();
+        for f in self.nullary.iter().filter(|f| f.ends_with("_spec")) {
+            let skill = f.trim_end_matches("_spec");
+            if skill.is_empty() {
+                continue;
+            }
+            let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+            list.push(spec_of(skill, &m)?);
+        }
+        if list.is_empty() {
+            return Self::new(include_str!("../../scripts/skills.rhai")).map(|s| (*s.skills).clone());
+        }
+        Ok(crate::catalog::Skills::new(list))
+    }
+
+    /// Every skill the script declares.
+    pub fn skills(&self) -> &std::sync::Arc<crate::catalog::Skills> {
+        &self.skills
     }
 
     /// What others see of a skill and what it means to them (`<skill>_shows()`), read once
@@ -883,16 +914,11 @@ impl Scripts {
         v.unwrap_or(default)
     }
 
-    /// What a skill takes and gives, as the rules describe it (`skill_io(name)`), for minds
-    /// composing routines. None when the script does not describe it.
+    /// What a skill takes and gives, as its spec says (`<skill>_spec()`), for minds composing
+    /// routines. None when it says neither.
     pub fn skill_io(&self, skill: &str) -> Option<(String, String)> {
-        if !self.has("skill_io") {
-            return None;
-        }
-        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "skill_io", (skill.to_string(),)).ok()?.try_cast::<Map>()?;
-        let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
-        let (takes, gives) = (text("takes"), text("gives"));
-        (!takes.is_empty() || !gives.is_empty()).then_some((takes, gives))
+        let s = self.skills.get(skill)?;
+        (!s.takes.is_empty() || !s.gives.is_empty()).then(|| (s.takes.clone(), s.gives.clone()))
     }
 
     /// Generic numeric query, e.g. `attack_cooldown`.
@@ -909,6 +935,49 @@ fn number(d: &Dynamic) -> Option<f64> {
         return Some(i as f64);
     }
     d.as_float().ok()
+}
+
+/// The traits a skill's spec may have.
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items"];
+
+/// A skill's spec from what `<skill>_spec()` returned.
+fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
+    let f = format!("{skill}_spec");
+    if let Some(k) = m.keys().find(|k| !SPEC_TRAITS.contains(&k.as_str())) {
+        return Err(format!("{f}: unknown trait `{k}` (traits are {})", SPEC_TRAITS.join(", ")));
+    }
+    let flag = |k: &str, d: bool| m.get(k).map_or(Ok(d), |v| v.as_bool().map_err(|_| format!("{f}: `{k}` must be true or false")));
+    let text = |k: &str| m.get(k).map_or(Ok(String::new()), |v| v.clone().into_string().map_err(|_| format!("{f}: `{k}` must be a string")));
+    let list = |k: &str| -> Result<Vec<String>, String> {
+        let Some(v) = m.get(k) else { return Ok(Vec::new()) };
+        let a = v.clone().try_cast::<Array>().ok_or_else(|| format!("{f}: `{k}` must be a list of words"))?;
+        a.into_iter().map(|x| x.into_string().map_err(|_| format!("{f}: `{k}` must be a list of words"))).collect()
+    };
+    // `item: true`, or a word for what the item names (`"technique"`).
+    let (needs_item, item_arg) = match m.get("item") {
+        None => (false, String::new()),
+        Some(v) if v.is_bool() => (v.as_bool().unwrap_or(false), String::new()),
+        Some(v) => (true, v.clone().into_string().map_err(|_| format!("{f}: `item` is true, false or what the item names"))?),
+    };
+    let about = text("about")?;
+    if about.trim().is_empty() {
+        return Err(format!("{f}: `about` describes the skill for a mind: what it does, when it is useful, what it is not"));
+    }
+    let reach = m.get("reach").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `reach` must be a number")))?;
+    Ok(crate::catalog::SkillSpec {
+        name: skill.to_string(),
+        needs_target: flag("target", false)?,
+        needs_item,
+        item_arg,
+        args: list("args")?,
+        reach: (reach as f32).clamp(0.0, 64.0),
+        about,
+        takes: text("takes")?,
+        gives: text("gives")?,
+        listed: flag("listed", true)?,
+        talk: flag("talk", false)?,
+        items: list("items")?,
+    })
 }
 
 fn decode_missile(f: &str, d: Dynamic) -> Result<crate::combat::MissileSpec, String> {
@@ -1102,10 +1171,10 @@ mod tests {
         let (takes, gives) = s.skill_io("eat").unwrap();
         assert!(takes.contains("food") && gives.contains("berries 12"), "{takes} / {gives}");
         assert!(s.skill_io("build").unwrap().0.contains("campfire 3 wood"));
-        for sk in crate::catalog::SKILLS {
-            if !matches!(sk.name, "open" | "close" | "found" | "join" | "welcome" | "leave" | "dodge" | "block" | "follow" | "flee" | "offer" | "accept" | "signal") {
-                assert!(s.skill_io(sk.name).is_some(), "{} undescribed", sk.name);
-            }
+        // Every skill says what it is, and what it takes or gives.
+        for sk in s.skills().iter() {
+            assert!(sk.about.len() > 20, "{} undescribed", sk.name);
+            assert!(s.skill_io(&sk.name).is_some(), "{} says neither what it takes nor what it gives", sk.name);
         }
         let mut c = ctx();
         c.item = "berries".into();
@@ -1118,7 +1187,7 @@ mod tests {
     #[ignore]
     fn print_skill_reference() {
         let s = scripts();
-        let text = crate::catalog::skills_help_io(&|n| s.skill_io(n));
+        let text = crate::catalog::skills_help_of(s.skills());
         println!("{text}\n({} chars)", text.len());
     }
 
@@ -1156,7 +1225,7 @@ mod tests {
         assert!(s.check("firebolt", &c).is_ok());
         // A heal: yourself or an ally, not someone fighting you, and only when hurt.
         c.skill = "heal".into();
-        c.actor.knows.push("mending".into());
+        c.actor.knows.push("wound_tending".into());
         c.target = TargetFacts { class: "creature".into(), id: 1, kind: "person".into(), alive: true, hp: 100.0, max_hp: 100.0, ..Default::default() };
         assert_eq!(s.check("heal", &c).unwrap_err(), "you are not hurt");
         c.target.hp = 40.0;
@@ -1205,11 +1274,11 @@ mod tests {
         assert_eq!(with(|x| x.aim == Aim::Facing), vec!["block"]);
         assert_eq!(with(|x| x.aim == Aim::SelfOrAlly), vec!["heal"]);
         // Real-time behavior and reflexes, with the walking and resting skills.
-        let real: Vec<&str> = crate::catalog::SKILLS.iter().map(|k| k.name).filter(|n| sh.real_time(n)).collect();
+        let real: Vec<&str> = s.skills().names().filter(|n| sh.real_time(n)).collect();
         let mut real = real;
         real.sort();
         assert_eq!(real, sorted(vec!["wander", "flee", "follow", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
-        let mut reflex: Vec<&str> = crate::catalog::SKILLS.iter().map(|k| k.name).filter(|n| sh.reflex(n)).collect();
+        let mut reflex: Vec<&str> = s.skills().names().filter(|n| sh.reflex(n)).collect();
         reflex.sort();
         assert_eq!(reflex, sorted(vec!["flee", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "heal", "yield"]));
         // Knacks: the starter skills share the older skills' genes.
@@ -1251,6 +1320,41 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         let refused = |extra: &str| Scripts::new(&format!("{}\n{extra}", include_str!("../../scripts/skills.rhai"))).err().unwrap_or_default();
         assert!(refused(r#"fn zap_combat() { #{ aim: "point" } }"#).contains("zap_missile"));
         assert!(refused(r#"fn zap_combat() { #{ aim: "creature", flying: true } }"#).contains("unknown trait `flying`"));
+    }
+
+    /// A skill added only in the script (its spec and rules) is one a graph, an act and a
+    /// mind's prompt take, with no Rust change; without a spec an install refuses it.
+    #[test]
+    fn a_skill_added_only_in_the_script_is_everyones() {
+        let shipped = include_str!("../../scripts/skills.rhai");
+        let whittle = r#"
+fn whittle_spec() { #{ item: true, items: ["wood"], reach: 0.0, about: "Carve a piece of wood into a peg while you sit.", takes: "1 wood", gives: "a peg (nothing yet uses it)" } }
+fn whittle_check(a) { if inv(a, "wood") < 1 { return "no wood to whittle"; } "" }
+fn whittle_duration(a) { 3000 }
+fn whittle_done(a) { [#{ op: "remove", item: "wood", qty: 1 }] }
+"#;
+        let s = Scripts::new(&format!("{shipped}
+{whittle}")).unwrap();
+        let spec = s.skills().get("whittle").expect("declared");
+        assert!(spec.needs_item && !spec.needs_target && spec.items == ["wood"]);
+        crate::catalog::scoped(s.skills().clone(), || {
+            // A graph leaf and a deliberate act.
+            let (g, _) = crate::normalize::graph(serde_json::json!({"do": "whittle", "item": "wood"})).unwrap();
+            crate::graph::from_value(g).unwrap();
+            let a = crate::acts::parse(serde_json::json!({"do": "whittle", "item": "wood"}), None, s.shapes()).unwrap();
+            assert_eq!(a.skill, "whittle");
+            // A mind's skill reference.
+            assert!(crate::catalog::skills_help().contains("- whittle(item: wood): Carve a piece of wood"), "{}", crate::catalog::skills_help());
+        });
+        // Under the shipped skills it is unknown.
+        crate::catalog::scoped(scripts().skills().clone(), || assert!(crate::normalize::graph(serde_json::json!({"do": "whittle", "item": "wood"})).is_err()));
+        // Rules without a spec are refused at install; a spec without a description too.
+        let bare = Scripts::new(&format!("{shipped}
+{}", whittle.lines().filter(|l| !l.contains("whittle_spec")).collect::<Vec<_>>().join("\n"))).unwrap();
+        assert!(bare.validate().unwrap_err().contains("`whittle` has rules but no `whittle_spec()`"));
+        let mute = Scripts::new(&format!("{shipped}
+fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
+        assert!(mute.contains("`about` describes the skill"), "{mute}");
     }
 
     #[test]

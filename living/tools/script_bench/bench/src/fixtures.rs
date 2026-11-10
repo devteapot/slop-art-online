@@ -42,9 +42,12 @@ impl Rng {
 }
 
 const ITEMS: [&str; 10] = ["berries", "wood", "cloak", "spear", "armor", "arrow", "bow", "basket", "fiber", "hide"];
-const TECHNIQUES: [&str; 8] = ["fire", "cooking", "shelter", "tanning", "mending", "fire_bolt", "carpentry", "smoking"];
+const TECHNIQUES: [&str; 8] = ["fire", "cooking", "shelter", "tanning", "wound_tending", "fire_bolt", "carpentry", "smoking"];
 const ACTIVITIES: [&str; 8] = ["", "", "sleep", "rest", "block", "gather", "walk", "craft"];
 const SEASONS: [&str; 4] = ["spring", "summer", "autumn", "winter"];
+/// The skills the Rust catalog listed before skills were declared in the script (2026-11-10),
+/// in its order: the fixtures' knacks stay what they were.
+const KNACK_SKILLS: [&str; 57] = ["goto", "wander", "gather", "eat", "sleep", "rest", "build", "pave", "open", "close", "craft", "cook", "smoke", "clear", "give", "store", "drop", "take", "attack", "seize", "threaten", "yield", "offer", "accept", "found", "join", "welcome", "host", "leave", "dodge", "block", "strike", "bowshot", "firebolt", "heal", "throw", "shoot", "follow", "flee", "wait", "conceive", "teach", "experiment", "write", "tend", "read", "plant", "signal", "rework", "wave", "appraise", "nod", "face", "step_aside", "keep", "play", "graze"];
 const COOLDOWN_SKILLS: [&str; 8] = ["strike", "bowshot", "firebolt", "heal", "dodge", "block", "attack", "gather"];
 
 fn genes(r: &mut Rng) -> Genes {
@@ -53,9 +56,9 @@ fn genes(r: &mut Rng) -> Genes {
         g.insert(b.to_string(), r.range(0.8, 1.25));
     }
     // A knack for every skilled skill in the catalog, as `genes::founder` gives a person.
-    for sk in living_rules::catalog::SKILLS {
-        if !matches!(sk.name, "wait" | "sleep" | "rest" | "eat" | "signal" | "goto" | "follow" | "wander" | "flee") {
-            g.insert(format!("knack:{}", sk.name), r.range(0.85, 1.15));
+    for sk in KNACK_SKILLS {
+        if !matches!(sk, "wait" | "sleep" | "rest" | "eat" | "signal" | "goto" | "follow" | "wander" | "flee") {
+            g.insert(format!("knack:{sk}"), r.range(0.85, 1.15));
         }
     }
     for t in living_rules::genes::PERSON_TRAITS {

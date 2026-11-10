@@ -10,7 +10,7 @@
 use super::context::Plan;
 use super::{ActorFacts, RegardIn, RoutineFacts, Scripts, SkillCtx, TargetFacts};
 use crate::catalog;
-use rhai::{Dynamic, Map, Scope};
+use rhai::{Dynamic, Scope};
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -133,14 +133,13 @@ fn laws_and_tables(p: &mut Probe) -> Result<(), String> {
             }
         }
     }
-    if s.has("skill_io") {
-        for k in catalog::SKILLS {
-            let d = p.raw("skill_io", (k.name.to_string(),), &|| format!("for `{}`", k.name))?;
-            let ok = d.clone().try_cast::<Map>().is_some_and(|m| m.values().all(|v| v.is_string()));
-            if !ok {
-                return Err(format!("install refused: `skill_io(\"{}\")` must return a map of texts", k.name));
-            }
-        }
+    // Every skill the script has rules for (a duration or effects) is declared, with a
+    // description for minds.
+    let mut ruled: Vec<&str> = s.unary.iter().filter_map(|f| f.strip_suffix("_done").or_else(|| f.strip_suffix("_duration"))).filter(|n| !n.is_empty()).collect();
+    ruled.sort();
+    ruled.dedup();
+    if let Some(k) = ruled.iter().find(|k| s.skills.get(k).is_none()) {
+        return Err(format!("install refused: `{k}` has rules but no `{k}_spec()` (every skill declares its arguments and a description for minds)"));
     }
     Ok(())
 }
@@ -184,7 +183,7 @@ fn skills(p: &mut Probe) -> Result<(), String> {
     // Where an item is used: on nothing, a place, a person, and the structures items go into.
     let item_targets: Vec<&TargetFacts> = targets.iter().filter(|t| matches!(t.class.as_str(), "none" | "place") || t.id == 9 || ["storage", "campfire", "remains"].contains(&t.kind.as_str())).collect();
     for skill in &names {
-        let takes_item = catalog::skill(skill).is_none_or(|k| k.needs_item) || ["build", "craft"].contains(&skill.as_str());
+        let takes_item = s.skills.get(skill).is_none_or(|k| k.needs_item) || ["build", "craft"].contains(&skill.as_str());
         let mut samples: Vec<SkillCtx> = Vec::new();
         for a in &actors {
             for t in &targets {
@@ -241,7 +240,7 @@ fn regard(p: &mut Probe) -> Result<(), String> {
     }
     for (observer, target) in [("person", "person"), ("wolf", "wolf"), ("wolf", "person"), ("person", "deer")] {
         for (known, revealed, own, night) in [(false, false, false, false), (true, false, false, true), (false, true, false, false), (true, true, true, false)] {
-            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "mending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night };
+            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "wound_tending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night };
             let d = p.raw("perceived_of", (super::regard_map(&r),), &|| format!("for a {observer} looking at a {target}"))?;
             super::decode_regard(d, &r).map_err(|e| format!("install refused: {e} (a {observer} looking at a {target})"))?;
         }
@@ -329,8 +328,10 @@ mod tests {
     const SKILLS: &str = include_str!("../../../scripts/skills.rhai");
 
     /// The rules with `overlay`'s functions in place of theirs, as a floor composes them.
+    /// The shipped rules with `overlay` (and a description for the test skill `zap`).
     fn refused(overlay: &str) -> String {
-        let s = Scripts::new(&crate::floors::compose(SKILLS, overlay).unwrap()).expect("compiles");
+        let overlay = format!("{overlay}\nfn zap_spec() {{ #{{ target: true, about: \"a test skill that zaps\" }} }}");
+        let s = Scripts::new(&crate::floors::compose(SKILLS, &overlay).unwrap()).expect("compiles");
         s.validate().expect_err("refused")
     }
 
