@@ -1259,7 +1259,7 @@ fn stance_fits(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
 
 /// The tiles of one structure in a scene list (id, kind, owner, position, distance): those
 /// reached from `start` through neighbours (within 1.5 tiles) of the same kind and owner.
-fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], start: usize) -> Vec<usize> {
+pub(crate) fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], start: usize) -> Vec<usize> {
     let (_, kind, owner, _, _) = &all[start];
     let mut part = vec![start];
     let mut k = 0;
