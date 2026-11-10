@@ -343,13 +343,16 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
             }
             let key = |p: (f32, f32)| (p.0.floor() as i32, p.1.floor() as i32);
             // Work is spread: the nearest of the least used spots. Only a spot one can walk to
-            // from home counts (a fishing spot across the water, a walled-in yard do not); in
-            // another settlement, too far for one search, the nearest counts.
+            // from home counts (a fishing spot across the water, a walled-in yard do not): by
+            // the connected ground once the routes are warmed, else by the walk's first leg,
+            // which searches the areas the whole way (a 6,000-tile search refused spots round
+            // a building row or a pond). In another settlement the nearest counts.
             spots.sort_by(|a, b| {
                 let u = |p: &(f32, f32)| if spread { used.get(&key(*p)).copied().unwrap_or(0) } else { 0 };
                 u(a).cmp(&u(b)).then(dist(*a, from).total_cmp(&dist(*b, from)))
             });
-            let pick = if sj == si { spots.into_iter().take(4).find(|p| map.path(from, *p, 6_000).is_some()) } else { spots.into_iter().next() };
+            let reach = |p: &(f32, f32)| map.reachable(from, *p).unwrap_or_else(|| map.route_leg(from, *p, &living_rules::nav::RouteSpec::default()).is_some());
+            let pick = if sj == si { spots.into_iter().take(4).find(reach) } else { spots.into_iter().next() };
             let Some(pick) = pick else { continue };
             if spread {
                 *used.entry(key(pick)).or_default() += 1;

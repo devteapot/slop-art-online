@@ -30,11 +30,13 @@ $V cleanup --run $R
 
 ## Gotchas
 
+- A dummy is an adult (`stage` 2 or more). Until 2026-11-10 it was the first living person with half its health, on the island resident 17, a child, whose strike the rules refuse ("too young to fight"): the block, dodge and heal scenes then saw no blow at all (5 of 25 failing on `origin/main` too). Since then a refusal at the start is told (`You failed to strike → …: too young to fight` in the attacker's `experience`), so look there first when an attacker never strikes.
+- The block scene places the attacker first, reads where it stands, and raises the guard toward it (or away from it); a guard aimed at a fixed point east met a blow from the side when `place_at` put the attacker on the next walkable tile.
 - The block, dodge and heal scenes give the attacker 4 s to land its blow. On 2026-11-09 one full run on a host also running the mind suite and a headless game client failed all three with no blow at all; two reruns (and the scenes run alone) passed. Rerun on a quieter host before calling it a regression.
 - The `kill` scene takes about ten strikes at 2 energy each; with `--scene all`, use `--fresh` so later scenes are not refused "too tired". The dummy resident is set to a wait graph, so it neither flees nor strikes back.
 - Energy is a real requirement: a character worn out by earlier scenes is refused "too tired". Use `--fresh`.
 - Place a dummy before setting its graph: a teleport drops an approach its graph already started.
-- A missile strikes the first body on its line, which may be an earlier scene's dummy; aim off their lines.
+- A missile strikes the first body on its line, which may be an earlier scene's dummy or a resident at its post: the arrival spot is inside a town, with a building and residents in fixed lines (the diagonal fire bolt struck a wall on 2026-11-10). The bow and bolt scenes place their dummy in the first direction whose line is clear of wall, rock and other bodies (terrain from the public `terrain_chunk` rows), aim at where it actually stands, and check the health of the body the impact names (a bystander who walked in counts; one the shot killed counts as burned).
 - `my_combat` rows stay 1.5 s for the two involved (a refusal 4 s, an onlooker's 300 ms; the dead one's death and witnesses until it joins again); filter by `at_ms` per scene and read soon after the act.
 - SQL returns `Ready` rows positionally: `[skill, from_ms, at_ms]`.
 - Presentation codes are `skill_card.code`, kept stable across script installs by the authority's private `skill_code` table; they are the world's codes, so read them from `skill_card`, never hard-code a number.

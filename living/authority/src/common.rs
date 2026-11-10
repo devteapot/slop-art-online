@@ -608,21 +608,25 @@ pub fn inv_remove(ctx: &ReducerContext, owner: u64, item: &str, qty: u32) -> Res
     Ok(())
 }
 
-/// Best food item held: cooked first, then by nutrition.
+/// What an item feeds, by the rules' `nutrition(item)`: food is whatever has nutrition.
+pub fn nutrition(sc: &living_rules::script::Scripts, item: &str) -> f64 {
+    sc.num_of("nutrition", item, 0.0)
+}
+
+/// The most nourishing food held (cooked food feeds most in the rules), by name on a tie.
 pub fn best_food(ctx: &ReducerContext, owner: u64) -> Option<String> {
-    let held = inv_list(ctx, owner);
-    ["cooked_meat", "cooked_fish", "meat", "fish", "berries"]
-        .iter()
-        .find(|f| held.iter().any(|(i, q)| i == *f && *q > 0))
-        .map(|s| s.to_string())
+    let sc = scripts(ctx);
+    inv_list(ctx, owner)
+        .into_iter()
+        .map(|(i, _)| (nutrition(&sc, &i), i))
+        .filter(|(n, _)| *n > 0.0)
+        .max_by(|a, b| a.0.total_cmp(&b.0).then_with(|| b.1.cmp(&a.1)))
+        .map(|(_, i)| i)
 }
 
 pub fn food_count(ctx: &ReducerContext, owner: u64) -> u32 {
-    inv_list(ctx, owner)
-        .into_iter()
-        .filter(|(i, _)| living_rules::catalog::item(i).map_or(false, |s| s.food))
-        .map(|(_, q)| q)
-        .sum()
+    let sc = scripts(ctx);
+    inv_list(ctx, owner).into_iter().filter(|(i, _)| nutrition(&sc, i) > 0.0).map(|(_, q)| q).sum()
 }
 
 // ---- resources ----------------------------------------------------------------

@@ -309,6 +309,18 @@ pub struct Steer {
     pub input_ms: u64,
 }
 
+/// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):
+/// one row per body walking to a place (private; written when a leg is planned, deleted when
+/// the walk ends or another goal starts). A table of its own because a column added to
+/// `steer` would need a constant default, which a list cannot have in 2.14.1.
+#[derive(Clone, Debug)]
+#[spacetimedb::table(accessor = walk_route)]
+pub struct WalkRoute {
+    #[primary_key]
+    pub id: u32,
+    pub route: Vec<u32>,
+}
+
 /// Needs anchored at `at_ms` with per-minute rates.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(open_tables, spacetimedb::table(accessor = vitals, public))]

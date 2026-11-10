@@ -19,7 +19,7 @@ $V launch --run $R --seed island && $V doctor --run $R
 python3 .agents/skills/verify-player/scripts/gesture.py --run $R
 ```
 
-The script joins the run's player if needed, finds a resident keeping its post, and sets the scene with admin `place_at` (name it in the report). Results: `RUN/gesture.json`; calls in `actions.log`.
+The script joins the run's player if needed, finds the resident keeping its post nearest the player (a fresh player stands at the arrival point inside a town), and sets the scene with admin `place_at` (name it in the report). Not the first one found: since world creation repeats (2026-11-10) that was always an outlaw keeping the road, whose fellows threaten a stranger who comes near, and their commotion outweighed the greeting. Results: `RUN/gesture.json`; calls in `actions.log`.
 
 From the game client's own path: run the client headless on the island run (`LIVING_GAME_LIVE`, see [verify-client game-client](../../verify-client/features/game-client.md)) with a plan such as `ready;sync:greet;wait:7;gesture:wave;wait:2;shot:greet;quit`. `gesture:wave|nod[:ID]` goes through the same code as the G and B keys; `sync:NAME` waits for `<dir>/NAME.go`, written after an admin `place_at` puts the client's character about 2.6 m in front of a resident keeping its post (a number in the file turns the view to that yaw). Check the player's `skill_use` (`wave`, source `act`, outcome `greeted <name>`), the resident's (`nod`, source `graph`, outcome `answered <player>`) and the player's `experience` "… answers your greeting (nod)."; the photographs show the wave, the nod and the answering resident's nameplate.
 

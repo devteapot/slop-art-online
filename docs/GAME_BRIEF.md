@@ -657,7 +657,7 @@ Client presentation and the clip pipeline only.
 - **Wolf paw slide** (look-dev wolf, `LIVING_GAME_PLAYER=beast:wolf`, flat ground, 0 → 8 → 0 m/s, 3 runs each; the slowest planted paw's median slide). f44b66a^: 0.29 m/s at 1–2 m/s, rising to 1.75 at 7–8, with 12–19 cm drift per contact. f44b66a with the phase sync: the same, because the clips' timing was off. Now: 0.002–0.36 m/s, 0.7–4.2 cm. `gait.rs` records paw tips; `foot_slide.py --paws`.
 - **Camera framing** (`camera.rs`, `Context`): the view frames you with your opponents in a fight you are in (any move or blow between you in the last 4 s; 10–18 m by their spread), with whoever you talk with (8 m), and with whoever you trade a wave or nod with (9–15 m), for the exchange plus 3.5 s. It never turns; it eases in over about 1.5 s and out over about 2.5 s, and a context outlasts its evidence by 1.2 s, so a wave and its answer are one framing. Turning the view yourself dismisses it until that context ends. Someone greeting you now counts too (`town.rs`, `greeted_by`).
 - **Marker check** (`living/tools/marker_check.py`, at the end of `gen_anim.sh`): per character and looping gait, it fails on missing markers and warns on split contacts, a contact share far from the gait's range, unpaired feet, a phase 0 that isn't the synced foot's touchdown, a baked clip whose length differs from its sidecar, and planted feet that slide more than 4 cm in the baked take (pure Python, read from the GLB). Today: the wolf and the deer are clean; the people's Kimodo takes slide 3–10 cm per contact (sneak the most).
-- **Open.** The rules don't show `graze`, so the client can't tell a grazing deer from a standing one. A flee from a place in this build ran toward it in scripted scenes (authority, `motion.rs` `GOAL_FLEE`; not investigated here). Deer have no antlers: the projection carries no sex. No paw IK beyond the body tilt, so steps and banks narrower than the body still gap.
+- **Open.** The rules show `graze` since 2026-11-10 (`graze_shows`, look `eat`), and the client already names it (`town.rs`); not yet checked on screen. A flee ran toward its threat in scripted scenes: the goal ran from an escape point beyond the fleer (`act.rs`); fixed 2026-11-10, the goal now runs from the threat itself. Deer have no antlers: the projection carries no sex. No paw IK beyond the body tilt, so steps and banks narrower than the body still gap.
 
 ## Verbs: acting on the world (2026-11-10)
 
@@ -697,7 +697,7 @@ A player could move, fight and greet, but not gather, eat, craft, build, give, t
 - **Connected, at the island's arrival:**
   - the drawn resources and stores add 100–150 meshes in view, 3 distinct meshes and 1 material; toon materials stay at 42;
   - frame means 5.53 / 5.53 ms against 5.22 / 6.90 ms;
-  - the client checks the rules for what F aims at 4 times a second, and for a whole list only when one opens.
+  - the client checks the rules for what F aims at 4 times a second, and for a whole list only when one opens; since 2026-11-10 the hint's checks are spread over frames (see "How the client feels", item 6).
 
 **What is still off:**
 - **A skill in `skills.rhai` alone is not a skill yet for anyone.** The authority's graph parser accepts only catalog skills (`graph::check`, "unknown skill"), so a new skill needs a catalog line in `living_rules` too (as `host` had). The client already lists a script-only skill; the core would need to read a skill's spec from the script (`<name>_spec()`) for the script to be the only place.
@@ -721,7 +721,16 @@ A review of the client at `6c8d1002` found six causes of poor feel. Five are fix
 4. **Starts slide less.** A drawn gait takes up its segment's speed at once when it rises (the authority starts a body at full speed), and fades in over 0.08 s from standing instead of 0.2 s. It still eases down at a stop: freezing the gait mid-stride and blending it to standing slid both feet more than finishing the step does.
 5. **The camera no longer pops over hills.** `camera::follow` lifts the eye over the island's ground itself, eased (10/s up, 2.5/s down, at least 0.3 m clear), and aims after the lift; the lift that ran after the camera had aimed is gone.
 6. **Per-frame copies of the SDK cache: measured, not changed.** `iter()` and `find()` clone rows under a lock every frame (`my_experience` six times, `seen_characters` twice, the 70 kB script row once). At about 180 bodies in sight they cost at most 1.3% of the main thread's samples, about 0.2 ms a frame. The frame's hitches come from elsewhere: the F hint's rule checks (`verbs::options`, Rhai `Scripts::check`) every 0.25 s take about 8 ms each, 9–13% of the main thread, so about one frame in fourteen runs over 8 ms with 50 or 200 people in sight. Plans:
-   - **The hint first:** check only when what the hint depends on changes (the aimed thing or person, my pack, know-how and needs), or spread one check per frame over the candidates.
+   - **The hint: done on branch `fix-verb-hint` (2026-11-10).** Checking only when the hint's inputs change would not help in a crowd, where the nearest person changes all the time, so the checks are spread instead. The catalog is worked through one skill and item at a time (`verbs::plan`, `check_unit`), at most 1 ms a frame (`HINT_BUDGET`); a job toward a person takes about 8.5 ms in 5–6 frames, and what the hint shows changes when it is done. A skill was too coarse a unit: `teach` alone tries every item there is and takes 4–5 ms. With the crowd held still (`set_behavior` wait, two runs per arm, the Mac's load average 9–11 from other agents):
+
+     | Bodies in sight | Frame work p50 | p99 | Frames over 8 ms |
+     |---|---|---|---|
+     | 53–60, before | 2.9 / 3.1 ms | 11.3 / 11.5 ms | 90 / 92 of about 1,260 |
+     | 55–61, after | 3.4 / 3.2 ms | 4.8 / 4.4 ms | 3 / 0 |
+     | 204–212, before | 5.5 / 5.7 ms | 15.3 / 13.7 ms | 113 / 106 of about 1,300 |
+     | 196–213, after | 5.4 / 5.8 ms | 7.3 / 7.8 ms | 5 / 8 |
+
+     The same total work, spread: the median rises by up to 0.5 ms with 50 in sight. The frames still over 8 ms with 200 in sight (up to 14 ms) come from something else.
    - **The copies, when a crowd makes them matter:** one typed resource per table, kept from the SDK's `on_insert`/`on_update`/`on_delete` callbacks (they also fire for a subscription's initial rows) and drained in the Mirror phase; systems borrow it. Speech, act outcomes and combat events become queues of new rows. The script row is recompiled on its update callback, not looked up every frame.
 
 **Evidence** (Mac M4 Pro, headless at 60 Hz, scratch island world `verify-feel-1`, the real client through the same script steps the keys use; `.local/living/fix-client-feel/`):
