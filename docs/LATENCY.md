@@ -261,6 +261,7 @@ The authority stays the single source of truth. No table, reducer or subscriptio
    - It learns its delay only from body rows whose segment changed (`on_update` with a new `t_ms`), not from bodies entering view.
    - My own body is drawn at the display time plus `ServerClock::lead`, the margin by which the freshest rows arrive ahead of the display, so my new segment is drawn in the frame that applies it.
    - Others keep the small interpolation delay.
+   - Since 2026-11-10, while a direction is held my segment is carried up to 150 ms past its end (`Tracks::update_ahead`): the authority's renewal, anchored at that end, arrives after my body drawn on the lead has reached it, and my body had stopped there for part of a frame at each renewal ([game brief](GAME_BRIEF.md#how-the-client-feels-renewals-frame-order-stale-input-starts-hills-2026-11-10)).
    - For comparison, every 10 s the game logs a shadow clock fed the old way (`clock:` lines, `bodies.rs`).
 
 **Tools.**
