@@ -50,6 +50,7 @@ pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "found", needs_target: false, needs_item: false, reach: 0.0, help: "found a community with its home here (text: its name); you become its first member" },
     SkillSpec { name: "join", needs_target: true, needs_item: false, reach: 3.0, help: "ask a member of a community to let you join it (a member must welcome you)" },
     SkillSpec { name: "welcome", needs_target: true, needs_item: false, reach: 3.0, help: "welcome a person who asked to join your community" },
+    SkillSpec { name: "host", needs_target: true, needs_item: false, reach: 3.0, help: "take a person in as your guest: a bed in your household's house until morning, and food from its store" },
     SkillSpec { name: "leave", needs_target: false, needs_item: false, reach: 0.0, help: "leave your community" },
     SkillSpec { name: "dodge", needs_target: false, needs_item: false, reach: 0.0, help: "dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses (costs energy)" },
     SkillSpec { name: "block", needs_target: false, needs_item: false, reach: 0.0, help: "raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it); hits from the front while blocking do a quarter of the damage, from behind it does not help" },

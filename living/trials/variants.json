@@ -1,0 +1,98 @@
+{
+ "default": {
+  "about": "living/configs/models.json as it stands. Since 694821c/b8cfdba people think with glm-flash (zai-glm-5-3-flash) at reasoning effort low for think and high for deliberate, talk, consolidate and internalize, max_tokens 24000, prompt caching on, overflow deepseek-flash; animals think, remember and compile with glm-flash. Level of detail and lessons off.",
+  "models": {},
+  "env": {}
+ },
+ "deepseek-flash": {
+  "about": "People think with deepseek-flash (deepseek-v4-1-flash-1017; overflow glm-flash); otherwise as default.",
+  "models": {
+   "default": "deepseek-flash"
+  },
+  "env": {}
+ },
+ "ministral-14b": {
+  "about": "People think with ministral-14b (ministral-14b-latest).",
+  "models": {
+   "default": "ministral-14b"
+  },
+  "env": {}
+ },
+ "lessons": {
+  "about": "Default with LIVING_LESSONS=1.",
+  "models": {},
+  "env": {
+   "LIVING_LESSONS": "1"
+  }
+ },
+ "grounds": {
+  "about": "Default with LIVING_GROUNDS=1.",
+  "models": {},
+  "env": {
+   "LIVING_GROUNDS": "1"
+  }
+ },
+ "lod": {
+  "about": "Default with LIVING_LOD=1 (no player on stage).",
+  "models": {},
+  "env": {
+   "LIVING_LOD": "1"
+  }
+ },
+ "glm-flash-low": {
+  "about": "People think with glm-flash sent with reasoning_effort low for every purpose. Replaying one real compile request (2026-11-09): as sent, 43.8 s with 5,742 reasoning tokens of 6,149 completion; with low, 3.4 s, 0 reasoning and 211 completion tokens; \"none\" is refused (HTTP 400). Before 694821c the profile sent no effort; since 694821c/b8cfdba main sets per-purpose efforts, and this variant overrides them all to low.",
+  "models": {
+   "profiles": {
+    "glm-flash": {
+     "reasoning_effort": {
+      "deliberate": "low",
+      "consolidate": "low",
+      "talk": "low",
+      "think": "low"
+     }
+    }
+   }
+  },
+  "env": {}
+ },
+ "deliberate-low": {
+  "about": "As default, with glm-flash's deliberate (compile) effort lowered from high to low; think stays low, talk/consolidate/internalize stay high. A patch to living/configs/models.json, merged as given.",
+  "models": {
+   "profiles": {
+    "glm-flash": {
+     "reasoning_effort": {
+      "deliberate": "low"
+     }
+    }
+   }
+  },
+  "env": {}
+ },
+ "instinct": {
+  "about": "No mind: the subject lives on its graph alone (instinct-only control, e.g. for wolf packs).",
+  "mind": false,
+  "models": {},
+  "env": {}
+ },
+ "people": {
+  "about": "People think with the `people` mix of living/configs/models.json as their default (think glm-flash; deliberate deepseek-flash@low on stage, glm-flash off stage; talk deepseek-flash; consolidate and reorganize glm-flash).",
+  "models": {
+   "default": "people"
+  },
+  "env": {}
+ },
+ "recall600": {
+  "about": "Default with LIVING_RECALL_TOKENS=decide=600 (main's default is decide=800).",
+  "models": {},
+  "env": {
+   "LIVING_RECALL_TOKENS": "decide=600"
+  }
+ },
+ "animal-switches": {
+  "about": "Default with LIVING_ANIMAL_MINDS=pack,salient,choose: one mind per pack, think on salient change, one-call choice from a menu (docs/MIND_HARNESS.md item 3).",
+  "models": {},
+  "env": {
+   "LIVING_ANIMAL_MINDS": "pack,salient,choose"
+  }
+ }
+}

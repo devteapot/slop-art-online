@@ -118,9 +118,14 @@ The simulation logs its cost every 3 s. A 78-joint character costs about 9 µs o
 | A middle mouse tap | turn the view until the direction you face is straight ahead; the cursor moves with the ground meanwhile, so you keep facing the same spot |
 | `[` / `]` held, or middle mouse drag | rotate the view (90°/s for the keys); it stays where you leave it |
 | Alt + mouse | glance around; the view eases back on release |
+| F | act on what is under the cursor or within 3 m: a tap does the likely act, holding opens the list of what the rules allow (`verbs.rs`) |
+| C | the list of acts on yourself (eat, sleep, craft, build, write, …) |
+| I / K | toggle the pack and the know-how panels |
+| 1–9, 0, click; Esc | pick from an open list; go back or close |
+| G / B / V | wave, nod, look someone over (`town.rs`) |
 | F1 | developer panels in egui (status, camera, look, sight, look-dev); hidden by default |
 
-The line from your character to the cursor shows where an aimed skill would go. There are no skills yet: the skill bar shows LMB, RMB, Q, E, R and Shift (docs/GAME_BRIEF.md, 2026-11-09), unavailable until combat is on the server. `F` interacts (talk, pick up); the middle-button tap aligns the view.
+The line from your character to the cursor shows where an aimed skill would go. There are no skills yet: the skill bar shows LMB, RMB, Q, E, R and Shift (docs/GAME_BRIEF.md, 2026-11-09), unavailable until combat is on the server. `F` acts on things and people from the rules' own data (docs/GAME_BRIEF.md, "Verbs"); the middle-button tap aligns the view.
 
 ## Game UI
 
@@ -129,7 +134,8 @@ The player's UI is Bevy UI (`src/ui/`); egui stays for the F1 panels. It is mini
 - nameplates over hovered, targeted or hostile characters, fading with distance (a speaker's bubble carries their name);
 - speech bubbles that stack instead of overlapping, with leader lines, and that fade out;
 - status icons while an effect is active (hungry, tired, losing health, recovering, in combat);
-- an interaction hint near something usable;
+- an interaction hint near something usable (`F gather`), the list of acts, and short notes of what the authority said of them;
+- the pack (I) and know-how (K) panels, hidden by default;
 - the chat log when there is new speech or the input is open (only what you heard);
 - the death screen: the cause, who saw it, then "Arrive as a new stranger" (click or Enter);
 - a small compass at the top right, with north and nearby places.

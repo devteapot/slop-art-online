@@ -12,9 +12,10 @@
 //!   ([`Island::spawn_lot`]); none from the client's own planner.
 //! - **Characters** from the bodies in the window: people as recipe characters (seeded by
 //!   character id; folk and dress from the settlement round their home, `settlement.kind`,
-//!   `settlement.style`; children smaller by life stage), wolves as the rigged wolf
-//!   ([`crate::bodies::spawn_beast`]: walk, trot or run by speed, its bite, leap, flinch and
-//!   death; scaled by life stage), other animals as the procedural creatures of `bodies.rs`.
+//!   `settlement.style`; children smaller by life stage), wolves and deer as their rigged files
+//!   ([`crate::bodies::spawn_beast`]: walk, trot or run by speed, a wolf's bite and leap, a
+//!   flinch and death; scaled by life stage; a deer startles before it flees, [`STARTLE`]),
+//!   other animals as the procedural creatures of `bodies.rs`.
 //!   Clips follow the displayed motion: idle, walk or run by speed (the authority's
 //!   walk is about 2.6 m/s and its run about 4.1), talk while speaking, and over a standing body
 //!   what it is seen doing (`town.rs`: work, gathering, eating, play, sitting, a wave or a nod).
@@ -136,6 +137,14 @@ struct Shown {
     sitting: bool,
     /// Getting up: since when (display ms) and where it sat.
     rising: Option<(f64, Vec2)>,
+    /// Its file has a startle ([`STARTLE`]); how long it has stood (s); a startle playing: since
+    /// when (display ms) and where it stood.
+    startles: bool,
+    still: f32,
+    startle: Option<(f64, Vec2)>,
+    /// A rigged animal's tilt with the ground under its paws (`bodies::lie_on`), eased.
+    tilt: Quat,
+    kind: String,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -146,6 +155,15 @@ const CATCH_UP: f32 = 1.2;
 /// A body this far (m) from where it is drawn is drawn there at once: a teleport (an admin
 /// `place_at`) used to crawl in at [`CATCH_UP`], tens of seconds for a few tens of metres.
 const SNAP_M: f32 = 6.0;
+
+/// A creature whose file has a `startle` clip (the deer) and that sets off at least this fast
+/// (m/s, the authority's velocity) after standing [`STILL_S`] is fleeing: the rules' flee is
+/// 1.15 × the deer's 3.7 m/s walk, and its speed gene varies by a few per cent, so a wander
+/// (3.5–3.9 m/s) never reaches it. It plays the startle where it stood, held there for the
+/// clip's gathering and spring (s), then catches up as a sitter getting up does ([`CATCH_UP`]).
+const STARTLE: (&str, f64) = ("startle", 420.0);
+const STARTLE_V: f32 = 4.0;
+const STILL_S: f32 = 1.0;
 
 /// How fast drawn yaw takes up a new facing (1/s): about 90% in 0.15 s.
 const YAW_RATE: f32 = 16.0;
@@ -282,9 +300,6 @@ fn yaw_of(d: Vec2) -> f32 {
 /// What `bodies` reads and writes of a drawn body.
 type Drawn = (&'static mut Transform, Option<&'static Fitted>, Option<&'static mut Model>, Option<&'static crate::characters::Character>, &'static mut Motion, Option<&'static mut Visibility>);
 
-/// A drawn wolf's height (m) for nameplates and bubbles, at adult size.
-const WOLF_TALL: f32 = 0.9;
-
 /// Draw the window's bodies: spawn, place on the island's ground, face, and pick clips.
 #[allow(clippy::too_many_arguments)]
 fn bodies(
@@ -386,17 +401,18 @@ fn bodies(
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
                 (e, recipe.height, true, false)
             } else if let Some(e) = crate::bodies::spawn_beast(&mut commands, &assets, &body.kind, at, yaw_of(Vec2::new(h.cos(), h.sin())), size) {
-                (e, WOLF_TALL * size, false, true)
+                (e, crate::bodies::beast_height(&body.kind) * size, false, true)
             } else {
                 let tf = Transform::from_translation(at).with_rotation(Quat::from_rotation_y(-h));
                 let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, &body.kind, id, false, tf, p);
-                (e, if body.kind == "wolf" { WOLF_TALL } else { 1.4 }, false, false)
+                (e, crate::bodies::beast_height(&body.kind).min(1.4), false, false)
             };
+            let startles = beast && crate::bodies::beast_file(&body.kind).is_some_and(|f| crate::gait::of(f).info(STARTLE.0).is_some());
             commands.entity(entity).insert(Motion::default());
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone() });
             live.heights.insert(id, height);
             continue;
         }
@@ -407,9 +423,16 @@ fn bodies(
             s.rising = Some((scene.now_ms, s.drawn));
         }
         s.sitting = sitting;
+        // Taking flight from standing: startle where it stood first.
+        let fast = row.as_ref().is_some_and(|b| b.vx.hypot(b.vy) >= STARTLE_V);
+        if s.startles && !mine && s.still >= STILL_S && fast && s.startle.is_none() && action.is_none() {
+            s.startle = Some((scene.now_ms, s.drawn));
+        }
+        s.still = if s.speed < MOVING && !fast { s.still + dt } else { 0.0 };
+        s.startle = s.startle.filter(|(t, _)| scene.now_ms - t < STARTLE.1);
         let auth_v = (p - s.last).length() / dt;
         s.last = p;
-        let held = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(_, at)| at);
+        let held = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(_, at)| at).or(s.startle.map(|(_, at)| at));
         let before = s.drawn;
         match held {
             Some(seat) => s.drawn = seat,
@@ -431,20 +454,29 @@ fn bodies(
             s.yaw = living_rules::steer::wrap(s.yaw);
         }
         let (speed, person, beast, yaw) = (s.speed, s.person, s.beast, s.yaw);
-        let rising = held.map(|_| s.rising.map_or(0.0, |(t, _)| t));
+        let rising = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(t, _)| t);
+        let startle = s.startle.map(|(t, _)| crate::combat::Action { clip: STARTLE.0, rate: 1.0, start_ms: t, hold: None, face: None });
+        let dir = Vec2::new(yaw.cos(), yaw.sin());
+        // A rigged creature is drawn at its file's size times its life stage's (it grows up), its
+        // body lying on the ground under its paws.
+        let size = if beast { conn.db.seen_characters().id().find(&id).map_or(1.0, |c| stage_scale(c.stage)) } else { 1.0 };
+        let (ground, tilt) = if beast {
+            let (want, y) = crate::bodies::lie_on(&s.kind, |x, z| island.height(x, z), p, dir, size);
+            s.tilt = s.tilt.slerp(want, 1.0 - (-dt * crate::bodies::TILT_RATE).exp());
+            (y, s.tilt)
+        } else {
+            (ground, Quat::IDENTITY)
+        };
         let Ok((mut tf, fitted, mut model, ch, mut motion, vis)) = q.get_mut(s.entity) else { continue };
         tf.translation.x = p.x;
         tf.translation.z = p.y;
-        let dir = Vec2::new(yaw.cos(), yaw.sin());
         tf.rotation = if person {
             Quat::from_rotation_y(yaw_of(dir) + PI)
         } else if beast {
-            Quat::from_rotation_y(yaw_of(dir))
+            tilt * Quat::from_rotation_y(yaw_of(dir))
         } else {
             Quat::from_rotation_y(-yaw)
         };
-        // A rigged creature is drawn at its file's size times its life stage's (it grows up).
-        let size = if beast { conn.db.seen_characters().id().find(&id).map_or(1.0, |c| stage_scale(c.stage)) } else { 1.0 };
         if beast {
             tf.scale = Vec3::splat(size);
         }
@@ -469,7 +501,7 @@ fn bodies(
         motion.speed = speed;
         motion.stride = ch.map_or(size, |c| c.stride);
         motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
-        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None }));
+        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None })).or(startle);
         motion.now_ms = scene.now_ms;
     }
 }
@@ -597,6 +629,12 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
 /// - `gesture:wave|nod|appraise[:ID]`: greet, or look someone over, through `human_act` as the
 ///   G, B and V keys do (`town.rs`), at character ID, else whom the keys would pick;
+/// - verbs (`verbs.rs`): `act:SKILL[:ITEM][@AIM]` sends an act as a list pick does (AIM is
+///   `nearest:KIND` for the nearest thing or creature of that kind, `id:N`, `self`, or nothing for
+///   what F aims at now; the log says whether the rules offered it, and it is sent either way);
+///   `menu:f[@AIM]|c|close|N` opens F's list (on AIM) or my own, closes it, or picks row N;
+///   `words:TEXT` enters words in the text box an act opened (write, found); `panel:inventory|
+///   know-how[:SKILL]|none` shows a panel (know-how with SKILL selected);
 /// - `sync:NAME`: until `<dir>/NAME.go` exists (an outside driver sets the scene: the hour, the
 ///   weather, where I stand), then delete it; a number in the file turns the view to that yaw;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
@@ -632,8 +670,7 @@ fn script(
     mut input: ResMut<Input>,
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
-    mut skills: ResMut<crate::combat::Scripted>,
-    mut gestures: ResMut<crate::town::Scripted>,
+    (mut skills, mut gestures, mut verbs): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>),
     (hud, loading): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>),
     target: Option<Res<crate::capture::Target>>,
     time: Res<Time>,
@@ -727,6 +764,27 @@ fn script(
         "gesture" => {
             let (name, whom) = arg.split_once(':').unwrap_or((arg, ""));
             gestures.press.push((name.to_string(), whom.to_string()));
+            true
+        }
+        "act" => {
+            let (what, at) = arg.split_once('@').unwrap_or((arg, ""));
+            let (skill, item) = what.split_once(':').unwrap_or((what, ""));
+            verbs.acts.push((skill.to_string(), item.to_string(), at.to_string()));
+            true
+        }
+        "menu" => {
+            verbs.menu.push(arg.to_string());
+            true
+        }
+        "words" => {
+            // The text box's words for an act that asked for them (as typed and Enter).
+            input.compose = None;
+            input.chat_open = false;
+            input.composed = Some(arg.to_string());
+            true
+        }
+        "panel" => {
+            verbs.panel.push(arg.to_string());
             true
         }
         "sync" => {

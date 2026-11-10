@@ -10,8 +10,16 @@
 //! - **Align (on request only):** tap the middle button, and the view turns until
 //!   the direction you face is straight ahead. The mouse cursor moves with the ground meanwhile,
 //!   so you keep facing the same spot (a fixed cursor would make the view keep turning).
-//! - **Context:** conversations frame both speakers, until you rotate or the talk ends; so does
-//!   a greeting (`town.rs`: my wave or nod, and the answer), for a few seconds.
+//! - **Context** ([`Context`]): the view eases in and frames you with whoever you are dealing
+//!   with, without turning, and eases back out when it is over:
+//!   - a fight you are in: you and your opponents (anyone whose blow or move was aimed at you, or
+//!     yours at them, in the last [`FIGHT_HOLD_MS`]), closer the tighter the fight;
+//!   - a conversation: both speakers, close;
+//!   - a gesture exchange (`town.rs`: my wave or nod and the answer, or someone's at me): both of
+//!     you, for a few seconds.
+//!
+//!   Turning the view yourself dismisses the framing until that context ends: your own camera
+//!   input always wins. It eases in over about 1.5 s and out over about 2.5 s; there are no cuts.
 //! - **Sight bound:** the view never pulls back further than about 2 × the sight radius, so
 //!   less sight (night) brings it in, along the same tilt toward the ground.
 
@@ -56,7 +64,8 @@ pub struct Rig {
     pub rotate_rate: f32,
     /// Most the view centre leans toward the cursor (metres), past a deadzone.
     pub lead: f32,
-    pub frame_talk: bool,
+    /// Frame conversations, greetings and fights ([`Context`]).
+    pub frame: bool,
     pub sight_bound: bool,
 }
 
@@ -70,7 +79,7 @@ impl Default for Rig {
             steer_rate: 90.0,
             rotate_rate: 90.0,
             lead: 2.5,
-            frame_talk: true,
+            frame: true,
             sight_bound: true,
         }
     }
@@ -85,8 +94,20 @@ pub struct Cam {
     /// Yaw the movement keys are relative to; it lags a turning camera while keys are held.
     control_yaw: f32,
     focus: Vec3,
-    talk: f32,
-    talk_dismissed: Option<u32>,
+    /// What the view frames now, and a context the player dismissed by turning the view.
+    pub context: Option<Context>,
+    dismissed: Option<Context>,
+    /// How long the current context has had no evidence (s).
+    lapsed: f32,
+    /// How far the view is framing (0–1), the framed view, and where the framed group's centre
+    /// is from my focus (both eased, so a change of context never cuts).
+    frame: f32,
+    frame_view: View,
+    frame_off: Vec3,
+    /// My opponents now, and when each last exchanged a blow or a move with me (display ms).
+    pub opponents: Vec<u32>,
+    fought: std::collections::HashMap<u32, f64>,
+    /// Whom I talk with or greet (the framed one), for the HUD.
     pub talk_partner: Option<u32>,
     pub cursor_ground: Option<Vec3>,
     pub shown: View,
@@ -136,10 +157,81 @@ pub fn spawn(mut commands: Commands) {
     ));
 }
 
+/// What the view frames besides me.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Context {
+    /// A fight I am in: me and [`Cam::opponents`].
+    Fight,
+    /// A conversation with someone.
+    Talk(u32),
+    /// A gesture exchange with someone: my greeting and its answer, or theirs at me.
+    Greet(u32),
+}
+
+/// A fight lasts this long after the last blow or move between me and an opponent (ms).
+pub const FIGHT_HOLD_MS: f64 = 4000.0;
+/// Opponents further than this (m) are left out of the frame.
+const FIGHT_REACH_M: f32 = 20.0;
+/// Framing eases in and out at these rates (1/s): about 1.5 s in, 2.5 s out.
+const FRAME_IN: f32 = 2.0;
+const FRAME_OUT: f32 = 1.2;
+/// A context outlasts its evidence by this (s), so a wave and its answer a moment later are one
+/// framing, not two.
+const CONTEXT_HOLD_S: f32 = 1.2;
+
+/// My opponents: whoever's move under way is aimed at me, whom mine is aimed at, and anyone I
+/// traded blows with (hit, missed, blocked, dodged) in the last [`FIGHT_HOLD_MS`]; alive, drawn
+/// and within [`FIGHT_REACH_M`].
+fn opponents(net: &Net, scene: &Scene, combat: &crate::combat::Combat, fought: &mut std::collections::HashMap<u32, f64>) -> Vec<u32> {
+    use living_rules::combat::seen;
+    use spacetimedb_sdk::Table;
+    let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else {
+        fought.clear();
+        return vec![];
+    };
+    let now = scene.now_ms;
+    let mut saw = |id: u32, t: f64| {
+        if id != 0 && id != me {
+            let e = fought.entry(id).or_insert(t);
+            *e = e.max(t);
+        }
+    };
+    for e in &combat.recent {
+        if matches!(e.row.kind, seen::HIT | seen::MISS | seen::BLOCKED | seen::DODGED | seen::RELEASE) {
+            if e.row.actor == me {
+                saw(e.row.target, e.seen_ms);
+            } else if e.row.target == me {
+                saw(e.row.actor, e.seen_ms);
+            }
+        }
+    }
+    for f in conn.db.seen_fighters().iter().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120) {
+        if f.target == me {
+            saw(f.id, now);
+        } else if f.id == me {
+            saw(f.target, now);
+        }
+    }
+    let at = |id: u32| scene.shown.get(&id).map(|s| s.0);
+    let mine = at(me);
+    fought.retain(|id, t| now - *t < FIGHT_HOLD_MS && !combat.deaths.contains_key(id) && at(*id).zip(mine).is_some_and(|(p, m)| p.distance(m) < FIGHT_REACH_M));
+    let mut ids: Vec<u32> = fought.keys().copied().collect();
+    ids.sort_unstable();
+    ids
+}
+
+/// Whom I am in a gesture exchange with: whom I just greeted, who answered me, or who greeted me,
+/// latest first, within 12 m.
+fn greet_partner(net: &Net, scene: &Scene, town: Option<&crate::town::Town>) -> Option<u32> {
+    let (town, me) = (town?, net.my_id?);
+    let (mine, _) = scene.shown.get(&me)?;
+    let near = |id: u32| scene.shown.get(&id).is_some_and(|(p, _)| p.distance(*mine) < 12.0);
+    town.answered.iter().chain(town.greeted_by.iter()).map(|(id, at)| (*id, *at)).chain(town.greeting).filter(|(id, _)| near(*id)).max_by(|a, b| a.1.total_cmp(&b.1)).map(|(id, _)| id)
+}
+
 /// Who I am talking with: the latest speaker I heard in the last 8 s within 8 m, else (while
-/// typing) the nearest person within 6 m, else whom I just greeted or who just answered my
-/// greeting, within 8 m.
-fn talk_partner(net: &Net, scene: &Scene, input: &Input, town: Option<&crate::town::Town>) -> Option<u32> {
+/// typing) the nearest person within 6 m.
+fn talk_partner(net: &Net, scene: &Scene, input: &Input) -> Option<u32> {
     let (conn, me) = (net.conn.as_ref()?, net.my_id?);
     let (mine, _) = scene.shown.get(&me)?;
     let near = |id: u32, r: f32| scene.shown.get(&id).is_some_and(|(p, _)| p.distance(*mine) < r);
@@ -163,8 +255,7 @@ fn talk_partner(net: &Net, scene: &Scene, input: &Input, town: Option<&crate::to
                 .map(|(id, _)| id)
         })
         .flatten();
-    let greeted = town.and_then(|t| t.answered.iter().map(|(id, at)| (*id, *at)).chain(t.greeting).filter(|(id, _)| near(*id, 8.0)).max_by(|a, b| a.1.total_cmp(&b.1)).map(|(id, _)| id));
-    heard.or(typing).or(greeted)
+    heard.or(typing)
 }
 
 fn diff(want: f32, from: f32) -> f32 {
@@ -188,7 +279,7 @@ pub fn follow(
     mut q: Query<(&mut Transform, &mut Projection, &Camera, &GlobalTransform, &mut DistanceFog), With<Camera3d>>,
     mut windows: Query<&mut Window>,
     ui: Res<crate::hud::UiWants>,
-    town: Option<Res<crate::town::Town>>,
+    (town, combat): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>),
     time: Res<Time>,
 ) {
     let Ok((mut tf, mut proj, camera, gtf, mut fog)) = q.single_mut() else { return };
@@ -280,20 +371,41 @@ pub fn follow(
     // (Haigh-Hutchinson: never change the control reference instantly).
     cam.control_yaw = if input.moving { cam.control_yaw + diff(cam.shown_yaw, cam.control_yaw) * ease(2.0) } else { cam.shown_yaw };
 
-    // Conversations: frame both speakers; rotating dismisses the framing until the talk ends.
-    let partner = if r.frame_talk { talk_partner(&net, &scene, &input, town.as_deref()) } else { None };
-    if partner != cam.talk_partner {
-        cam.talk_partner = partner;
-        if partner.is_none() {
-            cam.talk_dismissed = None;
+    // Context: a fight I am in, else a conversation, else a gesture exchange. Turning the view
+    // dismisses it until that context ends.
+    let mut fought = std::mem::take(&mut cam.fought);
+    cam.opponents = match combat.as_deref() {
+        Some(c) if r.frame => opponents(&net, &scene, c, &mut fought),
+        _ => vec![],
+    };
+    cam.fought = fought;
+    let context = if !r.frame {
+        None
+    } else if !cam.opponents.is_empty() {
+        Some(Context::Fight)
+    } else if let Some(id) = talk_partner(&net, &scene, &input) {
+        Some(Context::Talk(id))
+    } else {
+        greet_partner(&net, &scene, town.as_deref()).map(Context::Greet)
+    };
+    // A context with no evidence lasts a moment longer (unless another takes its place).
+    cam.lapsed = if context.is_none() && cam.context.is_some() { cam.lapsed + dt } else { 0.0 };
+    let context = if context.is_none() && cam.lapsed < CONTEXT_HOLD_S { cam.context } else { context };
+    if context != cam.context {
+        debug!("camera: context {:?} -> {:?} (opponents {:?})", cam.context, context, cam.opponents);
+        cam.context = context;
+        if context.is_none() || context != cam.dismissed {
+            cam.dismissed = None;
         }
     }
-    if manual != 0.0 && partner.is_some() {
-        cam.talk_dismissed = partner;
+    if manual != 0.0 && context.is_some() {
+        cam.dismissed = context;
     }
-    let framing = partner.is_some() && cam.talk_dismissed != partner;
-    cam.talk += ((framing as u8 as f32) - cam.talk) * ease(3.0);
-
+    let framing = context.filter(|c| cam.dismissed != Some(*c));
+    cam.talk_partner = match framing {
+        Some(Context::Talk(id) | Context::Greet(id)) => Some(id),
+        _ => None,
+    };
     // The view, brought in along the tilt toward the ground when sight is short.
     let mut v = r.view;
     if r.sight_bound {
@@ -303,7 +415,39 @@ pub fn follow(
             v = r.view.lerp(r.close, t);
         }
     }
-    let v = v.lerp(View { pitch: 36.0, distance: 8.0, fov: 45.0 }, cam.talk);
+    // Who is framed with me (sim positions), and the view that holds us.
+    let me_at = net.my_id.and_then(|id| scene.shown.get(&id)).map(|s| s.0);
+    let group: Vec<Vec2> = match framing {
+        Some(Context::Fight) => cam.opponents.iter().filter_map(|id| scene.shown.get(id).map(|s| s.0)).collect(),
+        Some(Context::Talk(id) | Context::Greet(id)) => scene.shown.get(&id).map(|s| s.0).into_iter().collect(),
+        None => vec![],
+    };
+    // Framing needs someone drawn to frame with me.
+    let to = (framing.is_some() && me_at.is_some() && !group.is_empty()) as u8 as f32;
+    cam.frame += (to - cam.frame) * ease(if to > cam.frame { FRAME_IN } else { FRAME_OUT });
+    if let (Some(m), false) = (me_at, group.is_empty()) {
+        let all = || group.iter().copied().chain(std::iter::once(m));
+        let (lo, hi) = all().fold((m, m), |(lo, hi), p| (lo.min(p), hi.max(p)));
+        let centre = (lo + hi) * 0.5;
+        let spread = all().map(|p| p.distance(centre)).fold(0.0, f32::max);
+        let want = match framing {
+            Some(Context::Fight) => View { pitch: 34.0, distance: (8.0 + 1.8 * spread).clamp(10.0, 18.0), fov: 50.0 },
+            Some(Context::Greet(_)) => View { pitch: 32.0, distance: (7.5 + 0.9 * 2.0 * spread).clamp(9.0, 15.0), fov: 48.0 },
+            _ => View { pitch: 36.0, distance: 8.0, fov: 45.0 },
+        };
+        // A new context starts from its own view; one under way eases toward the new spread.
+        if cam.frame < 0.02 {
+            cam.frame_view = want;
+        } else {
+            cam.frame_view = cam.frame_view.lerp(want, ease(2.5));
+        }
+        let off = Vec3::new(centre.x - m.x, 0.0, centre.y - m.y);
+        cam.frame_off = if cam.frame < 0.02 { off } else { cam.frame_off + (off - cam.frame_off) * ease(3.0) };
+    }
+    // Framing only ever brings the view in (never further than sight allows).
+    let base = v;
+    let mut v = base.lerp(cam.frame_view, cam.frame);
+    v.distance = v.distance.min(base.distance);
     cam.shown = v;
 
     if let Some(me) = target.0 {
@@ -313,16 +457,11 @@ pub fn follow(
             let n = (c - size2 / 2.0) / (size2 / 2.0);
             let k = ((n.length() - 0.3) / 0.5).clamp(0.0, 1.0);
             let dir = (right * n.x - up * n.y).normalize_or_zero();
-            Vec3::new(dir.x, 0.0, dir.y) * k * k * (3.0 - 2.0 * k) * r.lead * s * (1.0 - cam.talk)
+            Vec3::new(dir.x, 0.0, dir.y) * k * k * (3.0 - 2.0 * k) * r.lead * s * (1.0 - cam.frame)
         });
-        // Look at about chest height.
-        let mut want = me + lean + Vec3::Y * 1.2 * s;
-        // The partner on the tile ground; on a land world (`live.rs`, no tile ground) at my
-        // height, as they stand within a few metres.
-        let partner = cam.talk_partner.and_then(|id| scene.shown.get(&id)).map(|(p, _)| if scene.ready() { scene.at3(p.x, p.y) } else { Vec3::new(p.x, me.y, p.y) });
-        if let Some(p) = partner {
-            want = want.lerp((me + p) * 0.5 + Vec3::Y * 1.3, cam.talk);
-        }
+        // Look at about chest height, toward the framed group's centre as far as framing goes
+        // (at my height: the others stand within a few metres).
+        let want = me + lean + Vec3::Y * 1.2 * s + cam.frame_off * cam.frame;
         let snap = cam.focus.distance(want) > 40.0;
         cam.focus = if snap { want } else { cam.focus + (want - cam.focus) * ease(8.0) };
     }

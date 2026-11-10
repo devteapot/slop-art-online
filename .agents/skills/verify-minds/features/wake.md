@@ -22,5 +22,5 @@ The island module builds in `.local/living/target-wake-island`. `LIVING_SEED=isl
 
 ## Gotchas
 
-- The ring a resident kept before waking is not internalized yet (phase 2): this service does not read `prior`.
-- Without Neo4j there is no store, so recall and the ring's internalization are not exercised.
+- Without Neo4j there is no store: the identity from facts is made (a persona row) but the ring is not taken in. The whole mind-making flow, with a store, is verify-knowledge's `woken_mind.py` ([woken minds](../../verify-knowledge/features/woken-minds.md)).
+- `LIVING_ONLY` names the resident here; labs and trials use `LIVING_ONLY=woken`. Woken residents take the models file's `woken` route; this case's models file has none, so it uses the default.

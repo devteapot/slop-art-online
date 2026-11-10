@@ -368,7 +368,7 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
     }
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        let _ = perceive::speak(ctx, actor, &say, say_to, now);
+        let _ = perceive::speak(ctx, actor, &say, say_to, true, now);
     }
     Ok(())
 }
@@ -393,7 +393,7 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
     }
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        perceive::speak(ctx, actor, &say, say_to, now)?;
+        perceive::speak(ctx, actor, &say, say_to, true, now)?;
     }
     Ok(())
 }
@@ -527,10 +527,6 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
         } else {
             ctx.db.persona().insert(row);
         }
-    }
-    if !update.relations.is_empty() || update.replace {
-        // Whom it has feelings about is whom it knows by name.
-        crate::perception::knowledge_changed(Some(actor));
     }
     for r in update.relations.into_iter().take(32) {
         if r.other == actor || ctx.db.character().id().find(r.other).is_none() {

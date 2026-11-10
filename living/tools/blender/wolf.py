@@ -1,4 +1,5 @@
-"""A stylised wolf with a procedural quadruped rig and keyed clips, for the game client.
+"""A stylised wolf with a procedural quadruped rig and keyed clips, for the game client
+(`quadruped.py` is the rig, keying and export machinery it shares with the deer).
 
     blender -b -P living/tools/blender/wolf.py -- --out living/game/assets/lookdev/anim/wolf.glb
         [--summary wolf.clips.json] [--seed 1]
@@ -28,37 +29,14 @@ detected from paw height and world speed, `paw_markers`); the gaits all bring th
 down at phase 0 (`sync: "hl"`), so the game blends them at one shared phase.
 """
 
-import argparse
-import json
 import math
+import os
 import sys
 
-import bmesh
-import bpy
-from mathutils import Matrix, Vector
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-FPS = 30
-
-
-def P(f, s, u):
-    """The wolf's frame (forward, left, up) in Blender's: it faces -Y, so glTF +Z."""
-    return Vector((s, -f, u))
-
-
-def lerp(a, b, t):
-    return a + (b - a) * t
-
-
-def smooth(t):
-    t = min(1.0, max(0.0, t))
-    return t * t * (3 - 2 * t)
-
-
-def bump(t, a, b):
-    """0 outside a..b, rising and falling smoothly inside."""
-    if t <= a or t >= b:
-        return 0.0
-    return math.sin(math.pi * (t - a) / (b - a))
+import bmesh  # noqa: E402
+from quadruped import LEGS, P, Part, Skeleton, args, build, bump, joint, lerp, lerp_c, loft, path_stations, smooth  # noqa: E402
 
 
 # ---------------------------------------------------------------------------------------------
@@ -73,180 +51,16 @@ REST = {
     "shoulder": (0.26, 0.55), "elbow": (0.17, 0.37), "wrist": (0.21, 0.12), "fpaw": (0.26, 0.015),
     "hip": (-0.40, 0.57), "stifle": (-0.29, 0.37), "hock": (-0.45, 0.16), "hpaw": (-0.41, 0.015),
 }
+SK = Skeleton(REST, SIDE, centre=(-0.09, 0.66))
+body_pose, leg_points, neutral_paw, stand = SK.body_pose, SK.leg_points, SK.neutral_paw, SK.stand
 
 
-def dist2(a, b):
-    return math.hypot(a[0] - b[0], a[1] - b[1])
-
-
-LEN = {
-    "upper": dist2(REST["shoulder"], REST["elbow"]), "fore": dist2(REST["elbow"], REST["wrist"]),
-    "thigh": dist2(REST["hip"], REST["stifle"]), "shin": dist2(REST["stifle"], REST["hock"]),
-}
-# Paw offsets from the wrist / hock at rest (pastern and metatarsus).
-PASTERN = (REST["fpaw"][0] - REST["wrist"][0], REST["fpaw"][1] - REST["wrist"][1])
-META = (REST["hpaw"][0] - REST["hock"][0], REST["hpaw"][1] - REST["hock"][1])
-
-LEGS = {  # name: (front, side sign)
-    "fl": (True, 1.0), "fr": (True, -1.0), "hl": (False, 1.0), "hr": (False, -1.0),
-}
-
-# Bones: name -> (head joint, tail joint, parent). Joint names with a leg prefix are per leg.
-BONES = [
-    ("root", None, None, None),
-    ("hips", "pelvis", "mid", "root"),
-    ("spine", "mid", "chest", "hips"),
-    ("chest", "chest", "neck", "spine"),
-    ("neck", "neck", "skull", "chest"),
-    ("head", "skull", "nose", "neck"),
-    ("jaw", "jaw0", "jaw1", "head"),
-    ("tail1", "tail0", "tail1", "hips"),
-    ("tail2", "tail1", "tail2", "tail1"),
-    ("tail3", "tail2", "tail3", "tail2"),
-]
-for leg, (front, _) in LEGS.items():
-    if front:
-        BONES += [(f"upper.{leg}", f"{leg}.shoulder", f"{leg}.elbow", "chest"),
-                  (f"fore.{leg}", f"{leg}.elbow", f"{leg}.wrist", f"upper.{leg}"),
-                  (f"paw.{leg}", f"{leg}.wrist", f"{leg}.fpaw", f"fore.{leg}")]
-    else:
-        BONES += [(f"thigh.{leg}", f"{leg}.hip", f"{leg}.stifle", "hips"),
-                  (f"shin.{leg}", f"{leg}.stifle", f"{leg}.hock", f"thigh.{leg}"),
-                  (f"paw.{leg}", f"{leg}.hock", f"{leg}.hpaw", f"shin.{leg}")]
-
-
-def rot2(v, a):
-    c, s = math.cos(a), math.sin(a)
-    return (v[0] * c - v[1] * s, v[0] * s + v[1] * c)
-
-
-def ik2(root, target, a, b, forward_knee):
-    """Two-bone IK in a leg's (forward, up) plane: the middle joint, bent forward or back."""
-    dx, du = target[0] - root[0], target[1] - root[1]
-    d = math.hypot(dx, du)
-    d = min(max(d, abs(a - b) + 1e-3), a + b - 1e-4)
-    ex, eu = dx / max(math.hypot(dx, du), 1e-6), du / max(math.hypot(dx, du), 1e-6)
-    x = (a * a - b * b + d * d) / (2 * d)
-    y = math.sqrt(max(a * a - x * x, 0.0))
-    px, pu = -eu, ex  # perpendicular toward forward for a downward leg
-    if not forward_knee:
-        px, pu = -px, -pu
-    return (root[0] + ex * x + px * y, root[1] + eu * x + pu * y)
-
-
-class Pose:
-    """Joint points of one frame, in the wolf's frame (f, s, u)."""
-
-    def __init__(self):
-        self.pt = {}
-
-    def set(self, name, f, u, s=0.0):
-        self.pt[name] = (f, s, u)
-
-
-def body_pose(bob=0.0, pitch=0.0, lean=0.0, flex=0.0, shift=0.0, head=(0.0, 0.0), head_turn=0.0, jaw=0.0, tail=(0.0, 0.0), crouch=0.0):
-    """The torso, head and tail: `bob` lifts it, `pitch` tips it nose-down (+, radians) about
-    its middle, `flex` arches the back (+) or stretches it (-), `shift` slides it forward,
-    `head` (lower, reach) moves the head down and out, `head_turn` turns it left (radians),
-    `jaw` opens the mouth (radians), `tail` (raise, sway) in radians, `crouch` lowers the hind
-    and front ends (m). Returns a Pose without legs and a function placing body-fixed points."""
-    p = Pose()
-    cf, cu = -0.09, 0.66
-
-    def place(f, u, lift=0.0):
-        rf, ru = rot2((f - cf, u - cu), -pitch)
-        return (cf + rf + shift, cu + ru + bob + lift - crouch)
-
-    for k in ("pelvis", "mid", "chest", "neck", "tail0"):
-        f, u = REST[k]
-        lift = {"mid": flex * 0.06, "pelvis": -flex * 0.02, "chest": -flex * 0.02}.get(k, 0.0)
-        if k in ("pelvis", "tail0"):
-            f += flex * 0.05
-        if k == "chest":
-            f -= flex * 0.05
-        p.set(k, *place(f, u, lift))
-    # Neck and head: lowered (`head[0]`) and reaching out (`head[1]`), turned by head_turn.
-    nf, _, nu = p.pt["neck"]
-    sf, su = REST["skull"][0] - REST["neck"][0], REST["skull"][1] - REST["neck"][1]
-    neck_a = -head[0] * 0.9 - pitch
-    sf, su = rot2((sf * (1 + head[1]), su), neck_a)
-    ts = math.sin(head_turn) * math.hypot(sf, su)
-    sf *= math.cos(head_turn) ** 0.5
-    p.set("skull", nf + sf, nu + su, ts)
-    kf, ks, ku = p.pt["skull"]
-    head_a = -head[0] * 0.6 - pitch
-    for k in ("nose", "jaw0", "jaw1"):
-        df, du = REST[k][0] - REST["skull"][0], REST[k][1] - REST["skull"][1]
-        if k == "jaw1":
-            # The jaw swings down about its hinge (jaw0).
-            jf, ju = REST["jaw0"][0] - REST["skull"][0], REST["jaw0"][1] - REST["skull"][1]
-            rf, ru = rot2((df - jf, du - ju), -jaw)
-            df, du = jf + rf, ju + ru
-        df, du = rot2((df, du), head_a)
-        p.set(k, kf + df * math.cos(head_turn), ku + du, ks + df * math.sin(head_turn))
-    # Tail: hanging in a curve, raised and swayed.
-    tf, _, tu = p.pt["tail0"]
-    prev = (tf, 0.0, tu)
-    for i, k in enumerate(("tail1", "tail2", "tail3")):
-        a, b = REST[("tail0", "tail1", "tail2")[i]], REST[k]
-        df, du = rot2((b[0] - a[0], b[1] - a[1]), tail[0] * (0.6 + 0.4 * i) - pitch)
-        ds = math.sin(tail[1] * (0.5 + 0.5 * i)) * abs(df)
-        prev = (prev[0] + df, prev[1] + ds, prev[2] + du)
-        p.pt[k] = prev
-    return p, place
-
-
-def leg_points(p, place, leg, paw, lift_paw=0.0, fold=0.0):
-    """Solve one leg to put its paw (f, u) at `paw`; `fold` bends the wrist or hock (radians,
-    swing phase), `lift_paw` raises the toe. Writes the leg's joints into the pose."""
-    front, sgn = LEGS[leg]
-    s = SIDE * sgn
-    if front:
-        root = place(*REST["shoulder"])
-        off = rot2(PASTERN, fold)
-        wrist = (paw[0] - off[0], paw[1] - off[1])
-        elbow = ik2(root, wrist, LEN["upper"], LEN["fore"], forward_knee=False)
-        names = ("shoulder", "elbow", "wrist", "fpaw")
-        pts = (root, elbow, wrist, paw)
-    else:
-        root = place(*REST["hip"])
-        off = rot2(META, -fold)
-        hock = (paw[0] - off[0], paw[1] - off[1])
-        stifle = ik2(root, hock, LEN["thigh"], LEN["shin"], forward_knee=True)
-        names = ("hip", "stifle", "hock", "hpaw")
-        pts = (root, stifle, hock, paw)
-    for n, q in zip(names, pts):
-        p.set(f"{leg}.{n}", q[0], q[1], s)
-
-
-def neutral_paw(leg):
-    return REST["fpaw"] if LEGS[leg][0] else REST["hpaw"]
+def gait(t, speed, period, offsets, duty, lift, body):
+    return SK.gait(t, speed, period, offsets, duty, lift, body)
 
 
 # ---------------------------------------------------------------------------------------------
 # Clips: name -> (seconds, loop, natural speed m/s or None, function(t in 0..1) -> Pose)
-
-
-def gait(t, speed, period, offsets, duty, lift, body):
-    """A cyclic gait at `speed` m/s: each leg's paw is planted for `duty` of the cycle and
-    moves back under the body at exactly `speed`, then swings forward."""
-    p, place = body
-    reach = speed * period * duty  # ground covered while a paw is down
-    for leg, off in offsets.items():
-        ph = (t + off) % 1.0
-        f0, u0 = neutral_paw(leg)
-        if ph < duty:
-            x = ph / duty
-            f = f0 + reach * (0.5 - x)
-            paw, fold = (f, u0), 0.0
-        else:
-            x = (ph - duty) / (1 - duty)
-            e = smooth(x)
-            f = f0 + reach * (e - 0.5)
-            h = lift * math.sin(math.pi * x) ** 0.8
-            paw, fold = (f, u0 + h), 1.1 * math.sin(math.pi * min(1.0, x * 1.3))
-        leg_points(p, place, leg, paw, fold=fold)
-    return p
 
 
 def clip_idle(t):
@@ -282,13 +96,6 @@ def clip_run(t):
     body = body_pose(bob=0.05 * math.sin(a + 0.6) + 0.01, pitch=-0.07 * math.sin(a), flex=flex, head=(0.25 - 0.08 * math.sin(a), 0.15),
                      tail=(0.35, 0.05 * math.sin(a)))
     return gait(t, RUN, PERIOD["run"], {"hl": 0.0, "hr": -0.09, "fr": -0.42, "fl": -0.52}, 0.3, 0.16, body)
-
-
-def stand(body):
-    p, place = body
-    for leg in LEGS:
-        leg_points(p, place, leg, neutral_paw(leg))
-    return p
 
 
 BITE_S, BITE_SNAP = 0.85, 0.55
@@ -352,20 +159,7 @@ def clip_death(t):
         # The legs fold as it sinks, then lie loose and a little straighter.
         leg_points(p, place, leg, (f + (0.06 if LEGS[leg][0] else -0.05) * limp, u + 0.12 * buckle * (1 - limp) + 0.05 * limp), fold=0.5 * buckle * (1 - limp))
     # Roll onto the right side about the forward axis, settling the body on the ground.
-    ang = roll * math.pi / 2 * 0.97
-    pivot = 0.0
-    out = Pose()
-    for k, (f, sd, u) in p.pt.items():
-        uu = u - pivot
-        s2 = sd * math.cos(ang) - uu * math.sin(ang)
-        u2 = sd * math.sin(ang) + uu * math.cos(ang) + pivot
-        out.pt[k] = (f, s2, u2)
-    # Keep the lowest point on the ground and the body centred where it stood.
-    low = min(q[2] for q in out.pt.values())
-    cs = out.pt["mid"][1]
-    for k, (f, sd, u) in out.pt.items():
-        out.pt[k] = (f, sd - cs * roll, u - low * roll)
-    return out
+    return SK.lie_down(p, roll)
 
 
 WALK, TROT, RUN = 1.3, 3.4, 7.0
@@ -382,64 +176,6 @@ CLIPS = {
 }
 
 
-def rest_pose():
-    return stand(body_pose())
-
-
-# ---------------------------------------------------------------------------------------------
-# Armature
-
-
-def bone_matrix(head, tail):
-    """Armature-space matrix of a bone from its head and tail (Blender coords): Y along it, X
-    toward the wolf's left where it can be."""
-    y = (tail - head).normalized()
-    side = Vector((1, 0, 0))
-    x = side - y * side.dot(y)
-    if x.length < 1e-4:
-        x = Vector((0, 0, 1)) - y * y.z
-    x.normalize()
-    z = x.cross(y)
-    m = Matrix((x, y, z)).transposed().to_4x4()
-    m.translation = head
-    return m
-
-
-def joint(pose, name):
-    f, s, u = pose.pt[name]
-    return P(f, s, u)
-
-
-def bone_ends(pose, b):
-    _, h, t, _ = b
-    if h is None:
-        return P(0, 0, 0), P(0.2, 0, 0)
-    return joint(pose, h), joint(pose, t)
-
-
-def make_armature(rest):
-    arm_data = bpy.data.armatures.new("WolfRig")
-    arm = bpy.data.objects.new("Wolf", arm_data)
-    bpy.context.collection.objects.link(arm)
-    bpy.context.view_layer.objects.active = arm
-    bpy.ops.object.mode_set(mode="EDIT")
-    ebs = {}
-    for b in BONES:
-        name, _, _, parent = b
-        head, tail = bone_ends(rest, b)
-        eb = arm_data.edit_bones.new(name)
-        eb.head, eb.tail = head, tail
-        eb.matrix = bone_matrix(head, tail)
-        eb.length = (tail - head).length
-        eb.use_deform = name != "root"
-        if parent:
-            eb.parent = ebs[parent]
-            eb.use_connect = False
-        ebs[name] = eb
-    bpy.ops.object.mode_set(mode="OBJECT")
-    return arm
-
-
 # ---------------------------------------------------------------------------------------------
 # Mesh
 
@@ -450,51 +186,6 @@ SADDLE = (0.27, 0.26, 0.25)
 PALE = (0.84, 0.80, 0.72)
 DARK = (0.08, 0.07, 0.07)
 EYE = (0.85, 0.62, 0.20)
-
-
-def loft(bm, stations, sides=8, cap0=True, cap1=True, phase=0.0):
-    """Rings at `stations` [(centre Vector, along Vector, half width, half height)], joined
-    into a tube. Rings lie across `along`; width runs along the wolf's side (X)."""
-    rings = []
-    for c, along, w, h in stations:
-        a = along.normalized()
-        x = Vector((1, 0, 0)) - a * a.x
-        if x.length < 1e-3:
-            x = Vector((0, 1, 0)) - a * a.y
-        x.normalize()
-        y = a.cross(x).normalized()
-        ring = []
-        for i in range(sides):
-            t = 2 * math.pi * (i + phase) / sides
-            ct, st = math.cos(t), math.sin(t)
-            # A soft superellipse: fuller than an ellipse, so the low-poly body reads as mass.
-            r = (abs(ct) ** 2.6 + abs(st) ** 2.6) ** (-1 / 2.6)
-            ring.append(bm.verts.new(c + x * (ct * w * r) + y * (st * h * r)))
-        rings.append(ring)
-    faces = []
-    for r0, r1 in zip(rings, rings[1:]):
-        for i in range(sides):
-            j = (i + 1) % sides
-            faces.append(bm.faces.new((r0[i], r0[j], r1[j], r1[i])))
-    if cap0:
-        faces.append(bm.faces.new(list(reversed(rings[0]))))
-    if cap1:
-        faces.append(bm.faces.new(rings[-1]))
-    return [v for r in rings for v in r], faces
-
-
-def path_stations(points, sizes):
-    """Stations along a polyline of Vectors with (w, h) per point."""
-    out = []
-    for i, (c, (w, h)) in enumerate(zip(points, sizes)):
-        a = points[min(i + 1, len(points) - 1)] - points[max(i - 1, 0)]
-        out.append((c, a, w, h))
-    return out
-
-
-class Part:
-    def __init__(self, bm, verts, faces, bones, color):
-        self.verts, self.faces, self.bones, self.color = verts, faces, bones, color
 
 
 def build_mesh(rest):
@@ -576,212 +267,14 @@ def build_mesh(rest):
     return bm, parts
 
 
-def lerp_c(a, b, t):
-    t = min(1.0, max(0.0, t))
-    return tuple(x + (y - x) * t for x, y in zip(a, b))
-
-
-def seg_dist(p, a, b):
-    ab = b - a
-    t = max(0.0, min(1.0, (p - a).dot(ab) / max(ab.dot(ab), 1e-9)))
-    return (p - (a + ab * t)).length
-
-
-def make_mesh(rest, arm):
-    bm, parts = build_mesh(rest)
-    col = bm.loops.layers.color.new("Color")
-    for part in parts:
-        for fc in part.faces:
-            fc.smooth = True
-            for loop in fc.loops:
-                loop[col] = (*part.color(loop.vert.co, fc.normal), 1.0)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
-    me = bpy.data.meshes.new("WolfBody")
-    # Weights from each part's own bones, by distance to their segments.
-    ends = {b[0]: bone_ends(rest, b) for b in BONES}
-    weights = {}
-    for part in parts:
-        for v in part.verts:
-            ds = [(seg_dist(v.co, *ends[b]), b) for b in part.bones]
-            ds.sort()
-            ws = [(1.0 / (d + 0.015) ** 4, b) for d, b in ds[:3]]
-            tot = sum(w for w, _ in ws)
-            weights[v] = [(w / tot, b) for w, b in ws if w / tot > 0.02]
-    bm.verts.index_update()
-    vw = {v.index: w for v, w in weights.items()}
-    bm.to_mesh(me)
-    bm.free()
-    # The exporter writes the active colour attribute (export_vertex_color="ACTIVE").
-    me.color_attributes.active_color = me.color_attributes["Color"]
-    me.color_attributes.render_color_index = me.color_attributes.active_color_index
-    obj = bpy.data.objects.new("WolfBody", me)
-    bpy.context.collection.objects.link(obj)
-    mat = bpy.data.materials.new("Body")
-    mat.use_nodes = True
-    bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
-    bsdf.inputs["Base Color"].default_value = (1, 1, 1, 1)
-    bsdf.inputs["Roughness"].default_value = 0.9
-    me.materials.append(mat)
-    groups = {b[0]: obj.vertex_groups.new(name=b[0]) for b in BONES if b[0] != "root"}
-    for i, ws in vw.items():
-        tot = sum(w for w, _ in ws)
-        for w, b in ws:
-            groups[b].add([i], w / tot, "REPLACE")
-    obj.parent = arm
-    mod = obj.modifiers.new("Rig", "ARMATURE")
-    mod.object = arm
-    return obj
-
-
-# ---------------------------------------------------------------------------------------------
-# Keying
-
-
-def key_clip(arm, name, seconds, fn, loop):
-    n = max(2, round(seconds * FPS))
-    frames = n if loop else n + 1
-    rest = {b.name: b.matrix_local.copy() for b in arm.data.bones}
-    parent = {b[0]: b[3] for b in BONES}
-    act = bpy.data.actions.new(name)
-    arm.animation_data_create()
-    arm.animation_data.action = act
-    seq = {b[0]: [] for b in BONES}
-    for i in range(frames + (1 if loop else 0)):
-        t = (i % n) / n if loop else i / n
-        pose = fn(t)
-        M = {}
-        for b in BONES:
-            head, tail = bone_ends(pose, b)
-            M[b[0]] = bone_matrix(head, tail)
-        for b in BONES:
-            bn = b[0]
-            par = parent[bn]
-            if par:
-                local = (M[par] @ rest[par].inverted() @ rest[bn]).inverted() @ M[bn]
-            else:
-                local = rest[bn].inverted() @ M[bn]
-            seq[bn].append(local)
-    for bn, mats in seq.items():
-        pb = arm.pose.bones[bn]
-        pb.rotation_mode = "QUATERNION"
-        qs, ls = [], []
-        prev = None
-        for m in mats:
-            q = m.to_quaternion()
-            if prev is not None and prev.dot(q) < 0:
-                q = -q
-            prev = q
-            qs.append(q)
-            ls.append(m.to_translation())
-        for path, comps in ((pb.path_from_id("rotation_quaternion"), [[q.w for q in qs], [q.x for q in qs], [q.y for q in qs], [q.z for q in qs]]),
-                            (pb.path_from_id("location"), [[v.x for v in ls], [v.y for v in ls], [v.z for v in ls]])):
-            for k, comp in enumerate(comps):
-                fc = act.fcurve_ensure_for_datablock(arm, path, index=k, group_name=bn)
-                fc.keyframe_points.add(len(comp))
-                fc.keyframe_points.foreach_set("co", [x for f, v in enumerate(comp) for x in (f, v)])
-                for kp in fc.keyframe_points:
-                    kp.interpolation = "LINEAR"
-                fc.update()
-    arm.animation_data.action = None
-    track = arm.animation_data.nla_tracks.new()
-    track.name = name
-    strip = track.strips.new(name, 0, act)
-    strip.name = name
-    act.use_fake_user = True
-    return len(seq["root"])
-
-
-def paw_slide(fn, speed, period):
-    """How far a planted paw drifts (m) between samples, at worst: its world-space travel while it
-    is on the ground (within 2 mm of its rest height), against the body moving at `speed`."""
-    worst = 0.0
-    n = 240
-    for leg in LEGS:
-        name = f"{leg}.{'fpaw' if LEGS[leg][0] else 'hpaw'}"
-        prev = None
-        for i in range(n + 1):
-            t = i / n
-            f, _, u = fn(t).pt[name]
-            world = f + speed * period * t
-            ground = REST["fpaw" if LEGS[leg][0] else "hpaw"][1] + 0.002
-            if u < ground and prev is not None and prev[1] < ground:
-                worst = max(worst, abs(world - prev[0]))
-            prev = (world, u)
-    return worst
-
-
-def paw_markers(fn, seconds, speed, loop):
-    """Each paw's contact windows (normalised clip time), detected from the clip as baked: the paw
-    within 1 cm of its rest height and slower than 0.3 m/s in the world (the body moving at
-    `speed`). Loops' windows that cross the seam are split at 1. The gaits all bring the left hind
-    paw down at 0 (`gait`'s offsets), the phase the game syncs them on (`sync: "hl"`)."""
-    n = max(2, round(seconds * FPS))
-    frames = n if loop else n + 1
-    out = {}
-    for leg in LEGS:
-        name = f"{leg}.{'fpaw' if LEGS[leg][0] else 'hpaw'}"
-        rest_u = REST["fpaw" if LEGS[leg][0] else "hpaw"][1]
-        pts = []
-        for i in range(frames + 1):
-            f, _, u = fn((i % n) / n if loop else min(i, n) / n).pt[name]
-            pts.append((f + (speed or 0.0) * seconds * i / n, u))
-        down = []
-        for i in range(frames):
-            (f0, u0), (f1, _) = pts[i], pts[i + 1] if (loop or i + 1 < frames) else pts[i]
-            down.append(u0 - rest_u <= 0.01 and abs(f1 - f0) * FPS <= 0.3)
-        wins, i = [], 0
-        while i < frames:
-            if down[i]:
-                j = i
-                while j < frames and down[j]:
-                    j += 1
-                wins.append([i / n, min(j / n, 1.0)])
-                i = j
-            else:
-                i += 1
-        # A loop's window that runs to its end continues at 0: one contact, split at the seam.
-        out[leg] = [[round(a, 4), round(b, 4)] for a, b in wins]
-    return out
-
-
 def main():
-    argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--summary")
-    a = ap.parse_args(argv)
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    rest = rest_pose()
-    arm = make_armature(rest)
-    body = make_mesh(rest, arm)
-    withers = max(v.co.z for v in body.data.vertices if 0.1 < -v.co.y < 0.3)
-    summary = {"model": "wolf", "fps": FPS, "faces": "+Z", "shoulder_m": round(withers, 3), "clips": []}
-    for name, (seconds, loop, speed, fn) in CLIPS.items():
-        frames = key_clip(arm, name, seconds, fn, loop)
-        rec = {"name": name, "seconds": round(seconds, 3), "loop": loop, "frames": frames}
-        rec["contacts"] = paw_markers(fn, seconds, speed, loop)
-        if speed:
-            rec["sync"] = "hl"
-        if speed:
-            rec["speed"] = speed
-            rec["paw_slide_m"] = round(paw_slide(fn, speed, seconds), 4)
+    a = args()
+
+    def extra(name, rec):
         if name == "bite":
             rec["snap_s"] = BITE_SNAP
-        summary["clips"].append(rec)
-        print(f"CLIP {name}: {seconds:.2f} s, {frames} keys" + (f", {speed} m/s, paw slide {rec['paw_slide_m'] * 100:.1f} cm" if speed else ""))
-    tris = sum(len(p.vertices) - 2 for p in body.data.polygons)
-    summary["triangles"] = tris
-    summary["bones"] = len(BONES) - 1
-    bpy.ops.object.select_all(action="SELECT")
-    bpy.ops.export_scene.gltf(
-        filepath=a.out, export_format="GLB", export_yup=True, export_vertex_color="ACTIVE", export_normals=True,
-        export_animations=True, export_animation_mode="NLA_TRACKS", export_force_sampling=True, export_frame_step=1,
-        export_optimize_animation_size=False, export_def_bones=False, export_leaf_bone=False, export_reset_pose_bones=True,
-        export_rest_position_armature=True, export_morph_animation=False, export_materials="EXPORT")
-    print(f"WOLF {a.out}: {tris} triangles, {len(BONES) - 1} bones, {len(CLIPS)} clips")
-    if a.summary:
-        with open(a.summary, "w") as f:
-            json.dump(summary, f, indent=1)
+
+    build(SK, "wolf", CLIPS, build_mesh, a.out, a.summary, (0.1, 0.3), extra=extra)
 
 
 main()

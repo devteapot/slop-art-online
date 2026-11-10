@@ -11,16 +11,19 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
-SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "floor-megacity-2k")
+SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "floor-megacity-2k", "floor-megacity-4k")
 # Seeds derived from a tracked seed in the run's directory (published through `--seed` with an
-# absolute path): the megacity floor (docs/FLOORS.md) at 2048 m, since its 4096 m size does not
-# fit one reducer's fuel budget in `init`.
-DERIVED = {"floor-megacity-2k": ("floor-megacity", {"size": 2048})}
+# absolute path): the megacity floor (docs/FLOORS.md) at 2048 m, created inside `init` from a
+# compiled seed, and at 4096 m as a floor: a module built without a seed (`--seed none`) given
+# the seed at runtime by `create_floor`, which creates the land in scheduled steps (`genesis`).
+DERIVED = {"floor-megacity-2k": ("floor-megacity", {"size": 2048}), "floor-megacity-4k": ("floor-megacity", {"size": 4096})}
+FLOORS = ("floor-megacity-4k",)
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
           "place", "routine", "relation")
@@ -59,9 +62,33 @@ def authored_copy(directory, world="aske-coast"):
     return living
 
 
-def harness(action, run, evidence, *args):
+def harness(action, run, evidence, *args, env=None):
     return command([sys.executable, str(HARNESS), action, "--run", run, *map(str, args)],
-                   evidence, cwd=ROOT, timeout=900)
+                   evidence, cwd=ROOT, timeout=900, env=env)
+
+
+def create_floor(run, d, seed):
+    """Give a floor module its seed and wait for the staged creation (`genesis`) to finish;
+    returns the checks."""
+    started = time.time()
+    code = harness("call", run, d / "create-floor.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin")
+    checks = [{"check": "create_floor accepted the seed", "pass": code == 0}]
+    rows, polls = [], 0
+    while code == 0 and time.time() - started < 900:
+        polls += 1
+        if harness("sql", run, d / "genesis-poll.log", "SELECT * FROM genesis", "--save", "genesis") == 0:
+            rows = json.loads((d / "genesis.json").read_text())
+            if rows and rows[0].get("done"):
+                break
+        time.sleep(3)
+    g = rows[0] if rows else {}
+    elapsed = round(time.time() - started, 1)
+    write(d / "genesis-final.json", {"row": g, "seconds": elapsed, "polls": polls})
+    checks.append({"check": "the staged creation finished", "pass": bool(g.get("done")), "detail": {"steps": g.get("step"), "seconds": elapsed}})
+    checks.append({"check": "no generation restarts", "pass": g.get("restarts") == 0, "detail": g.get("restarts")})
+    again = harness("call", run, d / "create-floor-again.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin", "--expect-refusal", "already has its seed")
+    checks.append({"check": "a second create_floor is refused", "pass": again == 0})
+    return checks
 
 
 def snapshot(run, tables):
@@ -125,7 +152,9 @@ def check_seed(seed, rows):
             children = [i for i in ids if i not in grown]
             present(f"{t['name']} added children have household parents", all(chars[i]["parent_a"] in ids and chars[i]["parent_b"] in ids and bgs[i]["occupation"] == "child" for i in children), {"requested_workers": len(grown), "added_children": len(children)})
         com = communities.get(t["name"], {})
-        equal(f"{t['name']} memberships", sorted(r["member"] for r in rows["membership"] if r["community"] == com.get("id")), sorted(ids))
+        # A founder may die in the seconds the world ticks before the snapshot, and death ends
+        # membership: compare the living.
+        equal(f"{t['name']} memberships of the living", sorted(r["member"] for r in rows["membership"] if r["community"] == com.get("id")), sorted(i for i in ids if chars[i]["alive"]))
         present(f"{t['name']} settlement backgrounds", bool(ids) and all(bg.get("town_center") is not None and bg.get("walled") == t.get("walled", True) for i, bg in bgs.items() if i in ids))
         if t.get("ledger"):
             present(f"{t['name']} ledger", any(a["text"] == t["ledger"] for a in artifacts))
@@ -166,6 +195,8 @@ def check_seed(seed, rows):
     drawn_children = sum(c["parent_a"] != 0 and any(not t.get("residents") and bgs.get(c["id"], {}).get("town") == t["name"] for t in settlements) for c in by_name.values())
     equal("total people including drawn children", len(by_name), expected_people + drawn_children)
     for kind, count in seed["animals"].items():
+        if not isinstance(count, int):
+            continue  # `habitat`: where each kind lives, not a count
         # A seed's `packs` place animals of a kind on purpose, beside its `animals` (docs/COMBAT.md).
         packed = sum(p.get("count", 0) for p in seed.get("packs", []) if p.get("kind") == kind)
         equal(f"{kind} count including dead founders", sum(c["kind"] == kind for c in chars.values()), count + packed)
@@ -304,14 +335,17 @@ def check_land(seed, rows, side, tiles):
     # styles, the core's towers, the wall's gates, and the land's other settlements outside it.
     metro = seed.get("map", {}).get("params", {}).get("metro")
     if metro is not None:
-        wards = [s for s in settlements if s["style"] in ("metro", "slum", "works")]
+        # The seed's districts name the wards' styles (the prototype's defaults without them).
+        styles = {d.get("style", "metro") for d in metro.get("districts", [])} or {"metro", "slum", "works"}
+        wards = [s for s in settlements if s["style"] in styles]
         rings = len(metro.get("rings", [0.3, 0.58, 0.82]))
         arterials = metro.get("arterials", 8)
         present("city wards: the core and every band and sector", len(wards) == 1 + rings * arterials, {"wards": len(wards), "expected": 1 + rings * arterials})
-        present("ward districts include metro, slum and works", {"metro", "slum", "works"} <= {s["style"] for s in wards}, sorted({s["style"] for s in wards}))
+        present("every district of the seed has a ward", styles <= {s["style"] for s in wards}, {"seed": sorted(styles), "wards": sorted({s["style"] for s in wards})})
         core = wards[0] if wards else None
-        towers = [l for l in lots if core and l["settlement"] == core["id"] and l["height_m"] >= 50.0]
-        present("the core stands in towers of 50 m or more", len(towers) >= 40, len(towers))
+        core_style = core["style"] if core else None
+        tall = [l for l in lots if any(l["settlement"] == w["id"] for w in wards if w["style"] == core_style) and l["height_m"] >= 100.0]
+        present("the core's district stands in towers of 100 m or more", len(tall) >= 6, len(tall))
         reach = max(((s["x"] - core["x"]) ** 2 + (s["y"] - core["y"]) ** 2) ** 0.5 + s["radius_m"] for s in wards) if wards else 0.0
         outside = [s for s in settlements if s not in wards]
         present("the land's other settlements stand outside the city", outside and all(((s["x"] - core["x"]) ** 2 + (s["y"] - core["y"]) ** 2) ** 0.5 > reach * 0.9 for s in outside), [(s["style"], s["x"], s["y"]) for s in outside])
@@ -435,6 +469,8 @@ def suite(args):
             code = command(["cargo", "test", "-p", "living-authority", "--lib", "--target-dir", str(target), "seed::tests::", "--", "--nocapture"], directory / "seed-tests.log", cwd=ROOT / "living", env=dict(os.environ, LIVING_SEED="authored-test"), timeout=900)
             results["seed tests"] = {"pass": code == 0}
         seeds = list(SEEDS) + ["realm"] if args.feature in ("all", "worlds") else []
+        if args.seeds:
+            seeds = [x for x in args.seeds.split(",") if x in SEEDS]
         if args.feature in ("all", "guards"):
             malformed = json.loads((ROOT / "living/seeds/authored-test.json").read_text())
             del malformed["animals"]
@@ -455,24 +491,27 @@ def suite(args):
                 seed_path = directory / "malformed.json" if seed_name == "malformed" else ROOT / f"living/seeds/{seed_name}.json"
             write(d / "seed.json", json.loads(seed_path.read_text()))
             database = "verify-" + active_run
-            seed_arg = str(seed_path.with_suffix("")) if seed_name == "malformed" or seed_name in DERIVED else seed_name
+            seed_arg = "none" if seed_name in FLOORS else str(seed_path.with_suffix("")) if seed_name == "malformed" or seed_name in DERIVED else seed_name
+            # A floor module compiles its seed's `rules` switches in (LIVING_RULES).
+            rules = json.loads(seed_path.read_text()).get("rules", {})
+            launch_env = dict(os.environ, LIVING_RULES=",".join(f"{k}={str(v).lower()}" for k, v in rules.items())) if seed_name in FLOORS else None
             container = subprocess.run(["docker", "ps", "--filter", f"name=^{CONTAINER}$", "--format", "{{.Status}}"], capture_output=True, text=True, check=True, timeout=30)
             if not container.stdout.strip().startswith("Up"):
                 raise RuntimeError("existing SpacetimeDB container is down; start it before running this skill")
             try:
                 started = datetime.now(timezone.utc).isoformat()
-                launch_code = harness("launch", active_run, d / "launch.log", "--seed", seed_arg, "--target-dir", target)
+                launch_code = harness("launch", active_run, d / "launch.log", "--seed", seed_arg, "--target-dir", target / ("floor" if seed_name in FLOORS else "seeded"), env=launch_env)
                 ended = datetime.now(timezone.utc).isoformat()
                 if seed_name == "malformed":
                     identity_status, identity = database_identity(database)
-                    built = target / "wasm32-unknown-unknown/release/living_authority.wasm"
+                    built = target / "seeded/wasm32-unknown-unknown/release/living_authority.wasm"
                     state = json.loads((d / "state.json").read_text()) if (d / "state.json").exists() else {}
                     publication = {"started": started, "ended": ended, "identity_status": identity_status, "database_identity": identity, "wasm_sha256": hashlib.sha256(built.read_bytes()).hexdigest() if built.exists() else None, "publication_attempted": state.get("published", False)}
                     write(d / "publication.json", publication)
                     server = subprocess.run(["docker", "logs", "--since", started, "--until", ended, CONTAINER], capture_output=True, text=True, timeout=30)
                     records = re.split(r"(?=\d{4}-\d{2}-\d{2}T)", server.stdout + server.stderr)
                     launch_key = f"launching module db={identity} " if identity_status == 200 else "NO_CORRELATED_LAUNCH"
-                    selected = [r for r in records if launch_key in r or ("reducer \"init\" runtime error" in r and "::seed::seed" in r) or ("Frame #" in r and ("::seed::seed" in r or "rust_panic" in r or "__rust_start_panic" in r))]
+                    selected = [r for r in records if launch_key in r or "reducer \"init\" runtime error" in r or "seed: " in r or ("Frame #" in r and ("::seed::seed" in r or "rust_panic" in r or "__rust_start_panic" in r))]
                     (d / "server-init.log").write_text("".join(selected))
                     command([str(ROOT / "living/tools/stdb"), "logs", "-s", "local", database, "--num-lines", "100"], d / "module.log", timeout=30)
                     query_code = harness("sql", active_run, d / "init-state.log", "SELECT * FROM world")
@@ -483,7 +522,7 @@ def suite(args):
                     readable = "animals" in text and "missing field" in text
                     rejected = launch_code != 0 and publication["publication_attempted"] and query_code != 0 and "sql: 404" in query
                     report = {"pass": rejected, "rejection": "PASS" if rejected else "FAIL",
-                              "known_issue": {"label": "KNOWN ISSUE", "reference": "docs/LIVING_HANDOFF.md, Still open", "source": "living/authority/src/seed.rs:603", "description": "initializer panics and publication does not name the missing field", "readable_error_asserted": False},
+                              "known_issue": {"label": "KNOWN ISSUE", "reference": "docs/LIVING_HANDOFF.md, Still open", "source": "living/authority/src/lib.rs (init)", "description": "init returns `seed: missing field ...` instead of panicking; the shared harness truncates publication stderr, so whether the field is named is recorded (missing_field_diagnostic_visible), not asserted", "readable_error_asserted": False},
                               "launch_exit_code": launch_code, "panic_reported": "::seed::seed" in trace and "rust_panic" in trace,
                               "missing_field_diagnostic_visible": readable, "database_launch_correlated": launch_key in trace}
                     write(d / "guards.json", report)
@@ -492,6 +531,10 @@ def suite(args):
                     continue
                 if launch_code:
                     raise RuntimeError(f"launch failed; read {d}/launch.log")
+                floor_checks = create_floor(active_run, d, json.loads(seed_path.read_text())) if seed_name in FLOORS else []
+                if floor_checks and not all(c["pass"] for c in floor_checks):
+                    write(d / "checks.json", floor_checks)
+                    raise RuntimeError(f"floor creation failed; read {d}/create-floor.log and genesis-final.json")
                 if harness("doctor", active_run, d / "doctor.log"):
                     raise RuntimeError(f"doctor failed; read {d}/doctor.log")
                 if harness("call", active_run, d / "pause.log", "set_paused", "[true]", "--as-admin"):
@@ -499,7 +542,7 @@ def suite(args):
                 rows = snapshot(active_run, TABLES)
                 public_tables = re.findall(r"#\[spacetimedb::table\(accessor = (\w+), public\)\]", (ROOT / "living/authority/src/tables.rs").read_text())
                 rows.update(snapshot(active_run, [t for t in public_tables if t not in rows]))
-                checks = check_seed(json.loads((d / "seed.json").read_text()), rows)
+                checks = floor_checks + check_seed(json.loads((d / "seed.json").read_text()), rows)
                 if json.loads((d / "seed.json").read_text()).get("map", {}).get("kind") == "land":
                     checks.append(native_digests(d, rows, target))
                 checks.append({"check": "public tables exclude sheet secrets", **no_secrets(json.loads((d / "seed.json").read_text()), rows)})
@@ -533,6 +576,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True)
     parser.add_argument("--feature", choices=("all", "worlds", "authored", "guards"), default="all")
+    parser.add_argument("--seeds", help="comma-separated subset of the worlds' seeds (e.g. floor-megacity-2k,floor-megacity-4k)")
     args = parser.parse_args()
     return suite(args)
 

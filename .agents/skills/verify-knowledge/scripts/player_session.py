@@ -70,7 +70,9 @@ class Session:
         return self.me()
 
     def me(self):
-        rows = self.sql("SELECT id, name, alive FROM character WHERE controller = :sender", "player")
+        # The player's own characters through its view: `character` is private in the default
+        # scoped build (docs/PERCEPTION.md).
+        rows = self.sql("SELECT id, name, alive FROM my_characters", "player")
         alive = [r for r in rows if r["alive"]]
         return alive[0]["id"] if alive else None
 

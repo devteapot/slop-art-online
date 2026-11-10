@@ -1,0 +1,156 @@
+{
+ "title": "Hungry stranger",
+ "about": "The subject has carried no food since dawn and arrives at a settlement whose residents keep their routines. Food is reachable by gathering (bushes in gardens and along fields), taking from a store, trading or asking. A resident who is asked for food, or asked anything with food in it, answers with a scripted line and gives two berries (each resident once, at most twice in all); anyone else spoken to gives a short scripted answer.",
+ "world": {
+  "seed": "island",
+  "rules": {
+   "minds": true
+  },
+  "start_hour": 13.0
+ },
+ "minutes": 15,
+ "subject": {
+  "pick": {
+   "kind": "person",
+   "stage": 2,
+   "bg": {
+    "town": "Elmwick"
+   },
+   "fewest_know_how": true
+  },
+  "clear_items": true,
+  "background": {
+   "origin": "traveller",
+   "sheet": {
+    "narrative": "I left the coast at first light with nothing to eat and have walked all morning. I have never been to this place and know nobody here. I would rather work for a meal than beg for one, but my stomach is loud.",
+    "values": [
+     "paying my own way",
+     "honesty"
+    ],
+    "goals": [
+     "find something to eat",
+     "find work"
+    ],
+    "mood": "hungry and wary",
+    "relations": [],
+    "memories": [],
+    "stances": [],
+    "places": []
+   }
+  }
+ },
+ "cast": {},
+ "timeline": [
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "subject",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "start",
+   "do": "place",
+   "who": "subject",
+   "to": {
+    "arrival": true
+   }
+  },
+  {
+   "at": "start",
+   "do": "graph",
+   "who": "subject",
+   "graph": "instinct:person"
+  },
+  {
+   "when": {
+    "said": {
+     "by": "subject",
+     "to": "any",
+     "words": [
+      "food",
+      "eat",
+      "hungry",
+      "starving",
+      "berr",
+      "bread",
+      "meal",
+      "spare",
+      "trade",
+      "work"
+     ]
+    }
+   },
+   "max": 2,
+   "per_addressee": true,
+   "steps": [
+    {
+     "do": "items",
+     "who": "$addressee",
+     "items": {
+      "berries": 2
+     },
+     "after": 1
+    },
+    {
+     "do": "say",
+     "who": "$addressee",
+     "to": "$subject",
+     "text": "You look done in, stranger. Here, take a couple of berries.",
+     "after": 3
+    },
+    {
+     "do": "act",
+     "who": "$addressee",
+     "act": {
+      "do": "give",
+      "target": "$subject",
+      "item": "berries",
+      "qty": 2
+     },
+     "after": 4
+    }
+   ]
+  },
+  {
+   "when": {
+    "said": {
+     "by": "subject",
+     "to": "any",
+     "without": [
+      "food",
+      "eat",
+      "hungry",
+      "starving",
+      "berr",
+      "bread",
+      "meal",
+      "spare",
+      "trade",
+      "work"
+     ]
+    }
+   },
+   "max": 3,
+   "per_addressee": true,
+   "steps": [
+    {
+     "do": "say",
+     "who": "$addressee",
+     "to": "$subject",
+     "text": "Mm. Good day to you.",
+     "after": 3
+    }
+   ]
+  }
+ ],
+ "probes": [
+  "first_eat_min",
+  "food_gained",
+  "hunger_max",
+  "lines_said",
+  "said_to",
+  "talk_turns"
+ ]
+}

@@ -392,7 +392,7 @@ Proposed, not applied. It makes GLM Flash's effort explicit per purpose, turns o
 - **Compile inputs:** person compile replays used the original think decision, not each model's own think.
 - **Latency:** measured from the Mac, with streaming, at concurrency 16, at one time of day. p95 values swing between passes, for example GLM `@high` talk p95 4.2 s in the first pass and 27 s in the key pass.
 - **Not measured:** cache lifetime, per-actor cache keys, batch prices and the `internalize` and reorganize purposes.
-- **A probable prompt bug:** in sample `talk-00` (Pim, aske-coast-1792435287), the other speaker's lines appear as the literal `“text”` three times. Check whether the current `talk.rs` still renders lines like this.
+- **A prompt bug, found and fixed** (`feedback-1`, [mind feedback](MIND_FEEDBACK.md#5-the-word-text-spoken-aloud)): in sample `talk-00` (Pim, aske-coast-1792435287) the other speaker's lines appear as the literal `“text”` three times. `talk.rs` rendered them faithfully: the speakers had said "text". Their graphs copied the grammar's own example, `{"say": "text", "to": T}`, into a say node (`Fen.jsonl:22`).
 
 ## Evidence
 

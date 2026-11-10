@@ -94,6 +94,22 @@ static SKILL_IO: std::sync::RwLock<Option<(u32, Arc<SkillIoTable>)>> = std::sync
 /// are real-time behavior rather than acts.
 static SHAPES: std::sync::RwLock<Option<Arc<living_rules::combat::Shapes>>> = std::sync::RwLock::new(None);
 
+/// The world's laws for residents woken into minds (docs/TOWN_LIFE.md, "Layer 2"), read
+/// from the rule script with the rest: `woken_stage("cap")`, how many woken residents of one
+/// settlement may be on stage at once (0: no cap), and `woken_stage("wait_s")`, how long a
+/// woken resident's first thought waits for its mind to be made.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct WokenLaws {
+    pub stage_cap: u32,
+    pub wait_s: f64,
+}
+
+static WOKEN: std::sync::RwLock<WokenLaws> = std::sync::RwLock::new(WokenLaws { stage_cap: 0, wait_s: 0.0 });
+
+pub fn woken_laws() -> WokenLaws {
+    *WOKEN.read().unwrap()
+}
+
 /// Read what each skill takes and gives, and what each combat skill is, from the world's rule
 /// script (once per revision).
 pub fn set_rules(revision: u32, source: &str) {
@@ -106,6 +122,11 @@ pub fn set_rules(revision: u32, source: &str) {
             log::info!("rules revision {revision}: {} skills describe what they take and give", table.len());
             *SKILL_IO.write().unwrap() = Some((revision, Arc::new(table)));
             *SHAPES.write().unwrap() = Some(Arc::new(s.shapes().clone()));
+            let w = WokenLaws { stage_cap: s.num_of("woken_stage", "cap", 0.0).max(0.0) as u32, wait_s: s.num_of("woken_stage", "wait_s", 0.0).max(0.0) };
+            if w != woken_laws() {
+                log::info!("woken residents: {w:?}");
+            }
+            *WOKEN.write().unwrap() = w;
         }
         Err(e) => log::warn!("rules revision {revision} unreadable: {e}"),
     }
@@ -206,7 +227,7 @@ Nodes:
 - {{\"seq\": [N, ...]}} steps in order, remembering progress; fails when a step fails.
 - {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds, except that work already begun under it (sleep, rest, eat, gather, build, craft, cook, teach, write, read, plant...) is finished; walking, fleeing and fighting stop as soon as C no longer holds.
 - {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically.{making}
-- {{\"say\": \"text\", \"to\": T}} speak (each say node speaks at most once per 45 s).
+- {{\"say\": \"<the words>\", \"to\": T}} speak (each say node speaks at most once per 45 s).
 - {{\"wait\": seconds}}
 - {{\"think\": \"reason\"}} ask yourself to reconsider (non-blocking; ignored within 45 s of a decision, then at most once per 90 s). Put it where your plan runs out (e.g. last in a seq or as the final fallback), not where it is reached on every check.
 Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"above\": 60}}, \"has\": {{\"item\": \"food\"}}}}, \"then\": {{\"do\": \"eat\", \"item\": \"food\"}}}}
@@ -254,6 +275,7 @@ Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happe
 {\"do\": \"give\", \"target\": {\"id\": 4}, \"item\": \"berries\", \"qty\": 3}, \
 {\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}} (take a trade offered to you), \
 {\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"fire\"}, {\"do\": \"tend\", \"target\": {\"id\": 6}}, \
+{\"do\": \"host\", \"target\": {\"id\": 6}} (take someone in as your household's guest until morning: a bed in your house, food from its store), \
 {\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know\"}, {\"do\": \"read\"}, \
 {\"do\": \"join\"|\"welcome\", \"target\": {\"id\": 6}}, {\"do\": \"found\", \"text\": \"a name\"}, {\"do\": \"threaten\", \"target\": {\"id\": 6}}, {\"do\": \"seize\", \"target\": {\"id\": 6}, \"item\": \"hide\", \"qty\": 2}, {\"do\": \"yield\", \"target\": {\"id\": 6}}, and any other single piece of work (build, craft, cook, store, take, plant). \
 {\"do\": \"rework\", \"item\": \"find food and eat\", \"graph\": {...the whole new version...}} reworks one of your ways (\"retire\": true instead drops it; a new name works out a new way; \
@@ -402,7 +424,9 @@ that fit it now (labels you give REPLACE its old ones, e.g. a Stranger who becam
 merge concepts that turn out to be the same thing. Prefer connecting to existing concepts over inventing new ones. \
 History is kept automatically. Keep as memories only the \
 few experiences the person would still remember tomorrow (at most 3, often none), each with a gist in the person's own words{}. Identity (narrative, values, goals, traits 0-100, \
-mood) changes only when experiences genuinely warrant it; otherwise identity is null.\n\n{}\n\n\
+mood) changes only when experiences genuinely warrant it; otherwise identity is null. When it changes, it follows the life the person has lived: goals and values \
+grow out of what they did, tried, met and went through, and name the people, places and things in that life they are about; a feeling that comes and goes \
+(restlessness, loneliness, a longing) is felt, and belongs to mood and memory until the person's life gives it someone or something to turn to.\n\n{}\n\n\
 KEYS: anchors connect your mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \"kind:<wolf|deer|berry_bush|campfire|...>\", \
 \"know:<technique>\" (the technique itself, e.g. \"know:cooking\"). \
 Any other key is yours to invent (\"idea:shared_storage\", \"plan:river_camp\"). Reuse existing keys shown in your mind.\n\
@@ -432,6 +456,32 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
 /// The person's choices are the player's: their acts and words are recorded as acts and
 /// words, never with reasons nobody perceived. The identity (narrative, values, traits, mood)
 /// is inferred from that conduct (decided 2026-11-09), and only when it says something new.
+/// The memory of a resident who has just been woken into a mind: what it perceived before
+/// (its ring), with nothing it did not perceive and nothing about who it is (that comes from
+/// the world's facts).
+pub fn ring_system() -> String {
+    shared(format!(
+        "You are the memory of the person described under # Who you are, in a persistent simulated world. \
+Until now they lived by habit: the lines below are what they perceived around their daily life before this moment (what they saw and \
+heard, who came into view, what happened near them, and where). Record what they now know or can expect from it (who they saw, what \
+was said, what happened, where things are) and keep as memories only the few things they would still remember (at most 4, often \
+fewer), each with a gist in their own words that says what happened, not why. Never invent motives, feelings, plans or thoughts. \
+What others said stays what others claimed (person:4 -CLAIMED-> idea:wolves_at_ford). Someone they only saw is known by how they \
+looked to them, not by name. Keep the mind as a graph you shape freely and connect to existing concepts. IDENTITY: always null here.\n\n{}\n\n\
+KEYS: anchors connect the mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \
+\"kind:<wolf|deer|berry_bush|tree|...>\", \"know:<technique>\". Any other key is yours to invent. Reuse existing keys shown in the mind.\n\n\
+Reply with ONE JSON object, compact (at most 12 nodes and 20 edges):\n\
+{{\"summary\": \"what they perceived (1-2 sentences, no motives)\",\n\
+ \"remember\": [{{\"exp\": experience id, \"gist\": \"...\"}}],\n\
+ \"nodes\": [{{\"key\": \"person:4\", \"labels\": [\"Person\"], \"name\": \"Bram\", \"props\": {{...}}}}],\n\
+ \"edges\": [{{\"from\": \"self\", \"rel\": \"SAW\", \"to\": \"person:4\", \"confidence\": 0.0-1.0, \"because\": [experience ids], \"props\": {{...}}}}],\n\
+ \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"stranger|acquaintance|...\", \"note\": \"short\"}}],\n\
+ \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
+ \"identity\": null}}",
+        world_rules()
+    ))
+}
+
 pub fn internalize_system() -> String {
     shared(format!(
         "You are the memory of the person described under # Who you are, in a persistent simulated world. \
@@ -510,6 +560,8 @@ pub fn reorganize_user(name: &str, persona: &str, concepts: &[String], edges: &[
 pub struct Ctx<'a> {
     pub name: &'a str,
     pub clock: String,
+    /// How the character's body feels now, in words (`felt_body`); empty where not shown.
+    pub body: String,
     pub persona: String,
     pub relations: Vec<String>,
     pub mind: Vec<String>,
@@ -523,6 +575,9 @@ fn common(c: &Ctx, out: &mut Segments) {
     out.push(Stability::Shared, "Respond with the JSON object.\n\n");
     out.push(Stability::Character, format!("# Who you are ({})\n{}\n", c.name, c.persona));
     out.push(Stability::Dynamic, format!("\nNow {}\n", c.clock));
+    if !c.body.is_empty() {
+        out.push(Stability::Dynamic, format!("How your body feels: {}\n", c.body));
+    }
     out.push(Stability::Character, "\n# People you know\n");
     if c.relations.is_empty() {
         out.push(Stability::Character, "(nobody yet)\n");
@@ -557,6 +612,54 @@ fn common(c: &Ctx, out: &mut Segments) {
     for p in &c.places {
         out.push(Stability::Character, format!("- {p}\n"));
     }
+}
+
+/// A body's needs and health at one moment, with how they are changing (per minute).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Body {
+    pub hp: f32,
+    pub max_hp: f32,
+    pub hunger: f32,
+    pub energy: f32,
+    pub hp_rate: f32,
+}
+
+/// The body as its owner feels it, in plain words: no numbers, the thresholds the authority's
+/// own bodily alarms and `body_state` law use (hungry above 55, very hungry from 80, starving
+/// from 97; exhausted below 12; badly wounded below 35% of full health, barely alive below 15%).
+pub fn felt_body(b: Body) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    parts.push(match b.hunger {
+        h if h >= 97.0 => "starving, your body wasting away",
+        h if h >= 80.0 => "very hungry",
+        h if h > 55.0 => "hungry",
+        h if h > 40.0 => "beginning to feel hungry",
+        h if h <= 15.0 => "well fed",
+        _ => "not hungry",
+    });
+    match b.energy {
+        e if e <= 0.0 => parts.push("utterly spent"),
+        e if e < 12.0 => parts.push("exhausted"),
+        e if e < 30.0 => parts.push("tired"),
+        e if e < 50.0 => parts.push("a little tired"),
+        e if e >= 85.0 => parts.push("well rested"),
+        _ => {}
+    }
+    let f = if b.max_hp > 0.0 { b.hp / b.max_hp } else { 1.0 };
+    parts.push(match f {
+        f if f < 0.15 => "barely alive",
+        f if f < 0.35 => "badly wounded",
+        f if f < 0.6 => "hurt",
+        f if f < 0.9 => "a little hurt",
+        _ => "unhurt",
+    });
+    let mut out = parts.join(", ");
+    if b.hp_rate < -0.01 {
+        out.push_str("; you are growing weaker");
+    } else if b.hp_rate > 0.01 && f < 0.99 {
+        out.push_str("; your wounds are mending");
+    }
+    out
 }
 
 pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> Segments {
@@ -749,6 +852,8 @@ pub struct TalkUser<'a> {
     pub lately: &'a [String],
     pub earlier: Option<&'a str>,
     pub scene: &'a str,
+    /// How one's body feels (`felt_body`); empty when unknown.
+    pub body: &'a str,
     pub conversation: &'a [String],
     pub heard: &'a str,
     /// Standing proposals between the two, what one carries and knows (for acts).
@@ -779,6 +884,9 @@ pub fn talk_user(t: &TalkUser) -> String {
         out.push(Stability::Dynamic, format!("\n# Before this\n{e}\n"));
     }
     out.push(Stability::Dynamic, format!("\n# Now\n{}\n", t.scene));
+    if !t.body.is_empty() {
+        out.push(Stability::Dynamic, format!("How your body feels: {}\n", t.body));
+    }
     for b in t.between {
         out.push(Stability::Dynamic, format!("- {b}\n"));
     }
@@ -792,6 +900,17 @@ pub fn talk_user(t: &TalkUser) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_body_is_felt_in_words() {
+        use super::{felt_body, Body};
+        let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(Body { hp, max_hp: 100.0, hunger, energy, hp_rate });
+        assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, unhurt");
+        assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded; you are growing weaker");
+        assert_eq!(b(70.0, 10.0, 90.0, 0.4), "well fed, well rested, a little hurt; your wounds are mending");
+        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive; you are growing weaker");
+        assert!(!b(55.0, 60.0, 40.0, 0.0).chars().any(|c| c.is_ascii_digit()));
+    }
+
     #[test]
     fn animals_are_told_what_they_smell() {
         let scene = serde_json::json!({"you": {"id": 1}, "creatures": [], living_rules::species::SMELLED: [{"kind": "deer", "id": 7, "dir": "northeast", "dist": "far, about 40 tiles"}]}).to_string();
@@ -809,6 +928,7 @@ mod tests {
         Ctx {
             name,
             clock: format!("dynamic-clock-{name}"),
+            body: String::new(),
             persona: format!("persona-{name}"),
             relations: vec![format!("relation-{name}")],
             mind: vec![format!("dynamic-recall-{name}")],
@@ -857,6 +977,7 @@ mod tests {
                     lately: &c.experiences,
                     earlier: Some("dynamic-earlier"),
                     scene: "dynamic-scene",
+                    body: "",
                     conversation: &["dynamic-line".into()],
                     heard: "dynamic-heard",
                     between: &["dynamic-offer".into()],
