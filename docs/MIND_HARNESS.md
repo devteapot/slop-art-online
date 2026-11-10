@@ -31,10 +31,10 @@ How the mind service chooses models, schedules sleep, thinks for animals, keeps 
 
 - **Where a name is accepted, a mix is too:** `default`, `assign`, `rotate`, `stages`, `groups` and `species`.
 - **A choice** is a profile, a profile with its own effort for that purpose (`deepseek-flash@low`), or one per stage of attention. `*` covers the purposes a mix leaves out; a purpose it does not cover goes to the default.
-- **Effort** comes from the choice's `@effort`, else from the profile's map for the purpose, else for its parent: `reorganize` inherits `consolidate`. An older profile therefore never sends reorganization at GLM's default effort, which behaves like `max` (MODEL_COST Part 1).
-- **`purpose_max_tokens`** caps one purpose apart from the profile's `max_tokens`.
+- **Effort** comes from the choice's `@effort`, else from the profile's map for the purpose, else for its parent: `reorganize` inherits `consolidate`. An older profile therefore never sends reorganization at GLM's default effort, which behaves like `max` (MODEL_COST Part 1). Since 2026-11-10 a map entry may be `null` (send none on purpose), and every purpose a route can reach without an entry is logged at start (see [the 2026-11-10 fixes](#fixes-from-the-rules2-r2-review-2026-11-10)).
+- **`purpose_max_tokens`** caps one purpose apart from the profile's `max_tokens`. Since 2026-11-10 every profile caps every purpose (below).
 - **Stage of attention** is the level of detail's: on stage while a human player is in the character's scene or was part of what it lived within `LIVING_LOD_STICKY_S` (600 s). It is tracked when `LIVING_LOD=1` or when any mix is staged; otherwise everyone is on stage. A staged mix changes which model is called, never how often.
-- **Startup refuses a file that names what does not exist**, a mix that names a mix, an unknown purpose, or a default mix without `*`. A mix with an unkeyed profile is disabled with a warning and passed over.
+- **Startup refuses a file that names what does not exist**, a mix that names a mix, an unknown purpose, or a default mix without `*`. A mix with an unkeyed profile is disabled with a warning and passed over. A purpose sent with no effort entry is warned about (`MODEL CONFIG: …`).
 - **The journal** records `profile`, `effort` (what was sent), `mix` and `attention` on every exchange, so purpose × profile × effort can be read back with [llm_load.py](../living/tools/llm_load.py) or `jq`.
 
 **What the file now does:**
@@ -58,7 +58,7 @@ How the mind service chooses models, schedules sleep, thinks for animals, keeps 
 - **Purpose.** Reorganization goes out as `reorganize`, a background-lane purpose, with its own effort and cap. On GLM Flash that is `high` and 24,000 tokens: MODEL_COST Part 2 found 35% cut off at 8,000 and 24/24 usable at 24,000.
 - **When.** At night by the world clock: `LIVING_NIGHT`, default `20-6`, which the mind already subscribes to. The mind cannot see the body's sleep. A mind is due after at least 2 integrations and 1,200 s since its last sleep, at most once a night (`LIVING_REORGANIZE_MIN`, `_GAP_S`). This is the rule that MODEL_COST's simulation put at about half a town per night. Consolidation no longer preempts it.
 - **How** (`LIVING_REORGANIZE`):
-  - **`night-batch` (default).** Everyone due goes out as one provider job per route, with later rounds in the same night at most every 60 s. People in a job are marked consolidating, so no integration interleaves. A job not done within a game day is cancelled, and its people go direct the next night.
+  - **`night-batch` (default).** Everyone due goes out as one provider job per route, with later rounds in the same night at most every 60 s. People in a job are marked consolidating, so no integration interleaves. A job not done within a game day is cancelled, and its people go direct the next night. Since 2026-11-10 a few failed polls do not lose the job, an abandoned job is cancelled, and a job left by a stopped service is collected at the next start (below).
   - **`night`.** The same rule, with direct calls.
   - **`timer`.** The old rule.
 - **Uploads.** `Llm::batch` uploads a JSONL file (`POST /v1/files`, then `input_files`) once the inline body would pass 2.4 MB; Mistral's proxy refuses about 2.5 MiB.
@@ -389,6 +389,27 @@ Claude side, not billed to a provider here: two blind judges (about 120k tokens 
 - **Docs:** this section, the table at the top, and LIVING_CORE.md ("Deliberation hygiene").
 - **Not changed:** authority, rules, bindings, `models.json` and `judgments.json`.
 - **Other branches:** `townlife-2` also edits `mind.rs`, `talk.rs` and `main.rs`. This diff touches `schedule`, `run`, `thinking` and the experience callback only.
+
+## Fixes from the rules2-r2 review (2026-11-10)
+
+Reviewers measured the `rules2-r2` trial journals (1,129 real calls, `.local/living/trials/rules2-r2/journal/`) and read the code at 6c8d1002. Each defect below was confirmed against the code and the journal before it was fixed. Branch `fix-mind-small`, one commit each; prompt edits are separate commits.
+
+| Defect | Evidence | Fix |
+| --- | --- | --- |
+| One output cap (24,000 on GLM Flash) for every purpose | A compile ran 24,000 tokens of `"places", …` for 166 s; one DeepSeek compile ran to 8,000. Normal p99: think 465, compile 1,008 (DeepSeek `low` 3,857), consolidate 2,388, reorganize 11,879. The longest usable compile was 4,547 tokens (GLM `low`, about 4,100 of them reasoning). | `purpose_max_tokens` on every profile: think 1,500; talk and rethink 1,000; deliberate, consolidate and internalize 6,000; reorganize 24,000. A test keeps every profile capped. |
+| A timeout gated the whole base URL | Two GLM compiles hit the 180 s timeout; GLM and DeepSeek share `api.mistral.ai`, so both were held. | Only a failed connection marks a host unreachable. verify-llm `timeout` asserts no gate. |
+| Background work overflowed to the other profile at that profile's settings | `deepseek-flash` mapped only think and deliberate, so a failed consolidation, integration or reorganization went to DeepSeek with thinking off (reorganize judged 4/21). | `Lane::Background` never overflows; its caller retries later with a backoff on its own model. A 429 keeps its one paced retry. Startup logs each purpose a route can send without an effort entry; `null` says "none on purpose" (DeepSeek's talk, consolidate, internalize). The project file has no gaps (a test). |
+| A failed batch poll lost the whole batch and paid twice | Poll and download used `?`; one error failed every member, the night's people went direct at full price, and the orphaned job still billed. | Up to 5 failed polls or reads in a row are tolerated; an abandoned job is cancelled; each sent job is kept in `<journal>/batches/<job>.json` and collected at the next start (reorganizations applied, player memory journaled). Fake provider: `batch.poll_errors`. |
+| The compile wrote fields the mind discards, and lost speech | `keep()` replaces the compiler's `thought`, `say`, `judgments` and `places` with the think step's, but the format asked for them (30% of compile reply characters). 13 of 434 compiles put speech in a `{"do": "say"}` act, which the authority refuses. | Code: a compiled say act becomes the turn's speech when the decision has none, and never reaches the authority. Prompt: the compile format asks for acts, plan, intent and graph or patch only. |
+| The persona listed every community member | 77 names, 11–20% of think and consolidation input, growing with the town. | A count, and by name only the members one has feelings about (at most 12). |
+| A failed deliberation consumed its trigger | A model error called `mind_skip`, clearing the request and its reasons; the rethink gate then counted the old plan as a new thought; "carries on" replies dropped their stances and places. | A model error keeps the request; it is retried after 5 s, doubling to 5 minutes, with conversation turns meanwhile; the gate records only successful thoughts; stances and places apply on both paths. verify-llm `outage` asserts the request survives. |
+| Every feeling or stance cited the whole consolidation batch | Shorthand relations and judgments carried every experience id; `because` was unioned without bound; every kept memory then GROUNDED every stance of its batch. | Shorthand entries cite their own `because` (default none); an edge cites at most 8 experiences, the newest kept on re-assertion. Prompt: the memory formats show `because` on relations and judgments. |
+| Adults could get a newborn's identity | A person with no sheet narrative and a recorded parent went to `birth_persona` at any age; authored towns give sheet parents to adults. A woken resident whose mind could not be made was marked made. | `Origin::of` chooses by life stage, then background (unit-tested); a failed waking is retried 3 times, then at most every 5 minutes. |
+| Smaller | The weakening id pattern matched `exp:<id>` keys; `missed_upto` was memory-only; the animal retry resent the whole reply; the journal had no `finish_reason` and repeated the system prompt (57% of journal bytes, 5.4 MB per mind per trial). | `exp:` excluded; the bound is derived from the mind's `weakened_by` after a restart; the retry keeps 3,000 characters; journal entries record `finish_reason` and `reasoning_tokens`, and each distinct system prompt is stored once (`system/<hash>.txt`, `content_ref`; `living/tools/journal_io.py` restores it). |
+
+Not changed: how memory fades (wall clock against game time; the owner has not decided).
+
+SpacetimeDB: no table, reducer, view or subscription changed. A failed deliberation now leaves its `deliberation` row pending (one row per character, as under the level of detail and the rethink gate) instead of calling `mind_skip`; an error thought is added through the existing `mind_update`.
 
 ## Verification
 

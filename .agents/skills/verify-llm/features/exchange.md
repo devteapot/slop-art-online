@@ -3,7 +3,8 @@
 ## Sub-features
 
 - POST and valid replies for think, deliberate, consolidate and talk.
-- Output cap, JSON mode, effort map, token accounting and the journal fields, including lane, queue wait and token usage breakdown.
+- Output cap, JSON mode, effort map, token accounting and the journal fields, including lane, queue wait, token usage breakdown, `reasoning_tokens` and `finish_reason` (`length`: cut off at the cap).
+- The journal stores each distinct system prompt once (`<journal>/system/<hash>.txt`); an entry's system message is `{"role": "system", "content_ref": "system/<hash>.txt"}`. `living/tools/journal_io.py` `restore` puts it back for readers.
 - A current-plan routine, installed mind brain, thoughts and speech.
 
 ## How to get to it (user POV)
