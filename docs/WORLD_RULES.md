@@ -60,7 +60,7 @@ Every skill's `about` says what it does, when it is useful and what it is not. E
 
 The specs are functions, so a floor overrides a skill's description the way it overrides any law: it redefines `<skill>_spec()` in its overlay ([floors](FLOORS.md#how-a-floor-overrides-laws)).
 
-**The skill reference minds read** (`catalog::skills_help`, in the deliberation grammar) grew from 12,835 characters to SKILLREF_AFTER, with two more skills (`offer_terms`, `demand`). Regenerate it with `cargo test -p living-rules --lib print_skill_reference -- --ignored --nocapture`, at `bbf7271` for the old text. Before and after, three lines:
+**The skill reference minds read** (`catalog::skills_help`, in the deliberation grammar) grew from 12,835 to 16,978 characters (56 skills to 58: `offer_terms` and `demand`). In the real run below, a deliberation's prompt averaged 12.0k tokens against 10.9k on main: the longer reference plus the dealings section. Regenerate it with `cargo test -p living-rules --lib print_skill_reference -- --ignored --nocapture`, at `bbf7271` for the old text. Before and after, three lines:
 
 ```text
 before:
@@ -311,15 +311,132 @@ No whole-World scan was added to a routine action. The two full scans are in rar
 
 ## Costs
 
-COSTS_PLACEHOLDER
+Measured on the Mac (Apple Silicon, Docker Desktop), on my own SpacetimeDB 2.14.1 container (`sao-rules2-stdb`), island seed modules of main `bbf7271` (base) and this branch (change), each window on a fresh world, 20 s settling, then 60 s profiled with `living/tools/bench.py`. Driver: a scratch `dealbench.py`, not committed; its load is described below. No subscribers. These runs do not establish performance acceptance at the 216-character gate or beyond.
+
+**Fuel per call** (`just living-script-gate`, the bench module under SpacetimeDB's wasmtime config; deterministic):
+
+| Law | main | this branch's code, main's script | this branch |
+| --- | ---: | ---: | ---: |
+| `rates` (the authority's call) | 7,024 | 7,159 | 7,183 |
+| `rates-law` | 127,901 | 134,249 | 138,010 |
+| strike (check + done) | 269,046 | 268,355 | 274,912 |
+| `perceived_of` | 60,601 | 60,884 | 62,671 |
+| `hook`: `on_give` over an agreement, a demand and a regard | — | — | 446,967 |
+
+The new context fields cost up to 5% on the rates path, and the larger script 2–3% per call. Every law is within its budget. The hook is about 1.6 strikes. Its budget is 560,000 (`budgets.json`). It runs only after a give, store or host, never per tick. Most of its cost is turning each of the actor's records into a Rhai map; with no records it is a few thousand instructions.
+
+**Install:** 8,905 calls over 212 functions, 540 ms in the island module on the Mac (`install.validate`). The heaviest are `teach_check` (635 operations), `on_store` (459) and `on_give` (454), against the 2,000 limit. The hook probes add the most calls: each body × each target × four items.
+
+**At rest on the island** (277 people, 34 animals; 13 regard records): mean tick and p50/p99 in ms.
+
+| | run | mean | p50 | p99 | max |
+| --- | --- | ---: | ---: | ---: | ---: |
+| base | 4 | 1.17 | 1.02 | 3.36 | 4.6 |
+| base | 9 | 1.22 | 1.12 | 3.01 | 4.7 |
+| change | 2 | 1.19 | 1.04 | 3.19 | 5.3 |
+| change | 3 | 1.43 | 1.25 | 3.75 | 7.1 |
+| change, a later pair (the Mac busier) | 5 | 2.46 | 2.39 | 4.84 | 13.2 |
+| base, the same pair | 6 | 2.32 | 2.25 | 4.78 | 8.8 |
+
+No difference beyond the run-to-run spread. In a minute at rest the hooks ran 17 times and record reads 38 times (0.02 ms/s). Base run 1 overlapped a scratch world's cleanup and is left out. Relation filters reading stances are included in these windows; no separate span was taken.
+
+**With dealings in flight:**
+
+- **The load:** 60 pairs of walkers (397 people), each handing the other a wood every ~4 s for the whole window: about 45 gives a second.
+- **On the change arm:** each pair also holds an agreement (`offer_terms`, 900 wood wanted, so it stays open) and a demand. Every give runs `on_give` over the giver's two records (walkers belong to no community, so no regard is among them) and amends the agreement. That is 133 open records.
+- **Arms:** alternated base, change, change, base.
+
+| | run | mean tick | p50 | p95 | p99 | max | over 16.7 ms | hook span | record reads |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 1 | 3.55 | 3.09 | 7.79 | 9.86 | 13.1 | 0 | — | — |
+| change | 2 | 4.38 | 3.85 | 9.54 | 11.63 | 14.9 | 0 | 4.4 ms/s, 2,679 calls | 1.1 ms/s, 5,396 |
+| change | 3 | 4.06 | 3.57 | 8.74 | 10.60 | 13.8 | 0 | 4.5 ms/s, 2,495 calls | 1.1 ms/s, 5,024 |
+| base | 4 | 3.96 | 3.65 | 8.15 | 10.23 | 14.2 | 0 | — | — |
+
+- **The change:** +0.1 to +0.8 ms mean per tick, from a spread of 0.4 ms between the two base runs, so roughly +10%. About 5.5 ms/s of it is in the hook and record-read spans (about 95 µs per give in the module). The rest is the record writes (an amend per give) and the effects.
+- **Mean, not ms/s:** the change arm logs more span lines, which cut the start of bench.py's log window (1,850–1,900 tick samples against 2,530–2,560), so the table compares means.
+- **A stress case, not ordinary life.** Each walker delivers on its agreement every 4 seconds without end.
+- **An earlier version** told the other side every partial delivery. It wrote about 50 more experiences a second than the base under this load and was dropped: a give is seen by its receiver anyway, and each side reads progress in its dealings. The table is the version without it.
+
+**What grows:**
+
+- at most 12 open records per character;
+- closed records for 12 world hours (6 minutes at the island's day);
+- seeded stances for the world's life;
+- one `record_clock` row.
 
 ## Verification
 
-VERIFICATION_PLACEHOLDER
+On the Mac, my own SpacetimeDB 2.14.1 container (`sao-rules2-stdb`, `127.0.0.1:3342`), scratch `verify-*` databases only, code `eaee6b0` plus the driver fixes in this commit. Evidence: `.local/living/verify/` (git-ignored).
+
+| Surface | What was driven | Result | Evidence |
+| --- | --- | --- | --- |
+| Project check | `set -o pipefail; just living-check` | exit 0; rules 120 passed, including `a_skill_added_only_in_the_script_is_everyones`, `agreements_and_demands_are_rules_on_records` and the records tests | — |
+| Core | `scenes.py dealings` (island): agreements kept, broken, lapsed and not taken; demands met and unpaid; closed records dropped; regard records seeded and read by a relation filter | 16 of 16, twice (`8bc4f14` and the final code) | `core-rules2-deal1/`, `core-rules2-final-dealings/` |
+| Core | `tick`, `needs`, `seize` (default seed), `skirmish` (island) | 6/6, 6/6, 6/6, 8/8 | `core-rules2-final/`, `core-rules2-final-dealings/` |
+| Player | `deal.py`: proposes terms with the verbs' node, reads `my_records`, is told accepted, owed and kept; `record` and `record_party` private; a demand on the player told and unpaid when due (world rules, no overlay) | 13 of 13; the first attempt failed 1 on the driver (the outcome begins with a capital) | `player-rules2-deal2/`, `-deal1/` |
+| Player | `new_skill.py`: `whittle` only in the script; no spec refused at install; done by a player (`human_act`), a graph leaf and a mind's act; the tree's script reinstalled | 6 of 6; the first attempt failed 1 on the driver (it assumed the player's wood) | `player-rules2-deal2/` |
+| Client | `verify-client/scripts/run.py` on my own server | 30 PASS, exit 0. Three harness fixes made it run: any loopback server; the table inventory reads every authority file (`records.rs`); the floor's private tables and reducers (`floor_seed`, `genesis_timer`, `create_floor`, `genesis_step`), missing from its lists since floors merged | `client-rules2-4/` |
+| Minds | `verify_minds.py --case dealings` (fake model) | pass: the demand is told, the deliberation shows it under "Your dealings", the model's give pays it, the demand is `met` and the demander told. Three driver fixes: the demander held still; the next thought requested when the cadence drops the ask; the fake rule matching the quoted reason | `minds-rules2-4-dealings/` (failed attempts `-1`–`-3` kept) |
+| Minds | `acts`, `roundtrip`, `conversation` | pass | `minds-rules2-1-*/` |
+| Fuel gate | `just living-script-gate`, with the new `hook` case | every law within budget (table above) | `target-gate/script-gate/` |
+
+**Not covered:**
+
+- the game client binary drawn and driven (its verbs tests run; no headless session);
+- a woken resident proposing terms through a real model (the real run had none);
+- `on_death` content (the shipped rules define none);
+- `verify-knowledge` (unchanged: memory text keeps the word "mending" as history);
+- `verify-generation`'s own driver for seeded records (the core scene checks they exist).
+
+**Maintenance of the verification skills (a scoped pass):** the feature maps of `verify-core` (new `dealings.md`), `verify-player` (new `dealings.md`, `verbs.md`), `verify-minds` (new `dealings.md`), `verify-client` (`visibility.md`, `reconnect.md`, SKILL) and `verify-generation` (`seeded-world.md`) were updated, and `verify`'s surface table. The pass covered the features this change touches and drove each of them live (above). It did not re-read every other feature from source with subagents.
 
 ## The real run
 
-TRIAL_PLACEHOLDER
+**Question:** with agreements, demands and regard available (and the renamed know-how), does help reach the newcomer in the social preset?
+
+**Setup:**
+
+- **Batch:** `r2`, on the Spark's trial service, 2026-11-10 14:04–15:05.
+- **Trial:** `life-social` (residents wake into minds when engaged; `LIVING_ONLY=<subject>,woken`), island world seeds 7, 11, 7 (the seeds where the newcomer arrives inside the walls), 60 minutes, glm-flash for the newcomer and the models file's `woken` route for residents.
+- **Arms**, each 3 replicates, run in parallel:
+  - control: main `bbf7271` (its module built for the same world seeds from its own seed, its rules, models and mind);
+  - change: `rules-2` `8bc4f14` (module, rules, mind; same models).
+- The change arm ran before the partial-delivery tells were dropped. No delivery happened in it, so this makes no difference.
+
+| | control (main) | change (`rules-2`) |
+| --- | --- | --- |
+| Asks by the newcomer (food, a lesson, a bed) | 3.3 (0–6) | 2.3 (0–6) |
+| Heard | 1.3 (0–4) | 0.3 (0–1) |
+| Residents woken | 0.7 (0–1) | 1.0 (1–1) |
+| Talk turns | 1.0 (0–3) | 0 |
+| Gives, teaches, hosts toward the newcomer decided | 0 | 0 |
+| Food, lodging, lessons received | 0 | 0 |
+| Agreements or demands made (records other than regard) | — | 0 |
+| Tokens per run | 1.22M (0.92–1.48M) | 1.74M (1.52–1.90M) |
+| Cost per run | $0.20 | $0.30 |
+
+**Did help arrive?** No, in either arm. The run cannot say whether agreements help: almost no encounter happened.
+
+- The newcomers spoke mostly to no one in earshot ("If these walls won't talk, I'll leave something that can"). They fed themselves by gathering, and built.
+- No resident heard more than one ask in the change arm, and no conversation turn ran.
+- `i8` had 10–17 asks and 7–11 heard per run on the same preset. Both arms of `r2` share main `bbf7271`'s world (after `hunger-1`, residents make food rounds), so the drop is the world's, not this change's.
+
+**What the change arm did show:**
+
+- The newcomer's identity spoke of tending wounds, not mending things.
+- Its prompts and the woken resident's carried their dealings: 20–22 prompts per engaged world, the resident's with its town's regard.
+- The change arm made more deliberations (255 against 191 over three runs) with larger prompts (12.0k against 10.9k tokens).
+
+**Spend:** $1.48 for the batch (control $0.61, change $0.87; 8.8M tokens), plus about $0.04 of replays: about $1.52.
+
+**Evidence:**
+
+- archived on the Mac under `.local/living/trials/rules2-r2/` (`trials/r2/` with `report.md`, `social_report.txt`, `r2_final.json`; `journal/`);
+- the trial databases deleted; the replays' `rules2_replay_mending.json`;
+- the Spark's checkouts removed. Its 6 replica directories were left for the next `trials.py reclaim`, which refused while another batch was live.
+
+**Next, to test the question:** a preset where the newcomer meets people (arrival among residents at their work), or a scripted resident who answers asks. Then compare agreements made, kept and broken, and help received, over 3+ replicates.
 
 ## Files
 

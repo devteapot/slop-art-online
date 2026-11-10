@@ -67,10 +67,10 @@ def main():
         p.call("grant_items", [who, "wood", 3], "admin")
 
     # The player, through the act path the client uses.
-    since = now_ms()
+    since, had = now_ms(), wood(p, me)
     p.act({"do": "whittle", "item": "wood"})
     done = wait_for(lambda: [t for t in p.told(me, since) if "whittle wood" in t and "did what you had decided" in t], 10)
-    check(p, "a player does it with human_act", done and wood(p, me) == 2, f"{done}; wood {wood(p, me)}")
+    check(p, "a player does it with human_act (one wood used)", done and wood(p, me) == had - 1, f"{done}; wood {had} -> {wood(p, me)}")
     # A behaviour graph leaf.
     p.call("set_behavior", [walker, json.dumps({"seq": [{"do": {"skill": "whittle", "item": "wood"}}, {"wait": 120}]})], "admin")
     g = wait_for(lambda: wood(p, walker) == 2, 12)

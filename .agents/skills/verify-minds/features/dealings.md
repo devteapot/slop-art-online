@@ -19,5 +19,8 @@ The fake rule matches a deliberate request containing "demanded 1 stone of you",
 
 ## Gotchas
 
+- The rules' `ask` goes through the authority's thinking cadence (`perceive::request`: a person who deliberated within the species' `think_min_s` gets no new request unless it is urgent), as an offer's does. Right after the mind service starts, the ask is usually dropped. The case then requests the next thought itself (`asked_by_the_rules` in `result.json` says which), and that thought shows the demand among the character's dealings.
+- The fake rule matches the dealing's own words, including the quoted reason between "stone" and "of you".
+
 - `record` and `record_party` are subscribed whole by the mind service (as the owner, like `trade_offer`); a character is shown only the records it or its community is a party to.
 - Regard shows in the same section on an island world (its seeded stances); the default world has none.

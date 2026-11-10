@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-11-10 dealings (Mac)
+
+Branch `rules-2` (`eaee6b0`), own container `sao-rules2-stdb` (2.14.1, port 3342), fake model. `dealings` (new) passed on the fourth attempt (`minds-rules2-4-dealings/`). The earlier attempts failed on the driver: the demander's own graph kept its body busy; the thinking cadence dropped the rules' ask after the mind's first thought, so the case now requests the next thought; and the fake rule did not allow for the quoted reason in the dealing's words. `acts`, `roundtrip`, `conversation` pass (`minds-rules2-1-*/`).
+
 ## 2026-11-10 mind feedback (Mac)
 
 On the Mac (Docker Desktop), branch `feedback-1` (ffb4280 on main 6de2bad) in a worktree, against its own server `feedback-verify-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3343`), private target: docs/MIND_FEEDBACK.md.

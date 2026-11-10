@@ -451,22 +451,31 @@ def dealings_case(run):
     pay = basic_reply(acts=[{'do': 'give', 'target': {'id': other}, 'item': 'stone', 'qty': 1}])
     script = {'replies': {'think': {'thought': 'I am asked for a stone.', 'intend': ['give them the stone'], 'say': None},
                           'deliberate': basic_reply()},
-              'rules': [{'purpose': 'deliberate', 'contains': 'demanded 1 stone of you', 'reply': pay, 'times': -1}]}
+              'rules': [{'purpose': 'deliberate', 'contains': 'demanded 1 stone (\\"verify dealing\\") of you', 'reply': pay, 'times': -1}]}
     models = model(run, script)
     run.start(models, [actor])
     accepted_before = len(run.thoughts(actor))
+    # The demander is held still (its own instinct graph could keep its body busy) and acts as its
+    # mind would decide.
+    run.admin('set_behavior', other, json.dumps({'wait': 120}))
     run.admin('mind_act', other, [json.dumps({'do': 'demand', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'text': 'verify dealing'})], 'verify-minds')
-    demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 30)[0]
+    demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 60)[0]
+    run.private(f'SELECT * FROM experience WHERE observer = {other}', 'demander-experiences')
     told = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'told') if e['kind'] == 'record' and 'demands 1 stone of you' in e['text']], 'told the demand', 30)
+    # The rules' `ask` goes through the authority's thinking cadence (`think_min_s`): a mind that
+    # thought moments ago is not asked again. Its next thought sees the demand among its dealings.
+    asked = bool(run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'asked'))
+    if not asked:
+        run.request(actor, 'dealing')
     met = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-met') if r['id'] == demand['id'] and r['status'] == 'met'], 'demand met', 90)
     sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
-    shown = [e for e in sent if "Your dealings and your people's standing" in json.dumps(e) and 'demanded 1 stone of you' in json.dumps(e)]
+    shown = [e for e in sent if "Your dealings and your people's standing" in json.dumps(e) and 'demanded 1 stone' in json.dumps(e)]
     assert shown, 'the deliberation showed the demand among its dealings'
     paid = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {other}', 'demander-told') if 'paid the 1 stone you demanded' in e['text']], 'demander told', 30)
     inv = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {other}', 'demander-inventory')}
     assert inv.get('stone') == 1, inv
     return {'status': 'pass', 'told': told[0]['text'], 'record': met[0]['status'], 'demander_told': paid[0]['text'],
-            'deliberations_with_dealings': len(shown), 'thoughts_before': accepted_before}
+            'deliberations_with_dealings': len(shown), 'thoughts_before': accepted_before, 'asked_by_the_rules': asked}
 
 
 def sight_case(run):

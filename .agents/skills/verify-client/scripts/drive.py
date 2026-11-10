@@ -63,7 +63,9 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence',
            'woken', 'prior', 'prior_head', 'guest', 'judged',
            # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
-           'record', 'record_party', 'record_clock']
+           'record', 'record_party', 'record_clock',
+           # A floor module's staged genesis (floor.rs), private since floors were added.
+           'floor_seed', 'genesis_timer']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
@@ -89,6 +91,8 @@ ADMIN = {
     'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
     'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
     'spawn_newcomer': ['probe'],
+    # A floor module's runtime seed (floor.rs, admin only).
+    'create_floor': ['{}'],
 }
 
 
@@ -318,7 +322,8 @@ class Run:
         exact = re.findall(r'"(SELECT [^"]+)"', match[1])
         if exact != BASE_QUERIES:
             raise RuntimeError('viewer query set changed; update BASE_QUERIES and the feature map')
-        tables = (ROOT / 'living/authority/src/tables.rs').read_text()
+        # Tables are declared in tables.rs and in a few modules of their own (records.rs).
+        tables = '\n'.join(p.read_text() for p in sorted((ROOT / 'living/authority/src').glob('*.rs')))
         accessor = lambda d: re.search(r'accessor\s*=\s*(\w+)', d)[1]
         definitions = re.findall(r'^#\[spacetimedb::table\((.*?)\)\]', tables, re.S | re.M)
         private = [accessor(d) for d in definitions if not re.search(r'\bpublic\b', d)]
@@ -339,7 +344,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'tick', 'housekeeping'}
+        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,

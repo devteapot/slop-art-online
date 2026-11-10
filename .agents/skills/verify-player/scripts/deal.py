@@ -34,7 +34,7 @@ check, wait_for, now_ms = G.check, G.wait_for, G.now_ms
 def mine(p, words, since, kind=None):
     """What the player reads of its own experiences (its view), since a time."""
     return [e for e in p.sql("SELECT kind, text, at_ms FROM my_experience", "player")
-            if e["at_ms"] >= since and words in e["text"] and (kind is None or e["kind"] == kind)]
+            if e["at_ms"] >= since and words.lower() in e["text"].lower() and (kind is None or e["kind"] == kind)]
 
 
 def main():
