@@ -71,7 +71,13 @@ async fn main() -> Result<()> {
     let seed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(root.join(format!("living/seeds/{}.json", std::env::var("LIVING_SEED").unwrap_or_else(|_| "world".into()))))?)?;
     // LIVING_RUN separates experiments on other databases (journal and Neo4j minds are per run).
     let run = std::env::var("LIVING_RUN").unwrap_or_else(|_| seed["run"].as_str().unwrap_or("valley").to_string());
-    let (mw, mh) = (seed["map"]["w"].as_u64().unwrap_or(96) as u32, seed["map"]["h"].as_u64().unwrap_or(96) as u32);
+    // Tile worlds give `map.w`/`map.h`; land worlds (the island, floors) give one `map.size`.
+    // Without the fallback every place a mind located on the island was clamped to 96 x 96.
+    let size = seed["map"]["size"].as_u64();
+    let (mw, mh) = (
+        seed["map"]["w"].as_u64().or(size).unwrap_or(96) as u32,
+        seed["map"]["h"].as_u64().or(size).unwrap_or(96) as u32,
+    );
     let year_days = seed["year_days"].as_f64().unwrap_or(living_rules::YEAR_DAYS as f64) as f32;
     let pace = seed["life_pace"].as_f64().unwrap_or(1.0) as f32;
     let species: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(root.join("living/seeds/species.json"))?)?;
