@@ -289,6 +289,8 @@ The shipped law wakes on all of these when `by` is a player or a mind, and never
 
 ### Who the woken mind is (phase 2)
 
+Since 2026-11-10 the island's residents are authored ([seeded lives](SEEDED_LIVES.md#the-seam-with-town-life-layer-2)): each has a sheet in its `background`, its relations as `relation` rows and its author's places as `place` rows before it wakes. The paid lab there found that the first consolidation rewrites an authored persona with wrong facts unless it is given the resident's world facts.
+
 It starts from what the world holds about the resident, read at waking: its household and family (`parent_a/b`, `home_x/y`), its occupation and background (`background`, the authored sheet where the seed has one), its genome, its lot and settlement (`woken.settlement`), its community, its relations if any, its places, and its ring. The mind service seeds its Neo4j mind from these facts (the same bootstrap an authored resident's sheet gets), then **internalizes the ring in one batch** before the first deliberation, through player memory's internalize path (`lived.rs`, reused once `harness-1` lands): the ring's lines are first-person perceptions with positions and times, like a player's experience rows. Anything the model writes beyond those facts (a persona narrative, values, goals) is marked as the mind's own, `lived_under = ["ai"]` and an `inferred_from: woken` mark, so an experiment can tell world facts from what a model made up. No backstory is invented by the engine.
 
 ### The ring before waking

@@ -42,7 +42,7 @@ Sheet traits that are person temperament traits (`caution`, `sociability`, `empa
 }
 ```
 
-**Authority** (`living/authority/src/seed.rs`). After every settlement has its people, each sheet is copied into its person's `background` row as `sheet`. `relations[]` gain `"id"`, and each `memories[].about` becomes `[{"name", "id"}]`. Names that match no one are dropped and logged. Relations may name people in other settlements. `secret` is removed, because `background` is a public table. The other background fields are the same as on the occupation path: `origin`, `town`, `town_character`, `walled`, `occupation`, `household`, `home`, `town_center`, and `towns_known` when a realm has several settlements.
+**Authority** (`living/authority/src/seed.rs`). After every settlement has its people, each sheet is copied into its person's `background` row as `sheet`. `relations[]` gain `"id"`, and each `memories[].about` becomes `[{"name", "id"}]`. Names that match no one are dropped and logged. Relations may name people in other settlements. `secret` is removed: `background` is private now, but the secret is read only from the seed file the mind service runs. Since 2026-11-10 each resolved relation is also written as a `relation` row at world creation, so instinct-only residents' graphs read it (`friend`, `enemy`, a label) and a woken mind starts with it ([seeded lives](SEEDED_LIVES.md)). The other background fields are the same as on the occupation path: `origin`, `town`, `town_character`, `walled`, `occupation`, `household`, `home`, `town_center`, and `towns_known` when a realm has several settlements.
 
 **Mind** (`sheet_persona` in `living/mind/src/mind.rs`). A person whose background carries a sheet with a narrative gets it in place of `background_persona` or `birth_persona`, both at bootstrap and on first deliberation (an authored infant receives it once it becomes a child). Installation:
 
@@ -98,3 +98,7 @@ The first authored world, set up at the user's request on 2026-09-28: a develope
 - **Models:** Brandholm thinks with Luna; Saltreach and Oathstone with Mistral Small (`groups` in the models config).
 - **Wildlife:** 60 deer and 8 wolves in packs.
 - **Sheets** (first draft, Luna): 491 relations, of which 103 are one-sided non-family feelings, 222 memories, 190 stances and 8 secrets.
+
+## The island (`island`), planned rather than cast by hand
+
+Since 2026-11-10 the island's 277 residents are authored too. `author_world.py island` plans them from `living/seeds/worlds/island/` (`bible.md`, `world.json` with anchor people, routes and stores, `ways.json`): households and situations per settlement, sheets per household with the situations each member is in, ties made mutual, a review pass by a second model, and checks against the rules' catalog. The result is merged into `living/seeds/island.json`. Residents may also carry `places` (another town's market with the stages of the road to it, or a spot on a road). See [seeded lives](SEEDED_LIVES.md).
