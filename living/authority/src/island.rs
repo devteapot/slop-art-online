@@ -221,7 +221,8 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
         arrive_x: arrive.0,
         arrive_y: arrive.1,
     };
-    let ways = living_rules::ways::Ways::of(land);
+    // Built by the planner's last step; a land made otherwise (none today) builds it here.
+    let ways = land.ways.clone().unwrap_or_else(|| living_rules::ways::Ways::of(land));
     Hosted { map, info, settlements, lots, ways }
 }
 

@@ -367,7 +367,7 @@ fn default_sites() -> Vec<SiteSpec> {
         spec(SiteKind::Cave, 2, 4, 1.2, 5.0, 300.0, 1.0, 0.0),
         // Hamlets: a few houses, barns and fields away from the towns, in meadows, woods and
         // hills (docs/SEEDED_LIVES.md). Placed last, so the sites above stay where they were.
-        SiteSpec { style: Some("hamlet".into()), dispersed: true, ..spec(SiteKind::Village, 2, 9, 3.0, 26.0, 230.0, 1.0, 0.6) },
+        SiteSpec { style: Some("hamlet".into()), dispersed: true, ..spec(SiteKind::Village, 2, 400, 3.0, 26.0, 230.0, 1.0, 0.6) },
     ]
 }
 
@@ -484,6 +484,8 @@ impl Range {
 /// A generated world: tiles, regions, sites and the fields behind its height.
 #[derive(Clone, Debug)]
 pub struct Land {
+    /// The roads as a graph for known ways ([`crate::ways`]), built by the planner's last step.
+    pub ways: Option<crate::ways::Ways>,
     pub seed: u64,
     pub size: u32,
     pub map: Map,
@@ -592,8 +594,14 @@ impl Land {
             if s.flatten <= 0.0 {
                 continue;
             }
-            let d = (x - s.x).d_hypot(y - s.y);
+            // Only sites within 1.5 radii level this point: a box test first spares the
+            // distance for the rest (a land of many hamlets asks this for every tile).
             let r = s.radius_m;
+            let (dx, dy) = (x - s.x, y - s.y);
+            if dx.abs() >= r * 1.5 || dy.abs() >= r * 1.5 {
+                continue;
+            }
+            let d = dx.d_hypot(dy);
             if d < r * 1.5 {
                 let w = (1.0 - smoothstep(r * 0.8, r * 1.5, d)) * s.flatten;
                 t = lerp(t, s.ground_m + 0.3 * detail, w);
@@ -878,12 +886,17 @@ pub struct Gen {
     work: Option<Box<Work>>,
     land: Option<Land>,
     plan: settle::Staged,
+    /// Dispersed-site steps run.
+    dispersed_done: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Next {
     Hydro,
     Macro,
+    /// Dispersed sites (hamlets), a bounded number per step, after the other sites and before
+    /// the tiles (their ground is levelled like any site's).
+    Dispersed,
     Rows(usize),
     Connect,
     Shore(usize),
@@ -891,8 +904,28 @@ enum Next {
     Done,
 }
 
+/// What the dispersed-site steps need from the macro pass, and how far they are.
+struct SiteWork {
+    wd: Vec<f32>,
+    still_d: Vec<f32>,
+    sea_d: Vec<f32>,
+    max_e: f32,
+    land_km2: f32,
+    avoid: Option<((f32, f32), f32)>,
+    /// The dispersed spec being placed (index among the dispersed ones) and its state.
+    spec: usize,
+    state: SpecState,
+    steps: u32,
+}
+
+/// Dispersed sites (hamlets) placed per step of [`Gen`]: each pick scans the candidates once
+/// against the placed sites near them, so a step's work is bounded by this many scans.
+const DISPERSED_PER_STEP: usize = 24;
+
 /// What the tile steps need from the macro pass.
 struct Work {
+    /// Dispersed sites still to place (none: done, or the land has no dispersed specs).
+    sites: Option<Box<SiteWork>>,
     land: Land,
     rmask: Vec<u8>,
     fords: Vec<((f32, f32), (f32, f32), f32)>,
@@ -909,17 +942,33 @@ struct Work {
 impl Gen {
     pub fn new(seed: u64, size_m: u32, p: LandParams) -> Self {
         assert!((256..=MAX_SIDE).contains(&size_m), "land side {size_m} m outside 256..={MAX_SIDE}");
-        Self { seed, size: size_m, p, next: Next::Hydro, hydro: None, work: None, land: None, plan: settle::Staged::default() }
+        Self { seed, size: size_m, p, next: Next::Hydro, hydro: None, work: None, land: None, plan: settle::Staged::default(), dispersed_done: 0 }
     }
 
     fn band_rows(&self) -> usize {
         (BAND_TILES / self.size as usize).max(1)
     }
 
-    /// Steps in all, for progress: the macro pass, the bands, connect, shore and the planner.
+    /// Steps in all, for progress: the macro pass, the dispersed sites, the bands, connect,
+    /// shore and the planner.
     pub fn steps(&self) -> u32 {
         let bands = (self.size as usize).div_ceil(self.band_rows()) as u32;
-        2 + bands + 3 + self.plan.steps()
+        2 + self.dispersed_steps() + bands + 3 + self.plan.steps()
+    }
+
+    /// Dispersed-site steps: done ones, plus the batches still wanted once the macro pass says
+    /// how many (before it, one per dispersed spec).
+    fn dispersed_steps(&self) -> u32 {
+        let specs = self.p.sites.iter().filter(|sp| sp.dispersed).count() as u32;
+        match self.work.as_ref().and_then(|w| w.sites.as_ref()) {
+            Some(sw) => {
+                let land = &self.work.as_ref().expect("work").land;
+                let left: usize = self.p.sites.iter().filter(|sp| sp.dispersed).skip(sw.spec).map(|sp| ((sw.land_km2 * sp.per_km2).round() as u32).clamp(sp.min, sp.max) as usize).sum::<usize>().saturating_sub(land.sites.iter().filter(|q| self.p.sites.iter().filter(|sp| sp.dispersed).skip(sw.spec).any(|sp| sp.kind == q.kind && sp.style == q.style)).count());
+                sw.steps + (left.div_ceil(DISPERSED_PER_STEP) as u32).max(1)
+            }
+            None if matches!(self.next, Next::Hydro | Next::Macro) => specs,
+            None => self.dispersed_done,
+        }
     }
 
     /// Steps done so far.
@@ -928,10 +977,11 @@ impl Gen {
         match self.next {
             Next::Hydro => 0,
             Next::Macro => 1,
-            Next::Rows(j) => 2 + (j / self.band_rows()) as u32,
-            Next::Connect => 2 + bands,
-            Next::Shore(k) => 3 + bands + k as u32,
-            Next::Plan => 5 + bands + self.plan.done(),
+            Next::Dispersed => 2 + self.dispersed_done,
+            Next::Rows(j) => 2 + self.dispersed_done + (j / self.band_rows()) as u32,
+            Next::Connect => 2 + self.dispersed_done + bands,
+            Next::Shore(k) => 3 + self.dispersed_done + bands + k as u32,
+            Next::Plan => 5 + self.dispersed_done + bands + self.plan.done(),
             Next::Done => self.steps(),
         }
     }
@@ -941,6 +991,7 @@ impl Gen {
         match self.next {
             Next::Hydro => "relief, lakes and rivers".into(),
             Next::Macro => "water, regions and sites".into(),
+            Next::Dispersed => format!("dispersed sites (step {})", self.dispersed_done + 1),
             Next::Rows(j) => format!("tiles, rows {j}..{}", (j + self.band_rows()).min(self.size as usize)),
             Next::Connect => "connectivity".into(),
             Next::Shore(0) => "shore distances on land".into(),
@@ -960,7 +1011,15 @@ impl Gen {
             }
             Next::Macro => {
                 self.work = Some(Box::new(macro_pass(*self.hydro.take().expect("hydro pass"), &self.p)));
-                self.next = Next::Rows(0);
+                self.next = if self.work.as_ref().is_some_and(|w| w.sites.is_some()) { Next::Dispersed } else { Next::Rows(0) };
+            }
+            Next::Dispersed => {
+                let wk = self.work.as_mut().expect("macro pass");
+                self.dispersed_done += 1;
+                if dispersed_step(wk, &self.p) {
+                    wk.sites = None;
+                    self.next = Next::Rows(0);
+                }
             }
             Next::Rows(j0) => {
                 let j1 = (j0 + self.band_rows()).min(w);
@@ -1000,6 +1059,36 @@ impl Gen {
         assert!(self.next == Next::Done, "land generation is not finished");
         self.land.expect("land")
     }
+}
+
+/// Place up to [`DISPERSED_PER_STEP`] dispersed sites, in the dispersed specs' order; true once
+/// every one is placed. The same picks as placing them all at once.
+fn dispersed_step(wk: &mut Work, p: &LandParams) -> bool {
+    let Some(sw) = wk.sites.as_mut() else { return true };
+    let land = &mut wk.land;
+    let mut placed = std::mem::take(&mut land.sites);
+    let SiteWork { wd, still_d, sea_d, max_e, land_km2, avoid, spec, state, steps } = &mut **sw;
+    *steps += 1;
+    let elev = &land.elev.v;
+    let c = SiteCtx { p, n: land.n, cell: land.cell, s: land.size as f32, elev, wd, still_d, sea_d, node_kind: &land.node_kind, max_e: *max_e, land_km2: *land_km2, seed: land.seed, avoid: *avoid };
+    let specs: Vec<&SiteSpec> = p.sites.iter().filter(|sp| sp.dispersed).collect();
+    let mut budget = DISPERSED_PER_STEP;
+    while *spec < specs.len() {
+        if !place_spec(&c, &|k| node_slope(elev, c.n, c.cell, k), specs[*spec], &mut placed, state, &mut budget) {
+            break;
+        }
+        *spec += 1;
+        *state = SpecState::default();
+    }
+    land.sites = placed;
+    *spec >= specs.len()
+}
+
+/// The ground's slope at a macro node (as the macro pass computes it).
+fn node_slope(elev: &[f32], n: usize, cell: f32, k: usize) -> f32 {
+    let (i, j) = ((k % n) as isize, (k / n) as isize);
+    let g = |a: isize, b: isize| elev[(b.clamp(0, n as isize - 1) as usize) * n + a.clamp(0, n as isize - 1) as usize];
+    ((g(i + 1, j) - g(i - 1, j)) / (2.0 * cell)).d_hypot((g(i, j + 1) - g(i, j - 1)) / (2.0 * cell))
 }
 
 /// The first half of the macro pass, on the `cell_m` grid: relief, lakes, rivers and valleys.
@@ -1606,6 +1695,7 @@ fn macro_pass(h: Hydro, p: &LandParams) -> Work {
     let sites = place_sites(&SiteCtx { p, n, cell, s, elev: &elev, wd: &wd, still_d: &still_d, sea_d: &sea_d, node_kind: &node_kind, max_e, land_km2, seed, avoid }, &|k| slope_of(&elev, k));
 
     let mut land = Land {
+        ways: None,
         seed,
         size: size_m,
         map: Map::from_chunks(0, 0, std::iter::empty()),
@@ -1685,7 +1775,8 @@ fn macro_pass(h: Hydro, p: &LandParams) -> Work {
         beds.push(River { points: pts.iter().map(|q| (q[0], q[1])).collect(), width_m: pts.iter().map(|q| q[2]).collect(), length_m: length, source_m, fords: river_fords });
     }
 
-    Work { land, rmask, fords, still, wet, beach, outcrops, trees, dirt, tiles: vec![Terrain::Grass as u8; tn], sd: Vec::new() }
+    let sites_work = p.sites.iter().any(|sp| sp.dispersed).then(|| Box::new(SiteWork { wd, still_d, sea_d, max_e, land_km2, avoid, spec: 0, state: SpecState::default(), steps: 0 }));
+    Work { land, rmask, fords, still, wet, beach, outcrops, trees, dirt, tiles: vec![Terrain::Grass as u8; tn], sd: Vec::new(), sites: sites_work }
 }
 
 /// Classify the tiles of rows `j0..j1`. Each tile's slope reads its neighbours' ground, so the
@@ -1988,7 +2079,100 @@ struct Survey {
     sea: f32,
 }
 
+/// A site candidate: score, position, mean ground, region kind.
+type Cand = (f32, f32, f32, f32, RegionKind);
+
+/// How far one site spec's placement has got: its relaxation level and that level's candidates.
+#[derive(Default)]
+pub(crate) struct SpecState {
+    relax: usize,
+    cands: Option<Box<Level>>,
+}
+
+/// One relaxation level's candidates and what the placed sites leave of each: whether one is
+/// too near (`blocked`, for good: sites are only added) and the distance to the nearest (up to
+/// 1,200 m). Kept up to date site by site, through buckets of candidates, so a pick is one pass
+/// over the candidates and a placement touches only those near it.
+pub(crate) struct Level {
+    cands: Vec<Cand>,
+    blocked: Vec<bool>,
+    nearest: Vec<f32>,
+    buckets: Vec<Vec<u32>>,
+    cols: i32,
+    /// Placed sites already taken into account.
+    seen: usize,
+}
+
+/// Side of a candidate bucket (metres).
+const BUCKET_M: f32 = 128.0;
+
+impl Level {
+    fn new(cands: Vec<Cand>, side: f32) -> Self {
+        let cols = (side / BUCKET_M).ceil().max(1.0) as i32;
+        let mut buckets = vec![Vec::new(); (cols * cols) as usize];
+        for (ci, c) in cands.iter().enumerate() {
+            let (bx, by) = (((c.1 / BUCKET_M) as i32).clamp(0, cols - 1), ((c.2 / BUCKET_M) as i32).clamp(0, cols - 1));
+            buckets[(by * cols + bx) as usize].push(ci as u32);
+        }
+        let n = cands.len();
+        Self { cands, blocked: vec![false; n], nearest: vec![1200.0; n], buckets, cols, seen: 0 }
+    }
+
+    /// Take a placed site into account for every candidate within its reach.
+    fn apply(&mut self, q: &Site, sp: &SiteSpec, relax: f32) {
+        let r = sp.radius_m;
+        let mine = q.kind == sp.kind && q.style == sp.style;
+        let need = if mine { (sp.spacing_m / relax.sqrt()).max(r + q.radius_m + 60.0) } else if q.kind == sp.kind && q.kind != SiteKind::Cave { (sp.spacing_m.max(q.radius_m * 3.0) / relax.sqrt()).max(r + q.radius_m + 120.0) } else { r + q.radius_m + 120.0 };
+        let counts = q.kind != SiteKind::Cave && sp.kind != SiteKind::Cave;
+        let reach = if counts { need.max(1200.0) } else { need };
+        let (b0x, b0y) = (((q.x - reach) / BUCKET_M).floor() as i32, ((q.y - reach) / BUCKET_M).floor() as i32);
+        let (b1x, b1y) = (((q.x + reach) / BUCKET_M).floor() as i32, ((q.y + reach) / BUCKET_M).floor() as i32);
+        for by in b0y.max(0)..=b1y.min(self.cols - 1) {
+            for bx in b0x.max(0)..=b1x.min(self.cols - 1) {
+                for &ci in &self.buckets[(by * self.cols + bx) as usize] {
+                    let ci = ci as usize;
+                    let (_, x, y, _, _) = self.cands[ci];
+                    let d = (q.x - x).d_hypot(q.y - y);
+                    if d < need {
+                        self.blocked[ci] = true;
+                    }
+                    if counts && d < self.nearest[ci] {
+                        self.nearest[ci] = d;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Placement relaxes its limits in these steps when a site does not fit.
+const RELAX: [f32; 4] = [1.0, 1.6, 2.5, 4.0];
+
 fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
+    let mut placed: Vec<Site> = Vec::new();
+    // Dispersed sites (hamlets) are placed in their own steps afterwards ([`Gen`]).
+    let mut order: Vec<&SiteSpec> = c.p.sites.iter().filter(|sp| !sp.dispersed).collect();
+    // Towns in their own style come after the villages, so the first sites stay where they were.
+    order.sort_by_key(|sp| match sp.kind {
+        SiteKind::Town if sp.style.is_none() => 0,
+        SiteKind::Giants => 1,
+        SiteKind::SmallFolk => 2,
+        SiteKind::Village => 3,
+        SiteKind::Town => 4,
+        SiteKind::Cave => 5,
+    });
+    for sp in order {
+        let mut unlimited = usize::MAX;
+        place_spec(c, slope, sp, &mut placed, &mut SpecState::default(), &mut unlimited);
+    }
+    placed
+}
+
+/// Place one spec's sites among those already `placed`, at most `budget` of them; true once the
+/// spec is done (it has its count, or nowhere is left at any relaxation). Resumable: `st` keeps
+/// the relaxation and its candidates, so a caller with a bounded budget per call (a step of
+/// [`Gen`]) places the rest in later calls with the same result.
+fn place_spec(c: &SiteCtx, slope: &dyn Fn(usize) -> f32, sp: &SiteSpec, placed: &mut Vec<Site>, st: &mut SpecState, budget: &mut usize) -> bool {
     let n = c.n;
     let node = |x: f32, y: f32| {
         let i = ((x / c.cell).round() as isize).clamp(0, n as isize - 1) as usize;
@@ -2036,141 +2220,140 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
         Some(sv)
     };
     use RegionKind as K;
-    let mut placed: Vec<Site> = Vec::new();
-    let mut order: Vec<&SiteSpec> = c.p.sites.iter().collect();
-    // Towns in their own style come after the villages, so the first sites stay where they were.
-    order.sort_by_key(|sp| match sp.kind {
-        _ if sp.dispersed => 6,
-        SiteKind::Town if sp.style.is_none() => 0,
-        SiteKind::Giants => 1,
-        SiteKind::SmallFolk => 2,
-        SiteKind::Village => 3,
-        SiteKind::Town => 4,
-        SiteKind::Cave => 5,
-    });
-    for sp in order {
-        let want = ((c.land_km2 * sp.per_km2).round() as u32).clamp(sp.min, sp.max) as usize;
-        let r = sp.radius_m;
-        let mine = |q: &Site| q.kind == sp.kind && q.style == sp.style;
-        for relax in [1.0f32, 1.6, 2.5, 4.0] {
-            let have = placed.iter().filter(|q| mine(q)).count();
-            if have >= want {
-                break;
-            }
-            let mut cands: Vec<(f32, f32, f32, f32, K)> = Vec::new();
-            for k in (0..n * n).step_by(2).filter(|k| (k / n) % 2 == 0) {
-                let (x, y) = ((k % n) as f32 * c.cell, (k / n) as f32 * c.cell);
-                let kind = c.node_kind[k];
-                let sr = if sp.kind == SiteKind::Cave { 12.0 } else { r };
-                if c.avoid.is_some_and(|(cc, cr)| (x - cc.0).d_hypot(y - cc.1) < cr * 1.12 + sr + 40.0) {
-                    continue;
-                }
-                let Some(sv) = survey(x, y, sr) else { continue };
-                // Wholly inland, unless the island leaves no room.
-                if sv.sea > if relax < 2.5 { 0.0 } else { 0.12 } {
-                    continue;
-                }
-                let rough = sv.hi - sv.lo;
-                // Settlements stay out of the spirit grove and keep lakes and sea outside their edge.
-                // On a cramped island the margin shrinks as placement relaxes.
-                let margin = if relax < 2.5 { r + 15.0 } else { r * 0.6 };
-                if sp.kind != SiteKind::Cave && (sv.grove > 0.0 || c.still_d[k] < margin) {
-                    continue;
-                }
-                let jitter = hash(c.seed ^ 0x71 ^ sp.kind as u64, x as i32, y as i32);
-                let score = match sp.kind {
-                    _ if sp.dispersed => {
-                        // Any not-too-rough ground of its region kinds, not in wetland pools or on
-                        // the peaks; water is welcome but not needed (a well, a stream).
-                        let ok_kind = if sp.regions.is_empty() { matches!(kind, K::Meadow | K::Forest | K::OldForest | K::Highland | K::Beach) } else { sp.regions.contains(&kind) };
-                        if !ok_kind || sv.still > 0.0 || sv.wetland > 0.1 * relax || sv.water > 0.15 * relax || rough > 9.0 * relax || sv.mean < 2.0 || sv.mean > 200.0 * relax {
-                            continue;
-                        }
-                        -rough * 0.5 + jitter * 6.0
-                    }
-                    SiteKind::Town if sp.relief_m.is_some() => {
-                        // A town in its own style: the relief it wants (a hillside to terrace, or
-                        // flat ground), near the sea if it likes the coast.
-                        let [lo, hi] = sp.relief_m.unwrap();
-                        let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach | K::Highland) || relax > 1.0 && matches!(kind, K::OldForest);
-                        if !ok_kind || sv.still > 0.04 * (relax - 1.0) || sv.wetland > 0.1 * relax || sv.water > 0.1 * relax || rough < lo / relax || rough > hi * relax || sv.mean < 2.0 || sv.mean > 140.0 * relax {
-                            continue;
-                        }
-                        let coast = if sp.coast && c.sea_d[k] < r * 2.5 { 14.0 } else { 0.0 };
-                        -(rough - (lo + hi) * 0.5).abs() * 0.3 - 0.02 * c.wd[k].min(400.0) + coast + jitter * 4.0
-                    }
-                    SiteKind::Town => {
-                        let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach) || relax > 1.0 && matches!(kind, K::OldForest | K::Wetland);
-                        if !ok_kind || sv.still > 0.04 * (relax - 1.0) || sv.wetland > 0.1 * relax || sv.water > 0.08 * relax || rough > 20.0 * relax || sv.mean < 2.0 || sv.mean > 80.0 * relax {
-                            continue;
-                        }
-                        -rough - 0.03 * c.wd[k].min(600.0) + if c.wd[k] < r * 1.2 { 8.0 } else { 0.0 } + if c.sea_d[k] < r * 2.5 { 4.0 } else { 0.0 } + jitter * 3.0
-                    }
-                    SiteKind::Village => {
-                        // Wetland pools leave no room for houses until placement has to relax.
-                        let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach) || relax > 1.6;
-                        if !ok_kind || sv.still > 0.0 || sv.wetland > 0.2 * (relax - 1.0) || sv.water > 0.1 * relax || rough > 10.0 * relax || sv.mean < 2.0 || sv.mean > 120.0 * relax || c.wd[k] > 160.0 * relax {
-                            continue;
-                        }
-                        -rough - 0.02 * c.wd[k] + jitter * 3.0
-                    }
-                    SiteKind::Giants => {
-                        let ok_kind = kind == K::Highland || relax > 1.0 && kind == K::Peaks;
-                        // Never below the foothills: the giants live up high.
-                        if !ok_kind || sv.water > 0.08 * relax || rough > 70.0 * relax || sv.mean < c.p.regions.highland_m * 0.6 {
-                            continue;
-                        }
-                        -rough + 0.12 * sv.mean + jitter * 5.0
-                    }
-                    SiteKind::SmallFolk => {
-                        let ok_kind = matches!(kind, K::Forest | K::OldForest | K::Highland) || relax > 1.6 && kind != K::Peaks;
-                        if !ok_kind || sv.water > 0.05 * relax || rough > 8.0 * relax || sv.mean < 20.0 / relax || sv.mean > 220.0 * relax {
-                            continue;
-                        }
-                        -rough + if matches!(kind, K::Forest | K::OldForest) { 6.0 } else { 0.0 } + 0.02 * sv.mean + jitter * 4.0
-                    }
-                    SiteKind::Cave => {
-                        let sl = slope(k);
-                        let ok_kind = matches!(kind, K::Highland | K::Peaks);
-                        if !ok_kind || sv.water > 0.0 || sl < 0.45 / relax || sl > 1.6 * relax || sv.mean < 50.0 / relax || sv.mean > c.max_e * 0.8 {
-                            continue;
-                        }
-                        sl * 10.0 + jitter * 5.0
-                    }
-                };
-                cands.push((score, x, y, sv.mean, kind));
-            }
-            while placed.iter().filter(|q| mine(q)).count() < want {
-                let mut best: Option<(f32, usize)> = None;
-                for (ci, &(score, x, y, _, _)) in cands.iter().enumerate() {
-                    let mut ok = true;
-                    let mut nearest = 1200f32;
-                    for q in &placed {
-                        let d = (q.x - x).d_hypot(q.y - y);
-                        let need = if mine(q) { (sp.spacing_m / relax.sqrt()).max(r + q.radius_m + 60.0) } else if q.kind == sp.kind && q.kind != SiteKind::Cave { (sp.spacing_m.max(q.radius_m * 3.0) / relax.sqrt()).max(r + q.radius_m + 120.0) } else { r + q.radius_m + 120.0 };
-                        if d < need {
-                            ok = false;
-                            break;
-                        }
-                        if q.kind != SiteKind::Cave && sp.kind != SiteKind::Cave {
-                            nearest = nearest.min(d);
-                        }
-                    }
-                    // Dispersed sites spread over region kinds too: each one already in this kind
-                    // of region counts against the next.
-                    let same = if sp.dispersed { placed.iter().filter(|q| mine(q) && q.region == cands[ci].4).count() as f32 } else { 0.0 };
-                    let eff = score + nearest / 100.0 - 4.0 * same;
-                    if ok && best.is_none_or(|b| eff > b.0) {
-                        best = Some((eff, ci));
-                    }
-                }
-                let Some((_, ci)) = best else { break };
-                let (_, x, y, mean, kind) = cands[ci];
-                placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten, style: sp.style.clone(), ward: false });
-            }
+    let want = ((c.land_km2 * sp.per_km2).round() as u32).clamp(sp.min, sp.max) as usize;
+    let r = sp.radius_m;
+    let mine = |q: &Site| q.kind == sp.kind && q.style == sp.style;
+    while st.relax < RELAX.len() {
+        let relax = RELAX[st.relax];
+        let have = placed.iter().filter(|q| mine(q)).count();
+        if have >= want {
+            return true;
         }
+        if st.cands.is_none() {
+            let mut cands: Vec<Cand> = Vec::new();
+                for k in (0..n * n).step_by(2).filter(|k| (k / n) % 2 == 0) {
+                    let (x, y) = ((k % n) as f32 * c.cell, (k / n) as f32 * c.cell);
+                    let kind = c.node_kind[k];
+                    let sr = if sp.kind == SiteKind::Cave { 12.0 } else { r };
+                    if c.avoid.is_some_and(|(cc, cr)| (x - cc.0).d_hypot(y - cc.1) < cr * 1.12 + sr + 40.0) {
+                        continue;
+                    }
+                    let Some(sv) = survey(x, y, sr) else { continue };
+                    // Wholly inland, unless the island leaves no room.
+                    if sv.sea > if relax < 2.5 { 0.0 } else { 0.12 } {
+                        continue;
+                    }
+                    let rough = sv.hi - sv.lo;
+                    // Settlements stay out of the spirit grove and keep lakes and sea outside their edge.
+                    // On a cramped island the margin shrinks as placement relaxes.
+                    let margin = if relax < 2.5 { r + 15.0 } else { r * 0.6 };
+                    if sp.kind != SiteKind::Cave && (sv.grove > 0.0 || c.still_d[k] < margin) {
+                        continue;
+                    }
+                    let jitter = hash(c.seed ^ 0x71 ^ sp.kind as u64, x as i32, y as i32);
+                    let score = match sp.kind {
+                        _ if sp.dispersed => {
+                            // Any not-too-rough ground of its region kinds, not in wetland pools or on
+                            // the peaks; water is welcome but not needed (a well, a stream).
+                            let ok_kind = if sp.regions.is_empty() { matches!(kind, K::Meadow | K::Forest | K::OldForest | K::Highland | K::Beach) } else { sp.regions.contains(&kind) };
+                            if !ok_kind || sv.still > 0.0 || sv.wetland > 0.1 * relax || sv.water > 0.15 * relax || rough > 9.0 * relax || sv.mean < 2.0 || sv.mean > 200.0 * relax {
+                                continue;
+                            }
+                            -rough * 0.5 + jitter * 6.0
+                        }
+                        SiteKind::Town if sp.relief_m.is_some() => {
+                            // A town in its own style: the relief it wants (a hillside to terrace, or
+                            // flat ground), near the sea if it likes the coast.
+                            let [lo, hi] = sp.relief_m.unwrap();
+                            let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach | K::Highland) || relax > 1.0 && matches!(kind, K::OldForest);
+                            if !ok_kind || sv.still > 0.04 * (relax - 1.0) || sv.wetland > 0.1 * relax || sv.water > 0.1 * relax || rough < lo / relax || rough > hi * relax || sv.mean < 2.0 || sv.mean > 140.0 * relax {
+                                continue;
+                            }
+                            let coast = if sp.coast && c.sea_d[k] < r * 2.5 { 14.0 } else { 0.0 };
+                            -(rough - (lo + hi) * 0.5).abs() * 0.3 - 0.02 * c.wd[k].min(400.0) + coast + jitter * 4.0
+                        }
+                        SiteKind::Town => {
+                            let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach) || relax > 1.0 && matches!(kind, K::OldForest | K::Wetland);
+                            if !ok_kind || sv.still > 0.04 * (relax - 1.0) || sv.wetland > 0.1 * relax || sv.water > 0.08 * relax || rough > 20.0 * relax || sv.mean < 2.0 || sv.mean > 80.0 * relax {
+                                continue;
+                            }
+                            -rough - 0.03 * c.wd[k].min(600.0) + if c.wd[k] < r * 1.2 { 8.0 } else { 0.0 } + if c.sea_d[k] < r * 2.5 { 4.0 } else { 0.0 } + jitter * 3.0
+                        }
+                        SiteKind::Village => {
+                            // Wetland pools leave no room for houses until placement has to relax.
+                            let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach) || relax > 1.6;
+                            if !ok_kind || sv.still > 0.0 || sv.wetland > 0.2 * (relax - 1.0) || sv.water > 0.1 * relax || rough > 10.0 * relax || sv.mean < 2.0 || sv.mean > 120.0 * relax || c.wd[k] > 160.0 * relax {
+                                continue;
+                            }
+                            -rough - 0.02 * c.wd[k] + jitter * 3.0
+                        }
+                        SiteKind::Giants => {
+                            let ok_kind = kind == K::Highland || relax > 1.0 && kind == K::Peaks;
+                            // Never below the foothills: the giants live up high.
+                            if !ok_kind || sv.water > 0.08 * relax || rough > 70.0 * relax || sv.mean < c.p.regions.highland_m * 0.6 {
+                                continue;
+                            }
+                            -rough + 0.12 * sv.mean + jitter * 5.0
+                        }
+                        SiteKind::SmallFolk => {
+                            let ok_kind = matches!(kind, K::Forest | K::OldForest | K::Highland) || relax > 1.6 && kind != K::Peaks;
+                            if !ok_kind || sv.water > 0.05 * relax || rough > 8.0 * relax || sv.mean < 20.0 / relax || sv.mean > 220.0 * relax {
+                                continue;
+                            }
+                            -rough + if matches!(kind, K::Forest | K::OldForest) { 6.0 } else { 0.0 } + 0.02 * sv.mean + jitter * 4.0
+                        }
+                        SiteKind::Cave => {
+                            let sl = slope(k);
+                            let ok_kind = matches!(kind, K::Highland | K::Peaks);
+                            if !ok_kind || sv.water > 0.0 || sl < 0.45 / relax || sl > 1.6 * relax || sv.mean < 50.0 / relax || sv.mean > c.max_e * 0.8 {
+                                continue;
+                            }
+                            sl * 10.0 + jitter * 5.0
+                        }
+                    };
+                    cands.push((score, x, y, sv.mean, kind));
+                }
+            st.cands = Some(Box::new(Level::new(cands, c.s)));
+        }
+        let level = st.cands.as_mut().expect("candidates");
+        // Sites placed since this level last looked (all of them, the first time).
+        for q in &placed[level.seen..] {
+            level.apply(q, sp, relax);
+        }
+        level.seen = placed.len();
+        while placed.iter().filter(|q| mine(q)).count() < want {
+            if *budget == 0 {
+                return false;
+            }
+            // Dispersed sites spread over region kinds too: each one already in this kind of
+            // region counts against the next.
+            let mut same_in = [0usize; 16];
+            if sp.dispersed {
+                for q in placed.iter().filter(|q| mine(q)) {
+                    same_in[(q.region as usize).min(15)] += 1;
+                }
+            }
+            let mut best: Option<(f32, usize)> = None;
+            for (ci, &(score, _, _, _, kind)) in level.cands.iter().enumerate() {
+                if level.blocked[ci] {
+                    continue;
+                }
+                let eff = score + level.nearest[ci] / 100.0 - 4.0 * same_in[(kind as usize).min(15)] as f32;
+                if best.is_none_or(|b| eff > b.0) {
+                    best = Some((eff, ci));
+                }
+            }
+            let Some((_, ci)) = best else { break };
+            let (_, x, y, mean, kind) = level.cands[ci];
+            placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten, style: sp.style.clone(), ward: false });
+            level.apply(placed.last().expect("placed"), sp, relax);
+            level.seen = placed.len();
+            *budget -= 1;
+        }
+        st.cands = None;
+        st.relax += 1;
     }
-    placed
+    true
 }
 
 /// Make every walkable tile reachable on foot: close pockets under `min_pocket` tiles, then cut
@@ -2309,6 +2492,39 @@ pub(crate) fn connect_walled(tiles: &mut [u8], w: usize) -> (u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Dispersed sites (hamlets) are placed a bounded number per step of [`Gen`]: a land asking
+    /// for many takes several steps, none places more than its budget, and they keep their
+    /// spacing (relaxed at most to the last relaxation).
+    #[test]
+    fn dispersed_sites_place_in_bounded_steps() {
+        let mut p = LandParams::default();
+        for sp in p.sites.iter_mut().filter(|sp| sp.dispersed) {
+            sp.per_km2 = 30.0;
+        }
+        let mut g = Gen::new(7, 2048, p.clone());
+        let (mut steps, mut most) = (0, 0);
+        while !g.is_done() {
+            let dispersed = g.next == Next::Dispersed;
+            let before = g.work.as_ref().map_or(0, |w| w.land.sites.len());
+            g.step();
+            if dispersed {
+                steps += 1;
+                most = most.max(g.work.as_ref().map_or(0, |w| w.land.sites.len()) - before);
+            }
+        }
+        let land = g.into_land();
+        let hamlets: Vec<&Site> = land.sites.iter().filter(|s| s.style.as_deref() == Some("hamlet")).collect();
+        assert!(steps >= 2, "{} hamlets in {steps} step(s)", hamlets.len());
+        assert!(most <= DISPERSED_PER_STEP, "a step placed {most}");
+        let spacing = p.sites.iter().find(|sp| sp.dispersed).unwrap().spacing_m / RELAX[RELAX.len() - 1].sqrt();
+        for (i, a) in hamlets.iter().enumerate() {
+            for b in &hamlets[i + 1..] {
+                assert!((a.x - b.x).hypot(a.y - b.y) >= spacing - 1e-3, "hamlets at {:?} and {:?}", (a.x, a.y), (b.x, b.y));
+            }
+        }
+        eprintln!("{} hamlets in {steps} dispersed steps, at most {most} a step", hamlets.len());
+    }
     use std::sync::OnceLock;
 
     fn default_size() -> &'static Land {

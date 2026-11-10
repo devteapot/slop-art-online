@@ -1948,6 +1948,41 @@ impl Mods {
 
 const SITE_MARK: u32 = u32::MAX - 1;
 
+/// Mark a cell of the road network and its neighbours (unless already marked).
+fn mark_net(net: &mut [u32], n: usize, k: usize, v: u32) {
+    let (i, j) = ((k % n) as isize, (k / n) as isize);
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            let (x, y) = (i + dx, j + dy);
+            if x >= 0 && y >= 0 && x < n as isize && y < n as isize {
+                let q = y as usize * n + x as usize;
+                if net[q] == 0 {
+                    net[q] = v;
+                }
+            }
+        }
+    }
+}
+
+/// Island roads between their parts ([`Plan::roads_begin`]): the routing grid, the network
+/// cells, the settlements still to join with their distances to the network, and the routed
+/// paths.
+pub(crate) struct RoadWork {
+    gr: Grid,
+    net: Vec<u32>,
+    foot: Vec<u32>,
+    town: usize,
+    tc: V2,
+    connected: Vec<usize>,
+    todo: Vec<usize>,
+    near: Vec<f32>,
+    raw: Vec<(Vec<usize>, RoadEnd, RoadEnd, f32, RoadClass)>,
+    pre: u32,
+}
+
+/// Settlements routed into the island's road network per step of [`Staged`].
+const ROUTES_PER_STEP: usize = 8;
+
 /// The routing grid.
 struct Grid {
     g: f32,
@@ -2183,13 +2218,21 @@ pub(crate) struct Staged {
     fills: Vec<usize>,
     /// The first lot of the ward being planned.
     ward_start: u32,
+    /// Island roads between their steps, and the route steps expected (known once begun).
+    road_work: Option<RoadWork>,
+    route_steps: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Step {
     #[default]
     City,
+    /// The routing grid and the network to join.
     Roads,
+    /// Settlements routed into it, [`ROUTES_PER_STEP`] per step.
+    RoadRoutes(u32),
+    /// The landing, cave paths, smoothing, river crossings, painted.
+    RoadsEnd,
     Streets,
     Stairs,
     /// The city's wards' lots, one ward per step, then each ward's back-fill in steps.
@@ -2201,6 +2244,8 @@ enum Step {
     Connect,
     /// Ornaments, a few settlements per step.
     Ornaments,
+    /// The roads as a graph for known ways ([`crate::ways`]), on the finished roads.
+    Ways,
     Done,
 }
 
@@ -2209,7 +2254,12 @@ impl Staged {
     pub(crate) fn steps(&self) -> u32 {
         // Ornament steps are counted from the settlements once they are planned (one before).
         let left = if self.next == Step::Done { 0 } else { self.dressing_left.max(1) };
-        7 + self.wards() as u32 + self.fills.iter().sum::<usize>() as u32 + self.dressed + left
+        8 + self.road_steps() + self.wards() as u32 + self.fills.iter().sum::<usize>() as u32 + self.dressed + left
+    }
+
+    /// Route steps plus the end step of the island roads.
+    fn road_steps(&self) -> u32 {
+        self.route_steps.max(1) + 1
     }
 
     fn wards(&self) -> usize {
@@ -2220,17 +2270,21 @@ impl Staged {
     pub(crate) fn done(&self) -> u32 {
         let w = (self.wards() + self.fills.iter().sum::<usize>()) as u32;
         let ward_step = |i: usize| (i + self.fills[..i].iter().sum::<usize>()) as u32;
+        let r = self.road_steps();
         match self.next {
             Step::City => 0,
             Step::Roads => 1,
-            Step::Streets => 2,
-            Step::Stairs => 3,
-            Step::Ward(i) => 4 + ward_step(i),
-            Step::WardFill(i, k) => 5 + ward_step(i) + k as u32,
-            Step::Towns => 4 + w,
-            Step::Paint => 5 + w,
-            Step::Connect => 6 + w,
-            Step::Ornaments => 7 + w + self.dressed,
+            Step::RoadRoutes(k) => 2 + k,
+            Step::RoadsEnd => 1 + r,
+            Step::Streets => 2 + r,
+            Step::Stairs => 3 + r,
+            Step::Ward(i) => 4 + r + ward_step(i),
+            Step::WardFill(i, k) => 5 + r + ward_step(i) + k as u32,
+            Step::Towns => 4 + r + w,
+            Step::Paint => 5 + r + w,
+            Step::Connect => 6 + r + w,
+            Step::Ornaments => 7 + r + w + self.dressed,
+            Step::Ways => 7 + r + w + self.dressed,
             Step::Done => self.steps(),
         }
     }
@@ -2238,7 +2292,9 @@ impl Staged {
     pub(crate) fn label(&self) -> String {
         match self.next {
             Step::City => "city".into(),
-            Step::Roads => "island roads".into(),
+            Step::Roads => "island roads: grid".into(),
+            Step::RoadRoutes(k) => format!("island roads: routes {} of {}", k + 1, self.route_steps.max(1)),
+            Step::RoadsEnd => "island roads: smoothing and crossings".into(),
             Step::Streets => "streets".into(),
             Step::Stairs => "stairs".into(),
             Step::Ward(i) => format!("ward {} of {} lots", i + 1, self.wards()),
@@ -2247,6 +2303,7 @@ impl Staged {
             Step::Paint => "paint".into(),
             Step::Connect => "walled connectivity".into(),
             Step::Ornaments => format!("ornaments ({} of {})", self.dressed + 1, self.dressed + self.dressing_left.max(1)),
+            Step::Ways => "the roads as a graph".into(),
             Step::Done => "done".into(),
         }
     }
@@ -2273,6 +2330,31 @@ impl Staged {
             // Island roads, painted first so river crossings become land before profiles are
             // sampled.
             Step::Roads => {
+                let mut pl = Plan::new(land, p);
+                if let Some(c) = &self.city {
+                    for r in &c.roads {
+                        pl.push_road(r.clone());
+                    }
+                    pl.city = Some((c.centre, c.radius * 1.03));
+                }
+                self.road_work = pl.roads_begin();
+                self.route_steps = self.road_work.as_ref().map_or(0, |w| w.todo.len().div_ceil(ROUTES_PER_STEP) as u32);
+                if self.road_work.is_some() {
+                    Step::RoadRoutes(0)
+                } else {
+                    Step::RoadsEnd
+                }
+            }
+            Step::RoadRoutes(k) => {
+                let pl = Plan::new(land, p);
+                let w = self.road_work.as_mut().expect("road work");
+                if pl.roads_route(w, ROUTES_PER_STEP) {
+                    Step::RoadsEnd
+                } else {
+                    Step::RoadRoutes(k + 1)
+                }
+            }
+            Step::RoadsEnd => {
                 let (roads, crossings) = {
                     let mut pl = Plan::new(land, p);
                     if let Some(c) = &self.city {
@@ -2281,7 +2363,9 @@ impl Staged {
                         }
                         pl.city = Some((c.centre, c.radius * 1.03));
                     }
-                    pl.island_roads();
+                    if let Some(w) = self.road_work.take() {
+                        pl.roads_end(w);
+                    }
                     pl.find_crossings();
                     (pl.roads, pl.crossings)
                 };
@@ -2427,7 +2511,7 @@ impl Staged {
                         land.props = props;
                         self.city = None;
                         self.dressing_left = 0;
-                        Step::Done
+                        Step::Ways
                     }
                     Err(d) => {
                         self.dressing_left = d.steps_left(land);
@@ -2435,6 +2519,10 @@ impl Staged {
                         Step::Ornaments
                     }
                 }
+            }
+            Step::Ways => {
+                land.ways = Some(crate::ways::Ways::of(land));
+                Step::Done
             }
             Step::Done => Step::Done,
         };
@@ -2528,14 +2616,27 @@ impl<'a> Plan<'a> {
     // -------------------------------------------------------------------------------------
     // Island roads
 
+    /// Island roads, in three parts so a caller with a per-call budget can spread them
+    /// ([`Staged`]): the routing grid and the network to join ([`Plan::roads_begin`]), the
+    /// settlements routed a few at a time, nearest to the network first
+    /// ([`Plan::roads_route`]), and the landing, the cave paths and the smoothing
+    /// ([`Plan::roads_end`]). In one go here.
+    #[allow(dead_code)]
     fn island_roads(&mut self) {
+        if let Some(mut w) = self.roads_begin() {
+            while !self.roads_route(&mut w, usize::MAX) {}
+            self.roads_end(w);
+        }
+    }
+
+    fn roads_begin(&mut self) -> Option<RoadWork> {
         let land = self.land;
         let rp = &self.p.roads;
         let mut gr = Grid::new(land, rp);
         let n = gr.n;
         // Network cells: 0 none, else road id + 1, or SITE_MARK at the town's centre.
         let mut net = vec![0u32; n * n];
-        let mut foot = vec![0u32; n * n];
+        let foot = vec![0u32; n * n];
         let settled: Vec<usize> = (0..land.sites.len()).filter(|&i| land.sites[i].kind != SiteKind::Cave && !land.sites[i].ward && self.site_style(i).is_some()).collect();
         // Roads laid out already (the city's highways and arterials) are the network's start;
         // roads between settlements keep out of the city and join them outside its wall.
@@ -2561,30 +2662,16 @@ impl<'a> Plan<'a> {
         }
         let town = if pre > 0 { None } else { settled.iter().find(|&&i| land.sites[i].kind == SiteKind::Town).or(settled.first()).copied() };
         if pre == 0 && town.is_none() {
-            return;
+            return None;
         }
-        let mark = |net: &mut Vec<u32>, k: usize, v: u32| {
-            let (i, j) = ((k % n) as isize, (k / n) as isize);
-            for dy in -1..=1 {
-                for dx in -1..=1 {
-                    let (x, y) = (i + dx, j + dy);
-                    if x >= 0 && y >= 0 && x < n as isize && y < n as isize {
-                        let q = y as usize * n + x as usize;
-                        if net[q] == 0 {
-                            net[q] = v;
-                        }
-                    }
-                }
-            }
-        };
         let tc = town.map_or((0.0, 0.0), |t| (land.sites[t].x, land.sites[t].y));
         let town = town.unwrap_or(usize::MAX);
         if town != usize::MAX {
-            mark(&mut net, gr.cell(tc), SITE_MARK);
+            mark_net(&mut net, n, gr.cell(tc), SITE_MARK);
         }
-        let mut connected: Vec<usize> = if town != usize::MAX { vec![town] } else { Vec::new() };
-        let mut todo: Vec<usize> = settled.iter().cloned().filter(|&i| i != town).collect();
-        let mut raw: Vec<(Vec<usize>, RoadEnd, RoadEnd, f32, RoadClass)> = Vec::new();
+        let connected: Vec<usize> = if town != usize::MAX { vec![town] } else { Vec::new() };
+        let todo: Vec<usize> = settled.iter().cloned().filter(|&i| i != town).collect();
+        let raw: Vec<(Vec<usize>, RoadEnd, RoadEnd, f32, RoadClass)> = Vec::new();
         let pre_roads = &self.roads;
         let dist_to_net = |raw: &[(Vec<usize>, RoadEnd, RoadEnd, f32, RoadClass)], connected: &[usize], q: V2| {
             let mut m = connected.iter().map(|&i| dist(q, (land.sites[i].x, land.sites[i].y))).fold(f32::MAX, f32::min);
@@ -2601,12 +2688,34 @@ impl<'a> Plan<'a> {
             m
         };
         // Settlements, nearest to the network first: each road ends where it meets the network,
-        // so later roads branch off earlier ones.
+        // so later roads branch off earlier ones. Each one's distance to the network is kept up
+        // to date as the network grows (the newly connected site and the new road's cells), the
+        // same minimum as measuring it afresh each round, without the rounds × settlements ×
+        // network work a land of many hamlets would cost.
+        let near: Vec<f32> = todo.iter().map(|&i| dist_to_net(&raw, &connected, (land.sites[i].x, land.sites[i].y))).collect();
+        Some(RoadWork { gr, net, foot, town, tc, connected, todo, near, raw, pre })
+    }
+
+    /// Route up to `budget` settlements into the network; true once every one is routed.
+    fn roads_route(&self, w: &mut RoadWork, budget: usize) -> bool {
+        let land = self.land;
+        let rp = &self.p.roads;
+        let RoadWork { gr, net, foot, town, connected, todo, near, raw, pre, .. } = w;
+        let (n, town, pre) = (gr.n, *town, *pre);
+        let mut left = budget;
         while !todo.is_empty() {
-            let (ti, _) = todo.iter().enumerate().map(|(ti, &i)| (ti, dist_to_net(&raw, &connected, (land.sites[i].x, land.sites[i].y)))).min_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
+            if left == 0 {
+                return false;
+            }
+            left -= 1;
+            let (ti, _) = near.iter().copied().enumerate().min_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
             let si = todo.swap_remove(ti);
+            near.swap_remove(ti);
             let s = &land.sites[si];
             let Some(style) = self.site_style(si) else { continue };
+            for (t, &i) in todo.iter().enumerate() {
+                near[t] = near[t].min(dist((land.sites[i].x, land.sites[i].y), (s.x, s.y)));
+            }
             let from = gr.cell((s.x, s.y));
             let class = if s.kind == SiteKind::SmallFolk { RoadClass::Path } else { RoadClass::Trunk };
             // A road never joins a footpath; a footpath may join anything.
@@ -2619,10 +2728,25 @@ impl<'a> Plan<'a> {
             let start = if hit == SITE_MARK { RoadEnd::Site(town as u16) } else { RoadEnd::Road(hit - 1) };
             let id = pre + raw.len() as u32;
             for &k in &path {
-                mark(if class == RoadClass::Path { &mut foot } else { &mut net }, k, id + 1);
+                mark_net(if class == RoadClass::Path { &mut *foot } else { &mut *net }, n, k, id + 1);
+            }
+            for (t, &i) in todo.iter().enumerate() {
+                let q = (land.sites[i].x, land.sites[i].y);
+                for &k in path.iter().step_by(4) {
+                    near[t] = near[t].min(dist(q, gr.centre(k)));
+                }
             }
             raw.push((path, start, RoadEnd::Site(si as u16), style.trunk_m, class));
         }
+        true
+    }
+
+    /// The landing, the cave paths, and every routed road smoothed and laid out.
+    fn roads_end(&mut self, w: RoadWork) {
+        let land = self.land;
+        let rp = &self.p.roads;
+        let RoadWork { gr, mut net, mut foot, town, tc, mut raw, pre, .. } = w;
+        let n = gr.n;
         // A road from the town down to the sea, ending at a landing.
         if rp.landing_m > 0.0 && town != usize::MAX {
             let best = (0..n * n).filter(|&k| gr.shore[k] && dist(gr.centre(k), tc) < rp.landing_m).min_by(|&a, &b| {
@@ -2638,7 +2762,7 @@ impl<'a> Plan<'a> {
                     let start = if hit == SITE_MARK { RoadEnd::Site(town as u16) } else { RoadEnd::Road(hit - 1) };
                     let id = pre + raw.len() as u32;
                     for &k in &path {
-                        mark(&mut net, k, id + 1);
+                        mark_net(&mut net, n, k, id + 1);
                     }
                     let w = self.style(SiteKind::Town).map_or(3.0, |s| s.trunk_m);
                     raw.push((path, start, RoadEnd::Shore, w, RoadClass::Trunk));
@@ -2665,7 +2789,7 @@ impl<'a> Plan<'a> {
                     let start = if hit == SITE_MARK { RoadEnd::Site(town as u16) } else { RoadEnd::Road(hit - 1) };
                     let id = pre + raw.len() as u32;
                     for &k in &path {
-                        mark(&mut foot, k, id + 1);
+                        mark_net(&mut foot, n, k, id + 1);
                     }
                     raw.push((path, start, RoadEnd::Site(si as u16), rp.path_width_m, RoadClass::Path));
                 }

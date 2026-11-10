@@ -20,6 +20,7 @@ const REACH_M: f32 = 120.0;
 /// Bucket size for finding road points near a point.
 const CELL_M: f32 = 32.0;
 
+#[derive(Clone, Debug)]
 pub struct Ways {
     pts: Vec<V2>,
     /// Whether a point lies on a trunk road (between settlements, not a street or a plaza).
