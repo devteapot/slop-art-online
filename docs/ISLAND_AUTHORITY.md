@@ -176,6 +176,28 @@ Newcomers (a player's `join`, a trial's `spawn_newcomer`) arrive at the `land` r
 - **Why it moved:** from 2026-09 to 2026-11-09 the point was 4 m outside the first gate's wall. On the seeded-lives towns that put it 2–28 m outside the town's radius, and in the social trials the newcomer stayed outside on every island seed. On seed 7 over the first game day of `verify-arr-base`, the mean number of people within 20 m was 16.2 at the square's heart and 0.1–0.2 at points just inside or outside the first gate. Values per seed (2048 m): seed 7 (410.5, 258.5), 6.0 m from the square's heart; seed 11 (1795.5, 1739.5), 5.7 m; seed 13 (809.5, 298.5), 5.7 m; the megacity floor (seed 11 of `floor-megacity.json`) (980.5, 1022.5), on the core square's walkable edge, 43.5 m from its built-on heart (`host::tests::arrival_is_on_the_first_towns_square`).
 - **What reads it:** `join`, `spawn_newcomer`, the seed's packs placed `near: "arrival"`, the trial runner's `{"arrival": true}` anchor, `spawn_battle`/`spawn_skirmish` (20–30 m north of it), and `soak.py`/`gate.py`. Scripted trials anchored to the arrival now start on the square rather than on the road outside the gate. The island's bold pack moved to 370–520 m from the arrival, which keeps it as far from the town as the earlier 250–400 m from the gate-side point. Since the wildlife placement below it starts near deer within 370–800 m of the arrival.
 
+### Wildlife placement (2026-11-10)
+
+The island's wolves starved because they did not find deer: herds and packs were placed independently, 100–1,100 m apart, while a wolf senses deer by sight (11 m) or scent. `wolves-1` changes where wolves start and how far they smell. It does not feed, move or override any animal; what they do after creation is their starting graphs and the rules.
+- **Packs near their prey.** A seed pack's `near` may name an animal kind: the pack starts `from_m`..`to_m` from one of that kind already placed. `band` (`{"of": "arrival", "from_m", "to_m"}`, or a settlement kind) also keeps the pack's centre within a distance band of a second point, and only animals from which the band can be reached are tried; when none can, the band alone places the pack (with a warning). `road_clear_m` keeps the centre that far from every road tile. All draws come from creation's seeded generator (`seed::rng` during `Creating`), so the same seed places the same packs; `init` logs `founding animals: N, starts digest X`.
+- **The island:** `animals.wolf` is 0. Its wild wolves are a pack of five near deer (40–120 m), and the bold pack is four near deer, 370–800 m from the arrival and 40 m clear of roads. On seed 7 at 20ca6edc the bold pack starts 111 m from deer and 721 m from the arrival; before the merge with main's seeded creation, 98 m from deer and 478 m from it.
+- **Scent:** wolves smell deer and wolves at 150 tiles (was 60), read at a cadence ([living core](LIVING_CORE.md), "Scent").
+- **Deer range when grazing fails:** above hunger 45, after `graze` and `sleep`, a deer wanders without waiting (`instincts.json` `deer`), as wolves do above hunger 50.
+
+**Three hours, no minds** (Mac, own 2.14.1 container, seeds 7 and 11 of the island, at f06979e2 without the scent cadence and before main's flee fix; `living/tools/eco_sample.py` every 10 s, `eco_report.py`; a meal is a rise in the meat a wolf carries, which is a kill):
+
+| | Seed 7 | Seed 11 |
+|---|---|---|
+| Wolves at start, end | 9, 5 | 9 (+3 pups), 4 |
+| Wolf deaths, hour 1 / 2 / 3 | 0 / 2 killed by people / 2 starved | 0 / 0 / 8 starved |
+| Deer at start, end | 24, 17 | 24, 20 |
+| Deer killed by wolves, hour 1 / 2 / 3 | 9 / 8 / 4 | 9 / 5 / 0 |
+| Deer births, hour 1 / 2 / 3 | 7 / 5 / 2 | 7 / 0 / 3 |
+| Meals per wolf, deer-meadows pack | 3, 3, 3, 3, 3 (minutes 17–18, 68–84, 118–147) | 1, 1, 1, 2, 2; all five starved (minutes 124–175) |
+| Meals per wolf, bold pack | 1, 1, 2, 2; two killed by people (84, 92), two starved (164, 170) | 1, 2, 2, 2; three starved (123–175) |
+
+Every wolf killed its own deer at minute 17–18, in both worlds: a kill feeds only its killer, five meat carried and eaten a piece at a time. On seed 7 the deer-meadows pack kept feeding past its second meal (all five had a third). On seed 11 nobody had a third, and no deer was killed after minute 80: from minute 60 to their deaths the starving wolves were 450–600 m (median) from the nearest deer, within 150 m in only 8–24% of samples, mostly wandering 3–9 m at a time and still sleeping at hunger 90 and above (the sleep rule comes before ranging). Deer did not collapse in either world.
+
 ## Measurements
 
 All measurements ran on the dev-box: 32-thread AMD x86_64, Fedora, rootless podman, SpacetimeDB 2.14.1 in a scratch container `slop-game-stdb`, seed `island` (seed 7, 2048 m).
