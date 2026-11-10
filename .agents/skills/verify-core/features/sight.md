@@ -8,6 +8,12 @@ Since 2026-11-09 (docs/PERCEPTION.md, "Minds see what their character sees" and 
 - Witnessed events (`perceive::witnessed`): a fight is an experience (`kind` `fight`) for a minded resident in the open within sight, and for none behind rock or a wall.
 - Noticing structures (`brain.rs` `noticed`, since `feedback-1`): new tiles of one kind and owner that touch (within 1.5 tiles) are one structure, noticed once with its extent ("You notice a gate about 7 by 8 tiles, 6 tiles southwest"), and not at all when part of it was already familiar. Unit test `a_row_of_gate_tiles_is_one_gate` (the island's first gate, 24 tiles); in a real island arrival a newcomer's percepts held 24 gate lines before and 1 after (trials `fbbase`, `fbbr`, docs/MIND_FEEDBACK.md).
 - Percepts name others by the projection's label: "A stranger attacked you", "A stranger said to you" until the observer knows the name (family, community, someone its mind has feelings about, someone who said their name).
+- A mind's scene (`perceive::scene_json`, the `deliberation.scene` a mind reads) lists, since `arm-scene`:
+  - resources per kind with `count` (in sight), `with_some` (with some left) and `nearest`: the nearest with some left, else the nearest bare one and `note` "none in sight has any left";
+  - structures with touching tiles of one kind and owner as one entry (`tiles`, `extent`, through `brain.rs` `joined_tiles`), except storages, houses, remains, signs, campfires, shelters and traps, which stay one entry each; storages, houses and remains in sight are always listed (up to 12), then the nearest others, up to 16 entries;
+  - a person farther than the `hearing` law with `earshot` "out of earshot: they would not hear you from here", and `time.hearing`;
+  - `you["places in sight"]`: the character's own places that pass `perception::in_sight`.
+  Resources and structures in the scene, like the behaviour graph's scene, are those within sight range; no sight line is tested for them (creatures and places are). A storage's `contents` are listed for any storage within sight range, not only one in reach.
 - Unchanged: hearing (speech, signals) and smell (scent) are not sight.
 
 ## Driving it
