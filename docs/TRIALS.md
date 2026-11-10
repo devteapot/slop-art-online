@@ -220,6 +220,14 @@ Mean (range) over 3 replicates; glm-flash for every purpose unless the arm says 
   - It merged 329–558 nodes per run (stances 205–430, places 44–144, ideas 34–73) and retracted 147–376.
   - **It merges different people.** 31 merges joined one `person:<id>` into another with a different id (control 0, 0, 2; `people` 7, 17, 1; `recall600` 0, 3, 1). In `life-people-r1`, `person:46` and `person:78` were merged into `person:50`, renamed "unresponsive townsfolk". In `life-people-r2`, `person:76` was merged into `person:2`, renamed "stranger seen south".
   - The ids are the authority's character ids, so each such merge collapses two real individuals into one memory. The mind applies them without a check (`sleep.rs` reorganize, `memory.rs` merge). A guard that refuses a merge between two different `person:<id>` keys is a small mind-service change for the mind-harness owners.
+  - **Correction (2026-11-10): the two bullets above are a counting error.** They counted the merges in the models' raw replies, not the merges the mind applied. The merge-guard worker found:
+    - 26 of the 31 person-into-person merges came after the 12th merge of their reply, and the mind reads only the first 12.
+    - The other 5 were refused by an existing guard (`merge_refused`).
+    - No two people were merged.
+    - The 329–558 merges per run above overstate in the same way: they are proposals, of which at most 12 per reply are read.
+
+    What reorganization did do: it renamed people (the "unresponsive townsfolk" is a rename of `person:50`, not a merge into it) and folded stances into people. Both are fixed on main (beaa0df).
+- **Lane A's place-based memory ran with clamped places.** The mind read only `map.w`/`map.h`, so every place on the island was clamped to 96 × 96 (fixed on main, 8fd4f43). In all 15 worlds, the places minds remembered and walked to were wrong outside that corner. That covers named places, `goto` to a remembered place, and the place cues in recall. Positions and settlements in these results are the authority's and are unaffected. What the minds did with places carries that defect: the places they named, walks to remembered places, and memories cued by a place. The social preset and the iterations ran on the same mind code, so they carry it too.
 
 #### `la2`: every animal with a mind
 
