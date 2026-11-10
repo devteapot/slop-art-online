@@ -19,7 +19,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'wake', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings')
+         'takeover', 'sight', 'wake', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 
@@ -113,6 +113,8 @@ def run_case(run, case):
         return sight_case(run)
     if case == 'wake':
         return wake_case(run)
+    if case == 'parked':
+        return parked_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -749,8 +751,8 @@ def wake_case(run):
     run.admin('grant_items', rid, 'wood', 2)
     acts = [{'do': 'accept', 'target': {'id': me}},
             {'do': 'teach', 'target': {'id': me}, 'item': lesson}]
-    # A line that arrives while the mind deliberates is left to that deliberation (talk.rs):
-    # its think step's `say` answers.
+    # A line that arrives while a woken resident's first deliberation waits for its identity
+    # waits for that deliberation (talk.rs): its think step's `say` answers, so no extra turn.
     script = {'replies': {'think': {'thought': 'A newcomer.', 'intend': ['wait'], 'say': 'verify minds welcome, newcomer'},
                           'deliberate': basic_reply(acts=acts),
                           'talk': {'thought': 'A newcomer asks where I work.', 'say': 'verify minds talk answer', 'end': False},
@@ -792,6 +794,52 @@ def wake_case(run):
     talks = [e for e in run.exchanges() if e['purpose'] == 'talk']
     return {'status': 'pass', 'resident': rid, 'woken': woke, 'lesson': lesson, 'talk_turns': len(talks),
             'places_kept': sorted(places_before), 'places_after': sorted(places)}
+
+
+def parked_case(run):
+    """A line heard while the listener's deliberation runs waits for it to end and then gets its
+    reply turn (talk.rs `deliberation_ended`), unless that deliberation spoke to the speaker."""
+    people = prepare(run)
+    actor = people[0]['id']
+    run.harness('player', 'join', 'MindsParker')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsParker'", 'player')[0]['id']
+    run.admin('place_near', player, actor)
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'Answering after my thinking.', 'say': 'verify minds parked answer', 'end': True}},
+              'rules': [{'purpose': 'think', 'contains': 'verify second', 'times': -1,
+                         'reply': {'thought': 'I answer while I think.', 'intend': ['wait'],
+                                   'say': {'text': 'verify minds answered while thinking', 'to': player}}},
+                        {'purpose': 'deliberate', 'contains': 'verify second', 'delay_s': 8, 'times': 1},
+                        {'purpose': 'deliberate', 'delay_s': 8, 'times': 1}]}
+    models = model(run, script)
+    requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    talks = lambda: [e for e in requests() if e['purpose'] == 'talk']
+    # 1. The deliberation says nothing to the player: the line gets its turn when it ends.
+    run.request(actor, 'first')
+    run.start(models, [actor])
+    run.wait(lambda: any(e['purpose'] == 'deliberate' for e in requests()), 'first deliberation running', 60)
+    run.harness('player', 'say', 'Will you answer me once you have thought it over?', '--to', str(actor))
+    time.sleep(3)
+    assert not talks(), 'a talk turn ran while the deliberation was running'
+    run.wait(lambda: talks(), 'the parked line gets its talk turn after the deliberation', 40)
+    run.wait(lambda: any('verify minds parked answer' in c['text'] and c['b'] == player for c in run.sql(
+        f'SELECT * FROM chronicle WHERE a = {actor}', 'parked-speech')), 'parked answer spoken')
+    log = run.log()
+    assert 'waits for it to end' in log and 'gets its turn' in log
+    after_first = len(talks())
+    # 2. The deliberation speaks to the player after hearing them: no extra turn.
+    time.sleep(2.2)
+    run.request(actor, 'second')
+    run.wait(lambda: any(e['purpose'] == 'deliberate' and 'verify second' in json.dumps(e['body']) for e in requests()),
+             'second deliberation running', 60)
+    run.harness('player', 'say', 'Another matter entirely: where does the river bend north?', '--to', str(actor))
+    run.wait(lambda: any('verify minds answered while thinking' in c['text'] and c['b'] == player for c in run.sql(
+        f'SELECT * FROM chronicle WHERE a = {actor}', 'deliberation-speech')), 'the deliberation answers', 40)
+    time.sleep(6)
+    assert len(talks()) == after_first, 'a talk turn repeated what the deliberation answered'
+    assert 'in its deliberation' in run.log()
+    return {'status': 'pass', 'talk_turns': len(talks())}
 
 
 def main():
