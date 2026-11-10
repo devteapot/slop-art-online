@@ -68,24 +68,68 @@ def harness(action, run, evidence, *args, env=None):
                    evidence, cwd=ROOT, timeout=900, env=env)
 
 
+def genesis_row(run, d, name="genesis"):
+    if harness("sql", run, d / f"{name}-poll.log", "SELECT * FROM genesis", "--save", name) != 0:
+        return {}
+    rows = json.loads((d / f"{name}.json").read_text())
+    return rows[0] if rows else {}
+
+
+def stop_chain(run, d):
+    """Leave the staged creation as a failed step leaves it: no step scheduled. SpacetimeDB
+    2.14.1 deletes a one-shot schedule row after the call whatever the outcome, and a failed
+    step rolled back its own scheduling of the next. The admin's `stop_genesis` unschedules
+    the next step (owner SQL may not write to scheduled tables); the chain must then hold still
+    for 8 s. Returns the stalled row."""
+    if harness("call", run, d / "stop.log", "stop_genesis", "[]", "--as-admin") != 0:
+        return {}
+    before = genesis_row(run, d, "genesis-stopped")
+    time.sleep(8)
+    after = genesis_row(run, d, "genesis-stalled")
+    timers = harness("sql", run, d / "stop-chain-timer.log", "SELECT * FROM genesis_timer", "--save", "genesis-timer")
+    left = json.loads((d / "genesis-timer.json").read_text()) if timers == 0 else ["?"]
+    stalled = not left and before.get("step") == after.get("step") and not after.get("done")
+    return after if stalled else {}
+
+
 def create_floor(run, d, seed):
     """Give a floor module its seed and wait for the staged creation (`genesis`) to finish;
-    returns the checks."""
+    returns the checks. On the way: bad land sizes are refused, a chain of steps stopped
+    midway (as a failed step leaves it) stalls, and `resume_genesis` carries it on."""
+    checks = []
+    for size, why in [(5000, "not a multiple of 16"), (9216, "above 8192"), (128, "below 256")]:
+        bad = json.loads(json.dumps(seed))
+        bad["map"]["size"] = size
+        code = harness("call", run, d / f"create-floor-{size}.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", "a land's side is a multiple of 16")
+        checks.append({"check": f"create_floor refuses a {size} m land ({why})", "pass": code == 0})
+    code = harness("call", run, d / "resume-none.log", "resume_genesis", "[]", "--as-admin", "--expect-refusal", "no staged creation")
+    checks.append({"check": "resume_genesis is refused before any creation", "pass": code == 0})
     started = time.time()
     code = harness("call", run, d / "create-floor.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin")
-    checks = [{"check": "create_floor accepted the seed", "pass": code == 0}]
-    rows, polls = [], 0
+    checks.append({"check": "create_floor accepted the seed", "pass": code == 0})
+    rows, polls, stopped = [], 0, None
     while code == 0 and time.time() - started < 900:
         polls += 1
-        if harness("sql", run, d / "genesis-poll.log", "SELECT * FROM genesis", "--save", "genesis") == 0:
-            rows = json.loads((d / "genesis.json").read_text())
-            if rows and rows[0].get("done"):
-                break
+        g = genesis_row(run, d)
+        rows = [g] if g else []
+        if g.get("done"):
+            break
+        if stopped is None and g.get("step", 0) >= 3:
+            busy = harness("call", run, d / "resume-busy.log", "resume_genesis", "[]", "--as-admin", "--expect-refusal", "already scheduled")
+            checks.append({"check": "resume_genesis is refused while a step is scheduled", "pass": busy == 0})
+            stopped = stop_chain(run, d)
+            checks.append({"check": "a chain stopped midway stalls (no step scheduled, the step count holds for 8 s)", "pass": bool(stopped), "detail": {"step": stopped.get("step"), "label": stopped.get("label")}})
+            again = harness("call", run, d / "stop-again.log", "stop_genesis", "[]", "--as-admin", "--expect-refusal", "no step is scheduled")
+            checks.append({"check": "stop_genesis is refused when no step is scheduled", "pass": again == 0})
+            resumed = harness("call", run, d / "resume.log", "resume_genesis", "[]", "--as-admin")
+            checks.append({"check": "resume_genesis carries the stopped creation on", "pass": resumed == 0})
         time.sleep(3)
     g = rows[0] if rows else {}
     elapsed = round(time.time() - started, 1)
     write(d / "genesis-final.json", {"row": g, "seconds": elapsed, "polls": polls})
     checks.append({"check": "the staged creation finished", "pass": bool(g.get("done")), "detail": {"steps": g.get("step"), "seconds": elapsed}})
+    done = harness("call", run, d / "resume-done.log", "resume_genesis", "[]", "--as-admin", "--expect-refusal", "already made")
+    checks.append({"check": "resume_genesis is refused once the world is made", "pass": done == 0})
     checks.append({"check": "no generation restarts", "pass": g.get("restarts") == 0, "detail": g.get("restarts")})
     again = harness("call", run, d / "create-floor-again.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin", "--expect-refusal", "already has its seed")
     checks.append({"check": "a second create_floor is refused", "pass": again == 0})

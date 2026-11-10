@@ -93,6 +93,8 @@ ADMIN = {
     'spawn_newcomer': ['probe'],
     # A floor module's runtime seed (floor.rs, admin only).
     'create_floor': ['{}'],
+    # Stop a staged creation between steps, and carry it on (floor.rs, admin only).
+    'stop_genesis': [], 'resume_genesis': [],
 }
 
 
