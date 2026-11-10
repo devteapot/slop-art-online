@@ -514,7 +514,13 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     let hour = common::hour(&w, now);
     let r = common::sight_for(ctx, id, &w, now);
-    let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": living_rules::is_night(hour), "season": common::season(ctx, now), "sight": r});
+    let hearing = common::laws(ctx).hearing;
+    let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": living_rules::is_night(hour), "season": common::season(ctx, now), "sight": r, "hearing": hearing});
+    // The places one keeps that one can see from here (the one sight rule).
+    let places_seen: Vec<String> = ctx.db.place().actor().filter(id).filter(|p| crate::perception::in_sight(&map, at, (p.x, p.y), dist(at, (p.x, p.y)), r)).map(|p| p.name).collect();
+    if !places_seen.is_empty() {
+        you.insert("places in sight".into(), json!(places_seen));
+    }
 
     let mut creatures = Vec::new();
     // What the character sees (sight and a clear sight line), each as it perceives them (the
@@ -554,6 +560,10 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
         o.insert("dist".into(), json!(round(c.dist)));
         o.insert("dir".into(), json!(direction(at, c.pos)));
+        // Speech carries `hearing` tiles: someone seen farther off would not hear you.
+        if ch.kind == "person" && c.dist > hearing {
+            o.insert("earshot".into(), json!("out of earshot: they would not hear you from here"));
+        }
         if let Some(a) = ctx.db.activity().id().find(c.id) {
             o.insert("doing".into(), json!(a.label));
         }
@@ -617,20 +627,81 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
     }
 
-    let mut groups: Vec<(String, u32, Value)> = Vec::new();
+    // Resources by kind: how many are in sight, how many have some left, and the nearest with
+    // some left (a bare bush nearer than full ones does not hide them).
+    struct Kind {
+        kind: String,
+        count: u32,
+        with_some: u32,
+        nearest: Option<Value>,
+        nearest_bare: Option<Value>,
+    }
+    let mut kinds: Vec<Kind> = Vec::new();
     for (n, d) in common::resources_near(ctx, at, r) {
         let amount = common::amount_now(ctx, &n, now).floor();
-        if let Some(g) = groups.iter_mut().find(|g| g.0 == n.kind) {
-            g.1 += 1;
+        let k = match kinds.iter_mut().position(|k| k.kind == n.kind) {
+            Some(i) => &mut kinds[i],
+            None => {
+                kinds.push(Kind { kind: n.kind.clone(), count: 0, with_some: 0, nearest: None, nearest_bare: None });
+                kinds.last_mut().unwrap()
+            }
+        };
+        k.count += 1;
+        let entry = || json!({"id": n.id, "at": [round(n.x), round(n.y)], "dist": round(d), "dir": direction(at, (n.x, n.y)), "amount": amount});
+        if amount >= 1.0 {
+            k.with_some += 1;
+            if k.nearest.is_none() {
+                k.nearest = Some(entry());
+            }
+        } else if k.nearest_bare.is_none() {
+            k.nearest_bare = Some(entry());
+        }
+    }
+    let resources: Vec<Value> = kinds
+        .into_iter()
+        .map(|k| match k.nearest {
+            Some(near) => json!({"kind": k.kind, "count": k.count, "with_some": k.with_some, "nearest": near}),
+            None => json!({"kind": k.kind, "count": k.count, "with_some": 0, "nearest": k.nearest_bare, "note": "none in sight has any left"}),
+        })
+        .collect();
+
+    // Structures: tiles of one thing (a wall, a gate) are one entry with its extent; stores,
+    // houses and remains in sight are always listed, then the nearest others.
+    let near = common::structures_near(ctx, at, r);
+    let tiles: Vec<(u64, String, u32, (f32, f32), f32)> = near.iter().map(|(s, d)| (s.id, s.kind.clone(), s.owner, (s.x, s.y), *d)).collect();
+    let single = |kind: &str| matches!(kind, "storage" | "house" | "remains" | "sign" | "campfire" | "shelter" | "trap");
+    let mut parts: Vec<Vec<usize>> = Vec::new();
+    let mut grouped = vec![false; tiles.len()];
+    for i in 0..tiles.len() {
+        if grouped[i] {
             continue;
         }
-        groups.push((n.kind.clone(), 1, json!({"id": n.id, "at": [round(n.x), round(n.y)], "dist": round(d), "dir": direction(at, (n.x, n.y)), "amount": amount})));
+        let part = if single(&tiles[i].1) { vec![i] } else { crate::brain::joined_tiles(&tiles, i) };
+        for &k in &part {
+            grouped[k] = true;
+        }
+        parts.push(part);
     }
-    let resources: Vec<Value> = groups.into_iter().map(|(k, n, near)| json!({"kind": k, "count": n, "nearest": near})).collect();
-
+    // `near` is nearest first, so each part's first index is its nearest tile.
+    let kept_kinds = |kind: &str| matches!(kind, "storage" | "house" | "remains");
+    let mut chosen: Vec<&Vec<usize>> = parts.iter().filter(|p| kept_kinds(&tiles[p[0]].1)).take(12).collect();
+    for p in parts.iter().filter(|p| !kept_kinds(&tiles[p[0]].1)) {
+        if chosen.len() >= 16 {
+            break;
+        }
+        chosen.push(p);
+    }
+    chosen.sort_by_key(|p| p[0]);
     let mut structures = Vec::new();
-    for (s, d) in common::structures_near(ctx, at, r) {
+    for part in chosen {
+        let (s, d) = (&near[part[0]].0, near[part[0]].1);
         let mut o = json!({"id": s.id, "kind": s.kind, "at": [round(s.x), round(s.y)], "dist": round(d), "dir": direction(at, (s.x, s.y))});
+        if part.len() > 1 {
+            let (xs, ys): (Vec<f32>, Vec<f32>) = part.iter().map(|k| tiles[*k].3).unzip();
+            let span = |v: &[f32]| (v.iter().cloned().fold(f32::MIN, f32::max) - v.iter().cloned().fold(f32::MAX, f32::min)).round() as i32 + 1;
+            o["tiles"] = json!(part.len());
+            o["extent"] = json!(format!("about {} by {} tiles in sight", span(&xs), span(&ys)));
+        }
         if s.owner != 0 {
             o["by"] = json!(common::label_for(ctx, &me, s.owner));
         }
@@ -659,9 +730,6 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             o["contents"] = Value::Object(inv);
         }
         structures.push(o);
-        if structures.len() >= 10 {
-            break;
-        }
     }
 
     // Nearest notable terrain within sight.
