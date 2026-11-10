@@ -6,6 +6,7 @@
 - A 500 also sends that primary to alternate.
 - A failed nondefault profile falls back once to default, without blind retries.
 - A default profile without an alternate permits one same-profile 429 recovery through its learned pacing and cooldown.
+- Background calls (`consolidate`, `reorganize`, `internalize`, `identity`) never go to an overflow or default profile (2026-11-10): they fail back to their caller, which retries later with a backoff on the model it chose. A 429 still gets its one paced retry on the same profile.
 
 ## How to get to it (user POV)
 
@@ -16,6 +17,8 @@ Configure a profile overflow or assign a secondary model. A provider rate limit 
 ```bash
 .agents/skills/verify-llm/scripts/verify_llm.py --run llm-$(date +%Y%m%d-%H%M%S) --case overflow --case retry-fallback --case error-overflow
 ```
+
+Background lanes: `cargo test --manifest-path living/Cargo.toml -p living-mind background_calls_do_not_overflow` (two unreachable base URLs: consolidate and reorganize journal only the first profile, think both).
 
 Compare `primary-requests.jsonl`, `alternate-requests.jsonl` and copied journals. The fallback case must have exactly one failed alternate think attempt followed by successful default think. The overflow cases must show primary HTTP 429 or 500, successful alternate think and an accepted plan.
 

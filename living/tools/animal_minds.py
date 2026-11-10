@@ -28,6 +28,8 @@ import sys
 import time
 from pathlib import Path
 
+from journal_io import restore
+
 ROOT = Path(__file__).resolve().parents[2]
 VERIFY = ROOT / ".agents/skills/verify/scripts/verify.py"
 FAKE = ROOT / ".agents/skills/verify-llm/scripts/fake_llm.py"
@@ -139,7 +141,7 @@ def cmd_report(a):
         d = Path(r["dir"])
         hours = r["seconds"] / 3600
         n = len(r["animals"])
-        ex = [json.loads(l) for p in (d / "journal").glob("*.jsonl") for l in p.read_text().splitlines() if l.strip()] if (d / "journal").exists() else []
+        ex = [restore(json.loads(l), p.parent) for p in (d / "journal").glob("*.jsonl") for l in p.read_text().splitlines() if l.strip()] if (d / "journal").exists() else []
         thoughts = json.loads((d / "thoughts.json").read_text()) if (d / "thoughts.json").exists() else []
         animals = set(r["animals"])
         th = [t for t in thoughts if t["actor"] in animals]

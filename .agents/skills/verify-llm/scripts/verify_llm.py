@@ -339,6 +339,13 @@ def run_case(run, case):
                     continue
                 run.admin('set_behavior', person['id'], json.dumps({'think': 'verify outage'}))
             run.wait(lambda: 'unreachable: holding model calls' in (run.directory / 'mind.log').read_text(), 'outage gate closes', 70)
+            # A deliberation whose model cannot be reached keeps its request and its reasons
+            # (it is tried again after a backoff); it is not skipped as "could not decide".
+            run.wait(lambda: 'could not reach its model' in (run.directory / 'mind.log').read_text(), 'a deliberation waits for its model', 70)
+            pending = run.sql(f'SELECT * FROM deliberation WHERE actor = {ids[0]}', 'deliberation-during-outage')
+            assert pending and 'verify outage' in pending[0]['reason'], f'the request survives the outage: {pending}'
+            during = run.sql(f'SELECT * FROM thought WHERE actor = {ids[0]}', 'thoughts-during-outage')
+            assert not any('could not decide' in t['summary'] for t in during), 'a model error does not consume the request'
             # Keep the outage long enough for a held probe, then restore the same URL.
             time.sleep(5)
             restarted_ms = time.time_ns() // 1_000_000
@@ -390,13 +397,14 @@ def run_case(run, case):
         failed = [e for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'alternate' and e['error']]
         assert len(failed) == 1 and failed[0]['latency_ms'] >= 179000
         assert 'timed out' in failed[0]['error']
+        assert 'unreachable: holding model calls' not in (run.directory / 'mind.log').read_text(), 'a timeout does not gate the host'
         assert any(e['purpose'] == 'think' and e['profile'] == 'primary' and not e['error'] for e in exchanges)
     elif case == 'repair':
         assert any(e['purpose'] == 'deliberate' and e['reply'].startswith('```json') for e in exchanges)
     elif case == 'deliberation-retry':
         assert any(e['purpose'] == 'deliberate' and e['profile'] == 'alternate' and e['reply'] == 'not JSON' for e in exchanges)
         repaired = [e for e in exchanges if e['purpose'] == 'deliberate' and e['profile'] == 'primary']
-        assert repaired and any('That reply was rejected:' in m['content'] for e in repaired for m in e['request']['messages'])
+        assert repaired and any('That reply was rejected:' in m.get('content', '') for e in repaired for m in e['request']['messages'])
     elif case == 'basic':
         assert any(t['kind'] == 'consolidate' and t['summary'] == 'I remember this moment.' for t in thoughts), 'experience consolidation must be accepted, not only identity bootstrap'
         speech = json.loads((run.directory / 'speech-after.json').read_text())
