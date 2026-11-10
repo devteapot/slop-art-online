@@ -1650,9 +1650,16 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
         }
         // How they feel about the people they know is a fact of the world from the start, for
         // instinct and mind alike: the `relation` rows graphs read (`friend`, `enemy`, a label)
-        // and that a mind's projection later replaces (docs/SEEDED_LIVES.md).
+        // and that a mind's projection later replaces (docs/SEEDED_LIVES.md). A feeling is not
+        // knowing a name, so an authored relation is also an introduction (`acquaintance`)
+        // unless the author says this person would not know the other by name
+        // (`knows_name: false`); one's own community is known by name already.
+        let community = |p: u32| ctx.db.membership().member().find(p).map(|m| m.community);
         for rel in sheet["relations"].as_array().into_iter().flatten() {
             let Some(other) = rel["id"].as_u64().map(|o| o as u32).filter(|o| *o != id) else { continue };
+            if rel["knows_name"].as_bool() != Some(false) && (community(id).is_none() || community(id) != community(other)) {
+                crate::perception::introduce(ctx, id, other, now);
+            }
             if ctx.db.relation().by_pair().filter((id, other)).next().is_some() {
                 continue;
             }

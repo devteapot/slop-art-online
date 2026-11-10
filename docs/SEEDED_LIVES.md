@@ -84,7 +84,8 @@ What one resident starts with. Every item is a world fact written once, at world
 | Occupation and know-how | `background.occupation`, `know_how` | starting ways, skill checks |
 | Possessions | `inventory` (kit by occupation, a carrier's first load) | skills |
 | Places they know | `place` rows: work, square, inn, evening; a known way's stages; a spot on the road | graphs (`{"place": …}`), minds |
-| Relations, with reasons | **`relation` rows** (trust, affinity, label, note), written from the sheet at creation | graphs (`friend`, `enemy`, labels), perception (names known), minds |
+| Relations, with reasons | **`relation` rows** (trust, affinity, label, note), written from the sheet at creation | graphs (`friend`, `enemy`, labels), minds |
+| Whose name they know | kin and one's own community; **`acquaintance` rows** for each authored relation across communities unless the sheet says `knows_name: false` | perception (names in percepts), minds (`known_as`) |
 | A short past | sheet `memories` (in `background`) | the mind, installed as formative memories |
 | Stances, wants and fears | sheet `stances`, `values`, `goals`, `mood` | the mind |
 | A secret | the seed file only (`LIVING_SEED`); never a table | the character's own prompts |
@@ -146,7 +147,29 @@ Layer 2 phase 2 (`townlife-2`) seeds a woken resident's mind "only from world fa
 4. **No situation table.** Situations reach a mind only through its own sheet, so waking never copies another person's view of a shared situation.
 5. **Keep the authored identity through consolidation.** The paid lab showed the first consolidation rewriting three authored personas with wrong facts within a minute (a Brackenford gate guard became "a guard of Kettlebridge"), because the consolidation prompt does not name the resident's settlement, trade or household. Phase 2 should give consolidation those world facts and revise an authored identity only on lived evidence.
 
-**Made (2026-11-10, after `townlife-2` merged):** a woken resident with an authored sheet has it installed as written (`sheet_persona`, no model call) instead of an identity a model writes from world facts. A resident without a sheet still gets the world-facts identity (`living/mind/src/mind/woken.rs`, `make_mind`). Before this, the merged build gave Wat Fenner, Agnes Fenner and Hester Crane a model-made persona ("I live here and watch what happens.") and no authored memories (`lives_wake.py`: 14 of 20). After it, 20 of 20. `verify-knowledge`'s `woken_mind.py` still proves the world-facts path: it takes the chosen resident's sheet out of its background first (`set_background`). It also needed two fixes for authored names: its newcomer is now Quorvan, since the island has people called Wren, and journal file names use underscores. All seven of its proofs pass, and `verify-minds` `wake` passes. Item 5, consolidation keeping the authored identity, is not made.
+**Made (2026-11-10, after `townlife-2` merged).** Waking an authored resident (`living/mind/src/mind/woken.rs`, `make_mind`) now goes:
+1. its world facts as given (household, family, places), marked `world`;
+2. its sheet as written (`sheet_persona`, no model call), marked `authored`: a mark of its own, so an experiment can tell what the author invented from what the world holds (`world`), what a model wrote (`ai`) and what the resident lived (`instinct`, `human`). The identity version says `written_by: author`;
+3. its ring, as for any woken resident.
+
+People in the sheet go into its mind named as it knows them (`known_as`).
+
+**Names.** Since `townlife-2`, names spread only as the authority projects them: kin, one's own community, or an introduction (`acquaintance`). A feeling is not an introduction. So an authored relation to someone outside one's community is an introduction at world creation (`seed::settle_authored`), unless the sheet marks it `knows_name: false`. The authoring tool decides that per relation in a names pass (one call per settlement, `living/seeds/worlds/island/names/`): would this person recognise the other and know what to call them? Of 524 cross-community relations, 505 are known by name and 19 are not. Wenna Marrow has never met Hester or Josiah Crane, so in her mind they stay "a stranger" until someone tells her their names. World creation writes 508 introductions.
+
+**Verified** (`verify-minds/scripts/lives_wake.py`):
+- **Free tier**, three woken Brackenford residents, 29 of 29:
+  - each woke as its authored self, its relations rows before waking;
+  - Wenna Marrow's two never-met relations stay "a stranger" in her mind; Mercy Abbot and Wat Fenner have 6 and 4 introductions;
+  - their minds mark `authored` 55–67 and `world` 6–8;
+  - each seeded situation it is in shows in its first prompt through its people (Wenna: the broken match, her mother's grudge; Mercy: the gate-due, the Coldwell fields, the mill toll and three more);
+  - its own secret is in its own prompt only.
+- **Paid tier** (DeepSeek V4.1 Flash): the marks are `world` 6–7, `authored` 55–67, `ai` 7–11 and `instinct` 6–9 (their rings).
+  - Mercy Abbot, asked about the gate-due: "a millstone round Brackenford's neck… that due drives good carters like Silas Pike to take their stone elsewhere."
+  - Wenna Marrow, asked why folk in the square look at her, chose not to answer: "The stranger's question only stirs the same old talk, and I have no mind to feed it." Her thoughts carry her side of the broken match ("Tobin chose me and I chose him").
+
+`verify-knowledge`'s `woken_mind.py` still proves the world-facts path on a resident whose sheet the fixture removes (7 of 7), and `verify-minds` `wake` passes.
+
+*Earlier the same day:* a woken resident with an authored sheet had it installed as written (`sheet_persona`, no model call) instead of an identity a model writes from world facts. A resident without a sheet still gets the world-facts identity (`living/mind/src/mind/woken.rs`, `make_mind`). Before this, the merged build gave Wat Fenner, Agnes Fenner and Hester Crane a model-made persona ("I live here and watch what happens.") and no authored memories (`lives_wake.py`: 14 of 20). After it, 20 of 20. `verify-knowledge`'s `woken_mind.py` still proves the world-facts path: it takes the chosen resident's sheet out of its background first (`set_background`). It also needed two fixes for authored names: its newcomer is now Quorvan, since the island has people called Wren, and journal file names use underscores. All seven of its proofs pass, and `verify-minds` `wake` passes. Item 5, consolidation keeping the authored identity, is not made.
 
 ## Culture against mechanics
 

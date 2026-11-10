@@ -26,7 +26,7 @@ DERIVED = {"floor-megacity-2k": ("floor-megacity", {"size": 2048}), "floor-megac
 FLOORS = ("floor-megacity-4k",)
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
-          "place", "routine", "relation")
+          "place", "routine", "relation", "acquaintance")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
@@ -331,6 +331,19 @@ def check_land(seed, rows, side, tiles):
     rel = {(r["actor"], r["other"]) for r in rows.get("relation", [])}
     sheet_pairs = {(names[r["name"]], names[x["name"]]) for t in entries for r in t.get("residents", []) if r["name"] in names for x in (r.get("sheet") or {}).get("relations", []) if x.get("name") in names and x["name"] != r["name"]}
     present("authored relations are relation rows", sheet_pairs <= rel, {"sheet_pairs": len(sheet_pairs), "rows": len(rel), "missing": sorted(sheet_pairs - rel)[:20]})
+    # A feeling is not an introduction: an authored relation across communities is one, unless
+    # the sheet says the person would not know the other by name (`knows_name: false`).
+    member = {m["member"]: m["community"] for m in rows["membership"]}
+    acq = {(a["observer"], a["known"]) for a in rows.get("acquaintance", [])}
+    want, refuse = set(), set()
+    for t in entries:
+        for r in t.get("residents", []):
+            for x in (r.get("sheet") or {}).get("relations", []):
+                a, b = names.get(r["name"]), names.get(x.get("name"))
+                if a is None or b is None or a == b or member.get(a) == member.get(b):
+                    continue
+                (refuse if x.get("knows_name") is False else want).add((a, b))
+    present("authored relations across communities are introductions, unless not known by name", want <= acq and not (refuse & acq), {"introductions": len(want), "not_known_by_name": len(refuse), "missing": sorted(want - acq)[:20], "wrongly_known": sorted(refuse & acq)[:20]})
     # A land with a city (`map.params.metro`, docs/FLOORS.md): its wards in their district
     # styles, the core's towers, the wall's gates, and the land's other settlements outside it.
     metro = seed.get("map", {}).get("params", {}).get("metro")

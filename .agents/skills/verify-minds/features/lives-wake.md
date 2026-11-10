@@ -8,6 +8,10 @@ Since 2026-11-10 ([seeded lives](../../../../docs/SEEDED_LIVES.md)). The island'
 - Its `relation` rows existed before waking and cover its sheet's relations.
 - Its persona is its authored narrative.
 - Its first prompt names people from its sheet and recalls its authored memories (`[before all this]`).
+- It woke as its authored self (the "Who I am (authored)." thought; a later consolidation may revise the persona, which is reported as `persona_now`).
+- Names: its relations across communities are introductions (`acquaintance`); one the sheet marks `knows_name: false` stays "a stranger" in its mind (its `person:` node's name).
+- Its mind marks its sources: `authored` (the sheet) and `world` (its facts), and `instinct` (its ring) and `ai` when a model wrote something (the paid tier).
+- Every seeded situation it is in (`living/seeds/worlds/island/cast/*.json`) shows in its first prompt through the other people in it.
 - Its own secret reaches its own prompts; no other resident's secret reaches them.
 - Paid tier (`--real PROFILE`, only when authorized): what it says when asked about another settlement, for reading against its sheet and the world tensions.
 
@@ -19,8 +23,9 @@ V=.agents/skills/verify/scripts/verify.py
 python3 "$V" launch --run "$R" --seed island
 CARGO_TARGET_DIR=living/target cargo build --release -p living-mind --manifest-path living/Cargo.toml
 .agents/skills/verify-minds/scripts/lives_wake.py --run "$R" \
-  --who "Wat Fenner=What do you make of the Kettlebridge folk?" \
-  --who "Hester Crane=What do people here say about Brackenford?"
+  --who "Wenna Marrow=Why do folk in the square look at you so?" \
+  --who "Mercy Abbot=What do you make of the gate-due?" \
+  --who "Wat Fenner=What do you make of the Kettlebridge folk?"
 python3 "$V" cleanup --run "$R"
 ```
 

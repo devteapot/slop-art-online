@@ -14,10 +14,13 @@ prompts. With `--real PROFILE` (paid: only when authorized), the profile answers
 and the replies are recorded for reading; the same prompt checks run.
 
 Checks per resident: woken by the player's speech; its `relation` rows existed before waking
-and match its sheet; its persona is its authored narrative; its first prompt carries its
-narrative, people from its sheet and its authored memories (`[before all this]`); its own
-secret reaches only its own prompts ("Known only to you"), and no other resident's secret
-reaches it.
+and match its sheet; the people it knows by name are introduced (`acquaintance`) and one it
+does not (`knows_name: false`) stays "a stranger" in its mind; its persona is its authored
+narrative; its first prompt carries its narrative, people from its sheet and its authored
+memories (`[before all this]`); every seeded situation it is in (`cast/*.json`) shows in that
+prompt through the other people in it it knows by name; its mind marks the sheet `authored`
+and its world facts `world` (and its ring `instinct`, when it took any in); its own secret
+reaches only its own prompts ("Known only to you"), and no other resident's secret reaches it.
 
 Evidence: `.local/living/verify/RUN/lives-wake/` (prompts, replies, rows, mind log, journal).
 Stops the mind and the fake model and removes the scratch Neo4j container in `finally`.
@@ -151,6 +154,10 @@ class Lab:
         self.procs.append(p)
         self.wait(lambda: "world subscribed:" in (self.dir / "mind.log").read_text(), "mind subscription", 120)
 
+    def cypher(self, q):
+        r = subprocess.run(["docker", "exec", self.container, "cypher-shell", "-a", "bolt://localhost:7687", "-u", "neo4j", "-p", self.password, "--format", "plain", q], capture_output=True, text=True)
+        return [l for l in r.stdout.splitlines()[1:] if l.strip()]
+
     def exchanges(self, name):
         f = self.journal / f"{re.sub(r'[^0-9A-Za-z]', '_', name)}.jsonl"
         return [json.loads(x) for x in f.read_text().splitlines() if x.strip()] if f.exists() else []
@@ -190,6 +197,7 @@ def main():
     seed = json.loads((ROOT / "living/seeds/island.json").read_text())
     authored = {r["name"]: r for t in seed.get("towns", []) + seed.get("villages", []) for r in t.get("residents", [])}
     secrets_of = {n: r["sheet"].get("secret", "") for n, r in authored.items() if r.get("sheet", {}).get("secret")}
+    situations = [x for f in sorted((ROOT / "living/seeds/worlds/island/cast").glob("*.json")) for x in json.loads(f.read_text()).get("situations", [])]
     who = [w.split("=", 1) for w in a.who]
     out = {}
     try:
@@ -229,10 +237,40 @@ def main():
             out[name] = rec
             lab.check(f"{name} woken by speech", woke.get("why") == "speech", json.dumps({k: woke.get(k) for k in ("why", "by", "settlement")}))
             lab.check(f"{name}'s relations were rows before waking", len(rel_before) >= len(names_in_sheet) * 0.8, f"{len(rel_before)} rows, {len(names_in_sheet)} in the sheet")
-            lab.check(f"{name}'s persona is the authored narrative", bool(persona) and persona[0]["narrative"].strip() == sheet["narrative"].strip(), (persona[0]["narrative"][:120] if persona else "no persona row"))
+            # The identity installed at waking is the sheet's (a later consolidation may revise
+            # the persona row: that is the mind's to do, and is reported, not checked).
+            installed = [t for t in lab.sql(f"SELECT * FROM thought WHERE actor = {rid}") if t["summary"] == "Who I am (authored)."]
+            narrative = json.loads(installed[0]["detail"]).get("narrative", "") if installed else ""
+            lab.check(f"{name} woke as its authored self", narrative.strip() == sheet["narrative"].strip(), narrative[:120] or "no authored install")
+            rec["persona_now"] = persona[0]["narrative"] if persona else None
             lab.check(f"{name} knows its people", len(named) >= min(3, len(names_in_sheet)), f"{len(named)} of {len(names_in_sheet)} sheet people named in its first prompt: {named[:8]}")
             lab.check(f"{name} knows its past", authored_mems >= 1, f"{authored_mems} authored memories recalled in its first prompt")
             lab.check(f"{name} holds no one else's secret", not leaked, f"other residents' secrets in its prompts: {leaked}")
+            # Names: introductions at world creation, and who stays a stranger in its mind.
+            acq = {a["known"] for a in lab.sql(f"SELECT * FROM acquaintance WHERE observer = {rid}")}
+            ids = {c["name"]: c["id"] for c in lab.sql("SELECT id, name FROM character WHERE kind = 'person'")}
+            unnamed = [x["name"] for x in sheet["relations"] if x.get("knows_name") is False and x["name"] in ids]
+            mind_names = {}
+            for x in unnamed:
+                rows = lab.cypher(f"MATCH (n {{run: '{lab.db}', actor: {rid}, key: 'person:{ids[x]}'}}) RETURN n.name")
+                mind_names[x] = rows[0].strip('"') if rows else None
+            lab.check(f"{name}: who it does not know by name stays a stranger", all(ids[x] not in acq for x in unnamed) and all(v in (None, "a stranger") for v in mind_names.values()), f"{len(unnamed)} not known by name, in its mind as {mind_names}; {len(acq)} introductions")
+            # Source marks in its mind.
+            marks = {}
+            for l in lab.cypher(f"MATCH (n {{run: '{lab.db}', actor: {rid}}}) WHERE n.lived_under IS NOT NULL UNWIND n.lived_under AS l RETURN l, count(*)") + lab.cypher(f"MATCH ({{run: '{lab.db}', actor: {rid}}})-[r]->() WHERE r.lived_under IS NOT NULL UNWIND r.lived_under AS l RETURN l, count(*)"):
+                k, _, v = l.rpartition(",")
+                marks[k.strip().strip('"')] = marks.get(k.strip().strip('"'), 0) + int(v)
+            lab.check(f"{name}'s mind marks its sources", marks.get("authored", 0) > 0 and marks.get("world", 0) > 0, json.dumps(marks))
+            rec["marks"] = marks
+            rec["not_known_by_name"] = mind_names
+            # Its seeded situations, through the people in them it knows by name.
+            mine_s = [x for x in situations if name in x["people"]]
+            seen = []
+            for x in mine_s:
+                named = [q for q in x["people"] if q != name and q in first]
+                seen.append({"id": x["id"], "summary": x["summary"], "side": x["sides"].get(name, ""), "named_in_prompt": named})
+            rec["situations"] = seen
+            lab.check(f"{name} is in its seeded situations", mine_s and all(z["named_in_prompt"] for z in seen), json.dumps([(z["id"], z["named_in_prompt"]) for z in seen]))
             if own:
                 lab.check(f"{name}'s own secret only in its own prompt", own[:60] in "\n".join(prompts), own[:80])
             print(f"  {name} heard by the player: {heard[-3:]}", flush=True)

@@ -820,6 +820,7 @@ impl Minds {
         if let Some(secret) = self.secret(c.id) {
             identity["secret"] = json!(secret);
         }
+        identity["written_by"] = json!("author");
         if let Some(store) = &self.store {
             let mut patch = memory::Patch::default();
             // Everyone they know of: household, the people they feel something about and the
@@ -829,9 +830,15 @@ impl Minds {
             people.extend(sheet["memories"].as_array().into_iter().flatten().flat_map(|m| m["about"].as_array().into_iter().flatten().filter_map(id_of)));
             people.sort_unstable();
             people.dedup();
+            // Named as this person knows them (`known_as`): someone the author says they know
+            // only by sight stays "a stranger" until they are told the name.
             for id in &people {
-                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.name(*id)), props: Default::default() });
+                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.known_as(c.id, *id)), props: Default::default() });
             }
+            // Everything the sheet installs is the author's (`lived_under = ["authored"]`), apart
+            // from world facts (`world`), what a model writes (`ai`) and what was lived (`instinct`,
+            // `human`).
+            patch.lived_under = Some("authored".into());
             // `sugar_into` bounds a model reply's lists; an authored sheet is taken whole.
             for chunk in relations.chunks(12) {
                 memory::sugar_into(&json!({"relations": chunk}), &mut patch, &[]);
