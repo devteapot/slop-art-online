@@ -409,6 +409,18 @@ Reviewers measured the `rules2-r2` trial journals (1,129 real calls, `.local/liv
 
 Not changed: how memory fades (wall clock against game time; the owner has not decided).
 
+**Verification** (dev-box worktree `~/dev/slop-mind-small`, own SpacetimeDB 2.14.1 container `mind-small-stdb` on 3427, private `CARGO_TARGET_DIR`, fake model only; evidence copied to the Mac checkout's `.local/living/fix-mind-small/`):
+
+| Surface | Run | Result |
+| --- | --- | --- |
+| `set -o pipefail; just living-check` | at cf781a0 and at the head | exit 0 |
+| Mind Cargo tests | every commit | 83 passed, 11 ignored |
+| verify-llm | `llm-ms-full` | 16 of 16 cases, 9 fake scenarios |
+| verify-minds | `minds-ms-full`; reruns `minds-ms-re`, `minds-ms-re2` | all pass but `consolidation` (known XFAIL); `dealings` timed out under load and passed alone; `takeover` found a fault of this branch, fixed in 7a3b425, then passed |
+| verify-knowledge | `knowledge-ms-full2`; `knowledge-woken-ms`; `knowledge-pmem-ms` (batch) | 20 of 20; all; all. A first `knowledge-ms-full` failed under load on a harness timing fault before any mind ran. |
+
+**Cost effect**, estimated offline on the same journal (no model calls; `.local/living/fix-mind-small/cost-effect.json`): of $1.47 for the 1,129 calls, about $0.065 (4.4%) is not spent: compile fields $0.041 (35% of a compile reply on average), the persona's member list $0.011 (1,135 characters a prompt down to about 256), and the two runaways cut at 6,000 instead of 24,000 and 8,000, $0.013 at most (a cut-off reply is then retried). Each runaway also no longer holds a call for 166 s or more. The batch fix saves a second full-price night whenever a poll fails; none failed on rules2-r2. The journal shrinks by 57% (19.9 of 34.8 MB was eight distinct system prompts, repeated).
+
 SpacetimeDB: no table, reducer, view or subscription changed. A failed deliberation now leaves its `deliberation` row pending (one row per character, as under the level of detail and the rethink gate) instead of calling `mind_skip`; an error thought is added through the existing `mind_update`.
 
 ## Verification

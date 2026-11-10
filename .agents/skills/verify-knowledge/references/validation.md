@@ -1,5 +1,12 @@
 # Knowledge validation
 
+## 2026-11-10 rules2-r2 fixes (dev-box)
+
+On the dev-box worktree `~/dev/slop-mind-small`, branch `fix-mind-small`, own container `mind-small-stdb` (2.14.1, port 3427, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only, scratch Neo4j on 7691 per run.
+
+- `knowledge-ms-full` failed before any mind ran: `memory_integration` looks for the player's first line among Oren's first 40 experiences, and under load (three suites at once) Oren had lived 46 before it. A harness timing fault, not this change. `knowledge-ms-full2`, run alone, passes 20 of 20, including `missed_things_weaken` (an `exp:66219` memory is not weakened by thing #66219; `weakened_upto` 0, then 9), real consolidation with per-entry `because`, and the uploaded night batch.
+- `woken_mind.py` (`knowledge-woken-ms`) passes all proofs; `player_memory.py --mode batch` (`knowledge-pmem-ms`) passes all proofs.
+
 ## 2026-11-10 mind feedback (Mac)
 
 Branch `feedback-1` (ffb4280) on its own server `feedback-verify-stdb` (3343): `knowledge-fb1-011838` passes 19 of 19, including the new Cargo test `missed_things_weaken` (memories naming a missed thing's id lose half; another id and `KNOWS` do not). `woken_mind.py`: the first attempt failed because the script started the mind against `:3300`; with `LIVING_STDB_URL` honoured, `knowledge-woken-fb1b-*` passes 8 of 8.

@@ -1,5 +1,13 @@
 # Model integration validation
 
+## 2026-11-10 rules2-r2 fixes (dev-box)
+
+On the dev-box worktree `~/dev/slop-mind-small`, branch `fix-mind-small`, own container `mind-small-stdb` (2.14.1, port 3427, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only: docs/MIND_HARNESS.md, "Fixes from the rules2-r2 review".
+
+- `llm-ms-full`: all 16 cases and the 9 fake-contract scenarios pass. `outage` now also proves the deliberation request survives the outage (`deliberation-during-outage.json` holds it with its reason; no "could not decide" thought; `mind.log` has `could not reach its model (1x); the request waits 5 s`); `timeout` proves the host is not gated. An earlier `llm-ms6-222231-outage` passed the same assertions on the first item-6 build.
+- Cargo (83 mind tests): the new `background_calls_do_not_overflow`, `purposes_sent_without_an_effort_entry_are_reported`, `every_profile_caps_each_purpose_near_its_need` and `a_failed_poll_keeps_the_batch_and_a_left_job_is_collected_after_a_restart` (one 500 on a poll: all answers, no cancel; every poll failing: five polls, one cancel; a run dropped before its first poll: the next `Llm` collects the job from `batches/`), and `a_large_batch_is_uploaded_as_a_file` checks the system prompt is journaled once by reference.
+- Not covered: the paid live tier.
+
 ## 2026-10-04 pacing correction and authority verification
 
 Product commit `47f3f9a18aa92111ec81b806ee9bc43a4feac42d` fixes rate collapse after simultaneous 429s, proportional recovery and the unconfigured ceiling. Runs used `/home/carlid/dev/sao-wt/llm-transport`, branch `llm/llm-transport`, rebased onto the living-core LoD and prompt fixes. No reference world, paid endpoint or Neo4j endpoint was contacted. No main-checkout `.env` or `.local` symlink was needed.
