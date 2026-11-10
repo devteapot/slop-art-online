@@ -1039,6 +1039,7 @@ impl Minds {
             self.clone().schedule(actor);
         }
         log::info!("reorganization: {:?}", self.sleep_cfg);
+        tokio::spawn(self.clone().collect_left_batches());
         if self.animal_cfg.any() {
             log::info!("animal minds: {:?}", self.animal_cfg);
         }

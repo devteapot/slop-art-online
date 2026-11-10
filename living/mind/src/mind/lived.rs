@@ -506,7 +506,7 @@ impl Minds {
         if prepared.is_empty() {
             return;
         }
-        let items: Vec<BatchItem> = prepared.iter().map(|(k, p)| BatchItem { id: k.clone(), actor: p.name.clone(), messages: p.msgs.iter().map(|m| Msg { role: m.role, content: m.content.clone() }).collect() }).collect();
+        let items: Vec<BatchItem> = prepared.iter().map(|(k, p)| BatchItem { id: k.clone(), actor: p.name.clone(), messages: p.msgs.iter().map(|m| Msg { role: m.role, content: m.content.clone() }).collect(), meta: serde_json::Value::Null }).collect();
         let _slow = self.slow.acquire().await;
         match self.llm.batch(&self.lived_profile(), crate::llm::Attention::OnStage, "internalize", items, self.lived_cfg.poll, self.lived_cfg.give_up).await {
             Ok(results) => {

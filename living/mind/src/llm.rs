@@ -78,7 +78,7 @@ impl Profile {
 
 /// Whether a person's mind is being watched: a human player is in their scene or was recently
 /// part of what they lived (see mind/lod.rs). Mixes may choose a model by it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Attention {
     OnStage,
@@ -1029,6 +1029,37 @@ pub struct BatchItem {
     pub id: String,
     pub actor: String,
     pub messages: Vec<Msg>,
+    /// What the caller needs to apply the answer, kept with the job for a restart.
+    pub meta: Value,
+}
+
+/// Where sent batch jobs wait to be collected, under the journal directory.
+const BATCHES_DIR: &str = "batches";
+
+/// Failed polls (or reads of a finished job's answers) in a row before a job is given up.
+pub const BATCH_POLL_FAILURES: u32 = 5;
+
+/// A batch job sent and not yet collected (`<journal>/batches/<job>.json`).
+#[derive(Serialize, Deserialize)]
+pub struct PendingJob {
+    pub job: String,
+    pub profile: String,
+    pub purpose: String,
+    pub effort: Option<String>,
+    pub mix: Option<String>,
+    pub attention: Option<Attention>,
+    pub created_ms: u64,
+    pub give_up_ms: u64,
+    pub items: Vec<PendingItem>,
+}
+
+/// One request of a pending job: its id, character, exact body and the caller's meta.
+#[derive(Serialize, Deserialize)]
+pub struct PendingItem {
+    pub id: String,
+    pub actor: String,
+    pub body: Value,
+    pub meta: Value,
 }
 
 impl Llm {
@@ -1078,61 +1109,158 @@ impl Llm {
         let job: Value = self.http.post(format!("{base}/batch/jobs")).bearer_auth(key).json(&spec).send().await.context("batch create")?.error_for_status().context("batch create")?.json().await?;
         let id = job["id"].as_str().ok_or_else(|| anyhow!("batch create: no job id in {job}"))?.to_string();
         log::info!("batch job {id}: {} {purpose} requests to {} ({via})", items.len(), p.model);
+        let job = PendingJob {
+            job: id,
+            profile: profile.to_string(),
+            purpose: purpose.to_string(),
+            effort: pick.effort.clone(),
+            mix: pick.mix.clone(),
+            attention: pick.attention,
+            created_ms: now_ms().saturating_sub(started.elapsed().as_millis() as u64),
+            give_up_ms: give_up.as_millis() as u64,
+            items: items.into_iter().map(|i| PendingItem { body: bodies[&i.id].1.clone(), id: i.id, actor: i.actor, meta: i.meta }).collect(),
+        };
+        // Kept until it is collected or given up on, so a restart collects what was paid for.
+        let file = self.pending_path(&job.job);
+        match serde_json::to_vec(&job) {
+            Ok(bytes) => {
+                if let Err(e) = std::fs::create_dir_all(self.journal.join(BATCHES_DIR)).and_then(|_| std::fs::write(&file, bytes)) {
+                    log::warn!("batch job {}: not kept for a restart ({}): {e}", job.job, file.display());
+                }
+            }
+            Err(e) => log::warn!("batch job {}: not kept for a restart: {e}", job.job),
+        }
+        Ok(self.collect(&job, poll, false).await?.into_iter().map(|(id, _, r)| (id, r)).collect())
+    }
+
+    fn pending_path(&self, job: &str) -> PathBuf {
+        self.journal.join(BATCHES_DIR).join(format!("{}.json", job.replace(|c: char| !c.is_alphanumeric() && c != '-', "_")))
+    }
+
+    /// Batch jobs a previous run of this service sent and did not collect (it stopped while
+    /// they ran), oldest first.
+    pub fn pending_jobs(&self) -> Vec<PendingJob> {
+        let mut jobs: Vec<PendingJob> = std::fs::read_dir(self.journal.join(BATCHES_DIR))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|f| f.path().extension().is_some_and(|x| x == "json"))
+            .filter_map(|f| match std::fs::read(f.path()).map_err(anyhow::Error::from).and_then(|b| serde_json::from_slice::<PendingJob>(&b).map_err(anyhow::Error::from)) {
+                Ok(j) => Some(j),
+                Err(e) => {
+                    log::warn!("batch job file {} unreadable: {e:#}", f.path().display());
+                    None
+                }
+            })
+            .collect();
+        jobs.sort_by_key(|j| j.created_ms);
+        jobs
+    }
+
+    async fn cancel_job(&self, base: &str, key: &str, job: &PendingJob, why: &str) {
+        match self.http.post(format!("{base}/batch/jobs/{}/cancel", job.job)).bearer_auth(key).send().await.and_then(|r| r.error_for_status()) {
+            Ok(_) => log::warn!("batch job {}: cancelled ({why})", job.job),
+            Err(e) => log::warn!("batch job {}: cancelling failed ({why}): {e}", job.job),
+        }
+        let _ = std::fs::remove_file(self.pending_path(&job.job));
+    }
+
+    /// Wait for a job and journal its answers (`after_restart` for one a previous run sent).
+    /// A few failed polls in a row are tolerated (one transient error must not lose a paid
+    /// job); past [`BATCH_POLL_FAILURES`] or the job's give-up time it is cancelled, so it stops
+    /// billing before its callers try again. A finished job whose answers cannot be read stays
+    /// on disk for the next start to collect.
+    pub async fn collect(&self, job: &PendingJob, poll: Duration, after_restart: bool) -> Result<Vec<(String, Value, Result<Reply>)>> {
+        let id = job.job.as_str();
+        let p = self.models.profiles.get(&job.profile).ok_or_else(|| anyhow!("batch job {id}: no profile {}", job.profile))?;
+        let key = self.keys.get(&job.profile).ok_or_else(|| anyhow!("batch job {id}: profile {} has no key", job.profile))?;
+        let base = p.base_url.trim_end_matches('/');
+        let mut failures = 0;
         let done = loop {
             tokio::time::sleep(poll).await;
-            let j: Value = self.http.get(format!("{base}/batch/jobs/{id}")).bearer_auth(key).send().await?.error_for_status()?.json().await?;
-            match j["status"].as_str().unwrap_or_default() {
-                "SUCCESS" | "FAILED" | "TIMEOUT_EXCEEDED" | "CANCELLED" => break j,
-                _ if started.elapsed() > give_up => {
-                    let _ = self.http.post(format!("{base}/batch/jobs/{id}/cancel")).bearer_auth(key).send().await;
-                    return Err(anyhow!("batch job {id} not done after {:?}; cancelled", give_up));
+            let polled: Result<Value> = async { Ok(self.http.get(format!("{base}/batch/jobs/{id}")).bearer_auth(key).send().await?.error_for_status()?.json().await?) }.await;
+            match polled {
+                Ok(j) => {
+                    failures = 0;
+                    match j["status"].as_str().unwrap_or_default() {
+                        "SUCCESS" | "FAILED" | "TIMEOUT_EXCEEDED" | "CANCELLED" => break j,
+                        _ if now_ms() > job.created_ms.saturating_add(job.give_up_ms) => {
+                            self.cancel_job(base, key, job, "not done in time").await;
+                            return Err(anyhow!("batch job {id} not done after {:?}; cancelled", Duration::from_millis(job.give_up_ms)));
+                        }
+                        _ => {}
+                    }
                 }
-                _ => {}
+                Err(e) => {
+                    failures += 1;
+                    log::warn!("batch job {id}: poll failed ({failures} in a row): {e:#}");
+                    if failures >= BATCH_POLL_FAILURES {
+                        self.cancel_job(base, key, job, "its polls kept failing").await;
+                        return Err(anyhow!("batch job {id}: {failures} polls failed in a row (last: {e:#}); cancelled"));
+                    }
+                }
             }
         };
-        let latency_ms = started.elapsed().as_millis() as u32;
+        let latency_ms = now_ms().saturating_sub(job.created_ms) as u32;
         let mut lines = Vec::new();
         for file in [&done["output_file"], &done["error_file"]] {
-            if let Some(f) = file.as_str().filter(|f| !f.is_empty()) {
-                let text = self.http.get(format!("{base}/files/{f}/content")).bearer_auth(key).send().await?.error_for_status()?.text().await?;
-                lines.extend(text.lines().filter(|l| !l.trim().is_empty()).filter_map(|l| serde_json::from_str::<Value>(l).ok()));
-            }
+            let Some(f) = file.as_str().filter(|f| !f.is_empty()) else { continue };
+            let mut tries = 0;
+            let text = loop {
+                let got: Result<String> = async { Ok(self.http.get(format!("{base}/files/{f}/content")).bearer_auth(key).send().await?.error_for_status()?.text().await?) }.await;
+                match got {
+                    Ok(t) => break t,
+                    Err(e) if tries + 1 < BATCH_POLL_FAILURES => {
+                        tries += 1;
+                        log::warn!("batch job {id}: reading {f} failed ({tries}x): {e:#}");
+                        tokio::time::sleep(poll).await;
+                    }
+                    Err(e) => return Err(e.context(format!("batch job {id}: reading {f} (kept for the next start)"))),
+                }
+            };
+            lines.extend(text.lines().filter(|l| !l.trim().is_empty()).filter_map(|l| serde_json::from_str::<Value>(l).ok()));
         }
         let mut out = Vec::new();
-        for item in &items {
+        for item in &job.items {
             let line = lines.iter().find(|l| l["custom_id"].as_str() == Some(item.id.as_str()));
             // An answer line carries the chat completion under `response.body` (or `response`).
             let resp = line.map(|l| if l["response"]["body"].is_object() { &l["response"]["body"] } else { &l["response"] });
-            let result: Result<(String, u32, Value)> = match resp.filter(|r| r["choices"].is_array()) {
-                Some(r) => Ok((content_text(&r["choices"][0]["message"]["content"]), r["usage"]["total_tokens"].as_u64().unwrap_or(0) as u32, r["usage"].clone())),
+            let result: Result<(String, u32, Value, Value)> = match resp.filter(|r| r["choices"].is_array()) {
+                Some(r) => Ok((content_text(&r["choices"][0]["message"]["content"]), r["usage"]["total_tokens"].as_u64().unwrap_or(0) as u32, r["usage"].clone(), r["choices"][0]["finish_reason"].clone())),
                 None => Err(anyhow!("batch job {id} ({}): no answer for {}: {}", done["status"], item.id, line.map(|l| l.to_string()).unwrap_or_default().chars().take(400).collect::<String>())),
             };
-            let (actor, body) = &bodies[&item.id];
-            let entry = json!({
+            let usage = result.as_ref().ok().map(|(_, _, u, _)| u);
+            let mut entry = json!({
                 "at_ms": now_ms(),
-                "actor": actor,
-                "purpose": purpose,
-                "profile": profile,
+                "actor": item.actor,
+                "purpose": job.purpose,
+                "profile": job.profile,
                 "model": p.model,
-                "effort": pick.effort,
-                "mix": pick.mix,
-                "attention": pick.attention,
+                "effort": job.effort,
+                "mix": job.mix,
+                "attention": job.attention,
                 "mode": "batch",
                 "job": id,
                 "custom_id": item.id,
                 "latency_ms": latency_ms,
-                "prompt_tokens": result.as_ref().ok().and_then(|(_, _, u)| u["prompt_tokens"].as_u64()),
-                "completion_tokens": result.as_ref().ok().and_then(|(_, _, u)| u["completion_tokens"].as_u64()),
-                "cached_tokens": result.as_ref().ok().and_then(|(_, _, u)| u["prompt_tokens_details"]["cached_tokens"].as_u64()),
-                "request": body,
-                "reply": result.as_ref().map(|(c, _, _)| c.clone()).ok(),
-                "tokens": result.as_ref().map(|(_, t, _)| *t).ok(),
+                "prompt_tokens": usage.and_then(|u| u["prompt_tokens"].as_u64()),
+                "completion_tokens": usage.and_then(|u| u["completion_tokens"].as_u64()),
+                "cached_tokens": usage.and_then(|u| u["prompt_tokens_details"]["cached_tokens"].as_u64()),
+                "reasoning_tokens": usage.and_then(|u| u["completion_tokens_details"]["reasoning_tokens"].as_u64()),
+                "finish_reason": result.as_ref().ok().and_then(|(_, _, _, f)| f.as_str()),
+                "request": item.body,
+                "reply": result.as_ref().map(|(c, ..)| c.clone()).ok(),
+                "tokens": result.as_ref().map(|(_, t, ..)| *t).ok(),
                 "error": result.as_ref().err().map(|e| format!("{e:#}")),
             });
-            self.journal(actor, &entry).await;
-            out.push((item.id.clone(), result.map(|(content, tokens, _)| Reply { content, tokens, latency_ms, model: p.model.clone() })));
+            if after_restart {
+                entry["after_restart"] = json!(true);
+            }
+            self.journal(&item.actor, &entry).await;
+            out.push((item.id.clone(), item.meta.clone(), result.map(|(content, tokens, ..)| Reply { content, tokens, latency_ms, model: p.model.clone() })));
         }
-        log::info!("batch job {id} {} in {:.0} s", done["status"], latency_ms as f64 / 1000.0);
+        let _ = std::fs::remove_file(self.pending_path(id));
+        log::info!("batch job {id} {} in {:.0} s{}", done["status"], latency_ms as f64 / 1000.0, if after_restart { " (collected after a restart)" } else { "" });
         Ok(out)
     }
 }
@@ -1671,7 +1799,7 @@ mod tests {
         .unwrap();
         let llm = Llm::new(models, directory.join("journal")).unwrap();
         let items = |n: usize, size: usize| -> Vec<BatchItem> {
-            (0..n).map(|i| BatchItem { id: format!("sleep-{i}"), actor: format!("a{i}"), messages: vec![Msg { role: "system", content: "Tidy the person's mind.".into() }, Msg { role: "user", content: "x".repeat(size) }] }).collect()
+            (0..n).map(|i| BatchItem { id: format!("sleep-{i}"), actor: format!("a{i}"), messages: vec![Msg { role: "system", content: "Tidy the person's mind.".into() }, Msg { role: "user", content: "x".repeat(size) }], meta: json!({"i": i}) }).collect()
         };
         // Below the limit: inline. The default limit is far above these bodies.
         let small = llm.batch("night", Attention::OffStage, "reorganize", items(3, 100), Duration::from_millis(50), Duration::from_secs(20)).await.unwrap();
@@ -1692,6 +1820,95 @@ mod tests {
         assert_eq!((journal["mode"].as_str(), journal["mix"].as_str(), journal["effort"].as_str(), journal["purpose"].as_str()), (Some("batch"), Some("night"), Some("high"), Some("reorganize")));
         drop(fake);
         println!("batch upload evidence: {}", directory.display());
+    }
+
+    /// One failed poll does not lose a batch; polls that keep failing give the job up and
+    /// cancel it (so it stops billing before its callers send again); and a job left by a run
+    /// that stopped is collected by the next one, from its file beside the journal.
+    #[tokio::test]
+    async fn a_failed_poll_keeps_the_batch_and_a_left_job_is_collected_after_a_restart() {
+        struct Fake(std::process::Child);
+        impl Drop for Fake {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let directory = std::env::temp_dir().join(format!("living-batch-poll-{}", now_ms()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let start = |name: &str, poll_errors: i64| {
+            let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = socket.local_addr().unwrap().port();
+            drop(socket);
+            let script = directory.join(format!("{name}.json"));
+            std::fs::write(&script, json!({"batch": {"poll_errors": poll_errors}}).to_string()).unwrap();
+            let log = directory.join(format!("{name}-requests.jsonl"));
+            let fake = Fake(std::process::Command::new("python3").arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py")).args(["--port", &port.to_string(), "--log"]).arg(&log).arg("--script").arg(&script).stdout(std::process::Stdio::null()).spawn().unwrap());
+            (fake, port, log)
+        };
+        let ready = |port: u16| async move {
+            for _ in 0..100 {
+                if reqwest::Client::new().get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        };
+        std::env::set_var("LIVING_TEST_BATCH_POLL_KEY", "dummy-only");
+        let models = |port: u16| -> ModelsFile {
+            serde_json::from_value(json!({"default": "p", "profiles": {"p": {"base_url": format!("http://127.0.0.1:{port}/v1"), "model": "m", "key_env": "LIVING_TEST_BATCH_POLL_KEY", "reasoning_effort": {"consolidate": "high"}}}})).unwrap()
+        };
+        let items = || -> Vec<BatchItem> { (0..2).map(|i| BatchItem { id: format!("sleep-{i}"), actor: format!("a{i}"), messages: vec![Msg { role: "system", content: "Tidy the person's mind.".into() }, Msg { role: "user", content: "x".into() }], meta: json!({"i": i}) }).collect() };
+        let lines = |log: &PathBuf| -> Vec<Value> { std::fs::read_to_string(log).unwrap_or_default().lines().map(|l| serde_json::from_str(l).unwrap()).collect() };
+        let poll = Duration::from_millis(50);
+
+        // One 500 on a poll: the job is polled again and answered; nothing is cancelled.
+        let (fake, port, log) = start("one", 1);
+        ready(port).await;
+        let llm = Llm::new(models(port), directory.join("journal-one")).unwrap();
+        let out = llm.batch("p", Attention::OffStage, "reorganize", items(), poll, Duration::from_secs(20)).await.unwrap();
+        assert!(out.len() == 2 && out.iter().all(|(_, r)| r.is_ok()), "the batch survives one failed poll");
+        let l = lines(&log);
+        assert_eq!(l.iter().filter(|x| x["status"] == 500 && x.get("poll").is_some()).count(), 1);
+        assert!(l.iter().all(|x| x.get("cancel").is_none()));
+        assert!(llm.pending_jobs().is_empty(), "a collected job leaves no file");
+        let entry: Value = serde_json::from_str(std::fs::read_to_string(directory.join("journal-one/a1.jsonl")).unwrap().trim()).unwrap();
+        assert_eq!((entry["finish_reason"].as_str(), entry["reasoning_tokens"].as_u64()), (Some("stop"), Some(2)));
+        drop(fake);
+
+        // Every poll fails: the job is given up after BATCH_POLL_FAILURES and cancelled.
+        let (fake, port, log) = start("all", -1);
+        ready(port).await;
+        let llm = Llm::new(models(port), directory.join("journal-all")).unwrap();
+        let err = llm.batch("p", Attention::OffStage, "reorganize", items(), poll, Duration::from_secs(20)).await.err().expect("a job whose polls keep failing is given up");
+        assert!(format!("{err:#}").contains("polls failed in a row"), "{err:#}");
+        let l = lines(&log);
+        assert_eq!(l.iter().filter(|x| x.get("poll").is_some()).count() as u32, BATCH_POLL_FAILURES);
+        assert_eq!(l.iter().filter(|x| x.get("cancel").is_some()).count(), 1, "the abandoned job is cancelled");
+        assert!(llm.pending_jobs().is_empty());
+        drop(fake);
+
+        // A run stops while its job runs; the next run on the same journal collects it.
+        let (fake, port, _) = start("restart", 0);
+        ready(port).await;
+        let journal = directory.join("journal-restart");
+        {
+            let llm = Llm::new(models(port), journal.clone()).unwrap();
+            let sent = tokio::time::timeout(Duration::from_millis(30), llm.batch("p", Attention::OffStage, "reorganize", items(), Duration::from_secs(5), Duration::from_secs(20))).await;
+            assert!(sent.is_err(), "the run stopped before its first poll");
+        }
+        let llm = Llm::new(models(port), journal.clone()).unwrap();
+        let left = llm.pending_jobs();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].items.iter().map(|i| i.meta["i"].as_i64().unwrap()).collect::<Vec<_>>(), [0, 1], "the callers' meta is kept");
+        let out = llm.collect(&left[0], poll, true).await.unwrap();
+        assert!(out.len() == 2 && out.iter().all(|(_, _, r)| r.is_ok()));
+        let entry: Value = serde_json::from_str(std::fs::read_to_string(journal.join("a0.jsonl")).unwrap().trim()).unwrap();
+        assert_eq!((entry["after_restart"].as_bool(), entry["job"].as_str()), (Some(true), Some(left[0].job.as_str())));
+        assert!(llm.pending_jobs().is_empty());
+        drop(fake);
+        println!("batch poll evidence: {}", directory.display());
     }
 
     /// A night of real reorganizations through this client's batch path (paid; ignored):
@@ -1716,6 +1933,7 @@ mod tests {
                 id: v["id"].as_str().map(String::from).unwrap_or_else(|| v["id"].to_string()),
                 actor: v["actor"].as_str().unwrap_or("night").to_string(),
                 messages: v["messages"].as_array().unwrap().iter().map(|m| Msg { role: if m["role"] == "system" { "system" } else { "user" }, content: m["content"].as_str().unwrap().to_string() }).collect(),
+                meta: Value::Null,
             })
             .collect();
         let n = items.len();

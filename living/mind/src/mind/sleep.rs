@@ -122,7 +122,76 @@ pub(super) struct Prep {
     now: u64,
 }
 
+impl Prep {
+    /// What applying the answer needs, kept with a batch job for a restart (not the messages:
+    /// the journal holds the exact request).
+    fn meta(&self) -> serde_json::Value {
+        json!({"actor": self.actor, "name": self.name, "route": self.route, "at": self.at, "told": self.told, "nodes": self.nodes, "edges": self.edges, "faded": self.faded, "now": self.now})
+    }
+
+    fn from_meta(v: &serde_json::Value) -> Option<Self> {
+        Some(Self {
+            actor: v["actor"].as_u64()? as u32,
+            name: v["name"].as_str()?.to_string(),
+            route: v["route"].as_str()?.to_string(),
+            at: serde_json::from_value(v["at"].clone()).ok()?,
+            msgs: Vec::new(),
+            told: v["told"].as_u64()? as usize,
+            nodes: v["nodes"].as_i64()?,
+            edges: v["edges"].as_i64()?,
+            faded: v["faded"].as_i64()?,
+            now: v["now"].as_u64()?,
+        })
+    }
+}
+
 impl Minds {
+    /// Batch jobs a previous run sent and did not collect (it stopped while they ran): the
+    /// provider ran and bills them, so their answers are collected and journaled, and a night's
+    /// reorganizations are applied to the minds they were for. A player memory's integrations
+    /// are journaled only: the experiences they integrate were held in memory, so they are
+    /// sent again.
+    pub(super) async fn collect_left_batches(self: Arc<Self>) {
+        for job in self.llm.pending_jobs() {
+            let poll = if job.purpose == "reorganize" { self.sleep_cfg.poll } else { self.lived_cfg.poll };
+            log::info!("batch job {}: {} {} requests left by a previous run; collecting", job.job, job.items.len(), job.purpose);
+            let results = match self.llm.collect(&job, poll, true).await {
+                Ok(r) => r,
+                Err(e) => {
+                    log::warn!("batch job {} from a previous run: {e:#}", job.job);
+                    continue;
+                }
+            };
+            if job.purpose != "reorganize" {
+                log::info!("batch job {}: {} answers journaled, not applied", job.job, results.len());
+                continue;
+            }
+            for (_, meta, r) in results {
+                let Some(prep) = Prep::from_meta(&meta) else { continue };
+                let actor = prep.actor;
+                if !self.mine().iter().any(|c| c.id == actor && c.alive) {
+                    continue;
+                }
+                // Not while this run is integrating or reorganizing the same mind.
+                {
+                    let mut a = self.actors.lock().unwrap();
+                    let m = a.entry(actor).or_default();
+                    if m.consolidating {
+                        log::info!("batch job {}: {} is busy; its reorganization is journaled, not applied", job.job, prep.name);
+                        continue;
+                    }
+                    m.consolidating = true;
+                }
+                let r = match r {
+                    Ok(reply) => self.sleep_finish(prep, reply, "batch, collected after a restart").await,
+                    Err(e) => Err(e),
+                };
+                self.slept(actor, r, false);
+            }
+        }
+    }
+
+
     /// The current night, by the world's clock (`None` by day or before the world exists).
     fn night(&self) -> Option<u64> {
         let w = self.conn.db.world().id().find(&0)?;
@@ -294,7 +363,7 @@ impl Minds {
         });
         for ((route, at), preps) in by_route {
             let n = preps.len();
-            let items: Vec<BatchItem> = preps.iter().map(|p| BatchItem { id: format!("sleep-{}-{night}", p.actor), actor: p.name.clone(), messages: p.msgs.iter().map(|m| Msg { role: m.role, content: m.content.clone() }).collect() }).collect();
+            let items: Vec<BatchItem> = preps.iter().map(|p| BatchItem { id: format!("sleep-{}-{night}", p.actor), actor: p.name.clone(), messages: p.msgs.iter().map(|m| Msg { role: m.role, content: m.content.clone() }).collect(), meta: p.meta() }).collect();
             let mut preps: HashMap<String, Prep> = preps.into_iter().map(|p| (format!("sleep-{}-{night}", p.actor), p)).collect();
             match self.llm.batch(&route, at, "reorganize", items, self.sleep_cfg.poll, give_up).await {
                 Ok(results) => {
