@@ -19,7 +19,9 @@ use serde_json::Value;
 
 /// Most acts waiting for one body at a time.
 pub const MAX_QUEUED: usize = 4;
-/// An act that has not reached its target after this long gives up.
+/// An act that has not reached its target after this long gives up, unless it is walking to a
+/// place: such a walk lasts as long as its route, and steering ends it on arrival or when the
+/// way is blocked (docs/PATHS.md).
 pub const APPROACH_MS: u64 = 90_000;
 /// An act still waiting for the body after this long is dropped.
 pub const QUEUE_MS: u64 = 120_000;

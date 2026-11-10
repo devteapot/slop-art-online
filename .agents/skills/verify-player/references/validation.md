@@ -1,5 +1,13 @@
 # Validation record (player)
 
+## 2026-11-10 walking far (Mac)
+
+Branch `path-1` (from `fe6ec66`) in a worktree, the worker's own container `path-stdb` (2.14.1, port 3391), island seed, `scoped`: walks planned leg by leg (docs/PATHS.md).
+
+- `walk_times.py --clicks 40` on `player-path2`: 16 journeys from Brackenford to every other settlement, all at once, 16 of 16 arrived on the clicked point (397–2,054 m straight, 2:20–14:11). 40 short clicks: 38 arrived (8 round an obstacle, up to 198 m walked for 39 m straight), 2 refused "destination unreachable" (sea, 26 and 29 m from shore). Every walker stayed under its person while walking (`presence.ai` false, checked mid-run).
+- `player-path1` (before the `acts::overdue` change): 4 of 4 short clicks arrived. The journey to Thornby stopped after 91 s with "you could not get to it in time", which found the approach limit (docs/PATHS.md, cause 3).
+- Not covered: a WebSocket player client (the game client) walking far; a mind service issuing a far `goto`.
+
 ## 2026-11-10 mind feedback (Mac)
 
 Branch `feedback-1` (ffb4280) on `feedback-verify-stdb` (3343), island seed, `player-fb1-012517`: `combat.py --scene kill` 2 of 2 (the resident's cause "killed by a stranger", no `acquaintance` row; the chronicle "FbPlayer killed Kelhan") and `--scene death` 3 of 3 ("killed by a wolf", where an earlier run read "killed by Storm the wolf").

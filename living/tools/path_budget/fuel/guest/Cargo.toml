@@ -1,0 +1,11 @@
+[package]
+name = "pb-guest"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+living-rules = { path = "../../../../rules", default-features = false }

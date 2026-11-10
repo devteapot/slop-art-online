@@ -231,7 +231,8 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
             let g = GATES_CHANGED.with(|g| g.get());
             if g != 0 {
                 let mm = Rc::make_mut(map);
-                mm.blocked = gate_blocks(ctx, mm.w, mm.h);
+                let blocked = gate_blocks(ctx, mm.w, mm.h);
+                mm.set_blocked(blocked);
                 if g != t {
                     GATES_CHANGED.with(|c| c.set(0));
                 }
@@ -242,7 +243,7 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("map.rebuild");
         let w = world(ctx);
         let mut map = Map::from_chunks(w.width, w.height, ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles)));
-        map.blocked = gate_blocks(ctx, w.width, w.height);
+        map.set_blocked(gate_blocks(ctx, w.width, w.height));
         let map = Rc::new(map);
         *cached = Some(map.clone());
         map

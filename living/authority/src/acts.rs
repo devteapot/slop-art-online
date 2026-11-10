@@ -119,7 +119,13 @@ pub fn interrupt(ctx: &ReducerContext, a: Activity, reflex: &str, now: u64) {
     }
 }
 
-/// The act in progress has been approaching its target for too long.
-pub fn overdue(a: &Activity, now: u64) -> bool {
-    a.node == ACT && a.phase == 0 && now.saturating_sub(a.started_ms) > rules::APPROACH_MS
+/// The act in progress has been approaching its target for too long. A walk to a place that is
+/// still under way is not: its route can take many minutes, and steering ends it on arrival or
+/// when the way is blocked. An approach to a creature, which can keep moving away, is.
+pub fn overdue(ctx: &ReducerContext, a: &Activity, now: u64) -> bool {
+    if a.node != ACT || a.phase != 0 || now.saturating_sub(a.started_ms) <= rules::APPROACH_MS {
+        return false;
+    }
+    let walking_to_a_place = ctx.db.steer().id().find(a.id).is_some_and(|s| s.goal == crate::motion::GOAL_POINT) && ctx.db.body().id().find(a.id).is_some_and(|b| b.next_ms != crate::motion::IDLE);
+    !walking_to_a_place
 }

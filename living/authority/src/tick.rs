@@ -43,6 +43,10 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         }
     }
     drop(phase);
+    // Walking regions are worked out ahead of the routes that need them, a slice a tick.
+    let phase = common::span("tick.routes");
+    motion::warm_routes(ctx);
+    drop(phase);
     // 2. Activity timers.
     let phase = common::span("tick.activity");
     let due: Vec<Activity> = ctx.db.activity().ends_ms().filter(..=now).collect();
