@@ -93,7 +93,7 @@ fn alias_node_key(k: &str) -> &str {
 
 pub fn node(v: Value, path: &str) -> Result<Value, String> {
     match v {
-        Value::String(s) if catalog::skill(&s).is_some() => Ok(json!({"do": {"skill": s}})),
+        Value::String(s) if catalog::skills().has(&s) => Ok(json!({"do": {"skill": s}})),
         Value::String(s) => Err(format!("{path}: expected a node object, got the string \"{s}\"; a node is one of {NODES}")),
         Value::Array(a) => node(json!({"first": a}), path),
         Value::Object(m) => {
@@ -158,13 +158,13 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
                 return Ok(json!({"think": reason}));
             }
             // A skill used directly as the node key: {"flee": {"target": "attacker"}}.
-            if m.len() == 1 || m.keys().any(|k| catalog::skill(k).is_some()) {
-                if let Some((k, v)) = m.iter().find(|(k, _)| catalog::skill(k).is_some()) {
+            if m.len() == 1 || m.keys().any(|k| catalog::skills().has(k)) {
+                if let Some((k, v)) = m.iter().find(|(k, _)| catalog::skills().has(k)) {
                     let mut action = Map::new();
                     action.insert("skill".into(), json!(k));
                     match v {
                         Value::Object(o) => action.extend(o.clone()),
-                        Value::String(s) if catalog::skill(k).map_or(false, |sp| sp.needs_item) => {
+                        Value::String(s) if catalog::skills().get(k).is_some_and(|sp| sp.needs_item) => {
                             action.insert("item".into(), json!(s));
                         }
                         Value::String(_) | Value::Number(_) => {
@@ -268,7 +268,7 @@ fn desires(v: Value, path: &str) -> Result<Value, String> {
             }
             let body = o.get("do").or_else(|| o.get("then")).or_else(|| o.get("node")).cloned().ok_or_else(|| format!("{p}: a desire needs \"do\" (a node)"))?;
             let body = match body {
-                Value::String(s) if catalog::skill(&s).is_none() => json!({"routine": s}),
+                Value::String(s) if !catalog::skills().has(&s) => json!({"routine": s}),
                 other => node(other, &format!("{p}.do"))?,
             };
             Ok(json!({"want": want, "weight": weight, "do": body}))
@@ -340,9 +340,8 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         }
         _ => {}
     }
-    let spec = catalog::skill(&skill).ok_or_else(|| {
-        format!("{path}.do: unknown skill `{skill}`; skills are {}", catalog::SKILLS.iter().map(|s| s.name).collect::<Vec<_>>().join(", "))
-    })?;
+    let all = catalog::skills();
+    let spec = all.get(&skill).ok_or_else(|| format!("{path}.do: unknown skill `{skill}`; skills are {}", all.names().collect::<Vec<_>>().join(", ")))?;
     out.insert("skill".into(), json!(skill));
     let item = action.get("item").or_else(|| action.get("what")).or_else(|| action.get("object")).or_else(|| action.get("kind")).cloned();
     // A blow does its full damage; there is no hurt or kill mode. A model or an older graph
@@ -356,7 +355,11 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     }
     if let Some(Value::String(i)) = item {
         if spec.needs_item {
-            out.insert("item".into(), json!(if matches!(skill.as_str(), "signal" | "teach") { i.trim().to_lowercase().replace(' ', "_") } else { fix_item(&i) }));
+            out.insert("item".into(), json!(match skill.as_str() {
+                "signal" => i.trim().to_lowercase().replace(' ', "_"),
+                "teach" => catalog::technique_name(&i.trim().to_lowercase().replace(' ', "_")).to_string(),
+                _ => fix_item(&i),
+            }));
         }
     }
     if spec.needs_item && !out.contains_key("item") {
@@ -383,7 +386,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         out.insert("text".into(), json!(text));
     }
     if let Some(Value::String(t)) = action.get("topic").or_else(|| action.get("technique")).or_else(|| action.get("about")) {
-        out.insert("topic".into(), json!(t.trim().to_lowercase()));
+        out.insert("topic".into(), json!(catalog::technique_name(&t.trim().to_lowercase())));
     }
     if let Some(Value::String(w)) = action.get("want").or_else(|| action.get("for")).or_else(|| action.get("in_return")) {
         out.insert("want".into(), json!(fix_item(w)));
@@ -402,7 +405,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         return Err(format!("{path}.do: skill `{skill}` needs a target"));
     }
     if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && spec.needs_item) {
-        let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some();
+        let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some() || spec.items.iter().any(|w| w == i);
         if !known {
             return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::ITEMS.iter().map(|x| x.name).collect::<Vec<_>>().join(", ")));
         }

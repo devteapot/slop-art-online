@@ -1219,7 +1219,7 @@ fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
     let r = ctx.db.relation().by_pair().filter((me, other)).next();
     let label = r.as_ref().map(|r| r.label.to_lowercase()).unwrap_or_default();
     let trust = r.as_ref().map(|r| r.trust).unwrap_or(0.0);
-    match want {
+    let fits = match want {
         "friend" => r.is_some() && (trust >= 25.0 || ["friend", "family", "partner", "ally", "kin"].iter().any(|l| label.contains(l))),
         "enemy" => r.is_some() && (trust <= -25.0 || ["enemy", "rival", "threat", "thief"].iter().any(|l| label.contains(l))),
         "family" => ["family", "partner", "kin", "child", "parent", "sibling"].iter().any(|l| label.contains(l)),
@@ -1231,7 +1231,18 @@ fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
         },
         "any" | "" => true,
         other => label.contains(&other.to_lowercase()),
+    };
+    fits || (r.is_none() && stance_fits(ctx, me, other, want))
+}
+
+/// Without a personal relation: how my community regards theirs, when a stance record says
+/// (`friend`, `enemy` or a word of its label; docs/WORLD_RULES.md, "Standing").
+fn stance_fits(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
+    if matches!(want, "family" | "stranger" | "outsider" | "any" | "") {
+        return false;
     }
+    let (a, b) = (crate::records::community_party(ctx, me), crate::records::community_party(ctx, other));
+    crate::records::stance(ctx, a, b).is_some_and(|(label, value)| living_rules::records::stance_fits(&label, value, want))
 }
 
 /// The tiles of one structure in a scene list (id, kind, owner, position, distance): those

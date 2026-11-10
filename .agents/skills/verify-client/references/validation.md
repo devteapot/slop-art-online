@@ -1,5 +1,15 @@
 # Client protocol validation
 
+## 2026-11-10 records private, `my_records` (Mac)
+
+Branch `rules-2` (`eaee6b0`), own container `sao-rules2-stdb` (2.14.1, port 3342), `scoped`: 30 PASS, exit 0 (`client-rules2-4/`). Harness fixes in this change:
+
+- `run.py` and `drive.py` accept any loopback server from `LIVING_STDB_URL`, and the drop proxy forwards to its port.
+- The private-table inventory reads every authority source file (the records tables are in `records.rs`).
+- `PRIVATE`, `ADMIN` and the scheduled reducers gained the floor module's `floor_seed`, `genesis_timer`, `create_floor` and `genesis_step`, missing since floors merged: on main the driver stopped at its reducer inventory.
+
+`record`, `record_party` and `record_clock` are refused to anonymous clients and players; `my_records` is in the view inventory, and verify-player `deal.py` proves its rows.
+
 ## 2026-11-10 `guest`, and harness-1's `judged` and `mind_judged` (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).

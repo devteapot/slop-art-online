@@ -1,12 +1,10 @@
 //! Verbs: what my character can do to what is in front of it, and to itself, offered from the
 //! world's own rules (docs/GAME_BRIEF.md, "Verbs").
 //!
-//! Nothing here is written per skill. The client knows a skill exists from the rules' catalog
-//! (`living_rules::catalog::SKILLS`: name, whether it takes a target or an item, its help) and from
-//! the world's installed skill script (the public `script` row, compiled here with the same
-//! `living_rules::script` the authority runs): a skill the script defines (`<name>_check` and
-//! `<name>_done`) that this client's catalog lacks is listed too, its target found by its check.
-//! What each takes and gives is the script's `skill_io`. Whether a skill
+//! Nothing here is written per skill. The client knows the world's skills from its installed
+//! skill script (the public `script` row, compiled here with the same `living_rules::script` the
+//! authority runs): each skill's `<skill>_spec()` says whether it takes a target or an item, the
+//! items it is given, its description and what it takes and gives. Whether a skill
 //! applies to what I point at is the rules' own `<skill>_check`, run on what my character knows
 //! (my pack, my know-how, my needs; the target as I perceive it). A skill the rules add shows up
 //! here with no client change, and a check the script changes changes what is offered.
@@ -63,32 +61,25 @@ pub struct Rules {
     pub revision: u32,
     pub scripts: Option<Scripts>,
     pub error: Option<String>,
-    /// Every skill there is: the catalog's, then those only the installed script defines.
+    /// Every skill there is, as the installed script declares it.
     pub skills: Vec<Skill>,
 }
 
-/// A skill as the client knows it: whether it takes a target (unknown for one only the script
-/// defines: its check decides), an item, and its help.
+/// A skill as the world's script declares it (`<skill>_spec()`): whether it takes a target or an
+/// item, the items it is given, the further arguments it reads and its description.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Skill {
     pub name: String,
-    pub target: Option<bool>,
+    pub target: bool,
     pub item: bool,
+    pub items: Vec<String>,
+    pub args: Vec<String>,
     pub help: String,
 }
 
-/// The catalog's skills, then the skills a script defines that the catalog lacks (a function
-/// `<name>_done` beside `<name>_check`).
-pub fn skills_of(source: &str) -> Vec<Skill> {
-    let mut out: Vec<Skill> = catalog::SKILLS.iter().map(|s| Skill { name: s.name.into(), target: Some(s.needs_target), item: s.needs_item, help: s.help.into() }).collect();
-    let fns: std::collections::BTreeSet<&str> = source.lines().filter_map(|l| l.trim_start().strip_prefix("fn ")).filter_map(|l| l.split('(').next()).map(str::trim).collect();
-    for f in &fns {
-        let Some(name) = f.strip_suffix("_done") else { continue };
-        if catalog::skill(name).is_none() && fns.contains(format!("{name}_check").as_str()) {
-            out.push(Skill { name: name.into(), target: None, item: false, help: String::new() });
-        }
-    }
-    out
+/// The skills the compiled script declares.
+pub fn skills_of(sc: &Scripts) -> Vec<Skill> {
+    sc.skills().iter().map(|s| Skill { name: s.name.clone(), target: s.needs_target, item: s.needs_item, items: s.items.clone(), args: s.args.clone(), help: s.about.clone() }).collect()
 }
 
 impl Rules {
@@ -101,9 +92,9 @@ impl Rules {
         self.revision = row.revision;
         match Scripts::new(&row.source) {
             Ok(s) => {
-                self.skills = skills_of(&row.source);
-                let extra: Vec<&str> = self.skills.iter().filter(|k| k.target.is_none()).map(|k| k.name.as_str()).collect();
-                info!("rules: skill script revision {} compiled ({} skills in the catalog; defined only by the script: {extra:?})", row.revision, catalog::SKILLS.len());
+                self.skills = skills_of(&s);
+                info!("rules: skill script revision {} compiled ({} skills)", row.revision, self.skills.len());
+                catalog::set_skills(s.skills().clone());
                 self.scripts = Some(s);
                 self.error = None;
             }
@@ -204,17 +195,6 @@ fn has_check(sc: &Scripts, skill: &str) -> bool {
 }
 
 /// The item names a skill's help lists (`(item: spear|cloak|torch)`), if it lists them.
-fn help_items(help: &str) -> Vec<String> {
-    let Some(i) = help.find("item: ") else { return Vec::new() };
-    let rest = &help[i + 6..];
-    let end = rest.find([')', ';', ' ']).unwrap_or(rest.len());
-    let list = &rest[..end];
-    if !list.contains('|') {
-        return Vec::new();
-    }
-    list.split('|').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
-}
-
 fn pretty(s: &str) -> String {
     s.replace('_', " ")
 }
@@ -235,7 +215,7 @@ pub fn choices(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, s
             continue;
         }
         let wants_target = *aim != Aim::Me;
-        if spec.target.is_some_and(|t| t != wants_target) {
+        if spec.target != wants_target {
             continue;
         }
         let checked = has_check(sc, skill);
@@ -243,7 +223,7 @@ pub fn choices(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, s
             continue;
         }
         // An argument this client cannot give: a behavior graph (reworking one's ways).
-        if spec.help.contains("graph:") {
+        if spec.args.iter().any(|a| a == "graph") {
             continue;
         }
         let ctx = |item: &str, text: &str, tgt_holds: Option<&str>| {
@@ -254,17 +234,12 @@ pub fn choices(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, s
                     t.inv.push((i.to_string(), 1));
                 }
             }
-            SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, night: me.night, hour: me.hour, season: "summer".into(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
+            // A skill that asks something in return is checked with something to ask for (each
+            // thing there is becomes its own choice below).
+            let want = if spec.args.iter().any(|a| a == "want") { catalog::ITEMS.iter().map(|i| i.name).find(|w| *w != item).unwrap_or_default() } else { "" };
+            SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, want: want.to_string(), want_qty: (!want.is_empty()) as u32, night: me.night, hour: me.hour, season: "summer".into(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
         };
         let allowed = |item: &str, text: &str| sc.check(skill, &ctx(item, text, (!item.is_empty()).then_some(item))).is_ok();
-        // A skill only the script defines takes a target when its check refuses having none.
-        if spec.target.is_none() && wants_target {
-            let mut none = ctx("", "", None);
-            none.target = TargetFacts { class: "none".into(), ..Default::default() };
-            if sc.check(skill, &none).is_ok() {
-                continue;
-            }
-        }
         // Words: refused without, allowed with.
         let words_needed = |item: &str| checked && !allowed(item, "") && allowed(item, "…");
         if !spec.item {
@@ -278,8 +253,13 @@ pub fn choices(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, s
         // Item candidates: what I carry, what I know, what the help names, and (for something
         // that may hold things) every item there is.
         let mut cands: Vec<String> = Vec::new();
-        let listed = help_items(&spec.help);
-        if checked {
+        let listed = spec.items.clone();
+        // A skill that asks something in return offers what I carry and its own words: the
+        // rules let terms promise anything, and every item for every want is too long a list.
+        let asks = spec.args.iter().any(|a| a == "want");
+        if checked && asks {
+            cands.extend(pack.iter().map(|(i, _)| i.clone()));
+        } else if checked {
             cands.extend(pack.iter().map(|(i, _)| i.clone()));
             cands.extend(techniques.iter().cloned());
             if !matches!(aim, Aim::Me) {
@@ -300,10 +280,10 @@ pub fn choices(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, s
             let count = have(&item).filter(|_| !techniques.contains(&item)).map(|n| format!(" ×{n}")).unwrap_or_default();
             let label = format!("{} {}{count}{}", pretty(skill), pretty(&item), if words { " …" } else { "" });
             let c = Choice { item: Some(item.clone()), words, ..Choice::new(skill, label) };
-            // A trade names what I ask in return: one choice per thing there is to ask for.
-            if skill == "offer" {
-                for w in catalog::ITEMS.iter().map(|i| i.name).filter(|w| *w != item) {
-                    out.push(Choice { want: Some(w.to_string()), label: format!("offer {} for {}", pretty(&item), pretty(w)), ..c.clone() });
+            // A trade or terms name what I ask in return: one choice per thing to ask for.
+            if asks {
+                for w in catalog::ITEMS.iter().map(|i| i.name.to_string()).chain(spec.items.iter().cloned()).filter(|w| *w != item) {
+                    out.push(Choice { want: Some(w.clone()), label: format!("{} {} for {}", pretty(skill), pretty(&item), pretty(&w)), ..c.clone() });
                 }
             } else {
                 out.push(c);
@@ -919,6 +899,15 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
             v.pending.remove(i);
         }
     }
+    // What the world's rules tell me of my dealings (an agreement kept or broken, a demand paid),
+    // from now on: rows already there when the client connected are history.
+    let told: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && e.kind == "record" && !v.seen.contains(&e.id)).collect();
+    for e in told {
+        v.seen.insert(e.id);
+        if (e.at_ms as f64) + 5_000.0 >= now_ms {
+            v.toasts.push(Toast { text: outcome_text(&e.text).1, ok: None, at: now });
+        }
+    }
     let n = v.toasts.len();
     if n > 3 {
         v.toasts.drain(..n - 3);
@@ -983,20 +972,20 @@ mod tests {
     fn a_bush_is_gathered_and_a_tap_gathers() {
         let sc = Scripts::new(SKILLS).unwrap();
         let (aim, t) = bush();
-        let c = choices(&sc, &me(&[], &[]), &aim, Some(&t), &skills_of(""));
+        let c = choices(&sc, &me(&[], &[]), &aim, Some(&t), &skills_of(&sc));
         // Gathering, and turning to face it (the rules' `face` takes anything in sight).
         assert_eq!(skills(&c), vec!["gather", "face"], "{c:?}");
         assert_eq!(likely(&sc, &aim, &c, None).map(|c| c.skill.as_str()), Some("gather"));
         // A full pack: the rules refuse to gather, so it is not offered.
         let full = me(&[("wood", 40)], &[]);
-        assert_eq!(skills(&choices(&sc, &full, &aim, Some(&t), &skills_of(""))), vec!["face"]);
+        assert_eq!(skills(&choices(&sc, &full, &aim, Some(&t), &skills_of(&sc))), vec!["face"]);
     }
 
     #[test]
     fn i_eat_food_i_carry_and_craft_what_i_know_and_can_afford() {
         let sc = Scripts::new(SKILLS).unwrap();
         let m = me(&[("berries", 4), ("wood", 3), ("stone", 1)], &["spear"]);
-        let c = choices(&sc, &m, &Aim::Me, None, &skills_of(""));
+        let c = choices(&sc, &m, &Aim::Me, None, &skills_of(&sc));
         let s = skills(&c);
         assert!(s.contains(&"eat:berries".to_string()), "{s:?}");
         assert!(!s.contains(&"eat:wood".to_string()), "{s:?}");
@@ -1005,7 +994,7 @@ mod tests {
         assert!(s.contains(&"sleep".to_string()) && s.contains(&"drop:berries".to_string()), "{s:?}");
         assert_eq!(c.iter().find(|c| c.skill == "eat").unwrap().label, "eat berries ×4");
         // Writing needs words: offered once known, with the text box first.
-        let w = choices(&sc, &me(&[("wood", 1)], &["writing"]), &Aim::Me, None, &skills_of(""));
+        let w = choices(&sc, &me(&[("wood", 1)], &["writing"]), &Aim::Me, None, &skills_of(&sc));
         assert!(w.iter().any(|c| c.skill == "write" && c.item.as_deref() == Some("tablet") && c.words), "{w:?}");
         // Nothing on myself is a use of force or a real-time skill.
         assert!(!s.iter().any(|k| k == "dodge" || k == "block" || k == "heal"), "{s:?}");
@@ -1016,7 +1005,7 @@ mod tests {
         let sc = Scripts::new(SKILLS).unwrap();
         let (aim, t) = person();
         let m = me(&[("berries", 4)], &["fire"]);
-        let c = choices(&sc, &m, &aim, Some(&t), &skills_of(""));
+        let c = choices(&sc, &m, &aim, Some(&t), &skills_of(&sc));
         let s = skills(&c);
         for want in ["give:berries", "teach:fire", "wave", "nod", "appraise"] {
             assert!(s.contains(&want.to_string()), "{want} missing: {s:?}");
@@ -1036,22 +1025,40 @@ mod tests {
         assert_eq!(likely(&sc, &aim, &c, wave.as_ref()).map(|c| c.skill.as_str()), Some("wave"));
     }
 
-    /// A skill the world's script adds is offered with no change here: found by its functions,
+    /// Terms and demands toward a person come from their specs like any act: what I carry for
+    /// each thing to ask for (and lodging, the terms' own word), and the node `human_act` takes.
+    #[test]
+    fn to_a_person_i_offer_terms_and_make_demands() {
+        let sc = Scripts::new(SKILLS).unwrap();
+        let (aim, t) = person();
+        let m = me(&[("berries", 4)], &[]);
+        let c = choices(&sc, &m, &aim, Some(&t), &skills_of(&sc));
+        let terms: Vec<&Choice> = c.iter().filter(|c| c.skill == "offer_terms").collect();
+        assert!(terms.iter().any(|c| c.item.as_deref() == Some("berries") && c.want.as_deref() == Some("wood")), "{terms:?}");
+        assert!(terms.iter().any(|c| c.want.as_deref() == Some("lodging")), "{terms:?}");
+        assert!(terms.iter().all(|c| c.item.as_deref() != Some("stone")), "only what I carry is promised: {terms:?}");
+        let node = terms.iter().find(|c| c.want.as_deref() == Some("wood")).unwrap().node(&aim, None);
+        assert_eq!(node, serde_json::json!({"do": "offer_terms", "target": {"id": 7}, "item": "berries", "qty": 1, "want": "wood", "want_qty": 1}));
+        living_rules::graph::parse(&node.to_string()).unwrap();
+        assert!(c.iter().any(|c| c.skill == "demand" && c.item.as_deref() == Some("berries")), "{c:?}");
+    }
+
+    /// A skill the world's script adds is offered with no change here: declared by its spec,
     /// aimed by its check.
     #[test]
     fn a_skill_the_rules_add_is_offered() {
-        let src = format!("{SKILLS}\nfn polish_check(a) {{ if a.target.kind != \"boulder\" {{ return \"nothing to polish\"; }} \"\" }}\nfn polish_duration(a) {{ 2000 }}\nfn polish_done(a) {{ [] }}\n");
+        let src = format!("{SKILLS}\nfn polish_spec() {{ #{{ target: true, reach: 1.3, about: \"polish a boulder\" }} }}\nfn polish_check(a) {{ if a.target.kind != \"boulder\" {{ return \"nothing to polish\"; }} \"\" }}\nfn polish_duration(a) {{ 2000 }}\nfn polish_done(a) {{ [] }}\n");
         let sc = Scripts::new(&src).unwrap();
         let boulder = Aim::Thing { class: "resource", kind: "boulder".into(), at: Vec2::ZERO, id: 3, amount: 5.0, nearest: true };
         let t = thing_facts("resource", "boulder", 3, 5.0, 1.0);
-        let c = choices(&sc, &me(&[], &[]), &boulder, Some(&t), &skills_of(&src));
+        let c = choices(&sc, &me(&[], &[]), &boulder, Some(&t), &skills_of(&sc));
         assert!(skills(&c).contains(&"polish".to_string()), "{c:?}");
         let (aim, t) = bush();
-        let c = choices(&sc, &me(&[], &[]), &aim, Some(&t), &skills_of(&src));
+        let c = choices(&sc, &me(&[], &[]), &aim, Some(&t), &skills_of(&sc));
         assert!(!skills(&c).contains(&"polish".to_string()), "{c:?}");
-        // Found from the script alone, and never offered on myself: its check needs a target.
-        assert_eq!(skills_of(&src).last().map(|k| (k.name.as_str(), k.target)), Some(("polish", None)));
-        assert!(!skills(&choices(&sc, &me(&[], &[]), &Aim::Me, None, &skills_of(&src))).contains(&"polish".to_string()));
+        // Declared by the script alone, and never offered on myself: it takes a target.
+        assert!(skills_of(&sc).iter().any(|k| k.name == "polish" && k.target));
+        assert!(!skills(&choices(&sc, &me(&[], &[]), &Aim::Me, None, &skills_of(&sc))).contains(&"polish".to_string()));
     }
 
     #[test]
@@ -1072,7 +1079,5 @@ mod tests {
     fn outcomes_read_short() {
         assert_eq!(outcome_text("You did what you had decided: eat berries."), (Some(true), "Eat berries".into()));
         assert_eq!(outcome_text("What you had decided did not work out: craft bow: you don't know how to make a bow (archery: learn it)."), (Some(false), "You don't know how to make a bow (archery: learn it)".into()));
-        assert_eq!(help_items("craft an item (item: spear|cloak|torch)"), vec!["spear", "cloak", "torch"]);
-        assert!(help_items("hand items to another creature").is_empty());
     }
 }

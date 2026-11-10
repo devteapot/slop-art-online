@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
 
 mod animal;
+mod dealings;
 mod judge;
 mod lived;
 pub mod lod;
@@ -1472,6 +1473,7 @@ impl Minds {
             judgments: recalled.judgments,
             places: self.places(actor),
             experiences,
+            dealings: self.dealings(actor),
         };
         let repertoire = self.repertoire_text(actor);
         // Think first, as the person and without the grammar; then compile the decision.
@@ -1806,6 +1808,7 @@ impl Minds {
             judgments: recalled.judgments,
             places: self.places(actor),
             experiences: meaningful.iter().map(|e| self.exp_line(e, &fmt, true)).collect(),
+            dealings: self.dealings(actor),
         };
         let animal = c.kind != "person";
         let system = match self.species.get(&c.kind).filter(|_| animal) {
