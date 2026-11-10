@@ -261,6 +261,15 @@ pub struct SiteSpec {
     /// Prefer a site near the sea.
     #[serde(default)]
     pub coast: bool,
+    /// A dispersed settlement (a hamlet, a farmstead, a hollow in the woods): placed after every
+    /// other site, on any ground of `regions` that is not too rough, spread over the island and
+    /// over its region kinds rather than drawn to water.
+    #[serde(default)]
+    pub dispersed: bool,
+    /// Region kinds a dispersed site may stand in (empty: meadow, forest, old forest, highland,
+    /// beach).
+    #[serde(default)]
+    pub regions: Vec<RegionKind>,
 }
 
 impl Default for LandParams {
@@ -345,7 +354,7 @@ impl Default for Regions {
 }
 
 fn default_sites() -> Vec<SiteSpec> {
-    let spec = |kind, min, max, per_km2, radius_m, spacing_m, scale, flatten| SiteSpec { kind, min, max, per_km2, radius_m, spacing_m, scale, flatten, style: None, relief_m: None, coast: false };
+    let spec = |kind, min, max, per_km2, radius_m, spacing_m, scale, flatten| SiteSpec { kind, min, max, per_km2, radius_m, spacing_m, scale, flatten, style: None, relief_m: None, coast: false, dispersed: false, regions: Vec::new() };
     vec![
         spec(SiteKind::Town, 1, 1, 0.0, 150.0, 0.0, 1.0, 0.8),
         spec(SiteKind::Giants, 1, 1, 0.0, 130.0, 0.0, 3.0, 0.85),
@@ -356,6 +365,9 @@ fn default_sites() -> Vec<SiteSpec> {
         SiteSpec { style: Some("steampunk".into()), relief_m: Some([12.0, 44.0]), ..spec(SiteKind::Town, 0, 1, 0.6, 105.0, 500.0, 1.0, 0.4) },
         SiteSpec { style: Some("cyberpunk".into()), relief_m: Some([0.0, 24.0]), coast: true, ..spec(SiteKind::Town, 0, 1, 0.6, 100.0, 500.0, 1.0, 0.65) },
         spec(SiteKind::Cave, 2, 4, 1.2, 5.0, 300.0, 1.0, 0.0),
+        // Hamlets: a few houses, barns and fields away from the towns, in meadows, woods and
+        // hills (docs/SEEDED_LIVES.md). Placed last, so the sites above stay where they were.
+        SiteSpec { style: Some("hamlet".into()), dispersed: true, ..spec(SiteKind::Village, 2, 9, 3.0, 26.0, 230.0, 1.0, 0.6) },
     ]
 }
 
@@ -1817,6 +1829,7 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
     let mut order: Vec<&SiteSpec> = c.p.sites.iter().collect();
     // Towns in their own style come after the villages, so the first sites stay where they were.
     order.sort_by_key(|sp| match sp.kind {
+        _ if sp.dispersed => 6,
         SiteKind::Town if sp.style.is_none() => 0,
         SiteKind::Giants => 1,
         SiteKind::SmallFolk => 2,
@@ -1855,6 +1868,15 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
                 }
                 let jitter = hash(c.seed ^ 0x71 ^ sp.kind as u64, x as i32, y as i32);
                 let score = match sp.kind {
+                    _ if sp.dispersed => {
+                        // Any not-too-rough ground of its region kinds, not in wetland pools or on
+                        // the peaks; water is welcome but not needed (a well, a stream).
+                        let ok_kind = if sp.regions.is_empty() { matches!(kind, K::Meadow | K::Forest | K::OldForest | K::Highland | K::Beach) } else { sp.regions.contains(&kind) };
+                        if !ok_kind || sv.still > 0.0 || sv.wetland > 0.1 * relax || sv.water > 0.15 * relax || rough > 9.0 * relax || sv.mean < 2.0 || sv.mean > 200.0 * relax {
+                            continue;
+                        }
+                        -rough * 0.5 + jitter * 6.0
+                    }
                     SiteKind::Town if sp.relief_m.is_some() => {
                         // A town in its own style: the relief it wants (a hillside to terrace, or
                         // flat ground), near the sea if it likes the coast.
@@ -1923,7 +1945,10 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
                             nearest = nearest.min(d);
                         }
                     }
-                    let eff = score + nearest / 100.0;
+                    // Dispersed sites spread over region kinds too: each one already in this kind
+                    // of region counts against the next.
+                    let same = if sp.dispersed { placed.iter().filter(|q| mine(q) && q.region == cands[ci].4).count() as f32 } else { 0.0 };
+                    let eff = score + nearest / 100.0 - 4.0 * same;
                     if ok && best.is_none_or(|b| eff > b.0) {
                         best = Some((eff, ci));
                     }

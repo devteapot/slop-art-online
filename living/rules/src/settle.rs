@@ -1203,7 +1203,34 @@ fn default_styles() -> Vec<Style> {
         ..wastes("salvage", vec![(LotKind::House, "kiosk".into()), (LotKind::Workshop, "workshop".into()), (LotKind::Chapel, "food_stall".into()), (LotKind::Inn, "food_stall".into()), (LotKind::MarketStall, "food_stall".into())])
     };
     let ruin = Style { landmark: None, workshop: 0.3, ..wastes("ruin", vec![(LotKind::House, "block".into()), (LotKind::Workshop, "workshop".into())]) };
-    vec![town, village, giants, small, steampunk, cyberpunk, ward, slum, works, outpost, salvage, ruin]
+    // A hamlet: a few farmhouses round a small green, barns and fields along its track, from
+    // the village kit (docs/SEEDED_LIVES.md).
+    let hamlet = Style {
+        site: SiteKind::Village,
+        buildings: "hamlet".into(),
+        kit: Some("fantasy".into()),
+        plaza_m: [12.0, 9.0],
+        trunk_m: 2.6,
+        street_m: 2.8,
+        lane_m: 2.2,
+        radials: 1,
+        lane_spacing_m: 30.0,
+        lane_m_max: 40.0,
+        branch: 0.3,
+        depth: 1,
+        bound: 0.95,
+        relief_m: 8.0,
+        gap_m: [5.0, 12.0],
+        garden: 0.8,
+        barn: 0.6,
+        workshop: 0.1,
+        outskirts_m: 45.0,
+        outskirt_gap_m: [10.0, 26.0],
+        fields: 0.8,
+        ornaments: Ornaments { garden_tree: 0.6, washing: 0.4, ..Ornaments::default() },
+        ..Style::default()
+    };
+    vec![town, village, giants, small, steampunk, cyberpunk, ward, slum, works, outpost, salvage, ruin, hamlet]
 }
 
 // ------------------------------------------------------------------------------------------
@@ -3496,6 +3523,12 @@ impl<'a> Plan<'a> {
             if lot.kind == LotKind::Lamp && hmax - hmin > 0.4 {
                 return None;
             }
+            // Nor is a garden or field laid across a terrace's step: the step's edge becomes a
+            // wall (`terrace::paint_drops`), which would cut through it.
+            let terraced = land.mods.terr.iter().any(|z| dist(z.c, lot.centre) < z.r_out + 4.0);
+            if terraced && matches!(lot.kind, LotKind::Garden | LotKind::Field) && hmax - hmin > terrace::CLIMB_M {
+                return None;
+            }
             lot.floor_m = (hmin + hmax) * 0.5;
         }
         lot.yaw = yaw_of(lot.front);
@@ -4493,7 +4526,9 @@ mod tests {
         for s in &l.settlements {
             let lots = &l.lots[s.lots.0 as usize..s.lots.1 as usize];
             let houses = lots.iter().filter(|x| matches!(x.kind, LotKind::House | LotKind::Townhouse)).count();
-            assert!(houses >= 3, "{:?} at {} m has {houses} houses", s.kind, l.size);
+            // A hamlet may be a farmstead or two; everywhere else a settlement is a few households.
+            let least = if s.style == "hamlet" { 1 } else { 3 };
+            assert!(houses >= least, "{:?} {} at {} m has {houses} houses", s.kind, s.style, l.size);
             assert!(s.landmark.is_some() || s.kind == SiteKind::Village, "{:?} has no landmark", s.kind);
         }
         let town = l.settlements.iter().find(|s| s.kind == SiteKind::Town).unwrap();
@@ -4890,7 +4925,7 @@ mod tests {
             assert!(count(k) > 0, "no {k:?} on the island");
         }
         eprintln!("props on the island: {}", l.props.len());
-        for s in l.settlements.iter().filter(|s| s.kind != SiteKind::SmallFolk) {
+        for s in l.settlements.iter().filter(|s| s.kind != SiteKind::SmallFolk && s.style != "hamlet") {
             let i = l.settlements.iter().position(|x| std::ptr::eq(x, s)).unwrap() as u16;
             assert!(l.props.iter().any(|p| p.settlement == i && p.kind == PropKind::Bench), "{:?} {} has no bench", s.kind, s.style);
         }

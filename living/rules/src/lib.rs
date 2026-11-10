@@ -23,6 +23,7 @@ pub mod script;
 pub mod social;
 pub mod species;
 pub mod steer;
+pub mod ways;
 
 /// Real milliseconds per in-world day.
 pub const DEFAULT_DAY_MS: u64 = 12 * 60 * 1000;
