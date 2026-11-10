@@ -47784,9 +47784,9 @@
         "plaza"
       ],
       "berries": [
+        "berry_bush",
         "field",
-        "garden",
-        "berry_bush"
+        "garden"
       ],
       "store": [
         "storage"
@@ -47877,6 +47877,9 @@
       "pedlar": [
         "plaza"
       ]
-    }
+    },
+    "spread": [
+      "berries"
+    ]
   }
 }

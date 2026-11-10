@@ -264,6 +264,10 @@ pub struct SeedTownLife {
     /// Places some households go in the evening (alternating by household), e.g. inn, square.
     #[serde(default)]
     pub evening: Vec<String>,
+    /// Places spread over their spots like workplaces (each resident the nearest of the least
+    /// used), so that a whole town does not share one, e.g. the bush someone picks berries at.
+    #[serde(default)]
+    pub spread: Vec<String>,
 }
 
 /// A place an author gives one resident (`residents[].places`, docs/SEEDED_LIVES.md). It is found
@@ -305,8 +309,8 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
     let map = common::map(ctx);
     let near = |p: (f32, f32)| map.nearest_walkable(p.0, p.1).unwrap_or(p);
     let named = |n: &str| if n.is_empty() { Some(si) } else { seeded.iter().position(|t| t.is_some_and(|t| t.name == n)) };
-    // Where a kind stands in settlement `sj`.
-    let spots = |sj: usize, k: &str| -> Vec<(f32, f32)> {
+    // Where a kind stands in settlement `sj` (looked up once per settlement and kind).
+    let spots_of = |sj: usize, k: &str| -> Vec<(f32, f32)> {
         let s = &h.settlements[sj];
         let lots = || h.lots.iter().filter(move |l| l.settlement as usize == sj);
         match k {
@@ -325,6 +329,8 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
             _ => Vec::new(),
         }
     };
+    let mut found: std::collections::HashMap<(usize, String), Vec<(f32, f32)>> = std::collections::HashMap::new();
+    let mut spots = |sj: usize, k: &str| -> Vec<(f32, f32)> { found.entry((sj, k.to_string())).or_insert_with(|| spots_of(sj, k)).clone() };
     // How many of the residents already work at a spot.
     let mut used: std::collections::HashMap<(i32, i32), u32> = std::collections::HashMap::new();
     let mut find = |kinds: &[String], sj: usize, from: (f32, f32), spread: bool| -> Option<(f32, f32)> {
@@ -408,7 +414,7 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
             }
         }
         for (name, kinds) in life.places.iter().filter(|(n, _)| !mine(n)) {
-            if let Some(at) = find(kinds, si, home, false) {
+            if let Some(at) = find(kinds, si, home, life.spread.contains(name)) {
                 put(name, at);
             }
         }

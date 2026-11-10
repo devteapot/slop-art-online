@@ -1,5 +1,12 @@
 # Validation record (generation)
 
+## 2026-11-10 island food places (Mac)
+
+Own scratch container `hunger-verify` (2.14.1, port 3382) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; branch `hunger-1` (main `7e5de53` merged in). The island seed gains the places `berries` and `store` and `town_life.spread`; `town::seat` reads `spread` and looks each spot kind up once per settlement. The driver's place check now names every seed place, and a new check asserts that a spread place is spread.
+
+- **`generation-hunger-110557`** (`--feature worlds --seeds island`): island 970 of 970. All 277 residents know `berries`, `evening`, `inn`, `square` and `store`; `berries` is spread over 275 distinct bushes for 277 residents.
+- **`generation-hunger-085943`** (before `spread`, from `fe6ec66`): island 969 of 969.
+
 ## 2026-11-09 floors: staged creation, a runtime seed, the second-pass megacity (dev-box)
 
 Own scratch container `megacity-stdb` (image `v2.14.1`, port 3394, `/wasm` mounted `:z`) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; worktree `~/dev/slop-megacity`, branch `megacity-1` from `14f3a72`. The driver gained the floor child `floor-megacity-4k` (`--seed none`, `create_floor`, `genesis` polled to `done`, four floor checks), `--seeds`, district styles read from the seed, membership checks of the living, and the `animals.habitat` map skipped in the animal counts.

@@ -37,7 +37,8 @@ A resident finds home, work, the square, an evening spot, where berries grow and
 
 ```json
 "town_life": {
-  "places": {"square": ["plaza"], "inn": ["inn", "hall", "plaza"], "berries": ["field", "garden", "berry_bush"], "store": ["storage"]},
+  "places": {"square": ["plaza"], "inn": ["inn", "hall", "plaza"], "berries": ["berry_bush", "field", "garden"], "store": ["storage"]},
+  "spread": ["berries"],
   "evening": ["inn", "square"],
   "work": {"farmer": ["field", "garden", "plaza"], "fisher": ["fishing_spot", "plaza"], "trader": ["market_stall", "plaza"], …}
 }
@@ -46,7 +47,7 @@ A resident finds home, work, the square, an evening spot, where berries grow and
 - A kind is a lot kind of the resident's own settlement (`lot.settlement`; fields and gardens at their centre, buildings at their door), a resource or structure kind within 1.5 × the settlement's radius (`fishing_spot`, `gate`), or `plaza` (the settlement's square). The first kind that has a spot wins.
 - Work is spread over the settlement's matching lots: the nearest of the least used. Only a spot a path reaches from home counts (`Map::path`, at most four candidates per kind); a fishing spot across a river or a walled yard is skipped.
 - `evening` alternates by household between the inn and the square.
-- `berries` is the nearest field or garden a path reaches (berries grow there together), else the nearest bush; `store` is the nearest storage. The food routine walks to them when nothing edible is in sight ([below](#starting-ways); added 2026-11-10 for [D2](SOAK.md#d2-the-islands-residents-starve-in-the-first-hours)).
+- A place named in `spread` is spread like work: each resident gets the nearest of the least used spots. On the island that is `berries`: a bush of one's own (else a field or garden), so a town does not strip the one bush nearest its houses. `store` is the nearest storage. The food routine walks to them when nothing edible is in sight ([below](#starting-ways)). Both were added on 2026-11-10 for [D2](SOAK.md#d2-the-islands-residents-starve-in-the-first-hours). The island's 277 residents get 277 different bushes, a median of 28 m from home (p90 57 m, at most 164 m). Each spot kind is now looked up once per settlement, so creation is no slower (`init` about 4.1 s, as before).
 - `home` needs no row: it is the household's door (`character.home_x/home_y`, set when the household claims the house at its door; `Target::Home` already falls back to it).
 - Cost at world creation: 158 ms for 262 residents in 8 settlements (`init.town.seat` spans); 942 place rows, never rewritten. Nothing per tick scans settlements, lots or households.
 
