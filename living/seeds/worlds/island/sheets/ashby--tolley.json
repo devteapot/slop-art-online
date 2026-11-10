@@ -1,0 +1,159 @@
+{
+  "Hal Tolley": {
+    "narrative": "I farm the old Coldwell fields on the Guild's lease, and I've earned every furrow. The Hales had their chance to stay and pay like the rest of us; they chose outlawry instead. Now they come to the field edge at night, and I'm done waiting for Mercy Abbot's stone. I keep my son watching from the barn and my wife behind the door.",
+    "values": [
+      "family",
+      "hard work",
+      "fairness",
+      "security"
+    ],
+    "goals": [
+      "Get a stone wall built around the yard",
+      "Keep the Hales off the fields",
+      "Make the farm pay enough to keep the lease",
+      "See my children safe and settled"
+    ],
+    "mood": "anxious and stubborn",
+    "traits": {
+      "caution": 65,
+      "sociability": 45,
+      "empathy": 50,
+      "curiosity": 35,
+      "ambition": 60,
+      "introspection": 40,
+      "temper": 55,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Mercy Abbot",
+        "trust": 40,
+        "affinity": 30,
+        "label": "landlord",
+        "note": "She holds the lease I farm, but she's left me to face the Hales alone."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -80,
+        "affinity": -60,
+        "label": "threat",
+        "note": "She wants these fields back, and I won't give them up."
+      },
+      {
+        "name": "Marta Tolley",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the house and wants a wall as much as I do."
+      },
+      {
+        "name": "Tib Tolley",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He watches from the barn and knows the fields as well as I do."
+      },
+      {
+        "name": "Nell Tolley",
+        "trust": 80,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "She's afraid of the woods, and I can't blame her."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 30,
+        "affinity": 20,
+        "label": "reeve",
+        "note": "He took the fields from the Hales and let them to the Guild; I just farm them."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 60,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A good neighbour; he sells grain and keeps to his own."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": -70,
+        "affinity": -50,
+        "label": "outlaw",
+        "note": "He's the one who does the threatening on the road."
+      },
+      {
+        "name": "Hob Ferrier",
+        "trust": -65,
+        "affinity": -40,
+        "label": "outlaw",
+        "note": "He's been at the field edge with Ned, looking at my barn."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I signed the lease with Mercy Abbot for the old Coldwell fields, thinking I'd finally have land of my own.",
+        "salience": 0.9,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "Seeing Ned Hale and Hob Ferrier at the edge of the field at dusk, just standing and looking.",
+        "salience": 0.8,
+        "about": [
+          "Ned Hale",
+          "Hob Ferrier"
+        ]
+      },
+      {
+        "gist": "Asking Mercy Abbot for stone to build a wall, and getting nothing but words.",
+        "salience": 0.7,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the blight came and we all went hungry until the town store lent grain.",
+        "salience": 0.6,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Teaching Tib to watch from the barn and count the men in the woods.",
+        "salience": 0.5,
+        "about": [
+          "Tib Tolley"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "fields_are_mine_by_lease",
+        "value": 0.9,
+        "why": "The Guild leased them to me fair and square, and I've worked them."
+      },
+      {
+        "key": "hales_are_outlaws",
+        "value": 0.85,
+        "why": "They refused to give up their houses and took to the road; that makes them outlaws."
+      },
+      {
+        "key": "need_a_wall",
+        "value": 0.8,
+        "why": "Words won't stop men at night; stone will."
+      },
+      {
+        "key": "protect_family_first",
+        "value": 0.9,
+        "why": "My wife and children are all I've got."
+      },
+      {
+        "key": "guild_should_help",
+        "value": 0.7,
+        "why": "I pay rent to the Guild; they should keep me safe."
+      }
+    ],
+    "secret": ""
+  }
+}

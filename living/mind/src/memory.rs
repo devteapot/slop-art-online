@@ -1114,6 +1114,40 @@ impl Store {
 
 impl Store {
     /// Recalling a memory rehearses it: it fades from this moment again.
+    /// What a mind remembered of a thing it went by id (`#581`) that did not hold up where it
+    /// acted (not in sight, or bare): concepts and memories naming that id lose `factor` of
+    /// their salience, and open, fading beliefs touching them lose it of their confidence, so
+    /// recall brings them up less and they fade sooner. Durable edges (`KNOWS`, kinship) and
+    /// the concepts themselves stay; nothing is retracted here. Returns how many concepts.
+    pub async fn weaken(&self, actor: u32, id: u64, factor: f64, why: &str, t: u64) -> Result<i64> {
+        let mut rows = self
+            .g
+            .execute(
+                self.q(
+                    "MATCH (c:Concept {run: $run, actor: $actor})
+                     WHERE NOT c:Merged AND NOT c:IdentityVersion AND NOT c:Forgotten AND c.key <> 'self'
+                       AND toLower(c.key + ' ' + coalesce(c.name, '') + ' ' + coalesce(c.gist, '')) =~ $pattern
+                     SET c.salience = toFloat(coalesce(c.salience, 0.5)) * $f, c.weakened_t = $t, c.weakened_by = $why
+                     WITH c
+                     OPTIONAL MATCH (c)-[r {open: true}]-(:Concept)
+                     WHERE NOT type(r) IN $durable
+                     SET r.confidence = toFloat(coalesce(r.confidence, 0.5)) * $f
+                     RETURN count(DISTINCT c) AS n",
+                    actor,
+                )
+                .param("pattern", id_pattern(id))
+                .param("f", factor)
+                .param("t", t as i64)
+                .param("why", why)
+                .param("durable", DURABLE.iter().map(|s| s.to_string()).collect::<Vec<_>>()),
+            )
+            .await?;
+        Ok(match rows.next().await? {
+            Some(r) => r.get::<i64>("n").unwrap_or(0),
+            None => 0,
+        })
+    }
+
     pub async fn rehearse(&self, actor: u32, exps: &[u64]) -> Result<()> {
         if exps.is_empty() {
             return Ok(());
@@ -1128,6 +1162,22 @@ impl Store {
             .await?;
         Ok(())
     }
+}
+
+/// A thing's id as minds write it: `#581`, `bush:581`, `fire_581`, `id 581`, not `5810`.
+fn id_pattern(id: u64) -> String {
+    format!("(?s).*(#|:|_|id )\\s?{id}(?![0-9]).*")
+}
+
+/// The id of a remembered thing an act or a step failed on, from the authority's feedback, when
+/// what failed was the thing itself (not in sight where the body was, or depleted): `gather →
+/// #66219: no #66219 in sight.`, `gather → #66219: the berry_bush is depleted.`
+pub fn failed_at_thing(text: &str) -> Option<u64> {
+    let rest = text.split_once("did not work out: ")?.1;
+    let (label, why) = rest.split_once(": ")?;
+    let id: u64 = label.rsplit_once("→ #")?.1.trim().parse().ok()?;
+    let why = why.trim_end_matches('.');
+    (why == format!("no #{id} in sight") || why.ends_with(" is depleted") || why == "it is gone").then_some(id)
 }
 
 /// Convenience arrays a reply may carry (`relations`, `judgments`, `places`) become ordinary
@@ -1357,6 +1407,17 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn failures_at_remembered_things_are_read_from_feedback() {
+        use super::failed_at_thing;
+        assert_eq!(failed_at_thing("What you had decided did not work out: gather → #66219: no #66219 in sight."), Some(66219));
+        assert_eq!(failed_at_thing("What you had decided did not work out: gather → #66219: the berry_bush is depleted."), Some(66219));
+        assert_eq!(failed_at_thing("What you had decided did not work out: goto → #115: it is gone."), Some(115));
+        // A failure of the body, not of the remembered thing.
+        assert_eq!(failed_at_thing("What you had decided did not work out: gather → #66219: your pack is full (eat, store, give or drop some first)."), None);
+        assert_eq!(failed_at_thing("What you had decided did not work out: give 3 berries → a stranger: they walked off."), None);
+    }
+
     use super::*;
 
     #[test]
@@ -1477,6 +1538,44 @@ mod tests {
         assert!(proj.judgments.iter().any(|j| j.0 == "wolves_are_near") && !proj.judgments.iter().any(|j| j.0 == "old_worry"), "{:?}", proj.judgments);
         let mems = s.memories(1, 10).await.unwrap();
         assert!(mems.iter().any(|m| m.0 == 1) && !mems.iter().any(|m| m.0 == 2), "{mems:?}");
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
+    /// A step failed at a thing the mind went by id: what it remembered of that id loses half
+    /// its salience and confidence; a different id and durable edges are untouched.
+    #[tokio::test]
+    #[ignore]
+    async fn missed_things_weaken() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-missed-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Arlen").await.unwrap();
+        let now = crate::llm::now_ms();
+        let v = json!({
+            "nodes": [{"key": "idea:bush_66219", "labels": ["Food"], "name": "the full bush #66219"}, {"key": "idea:bush_662190", "labels": ["Food"]}, {"key": "person:7", "labels": ["Person"], "name": "Kael"}],
+            "edges": [{"from": "self", "rel": "FORAGES_AT", "to": "idea:bush_66219", "confidence": 0.9, "because": [1]},
+                      {"from": "self", "rel": "FORAGES_AT", "to": "idea:bush_662190", "confidence": 0.9, "because": [1]},
+                      {"from": "person:7", "rel": "KNOWS", "to": "idea:bush_66219", "confidence": 0.8, "because": [1]}],
+            "remember": [{"exp": 1, "gist": "Berries for days at #66219, by the gate."}, {"exp": 2, "gist": "Kael showed me #662190."}]
+        });
+        let (p, _) = patch_from(&v, &[1, 2], &|_| Some((now, 0.8, Vec::new())));
+        s.apply(1, &p, "t1", now).await.unwrap();
+        let n = s.weaken(1, 66219, 0.5, "exp:9", now).await.unwrap();
+        assert_eq!(n, 2, "the idea and the memory naming #66219");
+        let mut r = s.g.execute(query(
+            "MATCH (c:Concept {run: $run, actor: 1}) WHERE c.key IN ['idea:bush_66219', 'idea:bush_662190', 'exp:1', 'exp:2']
+             OPTIONAL MATCH (:Concept {run: $run, key: 'self'})-[e {rel: 'FORAGES_AT'}]->(c)
+             OPTIONAL MATCH (:Concept {run: $run, key: 'person:7'})-[k:KNOWS]->(c)
+             RETURN c.key AS key, toFloat(coalesce(c.salience, 0.5)) AS sal, c.weakened_by AS by, e.confidence AS conf, k.confidence AS known").param("run", run.clone())).await.unwrap();
+        let mut seen = std::collections::HashMap::new();
+        while let Some(row) = r.next().await.unwrap() {
+            seen.insert(row.get::<String>("key").unwrap(), (row.get::<f64>("sal").unwrap(), row.get::<Option<String>>("by").unwrap(), row.get::<Option<f64>>("conf").unwrap(), row.get::<Option<f64>>("known").unwrap()));
+        }
+        let (bush, other, mem, mem2) = (&seen["idea:bush_66219"], &seen["idea:bush_662190"], &seen["exp:1"], &seen["exp:2"]);
+        assert!((bush.2.unwrap() - 0.45).abs() < 1e-6 && bush.1.as_deref() == Some("exp:9"), "{bush:?}");
+        assert!((other.2.unwrap() - 0.9).abs() < 1e-6 && other.1.is_none(), "{other:?}");
+        assert!((mem.0 - 0.4).abs() < 1e-6 && (mem2.0 - 0.8).abs() < 1e-6, "{mem:?} {mem2:?}");
+        assert!((bush.3.unwrap() - 0.8).abs() < 1e-6, "KNOWS is durable: {bush:?}");
         s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
     }
 

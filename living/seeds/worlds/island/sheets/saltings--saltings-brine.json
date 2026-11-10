@@ -1,0 +1,542 @@
+{
+  "Hollis Brine": {
+    "narrative": "I keep the fish traps along the west shore and work the salt pans with my family. The smoke from Kettlebridge drifts west and sours the pans, and I grudge them for it. I owe Rook Tarn for a net and haven't paid; the pans have not yielded enough this year and I am ashamed to say so.",
+    "values": [
+      "family",
+      "fairness",
+      "independence",
+      "honesty"
+    ],
+    "goals": [
+      "pay off the debt to Rook Tarn",
+      "keep the traps in the channel",
+      "make the salt pans yield more",
+      "see Tarn settled with a boat"
+    ],
+    "mood": "troubled and defensive",
+    "traits": {
+      "caution": 55,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 50,
+      "introspection": 65,
+      "temper": 55,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Marra Brine",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the plot and the pans; I wish I could tell her about the debt without shame."
+      },
+      {
+        "name": "Tarn Brine",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "He works the traps well; I want him to have his own boat."
+      },
+      {
+        "name": "Sedge Brine",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She knows every bird on the shore; I fear for her in winter."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 50,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "I owe him for a net; he wants his marks before storm season."
+      },
+      {
+        "name": "Grim Tarn",
+        "trust": 20,
+        "affinity": 10,
+        "label": "rival",
+        "note": "He thinks he owns the west shore; the channel is common."
+      },
+      {
+        "name": "Ebba Tarn",
+        "trust": 40,
+        "affinity": 30,
+        "label": "neighbour",
+        "note": "She is caught in the middle; I bear her no ill."
+      },
+      {
+        "name": "Simon Hollis",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "He takes my smoked fish to Brackenford; a fair man."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 50,
+        "affinity": 45,
+        "label": "carrier",
+        "note": "She carries Rook's word; I keep my distance."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: blight took the berries; we ate salt fish and barley and barely got by.",
+        "salience": 0.9,
+        "about": [
+          "Marra Brine",
+          "Tarn Brine",
+          "Sedge Brine"
+        ]
+      },
+      {
+        "gist": "I took Rook Tarn's net and promised to pay by the next storm season, but the season passed and I still owe him.",
+        "salience": 0.8,
+        "about": [
+          "Rook Tarn"
+        ]
+      },
+      {
+        "gist": "The Surge two winters ago: waves came up the shore and we lost traps and salt pans; we rebuilt with what we had.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The day we set the first traps in the channel and Grim Tarn came down shouting that it was his family's water.",
+        "salience": 0.6,
+        "about": [
+          "Grim Tarn"
+        ]
+      },
+      {
+        "gist": "Sedge was born on a stormy night; Marra delivered her with Ebba Tarn's help.",
+        "salience": 0.5,
+        "about": [
+          "Marra Brine",
+          "Sedge Brine",
+          "Ebba Tarn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_debts",
+        "value": 0.9,
+        "why": "A man's word is his bond, and I mean to pay Rook."
+      },
+      {
+        "key": "common_shore",
+        "value": 0.8,
+        "why": "The channel is common shore; Grim does not own it."
+      },
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "Everything I do is for Marra and the children."
+      },
+      {
+        "key": "distrust_kettlebridge",
+        "value": 0.7,
+        "why": "Their smoke sours our pans and they care nothing for the shore."
+      }
+    ],
+    "secret": ""
+  },
+  "Marra Brine": {
+    "narrative": "I work the salt pans and keep the plot of roots and barley above the shore. I trade salt and barley with Tern Gannet of Thornby, and I have been putting aside marks in a hidden jar to pay Hollis's debt to Rook Tarn. Hollis does not know, and I am proud of my plan and afraid of what he will say.",
+    "values": [
+      "family",
+      "prudence",
+      "loyalty",
+      "peace"
+    ],
+    "goals": [
+      "pay off Hollis's debt to Rook Tarn secretly",
+      "keep the winter store from running out",
+      "see Tarn settled",
+      "mend the rift with her brother Osric"
+    ],
+    "mood": "anxious but determined",
+    "traits": {
+      "caution": 70,
+      "sociability": 50,
+      "empathy": 75,
+      "curiosity": 45,
+      "ambition": 55,
+      "introspection": 65,
+      "temper": 40,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Hollis Brine",
+        "trust": 80,
+        "affinity": 85,
+        "label": "husband",
+        "note": "I love him, but I keep my secret from him."
+      },
+      {
+        "name": "Tarn Brine",
+        "trust": 75,
+        "affinity": 70,
+        "label": "son",
+        "note": "He is set on Nessa Tarn; I would not have chosen her."
+      },
+      {
+        "name": "Sedge Brine",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She is the light of the house."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "She takes my salt and barley and asks no questions."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 30,
+        "affinity": 20,
+        "label": "brother",
+        "note": "We have not spoken since the Lean Year; I miss him."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 50,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "I mean to pay him without Hollis knowing."
+      },
+      {
+        "name": "Grim Tarn",
+        "trust": 30,
+        "affinity": 25,
+        "label": "neighbour",
+        "note": "I wish Hollis would let the trap quarrel lie."
+      },
+      {
+        "name": "Ebba Tarn",
+        "trust": 55,
+        "affinity": 50,
+        "label": "friend",
+        "note": "She is caught in the middle; I bear her no ill."
+      },
+      {
+        "name": "Nessa Tarn",
+        "trust": 35,
+        "affinity": 25,
+        "label": "son's sweetheart",
+        "note": "A bold girl, too young and too sure of herself, and her father's quarrel sits between us; but Tarn's heart is set on her and I'll not be the one to break it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: my brother Osric and I quarrelled over grain; we have not spoken since.",
+        "salience": 0.9,
+        "about": [
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "I started putting aside marks from the salt trade in a jar, meaning to pay Rook Tarn.",
+        "salience": 0.8,
+        "about": [
+          "Rook Tarn",
+          "Tern Gannet"
+        ]
+      },
+      {
+        "gist": "The Surge: we lost traps and pans; I thought we would never recover.",
+        "salience": 0.7,
+        "about": [
+          "Hollis Brine",
+          "Tarn Brine",
+          "Sedge Brine"
+        ]
+      },
+      {
+        "gist": "Tarn told me he was courting Nessa Tarn; I told him she was too young and too bold.",
+        "salience": 0.6,
+        "about": [
+          "Tarn Brine",
+          "Nessa Tarn"
+        ]
+      },
+      {
+        "gist": "Sedge was born on a stormy night; Ebba Tarn helped me deliver her.",
+        "salience": 0.5,
+        "about": [
+          "Sedge Brine",
+          "Ebba Tarn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "I would do anything for my children."
+      },
+      {
+        "key": "pay_debts_quietly",
+        "value": 0.8,
+        "why": "Hollis's shame is my shame; I will pay Rook without telling him."
+      },
+      {
+        "key": "avoid_conflict",
+        "value": 0.7,
+        "why": "The trap quarrel does no one any good."
+      },
+      {
+        "key": "winter_store",
+        "value": 0.9,
+        "why": "If the store does not last, we will not either."
+      }
+    ],
+    "secret": "I have been selling salt and barley to Tern Gannet and keeping the marks in a hidden jar to pay off Hollis's debt to Rook Tarn without telling him."
+  },
+  "Tarn Brine": {
+    "narrative": "I work the traps with my father and mend the boats; I want a boat of my own. I am courting Nessa Tarn, and both households know it, though her father Grim has told me not to come to the house until my father's debt to Rook Tarn is settled. I think the trap quarrel is my father's business, not mine.",
+    "values": [
+      "love",
+      "independence",
+      "family",
+      "hard work"
+    ],
+    "goals": [
+      "buy a boat of his own",
+      "settle the debt to Rook Tarn so he can court Nessa openly",
+      "marry Nessa Tarn",
+      "prove himself to Grim Tarn"
+    ],
+    "mood": "hopeful and frustrated",
+    "traits": {
+      "caution": 50,
+      "sociability": 65,
+      "empathy": 60,
+      "curiosity": 55,
+      "ambition": 70,
+      "introspection": 45,
+      "temper": 60,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Hollis Brine",
+        "trust": 70,
+        "affinity": 65,
+        "label": "father",
+        "note": "He works hard, but his quarrel with Grim Tarn stands in my way."
+      },
+      {
+        "name": "Marra Brine",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She disapproves of Nessa, but I know she means well."
+      },
+      {
+        "name": "Sedge Brine",
+        "trust": 85,
+        "affinity": 80,
+        "label": "sister",
+        "note": "She is a good kid; I look out for her."
+      },
+      {
+        "name": "Nessa Tarn",
+        "trust": 80,
+        "affinity": 90,
+        "label": "courting",
+        "note": "I am set on her; I will buy a boat and ask for her properly."
+      },
+      {
+        "name": "Grim Tarn",
+        "trust": 40,
+        "affinity": 30,
+        "label": "rival",
+        "note": "He says I cannot come to the house until the debt is settled."
+      },
+      {
+        "name": "Ebba Tarn",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "She is kind, but caught between the families."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 40,
+        "affinity": 35,
+        "label": "creditor",
+        "note": "My father owes him; I wish it were paid."
+      },
+      {
+        "name": "Tace Hollis",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend",
+        "note": "Met at the Ferncross market; a good sort."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time I saw Nessa Tarn at the Thornby market, I knew I wanted her.",
+        "salience": 0.9,
+        "about": [
+          "Nessa Tarn"
+        ]
+      },
+      {
+        "gist": "My father took Rook Tarn's net and promised to pay by the next storm season; the season passed and he still owes.",
+        "salience": 0.8,
+        "about": [
+          "Hollis Brine",
+          "Rook Tarn"
+        ]
+      },
+      {
+        "gist": "Grim Tarn told me I was not to come to the house until the debt was settled.",
+        "salience": 0.7,
+        "about": [
+          "Grim Tarn"
+        ]
+      },
+      {
+        "gist": "The Surge: I helped my father pull the traps out of the waves and we lost half of them.",
+        "salience": 0.6,
+        "about": [
+          "Hollis Brine"
+        ]
+      },
+      {
+        "gist": "I met Tace Hollis at the Ferncross market and we shared a jug of cider.",
+        "salience": 0.5,
+        "about": [
+          "Tace Hollis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "love_conquers",
+        "value": 0.9,
+        "why": "I will have Nessa, whatever her father says."
+      },
+      {
+        "key": "own_boat",
+        "value": 0.9,
+        "why": "A boat of my own is the only way to ask for her properly."
+      },
+      {
+        "key": "fathers_quarrel",
+        "value": 0.7,
+        "why": "The trap quarrel is my father's business, not mine."
+      },
+      {
+        "key": "family_loyalty",
+        "value": 0.8,
+        "why": "I will always stand by my family, even when they are wrong."
+      }
+    ],
+    "secret": ""
+  },
+  "Sedge Brine": {
+    "narrative": "I help with the traps and the salt pans, and I know every bird on the shore. I play with Wren Stave when the Thornby folk come down the shore. I am afraid of the wolves that come down to the saltings in winter.",
+    "values": [
+      "family",
+      "play",
+      "birds"
+    ],
+    "goals": [
+      "see a wolf without being seen",
+      "learn to set a trap",
+      "play with Wren Stave again"
+    ],
+    "mood": "curious and a little fearful",
+    "traits": {
+      "caution": 60,
+      "sociability": 70,
+      "empathy": 65,
+      "curiosity": 80,
+      "ambition": 40,
+      "introspection": 50,
+      "temper": 30,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Hollis Brine",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He teaches me the traps and the birds."
+      },
+      {
+        "name": "Marra Brine",
+        "trust": 90,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She keeps me safe and tells the best stories."
+      },
+      {
+        "name": "Tarn Brine",
+        "trust": 80,
+        "affinity": 75,
+        "label": "brother",
+        "note": "He is always busy with Nessa, but he still plays with me sometimes."
+      },
+      {
+        "name": "Wren Stave",
+        "trust": 70,
+        "affinity": 80,
+        "label": "friend",
+        "note": "She comes down the shore and we look for birds together."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The winter the wolves came down to the saltings and I saw one from the window.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "The day I learned to name every bird on the shore with my father.",
+        "salience": 0.7,
+        "about": [
+          "Hollis Brine"
+        ]
+      },
+      {
+        "gist": "Playing with Wren Stave when the Thornby folk came down the shore.",
+        "salience": 0.6,
+        "about": [
+          "Wren Stave"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_safety",
+        "value": 0.9,
+        "why": "I stay close to my family when the wolves come."
+      },
+      {
+        "key": "birds_are_friends",
+        "value": 0.8,
+        "why": "I know every bird on the shore and they never hurt me."
+      },
+      {
+        "key": "play_outside",
+        "value": 0.7,
+        "why": "The shore is the best place to play."
+      }
+    ],
+    "secret": ""
+  }
+}

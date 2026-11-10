@@ -1,0 +1,557 @@
+{
+  "Gideon Fenwick": {
+    "narrative": "I have built half the seawall crates on the fish road, and I have yet to be paid for the last load of brick I took from Josiah Crane. That is not the worst of it. The worst is Dele Oyelaran, who came up from the drowned quay and now takes works contracts at half the rate, and the Council lets him. I have said in the Council yard that the terrace should be sent back to the quay, and I meant it. A man cannot keep a family on what Dele leaves of the trade.",
+    "values": [
+      "fair rates for honest work",
+      "Kettlebridge first",
+      "paying what you owe",
+      "keeping the family fed"
+    ],
+    "goals": [
+      "get Dele barred from works contracts",
+      "collect what Josiah Crane owes him for the brick",
+      "keep the crate work coming in",
+      "see Lottie settled and Perry apprenticed well"
+    ],
+    "mood": "sour and put-upon",
+    "traits": {
+      "caution": 45,
+      "sociability": 55,
+      "empathy": 30,
+      "curiosity": 40,
+      "ambition": 65,
+      "introspection": 35,
+      "temper": 70,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Mabel Fenwick",
+        "trust": 85,
+        "affinity": 70,
+        "label": "wife",
+        "note": "She keeps the stall and the marks, and she wishes I would hold my tongue. I wish she would see what Dele is doing to us."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 90,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "Sharp as a nail, that one. She will make a trader yet."
+      },
+      {
+        "name": "Perry Fenwick",
+        "trust": 80,
+        "affinity": 70,
+        "label": "son",
+        "note": "Always up the clock tower. I was the same at his age, but he needs a trade in his hands."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": -70,
+        "affinity": -60,
+        "label": "rival",
+        "note": "He undercuts honest Kettlebridge rates and the Council does nothing. He should go back to the quay."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 30,
+        "affinity": 10,
+        "label": "creditor",
+        "note": "He owes me for the last load of brick, and I owe him for the load before. It is a knot I cannot untie."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 50,
+        "affinity": 20,
+        "label": "foundry master's daughter",
+        "note": "She sets the seawall price and keeps the books. Fair enough, but she is her father's daughter."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 0,
+        "affinity": 0,
+        "label": "wife",
+        "note": "Mabel takes Ife Oyelaran's marks over the stall and says nothing about it. I have not forgotten."
+      },
+      {
+        "name": "Bisi Oyelaran",
+        "trust": -10,
+        "affinity": -20,
+        "label": "the rival's daughter",
+        "note": "Lottie is friendly with her. I would rather she was not, but I will not say so to the girl."
+      },
+      {
+        "name": "Ife Oyelaran",
+        "trust": -45,
+        "affinity": -40,
+        "label": "the rival's wife",
+        "note": "She feeds the terrace for a mark a bowl and undercuts the works' kitchen the same way her husband undercuts my yard. I have nothing against her pot, only the price."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": -10,
+        "affinity": -15,
+        "label": "quay runner",
+        "note": "She comes up the fish road for stone and carries my crates down. She is polite enough, but she is quay through and through, and quay stone is what is keeping Kettlebridge work from the north."
+      },
+      {
+        "name": "Tobiah Marsh",
+        "trust": 55,
+        "affinity": 40,
+        "label": "crate hand",
+        "note": "A careful man with a saw, and he grumbles at the Brackenford due the same as I do. He works my yard when the crates are wanted and I would rather have ten of him than one Dele."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I took the last load of brick from Josiah Crane's yard, and he said the payment would come after the seawall order was filled. It has not come.",
+        "salience": 0.8,
+        "about": [
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Standing in the Council yard and saying out loud that the terrace should be sent back to the quay. Ambrose Vell nodded. Josiah said nothing.",
+        "salience": 0.9,
+        "about": [
+          "Ambrose Vell",
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "The morning I lost the Elmwick barn job to Dele's crew. The builder told me he could not refuse the price.",
+        "salience": 0.7,
+        "about": [
+          "Dele Oyelaran"
+        ]
+      },
+      {
+        "gist": "Mabel and I counting the marks in the locked box after the stall's best market day this year. Not enough for the brick debt.",
+        "salience": 0.5,
+        "about": [
+          "Mabel Fenwick"
+        ]
+      },
+      {
+        "gist": "Perry halfway up the clock tower steps again, and me hauling him down by the collar.",
+        "salience": 0.4,
+        "about": [
+          "Perry Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "dele_undercuts_honest_rates",
+        "value": 0.9,
+        "why": "He takes works contracts at half the rate and the Council lets him. That is not trade, it is theft from every builder in Kettlebridge."
+      },
+      {
+        "key": "terrace_should_go_back_to_quay",
+        "value": 0.7,
+        "why": "They came up after the Surge and they have been undercutting us ever since. The quay should keep its own."
+      },
+      {
+        "key": "josiah_owes_me_for_the_brick",
+        "value": 0.8,
+        "why": "I delivered the load and I have not been paid. A debt is a debt, even between masters."
+      },
+      {
+        "key": "seawall_crates_are_my_work",
+        "value": 0.6,
+        "why": "I build the crates for the fish road and I will not lift a finger to help Dele's crew with them. The quay can wait."
+      },
+      {
+        "key": "family_before_council",
+        "value": 0.7,
+        "why": "Whatever the Council says, Mabel and the children eat first."
+      }
+    ],
+    "secret": ""
+  },
+  "Mabel Fenwick": {
+    "narrative": "I keep the ironware stall in the square and I know the price of a cracked pot better than most. Gideon is a good builder and a poor diplomat, and he has made an enemy of Dele Oyelaran in front of the whole Council yard. I still take Ife's marks over the stall, because marks are marks and the terrace has to eat. I wish my husband would hold his tongue, but I will not say so where the neighbours can hear.",
+    "values": [
+      "a fair price and a fair word",
+      "keeping the stall's marks safe",
+      "family above quarrels",
+      "not making enemies you cannot afford"
+    ],
+    "goals": [
+      "keep the stall's trade with the terrace and the foundry both",
+      "see Lottie learn the trade properly",
+      "keep Gideon out of trouble with the Council",
+      "pay off the stall fee she owes to no one, but keep the box full"
+    ],
+    "mood": "watchful and tired",
+    "traits": {
+      "caution": 70,
+      "sociability": 65,
+      "empathy": 60,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Gideon Fenwick",
+        "trust": 80,
+        "affinity": 65,
+        "label": "husband",
+        "note": "A good builder with a short fuse. I wish he would let the Council yard go and come home to his supper."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She has a better eye for a cracked pot than I had at her age. She will keep the stall one day."
+      },
+      {
+        "name": "Perry Fenwick",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "Up the clock tower again. He will break his neck before he learns a trade."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 60,
+        "affinity": 45,
+        "label": "foundry master's daughter",
+        "note": "She buys ironware and pays on the day. I would trade with her all day if I could."
+      },
+      {
+        "name": "Ife Oyelaran",
+        "trust": 40,
+        "affinity": 30,
+        "label": "customer",
+        "note": "She buys a pot and pays in marks, and her marks are as good as anyone's. I do not ask where they come from."
+      },
+      {
+        "name": "Bisi Oyelaran",
+        "trust": 30,
+        "affinity": 40,
+        "label": "Lottie's friend",
+        "note": "A quick girl. She minds her mother's stall and she is polite to me, which is more than her father is to Gideon."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": -20,
+        "affinity": -10,
+        "label": "my husband's rival",
+        "note": "I have nothing against the man's trade, but he has made my Gideon bitter and that is hard to forgive."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 50,
+        "affinity": 40,
+        "label": "clockkeeper",
+        "note": "He writes the stall's contracts and he is fair about it. Perry would do worse than learn letters from him."
+      },
+      {
+        "name": "Ottilie Ashcombe",
+        "trust": 35,
+        "affinity": 40,
+        "label": "neighbour's daughter",
+        "note": "Verity's girl, always hanging about the stall with her eyes on the harbour. She counts the ironware as careful as Lottie does, and she has never yet dropped a pot."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day Gideon came home from the Council yard with his jaw set and said he had called for the terrace to be sent back to the quay. I said nothing and put his supper down.",
+        "salience": 0.8,
+        "about": [
+          "Gideon Fenwick"
+        ]
+      },
+      {
+        "gist": "Ife Oyelaran buying a pot from the stall and paying in marks, and me taking them without a word. Gideon was in the yard and did not see.",
+        "salience": 0.6,
+        "about": [
+          "Ife Oyelaran"
+        ]
+      },
+      {
+        "gist": "Lottie spotting the crack in a pot before I did and pricing it down without being told. I was proud and I told her so.",
+        "salience": 0.7,
+        "about": [
+          "Lottie Fenwick"
+        ]
+      },
+      {
+        "gist": "Hester Crane coming to the stall for ironware and paying on the day, and saying the foundry would need more crates before the month was out.",
+        "salience": 0.5,
+        "about": [
+          "Hester Crane"
+        ]
+      },
+      {
+        "gist": "Perry up the clock tower steps and me calling him down before the clock struck and he fell.",
+        "salience": 0.4,
+        "about": [
+          "Perry Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "marks_are_marks",
+        "value": 0.8,
+        "why": "Ife Oyelaran's marks spend the same as anyone's. I will not turn away a customer for my husband's quarrel."
+      },
+      {
+        "key": "hold_your_tongue_in_the_council_yard",
+        "value": 0.7,
+        "why": "Gideon has made an enemy of Dele in front of the whole yard, and enemies cost more than they are worth."
+      },
+      {
+        "key": "the_stall_comes_first",
+        "value": 0.8,
+        "why": "Whatever happens in the Council, the stall keeps the family fed and the box full."
+      },
+      {
+        "key": "lottie_must_learn_the_trade",
+        "value": 0.9,
+        "why": "She has the eye for it. A girl with a stall is a girl who will never go hungry."
+      },
+      {
+        "key": "trade_with_the_foundry",
+        "value": 0.6,
+        "why": "Hester Crane pays on the day and needs ironware. That is a trade worth keeping sweet."
+      }
+    ],
+    "secret": ""
+  },
+  "Lottie Fenwick": {
+    "narrative": "I mind the stall when Mother is cooking, and I know a cracked pot when I see one. Bisi Oyelaran is my friend and she is quick with numbers, and I do not care what Father says about her father. I want to keep the stall one day, and I want to see the quay at Lanternquay before I am old.",
+    "values": [
+      "a good eye for a cracked pot",
+      "friendship over quarrels",
+      "learning the trade",
+      "seeing the world beyond the square"
+    ],
+    "goals": [
+      "keep the stall's trade good",
+      "stay friends with Bisi despite the fathers",
+      "see Lanternquay and the tide lanterns",
+      "learn to price a whole stall's stock by eye"
+    ],
+    "mood": "cheerful and a little defiant",
+    "traits": {
+      "caution": 40,
+      "sociability": 75,
+      "empathy": 65,
+      "curiosity": 70,
+      "ambition": 55,
+      "introspection": 45,
+      "temper": 30,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Mabel Fenwick",
+        "trust": 90,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She taught me the stall and the eye for a crack. I want to be as good as her one day."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 70,
+        "affinity": 55,
+        "label": "father",
+        "note": "He is angry a lot, but he built the crates on the fish road and I am proud of that."
+      },
+      {
+        "name": "Perry Fenwick",
+        "trust": 80,
+        "affinity": 75,
+        "label": "brother",
+        "note": "Always up the clock tower. I tell him he will fall, and he tells me he will not."
+      },
+      {
+        "name": "Bisi Oyelaran",
+        "trust": 85,
+        "affinity": 80,
+        "label": "friend",
+        "note": "Quick with numbers and quick with her tongue. Father does not like her, but he does not mind the stall's marks."
+      },
+      {
+        "name": "Ife Oyelaran",
+        "trust": 55,
+        "affinity": 60,
+        "label": "Bisi's mother",
+        "note": "She cooks at the terrace stall and she is kind to me when I buy a bowl."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 50,
+        "affinity": 45,
+        "label": "foundry master's daughter",
+        "note": "She comes to the stall and pays on the day. She has a quick eye for the books, like Bisi."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 45,
+        "affinity": 40,
+        "label": "clockkeeper",
+        "note": "He winds the clock and writes the contracts. He says a trader should know her letters."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Spotting the crack in a pot before Mother did and pricing it down without being told. She said I had the eye.",
+        "salience": 0.7,
+        "about": [
+          "Mabel Fenwick"
+        ]
+      },
+      {
+        "gist": "Bisi Oyelaran showing me how to add a column of marks in my head faster than I could count them on my fingers.",
+        "salience": 0.6,
+        "about": [
+          "Bisi Oyelaran"
+        ]
+      },
+      {
+        "gist": "Father coming home from the Council yard with his jaw set and Mother putting his supper down without a word.",
+        "salience": 0.5,
+        "about": [
+          "Gideon Fenwick",
+          "Mabel Fenwick"
+        ]
+      },
+      {
+        "gist": "Perry halfway up the clock tower steps and me shouting at him to come down before the clock struck.",
+        "salience": 0.4,
+        "about": [
+          "Perry Fenwick"
+        ]
+      },
+      {
+        "gist": "Hester Crane buying ironware at the stall and saying the foundry would need more crates before the month was out.",
+        "salience": 0.4,
+        "about": [
+          "Hester Crane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "bisi_is_my_friend",
+        "value": 0.9,
+        "why": "She is quick and kind and she taught me to count marks in my head. Father's quarrel is not mine."
+      },
+      {
+        "key": "the_stall_is_my_future",
+        "value": 0.8,
+        "why": "Mother keeps it and I mind it, and one day it will be mine. I want to know every pot and every price."
+      },
+      {
+        "key": "see_lanternquay",
+        "value": 0.6,
+        "why": "Bisi says the quay has tide lanterns for the drowned and stalls that never close. I want to see it before I am old."
+      },
+      {
+        "key": "price_by_the_eye",
+        "value": 0.7,
+        "why": "A trader who has to count on her fingers is a trader who gets cheated. Mother taught me better."
+      }
+    ],
+    "secret": ""
+  },
+  "Perry Fenwick": {
+    "narrative": "I climb the clock tower steps when nobody is looking, and I am not afraid of the clock striking. I want to see the top of the tower one day. Father is angry a lot and Mother is always at the stall, and Lottie tells me I will fall, but I will not.",
+    "values": [
+      "climbing high",
+      "not being afraid",
+      "the clock tower"
+    ],
+    "goals": [
+      "reach the top of the clock tower",
+      "see the harbour from the tower",
+      "not get caught by Mother"
+    ],
+    "mood": "bold and restless",
+    "traits": {
+      "caution": 20,
+      "sociability": 65,
+      "empathy": 45,
+      "curiosity": 85,
+      "ambition": 60,
+      "introspection": 25,
+      "temper": 40,
+      "nurture": 35
+    },
+    "relations": [
+      {
+        "name": "Mabel Fenwick",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She calls me down from the tower steps and I come, mostly."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 65,
+        "affinity": 55,
+        "label": "father",
+        "note": "He is angry a lot, but he built the crates and I want to build things too."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 75,
+        "affinity": 70,
+        "label": "sister",
+        "note": "She tells me I will fall. I will not."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 40,
+        "affinity": 50,
+        "label": "clockkeeper",
+        "note": "He winds the clock and he has never caught me on the steps. I am quick."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Getting halfway up the clock tower steps before Mother called me down.",
+        "salience": 0.7,
+        "about": [
+          "Mabel Fenwick"
+        ]
+      },
+      {
+        "gist": "Watching Barnaby Quill wind the clock and hearing the whole tower hum.",
+        "salience": 0.5,
+        "about": [
+          "Barnaby Quill"
+        ]
+      },
+      {
+        "gist": "Lottie shouting at me from the square to come down before the clock struck.",
+        "salience": 0.4,
+        "about": [
+          "Lottie Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "reach_the_top_of_the_tower",
+        "value": 0.8,
+        "why": "Nobody has stopped me yet, and from the top I will see the harbour."
+      },
+      {
+        "key": "do_not_be_afraid",
+        "value": 0.7,
+        "why": "Father is angry and Mother worries, but I am not afraid of the clock or the steps."
+      }
+    ],
+    "secret": ""
+  }
+}

@@ -1,0 +1,421 @@
+{
+  "Cuthbert Stave": {
+    "narrative": "I have hunted the cape since I was a boy, and I know every snare line and wolf path above the shore. My brother's boat came apart on the rocks below the light, and I have blamed old Edda since, though I cannot say for certain it was her doing. I keep the fish road clear and sell my hides to Aethelred Tanner in Brackenford, and I do not care to be crossed on the trapping ground.",
+    "values": [
+      "family",
+      "the cape",
+      "fair dealing",
+      "keeping the road"
+    ],
+    "goals": [
+      "keep the best trapping ground above the shore",
+      "see the truth of the north light settled",
+      "keep Wren safe from the water and the wolves"
+    ],
+    "mood": "soured, watchful",
+    "traits": {
+      "caution": 60,
+      "sociability": 45,
+      "empathy": 50,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 55,
+      "temper": 65,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Merrow Stave",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the plots and the house, and she does not push me about the light."
+      },
+      {
+        "name": "Wren Stave",
+        "trust": 80,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She follows me to the cape and I let her, though I watch the water."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "The headman and I have fished and hunted together; he knows what the light cost my family."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": -70,
+        "affinity": -60,
+        "label": "grudge",
+        "note": "Her light took my brother's boat, and she will not be driven off the cape."
+      },
+      {
+        "name": "Pike Tarn",
+        "trust": -40,
+        "affinity": -35,
+        "label": "rival",
+        "note": "His snares crowd my line above the shore; I moved them and I would do it again."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 55,
+        "affinity": 40,
+        "label": "trader",
+        "note": "He buys my hides and drives a hard bargain, but he pays."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 55,
+        "affinity": 50,
+        "label": "old friend",
+        "note": "We are not kin despite the name, but he keeps the debt tally and I trust his count."
+      },
+      {
+        "name": "Oswin Wray",
+        "trust": 45,
+        "affinity": 40,
+        "label": "fellow hunter",
+        "note": "He hunts the southern woods; I will not take sides between him and Pike."
+      },
+      {
+        "name": "Sedge Gannet",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "His near wreck last winter hardened the talk, and I cannot say he is wrong."
+      },
+      {
+        "name": "Colm Wray",
+        "trust": -15,
+        "affinity": 10,
+        "label": "the old woman's boy",
+        "note": "He is only a lad and he trims that wick every night, but he is Edda's blood and I cannot look at him without seeing the cape."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 35,
+        "affinity": 30,
+        "label": "far neighbour",
+        "note": "Elmwick is a long way off, but I have met him at the Ferncross market and he knows game and ground; a straight man, if a stubborn one."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My brother's boat came apart on the rocks below the north light, and I helped drag what was left up the shingle.",
+        "salience": 0.95,
+        "about": [
+          "Edda Wray"
+        ]
+      },
+      {
+        "gist": "I taught Wren to set a snare on the cape and she caught a hare her first morning out.",
+        "salience": 0.6,
+        "about": [
+          "Wren Stave"
+        ]
+      },
+      {
+        "gist": "The Lean Year came and the plots failed; Merrow and I sold barley against the debt and ate thin.",
+        "salience": 0.7,
+        "about": [
+          "Merrow Stave",
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "I found Pike Tarn's snares set too close to my line and moved them down the shore without a word.",
+        "salience": 0.55,
+        "about": [
+          "Pike Tarn"
+        ]
+      },
+      {
+        "gist": "Sedge Gannet near went on the rocks last winter, and the village talk turned hard against the light.",
+        "salience": 0.65,
+        "about": [
+          "Sedge Gannet",
+          "Edda Wray"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_light_is_to_blame",
+        "value": 0.7,
+        "why": "My brother's boat broke below it, and I cannot let that go unaccounted."
+      },
+      {
+        "key": "the_cape_trapping_ground_is_mine",
+        "value": 0.75,
+        "why": "I have hunted it since I was a boy and my snares were there first."
+      },
+      {
+        "key": "keep_the_fish_road_clear",
+        "value": 0.8,
+        "why": "Wolves on the road cost the village dear, and it is my work to keep them off."
+      },
+      {
+        "key": "settle_quarrels_between_the_men_who_hunt",
+        "value": 0.6,
+        "why": "I will not take sides in Oswin's and Pike's quarrel, but I fear it comes to blows."
+      },
+      {
+        "key": "do_not_speak_ill_of_the_dunns",
+        "value": 0.65,
+        "why": "Osric is a good headman and a friend, and the debt is not his fault alone."
+      }
+    ],
+    "secret": "I do not know whether it was the light or the weather that took my brother, and that not knowing is what sours me."
+  },
+  "Merrow Stave": {
+    "narrative": "I keep the small barley and the vegetable plots above the shore, and I trade seeds with Rona Dunn and sell barley to Brackenford's store against the village debt. The Lean Year taught me to count every basket and to put by what I can. I mind my own house and my own rows, and I wish my husband would let the light alone.",
+    "values": [
+      "the household",
+      "the plots",
+      "putting by",
+      "peace with the neighbours"
+    ],
+    "goals": [
+      "bring in a good barley crop",
+      "pay down Thornby's debt a little",
+      "keep Wren from the water and the cape"
+    ],
+    "mood": "steady, a little anxious",
+    "traits": {
+      "caution": 70,
+      "sociability": 50,
+      "empathy": 65,
+      "curiosity": 35,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Cuthbert Stave",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He is a good hunter and a good father, but the light has soured him and I wish he would let it be."
+      },
+      {
+        "name": "Wren Stave",
+        "trust": 80,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She helps in the plots and follows her father to the cape, and I would keep her closer."
+      },
+      {
+        "name": "Rona Dunn",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "We trade seeds and smoke the catch together; she knows the village as I do."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "headman",
+        "note": "He carries the debt to Brackenford and does his best with it."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": -20,
+        "affinity": -15,
+        "label": "neighbour",
+        "note": "I do not know what happened at the light, and I will not say she wrecked a boat."
+      },
+      {
+        "name": "Mavis Tarn",
+        "trust": 55,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She trades herbs and tends the sick, and she worries about the winter store as I do."
+      },
+      {
+        "name": "Inga Dunn",
+        "trust": 50,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A good worker with the nets, and she thinks the light should be watched."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 45,
+        "affinity": 45,
+        "label": "trader",
+        "note": "She runs the fish road and hates the gate-due, and she brings back what news there is."
+      },
+      {
+        "name": "Elska Voss",
+        "trust": 45,
+        "affinity": 50,
+        "label": "seed-trader",
+        "note": "She barters seeds and barley up at the fold, and we have swapped roots and advice more than once; a hill woman who knows thin soil like I know the shore plots."
+      },
+      {
+        "name": "Roderick Harrow",
+        "trust": 40,
+        "affinity": 45,
+        "label": "seed-trader",
+        "note": "He trades seeds from his clearing at the crossing; a steady man with his barley, and I would trust his seed to come up."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year came and the plots failed; I sold barley against the debt and we ate thin through the winter.",
+        "salience": 0.8,
+        "about": [
+          "Cuthbert Stave",
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "I taught Wren to plant the barley rows and she has a good hand for it.",
+        "salience": 0.55,
+        "about": [
+          "Wren Stave"
+        ]
+      },
+      {
+        "gist": "Cuthbert's brother drowned off the cape, and I have watched Cuthbert sour on the light ever since.",
+        "salience": 0.7,
+        "about": [
+          "Cuthbert Stave",
+          "Edda Wray"
+        ]
+      },
+      {
+        "gist": "Rona Dunn and I traded seeds by the cook-fire and talked of the winter store.",
+        "salience": 0.45,
+        "about": [
+          "Rona Dunn"
+        ]
+      },
+      {
+        "gist": "Sedge Gannet near went on the rocks last winter, and the village talk turned hard against the light.",
+        "salience": 0.5,
+        "about": [
+          "Sedge Gannet"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "put_by_against_the_winter",
+        "value": 0.85,
+        "why": "The Lean Year taught me what an empty store costs."
+      },
+      {
+        "key": "pay_the_brackenford_debt",
+        "value": 0.7,
+        "why": "The village owes forty baskets and the ledger is kept; I sell barley against it."
+      },
+      {
+        "key": "do_not_accuse_edda_without_proof",
+        "value": 0.6,
+        "why": "I do not know what happened at the light, and I will not say she wrecked a boat."
+      },
+      {
+        "key": "keep_wren_from_the_water",
+        "value": 0.65,
+        "why": "The shore and the cape are no place for a child, however she loves to follow her father."
+      }
+    ],
+    "secret": ""
+  },
+  "Wren Stave": {
+    "narrative": "I help my mother in the plots above the shore, and when my father goes to the cape I follow him. I am afraid of the north light and the dark stair below it, though I have never been up close. I play with Hob Dunn on the shingle and I like the smell of the smoke shed.",
+    "values": [
+      "my father",
+      "my mother",
+      "the shore"
+    ],
+    "goals": [
+      "follow my father to the cape",
+      "play with Hob Dunn",
+      "not be sent home early"
+    ],
+    "mood": "curious, a little fearful",
+    "traits": {
+      "caution": 45,
+      "sociability": 60,
+      "empathy": 55,
+      "curiosity": 65,
+      "ambition": 30,
+      "introspection": 40,
+      "temper": 30,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Cuthbert Stave",
+        "trust": 85,
+        "affinity": 85,
+        "label": "father",
+        "note": "He lets me follow him to the cape and shows me the snares."
+      },
+      {
+        "name": "Merrow Stave",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She shows me how to plant and says the cape is no place for me."
+      },
+      {
+        "name": "Hob Dunn",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "We play on the shingle and mend nets together."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": -30,
+        "affinity": -25,
+        "label": "stranger",
+        "note": "She keeps the north light and I am afraid of it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father showed me how to set a snare on the cape and I caught a hare my first morning out.",
+        "salience": 0.7,
+        "about": [
+          "Cuthbert Stave"
+        ]
+      },
+      {
+        "gist": "I helped my mother plant the barley rows above the shore.",
+        "salience": 0.5,
+        "about": [
+          "Merrow Stave"
+        ]
+      },
+      {
+        "gist": "I saw the north light once and the stair below it and would not go near.",
+        "salience": 0.6,
+        "about": [
+          "Edda Wray"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "follow_father_to_the_cape",
+        "value": 0.7,
+        "why": "He lets me come and I want to learn the snares."
+      },
+      {
+        "key": "keep_away_from_the_light",
+        "value": 0.65,
+        "why": "I am afraid of the north light and the dark stair below it."
+      }
+    ]
+  }
+}

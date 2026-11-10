@@ -1,0 +1,319 @@
+{
+  "Jem Coombe": {
+    "narrative": "I hold the Lakemead on Nell Sedge's lease and pay her in grain, and I have rebuilt my fence twice now where Elmwick men pulled it down. I am not a quarrelsome man, but a meadow you cannot fence is no meadow at all. My father Tibbott keeps the bees and the tally and tells me the meadow was grazed by both villages once, which does not mend a post. I want the harvest in, the rent paid, and my family left to farm.",
+    "values": [
+      "my family fed before anything",
+      "a lease is a promise both ways",
+      "peace with neighbours, even the ones I am at odds with"
+    ],
+    "goals": [
+      "get the meadow's grain in and pay Nell Sedge's rent",
+      "keep the fence standing through the summer",
+      "see Cedda safe and not walking the east road too soon"
+    ],
+    "mood": "tired and watchful",
+    "traits": {
+      "caution": 62,
+      "sociability": 45,
+      "empathy": 58,
+      "curiosity": 35,
+      "ambition": 50,
+      "introspection": 55,
+      "temper": 48,
+      "nurture": 66
+    },
+    "relations": [
+      {
+        "name": "Tibbott Coombe",
+        "trust": 85,
+        "affinity": 78,
+        "label": "father",
+        "note": "He keeps the bees and the tally and does not say much, but he is the steadiest thing on the meadow."
+      },
+      {
+        "name": "Morwen Coombe",
+        "trust": 90,
+        "affinity": 88,
+        "label": "wife",
+        "note": "She keeps the dairy and the house and worries the meadow will be taken from us; I would carry the fence posts alone before I let that happen."
+      },
+      {
+        "name": "Cedda Coombe",
+        "trust": 75,
+        "affinity": 82,
+        "label": "daughter",
+        "note": "She helps with the goats and asks after Thistle's stories; she is eleven and the east road can wait."
+      },
+      {
+        "name": "Osric Coombe",
+        "trust": 70,
+        "affinity": 85,
+        "label": "son",
+        "note": "He follows the goats at the meadow edge and is afraid of the deep reeds; I keep an eye on him."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 40,
+        "affinity": 20,
+        "label": "landlord",
+        "note": "She holds the lease and I pay her in grain; she has not pressed me yet, and I would rather she never had reason to."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": -55,
+        "affinity": -45,
+        "label": "rival",
+        "note": "He says the meadow was never Reedmoor's to let; he has no paper for that, and his men pulled my fence twice."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "A pedlar who comes through with his packs and has always dealt fair with us; I like him, though I have not promised him Cedda's company on the road."
+      },
+      {
+        "name": "Rill Fenlake",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She fishes the lake and her nets were trampled when Elmwick pulled my fence; I owe her for that and I have not forgotten it."
+      },
+      {
+        "name": "Morwen Coombe",
+        "trust": 88,
+        "affinity": 85,
+        "label": "kin by marriage",
+        "note": "My wife's people are the meadow's people; we stand together when the Elmwick men come."
+      },
+      {
+        "name": "Goda Toller",
+        "trust": -20,
+        "affinity": -10,
+        "label": "stranger",
+        "note": "An Elmwick woman who wants to farm the Lakemead if it is won back; I keep my distance."
+      },
+      {
+        "name": "Edric Toller",
+        "trust": -30,
+        "affinity": -20,
+        "label": "neighbour across the quarrel",
+        "note": "An Elmwick man with sheep and wool and no paper for the meadow; his folk grumble with Hob Garrow, but he at least grumbles quietly."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: the blight came through and the grain was thin, and my father would not speak of the Tolleys or the taken fields.",
+        "salience": 0.8,
+        "about": [
+          "Tibbott Coombe"
+        ]
+      },
+      {
+        "gist": "The first time Elmwick men pulled my fence down, I found the posts in the ditch and stood there a long while before I started mending.",
+        "salience": 0.85,
+        "about": [
+          "Hob Garrow"
+        ]
+      },
+      {
+        "gist": "The second time they pulled it down, Rill Fenlake's nets were trampled where she had laid them to dry, and I helped her gather them up.",
+        "salience": 0.8,
+        "about": [
+          "Rill Fenlake"
+        ]
+      },
+      {
+        "gist": "Nell Sedge walked the meadow with me when she let it, and we agreed the rent in grain and the strips I would work.",
+        "salience": 0.6,
+        "about": [
+          "Nell Sedge"
+        ]
+      },
+      {
+        "gist": "Cedda was born in the house by the meadow and Morwen would not let anyone but my father hold her first.",
+        "salience": 0.5,
+        "about": [
+          "Morwen Coombe",
+          "Cedda Coombe",
+          "Tibbott Coombe"
+        ]
+      },
+      {
+        "gist": "Thistle Mossfoot came through with his packs light one autumn and stayed the night, and the children would not let him sleep for stories.",
+        "salience": 0.4,
+        "about": [
+          "Thistle Mossfoot",
+          "Cedda Coombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "hold_the_meadow",
+        "value": 0.9,
+        "why": "It is my family's living and I hold it on a lease; I will not be turned off it by men with no paper."
+      },
+      {
+        "key": "pay_what_is_owed",
+        "value": 0.8,
+        "why": "Nell has been fair with me and the rent is hers by right; I would be ashamed to be short without asking her leave."
+      },
+      {
+        "key": "keep_the_peace_with_elmwick",
+        "value": 0.6,
+        "why": "I have no quarrel with Elmwick folk in the market, only with the men who pull fences; I would rather talk than fight."
+      },
+      {
+        "key": "protect_the_children",
+        "value": 0.85,
+        "why": "Cedda and Osric are the reason for the meadow; the east road and the deep reeds can wait until they are older."
+      },
+      {
+        "key": "ask_for_time_before_it_is_taken",
+        "value": 0.55,
+        "why": "I am short of grain and ashamed to ask Reedmoor for time again, but silence will not fill the tally."
+      }
+    ],
+    "secret": "I have thought of selling one of the goats to cover the rent and have not told Morwen, because she would say the meadow needs every beast it has."
+  },
+  "Tibbott Coombe": {
+    "narrative": "I am too bent now for the heavy work, so I keep the bees and the old tally of the rent, and I remember when both Elmwick and Reedmoor grazed the Lakemead and no one thought to ask whose it was. Nell Sedge was high-handed to let it, in my view, but my son holds the lease and I will not see the Coombes turned off. Hob Garrow's talk in Elmwick sticks in my throat. I keep my bees and my own counsel.",
+    "values": [
+      "the family holds together",
+      "an old tally is a true record",
+      "quiet work over loud talk"
+    ],
+    "goals": [
+      "see the rent tally squared without the meadow lost",
+      "keep the bees through the winter",
+      "watch the meadow's lease hold for my grandchildren"
+    ],
+    "mood": "sour and settled",
+    "traits": {
+      "caution": 72,
+      "sociability": 32,
+      "empathy": 54,
+      "curiosity": 40,
+      "ambition": 30,
+      "introspection": 68,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Jem Coombe",
+        "trust": 88,
+        "affinity": 80,
+        "label": "son",
+        "note": "He works the meadow and mends the fence and carries it all on his back; I keep the tally so he does not have to."
+      },
+      {
+        "name": "Morwen Coombe",
+        "trust": 75,
+        "affinity": 70,
+        "label": "gooddaughter",
+        "note": "She keeps the dairy and the house and frets about the meadow; she is right to fret."
+      },
+      {
+        "name": "Cedda Coombe",
+        "trust": 70,
+        "affinity": 82,
+        "label": "granddaughter",
+        "note": "She helps with the goats and asks for stories; I tell her the old ones of the meadow."
+      },
+      {
+        "name": "Osric Coombe",
+        "trust": 65,
+        "affinity": 78,
+        "label": "grandson",
+        "note": "He follows the goats and is afraid of the deep reeds; he will learn the meadow in time."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 25,
+        "affinity": -10,
+        "label": "landlord",
+        "note": "She let the meadow that was never hers to let alone; the lease stands, but I do not thank her for it."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": -60,
+        "affinity": -55,
+        "label": "grudge",
+        "note": "He talks in Elmwick as though the meadow were his by right of memory; memory is not a lease."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 50,
+        "affinity": 45,
+        "label": "pedlar",
+        "note": "He comes through with his packs and deals fair; I have no quarrel with him."
+      },
+      {
+        "name": "Rill Fenlake",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She fishes the lake and helped mend the fence; I trade cheese for her fish."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "As a boy I grazed the Lakemead with Elmwick and Reedmoor folk both, and no one asked whose it was.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year came and the grain was thin and the talk turned to fields and leases; I would not speak of the Tolleys then and I will not now.",
+        "salience": 0.75,
+        "about": [
+          "Jem Coombe"
+        ]
+      },
+      {
+        "gist": "Nell Sedge let the meadow to Jem and I watched the paper signed and said nothing, though I thought it high-handed.",
+        "salience": 0.7,
+        "about": [
+          "Nell Sedge",
+          "Jem Coombe"
+        ]
+      },
+      {
+        "gist": "I kept the bees through a hard winter when the hives nearly failed, and they came back in the spring.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "My wife died and Jem took the heavy work and I took the tally and the bees.",
+        "salience": 0.6,
+        "about": [
+          "Jem Coombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "hold_the_lease",
+        "value": 0.8,
+        "why": "Whatever I think of how it was let, my son holds the meadow and the family stands on it."
+      },
+      {
+        "key": "keep_the_tally_true",
+        "value": 0.85,
+        "why": "The rent is paid in grain and cheese and labour, and someone must write it down honestly or the Coombes will be short and not know it."
+      },
+      {
+        "key": "distrust_elmwick_talk",
+        "value": 0.7,
+        "why": "Hob Garrow's men pulled the fence twice; talk like that ends with the Coombes turned off."
+      },
+      {
+        "key": "mind_my_own_work",
+        "value": 0.6,
+        "why": "I am too bent for the heavy work and too old for loud arguments; the bees and the tally are mine to keep."
+      }
+    ],
+    "secret": "I think Nell Sedge was wrong to let the meadow, and if the lease ever lapsed I would not be sorry to see it grazed common again, whatever it cost my son."
+  }
+}

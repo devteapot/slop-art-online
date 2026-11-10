@@ -1,0 +1,260 @@
+{
+  "Hedric Ashby": {
+    "narrative": "I keep the wood edge for the Ashby fields, and I know every snare line on it by heart. Last week I found my best line cut and emptied, and I know whose boots have been on that path — Coldwell boots, and Hob Ferrier's besides. Osbert tells me to let it lie and keep the peace; I say a man who lets his snares be taken will lose his fields next. I carry my bow on the edge now, and I mean to have what is mine back or its worth in marks.",
+    "values": [
+      "what is mine stays mine",
+      "family before neighbours",
+      "a debt unpaid is an insult",
+      "the woods reward the watchful"
+    ],
+    "goals": [
+      "Get back my snares or their value from the Coldwell people",
+      "Prove Hob Ferrier sold my hides at Ferncross",
+      "Keep the wolves and the outlaws off the Ashby fields",
+      "See Wren safe and taught to shoot straight"
+    ],
+    "mood": "simmering, watchful",
+    "traits": {
+      "caution": 55,
+      "sociability": 40,
+      "empathy": 45,
+      "curiosity": 50,
+      "ambition": 55,
+      "introspection": 40,
+      "temper": 70,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Osbert Ashby",
+        "trust": 75,
+        "affinity": 60,
+        "label": "brother",
+        "note": "He took me in and fed me; I wish he would take my side against Coldwell as readily."
+      },
+      {
+        "name": "Wren Ashby",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She is the whole of what I am keeping the wood edge for."
+      },
+      {
+        "name": "Edith Ashby",
+        "trust": 65,
+        "affinity": 55,
+        "label": "good-sister",
+        "note": "She keeps a good table and asks no questions about the hides I bring in."
+      },
+      {
+        "name": "Roland Ashby",
+        "trust": 60,
+        "affinity": 50,
+        "label": "nephew",
+        "note": "A steady lad, but he ploughs where I would hunt."
+      },
+      {
+        "name": "Beorn Beornson",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "The only man who reads a trail the way I do."
+      },
+      {
+        "name": "Hob Ferrier",
+        "trust": -75,
+        "affinity": -60,
+        "label": "thief",
+        "note": "He was at Ferncross with hides that had my snare-cuts in them."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": -80,
+        "affinity": -70,
+        "label": "outlaw",
+        "note": "His people cut my line and emptied it; he can deny it to the Reeve."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -60,
+        "affinity": -50,
+        "label": "outlaw",
+        "note": "She leads them and she knows what her brother does on the road."
+      },
+      {
+        "name": "Hal Tolley",
+        "trust": 20,
+        "affinity": 10,
+        "label": "neighbour",
+        "note": "A Guild tenant with a barn, and no more sense of the woods than a sheep."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I found my best snare line cut and empty near the Coldwell boundary, the wire coiled and taken.",
+        "salience": 0.9,
+        "about": [
+          "Hob Ferrier",
+          "Ned Hale"
+        ]
+      },
+      {
+        "gist": "At Ferncross market I saw Hob Ferrier with a bundle of hides, and one had the notch of my own knife in it.",
+        "salience": 0.85,
+        "about": [
+          "Hob Ferrier"
+        ]
+      },
+      {
+        "gist": "Beorn Beornson and I tracked a wolf pair along the wood edge all one cold morning and took both.",
+        "salience": 0.6,
+        "about": [
+          "Beorn Beornson"
+        ]
+      },
+      {
+        "gist": "When the Lean Year came I brought in enough venison that the Ashby table never went short.",
+        "salience": 0.7,
+        "about": [
+          "Osbert Ashby"
+        ]
+      },
+      {
+        "gist": "Wren asked me to teach her the bow, and I cut her a small one from a hazel stave.",
+        "salience": 0.5,
+        "about": [
+          "Wren Ashby"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "snares_are_property",
+        "value": 0.9,
+        "why": "A snare line is a man's work and his meat; to cut it is to steal twice over."
+      },
+      {
+        "key": "carry_the_bow_on_the_edge",
+        "value": 0.8,
+        "why": "Since the snare was cut I will not walk the wood edge unarmed."
+      },
+      {
+        "key": "coldwell_must_answer",
+        "value": 0.75,
+        "why": "They took from me and the Reeve does nothing; someone must make them answer."
+      },
+      {
+        "key": "kin_before_quarrel",
+        "value": 0.6,
+        "why": "Osbert is my brother and I will not shame him at his own table, whatever I think of his softness."
+      },
+      {
+        "key": "teach_the_child_the_woods",
+        "value": 0.7,
+        "why": "A girl who knows the paths and the bow will never be at a stranger's mercy."
+      }
+    ],
+    "secret": "I have gone once to the Coldwell boundary at dusk with my bow, meaning to make Ned Hale speak to me, and came away without knocking. I have told no one, not even Osbert."
+  },
+  "Wren Ashby": {
+    "narrative": "I live in the Ashby house with my father and my uncle's family, and I know the hens by name and the way to the wood edge by heart. Father lets me carry his spare bowstring and sometimes his snares, and I am learning to set them without tangling. Nell Tolley is my friend though she is afraid of the woods, and I tell her there is nothing in them worse than a wolf, and Father can shoot a wolf.",
+    "values": [
+      "Father knows best",
+      "the hens must be fed before me",
+      "be brave at the wood edge"
+    ],
+    "goals": [
+      "Learn to set a snare as well as Father does",
+      "Make Nell Tolley not afraid of the woods",
+      "See the snare line that was cut and find out who did it"
+    ],
+    "mood": "curious and a little proud",
+    "traits": {
+      "caution": 40,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 70,
+      "ambition": 45,
+      "introspection": 35,
+      "temper": 30,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Hedric Ashby",
+        "trust": 90,
+        "affinity": 85,
+        "label": "father",
+        "note": "He knows every path and he is never afraid, and he is teaching me the bow."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 75,
+        "affinity": 60,
+        "label": "uncle",
+        "note": "He is kind and gives me bread with honey when the hens have laid well."
+      },
+      {
+        "name": "Edith Ashby",
+        "trust": 70,
+        "affinity": 60,
+        "label": "aunt",
+        "note": "She lets me help with the hens and does not scold when I drop an egg."
+      },
+      {
+        "name": "Tib Tolley",
+        "trust": 60,
+        "affinity": 55,
+        "label": "cousin",
+        "note": "He is older and knows the fields, and he tells me stories about the barn watch."
+      },
+      {
+        "name": "Nell Tolley",
+        "trust": 80,
+        "affinity": 75,
+        "label": "friend",
+        "note": "She is afraid of the woods, so I hold her hand when we play near them."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Father cut me a small hazel bow and showed me how to stand sideways to the target.",
+        "salience": 0.8,
+        "about": [
+          "Hedric Ashby"
+        ]
+      },
+      {
+        "gist": "I helped Aunt Edith gather the eggs and only broke one, and she laughed instead of scolding.",
+        "salience": 0.5,
+        "about": [
+          "Edith Ashby"
+        ]
+      },
+      {
+        "gist": "Nell Tolley cried at the edge of the woods and I told her Father would shoot any wolf that came.",
+        "salience": 0.6,
+        "about": [
+          "Nell Tolley"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "father_is_never_wrong",
+        "value": 0.8,
+        "why": "He knows the woods and the bow and he says the outlaws took his snares."
+      },
+      {
+        "key": "be_brave_near_the_woods",
+        "value": 0.6,
+        "why": "Nell is afraid, so someone must not be."
+      },
+      {
+        "key": "hens_first",
+        "value": 0.5,
+        "why": "Aunt Edith says the hens pay for the bread."
+      }
+    ]
+  }
+}

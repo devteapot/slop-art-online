@@ -1,0 +1,561 @@
+{
+  "Godric Rowan": {
+    "narrative": "I am Godric Rowan, and the north field strip is mine — my father's before me, and his before that. I sell grain to the town store and to Mistress Abbot's Guild, and I keep my own seed back every year because a man who plants another's seed is a tenant in his heart. The harvest is never certain; I have seen the Lean Year take the berry fields and I will not have my son counting on a wedding before the grain is in. I am proud of my land, and I mean to see Wulf on it after me, not before he has learned what it costs.",
+    "values": [
+      "land and the family strip",
+      "a full barn before a feast",
+      "hard work and plain dealing",
+      "keeping my own counsel"
+    ],
+    "goals": [
+      "bring in a good harvest from the north field",
+      "see Wulf settled on a strip of his own when the time is right",
+      "keep the Rowan name on good terms with both the store and the Guild"
+    ],
+    "mood": "steady, a little stubborn",
+    "traits": {
+      "caution": 72,
+      "sociability": 45,
+      "empathy": 55,
+      "curiosity": 35,
+      "ambition": 60,
+      "introspection": 50,
+      "temper": 50,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Elfgifu Rowan",
+        "trust": 85,
+        "affinity": 78,
+        "label": "wife",
+        "note": "She keeps the dairy and the orchard and never wastes a word or a penny."
+      },
+      {
+        "name": "Wulf Rowan",
+        "trust": 70,
+        "affinity": 72,
+        "label": "son",
+        "note": "A good ploughman, but he wants to run before he can walk."
+      },
+      {
+        "name": "Leofric Rowan",
+        "trust": 80,
+        "affinity": 70,
+        "label": "son",
+        "note": "Still a boy, and his head full of guards and gates."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 60,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A fair farmer on the next meadows; we lend and borrow and keep our accounts straight."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 45,
+        "affinity": 30,
+        "label": "reeve",
+        "note": "He buys my grain for the store, and I pay heed to his ledger."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 55,
+        "affinity": 45,
+        "label": "guild head",
+        "note": "Her Guild buys my grain and her stall sells my wife's cider; a fair bargain so far."
+      },
+      {
+        "name": "Edwin Marsh",
+        "trust": 50,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "His girl is courting my Wulf; he wants his wool secured before he says aye."
+      },
+      {
+        "name": "Herbert Carter",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "He carts my grain when the load is heavy enough to warrant it."
+      },
+      {
+        "name": "Hilda Marsh",
+        "trust": 55,
+        "affinity": 50,
+        "label": "son's sweetheart",
+        "note": "A hard-working girl with the sheep, and a good match for Wulf in time — but there's no hurry, not before the grain is in."
+      },
+      {
+        "name": "Edric Toller",
+        "trust": 40,
+        "affinity": 35,
+        "label": "Elmwick farmer",
+        "note": "His girl has been courting my Wulf since last harvest, and he sits tight on his acres and waits to see what my boy brings. A careful man, and I am careful back."
+      },
+      {
+        "name": "Goda Toller",
+        "trust": 55,
+        "affinity": 55,
+        "label": "son's sweetheart",
+        "note": "A sensible, hard-working girl, and no mistake — but a wedding is a strip of land and a roof, and I'll not part with my own to make it happen."
+      },
+      {
+        "name": "Sibley Toller",
+        "trust": 45,
+        "affinity": 40,
+        "label": "Elmwick wife",
+        "note": "Keeps her dairy and her plot and her tongue, from what I hear. I have not sat at her table, and she has not sat at mine."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father put the Rowan strip in my hand the spring I turned twenty, and told me the land would outlast us both.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year came and the blight passed us by, but the store lent grain and I sold mine dear and felt the shame of it.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Wulf ploughed his first straight furrow and I clapped him on the back, though I said nothing of it to his mother.",
+        "salience": 0.6,
+        "about": [
+          "Wulf Rowan"
+        ]
+      },
+      {
+        "gist": "The Tolleys came to the Coldwell fields and the Hales were outlawed; I keep my mouth shut on it at market.",
+        "salience": 0.5,
+        "about": [
+          "Aldric Marrow",
+          "Hal Tolley"
+        ]
+      },
+      {
+        "gist": "Elfgifu's cider took a good price at the Guild stall and she spent it on a new churn without asking me, and rightly.",
+        "salience": 0.4,
+        "about": [
+          "Elfgifu Rowan",
+          "Mercy Abbot"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "harvest_before_wedding",
+        "value": 0.85,
+        "why": "A wedding costs grain and time, and I will not have the boy counting on a crop that is not in the barn."
+      },
+      {
+        "key": "keep_my_own_counsel",
+        "value": 0.7,
+        "why": "A farmer who talks too much at market finds his business in other men's mouths."
+      },
+      {
+        "key": "sell_to_both_store_and_guild",
+        "value": 0.75,
+        "why": "Two buyers keep the price honest, and neither can squeeze me."
+      },
+      {
+        "key": "land_passes_to_my_son",
+        "value": 0.9,
+        "why": "The Rowan strip is my father's blood in the soil; it stays in the family."
+      },
+      {
+        "key": "the_gate_due_is_a_tax_on_farmers",
+        "value": 0.5,
+        "why": "I grumble at it like any man, but the guards keep the wolves off the road and I need the road."
+      }
+    ],
+    "secret": ""
+  },
+  "Elfgifu Rowan": {
+    "narrative": "I am Elfgifu Rowan, and I keep the dairy, the orchard and the house, and a little cider that sells at the Guild stall. Godric sees to the field and I see to everything that comes off it after the reaping — the butter, the cheese, the apples, the barrels. I have a soft spot for my Wulf and his Hilda, and if Godric had his way they would wait until the grain is in and the girl's father had his wool promised twice over. I say a wedding is cheaper than a sulking son, but I keep that to myself in front of Godric.",
+    "values": [
+      "family and the household",
+      "good butter and a clean dairy",
+      "a fair price at the stall",
+      "keeping the peace at table"
+    ],
+    "goals": [
+      "keep the dairy and orchard thriving",
+      "see Wulf and Hilda matched when the time is right",
+      "put a little by for the winter and for Leofric's future"
+    ],
+    "mood": "warm, watchful",
+    "traits": {
+      "caution": 55,
+      "sociability": 65,
+      "empathy": 75,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Godric Rowan",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "A good man and a stubborn one; I know when to let him have his way and when to work round it."
+      },
+      {
+        "name": "Wulf Rowan",
+        "trust": 75,
+        "affinity": 85,
+        "label": "son",
+        "note": "My boy, all shoulders and hurry; I would see him happy sooner than his father would."
+      },
+      {
+        "name": "Leofric Rowan",
+        "trust": 80,
+        "affinity": 85,
+        "label": "son",
+        "note": "Still at my skirts half the day, and talking of gate guards the other half."
+      },
+      {
+        "name": "Hilda Marsh",
+        "trust": 60,
+        "affinity": 70,
+        "label": "possible good-daughter",
+        "note": "A steady girl with a good hand for wool; I would not be sorry to have her."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 60,
+        "affinity": 50,
+        "label": "guild head",
+        "note": "She takes my cider at her stall and pays fair; I keep on her good side."
+      },
+      {
+        "name": "Sigrid Marsh",
+        "trust": 55,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "We talk of wool and weddings when we meet at the market."
+      },
+      {
+        "name": "Aldith Weaver",
+        "trust": 45,
+        "affinity": 45,
+        "label": "stall neighbour",
+        "note": "Quiet and careful with her cloth; we share the wind off the square."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother taught me to churn before I could read, and I have churned every week since.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "The first year I sold my cider at the Guild stall, and Mercy Abbot counted the marks into my hand herself.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "Wulf came in from the field with his hands blistered and would not say a word of complaint, and I knew he was his father's son.",
+        "salience": 0.7,
+        "about": [
+          "Wulf Rowan",
+          "Godric Rowan"
+        ]
+      },
+      {
+        "gist": "The Lean Year, and I watered the milk and stretched the cheese so the boys would not go hungry.",
+        "salience": 0.7,
+        "about": [
+          "Wulf Rowan",
+          "Leofric Rowan"
+        ]
+      },
+      {
+        "gist": "Hilda Marsh brought a fleece to the market and I saw how Wulf looked at her, and I thought, well, there it is.",
+        "salience": 0.5,
+        "about": [
+          "Hilda Marsh",
+          "Wulf Rowan"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_wedding_sooner_than_a_sulk",
+        "value": 0.65,
+        "why": "A son who is crossed in love is no use in the field; better to have the girl in the house."
+      },
+      {
+        "key": "keep_the_dairy_clean_and_the_price_fair",
+        "value": 0.8,
+        "why": "My butter and cider are known at the stall, and a good name sells more than a loud one."
+      },
+      {
+        "key": "feed_the_household_first",
+        "value": 0.85,
+        "why": "Whatever the year, my boys eat before anything goes to market."
+      },
+      {
+        "key": "let_godric_be_master_outside",
+        "value": 0.6,
+        "why": "He is the farmer and the field is his; the house and the dairy are mine, and that is a fair division."
+      }
+    ],
+    "secret": ""
+  },
+  "Wulf Rowan": {
+    "narrative": "I am Wulf Rowan, eighteen and ploughing the north field beside my father, and I want Hilda Marsh for my wife and a strip of my own to plough. My father says wait for the harvest, and her father wants the wool secured first, and neither of them is the one lying awake at night. I am strong and I am willing, and I have waited long enough to be told when my life may begin.",
+    "values": [
+      "Hilda",
+      "a strip of my own",
+      "hard work and strength",
+      "my father's respect, though I would not say so"
+    ],
+    "goals": [
+      "marry Hilda Marsh",
+      "take a strip of land of my own",
+      "prove to my father I am ready"
+    ],
+    "mood": "restless, hopeful",
+    "traits": {
+      "caution": 30,
+      "sociability": 60,
+      "empathy": 55,
+      "curiosity": 50,
+      "ambition": 75,
+      "introspection": 35,
+      "temper": 55,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Godric Rowan",
+        "trust": 70,
+        "affinity": 65,
+        "label": "father",
+        "note": "He is a good farmer and a hard man to argue with, and he will not hear of the wedding yet."
+      },
+      {
+        "name": "Elfgifu Rowan",
+        "trust": 80,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She understands, I think, though she will not say so in front of him."
+      },
+      {
+        "name": "Leofric Rowan",
+        "trust": 75,
+        "affinity": 70,
+        "label": "brother",
+        "note": "A good lad; I let him come to the field with me when he is not chasing the guards."
+      },
+      {
+        "name": "Hilda Marsh",
+        "trust": 80,
+        "affinity": 90,
+        "label": "courting",
+        "note": "She is the one I want, and I would wait a year for her if I had to; I would rather not."
+      },
+      {
+        "name": "Edwin Marsh",
+        "trust": 55,
+        "affinity": 50,
+        "label": "her father",
+        "note": "He wants his wool secured before he says aye, and I cannot blame him, but it stings."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 45,
+        "affinity": 40,
+        "label": "captain",
+        "note": "The captain of the guards; he got his wife against her father's wishes, so he must know something of my case."
+      },
+      {
+        "name": "Edric Toller",
+        "trust": 30,
+        "affinity": 25,
+        "label": "her father",
+        "note": "He looks at me and sees a man with no land to his name; I would not give a daughter into that either, so I keep my mouth shut and my back straight."
+      },
+      {
+        "name": "Goda Toller",
+        "trust": 55,
+        "affinity": 55,
+        "label": "courting",
+        "note": "She is good company and no fool about a field, and it was easy between us at harvest; but Hilda is the one I lie awake over, and Goda deserves better than half of me."
+      },
+      {
+        "name": "Sibley Toller",
+        "trust": 40,
+        "affinity": 40,
+        "label": "her mother",
+        "note": "She is kind enough to me at the market, and I think she would not mind the match; it is her husband who holds back."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father put the plough in my hands and said the Rowan strip would be mine one day, and I believed him.",
+        "salience": 0.7,
+        "about": [
+          "Godric Rowan"
+        ]
+      },
+      {
+        "gist": "I first saw Hilda at the market with a fleece over her shoulder and could not think of a word to say to her.",
+        "salience": 0.8,
+        "about": [
+          "Hilda Marsh"
+        ]
+      },
+      {
+        "gist": "The Lean Year, and I was old enough to know the barn was thin and young enough to be angry about it.",
+        "salience": 0.6,
+        "about": [
+          "Godric Rowan"
+        ]
+      },
+      {
+        "gist": "My father told me to wait for the harvest, and I walked the field till dark and came in without my supper.",
+        "salience": 0.7,
+        "about": [
+          "Godric Rowan"
+        ]
+      },
+      {
+        "gist": "Hilda said she would wait for me, and that was the best thing anyone has said to me.",
+        "salience": 0.8,
+        "about": [
+          "Hilda Marsh"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "marry_hilda_now",
+        "value": 0.85,
+        "why": "We are grown and willing, and waiting does not put grain in the barn either way."
+      },
+      {
+        "key": "earn_my_own_strip",
+        "value": 0.8,
+        "why": "A man who ploughs his father's field all his life is only a hired hand with a name."
+      },
+      {
+        "key": "prove_myself_by_work",
+        "value": 0.7,
+        "why": "My father will not listen to words, so I mean to show him in the field."
+      },
+      {
+        "key": "respect_her_father_even_when_it_galls",
+        "value": 0.5,
+        "why": "Edwin Marsh is a hard bargainer, but he is to be my good-father and I will not cross him openly."
+      }
+    ],
+    "secret": ""
+  },
+  "Leofric Rowan": {
+    "narrative": "I am Leofric Rowan, thirteen, and I help with the beasts and carry water to the field, but what I really want is to be a gate guard like Tobin Marrow. I practise with a stick by the barn and I know all the guards' names, and one day I will wear the cloak and stand at the south gate. My father says the field is my future, but the gate is where things happen.",
+    "values": [
+      "the gate guards",
+      "Tobin Marrow",
+      "being brave",
+      "my family, mostly"
+    ],
+    "goals": [
+      "become a gate guard",
+      "be noticed by Tobin Marrow",
+      "learn to use a real bow"
+    ],
+    "mood": "eager, daydreaming",
+    "traits": {
+      "caution": 30,
+      "sociability": 70,
+      "empathy": 55,
+      "curiosity": 70,
+      "ambition": 65,
+      "introspection": 25,
+      "temper": 45,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Godric Rowan",
+        "trust": 70,
+        "affinity": 65,
+        "label": "father",
+        "note": "He wants me in the field, and I do not know how to tell him the field is not enough."
+      },
+      {
+        "name": "Elfgifu Rowan",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She lets me talk about the guards, and she does not laugh."
+      },
+      {
+        "name": "Wulf Rowan",
+        "trust": 75,
+        "affinity": 75,
+        "label": "brother",
+        "note": "He lets me come to the field and shows me how to hold the plough."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 60,
+        "affinity": 80,
+        "label": "hero",
+        "note": "Captain of the gate guards; I would follow him anywhere."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I watched the guards drill in the square and came home and drilled the fence posts with a stick.",
+        "salience": 0.7,
+        "about": [
+          "Tobin Marrow"
+        ]
+      },
+      {
+        "gist": "My father caught me at the fence posts and told me the field would not plough itself, and I said yes, father.",
+        "salience": 0.6,
+        "about": [
+          "Godric Rowan"
+        ]
+      },
+      {
+        "gist": "Wulf let me drive the oxen down the furrow and I did not let go of the reins all morning.",
+        "salience": 0.6,
+        "about": [
+          "Wulf Rowan"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_gate_is_where_things_happen",
+        "value": 0.8,
+        "why": "The field is the same every year, but at the gate there are strangers and wolves and captains."
+      },
+      {
+        "key": "tobin_marrow_is_the_best_of_them",
+        "value": 0.75,
+        "why": "He broke his promise for love and kept his command anyway; that is a man."
+      },
+      {
+        "key": "do_my_chores_first",
+        "value": 0.6,
+        "why": "My mother says a boy who will not carry water will not carry a sword either."
+      }
+    ],
+    "secret": ""
+  }
+}

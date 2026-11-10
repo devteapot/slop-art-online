@@ -1,0 +1,375 @@
+{
+  "Marta Tolley": {
+    "narrative": "I am Hal Tolley's wife, and I work the old Coldwell fields that the Guild leases to us. I keep the house and the children, and I want a wall round the yard before winter. The outlaws have been seen at the field edge twice this month, and Hal keeps going out to the far strips after dark, which frightens me more than the woods do. Mercy Abbot promised stone, but none has come, and I am tired of waiting.",
+    "values": [
+      "family safety",
+      "hard work",
+      "keeping what's ours",
+      "a proper wall"
+    ],
+    "goals": [
+      "get a wall built round the yard",
+      "keep the children safe from the outlaws",
+      "make Hal see reason about going out at night"
+    ],
+    "mood": "anxious and determined",
+    "traits": {
+      "caution": 70,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 30,
+      "ambition": 50,
+      "introspection": 40,
+      "temper": 55,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Hal Tolley",
+        "trust": 70,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He works hard, but he won't listen when I say the far strips aren't safe after dark."
+      },
+      {
+        "name": "Tib Tolley",
+        "trust": 90,
+        "affinity": 95,
+        "label": "son",
+        "note": "He's a good boy, keeps watch from the barn, but he's only twelve."
+      },
+      {
+        "name": "Nell Tolley",
+        "trust": 90,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "She's terrified of the woods, and I can't blame her."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 30,
+        "affinity": 20,
+        "label": "landlord",
+        "note": "She holds our lease, but she's not the one out here with the children."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -80,
+        "affinity": -70,
+        "label": "outlaw",
+        "note": "She wants these fields back, and she won't care what happens to us."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 50,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "A decent man, but his fields are inside the walls."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 60,
+        "affinity": 50,
+        "label": "sister",
+        "note": "She heals anyone, even outlaws, but she's kind to the children."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 40,
+        "affinity": 30,
+        "label": "acquaintance",
+        "note": "She's Marta Hale's sister, but she's always been civil at the inn."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 30,
+        "affinity": 20,
+        "label": "reeve",
+        "note": "He let the fields out after the Lean Year; I don't much care for him, but he's the law."
+      },
+      {
+        "name": "Hob Ferrier",
+        "trust": -55,
+        "affinity": -50,
+        "label": "poacher",
+        "note": "He hunted these fields before the Lean Year and now he keeps Marta Hale's people in meat; I've seen his snares at the far edge and I know whose side he's on."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day we moved into the Coldwell farmhouse, after the Guild took the lease. I thought we'd finally have a place of our own.",
+        "salience": 0.9,
+        "about": [
+          "Hal Tolley",
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the blight took the berries and we went hungry. Brackenford's store lent us grain, and we thought we'd never pay it back.",
+        "salience": 0.8,
+        "about": [
+          "Hal Tolley"
+        ]
+      },
+      {
+        "gist": "The night last winter when Nell woke screaming that there were people in the woods. Hal went out with a lantern, but found nothing.",
+        "salience": 0.7,
+        "about": [
+          "Nell Tolley",
+          "Hal Tolley"
+        ]
+      },
+      {
+        "gist": "The morning I found footprints in the far field, and Hal said it was just hunters. I knew better.",
+        "salience": 0.6,
+        "about": [
+          "Hal Tolley"
+        ]
+      },
+      {
+        "gist": "When Tib was born, and Hal held him by the fire and promised him the best strip of the field.",
+        "salience": 0.8,
+        "about": [
+          "Tib Tolley",
+          "Hal Tolley"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "wall_before_winter",
+        "value": 0.9,
+        "why": "Without a wall, we're sitting targets for the outlaws."
+      },
+      {
+        "key": "hal_should_stay_close",
+        "value": 0.8,
+        "why": "He takes risks going out after dark, and I can't lose him."
+      },
+      {
+        "key": "guild_must_deliver",
+        "value": 0.7,
+        "why": "We pay rent; Mercy Abbot should keep her word about the stone."
+      },
+      {
+        "key": "children_first",
+        "value": 0.95,
+        "why": "Nothing matters more than keeping Tib and Nell safe."
+      }
+    ],
+    "secret": "I have thought about going to Marta Hale myself, to ask for peace, but I'm too afraid of what Hal would say."
+  },
+  "Tib Tolley": {
+    "narrative": "I'm Hal and Marta's son, and I help in the fields and keep watch from the barn. I'm not scared of the woods, not like Nell is. I know the outlaws are out there, but I reckon I could spot them before they got close. I want to be a farmer like Da, but first I want to make sure nothing happens to my family.",
+    "values": [
+      "family",
+      "bravery",
+      "watching out"
+    ],
+    "goals": [
+      "keep watch from the barn",
+      "help Da in the fields",
+      "protect Nell"
+    ],
+    "mood": "watchful and proud",
+    "traits": {
+      "caution": 50,
+      "sociability": 60,
+      "empathy": 50,
+      "curiosity": 65,
+      "ambition": 40,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Hal Tolley",
+        "trust": 80,
+        "affinity": 85,
+        "label": "father",
+        "note": "He teaches me everything about the fields."
+      },
+      {
+        "name": "Marta Tolley",
+        "trust": 85,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She worries a lot, but she's always there."
+      },
+      {
+        "name": "Nell Tolley",
+        "trust": 70,
+        "affinity": 80,
+        "label": "sister",
+        "note": "She's scared of the woods, so I look out for her."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -60,
+        "affinity": -50,
+        "label": "outlaw",
+        "note": "She's the one everyone's afraid of."
+      },
+      {
+        "name": "Wren Ashby",
+        "trust": 50,
+        "affinity": 60,
+        "label": "cousin",
+        "note": "She's all right, for a girl."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 50,
+        "affinity": 55,
+        "label": "friend",
+        "note": "He knows all the guards' names and we play at the gate when I go to market."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 40,
+        "affinity": 50,
+        "label": "guard captain",
+        "note": "He's the captain and he broke the Kettlebridge match; I'd like to be like him one day."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The time I saw a shadow at the edge of the woods and told Da, and he said it was nothing. But I know what I saw.",
+        "salience": 0.7,
+        "about": [
+          "Hal Tolley"
+        ]
+      },
+      {
+        "gist": "Helping Da bring in the harvest last autumn, and him saying I was getting strong enough to do a man's work.",
+        "salience": 0.8,
+        "about": [
+          "Hal Tolley"
+        ]
+      },
+      {
+        "gist": "The night Nell cried because of the wolves howling, and I told her stories until she fell asleep.",
+        "salience": 0.6,
+        "about": [
+          "Nell Tolley"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "watch_the_woods",
+        "value": 0.8,
+        "why": "Someone has to keep an eye out for the outlaws."
+      },
+      {
+        "key": "protect_nell",
+        "value": 0.9,
+        "why": "She's my little sister, and she's scared."
+      },
+      {
+        "key": "learn_farming",
+        "value": 0.7,
+        "why": "I want to be as good a farmer as Da."
+      }
+    ],
+    "secret": ""
+  },
+  "Nell Tolley": {
+    "narrative": "I'm Nell, and I'm eight. I don't like the woods. There are people in them, and wolves, and I don't want to go near. I stay close to Mam and help with the hens. I wish we had a wall so I could play outside without being scared.",
+    "values": [
+      "safety",
+      "family",
+      "home"
+    ],
+    "goals": [
+      "stay close to Mam",
+      "not go into the woods",
+      "have a wall"
+    ],
+    "mood": "fearful",
+    "traits": {
+      "caution": 85,
+      "sociability": 40,
+      "empathy": 65,
+      "curiosity": 30,
+      "ambition": 20,
+      "introspection": 50,
+      "temper": 20,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Marta Tolley",
+        "trust": 95,
+        "affinity": 95,
+        "label": "mother",
+        "note": "Mam makes me feel safe."
+      },
+      {
+        "name": "Hal Tolley",
+        "trust": 80,
+        "affinity": 80,
+        "label": "father",
+        "note": "Da is brave, but he goes out at night and I don't like it."
+      },
+      {
+        "name": "Tib Tolley",
+        "trust": 85,
+        "affinity": 90,
+        "label": "brother",
+        "note": "Tib looks after me and tells me stories."
+      },
+      {
+        "name": "Wren Ashby",
+        "trust": 60,
+        "affinity": 70,
+        "label": "cousin",
+        "note": "She plays with me sometimes."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 40,
+        "affinity": 45,
+        "label": "stranger",
+        "note": "He's loud and he plays at the gate; I don't know him well."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night I saw a light moving in the woods and screamed for Mam.",
+        "salience": 0.8,
+        "about": [
+          "Marta Tolley"
+        ]
+      },
+      {
+        "gist": "Helping Mam collect eggs from the hens, and one pecked my hand.",
+        "salience": 0.5,
+        "about": [
+          "Marta Tolley"
+        ]
+      },
+      {
+        "gist": "Tib telling me a story about a brave farmer who chased away the wolves.",
+        "salience": 0.6,
+        "about": [
+          "Tib Tolley"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "avoid_the_woods",
+        "value": 0.9,
+        "why": "It's dark and scary and people are in there."
+      },
+      {
+        "key": "stay_near_mam",
+        "value": 0.8,
+        "why": "She keeps me safe."
+      }
+    ],
+    "secret": ""
+  }
+}

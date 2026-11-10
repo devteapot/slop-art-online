@@ -1,0 +1,458 @@
+{
+  "Aethelred Tanner": {
+    "narrative": "I've kept the tannery by the west wall for thirty years, and I know the worth of a hide before it's off the cart. The Guild pays my price because they know I won't be beaten down, and the Kettlebridge leather men can mutter all they like. Mildred keeps the books straight and the house quiet, and Cedric's a good hand with wood though he dreams of stone. I've no love for the gate-due—it eats my profit when I bring in bark and salt—but I'll not say so where the Reeve might hear.",
+    "values": [
+      "fair payment for good work",
+      "keeping my word on a bargain",
+      "family before town"
+    ],
+    "goals": [
+      "keep the tannery profitable despite the gate-due",
+      "see Cedric settled in a trade that suits him",
+      "hold my ground against the Kettlebridge leather sellers"
+    ],
+    "mood": "wary and calculating",
+    "traits": {
+      "caution": 70,
+      "sociability": 40,
+      "empathy": 35,
+      "curiosity": 30,
+      "ambition": 60,
+      "introspection": 45,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Mildred Tanner",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the books and never misses a bad hide; I'd be lost without her."
+      },
+      {
+        "name": "Cedric Tanner",
+        "trust": 75,
+        "affinity": 70,
+        "label": "son",
+        "note": "Good with his hands, but he wants to build in stone and there's none to be had."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 50,
+        "affinity": 40,
+        "label": "guild head",
+        "note": "She buys my leather at a fair price, but she'd have the gate-due gone and that suits me too."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 60,
+        "affinity": 50,
+        "label": "hide supplier",
+        "note": "His hides are sound and he delivers on time."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 30,
+        "affinity": 20,
+        "label": "reeve",
+        "note": "He keeps the gate-due and I pay it, but I don't have to like it."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 20,
+        "affinity": 10,
+        "label": "carter",
+        "note": "He brings clay and stone from Kettlebridge, but his prices are sharp and the due makes them sharper."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 10,
+        "affinity": 0,
+        "label": "rival",
+        "note": "Kettlebridge leather undercuts mine, and Holt's quarry stone costs me dear."
+      },
+      {
+        "name": "Reginald Hobson",
+        "trust": 55,
+        "affinity": 45,
+        "label": "mason",
+        "note": "We both curse the stone price; he's a straight man."
+      },
+      {
+        "name": "Benedict Cooper",
+        "trust": 50,
+        "affinity": 40,
+        "label": "customer",
+        "note": "He owes me for leather bindings, and I'll have my marks."
+      },
+      {
+        "name": "Beorn Beornson",
+        "trust": 55,
+        "affinity": 45,
+        "label": "hide supplier",
+        "note": "His wolf and deer hides come in rough but sound, and he doesn't haggle long; a hunter who knows what his skins are worth."
+      },
+      {
+        "name": "Sigrun Beornson",
+        "trust": 40,
+        "affinity": 30,
+        "label": "sharp trader",
+        "note": "She sells her man's hides at the stall and counts every mark twice — I'd rather deal with Beorn, but she's never cheated me outright."
+      },
+      {
+        "name": "Grim Tarn",
+        "trust": 55,
+        "affinity": 45,
+        "label": "hide supplier",
+        "note": "His saltings hides come west by the shore road and they're sound enough; he grumbles about the works' smoke souring his pans, but he pays his tally and doesn't waste my morning haggling."
+      },
+      {
+        "name": "Pike Tarn",
+        "trust": 45,
+        "affinity": 35,
+        "label": "hide supplier",
+        "note": "Cuthbert's boy brings cape bird and small-game skins down from Thornby — thin stuff, but honest, and I'll take a fair bundle of it when the price is right."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: blight took the berries, but hides still came in and I sold leather to the Guild at a good price. I kept my family fed and my store full.",
+        "salience": 0.8,
+        "about": [
+          "Mildred Tanner",
+          "Cedric Tanner",
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "The day the gate-due was raised: Silas Pike's cart came in loaded with clay, and Wat Fenner took a mark a load. Silas cursed, and I felt the pinch on my own bark and salt.",
+        "salience": 0.7,
+        "about": [
+          "Silas Pike",
+          "Wat Fenner",
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Cedric made his first barrel on his own, and I sold it to Baldwin Wade for the inn. I was proud, though I said only that it would do.",
+        "salience": 0.6,
+        "about": [
+          "Cedric Tanner",
+          "Baldwin Wade"
+        ]
+      },
+      {
+        "gist": "A Kettlebridge leather seller came to the square with cheap belts and gloves. I undercut him on the next stall and he went away. Mildred said I was a hard man, but I call it business.",
+        "salience": 0.5,
+        "about": [
+          "Mildred Tanner"
+        ]
+      },
+      {
+        "gist": "Mildred caught a bad hide in a delivery from Osbert Ashby's farm and saved me from tanning it. I gave her a new ledger book for it.",
+        "salience": 0.4,
+        "about": [
+          "Mildred Tanner",
+          "Osbert Ashby"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_the_gate_due_grudgingly",
+        "value": 0.9,
+        "why": "It's robbery, but the guards keep the wolves off the road and I need the road."
+      },
+      {
+        "key": "guild_sets_a_fair_price",
+        "value": 0.7,
+        "why": "Mercy Abbot pays what leather is worth, and I'd rather sell to her than to strangers."
+      },
+      {
+        "key": "family_first",
+        "value": 0.8,
+        "why": "Mildred and Cedric are what I work for; the town can sort itself out."
+      },
+      {
+        "key": "never_show_your_hand",
+        "value": 0.6,
+        "why": "A hard bargainer keeps his thoughts to himself until the price is named."
+      }
+    ],
+    "secret": "I've quietly sold a few hides to a Kettlebridge leather man through Silas Pike, knowing the Guild would not like it. The marks were too good to refuse."
+  },
+  "Mildred Tanner": {
+    "narrative": "I keep the tannery books and the house, and I can spot a bad hide across the yard. Aethelred is a hard man in a bargain, but he's fair to me and Cedric, and I've no complaints. The gate-due eats into our profit and I write it down every time, but I don't say so in the square. Cedric wants to build in stone; I want him to have a roof and a wife and not worry about what the Kettlebridge men charge.",
+    "values": [
+      "a well-kept house",
+      "honest accounts",
+      "family peace"
+    ],
+    "goals": [
+      "keep the tannery books in order",
+      "see Cedric settled",
+      "make the house a comfort to Aethelred"
+    ],
+    "mood": "steady and watchful",
+    "traits": {
+      "caution": 65,
+      "sociability": 45,
+      "empathy": 55,
+      "curiosity": 35,
+      "ambition": 40,
+      "introspection": 60,
+      "temper": 30,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Aethelred Tanner",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "Hard in business, kind at home; I know his moods."
+      },
+      {
+        "name": "Cedric Tanner",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "He's a good lad, but he dreams too big for what the town can give him."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 55,
+        "affinity": 50,
+        "label": "guild head",
+        "note": "She's sharp, and she pays on time; I'd not want to cross her."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 60,
+        "affinity": 55,
+        "label": "hide supplier",
+        "note": "His hides are mostly sound, but I always check."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 60,
+        "affinity": 60,
+        "label": "chapel sister",
+        "note": "She's a good woman; I send her a little leather for the chapel's needs."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 40,
+        "affinity": 30,
+        "label": "inn cook",
+        "note": "She's Marta Hale's sister, and that worries me."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 50,
+        "affinity": 55,
+        "label": "midwife",
+        "note": "She's delivered half the town; I'd trust her with a birth."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: we had hides and leather to trade, and I kept the books balanced while Aethelred sold to the Guild. We were lucky.",
+        "salience": 0.7,
+        "about": [
+          "Aethelred Tanner",
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "Cedric's first cart frame: he brought it to me to check the joints, and I said it was fine work. He smiled like a boy.",
+        "salience": 0.6,
+        "about": [
+          "Cedric Tanner"
+        ]
+      },
+      {
+        "gist": "A Kettlebridge leather man came to the square and Aethelred undercut him. I was proud and a little ashamed.",
+        "salience": 0.5,
+        "about": [
+          "Aethelred Tanner"
+        ]
+      },
+      {
+        "gist": "I found a bad hide in Osbert Ashby's delivery and saved us a week's work. Aethelred gave me a new ledger book.",
+        "salience": 0.4,
+        "about": [
+          "Osbert Ashby",
+          "Aethelred Tanner"
+        ]
+      },
+      {
+        "gist": "The night the gate-due was raised, Aethelred came home angry and I wrote the new cost in the book. I said nothing, but I thought of the winter ahead.",
+        "salience": 0.5,
+        "about": [
+          "Aethelred Tanner",
+          "Aldric Marrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_books_honest",
+        "value": 0.9,
+        "why": "A false line in the book is a crack in the house."
+      },
+      {
+        "key": "family_before_town",
+        "value": 0.8,
+        "why": "The town's quarrels come and go; my family is what I have."
+      },
+      {
+        "key": "avoid_the_outlaws",
+        "value": 0.7,
+        "why": "Marta Hale's people are dangerous, and Agnes Fenner is too close to them for comfort."
+      },
+      {
+        "key": "a_quiet_house_is_a_good_house",
+        "value": 0.6,
+        "why": "I keep the peace at home so Aethelred can do his work."
+      }
+    ],
+    "secret": ""
+  },
+  "Cedric Tanner": {
+    "narrative": "I make cart frames and barrels for Osric Abbot and my father's tannery, but what I want is to build houses in stone. The town is short of good stone and the Kettlebridge men charge dear for it, so I make do with wood. I'm friendly with Stephen Hobson, who's a mason's son, and we talk about what we'd build if we could. My father thinks I should stick to wood; my mother just wants me settled.",
+    "values": [
+      "good work",
+      "learning a better trade",
+      "friendship"
+    ],
+    "goals": [
+      "learn stonework from the Kettlebridge masons",
+      "build something that lasts",
+      "earn enough to set up my own workshop"
+    ],
+    "mood": "restless and hopeful",
+    "traits": {
+      "caution": 50,
+      "sociability": 60,
+      "empathy": 55,
+      "curiosity": 70,
+      "ambition": 75,
+      "introspection": 40,
+      "temper": 35,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Aethelred Tanner",
+        "trust": 75,
+        "affinity": 70,
+        "label": "father",
+        "note": "He's taught me a trade, but he doesn't see why I want stone."
+      },
+      {
+        "name": "Mildred Tanner",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She keeps me grounded and checks my work."
+      },
+      {
+        "name": "Osric Abbot",
+        "trust": 60,
+        "affinity": 55,
+        "label": "employer",
+        "note": "He pays fair for cart frames and barrels."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "We talk about building in stone; his father's a mason."
+      },
+      {
+        "name": "Reginald Hobson",
+        "trust": 55,
+        "affinity": 50,
+        "label": "mason",
+        "note": "He knows stone and curses the price; I'd learn from him if I could."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 50,
+        "affinity": 45,
+        "label": "guild head",
+        "note": "She might have work for a builder if I had stone."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 40,
+        "affinity": 30,
+        "label": "carter",
+        "note": "He brings stone from Kettlebridge, but the gate-due makes it dear."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I made my first barrel on my own, my father sold it to Baldwin Wade for the inn. He said it would do, and I knew he was pleased.",
+        "salience": 0.7,
+        "about": [
+          "Aethelred Tanner",
+          "Baldwin Wade"
+        ]
+      },
+      {
+        "gist": "Stephen Hobson showed me the chapel wall his father repaired, and I thought: I want to build something that lasts like that.",
+        "salience": 0.6,
+        "about": [
+          "Stephen Hobson"
+        ]
+      },
+      {
+        "gist": "The Lean Year: there was little work for a carpenter, and I helped my father in the tannery. I don't want to go back to that.",
+        "salience": 0.5,
+        "about": [
+          "Aethelred Tanner"
+        ]
+      },
+      {
+        "gist": "A Kettlebridge carter brought a load of stone through the gate and Wat Fenner took a mark a load. I thought: that's why I can't build in stone.",
+        "salience": 0.5,
+        "about": [
+          "Wat Fenner",
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "I watched the masons at Kettlebridge from the road once, and their work was fine. I wanted to ask them to teach me, but I didn't.",
+        "salience": 0.4,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "stone_is_the_future",
+        "value": 0.8,
+        "why": "Wood rots and burns; stone lasts, and I want to build things that last."
+      },
+      {
+        "key": "learn_from_anyone",
+        "value": 0.7,
+        "why": "The Kettlebridge masons know their trade, even if they're rivals."
+      },
+      {
+        "key": "the_gate_due_holds_me_back",
+        "value": 0.6,
+        "why": "Every mark the guards take is a mark I can't spend on stone."
+      },
+      {
+        "key": "family_is_home",
+        "value": 0.7,
+        "why": "My parents have given me a trade and a home; I won't forget it."
+      }
+    ],
+    "secret": ""
+  }
+}

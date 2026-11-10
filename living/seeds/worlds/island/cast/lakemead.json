@@ -1,0 +1,161 @@
+{
+ "households": [
+  {
+   "key": "coombe",
+   "members": [
+    {
+     "name": "Jem Coombe",
+     "age": 42,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "tenant of the Lakemead; pays Nell Sedge rent in grain; Elmwick folk have pulled down his fence twice",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "tenant of Nell Sedge",
+      "at odds with Hob Garrow",
+      "friendly with Thistle Mossfoot"
+     ]
+    },
+    {
+     "name": "Tibbott Coombe",
+     "age": 68,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "Jem's widowed father; too bent for heavy work but keeps the meadow's bees and the old tally of the rent",
+     "knows": [
+      "planting",
+      "fire",
+      "basketry",
+      "storage",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "father of Jem Coombe",
+      "grandfather of Cedda Coombe and Osric Coombe",
+      "remembers the meadow grazed by Elmwick and Reedmoor both before it was let",
+      "grudges Hob Garrow for the talk in Elmwick",
+      "keeps the bees and the rent tally"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "fenlake",
+   "members": [
+    {
+     "name": "Rill Fenlake",
+     "age": 35,
+     "sex": "f",
+     "occupation": "fisher",
+     "role": "fishes the southern lake from a flat punt and smokes the catch; lives in the old boathouse at the meadow's edge",
+     "knows": [
+      "fishing",
+      "smoking",
+      "fire",
+      "mending",
+      "basketry",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "sells smoked fish to Thistle Mossfoot's packs",
+      "trades with Morwen Coombe for cheese and milk",
+      "grudges the Elmwick men who trampled her nets when they pulled the fence",
+      "friendly with Eadric Sedge of Reedmoor",
+      "owes Nell Sedge a share of the lake catch for the boathouse's standing"
+     ]
+    },
+    {
+     "name": "Gristle Fenlake",
+     "age": 9,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Rill's son; mends the punt and knows the shallow pools of the lake",
+     "knows": [
+      "mending",
+      "fishing"
+     ],
+     "parents": [
+      "Rill Fenlake"
+     ],
+     "ties": [
+      "son of Rill Fenlake",
+      "plays with Osric Coombe",
+      "helps his mother smoke the catch",
+      "afraid of the deep water at the lake's middle"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "lakemead-claim",
+   "kind": "feud",
+   "summary": "Elmwick says the Lakemead was always common grazing; Reedmoor's headwoman Nell Sedge let it to the Coombes for grain. Elmwick men have pulled down Jem's fence twice, and the Coombes keep mending it.",
+   "secret": false,
+   "people": [
+    "Jem Coombe",
+    "Morwen Coombe",
+    "Tibbott Coombe"
+   ],
+   "sides": {
+    "Jem Coombe": "He holds the meadow on a Reedmoor lease and pays rent in grain; he thinks Elmwick has no paper and no right, and he is tired of rebuilding fence posts.",
+    "Morwen Coombe": "She keeps the dairy going and trades cheese with Reedmoor folk, but she is friendly with Rowan Wray of Elmwick and hates that the quarrel sits between their families.",
+    "Tibbott Coombe": "He remembers when both villages grazed the meadow and thinks Nell Sedge was high-handed to let it; still, his son holds the lease and he will not see the Coombes turned off."
+   }
+  },
+  {
+   "id": "rent-in-grain",
+   "kind": "debt",
+   "summary": "The Coombes owe Nell Sedge this year's rent in grain, and the harvest on the meadow strips has been thin; they have been paying part in cheese and labour and the rest is still owed.",
+   "secret": false,
+   "people": [
+    "Jem Coombe",
+    "Morwen Coombe",
+    "Rill Fenlake"
+   ],
+   "sides": {
+    "Jem Coombe": "He is short of grain and does not want to ask Reedmoor for time again; he has thought of selling a goat but has not done it.",
+    "Morwen Coombe": "She has been carrying cheese to Hilda Sedge to make up the difference and worries Nell will take the meadow back if the grain does not come.",
+    "Rill Fenlake": "She owes Nell a share of the lake catch for her boathouse and knows the Coombes are behind; she has offered them smoked fish against their cheese, but she cannot cover their rent."
+   }
+  },
+  {
+   "id": "fence-trouble",
+   "kind": "quarrel",
+   "summary": "When Elmwick men pulled the fence down the second time, Rill Fenlake's nets were trampled where she had laid them to dry; she blames the Elmwick men and has said she will not sell fish to anyone from Elmwick.",
+   "secret": false,
+   "people": [
+    "Rill Fenlake",
+    "Jem Coombe",
+    "Morwen Coombe"
+   ],
+   "sides": {
+    "Rill Fenlake": "She lost a good net and a morning's catch and thinks Elmwick folk came looking for a fight, not just a fence; she is angry and will not be talked round quickly.",
+    "Jem Coombe": "He mended the fence with Rill's help and feels he owes her; he would rather keep the quarrel with Elmwick than lose his neighbour's trade.",
+    "Morwen Coombe": "She thinks Rill is right to be angry but fears the fish trade with Elmwick was one of the few things keeping the meadow's households fed."
+   }
+  },
+  {
+   "id": "pedlar-promise",
+   "kind": "courtship",
+   "summary": "Thistle Mossfoot of Fernhollow comes through the Lakemead on the east road and has been friendly with the Coombes; Cedda Coombe follows him about asking for stories of the hollow, and Jem has half-promised to let her walk a stretch of the road with him when the packs are light.",
+   "secret": false,
+   "people": [
+    "Jem Coombe",
+    "Morwen Coombe",
+    "Cedda Coombe"
+   ],
+   "sides": {
+    "Jem Coombe": "He likes Thistle and trusts him on the road, but the east road is no place for an eleven-year-old and he has not said yes outright.",
+    "Morwen Coombe": "She is fond of Thistle's visits and his fish, but she does not want her daughter walking roads with a pedlar's packs and has said so to Jem.",
+    "Cedda Coombe": "She wants to see Fernhollow and the giants' shelf beyond it, and she has already told Thea Wray she is going."
+   }
+  }
+ ]
+}

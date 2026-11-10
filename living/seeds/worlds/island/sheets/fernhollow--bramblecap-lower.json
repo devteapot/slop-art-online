@@ -1,0 +1,358 @@
+{
+  "Hazel Bramblecap": {
+    "narrative": "I keep the hollow's salve store, and I walk the old forest paths to Tanglewood for the herbs I cannot grow in my own rows. My aunt Pipwort is Eldest, and I am her niece, which means the hollow watches me more closely than it watches most. I have been paying the Tanglewood healer in salves for a winter's worth of roots and I have not paid enough, and the salve jars on my shelf are getting light. I tend the elders and dose the children, and I want the hollow to name who follows Pipwort openly, before the root table splits over it.",
+    "values": [
+      "the hollow's health",
+      "open dealing",
+      "family",
+      "the old forest's plants"
+    ],
+    "goals": [
+      "settle the Tanglewood debt before the salve store runs dry",
+      "see Pipwort name her successor openly",
+      "keep the winter cough from the elders"
+    ],
+    "mood": "worried and busy",
+    "traits": {
+      "caution": 62,
+      "sociability": 55,
+      "empathy": 78,
+      "curiosity": 58,
+      "ambition": 40,
+      "introspection": 66,
+      "temper": 30,
+      "nurture": 82
+    },
+    "relations": [
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 82,
+        "affinity": 70,
+        "label": "aunt",
+        "note": "She raised me in the salve shed; I want her to speak before it is too late."
+      },
+      {
+        "name": "Sorrel Bramblecap",
+        "trust": 90,
+        "affinity": 88,
+        "label": "husband",
+        "note": "He grumbles at the giants' track and I let him; he is steady where I fret."
+      },
+      {
+        "name": "Tamarisk Bramblecap",
+        "trust": 95,
+        "affinity": 92,
+        "label": "daughter",
+        "note": "She gathers berries at my heel and knows the salve jars by smell."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 80,
+        "affinity": 74,
+        "label": "friend",
+        "note": "The best hand with a fever in the hollow; we share what we know."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 55,
+        "affinity": 50,
+        "label": "cousin",
+        "note": "She assumes the memory will be hers; I say nothing to her face."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 60,
+        "affinity": 48,
+        "label": "kinswoman by marriage",
+        "note": "Years beside Pipwort with the seed store; she has a claim too."
+      },
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 45,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "The Tanglewood healer; her word came cold and I have no answer yet."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 50,
+        "affinity": 45,
+        "label": "the hollow's cook",
+        "note": "She feeds us all at the common table and asks after my jars."
+      },
+      {
+        "name": "Hazel Bramblecap",
+        "trust": 100,
+        "affinity": 100,
+        "label": "self",
+        "note": ""
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Pipwort set the salve jars in my hands when I was a girl and told me the hollow's ills were mine now.",
+        "salience": 0.8,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "The winter the cough went through the hollow, Betony and I sat up three nights with the elders and lost only one.",
+        "salience": 0.75,
+        "about": [
+          "Betony Mossfoot"
+        ]
+      },
+      {
+        "gist": "I walked to Tanglewood through wet leaves and came home with roots and a promise to pay in salves.",
+        "salience": 0.6,
+        "about": [
+          "Ysolde Fenwick"
+        ]
+      },
+      {
+        "gist": "Sorrel brought in the first barley from the grain patch and I cooked it at the common table for everyone.",
+        "salience": 0.5,
+        "about": [
+          "Sorrel Bramblecap",
+          "Tamarisk Bramblecap"
+        ]
+      },
+      {
+        "gist": "Tamarisk asked me why the jars were half empty and I had no good answer for a child.",
+        "salience": 0.55,
+        "about": [
+          "Tamarisk Bramblecap"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_debts_before_pride",
+        "value": 0.85,
+        "why": "The healer's roots kept the hollow alive last winter; I will not pretend I owe nothing."
+      },
+      {
+        "key": "name_the_successor_openly",
+        "value": 0.8,
+        "why": "A quarrel over Pipwort's memory would split the root table worse than any choice made in daylight."
+      },
+      {
+        "key": "medicine_belongs_to_everyone",
+        "value": 0.75,
+        "why": "I dose the elders and the children alike and take no mark for it."
+      },
+      {
+        "key": "do_not_fell_the_old_forest",
+        "value": 0.7,
+        "why": "The plants I need grow in the deep shade; cut it and the salves go with it."
+      }
+    ],
+    "secret": "I have been quietly watering the salves I give the healer to make them stretch, and if she finds out she will trust nothing I send."
+  },
+  "Sorrel Bramblecap": {
+    "narrative": "I work the hollow's grain patch and the berry rows, and I carry the surplus to the Ferncross woodcutters for what we cannot grow. My wife Hazel keeps the salve store and frets over her jars; I keep my grumbles to the giants' track, which takes our timber and gives us little. I want a second strip by the stream, and I have asked the Eldest for it more than once. The hollow is small and the winter is long, and I would rather be planting than talking.",
+    "values": [
+      "a full store before winter",
+      "good rows and honest measure",
+      "family",
+      "the hollow's common table"
+    ],
+    "goals": [
+      "win a second strip by the stream",
+      "bring in a good berry harvest for Ferncross",
+      "see the salve store refilled before the coughs come"
+    ],
+    "mood": "steady, a little put upon",
+    "traits": {
+      "caution": 55,
+      "sociability": 48,
+      "empathy": 52,
+      "curiosity": 40,
+      "ambition": 58,
+      "introspection": 44,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Hazel Bramblecap",
+        "trust": 88,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She frets and I plant; between us the house holds."
+      },
+      {
+        "name": "Tamarisk Bramblecap",
+        "trust": 92,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "She picks the rows clean and I let her eat as she goes."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 70,
+        "affinity": 62,
+        "label": "aunt by marriage",
+        "note": "She has not given me the stream strip yet, and I have asked plainly."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 62,
+        "affinity": 55,
+        "label": "seed-keeper",
+        "note": "She knows which seed will take to the poor ground; I go to her before I sow."
+      },
+      {
+        "name": "Bramwell Ashdown",
+        "trust": 58,
+        "affinity": 52,
+        "label": "trade partner",
+        "note": "He takes my berries at Ferncross and pays fair enough."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 60,
+        "affinity": 58,
+        "label": "kinswoman",
+        "note": "She feeds us all; I eat at her table and say little."
+      },
+      {
+        "name": "Yarrow Underbank",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "He will not fell a living tree, and I will not ask him to."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year blight came through the berry rows and I burned what I could not save.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Hazel and I planted the grain patch together the spring after, and it came up thick.",
+        "salience": 0.65,
+        "about": [
+          "Hazel Bramblecap"
+        ]
+      },
+      {
+        "gist": "I carried a full pack of berries to Ferncross and came back with a new axe head and a sack of salt.",
+        "salience": 0.5,
+        "about": [
+          "Bramwell Ashdown"
+        ]
+      },
+      {
+        "gist": "A giant's track runs above our rows and their timber haul tears the bank when the rains come.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Tamarisk was born in the house by the berry rows and Hazel would not let me in until the sun rose.",
+        "salience": 0.7,
+        "about": [
+          "Hazel Bramblecap",
+          "Tamarisk Bramblecap"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "store_first_talk_after",
+        "value": 0.85,
+        "why": "A hollow that eats in winter can argue all it likes in spring."
+      },
+      {
+        "key": "the_hollow_should_choose_its_elder",
+        "value": 0.6,
+        "why": "I have no claim either way, but I want it settled before the rows are sown."
+      },
+      {
+        "key": "the_giants_track_costs_us",
+        "value": 0.7,
+        "why": "Their sledges cut our bank and we see none of the timber."
+      },
+      {
+        "key": "work_the_poor_ground",
+        "value": 0.65,
+        "why": "The stream strip is poor but it is ours to try, and I would rather try than wait."
+      }
+    ],
+    "secret": "I have been taking a handful of the common grain each week and hiding it in the loft against a bad winter, and I have not told Hazel."
+  },
+  "Tamarisk Bramblecap": {
+    "narrative": "I gather berries in the rows with my father and follow my mother to the salve shed, where the jars smell of green and bitter things. I play with Rush Fenwick by the garden paths and I know which flowers are good for a cough. The deep caves in the hills frighten me, and I do not like to be out when the light goes.",
+    "values": [
+      "berries",
+      "mother's shed",
+      "Rush Fenwick",
+      "the garden paths"
+    ],
+    "goals": [
+      "fill my basket before my father does",
+      "learn the name of every flower",
+      "not go near the caves"
+    ],
+    "mood": "curious and easily startled",
+    "traits": {
+      "caution": 60,
+      "sociability": 62,
+      "empathy": 66,
+      "curiosity": 78,
+      "ambition": 35,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Hazel Bramblecap",
+        "trust": 95,
+        "affinity": 95,
+        "label": "mother",
+        "note": "She lets me hold the jars if I am careful."
+      },
+      {
+        "name": "Sorrel Bramblecap",
+        "trust": 90,
+        "affinity": 88,
+        "label": "father",
+        "note": "He lifts me over the berry rows and lets me eat as I pick."
+      },
+      {
+        "name": "Rush Fenwick",
+        "trust": 80,
+        "affinity": 82,
+        "label": "friend",
+        "note": "We play by the garden paths and she knows the smoke shed."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 75,
+        "affinity": 70,
+        "label": "great-aunt",
+        "note": "She is very old and smells of the seed store, and she pats my head."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I ate so many berries my mouth went purple and my mother laughed at me.",
+        "salience": 0.6,
+        "about": [
+          "Hazel Bramblecap"
+        ]
+      },
+      {
+        "gist": "A big folk came up the track with a sledge and I hid behind my father's legs.",
+        "salience": 0.5,
+        "about": [
+          "Sorrel Bramblecap"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

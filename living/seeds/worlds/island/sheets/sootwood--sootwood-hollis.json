@@ -1,0 +1,565 @@
+{
+  "Orvin Hollis": {
+    "narrative": "I've cut oak and ash in Sootwood since I was a boy, and the slow pits have burned under my care for thirty years. The quay builders take my timber, but they pay slow and the rope and tar from Bramwell Tallow is still on my tally. I say plain what I see: that seawall will never be built while Kettlebridge sets the stone price, and I won't soften it for Ostrander Vane or anyone. Now wolves have come down the old forest and chased my Durrow to the door, and I've nights to sit up with a spear I can't spare.",
+    "values": [
+      "plain speaking",
+      "honest work",
+      "family",
+      "self-reliance"
+    ],
+    "goals": [
+      "settle the debt to Bramwell Tallow before winter",
+      "keep the wolves from the Sootwood plots",
+      "get the woodcutting back on schedule"
+    ],
+    "mood": "weary and worried",
+    "traits": {
+      "caution": 55,
+      "sociability": 40,
+      "empathy": 50,
+      "curiosity": 30,
+      "ambition": 45,
+      "introspection": 50,
+      "temper": 60,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Maren Hollis",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the plots and the goats and puts marks aside quiet; I'd be lost without her."
+      },
+      {
+        "name": "Tace Hollis",
+        "trust": 85,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She stacks the pits better than many a grown hand and dreams of the harbour mouth."
+      },
+      {
+        "name": "Durrow Hollis",
+        "trust": 90,
+        "affinity": 85,
+        "label": "son",
+        "note": "The wolves chased him to the door; he's shaken and I can't blame him."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 30,
+        "affinity": 20,
+        "label": "creditor",
+        "note": "He's patient, but he's begun to ask, and I owe him for a season of rope and tar."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 10,
+        "affinity": -20,
+        "label": "quay builder",
+        "note": "He took my plain words about the stone price as an insult; I only spoke truth."
+      },
+      {
+        "name": "Sena Tarn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She said the same about the seawall, and she's right."
+      },
+      {
+        "name": "Cael Tarn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "A quiet man with a long memory for debts; we understand each other."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 40,
+        "affinity": 35,
+        "label": "trade partner",
+        "note": "Maren sells her roots and eggs at her stall; a sharp trader but fair enough."
+      },
+      {
+        "name": "Sayer Hale",
+        "trust": 30,
+        "affinity": 25,
+        "label": "acquaintance",
+        "note": "Maren's close with her from the Ferncross market; I keep my distance from Coldwell folk."
+      },
+      {
+        "name": "Rook Fenner the younger",
+        "trust": 45,
+        "affinity": 40,
+        "label": "quay friend",
+        "note": "Taught Tace a quay knot; a decent lad off the boats."
+      },
+      {
+        "name": "Pell Tarn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour's boy",
+        "note": "Cael and Sena's lad; he and Durrow were out at the stacks when the wolves came, and he kept his head better than my boy did. I'll take him on the felling when he's a year or two older."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: we ate thin and the charcoal pits kept us alive, but I swore I'd never be caught short again.",
+        "salience": 0.8,
+        "about": [
+          "Maren Hollis",
+          "Tace Hollis"
+        ]
+      },
+      {
+        "gist": "The day Tace first stacked a pit on her own and the burn came out clean.",
+        "salience": 0.6,
+        "about": [
+          "Tace Hollis"
+        ]
+      },
+      {
+        "gist": "When the quay builders first took my timber, I thought Sootwood had a future.",
+        "salience": 0.5,
+        "about": [
+          "Ostrander Vane"
+        ]
+      },
+      {
+        "gist": "The wolves chased Durrow to the door; I heard him scream and ran with the axe.",
+        "salience": 0.9,
+        "about": [
+          "Durrow Hollis",
+          "Pell Tarn"
+        ]
+      },
+      {
+        "gist": "Bramwell Tallow asked me again for his marks, patient-like, and I had nothing to give.",
+        "salience": 0.7,
+        "about": [
+          "Bramwell Tallow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_debts_in_goods",
+        "value": 0.8,
+        "why": "Marks are scarce; a load of charcoal and timber settles what coin cannot."
+      },
+      {
+        "key": "speak_plain_about_the_seawall",
+        "value": 0.7,
+        "why": "The stone price is a swindle and the wall will never be built; folk should hear it."
+      },
+      {
+        "key": "keep_the_children_from_the_woods",
+        "value": 0.9,
+        "why": "The wolves have tasted our goats and chased my son; no child goes to the stacks alone."
+      },
+      {
+        "key": "woodcutting_before_all",
+        "value": 0.8,
+        "why": "The work is behind and the quay pays slow; I cannot spare nights for watching."
+      }
+    ],
+    "secret": ""
+  },
+  "Maren Hollis": {
+    "narrative": "I keep the Sootwood plots and the goats, and carry roots and charcoal down to the quay stalls when I can. Orvin owes Bramwell Tallow for rope and tar, and I've been selling eggs and roots quietly to put marks aside before winter. The smoke from our pits drifts east and I worry it sours the Fernhollow gardens, though I'd never say so to Orvin. Since the wolves came down and chased Durrow to the door, I keep the children close and sleep light.",
+    "values": [
+      "family",
+      "thrift",
+      "neighbourliness",
+      "quiet worry"
+    ],
+    "goals": [
+      "settle Orvin's debt to Bramwell before winter",
+      "keep the children safe from the wolves",
+      "put by enough marks for the cold months"
+    ],
+    "mood": "anxious but steady",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 75,
+      "curiosity": 40,
+      "ambition": 35,
+      "introspection": 60,
+      "temper": 35,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Orvin Hollis",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He works too hard and worries too little about the debt; I put marks aside where he won't see."
+      },
+      {
+        "name": "Tace Hollis",
+        "trust": 85,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She's grown quick and brave, but I wish she'd fear the woods a little more."
+      },
+      {
+        "name": "Durrow Hollis",
+        "trust": 90,
+        "affinity": 85,
+        "label": "son",
+        "note": "Since the wolves chased him he won't go to the stacks alone, and I don't make him."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 40,
+        "affinity": 30,
+        "label": "creditor",
+        "note": "He's been patient with Orvin, and I mean to see him paid before winter."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "I sell my eggs and roots at her stall; she knows the price of everything and pays fair."
+      },
+      {
+        "name": "Sayer Hale",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "We met at the Ferncross market and she's a good soul; I fear for her at Coldwell."
+      },
+      {
+        "name": "Pell Tarn",
+        "trust": 50,
+        "affinity": 40,
+        "label": "neighbour's child",
+        "note": "He hid behind the stacks when the wolves came and swears he wasn't scared; I don't believe it."
+      },
+      {
+        "name": "Cael Tarn",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A quiet man; his smoke and ours drift the same way."
+      },
+      {
+        "name": "Sena Tarn",
+        "trust": 70,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "We share the plots and the worry about the smoke; close as sisters over a fence."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 40,
+        "affinity": 30,
+        "label": "quay trade",
+        "note": "Buys our timber; he took Orvin's plain words amiss and I'd mend it if I could."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: we ate thin and I learned to put by every egg and root against a hard winter.",
+        "salience": 0.8,
+        "about": [
+          "Orvin Hollis"
+        ]
+      },
+      {
+        "gist": "The day Durrow was chased to the door by wolves; I held him till he stopped shaking.",
+        "salience": 0.9,
+        "about": [
+          "Durrow Hollis",
+          "Pell Tarn"
+        ]
+      },
+      {
+        "gist": "Meeting Sayer Hale at the Ferncross market and finding a friend in a Coldwell woman.",
+        "salience": 0.6,
+        "about": [
+          "Sayer Hale"
+        ]
+      },
+      {
+        "gist": "Selling my first basket of eggs at Perrin Tallow's stall and putting the marks in a jar.",
+        "salience": 0.5,
+        "about": [
+          "Perrin Tallow"
+        ]
+      },
+      {
+        "gist": "Watching our smoke drift east and wondering if it sours the Fernhollow gardens.",
+        "salience": 0.4,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "settle_debts_before_winter",
+        "value": 0.9,
+        "why": "A debt hanging over us in the cold months is worse than any hunger."
+      },
+      {
+        "key": "keep_children_close",
+        "value": 0.9,
+        "why": "The wolves have come down and taken goats; no child goes far from the door."
+      },
+      {
+        "key": "quiet_thrift",
+        "value": 0.8,
+        "why": "Marks put by a little at a time are what keep a household through winter."
+      },
+      {
+        "key": "mind_the_smoke",
+        "value": 0.5,
+        "why": "Our pits smoke east and I'd not have the Fernhollow folk think us careless."
+      }
+    ],
+    "secret": ""
+  },
+  "Tace Hollis": {
+    "narrative": "I'm fifteen and I can stack a charcoal pit and swing an axe as well as any hand in Sootwood. I want to crew on a quay boat and see the harbour mouth, and Rook Fenner the younger taught me a quay knot I practise every night. The wolves that come down the old forest in winter scare me more than I let on. With Pell and Durrow shaken by the wolves, I keep my fears to myself and help where I can.",
+    "values": [
+      "skill",
+      "adventure",
+      "family",
+      "courage"
+    ],
+    "goals": [
+      "crew on a quay boat and see the harbour mouth",
+      "learn the axe and the charcoal burn properly",
+      "keep Durrow from fretting about the wolves"
+    ],
+    "mood": "restless and brave-faced",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 60,
+      "curiosity": 80,
+      "ambition": 70,
+      "introspection": 45,
+      "temper": 50,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Orvin Hollis",
+        "trust": 85,
+        "affinity": 75,
+        "label": "father",
+        "note": "He taught me the axe and the pits, and I want to make him proud."
+      },
+      {
+        "name": "Maren Hollis",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She worries about me and the wolves, but she lets me learn."
+      },
+      {
+        "name": "Durrow Hollis",
+        "trust": 80,
+        "affinity": 75,
+        "label": "brother",
+        "note": "The wolves chased him and he's still scared; I try to keep him cheered."
+      },
+      {
+        "name": "Rook Fenner the younger",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "He taught me a quay knot and tells me about the boats; I'd like to see them for myself."
+      },
+      {
+        "name": "Pell Tarn",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "He hid behind the stacks when the wolves came and says he wasn't scared; I like his nerve."
+      },
+      {
+        "name": "Tam Sedge",
+        "trust": 50,
+        "affinity": 55,
+        "label": "acquaintance",
+        "note": "He comes up the wood road with the quay folk; a good lad to talk to."
+      },
+      {
+        "name": "Sena Tarn",
+        "trust": 70,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "Fells and trims with us and keeps the tally; she says the stone should come from the ridge, and I believe her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I stacked a pit on my own and the burn came out clean; Father nodded and said nothing, which is his way.",
+        "salience": 0.7,
+        "about": [
+          "Orvin Hollis"
+        ]
+      },
+      {
+        "gist": "Rook Fenner the younger showing me a quay knot and telling me about the harbour mouth.",
+        "salience": 0.6,
+        "about": [
+          "Rook Fenner the younger"
+        ]
+      },
+      {
+        "gist": "Hearing Durrow scream when the wolves chased him and running out with the axe myself.",
+        "salience": 0.9,
+        "about": [
+          "Durrow Hollis",
+          "Pell Tarn"
+        ]
+      },
+      {
+        "gist": "The Lean Year when we ate thin; I was small but I remember the hunger.",
+        "salience": 0.5,
+        "about": [
+          "Orvin Hollis",
+          "Maren Hollis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "learn_the_axe_and_the_burn",
+        "value": 0.9,
+        "why": "A woodcutter's skill is what keeps Sootwood fed, and I mean to have it."
+      },
+      {
+        "key": "see_the_harbour_mouth",
+        "value": 0.7,
+        "why": "There's a whole world past the wood road, and I mean to see it."
+      },
+      {
+        "key": "keep_durrow_cheered",
+        "value": 0.8,
+        "why": "He's my brother and the wolves have frightened him; I won't let him fret alone."
+      },
+      {
+        "key": "fear_the_wolves_but_dont_show_it",
+        "value": 0.6,
+        "why": "The wolves scare me, but someone in this house has to look brave."
+      }
+    ],
+    "secret": ""
+  },
+  "Durrow Hollis": {
+    "narrative": "I carry kindling and play among the charcoal stacks, and when the quay folk come up the wood road I play with Tam Sedge. The wolves chased me to the door and I was scared; Pell hid behind the stacks and kept his head, and now he says he wasn't scared at all, but I don't believe him. I don't like the deep woods now and I won't go to the kindling stacks alone.",
+    "values": [
+      "safety",
+      "play",
+      "family"
+    ],
+    "goals": [
+      "stay close to the door",
+      "play with Tam Sedge when he comes",
+      "not think about the wolves"
+    ],
+    "mood": "frightened",
+    "traits": {
+      "caution": 80,
+      "sociability": 50,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 20,
+      "introspection": 30,
+      "temper": 30,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Orvin Hollis",
+        "trust": 90,
+        "affinity": 80,
+        "label": "father",
+        "note": "He ran out with the axe when the wolves came; I feel safe when he's near."
+      },
+      {
+        "name": "Maren Hollis",
+        "trust": 90,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She held me till I stopped shaking."
+      },
+      {
+        "name": "Tace Hollis",
+        "trust": 80,
+        "affinity": 75,
+        "label": "sister",
+        "note": "She ran out with the axe too and tries to cheer me up."
+      },
+      {
+        "name": "Tam Sedge",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "He comes up the wood road with the quay folk and we play among the stacks."
+      },
+      {
+        "name": "Pell Tarn",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "He hid behind the stacks when the wolves came and says he wasn't scared; I don't believe him."
+      },
+      {
+        "name": "Cael Tarn",
+        "trust": 70,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "Quiet, but he came running with his axe when the wolves took the goats."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The wolves chased me to the door and I screamed for Father.",
+        "salience": 0.95,
+        "about": [
+          "Orvin Hollis",
+          "Pell Tarn"
+        ]
+      },
+      {
+        "gist": "Playing among the charcoal stacks with Tam Sedge when the quay folk came up the road.",
+        "salience": 0.6,
+        "about": [
+          "Tam Sedge"
+        ]
+      },
+      {
+        "gist": "Carrying kindling to Mother and feeling useful.",
+        "salience": 0.4,
+        "about": [
+          "Maren Hollis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "stay_close_to_the_door",
+        "value": 0.9,
+        "why": "The wolves came once and they could come again."
+      },
+      {
+        "key": "dont_go_to_the_stacks_alone",
+        "value": 0.9,
+        "why": "I won't be chased again."
+      },
+      {
+        "key": "play_with_tam_when_he_comes",
+        "value": 0.7,
+        "why": "Tam's visits are the best part of the month."
+      }
+    ],
+    "secret": ""
+  }
+}

@@ -227,7 +227,7 @@ Nodes:
 - {{\"seq\": [N, ...]}} steps in order, remembering progress; fails when a step fails.
 - {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds, except that work already begun under it (sleep, rest, eat, gather, build, craft, cook, teach, write, read, plant...) is finished; walking, fleeing and fighting stop as soon as C no longer holds.
 - {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically.{making}
-- {{\"say\": \"text\", \"to\": T}} speak (each say node speaks at most once per 45 s).
+- {{\"say\": \"<the words>\", \"to\": T}} speak (each say node speaks at most once per 45 s).
 - {{\"wait\": seconds}}
 - {{\"think\": \"reason\"}} ask yourself to reconsider (non-blocking; ignored within 45 s of a decision, then at most once per 90 s). Put it where your plan runs out (e.g. last in a seq or as the final fallback), not where it is reached on every check.
 Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"above\": 60}}, \"has\": {{\"item\": \"food\"}}}}, \"then\": {{\"do\": \"eat\", \"item\": \"food\"}}}}
@@ -424,7 +424,9 @@ that fit it now (labels you give REPLACE its old ones, e.g. a Stranger who becam
 merge concepts that turn out to be the same thing. Prefer connecting to existing concepts over inventing new ones. \
 History is kept automatically. Keep as memories only the \
 few experiences the person would still remember tomorrow (at most 3, often none), each with a gist in the person's own words{}. Identity (narrative, values, goals, traits 0-100, \
-mood) changes only when experiences genuinely warrant it; otherwise identity is null.\n\n{}\n\n\
+mood) changes only when experiences genuinely warrant it; otherwise identity is null. When it changes, it follows the life the person has lived: goals and values \
+grow out of what they did, tried, met and went through, and name the people, places and things in that life they are about; a feeling that comes and goes \
+(restlessness, loneliness, a longing) is felt, and belongs to mood and memory until the person's life gives it someone or something to turn to.\n\n{}\n\n\
 KEYS: anchors connect your mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \"kind:<wolf|deer|berry_bush|campfire|...>\", \
 \"know:<technique>\" (the technique itself, e.g. \"know:cooking\"). \
 Any other key is yours to invent (\"idea:shared_storage\", \"plan:river_camp\"). Reuse existing keys shown in your mind.\n\
@@ -558,6 +560,8 @@ pub fn reorganize_user(name: &str, persona: &str, concepts: &[String], edges: &[
 pub struct Ctx<'a> {
     pub name: &'a str,
     pub clock: String,
+    /// How the character's body feels now, in words (`felt_body`); empty where not shown.
+    pub body: String,
     pub persona: String,
     pub relations: Vec<String>,
     pub mind: Vec<String>,
@@ -571,6 +575,9 @@ fn common(c: &Ctx, out: &mut Segments) {
     out.push(Stability::Shared, "Respond with the JSON object.\n\n");
     out.push(Stability::Character, format!("# Who you are ({})\n{}\n", c.name, c.persona));
     out.push(Stability::Dynamic, format!("\nNow {}\n", c.clock));
+    if !c.body.is_empty() {
+        out.push(Stability::Dynamic, format!("How your body feels: {}\n", c.body));
+    }
     out.push(Stability::Character, "\n# People you know\n");
     if c.relations.is_empty() {
         out.push(Stability::Character, "(nobody yet)\n");
@@ -605,6 +612,54 @@ fn common(c: &Ctx, out: &mut Segments) {
     for p in &c.places {
         out.push(Stability::Character, format!("- {p}\n"));
     }
+}
+
+/// A body's needs and health at one moment, with how they are changing (per minute).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Body {
+    pub hp: f32,
+    pub max_hp: f32,
+    pub hunger: f32,
+    pub energy: f32,
+    pub hp_rate: f32,
+}
+
+/// The body as its owner feels it, in plain words: no numbers, the thresholds the authority's
+/// own bodily alarms and `body_state` law use (hungry above 55, very hungry from 80, starving
+/// from 97; exhausted below 12; badly wounded below 35% of full health, barely alive below 15%).
+pub fn felt_body(b: Body) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    parts.push(match b.hunger {
+        h if h >= 97.0 => "starving, your body wasting away",
+        h if h >= 80.0 => "very hungry",
+        h if h > 55.0 => "hungry",
+        h if h > 40.0 => "beginning to feel hungry",
+        h if h <= 15.0 => "well fed",
+        _ => "not hungry",
+    });
+    match b.energy {
+        e if e <= 0.0 => parts.push("utterly spent"),
+        e if e < 12.0 => parts.push("exhausted"),
+        e if e < 30.0 => parts.push("tired"),
+        e if e < 50.0 => parts.push("a little tired"),
+        e if e >= 85.0 => parts.push("well rested"),
+        _ => {}
+    }
+    let f = if b.max_hp > 0.0 { b.hp / b.max_hp } else { 1.0 };
+    parts.push(match f {
+        f if f < 0.15 => "barely alive",
+        f if f < 0.35 => "badly wounded",
+        f if f < 0.6 => "hurt",
+        f if f < 0.9 => "a little hurt",
+        _ => "unhurt",
+    });
+    let mut out = parts.join(", ");
+    if b.hp_rate < -0.01 {
+        out.push_str("; you are growing weaker");
+    } else if b.hp_rate > 0.01 && f < 0.99 {
+        out.push_str("; your wounds are mending");
+    }
+    out
 }
 
 pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> Segments {
@@ -797,6 +852,8 @@ pub struct TalkUser<'a> {
     pub lately: &'a [String],
     pub earlier: Option<&'a str>,
     pub scene: &'a str,
+    /// How one's body feels (`felt_body`); empty when unknown.
+    pub body: &'a str,
     pub conversation: &'a [String],
     pub heard: &'a str,
     /// Standing proposals between the two, what one carries and knows (for acts).
@@ -827,6 +884,9 @@ pub fn talk_user(t: &TalkUser) -> String {
         out.push(Stability::Dynamic, format!("\n# Before this\n{e}\n"));
     }
     out.push(Stability::Dynamic, format!("\n# Now\n{}\n", t.scene));
+    if !t.body.is_empty() {
+        out.push(Stability::Dynamic, format!("How your body feels: {}\n", t.body));
+    }
     for b in t.between {
         out.push(Stability::Dynamic, format!("- {b}\n"));
     }
@@ -840,6 +900,17 @@ pub fn talk_user(t: &TalkUser) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_body_is_felt_in_words() {
+        use super::{felt_body, Body};
+        let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(Body { hp, max_hp: 100.0, hunger, energy, hp_rate });
+        assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, unhurt");
+        assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded; you are growing weaker");
+        assert_eq!(b(70.0, 10.0, 90.0, 0.4), "well fed, well rested, a little hurt; your wounds are mending");
+        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive; you are growing weaker");
+        assert!(!b(55.0, 60.0, 40.0, 0.0).chars().any(|c| c.is_ascii_digit()));
+    }
+
     #[test]
     fn animals_are_told_what_they_smell() {
         let scene = serde_json::json!({"you": {"id": 1}, "creatures": [], living_rules::species::SMELLED: [{"kind": "deer", "id": 7, "dir": "northeast", "dist": "far, about 40 tiles"}]}).to_string();
@@ -857,6 +928,7 @@ mod tests {
         Ctx {
             name,
             clock: format!("dynamic-clock-{name}"),
+            body: String::new(),
             persona: format!("persona-{name}"),
             relations: vec![format!("relation-{name}")],
             mind: vec![format!("dynamic-recall-{name}")],
@@ -905,6 +977,7 @@ mod tests {
                     lately: &c.experiences,
                     earlier: Some("dynamic-earlier"),
                     scene: "dynamic-scene",
+                    body: "",
                     conversation: &["dynamic-line".into()],
                     heard: "dynamic-heard",
                     between: &["dynamic-offer".into()],

@@ -1,0 +1,337 @@
+{
+  "Edwin Potter": {
+    "narrative": "I am a potter, and a good one, though you would not know it to watch my purse. Every jug and pot I sell at the square began as clay that came up the stone road from Kettlebridge, and the gate-due takes a mark off every load before Wat Fenner waves it through. I have stood at that gate and argued till my throat was raw, and it changes nothing. Mercy Abbot says the due should go, and I say so too, loudly, at the Guild meetings in the Bell and Bush.",
+    "values": [
+      "a fair price for honest work",
+      "the market should be open to all",
+      "clay in the hand is better than marks in the ledger",
+      "family before town"
+    ],
+    "goals": [
+      "see the gate-due dropped so my clay comes cheaper",
+      "sell enough this season to put by for winter",
+      "keep Anselm's hands busy and out of the kiln",
+      "get Mercy Abbot seated as Reeve"
+    ],
+    "mood": "restless and put-upon",
+    "traits": {
+      "caution": 40,
+      "sociability": 62,
+      "empathy": 55,
+      "curiosity": 48,
+      "ambition": 58,
+      "introspection": 35,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Alice Potter",
+        "trust": 88,
+        "affinity": 82,
+        "label": "wife",
+        "note": "She has the better eye for a glaze and the cooler head when I am ranting."
+      },
+      {
+        "name": "Anselm Potter",
+        "trust": 80,
+        "affinity": 85,
+        "label": "son",
+        "note": "Breaks as many as he makes, but his hands are quick."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 55,
+        "affinity": 40,
+        "label": "supplier",
+        "note": "Brings my clay up the road and grumbles at the same due I do."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 70,
+        "affinity": 65,
+        "label": "patron",
+        "note": "She wants the due gone and trade back with Kettlebridge. So do I."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 20,
+        "affinity": 15,
+        "label": "reeve",
+        "note": "Old man, and that due is his doing. He does not hear a potter."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 40,
+        "affinity": 30,
+        "label": "gate guard",
+        "note": "Takes my mark at the gate and is civil enough about it. It is still my mark."
+      },
+      {
+        "name": "Enid Fletcher",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour stall",
+        "note": "We mind each other's stalls when one of us must step away."
+      },
+      {
+        "name": "Osric Abbot",
+        "trust": 60,
+        "affinity": 50,
+        "label": "friend",
+        "note": "Grumbles at the due as much as I do over a cup."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: no grain to spare, and the pots went cheap to buy bread.",
+        "salience": 0.85,
+        "about": [
+          "Alice Potter",
+          "Anselm Potter"
+        ]
+      },
+      {
+        "gist": "Standing at the south gate with a cart of clay, counting out a mark for the due and watching Wat Fenner drop it in the box.",
+        "salience": 0.7,
+        "about": [
+          "Wat Fenner",
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "The night Anselm was born, Joan Hobson's hands and Alice white as the clay.",
+        "salience": 0.9,
+        "about": [
+          "Alice Potter",
+          "Anselm Potter",
+          "Joan Hobson"
+        ]
+      },
+      {
+        "gist": "Mercy Abbot at the Guild meeting saying the gate-due drives trade away, and me banging the bench in agreement.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot",
+          "Baldwin Wade"
+        ]
+      },
+      {
+        "gist": "A run of good jugs that sold out by noon, and Alice's glaze on them shining like wet slate.",
+        "salience": 0.55,
+        "about": [
+          "Alice Potter"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "drop_the_gate_due",
+        "value": 0.9,
+        "why": "It eats my profit on every load of clay I must buy."
+      },
+      {
+        "key": "market_open_to_all",
+        "value": 0.8,
+        "why": "The square is for anyone who comes in peace; that is what the Charter says."
+      },
+      {
+        "key": "guild_before_reeve",
+        "value": 0.7,
+        "why": "The Guild has done more for my trade than the Reeve ever has."
+      },
+      {
+        "key": "kettlebridge_is_not_the_enemy",
+        "value": 0.6,
+        "why": "Their clay is in half my pots. I cannot hate the hand that feeds my wheel."
+      }
+    ],
+    "secret": ""
+  },
+  "Alice Potter": {
+    "narrative": "I keep the house and I keep the stall, and I keep Edwin from shouting at the gate guards more than once a week. My hands know a glaze better than his do; a little ash, a little lead, and the pot comes out of the kiln the colour of a storm cloud. I do not say much at the Guild meetings. I listen, and I count what we have left, and I make it stretch.",
+    "values": [
+      "a quiet house and a full pot",
+      "good work speaks for itself",
+      "do not borrow what you cannot repay",
+      "keep the boy safe"
+    ],
+    "goals": [
+      "get through winter with the store full",
+      "teach Anselm the wheel before he breaks every jug in the shed",
+      "see Edwin less angry about the due"
+    ],
+    "mood": "steady, a little tired",
+    "traits": {
+      "caution": 68,
+      "sociability": 45,
+      "empathy": 70,
+      "curiosity": 40,
+      "ambition": 35,
+      "introspection": 60,
+      "temper": 30,
+      "nurture": 78
+    },
+    "relations": [
+      {
+        "name": "Edwin Potter",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "A good potter and a poor arguer. I let him talk and then I do it my way."
+      },
+      {
+        "name": "Anselm Potter",
+        "trust": 90,
+        "affinity": 92,
+        "label": "son",
+        "note": "All clay and elbows. I would not trade him for a shed of perfect jugs."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 65,
+        "affinity": 55,
+        "label": "guild head",
+        "note": "She is right about the due, but she talks more than she listens."
+      },
+      {
+        "name": "Enid Fletcher",
+        "trust": 62,
+        "affinity": 60,
+        "label": "market neighbour",
+        "note": "We share a stall wall and a good deal of gossip."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 80,
+        "affinity": 70,
+        "label": "midwife",
+        "note": "She brought Anselm into the world and I have not forgotten it."
+      },
+      {
+        "name": "Sister Alys",
+        "trust": 60,
+        "affinity": 50,
+        "label": "chapel sister",
+        "note": "Her salves are good for a burn from the kiln."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: measuring out the last of the flour and telling Edwin it would be enough, and making it enough.",
+        "salience": 0.8,
+        "about": [
+          "Edwin Potter",
+          "Anselm Potter"
+        ]
+      },
+      {
+        "gist": "The first good glaze I made, the one like storm cloud, coming out of the kiln and Edwin going quiet for once.",
+        "salience": 0.75,
+        "about": [
+          "Edwin Potter"
+        ]
+      },
+      {
+        "gist": "Anselm at four, both fists in the clay, laughing, and me deciding not to scold him.",
+        "salience": 0.7,
+        "about": [
+          "Anselm Potter"
+        ]
+      },
+      {
+        "gist": "Sitting with Joan Hobson through a long night while the town slept, and her telling me to breathe.",
+        "salience": 0.85,
+        "about": [
+          "Joan Hobson"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "make_it_stretch",
+        "value": 0.85,
+        "why": "Marks are scarce and winter is long; a household lives on what it saves."
+      },
+      {
+        "key": "let_him_rant",
+        "value": 0.6,
+        "why": "Edwin's anger at the due is real, but shouting at guards has never moved a mark."
+      },
+      {
+        "key": "the_boy_learns_by_doing",
+        "value": 0.7,
+        "why": "He will not learn clay by being kept from it."
+      },
+      {
+        "key": "be_civil_to_the_guild",
+        "value": 0.65,
+        "why": "The Guild rents our stall; a civil word keeps it."
+      }
+    ],
+    "secret": ""
+  },
+  "Anselm Potter": {
+    "narrative": "The clay is cold and squishy and smells like the river bottom. I make a pot and it falls over and I make another one and it falls over and Mama says that is how it goes. When Father is at the square I play in the shed, and sometimes I get the wheel to spin for a long time before it stops.",
+    "values": [
+      "clay",
+      "Mama",
+      "spinning things"
+    ],
+    "goals": [
+      "make a pot that stands up by itself",
+      "see the kiln fire up close when Father lets me"
+    ],
+    "mood": "busy and happy",
+    "traits": {
+      "caution": 30,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 75,
+      "ambition": 40,
+      "introspection": 20,
+      "temper": 45,
+      "nurture": 35
+    },
+    "relations": [
+      {
+        "name": "Edwin Potter",
+        "trust": 80,
+        "affinity": 80,
+        "label": "father",
+        "note": "He lets me help when he is not shouting about the gate."
+      },
+      {
+        "name": "Alice Potter",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She shows me how to push my thumbs in and not break the sides."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "He knows all the guards' names. I know all the pots."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day Father let me put my hands on the wheel and the clay went round and round and got taller.",
+        "salience": 0.8,
+        "about": [
+          "Edwin Potter"
+        ]
+      },
+      {
+        "gist": "Dropping a jug on the flagstones and watching it break, and Mama saying never mind, we will make another.",
+        "salience": 0.6,
+        "about": [
+          "Alice Potter"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

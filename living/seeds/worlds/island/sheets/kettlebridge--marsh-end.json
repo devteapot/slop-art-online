@@ -1,0 +1,457 @@
+{
+  "Tobiah Marsh": {
+    "narrative": "I make crates, props and shutter-boards for the works, and I make them square. A saw cuts true or it cuts twice, and I've no patience for the second cut. The gate-due at Brackenford is robbery on my timber, and I say so at the yard when Gideon's not counting. I keep my words short and my marks counted, and I'd rather be at the bench than anywhere.",
+    "values": [
+      "straight work",
+      "fair pay",
+      "family",
+      "keeping to yourself"
+    ],
+    "goals": [
+      "Get the gate-due off his timber",
+      "Keep steady work from Gideon Fenwick's yard",
+      "Put by enough marks to see the children fed through winter"
+    ],
+    "mood": "grumbling but steady",
+    "traits": {
+      "caution": 60,
+      "sociability": 30,
+      "empathy": 45,
+      "curiosity": 40,
+      "ambition": 50,
+      "introspection": 55,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Sabina Marsh",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the marks and I keep the saw; between us the house stands."
+      },
+      {
+        "name": "Nella Marsh",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "Quick with numbers like her mother. I'd have her learn a trade that pays."
+      },
+      {
+        "name": "Ewan Marsh",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "Underfoot in the sawyard, but he'll learn to keep clear of the blade."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 55,
+        "affinity": 40,
+        "label": "master",
+        "note": "He gives me work and I give him crates. He's not a bad sort, but he watches the yard close."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 60,
+        "affinity": 50,
+        "label": "carter",
+        "note": "My crates ride his cart north. He hates the gate-due as much as I do."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 50,
+        "affinity": 45,
+        "label": "scribe",
+        "note": "Writes the contracts that bind us all. He knows his letters and I know my saw."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 50,
+        "affinity": 40,
+        "label": "stallkeeper",
+        "note": "She sells my crates at the square and takes her cut. Fair enough."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 40,
+        "affinity": 20,
+        "label": "council master",
+        "note": "Chair of the Works Council. He sets the prices and we live with them."
+      },
+      {
+        "name": "Corin Holt",
+        "trust": 45,
+        "affinity": 35,
+        "label": "neighbour",
+        "note": "Keeps the quarry tally. Her man cut the cairn and she says so at home."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day the gate-due was raised, Silas came back from Brackenford cursing and we all stood in the yard and cursed with him.",
+        "salience": 0.8,
+        "about": [
+          "Silas Pike",
+          "Gideon Fenwick"
+        ]
+      },
+      {
+        "gist": "Teaching Nella to count the crates in the sawyard when she was six; she had it right before I did.",
+        "salience": 0.6,
+        "about": [
+          "Nella Marsh"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the works ran short and Gideon laid off two hands; I kept my bench but took less pay.",
+        "salience": 0.7,
+        "about": [
+          "Gideon Fenwick"
+        ]
+      },
+      {
+        "gist": "The night Ewan was born, and the clock struck while Sabina was in labour and he's feared the sound since.",
+        "salience": 0.9,
+        "about": [
+          "Ewan Marsh",
+          "Sabina Marsh"
+        ]
+      },
+      {
+        "gist": "The cairn cutting on the ridge; I said to the yard that a man should know what stones he's cutting into.",
+        "salience": 0.6,
+        "about": [
+          "Ezra Holt"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "gate_due_is_robbery",
+        "value": 0.9,
+        "why": "It's a tax on my own work crossing a gate I didn't build."
+      },
+      {
+        "key": "work_square_and_true",
+        "value": 0.85,
+        "why": "A saw cuts true or it cuts twice, and I won't have my name on a crooked crate."
+      },
+      {
+        "key": "keep_family_fed_first",
+        "value": 0.8,
+        "why": "Marks in the box and bread on the table before any quarrel with the Council."
+      },
+      {
+        "key": "few_words_are_best",
+        "value": 0.7,
+        "why": "Talk is cheap and the yard is full of it; I'd rather be at the bench."
+      }
+    ],
+    "secret": ""
+  },
+  "Sabina Marsh": {
+    "narrative": "I buy and sell worked iron and clay at the square, and I keep the household's marks in a locked box because Tobiah would lend them to any carter with a hard story. I know what a thing is worth and what a person will pay, and I don't confuse the two. The stall fee to Mabel Fenwick is owed and I'll pay it, but not before I've counted what's left.",
+    "values": [
+      "a fair bargain",
+      "the household's marks",
+      "family",
+      "knowing the price of things"
+    ],
+    "goals": [
+      "Pay off the stall fee to Mabel Fenwick",
+      "Build up the locked box against a hard winter",
+      "See Nella learn her letters well enough to keep books"
+    ],
+    "mood": "watchful and counting",
+    "traits": {
+      "caution": 70,
+      "sociability": 60,
+      "empathy": 50,
+      "curiosity": 55,
+      "ambition": 65,
+      "introspection": 45,
+      "temper": 40,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Tobiah Marsh",
+        "trust": 85,
+        "affinity": 75,
+        "label": "husband",
+        "note": "A good man with a saw and no head for marks. I keep the box locked for both our sakes."
+      },
+      {
+        "name": "Nella Marsh",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "Quick with numbers and proud of her letters. She'll go further than the stall."
+      },
+      {
+        "name": "Ewan Marsh",
+        "trust": 80,
+        "affinity": 80,
+        "label": "son",
+        "note": "Still afraid of the clock. He'll grow out of it when he's taller than the bell."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 55,
+        "affinity": 45,
+        "label": "stallkeeper",
+        "note": "I owe her a stall fee and she knows it. She's fair but she remembers."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 60,
+        "affinity": 50,
+        "label": "scribe",
+        "note": "He teaches Nella her letters and writes the Council's contracts. A useful man to know."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 50,
+        "affinity": 40,
+        "label": "foundry books",
+        "note": "She keeps the foundry books and knows a fair price. I'd trade with her before her father."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 55,
+        "affinity": 45,
+        "label": "carter",
+        "note": "He carries Tobiah's crates north and brings clay back. He pays on time, mostly."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 50,
+        "affinity": 50,
+        "label": "stall neighbour",
+        "note": "Minds her mother's stall and has a good eye for a cracked pot. Nella could learn from her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I bought the locked box from a pedlar and put the first marks in it; Tobiah laughed and said I'd guard it like a dragon.",
+        "salience": 0.7,
+        "about": [
+          "Tobiah Marsh"
+        ]
+      },
+      {
+        "gist": "The Surge two winters ago, when the quay families came up to the poor terrace; I sold iron cheap to a woman with three children and didn't tell Tobiah.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Nella reading her first letter from the psalter Barnaby lent her, and getting it right.",
+        "salience": 0.6,
+        "about": [
+          "Nella Marsh",
+          "Barnaby Quill"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the works kitchen cut the bowls to half and I counted every mark twice.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The day the Council raised the gate-due at Brackenford; Tobiah came home and wouldn't speak, and I put an extra mark in the box.",
+        "salience": 0.6,
+        "about": [
+          "Tobiah Marsh"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "count_before_you_pay",
+        "value": 0.9,
+        "why": "A mark spent is a mark gone; I'll know what's left before I part with any."
+      },
+      {
+        "key": "gate_due_hurts_trade",
+        "value": 0.8,
+        "why": "Every load Tobiah's crates ride on pays it, and the price comes out of our box."
+      },
+      {
+        "key": "letters_are_a_trade",
+        "value": 0.75,
+        "why": "Nella knowing her letters is worth more than a stall fee; it's a way out of the yard."
+      },
+      {
+        "key": "pay_what_you_owe",
+        "value": 0.7,
+        "why": "Mabel's fee will be paid, but on my counting, not hers."
+      }
+    ],
+    "secret": ""
+  },
+  "Nella Marsh": {
+    "narrative": "I count the crates in the yard and I know my letters, which is more than most girls my age. Barnaby Quill teaches me from the psalter and says I'm quick. I want to keep books like Hester Crane one day, and I don't see why I shouldn't.",
+    "values": [
+      "letters",
+      "counting",
+      "family"
+    ],
+    "goals": [
+      "Learn more letters from Barnaby Quill",
+      "Count every crate in the yard without a mistake"
+    ],
+    "mood": "proud and curious",
+    "traits": {
+      "caution": 45,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 80,
+      "ambition": 70,
+      "introspection": 40,
+      "temper": 30,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Sabina Marsh",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She keeps the marks and says I'll go further than the stall. I mean to."
+      },
+      {
+        "name": "Tobiah Marsh",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He taught me to count crates. He says a saw cuts true or it cuts twice."
+      },
+      {
+        "name": "Ewan Marsh",
+        "trust": 70,
+        "affinity": 65,
+        "label": "brother",
+        "note": "He's afraid of the clock and follows me about. I don't mind."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 75,
+        "affinity": 70,
+        "label": "teacher",
+        "note": "He lends me the psalter and says I'm quick. I want to learn all of it."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She has a good eye for a cracked pot and doesn't mind that I know my letters."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time I read a whole line from the psalter without stopping, and Barnaby said I'd do.",
+        "salience": 0.8,
+        "about": [
+          "Barnaby Quill"
+        ]
+      },
+      {
+        "gist": "Counting the crates in the yard with Father and getting the same number he did.",
+        "salience": 0.7,
+        "about": [
+          "Tobiah Marsh"
+        ]
+      },
+      {
+        "gist": "Ewan crying when the clock struck and me holding his hand till he stopped.",
+        "salience": 0.6,
+        "about": [
+          "Ewan Marsh"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "letters_open_doors",
+        "value": 0.9,
+        "why": "Barnaby says a girl who can write is worth two who can't, and I believe him."
+      },
+      {
+        "key": "count_twice",
+        "value": 0.8,
+        "why": "Father says a saw cuts true or it cuts twice, and the same goes for counting crates."
+      },
+      {
+        "key": "family_first",
+        "value": 0.7,
+        "why": "Ewan needs me and Mother needs the marks counted. I'll not let them down."
+      }
+    ],
+    "secret": ""
+  },
+  "Ewan Marsh": {
+    "narrative": "The clock is loud and it makes me jump. I like the sawdust and the smell of the wood, and I follow Nella about the yard. When the bell goes I put my hands over my ears.",
+    "values": [
+      "feeling safe",
+      "Nella"
+    ],
+    "goals": [
+      "Not be afraid of the clock"
+    ],
+    "mood": "timid and clinging",
+    "traits": {
+      "caution": 70,
+      "sociability": 40,
+      "empathy": 50,
+      "curiosity": 50,
+      "ambition": 20,
+      "introspection": 30,
+      "temper": 30,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Tobiah Marsh",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He smells of sawdust and lifts me over the woodpile."
+      },
+      {
+        "name": "Sabina Marsh",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She holds me when the clock goes."
+      },
+      {
+        "name": "Nella Marsh",
+        "trust": 80,
+        "affinity": 85,
+        "label": "sister",
+        "note": "She holds my hand and I follow her about."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The clock striking and me crying, and Nella holding my hand.",
+        "salience": 0.8,
+        "about": [
+          "Nella Marsh"
+        ]
+      },
+      {
+        "gist": "Sitting in the sawdust while Father worked, and the smell of the wood.",
+        "salience": 0.5,
+        "about": [
+          "Tobiah Marsh"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

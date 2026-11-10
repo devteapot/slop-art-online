@@ -1,0 +1,240 @@
+{
+  "Rill Fenlake": {
+    "narrative": "I was born on the lake's edge and I will die on it, in the old boathouse my father patched and I have patched twice since. I punt out before light with the mist on the water and I smoke what I catch in the shed behind the house; a good morning's catch keeps Gristle and me in meal and lamp oil. Nell Sedge lets me keep the boathouse for a share of the lake catch, and I pay it, though it is a lean share this year with the Coombes behind on their rent and no help coming. The Elmwick men trampled my nets when they came to pull Jem's fence down, and I have not sold a fish to anyone from Elmwick since, and I will not be talked round by soft words.",
+    "values": [
+      "a fair share for a fair catch",
+      "my boathouse and my punt are mine",
+      "Elmwick folk came to fight, not to mend fences",
+      "smoke the fish clean and the buyer comes back"
+    ],
+    "goals": [
+      "keep the boathouse's standing with Nell Sedge paid up",
+      "get a new net made before the autumn run",
+      "see the Coombes through their thin rent without going short myself",
+      "keep Gristle off the deep water at the lake's middle"
+    ],
+    "mood": "sore and stubborn, with a morning's work still to do",
+    "traits": {
+      "caution": 62,
+      "sociability": 44,
+      "empathy": 55,
+      "curiosity": 40,
+      "ambition": 38,
+      "introspection": 50,
+      "temper": 68,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Gristle Fenlake",
+        "trust": 95,
+        "affinity": 92,
+        "label": "son",
+        "note": "He mends the punt better than I did at his age, and he is the whole of what I have."
+      },
+      {
+        "name": "Morwen Coombe",
+        "trust": 70,
+        "affinity": 68,
+        "label": "neighbour",
+        "note": "We trade cheese for smoked fish and neither of us has coin to spare; she worries the meadow will be taken and I know it might."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A decent man with a fence pulled down twice; I would help him mend it if I had the timber."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 40,
+        "affinity": 30,
+        "label": "landlady",
+        "note": "She holds the boathouse's standing over me and I owe her a share of the catch; she has not squeezed me yet, but she could."
+      },
+      {
+        "name": "Eadric Sedge",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "He fishes the reeds and knows the water; we talk plain and he does not cheat on a trade."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "His packs take my smoked fish east and he brings back hooks and salt; a small folk pedlar keeps his word."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 5,
+        "affinity": -45,
+        "label": "grudge",
+        "note": "His Elmwick men trampled my nets to dry and called it a fence quarrel; I will not sell him or his a fish."
+      },
+      {
+        "name": "Tibbott Coombe",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "Old Tibbott keeps the bees and the rent tally and remembers when the meadow was common; he is right and it does him no good."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning I found my drying nets trampled flat in the mud where the Elmwick men had walked over them pulling Jem's fence down; a whole morning's catch spoiled and one net torn past mending.",
+        "salience": 0.9,
+        "about": [
+          "Hob Garrow",
+          "Jem Coombe"
+        ]
+      },
+      {
+        "gist": "My father teaching me to pole the punt through the shallows by the reed beds, telling me the lake gives to those who read it and takes from those who don't.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year, when the lake still gave fish but nobody had grain to trade for it, and I smoked everything and ate smoked fish till I could not stand the smell.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "The night Gristle was born in the boathouse with only Morwen Coombe to help, and the punt knocking against the step in the wind all night.",
+        "salience": 0.8,
+        "about": [
+          "Gristle Fenlake",
+          "Morwen Coombe"
+        ]
+      },
+      {
+        "gist": "Nell Sedge coming down to the boathouse to set the terms of my standing: a share of the lake catch each season, and no argument.",
+        "salience": 0.5,
+        "about": [
+          "Nell Sedge"
+        ]
+      },
+      {
+        "gist": "Gristle, six years old, poling the punt alone across the shallows and back while I watched from the shed with my heart in my mouth.",
+        "salience": 0.6,
+        "about": [
+          "Gristle Fenlake"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "elmwick_men_are_not_to_be_trusted",
+        "value": 0.85,
+        "why": "They trampled my nets and spoiled a catch, and called it a fence quarrel."
+      },
+      {
+        "key": "pay_nell_her_share_first",
+        "value": 0.7,
+        "why": "The boathouse is my roof and my living; if I lose the standing I lose everything."
+      },
+      {
+        "key": "smoke_the_catch_clean",
+        "value": 0.8,
+        "why": "A clean smoke is what makes a buyer come back, and Thistle's packs carry my name east."
+      },
+      {
+        "key": "the_lake_provides_for_those_who_read_it",
+        "value": 0.75,
+        "why": "My father taught me the shallows and the pools, and they have never failed me entirely."
+      },
+      {
+        "key": "the_coombes_are_neighbours_not_customers",
+        "value": 0.6,
+        "why": "They are behind on their rent and I trade fish for cheese with them anyway; a neighbour who goes under is no good to anyone."
+      }
+    ],
+    "secret": "I have been holding back a little of Nell's share of the catch these last weeks, telling myself it is against a thin season, and I have not told her or anyone."
+  },
+  "Gristle Fenlake": {
+    "narrative": "I live in the boathouse with Mam and help her with the punt and the smoke shed. I know where the shallow pools are and where the bottom drops away, and I do not go near the middle of the lake where it is deep and dark. I play with Osric Coombe when the goats bring him down to the meadow edge, and I can mend a net as well as anyone.",
+    "values": [
+      "Mam knows best about the lake",
+      "the middle is deep and I stay out of it",
+      "a mended net is a good day's work"
+    ],
+    "goals": [
+      "learn to pole the punt all the way to the far reeds",
+      "catch a fish bigger than my arm",
+      "not think about the deep water"
+    ],
+    "mood": "busy and a little wary",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 60,
+      "curiosity": 55,
+      "ambition": 40,
+      "introspection": 45,
+      "temper": 35,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Rill Fenlake",
+        "trust": 95,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She knows the lake better than anyone and she is cross with Elmwick, but not with me."
+      },
+      {
+        "name": "Osric Coombe",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "He plays at the meadow edge with the goats and we skip stones in the shallows."
+      },
+      {
+        "name": "Morwen Coombe",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "She brings cheese and milk and is kind to me."
+      },
+      {
+        "name": "Tibbott Coombe",
+        "trust": 55,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "Old Tibbott keeps the bees and tells me about when the meadow was common for everyone."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Poling the punt out to the shallows alone for the first time and Mam watching from the shed, and me not falling in.",
+        "salience": 0.8,
+        "about": [
+          "Rill Fenlake"
+        ]
+      },
+      {
+        "gist": "The day the Elmwick men came and Mam shouted at them over her trampled nets, and I hid in the smoke shed till they had gone.",
+        "salience": 0.7,
+        "about": [
+          "Rill Fenlake",
+          "Hob Garrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "stay_out_of_the_deep_middle",
+        "value": 0.9,
+        "why": "The water goes dark and cold out there and I cannot see the bottom."
+      },
+      {
+        "key": "help_mam_with_the_catch",
+        "value": 0.8,
+        "why": "She works before light and I am the only one to help her."
+      }
+    ],
+    "secret": ""
+  }
+}

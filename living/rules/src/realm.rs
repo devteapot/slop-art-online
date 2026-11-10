@@ -50,7 +50,7 @@ fn fbm(seed: u64, x: f32, y: f32, base: f32) -> f32 {
 
 impl Realm {
     pub fn to_map(&self) -> crate::map::Map {
-        crate::map::Map { w: self.w, h: self.h, tiles: self.tiles.clone(), blocked: Default::default(), opaque: Default::default() }
+        crate::map::Map { w: self.w, h: self.h, tiles: self.tiles.clone(), blocked: Default::default(), opaque: Default::default(), nav: Default::default() }
     }
 }
 

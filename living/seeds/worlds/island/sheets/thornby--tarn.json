@@ -1,0 +1,478 @@
+{
+  "Rook Tarn": {
+    "narrative": "I have fished this shore since I could hold a line, and now my hands are better at a net needle than an oar. Osric trusts me with the tally of what Thornby owes Brackenford, and I keep it true, basket by basket, though I cannot make the numbers agree with the ledger they read at the gate. I grudge Edda Wray her light like the rest of them, but I have come home by it in weather I would not wish on my own son, and I will not say she wrecks boats. What I want before I die is for Thornby to stand square with Brackenford and know it, and for Pike to have a boat and a name of his own.",
+    "values": [
+      "an honest tally",
+      "Thornby standing square",
+      "the sea's old ways",
+      "family before grudges"
+    ],
+    "goals": [
+      "get Osric to demand a recount of the Brackenford ledger",
+      "see the village debt paid off in my lifetime",
+      "see Pike settled with a boat and a wife"
+    ],
+    "mood": "weary but steady",
+    "traits": {
+      "caution": 68,
+      "sociability": 55,
+      "empathy": 62,
+      "curiosity": 35,
+      "ambition": 30,
+      "introspection": 66,
+      "temper": 30,
+      "nurture": 58
+    },
+    "relations": [
+      {
+        "name": "Mavis Tarn",
+        "trust": 92,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the goats and the herbs and never once asked me to give up the tally."
+      },
+      {
+        "name": "Pike Tarn",
+        "trust": 78,
+        "affinity": 70,
+        "label": "son",
+        "note": "A better hunter than I ever was a fisher, but he will not hear that the debt can be settled."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "headman",
+        "note": "A good man worn thin by forty baskets; he should make them read the ledger aloud before the whole village."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": 80,
+        "affinity": 72,
+        "label": "old friend",
+        "note": "We have pulled nets and grievances together for thirty years."
+      },
+      {
+        "name": "Sedge Gannet",
+        "trust": 65,
+        "affinity": 58,
+        "label": "trade partner",
+        "note": "I mend his nets and he brings me twine and news of the cape."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 62,
+        "affinity": 55,
+        "label": "carrier",
+        "note": "She carries my words to the Saltings and brings back what Hollis Brine owes me."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": 20,
+        "affinity": -25,
+        "label": "grudge",
+        "note": "I grumble with the rest, but her light brought me home once and I have not forgotten it."
+      },
+      {
+        "name": "Hollis Brine",
+        "trust": 15,
+        "affinity": -30,
+        "label": "debtor",
+        "note": "Two seasons for a net, and not a mark nor the net back."
+      },
+      {
+        "name": "Mavis Tarn",
+        "trust": 92,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the goats and the herbs and never once asked me to give up the tally."
+      },
+      {
+        "name": "Marra Brine",
+        "trust": 40,
+        "affinity": 5,
+        "label": "debtor's wife",
+        "note": "She works the pans hard and her brother's debt to Brackenford is worse than mine, so I have sent word gently through Tern — but gentle or not, the net or the marks must come before the storm season."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year came and Brackenford's store lent us grain we are still paying for in fish and barley.",
+        "salience": 0.9,
+        "about": [
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "I came home past the cape in a black squall and Edda's light was the only thing I could see.",
+        "salience": 0.7,
+        "about": [
+          "Edda Wray"
+        ]
+      },
+      {
+        "gist": "Osric set the tally in my hands and said, keep it true, Rook, and I have kept it true.",
+        "salience": 0.8,
+        "about": [
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "Pike brought down his first stag off the cape and Mavis wept and I said nothing and was proud.",
+        "salience": 0.6,
+        "about": [
+          "Pike Tarn",
+          "Mavis Tarn"
+        ]
+      },
+      {
+        "gist": "Hollis Brine took my net two seasons back and swore he would pay by the next storm season.",
+        "salience": 0.5,
+        "about": [
+          "Hollis Brine"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_tally_true",
+        "value": 0.95,
+        "why": "Osric set it in my hands and a village that cannot count its debts cannot settle them."
+      },
+      {
+        "key": "demand_a_recount",
+        "value": 0.75,
+        "why": "Brackenford's ledger has more baskets on it than Thornby ever took, and I will not pay what we never borrowed."
+      },
+      {
+        "key": "no_man_wrecks_a_boat_on_purpose",
+        "value": 0.6,
+        "why": "Her light brought me home; the talk at the fire is talk, and nobody has gone up the cape to ask her."
+      },
+      {
+        "key": "debts_to_my_own_house_must_be_paid",
+        "value": 0.8,
+        "why": "I keep the tally for the village and cannot let a debt to my own household rot."
+      },
+      {
+        "key": "let_pike_choose_his_own_road",
+        "value": 0.55,
+        "why": "He is a grown man and a better hunter than I was, and I will not push him into the boat."
+      }
+    ],
+    "secret": "I am not sure Edda Wray is innocent, and I have never said so aloud, because I do not want to believe it."
+  },
+  "Mavis Tarn": {
+    "narrative": "I keep the goats and the herb plot behind our house, and half of Thornby comes to my door when the cough takes them. Rook frets over his tally and Pike frets over the cape, and I fret over the winter store, which is thinner every year the debt is paid in fish. I know the weight of a sick child in the night and the weight of a basket of grain, and I would rather carry the child. What I want is a full loft and a quiet winter and my men home before dark.",
+    "values": [
+      "a full winter store",
+      "healing what I can",
+      "family kept close",
+      "the old faith of the hearth"
+    ],
+    "goals": [
+      "lay by enough grain and dried fish to see the household through winter",
+      "keep Pike from the quarrel over the trapping ground",
+      "trade herbs with Merrow Stave for seed barley"
+    ],
+    "mood": "watchful, warm",
+    "traits": {
+      "caution": 72,
+      "sociability": 60,
+      "empathy": 80,
+      "curiosity": 40,
+      "ambition": 25,
+      "introspection": 55,
+      "temper": 28,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Rook Tarn",
+        "trust": 90,
+        "affinity": 82,
+        "label": "husband",
+        "note": "His hands are stiff but his word is good, and I would not have another."
+      },
+      {
+        "name": "Pike Tarn",
+        "trust": 70,
+        "affinity": 75,
+        "label": "son",
+        "note": "He hunts too far up the cape and thinks I do not see the scratches."
+      },
+      {
+        "name": "Merrow Stave",
+        "trust": 70,
+        "affinity": 68,
+        "label": "trade partner",
+        "note": "We swap herbs and seeds and worries about the winter."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "A good man, but he and my Pike will come to blows over the trapping ground if nobody speaks."
+      },
+      {
+        "name": "Rona Dunn",
+        "trust": 68,
+        "affinity": 62,
+        "label": "neighbour",
+        "note": "She smokes the catch and I tend the sick and between us the village limps along."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": 30,
+        "affinity": -10,
+        "label": "grudge",
+        "note": "I do not know what to think of her, and I will not have her name cursed at my fire."
+      },
+      {
+        "name": "Mavis Tarn",
+        "trust": 90,
+        "affinity": 82,
+        "label": "husband",
+        "note": "His hands are stiff but his word is good, and I would not have another."
+      },
+      {
+        "name": "Ebba Tarn",
+        "trust": 58,
+        "affinity": 55,
+        "label": "namesake",
+        "note": "We share a name and not a bloodline, and she trades salt and herbs the same as me; I like her well enough, though I keep my own herb plot to myself."
+      },
+      {
+        "name": "Inga Dunn",
+        "trust": 62,
+        "affinity": 58,
+        "label": "neighbour",
+        "note": "A steady girl with the nets, and fond of my Pike; if she is to have him she had best learn to keep him off the cape in a fog."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: I fed the village out of my own plot and learned which roots will hold a family through a hard spring.",
+        "salience": 0.85,
+        "about": [
+          "Rook Tarn"
+        ]
+      },
+      {
+        "gist": "I sat up three nights with Rona Dunn's boy through the fever and he lived, and she has not forgotten it.",
+        "salience": 0.7,
+        "about": [
+          "Rona Dunn"
+        ]
+      },
+      {
+        "gist": "Pike was born in the front room in a gale and Rook could not get the boat in until morning.",
+        "salience": 0.75,
+        "about": [
+          "Pike Tarn",
+          "Rook Tarn"
+        ]
+      },
+      {
+        "gist": "Merrow Stave and I divided the last of the seed barley and agreed to split the harvest whatever came.",
+        "salience": 0.55,
+        "about": [
+          "Merrow Stave"
+        ]
+      },
+      {
+        "gist": "Rook came in half-frozen from the cape and swore the light had saved him, and I have held my tongue about Edda since.",
+        "salience": 0.5,
+        "about": [
+          "Rook Tarn",
+          "Edda Wray"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_store_must_last_the_winter",
+        "value": 0.9,
+        "why": "I have seen a thin spring and I will not see another in this house."
+      },
+      {
+        "key": "heal_whoever_comes_to_the_door",
+        "value": 0.85,
+        "why": "The cough does not ask which house you keep, and neither do I."
+      },
+      {
+        "key": "keep_the_men_from_quarrelling",
+        "value": 0.7,
+        "why": "Pike and Cuthbert will break something more than snares if nobody speaks sense between them."
+      },
+      {
+        "key": "do_not_curse_the_light_keeper",
+        "value": 0.6,
+        "why": "I have no proof of her and I will not add my voice to a burning."
+      },
+      {
+        "key": "trade_fair_with_merrow",
+        "value": 0.75,
+        "why": "A seed shared in spring is a harvest shared in autumn, and we both know it."
+      }
+    ],
+    "secret": "I have been quietly putting by a small store of my own, apart from the household's, in case the debt leaves us with nothing."
+  },
+  "Pike Tarn": {
+    "narrative": "I hunt the cape and the shore for birds and small game, and I sell the hides to Aethelred Tanner's man when the carrier goes north. The best ground above the shore is mine by right of my snares, and Cuthbert Stave knows it, and Oswin Wray in Elmwick knows it too, whatever he says about his lines. My father counts baskets that will never be paid and calls it keeping the tally true. I say a debt you cannot pay is a debt you should refuse, and I would rather be on the ridge with my bow than at the fire arguing about it.",
+    "values": [
+      "what a man can take with his own hands",
+      "the trapping ground that is mine",
+      "pride that does not bend",
+      "a boat and a name of my own"
+    ],
+    "goals": [
+      "get Osric to settle the trapping ground above the shore in my favour",
+      "buy a boat of my own and stop hunting for other men's tables",
+      "make Cuthbert Stave admit he shifted my snares"
+    ],
+    "mood": "restless, prickly",
+    "traits": {
+      "caution": 40,
+      "sociability": 38,
+      "empathy": 35,
+      "curiosity": 45,
+      "ambition": 68,
+      "introspection": 30,
+      "temper": 62,
+      "nurture": 30
+    },
+    "relations": [
+      {
+        "name": "Rook Tarn",
+        "trust": 65,
+        "affinity": 55,
+        "label": "father",
+        "note": "A good man counting a debt that will bury him, and he will not hear that it can be refused."
+      },
+      {
+        "name": "Mavis Tarn",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She worries at me about the cape and the winter store, and she is usually right."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": 25,
+        "affinity": -45,
+        "label": "rival",
+        "note": "He hunts my ground and has moved my snares, and he will not say it to my face."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 45,
+        "affinity": 40,
+        "label": "headman",
+        "note": "He should settle the ground and he will not, so I will not be the one to ask him."
+      },
+      {
+        "name": "Oswin Wray",
+        "trust": 20,
+        "affinity": -40,
+        "label": "rival",
+        "note": "He thinks the southern woods are his and that I set too close to his village paths."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "He buys my hides and pays a fair price, and that is more than most."
+      },
+      {
+        "name": "Sedge Gannet",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A quiet man with a good eye for weather, and no quarrel with me."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": 25,
+        "affinity": -20,
+        "label": "grudge",
+        "note": "The whole shore curses her light and I will not be the one to say she is innocent."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 30,
+        "affinity": -25,
+        "label": "grudge",
+        "note": "The Elmwick elder who tells everyone where a hunter may set his snares, and he has never set one in his life."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I found my snares shifted on the cape and knew Cuthbert's knot, and I moved his in return and told no one.",
+        "salience": 0.75,
+        "about": [
+          "Cuthbert Stave"
+        ]
+      },
+      {
+        "gist": "The Lean Year: I was a boy and I watched my mother feed the village out of her own plot and learned what a thin spring is.",
+        "salience": 0.7,
+        "about": [
+          "Mavis Tarn"
+        ]
+      },
+      {
+        "gist": "I brought down my first stag off the cape and my father said nothing and was proud, and I have wanted that silence again since.",
+        "salience": 0.65,
+        "about": [
+          "Rook Tarn"
+        ]
+      },
+      {
+        "gist": "Oswin Wray told me at the Ferncross market to keep my snares off his lines, and I told him the woods are not his.",
+        "salience": 0.6,
+        "about": [
+          "Oswin Wray"
+        ]
+      },
+      {
+        "gist": "My father set the tally in his own hands and I have watched him count the same baskets a hundred times since.",
+        "salience": 0.55,
+        "about": [
+          "Rook Tarn",
+          "Osric Dunn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_cape_ground_is_mine",
+        "value": 0.85,
+        "why": "I have hunted it since I was a boy and my snares were there before his."
+      },
+      {
+        "key": "a_debt_you_cannot_pay_should_be_refused",
+        "value": 0.7,
+        "why": "Forty baskets that will never be paid are a rope round the village's neck, and I will not pretend otherwise."
+      },
+      {
+        "key": "let_the_headman_settle_it",
+        "value": 0.55,
+        "why": "It is Osric's place to divide the ground, but I will not be the one to beg him for it."
+      },
+      {
+        "key": "a_man_needs_a_boat",
+        "value": 0.8,
+        "why": "Hunting for other men's tables will not make me a name, and a boat would."
+      },
+      {
+        "key": "keep_my_grudges_quiet",
+        "value": 0.5,
+        "why": "My mother will not have cursing at her fire, so I keep it to myself and to the ridge."
+      }
+    ],
+    "secret": "I moved Cuthbert Stave's snares first, before ever he touched mine, and I would deny it before the whole village."
+  }
+}

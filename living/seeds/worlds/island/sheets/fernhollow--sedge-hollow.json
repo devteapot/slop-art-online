@@ -1,0 +1,389 @@
+{
+  "Bracken Sedge": {
+    "narrative": "I build the hollow's frames and gates out of fallen wood, never a living tree, and I keep the tools that everyone borrows and half of them forget to bring back. When a pack turns up at the crossing with its ties cut clean, I know a knife did that, not a bad knot, and I have said so to Thistle though he would rather blame the woodcutter he quarrelled with. I mend what I can and I keep my mouth shut about the rest, but I do not like a thing that was opened by someone who knew what was in it.",
+    "values": [
+      "honest work",
+      "the old forest",
+      "the hollow's peace",
+      "keeping tools and promises"
+    ],
+    "goals": [
+      "find out who cut the fibre pack's ties without setting the hollow against the crossing",
+      "finish the benches for the common table before the cold sets in",
+      "keep the hollow's tools whole and accounted for"
+    ],
+    "mood": "quietly troubled",
+    "traits": {
+      "caution": 62,
+      "sociability": 40,
+      "empathy": 58,
+      "curiosity": 55,
+      "ambition": 35,
+      "introspection": 60,
+      "temper": 30,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Tansy Sedge",
+        "trust": 92,
+        "affinity": 88,
+        "label": "wife",
+        "note": "She feeds the whole hollow and still finds me a bowl at the end of the day."
+      },
+      {
+        "name": "Sorrel Sedge",
+        "trust": 90,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "She follows her mother now, but she still brings me the wood shavings to play with."
+      },
+      {
+        "name": "Yarrow Underbank",
+        "trust": 78,
+        "affinity": 72,
+        "label": "fellow builder",
+        "note": "We trade tools and neither of us will fell a living tree; that is most of a friendship."
+      },
+      {
+        "name": "Clover Hazel",
+        "trust": 70,
+        "affinity": 65,
+        "label": "trade partner",
+        "note": "Builds crates for the stall and trades tools with me; a careful hand."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 45,
+        "affinity": 35,
+        "label": "pedlar",
+        "note": "He blames the Ferncross folk for the opened pack, but I saw the ties: cut, not broken."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 45,
+        "label": "storekeeper",
+        "note": "Keeps the hollow's marks and wants us trading more with the giants; I keep my own counsel on that."
+      },
+      {
+        "name": "Tansy Hazel",
+        "trust": 60,
+        "affinity": 55,
+        "label": "stallkeeper",
+        "note": "She keeps the east road stall and feels the quarrel in her trade as much as any of us."
+      },
+      {
+        "name": "Bramwell Ashdown",
+        "trust": 50,
+        "affinity": 58,
+        "label": "woodcutter",
+        "note": "A Ferncross man I am friendly with, which makes the pack business awkward."
+      },
+      {
+        "name": "Marjoram Underbank",
+        "trust": 65,
+        "affinity": 62,
+        "label": "neighbour",
+        "note": "Bakes beside my wife; the two of them talk more than I do."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Teaching Sorrel to hold a plane on a scrap of fallen oak, and her shrieking with delight when the curl came off whole.",
+        "salience": 0.8,
+        "about": [
+          "Sorrel Sedge"
+        ]
+      },
+      {
+        "gist": "The night the wolves came down the track and I sat up with an axe by the common table while Tansy kept the fire high.",
+        "salience": 0.7,
+        "about": [
+          "Tansy Sedge",
+          "Sorrel Sedge"
+        ]
+      },
+      {
+        "gist": "Thistle bringing the opened pack to the crossing and me turning the cut ties over in my hands while he shouted about the woodcutters.",
+        "salience": 0.9,
+        "about": [
+          "Thistle Mossfoot",
+          "Tansy Hazel"
+        ]
+      },
+      {
+        "gist": "Yarrow and I hauling a fallen ash out of the old forest together, neither of us willing to touch a standing tree.",
+        "salience": 0.6,
+        "about": [
+          "Yarrow Underbank"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the hollow's gardens failed early and we ate thin and shared what the store had.",
+        "salience": 0.55,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "never_fell_a_living_tree",
+        "value": 0.95,
+        "why": "The old forest kept us before the big folk came, and it will keep us after."
+      },
+      {
+        "key": "cut_ties_mean_a_knife",
+        "value": 0.85,
+        "why": "A knot breaks raggedly; these were sliced clean, and only someone who knew the load would bother."
+      },
+      {
+        "key": "tools_come_back_or_they_do_not_go_out",
+        "value": 0.8,
+        "why": "Half the hollow borrows my tools and half of those forget; the work waits on it."
+      },
+      {
+        "key": "keep_the_quarrel_from_the_common_table",
+        "value": 0.7,
+        "why": "The hollow eats together; a feud at the root table sours every bowl."
+      },
+      {
+        "key": "trust_the_wood_before_the_word",
+        "value": 0.6,
+        "why": "Wood tells you what it will do; people tell you what suits them."
+      }
+    ],
+    "secret": ""
+  },
+  "Tansy Sedge": {
+    "narrative": "I keep the hollow's kitchen and the common table, and the elders eat at the root table from my pots, so I hear more of the hollow's business than most. The opened pack has set the traders against each other and I feel it at every meal: Thistle will not sit by a Ferncross man and Alder counts the marks twice. I cook, I listen, and I keep my own counsel, but I would sooner mend a quarrel than a pot.",
+    "values": [
+      "feeding people",
+      "the hollow's harmony",
+      "good bread",
+      "the old gardens"
+    ],
+    "goals": [
+      "keep the common table calm while the pack quarrel runs",
+      "trade the hollow's bread at the Reedmoor market for fish before the cold",
+      "see Sorrel learn the garden without fear of the woods"
+    ],
+    "mood": "watchful and warm",
+    "traits": {
+      "caution": 55,
+      "sociability": 72,
+      "empathy": 80,
+      "curiosity": 45,
+      "ambition": 30,
+      "introspection": 55,
+      "temper": 25,
+      "nurture": 88
+    },
+    "relations": [
+      {
+        "name": "Bracken Sedge",
+        "trust": 92,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He says the ties were cut, not broken, and he is usually right about what his hands touch."
+      },
+      {
+        "name": "Sorrel Sedge",
+        "trust": 90,
+        "affinity": 96,
+        "label": "daughter",
+        "note": "She follows me about the kitchen and the garden and asks why the wolves come down the track."
+      },
+      {
+        "name": "Marjoram Underbank",
+        "trust": 85,
+        "affinity": 82,
+        "label": "close friend",
+        "note": "We bake side by side and she hears the same quarrels I do; we tell each other the truth of them."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 72,
+        "affinity": 70,
+        "label": "fellow cook",
+        "note": "She keeps the common table too, and we share the ovens when the hollow eats together."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 50,
+        "affinity": 48,
+        "label": "pedlar",
+        "note": "He is angry and he is frightened of losing the crossing; I wish he would let the pack be mended first."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 58,
+        "affinity": 50,
+        "label": "storekeeper",
+        "note": "Counts every mark twice since the pack was opened, and talks of trading with the giants."
+      },
+      {
+        "name": "Nesta Ashdown",
+        "trust": 55,
+        "affinity": 60,
+        "label": "trade partner",
+        "note": "Trades bread with me at the crossing; I would not want her folk blamed for a cut tie."
+      },
+      {
+        "name": "Hilda Sedge",
+        "trust": 45,
+        "affinity": 52,
+        "label": "namesake cook",
+        "note": "Reedmoor's cook, shares a name and not a bloodline, and trades bread for fish."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 70,
+        "affinity": 65,
+        "label": "Eldest",
+        "note": "Keeps the hollow's memory; I feed her at the root table and she remembers my mother's bread."
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 62,
+        "affinity": 58,
+        "label": "bake-trade friend",
+        "note": "Elmwick's cook, and we trade bread at the Reedmoor market; she keeps a common fire for her village the way I keep the ovens for mine, and we both know what it is to feed folk who count every loaf."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Feeding the elders at the root table through the Lean Year on roots and thin porridge, and none of them going hungry while I had a pot.",
+        "salience": 0.8,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "Sorrel burning her first little loaf in the oven and crying, and me telling her a burnt loaf still feeds a body.",
+        "salience": 0.75,
+        "about": [
+          "Sorrel Sedge"
+        ]
+      },
+      {
+        "gist": "Thistle coming into the kitchen with the half-empty pack and the cut ties, and the table going quiet around him.",
+        "salience": 0.85,
+        "about": [
+          "Thistle Mossfoot"
+        ]
+      },
+      {
+        "gist": "Baking with Marjoram Underbank before dawn and the two of us deciding not to repeat what Alder said about the crossing.",
+        "salience": 0.6,
+        "about": [
+          "Marjoram Underbank",
+          "Alder Rush"
+        ]
+      },
+      {
+        "gist": "Carrying bread down to the Reedmoor market and bringing smoked fish back up the east road.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_full_bowl_settles_more_than_a_word",
+        "value": 0.9,
+        "why": "The hollow argues better on a full stomach, and I have seen it work."
+      },
+      {
+        "key": "hear_both_sides_before_the_meal_is_served",
+        "value": 0.75,
+        "why": "Thistle and Alder each want me to take their part, and taking one would lose me the other."
+      },
+      {
+        "key": "the_wolves_are_a_real_fear_not_a_tale",
+        "value": 0.7,
+        "why": "They came down the track in the cold and I kept the fire high all night."
+      },
+      {
+        "key": "the_elders_eat_first",
+        "value": 0.85,
+        "why": "The root table is the hollow's memory and its peace; it is fed before my own."
+      },
+      {
+        "key": "trade_with_reedmoor_must_go_on",
+        "value": 0.65,
+        "why": "The hollow needs fish and Reedmoor needs bread; a quarrel at the crossing does not fill a pot."
+      }
+    ],
+    "secret": ""
+  },
+  "Sorrel Sedge": {
+    "narrative": "I am eight and I follow my mother about the kitchen and the garden, and I know which pot is for the elders and which is for us. When the wolves come down the track I sit very still by the fire and listen, and my father sits up with the axe. I like the smell of bread and the wood shavings my father makes, and I do not like the dark beyond the garden gate.",
+    "values": [
+      "mother's kitchen",
+      "the garden",
+      "the fire"
+    ],
+    "goals": [
+      "learn to bake a loaf that does not burn",
+      "see the wolves without being seen by them"
+    ],
+    "mood": "curious and a little afraid",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 65,
+      "curiosity": 75,
+      "ambition": 30,
+      "introspection": 35,
+      "temper": 25,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Tansy Sedge",
+        "trust": 95,
+        "affinity": 95,
+        "label": "mother",
+        "note": "She lets me stir the pot if I stand on the stool and am careful."
+      },
+      {
+        "name": "Bracken Sedge",
+        "trust": 90,
+        "affinity": 90,
+        "label": "father",
+        "note": "He makes curls of wood with his plane and lets me keep them."
+      },
+      {
+        "name": "Tansy Mossfoot",
+        "trust": 70,
+        "affinity": 80,
+        "label": "playmate",
+        "note": "We know every flower by name and run the garden paths together."
+      },
+      {
+        "name": "Marjoram Underbank",
+        "trust": 70,
+        "affinity": 72,
+        "label": "baker",
+        "note": "She bakes with my mother and always gives me the corner of the loaf."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Burning my first little loaf in the oven and my mother telling me a burnt loaf still feeds a body.",
+        "salience": 0.8,
+        "about": [
+          "Tansy Sedge"
+        ]
+      },
+      {
+        "gist": "Sitting by the fire while the wolves howled down the track and my father stood at the door with the axe.",
+        "salience": 0.7,
+        "about": [
+          "Bracken Sedge",
+          "Tansy Sedge"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

@@ -26,7 +26,7 @@ DERIVED = {"floor-megacity-2k": ("floor-megacity", {"size": 2048}), "floor-megac
 FLOORS = ("floor-megacity-4k",)
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
-          "place", "routine")
+          "place", "routine", "relation", "acquaintance")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
@@ -47,11 +47,18 @@ def command(args, evidence, **kwargs):
     return result.returncode
 
 
-def authored_copy(directory):
-    living = directory / "source/living"
+def authored_copy(directory, world="aske-coast"):
+    living = directory / f"source-{world}/living"
     (living / "tools").mkdir(parents=True)
     shutil.copy2(ROOT / "living/tools/author_world.py", living / "tools/author_world.py")
-    shutil.copytree(ROOT / "living/seeds/worlds/aske-coast", living / "seeds/worlds/aske-coast")
+    shutil.copytree(ROOT / f"living/seeds/worlds/{world}", living / f"seeds/worlds/{world}")
+    if world == "island":
+        # A planned world (docs/SEEDED_LIVES.md) merges into an existing seed and checks
+        # occupations and items against the repertoire and the rules' catalog.
+        (living / "rules/src").mkdir(parents=True)
+        shutil.copy2(ROOT / "living/rules/src/catalog.rs", living / "rules/src/catalog.rs")
+        for f in ("island.json", "repertoire.json"):
+            shutil.copy2(ROOT / f"living/seeds/{f}", living / f"seeds/{f}")
     return living
 
 
@@ -277,7 +284,12 @@ def check_land(seed, rows, side, tiles):
         residents = [i for i, c in members.items() if c in folk]
         names = set(life.get("places", {})) | ({"evening"} if life.get("evening") else set())
         missing = [i for i in residents if not names <= set(places.get(i, {}))]
-        present("residents know the seed's places (square, inn, evening)", residents and len(missing) <= 0.05 * len(residents), {"residents": len(residents), "missing": missing[:20]})
+        present(f"residents know the seed's places ({', '.join(sorted(names))})", residents and len(missing) <= 0.05 * len(residents), {"residents": len(residents), "missing": missing[:20]})
+        # A spread place is shared out like work (the nearest of the least used spots): with
+        # spots to spare, residents mostly get different ones.
+        for name in life.get("spread", []):
+            spots = [places[i][name] for i in residents if name in places.get(i, {})]
+            present(f"spread place {name!r} is spread over its spots", spots and len(set(spots)) >= 0.5 * len(spots), {"residents": len(spots), "distinct": len(set(spots))})
         workers = [i for i in residents if bgs.get(i, {}).get("occupation") in life.get("work", {})]
         no_work = [i for i in workers if "work" not in places.get(i, {})]
         present("workers have a workplace", workers and len(no_work) <= 0.05 * len(workers), {"workers": len(workers), "without": no_work[:20]})
@@ -288,7 +300,24 @@ def check_land(seed, rows, side, tiles):
             s = next((x for x in settlements if x["id"] == l["settlement"]), None)
             if s:
                 reach[s["community"]] = max(reach.get(s["community"], 0.0), ((l["x"] - s["x"]) ** 2 + (l["y"] - s["y"]) ** 2) ** 0.5 + max(l["width_m"], l["depth_m"]))
-        far = [i for i in workers if "work" in places.get(i, {}) and (lambda s, w: ((w[0] - s["x"]) ** 2 + (w[1] - s["y"]) ** 2) ** 0.5 > max(max(40.0, s["radius_m"]) * 1.5, reach.get(s["community"], 0.0)) + 6)(folk[members[i]], places[i]["work"])]
+        # Places an author gave a resident (docs/SEEDED_LIVES.md) may lie elsewhere: a carrier's
+        # work is another town's market, an outlaw's a spot on the road.
+        authored = {r["name"]: r for t in seed.get("towns", []) + seed.get("villages", []) for r in t.get("residents", [])}
+        names_of = {c["id"]: c["name"] for c in rows["character"]}
+        own_places = {i: {p["name"]: p for p in authored.get(names_of.get(i), {}).get("places", [])} for i in residents}
+        given = [(i, p) for i in residents for p in own_places.get(i, {}).values()]
+        missing_given = [(names_of[i], p["name"]) for i, p in given if p["name"] not in places.get(i, {}) or any(f"{p['name']} {k}" not in places.get(i, {}) for k in range(1, p.get("stages", 0) + 1))]
+        present("authored places and the stages of known ways", not missing_given, {"given": len(given), "missing": missing_given[:20]})
+        legs = []
+        for i, p in given:
+            at = (lambda c: (c["home_x"], c["home_y"]))(next(c for c in rows["character"] if c["id"] == i))
+            for k in range(1, p.get("stages", 0) + 1):
+                nxt = places[i].get(f"{p['name']} {k}")
+                if nxt:
+                    legs.append(((nxt[0] - at[0]) ** 2 + (nxt[1] - at[1]) ** 2) ** 0.5)
+                    at = nxt
+        present("each stage of a known way is a short walk (220 m or less)", all(d <= 220 for d in legs), {"legs": len(legs), "longest": round(max(legs, default=0), 1)})
+        far = [i for i in workers if "work" in places.get(i, {}) and "work" not in own_places.get(i, {}) and (lambda s, w: ((w[0] - s["x"]) ** 2 + (w[1] - s["y"]) ** 2) ** 0.5 > max(max(40.0, s["radius_m"]) * 1.5, reach.get(s["community"], 0.0)) + 6)(folk[members[i]], places[i]["work"])]
         present("workplaces lie in or by their settlement", not far, far[:20])
         present("workplaces are walkable", all(tile(*w["work"]) in WALKABLE for i, w in places.items() if "work" in w), [i for i, w in places.items() if "work" in w and tile(*w["work"]) not in WALKABLE][:20])
         own = set(seed.get("ways", {}).get("common", {}))
@@ -299,6 +328,27 @@ def check_land(seed, rows, side, tiles):
         stage = {c["id"]: c.get("stage", 2) for c in rows["character"]}
         lacking = [i for i in residents if bgs.get(i, {}).get("occupation") and stage.get(i, 2) >= 1 and not {n.lower() for n in own} <= routines.get(i, set())]
         present("residents start on the seed's own ways", own and not lacking, lacking[:20])
+    # Dispersed settlements (hamlets) and the sheets' relations as rows (docs/SEEDED_LIVES.md).
+    hamlets = [x for x in settlements if x["style"] == "hamlet"]
+    want_hamlets = [t for t in entries if t.get("site") == "hamlet_village"]
+    present("hamlets laid out, and peopled where the seed says", len(hamlets) >= len(want_hamlets) and sum(1 for x in hamlets if x["community"]) == len(want_hamlets), {"hamlets": len(hamlets), "seeded": len(want_hamlets)})
+    names = {c["name"]: c["id"] for c in rows["character"] if c["kind"] == "person"}
+    rel = {(r["actor"], r["other"]) for r in rows.get("relation", [])}
+    sheet_pairs = {(names[r["name"]], names[x["name"]]) for t in entries for r in t.get("residents", []) if r["name"] in names for x in (r.get("sheet") or {}).get("relations", []) if x.get("name") in names and x["name"] != r["name"]}
+    present("authored relations are relation rows", sheet_pairs <= rel, {"sheet_pairs": len(sheet_pairs), "rows": len(rel), "missing": sorted(sheet_pairs - rel)[:20]})
+    # A feeling is not an introduction: an authored relation across communities is one, unless
+    # the sheet says the person would not know the other by name (`knows_name: false`).
+    member = {m["member"]: m["community"] for m in rows["membership"]}
+    acq = {(a["observer"], a["known"]) for a in rows.get("acquaintance", [])}
+    want, refuse = set(), set()
+    for t in entries:
+        for r in t.get("residents", []):
+            for x in (r.get("sheet") or {}).get("relations", []):
+                a, b = names.get(r["name"]), names.get(x.get("name"))
+                if a is None or b is None or a == b or member.get(a) == member.get(b):
+                    continue
+                (refuse if x.get("knows_name") is False else want).add((a, b))
+    present("authored relations across communities are introductions, unless not known by name", want <= acq and not (refuse & acq), {"introductions": len(want), "not_known_by_name": len(refuse), "missing": sorted(want - acq)[:20], "wrongly_known": sorted(refuse & acq)[:20]})
     # A land with a city (`map.params.metro`, docs/FLOORS.md): its wards in their district
     # styles, the core's towers, the wall's gates, and the land's other settlements outside it.
     metro = seed.get("map", {}).get("params", {}).get("metro")
@@ -373,7 +423,9 @@ def repeatability(first, second):
     return report
 
 
-def authored(directory, living):
+def authored(directory, living, world="aske-coast"):
+    directory = directory / f"authored-{world}" if world != "aske-coast" else directory
+    directory.mkdir(exist_ok=True)
     wrapper = directory / "compile_offline.py"
     wrapper.write_text('''import json, pathlib, runpy, socket, sys, urllib.request
 attempts = []
@@ -383,16 +435,17 @@ def blocked(*args, **kwargs):
 socket.socket.connect = blocked
 socket.create_connection = blocked
 urllib.request.urlopen = blocked
-sys.argv = [sys.argv[1], "aske-coast", "--compile-only"]
+sys.argv = [sys.argv[1], sys.argv[2], "--compile-only"]
 try:
     runpy.run_path(sys.argv[0], run_name="__main__")
 finally:
     pathlib.Path(__file__).with_name("network.json").write_text(json.dumps(attempts))
 ''')
-    code = command([sys.executable, str(wrapper), str(living / "tools/author_world.py")], directory / "compile.log", timeout=120)
-    actual = living / "seeds/aske-coast.json"
-    original = ROOT / "living/seeds/aske-coast.json"
-    shutil.copy2(actual, directory / "compiled-aske-coast.json")
+    code = command([sys.executable, str(wrapper), str(living / "tools/author_world.py"), world], directory / "compile.log", timeout=120)
+    into = json.loads((living / f"seeds/worlds/{world}/world.json").read_text())["into"] if (living / f"seeds/worlds/{world}/world.json").exists() else world
+    actual = living / f"seeds/{into}.json"
+    original = ROOT / f"living/seeds/{into}.json"
+    shutil.copy2(actual, directory / f"compiled-{into}.json")
     a, b = json.loads(actual.read_text()), json.loads(original.read_text())
     differences = []
 
@@ -429,6 +482,7 @@ def suite(args):
     try:
         if args.feature in ("all", "authored"):
             results["authored"] = authored(directory, authored_copy(directory))
+            results["authored island"] = authored(directory, authored_copy(directory, "island"), "island")
         if args.feature in ("all", "guards"):
             code = command(["cargo", "test", "-p", "living-authority", "--lib", "--target-dir", str(target), "seed::tests::", "--", "--nocapture"], directory / "seed-tests.log", cwd=ROOT / "living", env=dict(os.environ, LIVING_SEED="authored-test"), timeout=900)
             results["seed tests"] = {"pass": code == 0}

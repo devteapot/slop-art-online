@@ -1,0 +1,420 @@
+{
+ "households": [
+  {
+   "key": "garrow",
+   "members": [
+    {
+     "name": "Hob Garrow",
+     "age": 60,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "elder of Elmwick; says Nell Sedge had no right to let the Lakemead",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "quarrels with Nell Sedge over the Lakemead",
+      "grazed the Lakemead as a boy"
+     ]
+    },
+    {
+     "name": "Annot Garrow",
+     "age": 33,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Hob's daughter; works the Garrow strips and keeps the house",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire",
+      "mending",
+      "storage"
+     ],
+     "parents": [
+      "Hob Garrow"
+     ],
+     "ties": [
+      "daughter of Hob Garrow",
+      "mother of Cerdic Garrow",
+      "widow of a fisher lost in the Surge",
+      "works the north strips with her father",
+      "trades eggs with Tern Gannet",
+      "close with Mallow Bramblecap"
+     ]
+    },
+    {
+     "name": "Cerdic Garrow",
+     "age": 11,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Annot's son; helps with the goats and the harvest",
+     "knows": [
+      "planting",
+      "fire"
+     ],
+     "parents": [
+      "Annot Garrow"
+     ],
+     "ties": [
+      "son of Annot Garrow",
+      "grandson of Hob Garrow",
+      "plays with Fennel Underbank",
+      "helps his mother in the fields"
+     ]
+    },
+    {
+     "name": "Leofgifu Garrow",
+     "age": 57,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Hob's wife; keeps the village cook-fire and the common bake",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage",
+      "mending",
+      "medicine"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Hob Garrow",
+      "mother of Annot Garrow",
+      "cooks for the village common table",
+      "trades bread with Tansy Sedge",
+      "worries about the winter store"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "wray-elm",
+   "members": [
+    {
+     "name": "Oswin Wray",
+     "age": 45,
+     "sex": "m",
+     "occupation": "hunter",
+     "role": "hunts the southern woods and keeps the wolves off the Elmwick paths",
+     "knows": [
+      "archery",
+      "trapping",
+      "fire",
+      "shelter",
+      "tanning",
+      "spear"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Rowan Wray",
+      "father of Thea Wray",
+      "hunts with Pike Tarn",
+      "sells hides to Aethelred Tanner",
+      "grudges the Coldwell outlaws for a stolen trap",
+      "friendly with Cuthbert Stave"
+     ]
+    },
+    {
+     "name": "Rowan Wray",
+     "age": 43,
+     "sex": "f",
+     "occupation": "fisher",
+     "role": "fishes the forest streams and smokes the catch for the village",
+     "knows": [
+      "fishing",
+      "smoking",
+      "fire",
+      "cooking",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Oswin Wray",
+      "mother of Thea Wray",
+      "trades smoked fish with Thistle Mossfoot",
+      "knows the stream pools better than anyone",
+      "grudges the Kettlebridge works for the smoke that drifts east"
+     ]
+    },
+    {
+     "name": "Thea Wray",
+     "age": 9,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Oswin and Rowan's daughter; mends nets and follows her mother to the smoke shed",
+     "knows": [
+      "fishing",
+      "fire"
+     ],
+     "parents": [
+      "Oswin Wray",
+      "Rowan Wray"
+     ],
+     "ties": [
+      "daughter of Oswin Wray and Rowan Wray",
+      "plays with Cerdic Garrow",
+      "afraid of the wolves in the woods"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "bexley",
+   "members": [
+    {
+     "name": "Aldwyn Bexley",
+     "age": 38,
+     "sex": "m",
+     "occupation": "builder",
+     "role": "builds and repairs the village houses and barns; came from Lanternquay after the Surge",
+     "knows": [
+      "carpentry",
+      "masonry",
+      "bridging",
+      "fire",
+      "toolmaking",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Nerys Bexley",
+      "father of Merek Bexley",
+      "works for Hob Garrow",
+      "owes Osric Dunn for a load of timber",
+      "friendly with Yarrow Underbank",
+      "thinks the seawall will never be built"
+     ]
+    },
+    {
+     "name": "Nerys Bexley",
+     "age": 36,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "keeps the Bexley plot and the hens; a Lanternquay woman learning the fields",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire",
+      "mending",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Aldwyn Bexley",
+      "mother of Merek Bexley",
+      "trades eggs at the market",
+      "misses the quay and the tide lanterns",
+      "close with Leofgifu Garrow"
+     ]
+    },
+    {
+     "name": "Merek Bexley",
+     "age": 7,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Aldwyn and Nerys's son; born on the quay and still afraid of the woods",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Aldwyn Bexley",
+      "Nerys Bexley"
+     ],
+     "ties": [
+      "son of Aldwyn Bexley and Nerys Bexley",
+      "plays with Thea Wray",
+      "afraid of the deep woods"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "toller",
+   "members": [
+    {
+     "name": "Edric Toller",
+     "age": 52,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "farms the Toller acres by the stream; keeps a few sheep and sells wool",
+     "knows": [
+      "planting",
+      "storage",
+      "fire",
+      "mending",
+      "cooking"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Sibley Toller",
+      "father of Goda Toller",
+      "sells wool to the weavers",
+      "neighbour of Hob Garrow",
+      "grumbles at the Lakemead quarrel"
+     ]
+    },
+    {
+     "name": "Sibley Toller",
+     "age": 49,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Edric's wife; keeps the dairy and the vegetable plot",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire",
+      "medicine",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Edric Toller",
+      "mother of Goda Toller",
+      "trades cheese at the market",
+      "tends the village sick with Leofgifu Garrow"
+     ]
+    },
+    {
+     "name": "Goda Toller",
+     "age": 22,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Edric and Sibley's daughter; works the fields and wants a strip of her own",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire",
+      "mending",
+      "storage"
+     ],
+     "parents": [
+      "Edric Toller",
+      "Sibley Toller"
+     ],
+     "ties": [
+      "daughter of Edric Toller and Sibley Toller",
+      "courts Wulf Rowan of Brackenford",
+      "helps her father with the sheep",
+      "wants to farm the Lakemead if it is won back"
+     ]
+    },
+    {
+     "name": "Hreod Toller",
+     "age": 14,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "Edric's nephew, raised in the Toller house; helps with the sheep and the harvest",
+     "knows": [
+      "planting",
+      "fire",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "nephew of Edric Toller",
+      "works alongside his uncle",
+      "plays with Cerdic Garrow"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "lakemead-claim",
+   "kind": "feud",
+   "summary": "Elmwick claims the Lakemead as its old common, but Reedmoor's headwoman Nell Sedge has let it to the Coombes, who pay her rent in grain. Hob Garrow has led the village's complaints and says the meadow was never Reedmoor's to let; the Coombes have rebuilt their fence after Elmwick folk pulled it down twice.",
+   "secret": false,
+   "people": [
+    "Hob Garrow",
+    "Goda Toller",
+    "Edric Toller",
+    "Nell Sedge",
+    "Jem Coombe"
+   ],
+   "sides": {
+    "Hob Garrow": "He remembers grazing the Lakemead as a boy and is certain it belongs to Elmwick. He feels Nell Sedge stole it and the Coombes are trespassers, and he wants the village to press the claim harder.",
+    "Goda Toller": "She wants a strip of her own and sees the Lakemead as the best chance for it. She is impatient with her father's caution and eager to see the meadow won back, though she has never spoken to the Coombes.",
+    "Edric Toller": "He thinks the quarrel is a distraction from the harvest and worries it will bring trouble with Reedmoor. He would rather settle it quietly but will not cross Hob Garrow openly.",
+    "Nell Sedge": "She is sure Reedmoor has the right to let the meadow and sees Elmwick's complaints as bullying. She relies on the Coombes' rent and will not give it up without a fight.",
+    "Jem Coombe": "He has rebuilt his fence twice and is tired of Elmwick folk pulling it down. He needs the meadow for his family and feels caught between two villages that both claim it."
+   }
+  },
+  {
+   "id": "bexley-debt",
+   "kind": "debt",
+   "summary": "Aldwyn Bexley owes Osric Dunn of Thornby for a load of timber he took on credit to repair Hob Garrow's barn. The debt is due at the next market and Aldwyn has not yet found the marks.",
+   "secret": false,
+   "people": [
+    "Aldwyn Bexley",
+    "Nerys Bexley",
+    "Osric Dunn",
+    "Hob Garrow"
+   ],
+   "sides": {
+    "Aldwyn Bexley": "He is proud of the barn repair but anxious about the debt. He hopes Hob Garrow will pay him enough to clear it and is ashamed he may have to ask for more time.",
+    "Nerys Bexley": "She keeps the household's marks and knows exactly how short they are. She is angry that Aldwyn took the timber on credit without telling her and fears they will lose their good name.",
+    "Osric Dunn": "He needs the marks to pay Thornby's own debt to Brackenford. He likes Aldwyn but will not wait forever, and he has told Aldwyn plainly that the debt is due.",
+    "Hob Garrow": "He knows Aldwyn is owed for the barn but has not yet paid, and he is slow to part with marks. He does not know the timber was bought on credit and would be embarrassed to learn it."
+   }
+  },
+  {
+   "id": "thea-fever",
+   "kind": "illness",
+   "summary": "Thea Wray has had a lingering cough since the spring and is not getting better. Rowan Wray has been treating her with stream herbs, but Sibley Toller, who has some healing knowledge, fears it may be the winter cough that has been going round.",
+   "secret": false,
+   "people": [
+    "Thea Wray",
+    "Rowan Wray",
+    "Oswin Wray",
+    "Sibley Toller",
+    "Leofgifu Garrow"
+   ],
+   "sides": {
+    "Thea Wray": "She is tired and cross and wants to be out with the other children. She does not understand why her mother keeps her by the fire.",
+    "Rowan Wray": "She is frightened for her daughter and has tried every herb she knows. She trusts Sibley Toller's advice but is reluctant to ask for help from the village.",
+    "Oswin Wray": "He is worried but hides it by hunting harder. He would go to Tanglewood for a healer if he thought it would help, but he does not know the way.",
+    "Sibley Toller": "She has seen the cough before and fears it could worsen in the cold. She wants to treat Thea but does not want to interfere with Rowan's care.",
+    "Leofgifu Garrow": "She has offered her own remedies and is quietly keeping an eye on the child. She thinks the village should do more but does not want to alarm the Wrays."
+   }
+  },
+  {
+   "id": "goda-courtship",
+   "kind": "courtship",
+   "summary": "Goda Toller has been courting Wulf Rowan of Brackenford since last harvest. Wulf's father Godric wants him to marry and take a strip of his own, but Edric Toller is uneasy about his daughter marrying into a Brackenford family with no land to offer.",
+   "secret": false,
+   "people": [
+    "Goda Toller",
+    "Wulf Rowan",
+    "Edric Toller",
+    "Sibley Toller",
+    "Godric Rowan"
+   ],
+   "sides": {
+    "Goda Toller": "She is fond of Wulf and sees marriage as a way to a bigger life. She is frustrated by her father's caution and has not told him how serious the courtship has become.",
+    "Wulf Rowan": "He wants to marry Goda and take a strip of land, but he knows his father will not part with land easily. He is nervous about meeting Edric Toller's expectations.",
+    "Edric Toller": "He does not want his daughter to leave Elmwick for a Brackenford family that has little to give. He has not forbidden the match but has made his doubts clear.",
+    "Sibley Toller": "She likes Wulf and thinks he is a good match, but she will not cross her husband openly. She has been quietly encouraging the courtship while trying to soften Edric.",
+    "Godric Rowan": "He wants his son settled and thinks Goda is a sensible choice, but he will not give up a strip of his own land for the match. He has not yet spoken to Edric Toller about it."
+   }
+  },
+  {
+   "id": "wolves-in-the-woods",
+   "kind": "rivalry",
+   "summary": "Oswin Wray and Pike Tarn both hunt the southern woods and both claim the best trapping ground. Oswin says Pike has been setting snares too close to the village paths, and Pike says Oswin has been taking game from his lines.",
+   "secret": false,
+   "people": [
+    "Oswin Wray",
+    "Pike Tarn",
+    "Cuthbert Stave",
+    "Hob Garrow"
+   ],
+   "sides": {
+    "Oswin Wray": "He is certain Pike is poaching his lines and putting the village at risk by drawing wolves closer. He has not confronted Pike directly but has complained to Hob Garrow.",
+    "Pike Tarn": "He thinks Oswin is jealous of his catch and too quick to claim the woods as his own. He resents being told where he can set his snares.",
+    "Cuthbert Stave": "He has hunted with both men and does not want to take sides. He thinks they should settle it between them but fears it will come to blows.",
+    "Hob Garrow": "He is elder and wants peace in the village. He has heard both complaints and is looking for a way to settle the matter without favouring either man."
+   }
+  }
+ ]
+}

@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn walled_city_has_gates_roads_and_houses() {
-        let mut map = Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), opaque: Default::default() };
+        let mut map = Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
         let l = lay_out(&mut map, (32.5, 32.5), 10, 14, true);
         assert_eq!(l.gates.len(), 4);
         assert_eq!(l.houses.len(), 10);

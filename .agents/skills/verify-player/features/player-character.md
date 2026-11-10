@@ -9,8 +9,21 @@ A person outside the simulation joins the world as one character and controls it
 - `player-move`: `human_move` steers the body at a walk or a run, stops it, and sets the plan to `moving yourself` (`lib.rs:356-375`).
 - `player-act-deliberate`: `human_act` with a skill that is not real-time (give, offer, gather, teach, conceive…) goes through `acts::submit`, the path minds use (`lib.rs:337-349`, `living/authority/src/acts.rs:27`). The act runs, or fails with feedback in the player's `experience` rows.
 - `player-act-graph`: `human_act` with a real-time skill (`wander`, `follow`, `wait`, `attack`…; `Shapes::real_time` in `living/rules/src/combat.rs`: `MOVES` and each combat skill's `real_time` trait in `living/scripts/skills.rhai`) becomes the character's behavior, with plan `your command` and source `human`.
+- `player-walk-far`: click-to-move (`human_act` with `{"do":"goto","target":{"at":[x,y]}}`, a deliberate act) reaches another settlement anywhere on the island, leg by leg, and lasts as long as the walk takes; a short click round a building row or a pond reaches it too. A click more than 12 m into water is refused ("destination unreachable"), and a place that cannot be reached at all is refused ("no path there") (`living/authority/src/motion.rs` `start`, `living/rules/src/nav.rs`, `acts::overdue`; docs/PATHS.md).
 - `player-say`: `human_say` writes a `speech` chronicle line, and people within earshot get a `speech` experience (`living/authority/src/perceive.rs`, `speak`). The player's own character perceives its words as a `said` experience ("You said to <name>: “…”", salience 0.5; since 2026-11-09, for player memory, docs/PLAYER_MEMORY.md); AI speakers get none.
 - `player-authority`: a player identity cannot call admin reducers (`admin only`), cannot use the `mind_*` reducers on someone else's character (`not your character`), and cannot join twice.
+
+## Walking far (island seed)
+
+`living/tools/walk_times.py` drives it with one fresh identity per walker, all at once: each joins, clicks on the `--from` settlement, then on its own target settlement (`--to all`: every other one), and `--clicks N` adds a walker making N clicks 30–60 m away in random directions. It records each outcome (the `act` experience row), the seconds to arrival, the walked length from `body` samples and the distance left. Each poll is a call as the walker, so its person stays present (no takeover). Use the run's own server variables, as for `$V`.
+
+```bash
+$V launch --run $R --seed island && $V doctor --run $R
+python3 living/tools/walk_times.py --db verify-$R --clicks 40 --out .local/living/verify/$R/walks.jsonl \
+  2> .local/living/verify/$R/walks.stderr   # 16 journeys from Brackenford and 40 clicks; about 25 min
+```
+
+Expect "You did what you had decided: goto → (x,y)." for every journey and click, `left_m` 0.0, and walk times close to the road or straight-line length at 2.6 m/s walking (1.4× on roads). Compare with docs/PATHS.md.
 
 ## How to get to it (user POV)
 

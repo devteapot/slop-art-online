@@ -350,6 +350,7 @@ impl Minds {
         let ctx = prompts::Ctx {
             name: &c.name,
             clock: fmt(llm::now_ms()),
+            body: String::new(),
             persona,
             relations: self.relations(actor),
             mind: recalled.mind,

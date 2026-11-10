@@ -27,6 +27,8 @@ pub struct LogMsg(usize);
 pub struct InputRow;
 #[derive(Component)]
 pub struct InputText;
+#[derive(Component)]
+pub struct InputLabel;
 
 pub fn spawn(mut commands: Commands, fonts: Res<Fonts>) {
     let f = fonts.clone();
@@ -57,7 +59,7 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>) {
             ))
             .with_children(|r| {
                 r.spawn((Node { padding: UiRect::axes(Val::Px(8.0), Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, BackgroundColor(theme::with_alpha(theme::GOLD, 0.18))))
-                    .with_child((Text::new("Say"), f.body(13.0, 800), TextColor(theme::GOLD)));
+                    .with_child((InputLabel, Text::new("Say"), f.body(13.0, 800), TextColor(theme::GOLD)));
                 r.spawn((InputText, Text::new(""), f.body(15.0, 600), TextColor(theme::TEXT), Node { flex_grow: 1.0, ..default() }));
             });
         });
@@ -70,6 +72,13 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, mut event
         return;
     }
     if !input.chat_open {
+        // An act asks for words (`verbs.rs`): open for them, without the key that chose it.
+        if input.compose.is_some() {
+            input.chat_open = true;
+            input.chat.clear();
+            events.clear();
+            return;
+        }
         // egui (F1 panels) may hold the keyboard.
         let egui_typing = wants.is_some_and(|w| w.keyboard);
         if keys.just_pressed(KeyCode::Enter) && !egui_typing {
@@ -86,7 +95,10 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, mut event
         match &ev.logical_key {
             LogicalKey::Enter => {
                 let line = std::mem::take(&mut input.chat);
-                if !line.trim().is_empty() {
+                // Words for an act (`verbs.rs`), else speech.
+                if input.compose.take().is_some() {
+                    input.composed = Some(line.trim().to_string());
+                } else if !line.trim().is_empty() {
                     out.say.push(line.trim().to_string());
                 }
                 input.chat_open = false;
@@ -95,6 +107,7 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, mut event
             LogicalKey::Escape => {
                 input.chat.clear();
                 input.chat_open = false;
+                input.compose = None;
                 return;
             }
             LogicalKey::Backspace => {
@@ -127,7 +140,8 @@ pub fn update(
     mut who: Query<(&LogWho, &mut TextSpan, &mut TextColor), Without<LogMsg>>,
     mut msg: Query<(&LogMsg, &mut TextSpan, &mut TextColor), Without<LogWho>>,
     mut input_row: Query<&mut Node, (With<InputRow>, Without<LogRow>)>,
-    mut input_text: Query<(&mut Text, &mut TextColor), (With<InputText>, Without<LogWho>, Without<LogMsg>)>,
+    mut input_text: Query<(&mut Text, &mut TextColor), (With<InputText>, Without<LogWho>, Without<LogMsg>, Without<InputLabel>)>,
+    mut input_label: Query<&mut Text, (With<InputLabel>, Without<InputText>)>,
 ) {
     let open = input.chat_open && model.death.is_none();
     let now = model.now;
@@ -172,6 +186,9 @@ pub fn update(
     }
     for mut n in &mut input_row {
         show(&mut n, open);
+    }
+    for mut t in &mut input_label {
+        set_text(&mut t, input.compose.as_deref().map_or("Say", |c| c));
     }
     if open {
         let caret = if crate::capture::scripted() || (time.elapsed_secs() * 1.8).fract() < 0.6 { "|" } else { " " };

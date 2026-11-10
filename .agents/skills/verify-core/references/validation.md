@@ -1,5 +1,23 @@
 # Core validation record
 
+## 2026-11-10 island food: berries and store places, a food round (Mac)
+
+Branch `hunger-1` (main `7e5de53` merged in) in a worktree, the worker's own container `hunger-verify` (Docker Desktop, 2.14.1, port 3382) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`: `town_life.places` gains `berries` and `store`, `town_life.spread` shares `berries` out like work, and the island's own "find food and eat" walks a round when nothing edible is in sight ([D2](../../../../docs/SOAK.md#d2-the-islands-residents-starve-in-the-first-hours)). Free tier only.
+
+- `cargo_checks.py` (`core-hunger-101946`): rules, authority, mind and viewer sync pass. `tick` 6 of 6, `needs`, `seize` and `sight` pass.
+- `town.py` (`core-hunger-101946-town`) 20 of 21: the step-aside scene's three approaches got no step (its recorded flake, above). Rerun of that scene alone (`core-hunger-101946-aside`) 1 of 1: made way on the second approach.
+- `lives.py --minutes 24` (`core-hunger-101946-lives`) 19 of 19.
+- The same checks on the seed before `spread` (`core-hunger-080229`, from `fe6ec66`): tick, needs, seize, sight pass; town 21 of 21; lives 19 of 19.
+
+## 2026-11-10 walking routes (Mac)
+
+Branch `path-1` (from `fe6ec66`) in a worktree, the worker's own container `path-stdb` (Docker Desktop, 2.14.1, port 3391): walks planned leg by leg over regions and areas, acts walking to a place outlast `APPROACH_MS` (docs/PATHS.md). Free tier only.
+
+- `cargo_checks.py` (`core-path1`): rules 116 (4 new `nav::` tests), authority 11, mind 66, viewer sync 4. `tick` 6 of 6.
+- `verify_steering.py` (`core-path1-steering2`, `--wasm living_authority_verify_core_path1.wasm`: on a worker's own server the driver's default `/wasm/living_authority.wasm` does not exist) 5 of 5; `verify_mechanics.py` (`core-path1-mechanics`, same `--wasm`) 23 of 23.
+- `town.py` (`core-path1-town`) 20 of 21: "a resident faces someone who comes up behind them" failed (the scene's recorded flake, above; its 6 m approach is a clear straight line, which `route_leg` answers without planning). "A worker reached a workplace away from home": 239 tiles from home.
+- Walking load (`walk_times.py --residents 150` with `bench.py`, docs/PATHS.md "The tick with many walkers"): 150 of 150 residents moving at every 10 s sample for 7 min, 165 km walked, tick p99 1.64 ms, 0 ticks over 16.7 ms; the same orders on `fe6ec66` moved nobody, tick p99 5.0 ms, 4 ticks over.
+
 ## 2026-11-10 hospitality and habit engagements (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).

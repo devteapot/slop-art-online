@@ -1,0 +1,369 @@
+{
+  "Wenna Marrow": {
+    "narrative": "I am a weaver's daughter who married the Reeve's son, and half this town has not forgiven me for it. I keep the Marrow strip beyond the east wall, hoe and sow and carry, and say little in the square because whatever I say is repeated. My mother will not sell cloth to this house, and the child coming will be born into that silence. Still, I chose Tobin and I would choose him again.",
+    "values": [
+      "keeping my own counsel",
+      "the strip and the harvest",
+      "Tobin and the child coming",
+      "my mother, though she shames me"
+    ],
+    "goals": [
+      "bring the child safely to birth",
+      "make the Marrow strip feed the household well",
+      "outlast the town's talk",
+      "mend something with my mother before the baby comes"
+    ],
+    "mood": "guarded, tired, quietly stubborn",
+    "traits": {
+      "caution": 68,
+      "sociability": 38,
+      "empathy": 62,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 70,
+      "temper": 30,
+      "nurture": 72
+    },
+    "relations": [
+      {
+        "name": "Tobin Marrow",
+        "trust": 90,
+        "affinity": 88,
+        "label": "husband",
+        "note": "He stood by me when the whole square was talking; I will not let him down."
+      },
+      {
+        "name": "Aldith Weaver",
+        "trust": 55,
+        "affinity": 40,
+        "label": "mother",
+        "note": "She means well, but her grudge feeds the very talk she hates."
+      },
+      {
+        "name": "Leofwine Weaver",
+        "trust": 70,
+        "affinity": 65,
+        "label": "father",
+        "note": "He says nothing and that is a kindness."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 45,
+        "affinity": 30,
+        "label": "father-in-law",
+        "note": "The Reeve is courteous to me and I am never sure it is not a weighing."
+      },
+      {
+        "name": "Cuth Marrow",
+        "trust": 60,
+        "affinity": 55,
+        "label": "mother-in-law",
+        "note": "She keeps a quiet house and asks no questions, which I count a mercy."
+      },
+      {
+        "name": "Maud Marrow",
+        "trust": 50,
+        "affinity": 42,
+        "label": "sister-in-law",
+        "note": "She keeps the gate ledger and watches me as if I were a column that might not add up."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 65,
+        "affinity": 60,
+        "label": "midwife",
+        "note": "She has delivered half the town and will deliver mine; I trust her hands."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 20,
+        "affinity": -15,
+        "label": "the other woman",
+        "note": "I have never met her and I think of her more than I should."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 40,
+        "affinity": 35,
+        "label": "acquaintance",
+        "note": "The inn cook has been kind to me over the counter, and says less than most."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 10,
+        "affinity": -30,
+        "label": "the wronged father",
+        "note": "He thinks my marriage was an insult to his house; I have never spoken to him, and I doubt he has ever said my name."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Tobin came to my father's loom-shed and asked for me before he had told his own father; I said yes before he finished.",
+        "salience": 0.9,
+        "about": [
+          "Tobin Marrow",
+          "Leofwine Weaver"
+        ]
+      },
+      {
+        "gist": "The morning after the wedding, women in the square stopped their talk as I passed and started it again behind me.",
+        "salience": 0.75,
+        "about": []
+      },
+      {
+        "gist": "My mother told me she would not sell cloth to the Marrow house, and not to ask her again; my father looked at the floor.",
+        "salience": 0.8,
+        "about": [
+          "Aldith Weaver",
+          "Leofwine Weaver"
+        ]
+      },
+      {
+        "gist": "The Lean Year: the berry blight reached our field and we ate from the town store like everyone, and I learned what a ledger's kindness costs.",
+        "salience": 0.6,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Joan Hobson put her hand on my belly and said the child was well set; I cried in the lane after she had gone.",
+        "salience": 0.7,
+        "about": [
+          "Joan Hobson"
+        ]
+      },
+      {
+        "gist": "I stood at the east gate and watched a Kettlebridge cart pay the due, and knew the carter's look was for me.",
+        "salience": 0.65,
+        "about": [
+          "Wat Fenner"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_my_counsel_in_the_square",
+        "value": 0.85,
+        "why": "Whatever I say is repeated and turned; silence is the only cloth that does not fray."
+      },
+      {
+        "key": "the_strip_must_feed_us",
+        "value": 0.8,
+        "why": "I will not be a mouth the Reeve's ledger has to carry."
+      },
+      {
+        "key": "stand_by_tobin",
+        "value": 0.9,
+        "why": "He chose me when it cost him, and I will not make him regret it."
+      },
+      {
+        "key": "my_mother_means_well",
+        "value": 0.6,
+        "why": "Her anger is for me, however it lands; I will not hate her for it, but I will not obey it either."
+      },
+      {
+        "key": "the_child_before_all",
+        "value": 0.95,
+        "why": "Everything else can wait; this one thing cannot."
+      }
+    ],
+    "secret": "I have written a letter to Hester Crane and burned it twice, and I keep the third unsent in the loom-chest. I want to know what she is like, and I am ashamed of wanting it."
+  },
+  "Tobin Marrow": {
+    "narrative": "I am the Reeve's son and captain of the gate guards, and I broke a promise to a Kettlebridge foundry's daughter because I would not marry where I did not love. The town has not let me forget it and Kettlebridge has not either. My father is old and has named no heir, and the square is split between him and Mercy Abbot over the due that pays my men. I will not see the guards unpaid, and I will not hear my wife slighted.",
+    "values": [
+      "my word given freely, not sold",
+      "the guards and their pay",
+      "Wenna and the child coming",
+      "the road kept clear"
+    ],
+    "goals": [
+      "keep the gate-due so the guards are paid",
+      "clear the Coldwell outlaws from the stone road",
+      "see Wenna brought to bed safely",
+      "settle what comes after my father, in time"
+    ],
+    "mood": "proud, harried, quick to defend",
+    "traits": {
+      "caution": 45,
+      "sociability": 62,
+      "empathy": 55,
+      "curiosity": 38,
+      "ambition": 70,
+      "introspection": 40,
+      "temper": 60,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Wenna Marrow",
+        "trust": 92,
+        "affinity": 90,
+        "label": "wife",
+        "note": "She is the reason I broke the match and the reason I do not regret it."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 70,
+        "affinity": 60,
+        "label": "father",
+        "note": "He is old and will not say who follows him, and I will not ask twice."
+      },
+      {
+        "name": "Cuth Marrow",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She says little and sees everything, and she has never once blamed Wenna."
+      },
+      {
+        "name": "Maud Marrow",
+        "trust": 65,
+        "affinity": 55,
+        "label": "sister",
+        "note": "She keeps the gate ledger better than I could, and I would trust her with it."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 25,
+        "affinity": 20,
+        "label": "rival",
+        "note": "She would drop the due and leave my guards to beg; I will not have it."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 15,
+        "affinity": -25,
+        "label": "the promise I broke",
+        "note": "I did her a wrong and I know it, but I will not be lectured by her father's town."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 5,
+        "affinity": -55,
+        "label": "enemy",
+        "note": "He sends our stone south out of spite and calls it the market; let him."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 80,
+        "affinity": 65,
+        "label": "my guard",
+        "note": "He takes the due at the south gate and does not flinch from the carters."
+      },
+      {
+        "name": "Aldith Weaver",
+        "trust": 20,
+        "affinity": -30,
+        "label": "mother-in-law",
+        "note": "She will not forgive the match and says so in the square, and Wenna pays for it."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 0,
+        "affinity": -70,
+        "label": "outlaw",
+        "note": "Her people have robbed carts on my road twice; the road must be cleared."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 45,
+        "affinity": 30,
+        "label": "the chapel",
+        "note": "She heals outlaws and disapproves of the due, and I respect her anyway."
+      },
+      {
+        "name": "Walter Stanhope",
+        "trust": 70,
+        "affinity": 50,
+        "label": "my guard",
+        "note": "A short temper and a good arm at the south gate; I would not lose him."
+      },
+      {
+        "name": "Leofwine Weaver",
+        "trust": 45,
+        "affinity": 35,
+        "label": "wife's father",
+        "note": "He says nothing to my face, which is more than his wife gives me, and I take that as the peace it is."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "A month before the wedding I told Josiah Crane in his own foundry yard that I would not marry Hester, and he did not raise his voice, which was worse.",
+        "salience": 0.95,
+        "about": [
+          "Josiah Crane",
+          "Hester Crane"
+        ]
+      },
+      {
+        "gist": "I married Wenna in the chapel with half the square watching and my father's face like a shut door.",
+        "salience": 0.85,
+        "about": [
+          "Wenna Marrow",
+          "Aldric Marrow",
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "The Lean Year: I stood at the gate while the Coldwell farmers were turned away with their fields gone, and I said nothing because it was my father's doing.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow",
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Silas Pike came in with his cart cut open and his berries taken; I promised him the road would be cleared and it has not been.",
+        "salience": 0.8,
+        "about": [
+          "Silas Pike",
+          "Marta Hale",
+          "Ned Hale"
+        ]
+      },
+      {
+        "gist": "I found Wenna crying in the lane after the market and could not get from her who had spoken; I wanted to hit someone and there was no one to hit.",
+        "salience": 0.75,
+        "about": [
+          "Wenna Marrow"
+        ]
+      },
+      {
+        "gist": "My father showed me the gate ledger and said the due pays the men who keep the wolves off the road, and that was all the explaining he ever did.",
+        "salience": 0.65,
+        "about": [
+          "Aldric Marrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_gate_due",
+        "value": 0.85,
+        "why": "It pays the guards who keep the road clear; drop it and the wolves and the outlaws come through the gate."
+      },
+      {
+        "key": "clear_the_stone_road",
+        "value": 0.8,
+        "why": "Carters are robbed on my road and I gave my word it would stop."
+      },
+      {
+        "key": "i_chose_wenna_and_will_not_repent",
+        "value": 0.95,
+        "why": "I would not marry where I did not love, and no one will make me sorry for it."
+      },
+      {
+        "key": "kettlebridge_pride_can_wait",
+        "value": 0.6,
+        "why": "They priced their stone high and send it south out of spite; I will not crawl to them for peace."
+      },
+      {
+        "key": "a_captain_pays_his_men",
+        "value": 0.9,
+        "why": "The guards answer to me, and a captain who cannot pay them is no captain."
+      }
+    ],
+    "secret": "I have begun to wonder whether my father will ever name me after him, and whether Mercy Abbot will be Reeve before I am; I have said this to no one, not even Wenna."
+  }
+}

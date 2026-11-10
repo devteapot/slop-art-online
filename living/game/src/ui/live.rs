@@ -21,7 +21,8 @@
 //!   over whoever answered my greeting (my `experience`), and nothing else: what residents do
 //!   shows on their bodies, never as labels.
 //!
-//! Not on the server yet, so omitted: interactions.
+//! - verbs (`verbs.rs`, `ui/verbs.rs`): the F hint, the list of acts, notes of their outcomes,
+//!   inventory and know-how, filled by `ui/verbs.rs` after this.
 
 use super::model::*;
 use crate::camera::Cam;

@@ -1,0 +1,494 @@
+{
+  "Marrow Wrack": {
+    "narrative": "I came down the fish road from Kettlebridge after the Surge with my wife and daughter and what tools I could carry. I build in concrete and salvage because that's what the quay has, but I know stone, and the seawall should be stone from the ridge, not the overpriced stuff Crane sends. Gideon Fenwick took my work and slandered me, and I won't set foot in Kettlebridge while he has a yard there. I owe Josiah Crane for a load of brick, and that debt sits on me like a wet coat.",
+    "values": [
+      "honest work",
+      "family",
+      "stone over salvage",
+      "paying debts",
+      "not being cheated"
+    ],
+    "goals": [
+      "build the seawall in stone from the ridge",
+      "clear my debt to Josiah Crane",
+      "see Gideon Fenwick get his due",
+      "keep my family fed and housed"
+    ],
+    "mood": "bitter but determined",
+    "traits": {
+      "caution": 60,
+      "sociability": 40,
+      "empathy": 50,
+      "curiosity": 45,
+      "ambition": 65,
+      "introspection": 55,
+      "temper": 70,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Odile Wrack",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She's the only one who knows what we lost in Kettlebridge, and she still stands by me."
+      },
+      {
+        "name": "Nia Wrack",
+        "trust": 85,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She's got her mother's sense and my stubbornness; I want better for her than a borrowed boat."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 70,
+        "affinity": 65,
+        "label": "workmate",
+        "note": "We patch the lower quay together and curse the stone price together."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 20,
+        "affinity": -40,
+        "label": "creditor",
+        "note": "He holds my brick debt and I can't pay it yet."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 0,
+        "affinity": -90,
+        "label": "enemy",
+        "note": "He took my work and slandered me; I won't forget."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 60,
+        "affinity": 55,
+        "label": "warden",
+        "note": "She wants the seawall as much as I do, and she listens when I talk stone."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 50,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She and Odile work together; a good woman with a bone-setting hand."
+      },
+      {
+        "name": "Mira Sallow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "Odile trades herbs with her; she keeps a good room of salves."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": 50,
+        "affinity": 55,
+        "label": "old friend",
+        "note": "Another man who came down the road and found the door shut; we drink to it when he's down."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 35,
+        "affinity": 45,
+        "label": "quay neighbour",
+        "note": "She cooks a good fried fish and pays on time, but she took Fenwick's word over mine when the tale came down the fish road — I'll build her stone stall when there's stone to be had, and watch her while I do it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The quarrel with Gideon Fenwick over the job and the brick load; he said I cheated him, and the whole yard heard.",
+        "salience": 0.9,
+        "about": [
+          "Gideon Fenwick"
+        ]
+      },
+      {
+        "gist": "Packing our things and walking down the fish road after the Surge, with Odile and Nia and a handcart of tools.",
+        "salience": 0.8,
+        "about": [
+          "Odile Wrack",
+          "Nia Wrack"
+        ]
+      },
+      {
+        "gist": "The first time I saw the lower quay after the surge: broken concrete, salt-eaten timber, and no stone anywhere.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Setting the first salvage beam on the lower quay with Ostrander Vane, and him saying we'd build it proper one day.",
+        "salience": 0.6,
+        "about": [
+          "Ostrander Vane"
+        ]
+      },
+      {
+        "gist": "Borrowing the load of brick from Josiah Crane on a handshake and a promise, and the look he gave me.",
+        "salience": 0.5,
+        "about": [
+          "Josiah Crane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "seawall_in_stone",
+        "value": 0.9,
+        "why": "Concrete and salvage won't hold against the next surge; the ridge has good stone."
+      },
+      {
+        "key": "no_return_to_kettlebridge",
+        "value": 0.8,
+        "why": "Fenwick's yard is there, and I won't give him the satisfaction."
+      },
+      {
+        "key": "debts_must_be_paid",
+        "value": 0.7,
+        "why": "I owe Crane for the brick, and I'll pay it even if it takes a year."
+      },
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "Odile and Nia are all I have left from the old life."
+      },
+      {
+        "key": "distrust_kettlebridge_prices",
+        "value": 0.8,
+        "why": "They sell stone dear and call it fair trade."
+      }
+    ],
+    "secret": "I once took a small block of dressed stone from a Kettlebridge yard without paying, the week before we left. I tell myself it was owed wages."
+  },
+  "Odile Wrack": {
+    "narrative": "I keep a healer's room behind the fish market and set the builders' bones when they fall. I came down from Kettlebridge with Marrow and Nia after the Surge, and the cold welcome we got there still stings. I know the quarrel cost us our house, and I wish Marrow would let it go, but I won't say so to his face. I want Nia settled with a man who has a roof, not a man who borrows boats.",
+    "values": [
+      "family",
+      "healing",
+      "practicality",
+      "loyalty",
+      "peace"
+    ],
+    "goals": [
+      "keep my family healthy and fed",
+      "see Nia married to someone steady",
+      "build up my stock of salves",
+      "avoid open quarrel with Kettlebridge"
+    ],
+    "mood": "weary but watchful",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 75,
+      "curiosity": 50,
+      "ambition": 40,
+      "introspection": 65,
+      "temper": 40,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Marrow Wrack",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He's a good man with a hard head; I wish he'd let the Fenwick quarrel lie."
+      },
+      {
+        "name": "Nia Wrack",
+        "trust": 80,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "She's got a good heart, but she doesn't see what debts can do to a household."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 75,
+        "affinity": 70,
+        "label": "colleague",
+        "note": "We set bones together and share what herbs we can."
+      },
+      {
+        "name": "Mira Sallow",
+        "trust": 70,
+        "affinity": 65,
+        "label": "colleague",
+        "note": "She knows her herbs, and she worries about the winter cough like I do."
+      },
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 60,
+        "affinity": 55,
+        "label": "herb trader",
+        "note": "She's a strange one, but her salves are good."
+      },
+      {
+        "name": "Jory Pike",
+        "trust": 30,
+        "affinity": 20,
+        "label": "suitor",
+        "note": "A cheerful lad, but he owes half the quay and borrows boats."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 50,
+        "affinity": 45,
+        "label": "employer",
+        "note": "She keeps Nia in work at her noodle stall."
+      },
+      {
+        "name": "Sella Pike",
+        "trust": 40,
+        "affinity": 35,
+        "label": "acquaintance",
+        "note": "She's a good woman, but her son needs to stand on his own."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": -60,
+        "affinity": -55,
+        "label": "grudge",
+        "note": "His quarrel took our house and our town from us; I will not forget it, whatever Marrow says."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "He patches the lower quay with salvage and wants proper stone; he took Marrow's side against Fenwick, and I remember that."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 40,
+        "affinity": 45,
+        "label": "stall-keeper",
+        "note": "She cooks at the fish market and wants her stall in stone; a hard worker, and she does not carry tales about my daughter."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning we left Kettlebridge: the neighbours looking away, and the cold rain on the fish road.",
+        "salience": 0.8,
+        "about": [
+          "Marrow Wrack",
+          "Nia Wrack"
+        ]
+      },
+      {
+        "gist": "Setting a quarryman's leg in Kettlebridge before the Surge, and him swearing I had the gentlest hands on the ridge.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Nia's first day at Ilse Ostrander's stall, and how proud she looked with her own apron.",
+        "salience": 0.7,
+        "about": [
+          "Nia Wrack",
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "Marrow coming home with the brick load and the debt to Crane, and me knowing we'd be paying for it for months.",
+        "salience": 0.6,
+        "about": [
+          "Marrow Wrack",
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "The first winter on the quay, when the cough took half the poor terrace and Mira and I ran out of salve.",
+        "salience": 0.7,
+        "about": [
+          "Mira Sallow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_needs_a_roof",
+        "value": 0.9,
+        "why": "A man who borrows boats will borrow bread, and I won't have Nia go hungry."
+      },
+      {
+        "key": "healing_for_all",
+        "value": 0.8,
+        "why": "I set bones for anyone who comes, Kettlebridge or quay, because that's what a healer does."
+      },
+      {
+        "key": "let_the_grudge_lie",
+        "value": 0.6,
+        "why": "The quarrel cost us our house, and I wish Marrow would let it go, though I won't say so to him."
+      },
+      {
+        "key": "distrust_kettlebridge_welcome",
+        "value": 0.7,
+        "why": "They turned their backs on us when we needed work, and I don't forget."
+      },
+      {
+        "key": "save_for_winter",
+        "value": 0.8,
+        "why": "The winter cough takes the poor terrace every year, and I mean to have salve and fuel."
+      }
+    ],
+    "secret": "I wrote to my sister in Kettlebridge last month, without telling Marrow, to ask if there was work for him there if the quarrel could be mended."
+  },
+  "Nia Wrack": {
+    "narrative": "I cook at Ilse Ostrander's noodle stall and I want a stall of my own one day. Jory Pike makes me laugh and he knows boats better than anyone, but my mother measures him by his debts and I can't blame her. I like Tam Harrow too, but Jory's the one who makes me feel like the quay is a place I could belong. I wish my father would let the Kettlebridge quarrel go, but I'd never say so.",
+    "values": [
+      "family",
+      "independence",
+      "good food",
+      "laughter",
+      "loyalty"
+    ],
+    "goals": [
+      "save enough for my own stall",
+      "see where things go with Jory Pike",
+      "keep my parents from worrying too much",
+      "learn more recipes from Ilse"
+    ],
+    "mood": "hopeful but pulled two ways",
+    "traits": {
+      "caution": 50,
+      "sociability": 75,
+      "empathy": 65,
+      "curiosity": 60,
+      "ambition": 70,
+      "introspection": 45,
+      "temper": 35,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Marrow Wrack",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He's stubborn as stone, but he'd do anything for me."
+      },
+      {
+        "name": "Odile Wrack",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She wants me settled, and she's probably right, but she doesn't see how Jory makes me laugh."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 70,
+        "affinity": 65,
+        "label": "employer",
+        "note": "She's taught me most of what I know about a noodle pot."
+      },
+      {
+        "name": "Jory Pike",
+        "trust": 60,
+        "affinity": 75,
+        "label": "suitor",
+        "note": "He's cheerful and he knows boats, and he makes me feel like the quay is home."
+      },
+      {
+        "name": "Tam Harrow",
+        "trust": 50,
+        "affinity": 55,
+        "label": "friend",
+        "note": "He's a good lad, but he's not Jory."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "We work the stalls together and she knows everyone's business."
+      },
+      {
+        "name": "Sella Pike",
+        "trust": 45,
+        "affinity": 40,
+        "label": "acquaintance",
+        "note": "Jory's mother is kind, but she worries about him like I do."
+      },
+      {
+        "name": "Rook Fenner the younger",
+        "trust": 40,
+        "affinity": 35,
+        "label": "acquaintance",
+        "note": "Tam's cousin; a quiet lad with quick hands for a knot."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She sets bones and trades gossip with my mother; a kind woman with a sharp eye."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time I cooked a whole pot of noodles at Ilse's stall without burning them, and she nodded once.",
+        "salience": 0.7,
+        "about": [
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "Jory Pike bringing me a handful of harbour flowers and not knowing where to look.",
+        "salience": 0.8,
+        "about": [
+          "Jory Pike"
+        ]
+      },
+      {
+        "gist": "My mother setting a fisherman's arm in our room while I held the lamp and tried not to look.",
+        "salience": 0.6,
+        "about": [
+          "Odile Wrack"
+        ]
+      },
+      {
+        "gist": "The night the tide lanterns were lit late and a boat came in wrong; my father cursing the wardens.",
+        "salience": 0.5,
+        "about": [
+          "Marrow Wrack"
+        ]
+      },
+      {
+        "gist": "Walking the fish road with my father when I was small, before the Surge, and him showing me the ridge stone.",
+        "salience": 0.6,
+        "about": [
+          "Marrow Wrack"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "earn_my_own_stall",
+        "value": 0.9,
+        "why": "I won't cook at someone else's fire forever."
+      },
+      {
+        "key": "jory_is_worth_the_risk",
+        "value": 0.7,
+        "why": "He makes me laugh and he's kind, and debts can be paid."
+      },
+      {
+        "key": "family_loyalty",
+        "value": 0.8,
+        "why": "My parents came down the road for me, and I won't shame them."
+      },
+      {
+        "key": "keep_the_peace_at_home",
+        "value": 0.6,
+        "why": "I won't say what I think about the Kettlebridge quarrel; it only makes my father angry."
+      },
+      {
+        "key": "good_food_brings_people",
+        "value": 0.7,
+        "why": "A hot bowl on a cold night is worth more than a mark in the box."
+      }
+    ],
+    "secret": "I've been putting aside a few marks each week for a stall of my own, and I haven't told my mother, because she'd want it for the winter store."
+  }
+}

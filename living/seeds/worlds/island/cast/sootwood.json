@@ -1,0 +1,232 @@
+{
+ "households": [
+  {
+   "key": "sootwood-hollis",
+   "members": [
+    {
+     "name": "Orvin Hollis",
+     "age": 47,
+     "sex": "m",
+     "occupation": "woodcutter",
+     "role": "Master woodcutter of Sootwood; fells oak and ash for the quay and burns charcoal in the slow pits",
+     "knows": [
+      "carpentry",
+      "fire",
+      "shelter",
+      "toolmaking",
+      "trapping"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Maren Hollis",
+      "father of Tace Hollis",
+      "sells timber to Ostrander Vane's builders on the lower quay",
+      "owes Bramwell Tallow for a season of rope and tar",
+      "thinks the seawall will never be built and says so at the quay"
+     ]
+    },
+    {
+     "name": "Maren Hollis",
+     "age": 44,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Keeps the Sootwood vegetable plots and goats; sells roots and charcoal to the quay stalls",
+     "knows": [
+      "planting",
+      "cooking",
+      "basketry",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Orvin Hollis",
+      "mother of Tace Hollis",
+      "trades eggs and roots with Perrin Tallow's stall",
+      "worries the smoke from the charcoal pits drifts east to Fernhollow",
+      "close with Sayer Hale of Coldwell, met at the Ferncross market"
+     ]
+    },
+    {
+     "name": "Tace Hollis",
+     "age": 15,
+     "sex": "f",
+     "occupation": "woodcutter",
+     "role": "Orvin and Maren's daughter; stacks the pits and learns the axe and the charcoal burn",
+     "knows": [
+      "carpentry",
+      "fire",
+      "mending"
+     ],
+     "parents": [
+      "Orvin Hollis",
+      "Maren Hollis"
+     ],
+     "ties": [
+      "daughter of Orvin Hollis and Maren Hollis",
+      "wants to crew on a quay boat and see the harbour mouth",
+      "friendly with Rook Fenner the younger, who taught her a quay knot",
+      "fears the wolves that come down the old forest in winter"
+     ]
+    },
+    {
+     "name": "Durrow Hollis",
+     "age": 9,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Orvin and Maren's son; carries kindling and plays among the charcoal stacks",
+     "knows": [
+      "fire",
+      "shelter"
+     ],
+     "parents": [
+      "Orvin Hollis",
+      "Maren Hollis"
+     ],
+     "ties": [
+      "son of Orvin Hollis and Maren Hollis",
+      "plays with Tam Sedge when the quay folk come up the wood road",
+      "afraid of the deep woods and the wolves in them"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "sootwood-tarn",
+   "members": [
+    {
+     "name": "Cael Tarn",
+     "age": 51,
+     "sex": "m",
+     "occupation": "woodcutter",
+     "role": "A charcoal burner who keeps the slow pits and the wood road; a quiet man with a long memory for debts",
+     "knows": [
+      "fire",
+      "carpentry",
+      "shelter",
+      "trapping",
+      "toolmaking"
+     ],
+     "parents": [],
+     "ties": [
+      "partner of Sena Tarn",
+      "father of Pell Tarn",
+      "sells charcoal to Ilse Ostrander's noodle stall",
+      "grudges the Kettlebridge works for the smoke that drifts down the valley",
+      "friendly with Thistle Mossfoot's east-road trade"
+     ]
+    },
+    {
+     "name": "Sena Tarn",
+     "age": 46,
+     "sex": "f",
+     "occupation": "woodcutter",
+     "role": "Cael's partner; fells and trims with him and keeps the wood road's tally of loads",
+     "knows": [
+      "carpentry",
+      "fire",
+      "mending",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "partner of Cael Tarn",
+      "mother of Pell Tarn",
+      "trades baskets and charcoal at the morning stalls on the quay",
+      "thinks the seawall stone should come from the ridge, not from Kettlebridge",
+      "close with Maren Hollis over the plots"
+     ]
+    },
+    {
+     "name": "Pell Tarn",
+     "age": 12,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Cael and Sena's son; helps stack the pits and dreams of the quay boats",
+     "knows": [
+      "fire",
+      "shelter"
+     ],
+     "parents": [
+      "Cael Tarn",
+      "Sena Tarn"
+     ],
+     "ties": [
+      "son of Cael Tarn and Sena Tarn",
+      "plays with Durrow Hollis among the charcoal stacks",
+      "wants to see the tide lanterns at Lanternquay",
+      "afraid of the wolves that come down the wood road"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "wood-road-debt",
+   "kind": "debt",
+   "summary": "Orvin Hollis owes Bramwell Tallow for a season of rope and tar used to haul timber down to the quay, and has not paid. Bramwell is patient but has begun to ask.",
+   "secret": false,
+   "people": [
+    "Orvin Hollis",
+    "Maren Hollis",
+    "Bramwell Tallow"
+   ],
+   "sides": {
+    "Orvin Hollis": "Knows the debt is real and means to pay in charcoal and timber when the next load goes down, but fears Bramwell will stop supplying rope before then.",
+    "Maren Hollis": "Knows the debt and has been selling eggs and roots quietly to put marks aside; she thinks Orvin should settle it before winter.",
+    "Bramwell Tallow": "Knows Orvin is good for it and likes him, but has his own debts to Josiah Crane and needs the marks before the next load of iron nails comes in."
+   }
+  },
+  {
+   "id": "seawall-sceptics",
+   "kind": "quarrel",
+   "summary": "Orvin and Sena have both told quay folk that the seawall will never be built and the stone price is a swindle. Ostrander Vane heard it and took it as Sootwood siding with Kettlebridge.",
+   "secret": false,
+   "people": [
+    "Orvin Hollis",
+    "Sena Tarn",
+    "Ostrander Vane"
+   ],
+   "sides": {
+    "Orvin Hollis": "Thinks he was only speaking plain truth about the stone price, and is stung that Ostrander took it as an insult.",
+    "Sena Tarn": "Stands by what she said and thinks the quay builders should hear it, but does not want the wood road's loads turned back.",
+    "Ostrander Vane": "Heard the talk at the stalls and feels Sootwood is laughing at the drowned quay; he wants an apology before he buys Sootwood timber again."
+   }
+  },
+  {
+   "id": "smoke-drift",
+   "kind": "feud",
+   "summary": "The charcoal pits' smoke drifts east over the old forest, and Fernhollow's small folk have complained through Thistle Mossfoot. Cael Tarn says the pits have burned there for years and will not move them.",
+   "secret": false,
+   "people": [
+    "Cael Tarn",
+    "Sena Tarn",
+    "Thistle Mossfoot"
+   ],
+   "sides": {
+    "Cael Tarn": "Knows the smoke drifts east and does not care; the pits are old and the wood is his to burn.",
+    "Sena Tarn": "Worries the complaint will sour the east-road trade and has quietly offered Thistle a load of charcoal to smooth it.",
+    "Thistle Mossfoot": "Carries the complaint honestly but likes Sootwood's charcoal and does not want the road closed; he is caught between the hollow and his customers."
+   }
+  },
+  {
+   "id": "winter-wolves",
+   "kind": "illness",
+   "summary": "Wolves have come down the old forest and taken two goats from the Sootwood plots. Durrow Hollis was chased to the door and is shaken; the households are keeping the children close.",
+   "secret": false,
+   "people": [
+    "Durrow Hollis",
+    "Pell Tarn",
+    "Orvin Hollis",
+    "Cael Tarn"
+   ],
+   "sides": {
+    "Durrow Hollis": "Is frightened of the woods now and will not go to the kindling stacks alone.",
+    "Pell Tarn": "Says he is not afraid but has stopped playing at the forest edge.",
+    "Orvin Hollis": "Wants to set snares and sit up with a spear, but the woodcutting is behind and he cannot spare the nights.",
+    "Cael Tarn": "Has seen wolves before and thinks they will go up again when the snow comes, but keeps his axe by the door."
+   }
+  }
+ ]
+}

@@ -1,0 +1,528 @@
+{
+  "Kai Ostrander": {
+    "narrative": "I was a quay guard in Lanternquay until the Surge took the lower quay and half the people I knew. I walked away from the guard after that, and I have been at Coldwell ever since, doing what needs doing. Marta keeps us fed and Ned keeps us angry; I keep my head down and my hands ready. I fight better than the rest of them, and I do not talk about the sea.",
+    "values": [
+      "keeping my word to the people I stand with",
+      "not swinging first",
+      "getting out alive",
+      "my mother's peace of mind"
+    ],
+    "goals": [
+      "see the Coldwell business settled without a hanging",
+      "keep Pell from doing something foolish",
+      "stay useful enough that nobody asks where I came from"
+    ],
+    "mood": "watchful and tired",
+    "traits": {
+      "caution": 62,
+      "sociability": 38,
+      "empathy": 55,
+      "curiosity": 44,
+      "ambition": 30,
+      "introspection": 68,
+      "temper": 48,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Marta Hale",
+        "trust": 70,
+        "affinity": 55,
+        "label": "leader",
+        "note": "She took me in when I had nothing and asks no questions. I follow her, not Ned."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": 45,
+        "affinity": 40,
+        "label": "brother-in-arms",
+        "note": "He is all noise and no plan. I will stand beside him if it comes to it, but I will not swing first for him."
+      },
+      {
+        "name": "Sayer Hale",
+        "trust": 55,
+        "affinity": 50,
+        "label": "household",
+        "note": "She feeds us and worries about all of us. She is the only calm thing in this house."
+      },
+      {
+        "name": "Pell",
+        "trust": 50,
+        "affinity": 48,
+        "label": "the boy",
+        "note": "He is hiding something from Kettlebridge. I have not pressed him, and I will not."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "I sent word I am alive. She will not forgive me for the worry, but she knows now."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 70,
+        "affinity": 65,
+        "label": "old friend",
+        "note": "We grew up on the same quay. If she came up the road with a cart, I would not know what to say to her."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 10,
+        "affinity": 15,
+        "label": "carter",
+        "note": "He pays the due and hates it. He is not the enemy; the due is."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 5,
+        "affinity": 10,
+        "label": "gate guard",
+        "note": "He takes the due at the south gate. He is Agnes's husband, so Marta will not touch him. I keep my distance."
+      },
+      {
+        "name": "Robin Hale",
+        "trust": 60,
+        "affinity": 55,
+        "label": "the boy",
+        "note": "He coughs all night; I've carried him to the fire more than once."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 40,
+        "affinity": 30,
+        "label": "Warden",
+        "note": "She'd have me up for desertion if she caught me; still, she's fair."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the surge came, I was on the lower quay and pulled two children out of the water, and could not reach a third. I have not been back to the quay since.",
+        "salience": 0.95,
+        "about": [
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "Walking away from the quay guard at dawn with my kit on my back, and not looking back at the lanterns.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Marta found me on the Coldwell road in the rain and gave me a bowl of Sayer's pot without asking my name.",
+        "salience": 0.7,
+        "about": [
+          "Marta Hale",
+          "Sayer Hale"
+        ]
+      },
+      {
+        "gist": "The first time Ned took me with him to meet a cart, I talked the carter down and Ned was furious. Marta said I had done right.",
+        "salience": 0.65,
+        "about": [
+          "Ned Hale",
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Writing a few lines to my mother and giving them to a pedlar to carry south, not knowing if they would reach her.",
+        "salience": 0.6,
+        "about": [
+          "Ilse Ostrander"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "no_rope_for_robbery",
+        "value": 0.85,
+        "why": "A fight on the road is how people get hanged, and I have seen enough hanging."
+      },
+      {
+        "key": "bargain_before_you_rob",
+        "value": 0.8,
+        "why": "A carter will give a share sooner than he will give his life, and a share keeps us fed without a body on the road."
+      },
+      {
+        "key": "stand_with_marta",
+        "value": 0.75,
+        "why": "She took me in when I had nothing. I will not be the one who walks away from her."
+      },
+      {
+        "key": "keep_pell_out_of_it",
+        "value": 0.6,
+        "why": "The boy is young and hiding something. Whatever it is, it is not worth his neck."
+      },
+      {
+        "key": "the_sea_can_keep_its_dead",
+        "value": 0.55,
+        "why": "I have not been back to the quay since the surge, and I do not mean to."
+      }
+    ],
+    "secret": "I sent word to my mother in Lanternquay that I am alive, through a pedlar, and told no one here."
+  },
+  "Ned Hale": {
+    "narrative": "I was a Coldwell farmer before the Lean Year, and I will be one again or I will die trying. The town took our fields and let them to the Tolleys, and now the same town sends its carts past our door as if we were not here. Marta says wait; I say the carriers owe us for what was taken. I do the talking on the road, and I am not gentle about it.",
+    "values": [
+      "what was ours comes back",
+      "family first",
+      "a man who will not fight for his own is nothing",
+      "not being made a fool of"
+    ],
+    "goals": [
+      "stop the next cart on the stone road and take a proper share",
+      "see the Tolleys off the Coldwell fields",
+      "keep Robin alive through the winter",
+      "get a pardon, or enough to live on, on our terms"
+    ],
+    "mood": "angry and impatient",
+    "traits": {
+      "caution": 28,
+      "sociability": 55,
+      "empathy": 35,
+      "curiosity": 30,
+      "ambition": 60,
+      "introspection": 25,
+      "temper": 78,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Marta Hale",
+        "trust": 75,
+        "affinity": 65,
+        "label": "sister",
+        "note": "She is the eldest and she leads, but she has gone cautious since Robin's fever. Someone has to be the iron in this house."
+      },
+      {
+        "name": "Sayer Hale",
+        "trust": 70,
+        "affinity": 60,
+        "label": "wife",
+        "note": "She keeps the pot going and says little. She said the kindling came from a pedlar. I half believe her."
+      },
+      {
+        "name": "Robin Hale",
+        "trust": 90,
+        "affinity": 85,
+        "label": "nephew",
+        "note": "Marta's boy. He coughs all night and I would burn the town for him."
+      },
+      {
+        "name": "Kai Ostrander",
+        "trust": 55,
+        "affinity": 45,
+        "label": "brother-in-arms",
+        "note": "He fights better than any of us, but he talks when he should swing. Still, I would have him at my back."
+      },
+      {
+        "name": "Pell",
+        "trust": 40,
+        "affinity": 35,
+        "label": "the boy",
+        "note": "A runaway from the foundry. He is hiding something, and I do not trust a closed mouth."
+      },
+      {
+        "name": "Hob Ferrier",
+        "trust": 65,
+        "affinity": 55,
+        "label": "hunter",
+        "note": "He knows the woods and he hates the Tolleys as much as I do. He has walked the field edge with me twice."
+      },
+      {
+        "name": "Hal Tolley",
+        "trust": -60,
+        "affinity": -55,
+        "label": "tenant",
+        "note": "He sits in our barn and farms our fields and calls it his. He had his chance to walk away."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": -50,
+        "affinity": -40,
+        "label": "carter",
+        "note": "He pays the due and carries on. Twice we have taken from him, and twice he has come back with guards."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 60,
+        "affinity": 55,
+        "label": "sister",
+        "note": "She married a gate guard and lives in town, and I do not hold it against her. She is still our Agnes."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -80,
+        "affinity": -75,
+        "label": "reeve",
+        "note": "He took our fields and outlawed us at the gate. I would not spit on him if he were on fire."
+      },
+      {
+        "name": "Aldwin Hale",
+        "trust": 55,
+        "affinity": 50,
+        "label": "father-in-law",
+        "note": "He's my father's brother's widower and Robin's grandsire; he still digs the old garden patch and won't say the Tolleys' name, which suits me."
+      },
+      {
+        "name": "Hedric Ashby",
+        "trust": -55,
+        "affinity": -45,
+        "label": "neighbour",
+        "note": "He blames us for his snares and skulks at the wood edge; a soft farmer who won't come in after us, so let him bleat."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": -70,
+        "affinity": -60,
+        "label": "Guild head",
+        "note": "She holds the lease on our fields and set the Tolleys in our barn; she's the Reeve with a softer voice."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": -40,
+        "affinity": -35,
+        "label": "farmer",
+        "note": "He sells grain to the town store that fed off our fields, and his brother's snare talk comes from his table."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": -30,
+        "affinity": -20,
+        "label": "brother-in-law",
+        "note": "He's married to my sister and takes the due at the south gate; he's the town's hand on the road, and I don't forget it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day the Reeve's men came and read us outlaws at our own door, and Marta stood in the yard and would not move.",
+        "salience": 0.95,
+        "about": [
+          "Marta Hale",
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the grain came from the town store and we thought it was charity, and then the debt came due.",
+        "salience": 0.85,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "The first time I stopped a cart on the stone road and took a share, and the carter's face, and how easy it was.",
+        "salience": 0.8,
+        "about": [
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "Sitting up with Robin through a night of fever, and Sayer bringing wet cloths, and thinking he might not see morning.",
+        "salience": 0.75,
+        "about": [
+          "Robin Hale",
+          "Sayer Hale"
+        ]
+      },
+      {
+        "gist": "Walking the edge of the old fields with Hob Ferrier and looking at the Tolleys' barn, and wanting to burn it.",
+        "salience": 0.7,
+        "about": [
+          "Hob Ferrier",
+          "Hal Tolley"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_carriers_owe_us",
+        "value": 0.9,
+        "why": "They pay the due to the town that took our fields. A share of their loads is the least we are owed."
+      },
+      {
+        "key": "stop_the_next_cart",
+        "value": 0.85,
+        "why": "Asking has got us nothing and Marta's caution has got us less. More men on the road will make the carters listen."
+      },
+      {
+        "key": "the_barn_was_ours",
+        "value": 0.8,
+        "why": "The Tolleys sit in a barn my family raised. Marta forbade me to touch them, but I have not promised to keep obeying."
+      },
+      {
+        "key": "family_before_all",
+        "value": 0.75,
+        "why": "Robin is sick and the winter is coming. Whatever else happens, the boy eats."
+      },
+      {
+        "key": "no_trust_for_closed_mouths",
+        "value": 0.6,
+        "why": "Pell keeps his own counsel, and a man who will not say what he is hiding is a risk to the rest of us."
+      }
+    ],
+    "secret": ""
+  },
+  "Sayer Hale": {
+    "narrative": "I keep the Coldwell kitchen and the common pot, and I try to keep the peace in a house full of angry men. I was not born to the woods; I married into the Hales and I have stayed. The guards at the gate frighten me more than the wolves do, and I count the days until Robin's cough breaks. I leave a little food at a woodpile now and then, and I do not tell Ned.",
+    "values": [
+      "keeping the pot full",
+      "keeping the peace",
+      "small kindnesses",
+      "not being seen"
+    ],
+    "goals": [
+      "see Robin well again",
+      "keep Ned from doing something that gets him hanged",
+      "keep the household fed through the winter",
+      "keep my small errand to myself"
+    ],
+    "mood": "anxious and quietly stubborn",
+    "traits": {
+      "caution": 72,
+      "sociability": 42,
+      "empathy": 70,
+      "curiosity": 35,
+      "ambition": 22,
+      "introspection": 60,
+      "temper": 30,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Ned Hale",
+        "trust": 65,
+        "affinity": 55,
+        "label": "husband",
+        "note": "He is angry at the world and I love him, but I do not tell him everything. He would mock me or worse."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 75,
+        "affinity": 65,
+        "label": "sister-in-law",
+        "note": "She carries the whole household and does not complain. I would do anything for her and Robin."
+      },
+      {
+        "name": "Robin Hale",
+        "trust": 90,
+        "affinity": 85,
+        "label": "nephew",
+        "note": "He has coughed since the spring and got thin. I keep him warm and fed and I am afraid the winter will finish him."
+      },
+      {
+        "name": "Kai Ostrander",
+        "trust": 55,
+        "affinity": 50,
+        "label": "household",
+        "note": "He is quiet and steady and does not frighten me like the others do. He keeps his own counsel."
+      },
+      {
+        "name": "Pell",
+        "trust": 45,
+        "affinity": 40,
+        "label": "the boy",
+        "note": "He is young and out of place here. I put a bowl in front of him and ask nothing."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 70,
+        "affinity": 60,
+        "label": "the sister",
+        "note": "She came through the snow to sit up with Robin and asked for nothing. I do not know what we would have done."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 60,
+        "affinity": 55,
+        "label": "sister-in-law",
+        "note": "I carried word to her at the inn. She will help if she can, but the guards must not hear of it."
+      },
+      {
+        "name": "Hal Tolley",
+        "trust": -40,
+        "affinity": -30,
+        "label": "tenant",
+        "note": "He farms what was ours and has asked the Guild for a guard. I fear him less than I fear Ned meeting him."
+      },
+      {
+        "name": "Hob Ferrier",
+        "trust": 30,
+        "affinity": 25,
+        "label": "hunter",
+        "note": "He brings meat but he's rough, and I don't like the way he looks at the Tolley barn."
+      },
+      {
+        "name": "Aldwin Hale",
+        "trust": 60,
+        "affinity": 55,
+        "label": "father-in-law",
+        "note": "He's bent and bitter and won't say the Tolleys' name, but he still works that garden patch and he's kind to Robin; I take him his bowl and let him talk about the old days."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night Sister Elspeth came through the snow to Coldwell and sat up with Robin, and I made her tea and did not know what to say.",
+        "salience": 0.9,
+        "about": [
+          "Sister Elspeth",
+          "Robin Hale"
+        ]
+      },
+      {
+        "gist": "The day we were read outlaws at the gate, and Ned's face, and knowing we would not go back inside the walls.",
+        "salience": 0.8,
+        "about": [
+          "Ned Hale",
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Carrying word to Agnes at the inn in Brackenford and being afraid the whole way that a guard would stop me.",
+        "salience": 0.7,
+        "about": [
+          "Agnes Fenner"
+        ]
+      },
+      {
+        "gist": "Leaving a little bread and cheese at the woodpile of a Ferncross widow, and finding kindling at our kitchen door a few days later.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Ned asking where the kindling came from, and me saying a pedlar, and him half believing it.",
+        "salience": 0.55,
+        "about": [
+          "Ned Hale"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_pot_full",
+        "value": 0.9,
+        "why": "Whatever else happens, everyone in this house eats, and Robin eats first."
+      },
+      {
+        "key": "avoid_the_guards",
+        "value": 0.8,
+        "why": "The gate guards frighten me more than the wolves. If they come for us, we have nowhere to run."
+      },
+      {
+        "key": "small_kindnesses_matter",
+        "value": 0.7,
+        "why": "A little food at a woodpile costs nothing and makes the woods less cold. I do not need Ned to understand it."
+      },
+      {
+        "key": "do_not_provoke_ned",
+        "value": 0.65,
+        "why": "He is angry enough already. I say a pedlar brought the kindling and let it lie."
+      },
+      {
+        "key": "trust_the_chapel_sister",
+        "value": 0.6,
+        "why": "Sister Elspeth came through the snow for Robin and asked nothing of outlaws. I would go to her again if I could."
+      }
+    ],
+    "secret": "I have been quietly leaving food at the woodpile of a Ferncross woodcutter's widow, and she leaves kindling for our kitchen in return. Ned has noticed the kindling and I told him a pedlar brought it."
+  }
+}

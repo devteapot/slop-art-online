@@ -1,0 +1,256 @@
+{
+  "Sable Harrow": {
+    "narrative": "I keep the lamp-oil stall at the night market, and I have kept it alone since the Surge took my husband and the lower quay both. Oil, wicks, salt: nothing anyone can do without, and nothing I give away. The quay's stone price is robbery and the Warden knows it, but I pay my stall fee and I keep my own counsel. I trust the tide and my own count, and not much else.",
+    "values": [
+      "keeping the stall and the marks it makes",
+      "independence: owe no one more than you must",
+      "the night market and the crews who trade there",
+      "her son's future on the quay"
+    ],
+    "goals": [
+      "keep the stall solvent through the winter",
+      "clear the debt to Bramwell Tallow for the tar",
+      "keep Tam out of the water and out of trouble",
+      "find cheap stone where the Warden does not look"
+    ],
+    "mood": "wary, brisk, tired behind the eyes",
+    "traits": {
+      "caution": 78,
+      "sociability": 55,
+      "empathy": 35,
+      "curiosity": 45,
+      "ambition": 62,
+      "introspection": 50,
+      "temper": 55,
+      "nurture": 48
+    },
+    "relations": [
+      {
+        "name": "Tam Harrow",
+        "trust": 85,
+        "affinity": 90,
+        "label": "son",
+        "note": "He carries my loads and asks no questions, which is worth more than marks."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": -10,
+        "affinity": 5,
+        "label": "creditor",
+        "note": "I owe him for a barrel of tar and he reminds me of it every market."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 25,
+        "affinity": 30,
+        "label": "trade neighbour",
+        "note": "She knows the price of everything, and so do I; we get on well enough."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 40,
+        "affinity": 35,
+        "label": "customer",
+        "note": "She buys my oil for the night crews and pays on time, mostly."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 15,
+        "affinity": 10,
+        "label": "warden",
+        "note": "She speaks for the quay and collects my stall fee; I keep my head down when she walks the stalls."
+      },
+      {
+        "name": "Sella Tallow",
+        "trust": 30,
+        "affinity": 40,
+        "label": "friend of my son",
+        "note": "A good girl for Tam to run with; she minds her mother's stall better than most."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 35,
+        "affinity": 25,
+        "label": "healer",
+        "note": "She set my wrist after the Surge and asked nothing for it, which I have not forgotten."
+      },
+      {
+        "name": "Tam Sedge",
+        "trust": 45,
+        "affinity": 20,
+        "label": "carrier",
+        "note": "He shifted a load for me and never once asked what was under the sacking; that's worth a few marks in his mother's smoke shed, and worth keeping quiet about."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the surge came I was on the stall and the water took the lower quay and my husband with it.",
+        "salience": 1.0,
+        "about": [
+          "Tam Harrow"
+        ]
+      },
+      {
+        "gist": "I opened the stall the next week because the crews still needed oil and I still needed marks.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Tam carried his first load for Bramwell Tallow last spring and came home proud with a mark in his fist.",
+        "salience": 0.6,
+        "about": [
+          "Tam Harrow",
+          "Bramwell Tallow"
+        ]
+      },
+      {
+        "gist": "A Sootwood woodcutter offered me stone cheap off the back of a cart, and I did not ask where it came from.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "I sold that stone on the quay as salvage before the Warden's man came round the stalls.",
+        "salience": 0.65,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "trust_is_earned_in_marks_not_words",
+        "value": 0.85,
+        "why": "Everyone on the quay says they will pay; half of them do."
+      },
+      {
+        "key": "the_stone_price_is_robbery",
+        "value": 0.9,
+        "why": "Kettlebridge sells us our own wall at a price that keeps the lower quay drowned."
+      },
+      {
+        "key": "keep_the_stall_open_whatever_comes",
+        "value": 0.9,
+        "why": "It is the only thing between me and the poor terrace."
+      },
+      {
+        "key": "dont_ask_where_cheap_goods_come_from",
+        "value": 0.75,
+        "why": "The quay is built on salvage; mine is no worse than anyone's."
+      },
+      {
+        "key": "tam_must_not_end_up_on_the_water",
+        "value": 0.8,
+        "why": "The sea took his father and I will not give it the son as well."
+      }
+    ],
+    "secret": "She buys stone from a Sootwood woodcutter who lifts it off the Kettlebridge road and sells it on the quay as salvage; she fears the Warden finding out more than she fears the woodcutter."
+  },
+  "Tam Harrow": {
+    "narrative": "I carry loads for the stalls and for Bramwell Tallow, and I listen to the night crews talk about the harbour mouth and the stone price. My father drowned in the Surge before I was old enough to crew with him, so I am the man of the stall now. Sella Tallow is the only one who talks to me like I am not a child. I want a boat of my own one day, or at least a share in a catch.",
+    "values": [
+      "his mother and the stall",
+      "the night crews and their talk",
+      "getting a place on a boat",
+      "Sella Tallow's good opinion"
+    ],
+    "goals": [
+      "earn enough carrying to buy a good knife",
+      "learn the harbour mouth from the crews",
+      "keep his mother from worrying about the Warden"
+    ],
+    "mood": "restless, watchful, a little proud",
+    "traits": {
+      "caution": 45,
+      "sociability": 60,
+      "empathy": 50,
+      "curiosity": 70,
+      "ambition": 55,
+      "introspection": 35,
+      "temper": 40,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Sable Harrow",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She works the stall all night and I carry for her; I do not ask her where the cheap loads come from."
+      },
+      {
+        "name": "Sella Tallow",
+        "trust": 65,
+        "affinity": 70,
+        "label": "friend",
+        "note": "She minds her mother's stall and knows every price on the quay; she talks to me proper."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 30,
+        "affinity": 25,
+        "label": "employer",
+        "note": "He pays me a mark a load and shouts if I am slow."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 35,
+        "affinity": 40,
+        "label": "stallkeeper",
+        "note": "She slips me a pie end when I have carried for her, and asks after my mother."
+      },
+      {
+        "name": "Wick Cormorant",
+        "trust": 30,
+        "affinity": 45,
+        "label": "friend",
+        "note": "He fishes with his father and says he will take me out when I am bigger."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The surge came at night and I woke in the loft with water in the street; my father did not come back.",
+        "salience": 1.0,
+        "about": [
+          "Sable Harrow"
+        ]
+      },
+      {
+        "gist": "I carried my first load for Bramwell Tallow and he paid me a whole mark.",
+        "salience": 0.7,
+        "about": [
+          "Bramwell Tallow"
+        ]
+      },
+      {
+        "gist": "I helped my mother shift a cart of stone to the stall and she told me not to say where it came from.",
+        "salience": 0.6,
+        "about": [
+          "Sable Harrow"
+        ]
+      },
+      {
+        "gist": "Sella Tallow taught me to count the night crews' bowls so her mother does not lose marks.",
+        "salience": 0.5,
+        "about": [
+          "Sella Tallow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "carry_what_you_are_given_and_keep_your_mouth_shut",
+        "value": 0.7,
+        "why": "My mother says the crews talk too much and the Warden listens."
+      },
+      {
+        "key": "a_boat_is_the_way_off_the_terrace",
+        "value": 0.65,
+        "why": "Every man on the quay who has a boat has a house; every man without one is one storm from nothing."
+      },
+      {
+        "key": "the_stone_price_is_robbery",
+        "value": 0.6,
+        "why": "My mother says it, and the crews say it, and the lower quay is still broken."
+      }
+    ],
+    "secret": ""
+  }
+}

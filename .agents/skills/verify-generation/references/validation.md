@@ -1,5 +1,12 @@
 # Validation record (generation)
 
+## 2026-11-10 island food places (Mac)
+
+Own scratch container `hunger-verify` (2.14.1, port 3382) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; branch `hunger-1` (main `7e5de53` merged in). The island seed gains the places `berries` and `store` and `town_life.spread`; `town::seat` reads `spread` and looks each spot kind up once per settlement. The driver's place check now names every seed place, and a new check asserts that a spread place is spread.
+
+- **`generation-hunger-110557`** (`--feature worlds --seeds island`): island 970 of 970. All 277 residents know `berries`, `evening`, `inn`, `square` and `store`; `berries` is spread over 275 distinct bushes for 277 residents.
+- **`generation-hunger-085943`** (before `spread`, from `fe6ec66`): island 969 of 969.
+
 ## 2026-11-09 floors: staged creation, a runtime seed, the second-pass megacity (dev-box)
 
 Own scratch container `megacity-stdb` (image `v2.14.1`, port 3394, `/wasm` mounted `:z`) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; worktree `~/dev/slop-megacity`, branch `megacity-1` from `14f3a72`. The driver gained the floor child `floor-megacity-4k` (`--seed none`, `create_floor`, `genesis` polled to `done`, four floor checks), `--seeds`, district styles read from the seed, membership checks of the living, and the `animals.habitat` map skipped in the animal counts.
@@ -161,3 +168,12 @@ Consulted the official [documentation entry point](https://spacetimedb.com/docs/
 ## What remains unverified
 
 Fresh paid drafting and its second pass, complete publication-error readability, semantic privacy of authored prose, every numeric seed, repeated valley homestead placement, subscriptions, browser rendering, player actions, learning, later ecology and performance. Use the neighbouring verification skills and performance contract for those claims.
+
+## Seeded lives (2026-11-10, branch `lives-1`)
+
+`generation-lives-0256` on the dev-box, in a worker's own container (`LIVING_STDB_CONTAINER=lives-stdb`, `LIVING_STDB_URL=http://127.0.0.1:3412`, SpacetimeDB 2.14.1), from commit `2108cdc` plus the terrace-garden fix:
+
+- `island` passes 968 of 968 checks. The new checks: hamlets laid out and peopled where the seed's `site: hamlet_village` entries ask (9 of 9); authored sheet relations as `relation` rows (2,348 of 2,348); authored places and the stages of known ways (9 residents, 60 stages, the longest 130.6 m); workplaces an author gave a resident exempt from the in-or-by-settlement check. The `land` digests (tiles `9b403da95bba9407`, heights `0d2f77752781845c`, layout `408df4be210092eb`) equal `floor_preview`'s.
+- `authored island` compiles `living/seeds/worlds/island` offline (network blocked) to the committed `island.json`.
+- One failure outside this change: "Saltmere memberships" in the second `realm` child. Roborpe (id 21) died within seconds of creation; death removes the membership but keeps the background the check counts. The first `realm` child passed. The check should compare living residents only.
+- The previous run (`generation-lives-0247`) failed "open lots stay walkable" on a Kettlebridge garden laid across a terrace step. The planner now keeps gardens and fields off terrace steps (`settle.rs`, `try_lot`). It also failed "original seeds unchanged", because `island.json`'s setting text was edited during that run.

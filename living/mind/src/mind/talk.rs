@@ -447,12 +447,16 @@ impl Minds {
 
     /// Full deliberations take priority over conversation turns.
     fn thinking(&self, actor: u32) -> bool {
-        if self.lod.on {
-            // A request held back off stage is not a deliberation under way (lod.rs).
-            let (deliberating, deferring) = self.actors.lock().unwrap().get(&actor).map_or((false, false), |m| (m.deliberating, m.deferring));
-            return !deferring && (deliberating || self.pending.lock().unwrap().contains_key(&actor));
+        // A request held back (off stage, lod.rs, or by the rethink gate) is not a
+        // deliberation under way.
+        let (deliberating, deferring) = self.actors.lock().unwrap().get(&actor).map_or((false, false), |m| (m.deliberating, m.deferring));
+        if deferring {
+            return false;
         }
-        self.actors.lock().unwrap().get(&actor).map_or(false, |m| m.deliberating) || self.conn.db.my_deliberations().iter().any(|d| d.actor == actor)
+        if self.lod.on {
+            return deliberating || self.pending.lock().unwrap().contains_key(&actor);
+        }
+        deliberating || self.conn.db.my_deliberations().iter().any(|d| d.actor == actor)
     }
 
     async fn reply_turn(&self, me: u32, other: u32) -> Result<()> {
@@ -502,7 +506,7 @@ impl Minds {
             Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().trim().to_string(), o.get("to").map(id_of).unwrap_or(0).max(id_of(&v["to"]))),
             _ => (String::new(), 0),
         };
-        let say = if say.eq_ignore_ascii_case("null") || say == "..." { String::new() } else { say };
+        let say = if say.eq_ignore_ascii_case("null") || living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
         let to = if to != 0 && to != me && self.conn.db.character().id().find(&to).map_or(false, |c| c.kind == "person") { to } else { other };
         // What the speaker says is now settled closes the exchange (their own judgment).
         let outcome = flat(if v["settled"].is_null() || v["settled"] == json!(false) { &v["outcome"] } else { &v["settled"] }).trim().to_string();
@@ -699,6 +703,7 @@ impl Minds {
         let plan = self.conn.db.brain().id().find(&me).map(|b| b.plan).filter(|p| !p.is_empty());
         let doing = plan.clone().unwrap_or_else(|| "going about your day".into());
         let scene = format!("{} ({part}), {place}. What you are doing: {doing}.", fmt(now));
+        let body = self.body_text(c.id);
         // What this exchange brings to mind: the other person, what was said, the place, the hour.
         let mut cues = Cues::default();
         cues.key(format!("person:{other}"), 1.2);
@@ -773,6 +778,7 @@ impl Minds {
             lately: &lately,
             earlier: earlier.as_deref(),
             scene: &scene,
+            body: &body,
             conversation: &convo,
             heard: &heard.text,
             between: &between,

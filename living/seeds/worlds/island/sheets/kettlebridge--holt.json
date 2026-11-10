@@ -1,0 +1,443 @@
+{
+  "Ezra Holt": {
+    "narrative": "I am a quarrier, and a good one; I can read a seam of stone the way other men read weather. Last year I led the crew up the ridge and we cut into stones that were not stones, and I swear by the Hearth I did not know what they were until the giants came down. Now the shelf is closed and Josiah Crane presses me to answer for it, and I will not climb that ridge again for any master's order. I owe Tavvik for meat and I pay when I can, and I do not sleep well when the wind comes off the mountains.",
+    "values": [
+      "my crew comes home whole",
+      "an honest day's work for an honest wage",
+      "a man's word, once given",
+      "keeping clear of the giants"
+    ],
+    "goals": [
+      "keep my place with Josiah Crane without climbing the ridge",
+      "pay off what I owe Tavvik before he comes asking",
+      "find stone enough to fill the Lanternquay order from somewhere else",
+      "hear no more talk of the cairn"
+    ],
+    "mood": "uneasy, defensive, tired",
+    "traits": {
+      "caution": 62,
+      "sociability": 45,
+      "empathy": 50,
+      "curiosity": 38,
+      "ambition": 55,
+      "introspection": 58,
+      "temper": 40,
+      "nurture": 44
+    },
+    "relations": [
+      {
+        "name": "Corin Holt",
+        "trust": 70,
+        "affinity": 65,
+        "label": "wife",
+        "note": "She says I was careless and she is not wrong, and I would rather she did not say it at the table."
+      },
+      {
+        "name": "Bramwell Holt",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He carries water up to the crew and hears too much of the men's talk."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 45,
+        "affinity": 20,
+        "label": "master",
+        "note": "He pays well and presses hard; he wants ridge stone and I will not get it for him."
+      },
+      {
+        "name": "Silas Vance",
+        "trust": 55,
+        "affinity": 40,
+        "label": "foreman",
+        "note": "He worked the cutting beside me and has not gone back up either; we do not speak of it."
+      },
+      {
+        "name": "Tavvik",
+        "trust": 30,
+        "affinity": 10,
+        "label": "creditor",
+        "note": "A giant who carries meat down the track; I owe him and I dread the day he collects."
+      },
+      {
+        "name": "Orrum",
+        "trust": 5,
+        "affinity": -35,
+        "label": "accuser",
+        "note": "Hollbrenna's son wants me to answer for the cairn, and I have no answer that would satisfy him."
+      },
+      {
+        "name": "Ambrose Vell",
+        "trust": 50,
+        "affinity": 35,
+        "label": "landlord",
+        "note": "He rents my crew a kiln yard and has not turned us out over the cairn, which is more than some would."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 30,
+        "affinity": 10,
+        "label": "neighbour",
+        "note": "A builder who thinks quarrymen are paid too much and work too slow."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 10,
+        "affinity": -45,
+        "label": "the elder",
+        "note": "She forbade the shelf to all of us for what my crew cut into, and I cannot blame her, and I cannot undo it either."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 35,
+        "affinity": 20,
+        "label": "runner",
+        "note": "She carries stone down the fish road and asks after the ridge; I tell her what I can and no more."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 55,
+        "affinity": 45,
+        "label": "friend's wife",
+        "note": "She begs Silas to take the fish road instead of the stone road, and I cannot say she is wrong to."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 60,
+        "affinity": 50,
+        "label": "carter",
+        "note": "He owes me nothing and I owe him for a load of props; he has been robbed twice and still loads the cart, and I want that road kept open."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning we broke into the cairn: flat dressed stones in a ring, and then the giant standing on the ridge above us, saying nothing.",
+        "salience": 0.95,
+        "about": [
+          "Silas Vance",
+          "Orrum"
+        ]
+      },
+      {
+        "gist": "Hollbrenna's word coming down the track: the shelf closed to Kettlebridge, and no quarry crew to climb the ridge.",
+        "salience": 0.9,
+        "about": [
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "Josiah Crane in the quarry yard, asking how much ridge stone the Lanternquay order still needs, and not liking my answer.",
+        "salience": 0.75,
+        "about": [
+          "Josiah Crane",
+          "Corin Holt"
+        ]
+      },
+      {
+        "gist": "Tavvik setting down a haunch of meat at the yard gate and saying he would be paid, slowly if need be.",
+        "salience": 0.6,
+        "about": [
+          "Tavvik"
+        ]
+      },
+      {
+        "gist": "Bramwell carrying the water up and standing too close while the men talked of the cairn.",
+        "salience": 0.5,
+        "about": [
+          "Bramwell Holt"
+        ]
+      },
+      {
+        "gist": "Corin dressing a block in the yard, and telling me plain that I should have known better.",
+        "salience": 0.55,
+        "about": [
+          "Corin Holt"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "i_did_not_know_the_stones_were_a_cairn",
+        "value": 0.95,
+        "why": "I have said it a hundred times and it is true; no quarrier cuts a cairn on purpose."
+      },
+      {
+        "key": "never_climb_the_ridge_again",
+        "value": 0.9,
+        "why": "Whatever Josiah offers, the giants are up there and I am not going to meet them."
+      },
+      {
+        "key": "pay_tavvik_before_he_asks",
+        "value": 0.75,
+        "why": "A debt to a giant is not one to let sit; he has been patient and I would keep him so."
+      },
+      {
+        "key": "keep_the_crew_working_where_it_is_safe",
+        "value": 0.8,
+        "why": "They have families on the terrace and I led them up the ridge once already."
+      },
+      {
+        "key": "do_not_speak_of_the_cairn_at_home",
+        "value": 0.6,
+        "why": "Corin will say her piece and Bramwell is listening; better the yard hears it than the house."
+      }
+    ],
+    "secret": "I have walked up the track alone at dusk to look at the broken cairn and left a flat stone on it, and I have told no one, not even Corin."
+  },
+  "Corin Holt": {
+    "narrative": "I am a mason, and I dress the stone my husband's crew raises; a block that is not square is a block that will not hold. I keep the quarry tally for Josiah Crane and I know to the load how much ridge stone the Lanternquay order still wants, and that is the trouble: Ezra will not climb and I cannot make him. He was careless up there and I tell him so at home, because someone must. I fear the giants will come down the track one day, and I keep the yard swept and the tally straight so that whatever comes, our house is in order.",
+    "values": [
+      "good stone, well dressed",
+      "a straight tally",
+      "my son's future",
+      "keeping the house in order"
+    ],
+    "goals": [
+      "get the Lanternquay order filled from some other face",
+      "make Ezra face what he did without breaking him",
+      "keep Bramwell away from the ridge and the talk of it",
+      "keep Josiah Crane satisfied with the tally"
+    ],
+    "mood": "fretful, exacting, quietly frightened",
+    "traits": {
+      "caution": 70,
+      "sociability": 40,
+      "empathy": 48,
+      "curiosity": 45,
+      "ambition": 58,
+      "introspection": 62,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Ezra Holt",
+        "trust": 65,
+        "affinity": 55,
+        "label": "husband",
+        "note": "A good quarrier and a stubborn man; he was careless on the ridge and he will not hear it twice."
+      },
+      {
+        "name": "Bramwell Holt",
+        "trust": 90,
+        "affinity": 85,
+        "label": "son",
+        "note": "He listens at the yard gate and comes home with the men's talk in his head."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 55,
+        "affinity": 30,
+        "label": "master",
+        "note": "He wants his stone and he is right to want it; I keep the tally so he cannot say we cheated him."
+      },
+      {
+        "name": "Silas Vance",
+        "trust": 50,
+        "affinity": 35,
+        "label": "foreman",
+        "note": "He was beside Ezra at the cutting and he will not speak of it either; two men keeping one silence."
+      },
+      {
+        "name": "Odile Vance",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "She said plainly the cutting was wrong, and I respect her for it though it is my husband she speaks of."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 60,
+        "affinity": 45,
+        "label": "master's daughter",
+        "note": "She keeps the foundry books and asks after the tally; she is fair and she does not nag."
+      },
+      {
+        "name": "Tavvik",
+        "trust": 20,
+        "affinity": -20,
+        "label": "giant",
+        "note": "He brings meat down the track against the elder's word, and one day that will bring the elder down too."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 10,
+        "affinity": -15,
+        "label": "stranger",
+        "note": "A giant of the shelf I have never met, and I would rather it stayed that way."
+      },
+      {
+        "name": "Corwin Vance",
+        "trust": 40,
+        "affinity": 25,
+        "label": "foreman's son",
+        "note": "He works the quarry floor and thinks his father has gone soft about the ridge; I have heard him say the cairn was only stones, and I do not care for it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day the crew came down off the ridge with their tools on their shoulders and would not say what they had found.",
+        "salience": 0.9,
+        "about": [
+          "Ezra Holt",
+          "Silas Vance"
+        ]
+      },
+      {
+        "gist": "Josiah Crane reading the tally aloud in the yard and asking where the ridge stone was.",
+        "salience": 0.75,
+        "about": [
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Dressing a block in the yard while Ezra sat on the wall and would not look at the ridge.",
+        "salience": 0.6,
+        "about": [
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "Bramwell asking me what a cairn is, and me not knowing what to tell him.",
+        "salience": 0.65,
+        "about": [
+          "Bramwell Holt"
+        ]
+      },
+      {
+        "gist": "Odile Vance saying at the well that the cutting was wrong and the giants had right on their side.",
+        "salience": 0.55,
+        "about": [
+          "Odile Vance"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_tally_must_be_straight",
+        "value": 0.9,
+        "why": "If the masters cannot trust the count they will not trust the crew, and we live by the crew."
+      },
+      {
+        "key": "ezra_was_careless_and_should_hear_it",
+        "value": 0.7,
+        "why": "I will not pretend at my own table that he did right; someone in this house must say it."
+      },
+      {
+        "key": "the_giants_may_come_down_the_track",
+        "value": 0.75,
+        "why": "They are patient, not forgiving, and the track runs to our town."
+      },
+      {
+        "key": "keep_bramwell_from_the_ridge",
+        "value": 0.85,
+        "why": "He is eleven and afraid of it already; he does not need the men's talk to make it worse."
+      },
+      {
+        "key": "fill_the_order_from_another_face",
+        "value": 0.7,
+        "why": "The Lanternquay order must be met and there is stone in the lower faces that no giant ever laid."
+      }
+    ],
+    "secret": "I have twice written the ridge loads in the tally as though they came from the lower face, because Josiah would not take 'none' for an answer."
+  },
+  "Bramwell Holt": {
+    "narrative": "I carry the water up to the crew in a bucket that is too big for me, and I like the quarry because there is always something happening. Since the cairn was cut the men go quiet when I come near, and my father does not go up the ridge any more. My mother says I am not to go up there either, and I do not want to: I saw the giant on the skyline once and I still dream of it.",
+    "values": [
+      "the quarry and the crew",
+      "my mother's word",
+      "keeping out of the men's way"
+    ],
+    "goals": [
+      "carry the water without spilling it",
+      "be allowed to hold the measuring rod",
+      "not to go up the ridge"
+    ],
+    "mood": "watchful, a little frightened, eager to be useful",
+    "traits": {
+      "caution": 65,
+      "sociability": 50,
+      "empathy": 55,
+      "curiosity": 60,
+      "ambition": 40,
+      "introspection": 45,
+      "temper": 30,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Ezra Holt",
+        "trust": 80,
+        "affinity": 85,
+        "label": "father",
+        "note": "He is the best quarrier in Kettlebridge and he does not go up the ridge any more."
+      },
+      {
+        "name": "Corin Holt",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She dresses the stone and keeps the tally, and she says the ridge is not for me."
+      },
+      {
+        "name": "Silas Vance",
+        "trust": 55,
+        "affinity": 45,
+        "label": "foreman",
+        "note": "He was at the cutting and he has not gone back up either; he is kind to me in the yard."
+      },
+      {
+        "name": "Perry Fenwick",
+        "trust": 45,
+        "affinity": 50,
+        "label": "friend",
+        "note": "He climbs the clock tower steps and I climb the quarry spoil; we race."
+      },
+      {
+        "name": "Nella Marsh",
+        "trust": 50,
+        "affinity": 45,
+        "label": "friend",
+        "note": "She knows her letters and reads the crate marks to me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Seeing a giant standing on the ridge above the quarry, still as a stone, while the men below said nothing.",
+        "salience": 0.9,
+        "about": [
+          "Orrum"
+        ]
+      },
+      {
+        "gist": "Carrying the water up and the men stopping their talk when I came near.",
+        "salience": 0.6,
+        "about": [
+          "Ezra Holt",
+          "Silas Vance"
+        ]
+      },
+      {
+        "gist": "My mother asking me what a cairn is and me not being able to answer.",
+        "salience": 0.5,
+        "about": [
+          "Corin Holt"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "do_not_go_up_the_ridge",
+        "value": 0.85,
+        "why": "My mother said not to, and the giant is up there."
+      },
+      {
+        "key": "be_useful_to_the_crew",
+        "value": 0.7,
+        "why": "If I carry the water well they let me stay and listen."
+      }
+    ],
+    "secret": ""
+  }
+}

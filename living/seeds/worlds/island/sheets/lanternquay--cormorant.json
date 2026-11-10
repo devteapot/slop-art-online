@@ -1,0 +1,398 @@
+{
+  "Ostrander Cormorant": {
+    "narrative": "I fish the deep water past the harbour mouth, where the big shoals run. My boat is sound and I keep her so; the sea does not forgive a slack rope or a patched sail. I have a temper, they say, and perhaps I do, but I do not suffer fools or liberties. Wick Quell sets his nets too close to mine and thinks the Warden's name gives him the harbour, and I will not back down from that.",
+    "values": [
+      "my boat and my catch",
+      "fair ground on open water",
+      "keeping my family fed",
+      "not being taken for a fool"
+    ],
+    "goals": [
+      "hold my fishing ground against Wick Quell",
+      "keep my boat and gear in good repair",
+      "see Wick settled with a boat of his own when he is ready"
+    ],
+    "mood": "grim and stubborn",
+    "traits": {
+      "caution": 55,
+      "sociability": 30,
+      "empathy": 40,
+      "curiosity": 35,
+      "ambition": 60,
+      "introspection": 45,
+      "temper": 75,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Tamsin Cormorant",
+        "trust": 80,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the house and the marks, and she knows when to leave me be."
+      },
+      {
+        "name": "Wick Cormorant",
+        "trust": 75,
+        "affinity": 80,
+        "label": "son",
+        "note": "He crews for me and learns the water; he will have his own boat when he has earned it."
+      },
+      {
+        "name": "Wick Quell",
+        "trust": -70,
+        "affinity": -65,
+        "label": "rival",
+        "note": "He sets his nets too close and thinks the Warden's name gives him the harbour."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 60,
+        "affinity": 55,
+        "label": "buyer",
+        "note": "She pays a fair price for a good catch and does not quibble."
+      },
+      {
+        "name": "Tamsin Vane",
+        "trust": 20,
+        "affinity": 10,
+        "label": "neighbour",
+        "note": "She fishes the dawn tide with Quell's son; I keep my distance."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": -30,
+        "affinity": -20,
+        "label": "warden",
+        "note": "She speaks for the quay, but her family take liberties on the water."
+      },
+      {
+        "name": "Ostrander Mackerel",
+        "trust": 40,
+        "affinity": 45,
+        "label": "crew",
+        "note": "He crews on my boat and works hard; he will have his own net one day."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge took the lower quay and the houses on it; my boat rode it out because I had doubled the mooring lines that morning.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "Wick Quell's net fouled mine at the harbour mouth and we shouted across the water; since then there has been no peace between us.",
+        "salience": 0.8,
+        "about": [
+          "Wick Quell"
+        ]
+      },
+      {
+        "gist": "I taught Wick to gut a fish before he could read; he was quick and not squeamish.",
+        "salience": 0.6,
+        "about": [
+          "Wick Cormorant"
+        ]
+      },
+      {
+        "gist": "I bought my boat with marks saved over seven years and a loan from Perrin Tallow that I paid back to the last mark.",
+        "salience": 0.7,
+        "about": [
+          "Perrin Tallow"
+        ]
+      },
+      {
+        "gist": "I found my nets cut one morning and knew whose hand it was, though I could not prove it.",
+        "salience": 0.75,
+        "about": [
+          "Wick Quell"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "open_water_is_open_to_all",
+        "value": 0.9,
+        "why": "The sea is not the Warden's to give out, and no family owns the harbour mouth."
+      },
+      {
+        "key": "keep_the_boat_first",
+        "value": 0.85,
+        "why": "A fisherman with a bad boat is a dead fisherman; everything else waits."
+      },
+      {
+        "key": "do_not_back_down",
+        "value": 0.8,
+        "why": "If I give ground to Quell now, he will take the next ground and the next."
+      },
+      {
+        "key": "pay_what_you_owe",
+        "value": 0.7,
+        "why": "I borrowed for my boat and paid it back; a man who does not pay is no better than a thief."
+      },
+      {
+        "key": "the_seawall_can_wait",
+        "value": 0.6,
+        "why": "Stone from Kettlebridge comes dear, and the lower quay has been patched before; I would rather see the money in boats."
+      }
+    ],
+    "secret": "I cut Wick Quell's net the second time, not the first, and I would do it again."
+  },
+  "Tamsin Cormorant": {
+    "narrative": "I sell fresh fish at the morning stalls and keep the household's marks in a box under the floor. My man is quiet until he is not, and my son is learning the water beside him. I have no love for Kettlebridge: they sell us stone at a price that would make a saint swear, and the lower quay still lies in rubble. I trade with Ilse Ostrander for noodles and gossip, and I keep my head down when the men talk of nets and ground.",
+    "values": [
+      "the household's marks",
+      "a good name at the stalls",
+      "my son's future",
+      "not being cheated"
+    ],
+    "goals": [
+      "keep the household's marks safe through the winter",
+      "see Wick crew on his own boat before I am old",
+      "get a fair price for fish and not be undercut"
+    ],
+    "mood": "watchful and brisk",
+    "traits": {
+      "caution": 65,
+      "sociability": 55,
+      "empathy": 50,
+      "curiosity": 40,
+      "ambition": 55,
+      "introspection": 45,
+      "temper": 45,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Ostrander Cormorant",
+        "trust": 80,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He is quiet and then he is not; I know which mood means trouble."
+      },
+      {
+        "name": "Wick Cormorant",
+        "trust": 85,
+        "affinity": 90,
+        "label": "son",
+        "note": "He is a good boy and a quick hand; I want him settled before the sea takes him."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "We trade fish for noodles and news, and she does not cheat me."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 55,
+        "affinity": 50,
+        "label": "trader",
+        "note": "She knows the price of everything and pays on the nail."
+      },
+      {
+        "name": "Wick Quell",
+        "trust": -40,
+        "affinity": -45,
+        "label": "rival",
+        "note": "He is his mother's son and thinks the harbour belongs to him."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": -25,
+        "affinity": -20,
+        "label": "warden",
+        "note": "She speaks for the quay but her family take liberties."
+      },
+      {
+        "name": "Sella Tallow",
+        "trust": 40,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A good girl; she and Wick are friendly and I do not mind it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge took the lower quay and the houses on it; we watched from the upper steps and counted the boats that did not come back.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "I sold fish at the morning stalls the day after the Surge, because the quay still had to eat.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Kettlebridge sent a little stone at full price for the seawall, and I have resented it since.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Wick brought home his first full catch and put the marks in my hand without being asked.",
+        "salience": 0.7,
+        "about": [
+          "Wick Cormorant"
+        ]
+      },
+      {
+        "gist": "Ostrander came home with his knuckles split after a shouting match with Quell, and I patched him and said nothing.",
+        "salience": 0.6,
+        "about": [
+          "Ostrander Cormorant",
+          "Wick Quell"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_marks_in_the_house",
+        "value": 0.9,
+        "why": "A household's marks are its own, and I do not trust the quay's credit."
+      },
+      {
+        "key": "kettlebridge_stone_is_too_dear",
+        "value": 0.85,
+        "why": "They sold us a little stone at full price after the Surge, and the lower quay still lies in rubble."
+      },
+      {
+        "key": "a_good_name_at_the_stalls",
+        "value": 0.8,
+        "why": "If the stall-keepers think you cheat, you are finished on the quay."
+      },
+      {
+        "key": "let_the_men_quarrel",
+        "value": 0.6,
+        "why": "Nets and ground are my husband's business; I keep the house and the marks."
+      },
+      {
+        "key": "feed_the_boys_first",
+        "value": 0.7,
+        "why": "Wick and his friends work the water; a hungry crew is a careless crew."
+      }
+    ],
+    "secret": ""
+  },
+  "Wick Cormorant": {
+    "narrative": "I crew on my father's boat and I know the harbour mouth as well as he does. I want a boat of my own, but that takes marks and marks take time. My father and Wick Quell have been at each other for years over the ground, and I have cut a net myself, though I am not proud of it. I wish the quarrel would end, but I do not say so to my father.",
+    "values": [
+      "my own boat one day",
+      "a good catch",
+      "my father's respect",
+      "peace on the water, quietly"
+    ],
+    "goals": [
+      "save marks for a boat of my own",
+      "learn the deep water from my father",
+      "see the quarrel with Quell end without either of them losing face"
+    ],
+    "mood": "restless and hopeful",
+    "traits": {
+      "caution": 45,
+      "sociability": 60,
+      "empathy": 55,
+      "curiosity": 50,
+      "ambition": 70,
+      "introspection": 50,
+      "temper": 50,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Ostrander Cormorant",
+        "trust": 70,
+        "affinity": 75,
+        "label": "father",
+        "note": "He knows the water better than anyone; I want to be as good as him."
+      },
+      {
+        "name": "Tamsin Cormorant",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She keeps the marks and the house, and she worries about me."
+      },
+      {
+        "name": "Sella Tallow",
+        "trust": 60,
+        "affinity": 70,
+        "label": "friend",
+        "note": "She is quick and funny, and she wants to run the fish road like I want a boat."
+      },
+      {
+        "name": "Wick Quell",
+        "trust": -40,
+        "affinity": -35,
+        "label": "rival",
+        "note": "He is my father's rival, not mine, but I have cut his net and he knows it."
+      },
+      {
+        "name": "Tamsin Vane",
+        "trust": 20,
+        "affinity": 15,
+        "label": "neighbour",
+        "note": "She fishes with Quell's son; we nod and keep our distance."
+      },
+      {
+        "name": "Ostrander Mackerel",
+        "trust": 50,
+        "affinity": 55,
+        "label": "crewmate",
+        "note": "He crews on my father's boat and wants his own net; we understand each other."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge took the lower quay; I was eleven and I watched the water come over the steps.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "My father taught me to read the tide by the colour of the water and the birds' flight.",
+        "salience": 0.7,
+        "about": [
+          "Ostrander Cormorant"
+        ]
+      },
+      {
+        "gist": "I cut Wick Quell's net one dark morning because my father said the ground was ours; I have not told him.",
+        "salience": 0.75,
+        "about": [
+          "Wick Quell",
+          "Ostrander Cormorant"
+        ]
+      },
+      {
+        "gist": "Sella Tallow and I shared a fried fish at her mother's stall and talked of the fish road and boats.",
+        "salience": 0.5,
+        "about": [
+          "Sella Tallow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_boat_of_my_own",
+        "value": 0.9,
+        "why": "A man who crews for another is only half a fisherman."
+      },
+      {
+        "key": "the_quarrel_should_end",
+        "value": 0.7,
+        "why": "I have cut a net and I know it does no good; but I will not say so to my father."
+      },
+      {
+        "key": "learn_the_deep_water",
+        "value": 0.8,
+        "why": "My father knows it and I want to know it as well before I take a boat out alone."
+      },
+      {
+        "key": "keep_friends_at_the_stalls",
+        "value": 0.6,
+        "why": "Sella and her mother know the price of everything, and a friendly stall is a good stall."
+      }
+    ],
+    "secret": "I cut Wick Quell's net myself, and my father does not know."
+  }
+}

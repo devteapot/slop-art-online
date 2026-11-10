@@ -16,12 +16,16 @@
 //!      `my_places`, `my_inventory`, `my_know_how`, my combat feed and timing (`my_combat`,
 //!      `my_readiness`) and the skill bar's `skill_card` (docs/COMBAT.md); the visible skills'
 //!      `act_card` and the one `weather` row (docs/TOWN_LIFE.md), both small and nearly static;
+//!      the world's installed skill script (`script`, the `skills` row: about 70 kB, sent again
+//!      only when a script is installed), from which `verbs.rs` offers acts;
 //!    - by the world's kind ([`Mode`]): **land** (a `land` row exists; the island): terrain
 //!      comes from regenerating the land (`live.rs`), so `terrain_chunk` is only subscribed in
 //!      the window, for edits; **tiles** (the lab worlds): `terrain_chunk` whole.
 //! 3. Windows of static data round me:
 //!    - land, near: `terrain_chunk` within [`TERRAIN_CHUNKS`] (only edits since world creation
-//!      matter there), re-centred when I walk [`RECENTRE`] chunks from its centre;
+//!      matter there), and the `resource_node` and `structure` rows there (what F can act on:
+//!      bushes, hearths, stores, signs; about 4 resources a chunk on the island), re-centred
+//!      when I walk [`RECENTRE`] chunks from its centre;
 //!    - land, far: `lot` within [`LOT_CHUNKS`] (buildings show to the island's draw distance),
 //!      re-centred after [`LOT_RECENTRE`] chunks. Lots never change, so this window has its own,
 //!      longer lifetime: re-sending it with every near move cost about 130 kB a move.
@@ -29,6 +33,13 @@
 //!    Subscription SQL has no `IN`, so a window is one id range per row of chunks (`id = (cy <<
 //!    16) | cx`), joined by `OR`;
 //!    - tiles: `resource_node` and `structure` per chunk within [`REGION_R`].
+//!
+//! Latency (docs/LATENCY.md, steps 1–3): the game reads unconfirmed (`with_confirmed_reads(false)`,
+//! SpacetimeDB's advice for real-time games: a delivery does not wait for the commit's fsync;
+//! after a server crash a client may have seen up to one batch the world no longer has, and a
+//! reconnect brings the durable state); [`flush`] sends what the input systems called in the
+//! same frame; the display clock learns its delay only from bodies whose segment changed
+//! (`body_t`), not from bodies entering view with old segments.
 
 use bevy::prelude::*;
 use living_bindings::*;
@@ -68,6 +79,8 @@ const PERCEIVED: &[&str] = &[
     // What residents are seen doing is named by `act_card` (17 rows); `weather` is one row.
     "SELECT * FROM act_card",
     "SELECT * FROM weather",
+    // The rules themselves, for offering acts (`verbs.rs`): one row, changed only by installs.
+    "SELECT * FROM script WHERE name = 'skills'",
 ];
 
 enum Signal {
@@ -155,8 +168,11 @@ pub struct Net {
     /// My living character, once the authority has one for my identity.
     pub my_id: Option<u32>,
     pub errors: Arc<Mutex<Vec<String>>>,
-    /// Latest `t_ms` among body rows updated since the display clock last looked.
+    /// Latest `t_ms` among body rows whose segment changed since the display clock last looked.
     pub body_t: Arc<AtomicU64>,
+    /// The same over every row inserted or updated (the feed before 2026-11-10), for a shadow
+    /// clock that `bodies.rs` logs beside the real one.
+    pub body_t_all: Arc<AtomicU64>,
     /// Window moves (re-subscriptions) since connecting, for measurements.
     pub window_moves: u32,
     inbox: Arc<Mutex<Vec<Signal>>>,
@@ -184,6 +200,7 @@ impl Default for Net {
             my_id: None,
             errors: Arc::default(),
             body_t: Arc::default(),
+            body_t_all: Arc::default(),
             window_moves: 0,
             inbox: Arc::default(),
             connecting: false,
@@ -271,18 +288,26 @@ impl Net {
         let token = std::fs::read_to_string(&path).ok().map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
         let (inbox, applied, gone, failed) = (self.inbox.clone(), self.inbox.clone(), self.inbox.clone(), self.inbox.clone());
         let body_t = self.body_t.clone();
+        let body_t_all = self.body_t_all.clone();
         let builder = DbConnection::builder()
             .with_uri(self.server.clone())
             .with_database_name(self.db.clone())
             .with_token(token)
+            // Deliveries need not wait for the commit's fsync (docs/LATENCY.md, step 2).
+            .with_confirmed_reads(false)
             .on_connect(move |conn, identity, token| {
                 applied.lock().unwrap().push(Signal::Identity(identity, token.to_string()));
-                let t = body_t.clone();
+                // Only a new segment says how late rows arrive: a body entering view brings a
+                // segment that may have started minutes ago (docs/LATENCY.md, step 3).
+                let all = body_t_all.clone();
                 conn.db.seen_bodies().on_insert(move |_, new| {
-                    t.fetch_max(new.t_ms, Ordering::Relaxed);
+                    all.fetch_max(new.t_ms, Ordering::Relaxed);
                 });
-                conn.db.seen_bodies().on_update(move |_, _, new| {
-                    body_t.fetch_max(new.t_ms, Ordering::Relaxed);
+                conn.db.seen_bodies().on_update(move |_, old, new| {
+                    body_t_all.fetch_max(new.t_ms, Ordering::Relaxed);
+                    if new.t_ms != old.t_ms {
+                        body_t.fetch_max(new.t_ms, Ordering::Relaxed);
+                    }
                 });
                 let ok = applied.clone();
                 let err = applied.clone();
@@ -427,7 +452,11 @@ impl Net {
         let span = |c: i32, n: i32, r: i32| ((c - r).max(0) as u32, (c + r).min(n - 1) as u32);
         let (xs, ys) = (span(cx, nx, r), span(cy, ny, r));
         let q = match which {
-            Which::Near => vec![format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", xs, ys))],
+            Which::Near => vec![
+                format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", xs, ys)),
+                format!("SELECT * FROM resource_node WHERE {}", chunk_ranges("chunk", xs, ys)),
+                format!("SELECT * FROM structure WHERE {}", chunk_ranges("chunk", xs, ys)),
+            ],
             Which::Lots => vec![format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", xs, ys))],
         };
         Some((vec![chunk_id(cx as u32, cy as u32)], q))
@@ -441,6 +470,18 @@ impl Net {
 
     pub fn map_size(&self) -> (u32, u32) {
         self.conn.as_ref().and_then(|c| c.db.world().iter().next()).map_or((96, 96), |w| (w.width, w.height))
+    }
+}
+
+/// Send what the input systems called this frame (docs/LATENCY.md, step 1): the SDK queues a
+/// reducer call until the next `frame_tick`, which [`pump`] runs at the start of a frame, so
+/// without this a key pressed in frame k left at the start of frame k + 1. Incoming messages it
+/// applies are drawn next frame, as before. SDK behaviour (2.14.1): check again on upgrades.
+pub fn flush(net: NonSend<Net>) {
+    if let Some(conn) = &net.conn {
+        if let Err(e) = conn.frame_tick() {
+            net.inbox.lock().unwrap().push(Signal::Disconnected(e.to_string()));
+        }
     }
 }
 
