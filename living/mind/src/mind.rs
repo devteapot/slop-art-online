@@ -580,7 +580,8 @@ impl Minds {
             }
             if self.conn.db.persona().id().find(&c.id).is_none() {
                 if self.is_woken(c.id) {
-                    // Its mind is made from the world's facts and its ring (woken.rs, below).
+                    // Its mind is made from its authored sheet or the world's facts, and its ring
+                    // (woken.rs, below).
                     continue;
                 }
                 if let Some(bg) = self.authored(&c) {
@@ -819,6 +820,7 @@ impl Minds {
         if let Some(secret) = self.secret(c.id) {
             identity["secret"] = json!(secret);
         }
+        identity["written_by"] = json!("author");
         if let Some(store) = &self.store {
             let mut patch = memory::Patch::default();
             // Everyone they know of: household, the people they feel something about and the
@@ -828,9 +830,15 @@ impl Minds {
             people.extend(sheet["memories"].as_array().into_iter().flatten().flat_map(|m| m["about"].as_array().into_iter().flatten().filter_map(id_of)));
             people.sort_unstable();
             people.dedup();
+            // Named as this person knows them (`known_as`): someone the author says they know
+            // only by sight stays "a stranger" until they are told the name.
             for id in &people {
-                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.name(*id)), props: Default::default() });
+                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.known_as(c.id, *id)), props: Default::default() });
             }
+            // Everything the sheet installs is the author's (`lived_under = ["authored"]`), apart
+            // from world facts (`world`), what a model writes (`ai`) and what was lived (`instinct`,
+            // `human`).
+            patch.lived_under = Some("authored".into());
             // `sugar_into` bounds a model reply's lists; an authored sheet is taken whole.
             for chunk in relations.chunks(12) {
                 memory::sugar_into(&json!({"relations": chunk}), &mut patch, &[]);
@@ -1732,6 +1740,17 @@ impl Minds {
     // ---- consolidation ------------------------------------------------------------
 
     async fn consolidate(&self, actor: u32) -> Result<()> {
+        // A woken resident's mind is made first (woken.rs): its identity, from its sheet or the
+        // world's facts, then its ring. A consolidation started meanwhile would be shown no
+        // identity ("(no persona yet)") and write one afresh over the one being installed, so it
+        // waits, as the first deliberation does (the `woken_stage("wait_s")` law).
+        if self.is_woken(actor) {
+            let wait = Duration::from_secs_f64(prompts::woken_laws().wait_s);
+            let started = Instant::now();
+            while self.woken_waiting(actor) && started.elapsed() < wait {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        }
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
         let cursor = self.cursor(actor);
         // A reply that ran too long failed: take fewer experiences at a time until it fits.

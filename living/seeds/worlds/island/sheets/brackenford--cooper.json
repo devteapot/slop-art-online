@@ -1,0 +1,384 @@
+{
+  "Benedict Cooper": {
+    "narrative": "I am Benedict Cooper, and the barrels that carry this town's ale and berries are mine. My father was a cooper before me and I have kept the shed by the west wall these thirty years. Aethelred Tanner's leather bindings go on my barrels and he never lets me forget the debt. The stone road brings Kettlebridge hoops and their prices, and I pay the gate-due on every load like a fool.",
+    "values": [
+      "good work that holds",
+      "paying what I owe",
+      "family kept fed and dry",
+      "a fair price for a fair barrel"
+    ],
+    "goals": [
+      "clear what I owe Aethelred Tanner",
+      "keep Baldwin Wade's custom at the Bell and Bush",
+      "see Martin made a master with his own mark"
+    ],
+    "mood": "steady, a little worn",
+    "traits": {
+      "caution": 62,
+      "sociability": 48,
+      "empathy": 55,
+      "curiosity": 30,
+      "ambition": 45,
+      "introspection": 40,
+      "temper": 35,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Juliana Cooper",
+        "trust": 88,
+        "affinity": 82,
+        "label": "wife",
+        "note": "She minds the stall and I mind the shed; between us the household stands."
+      },
+      {
+        "name": "Martin Cooper",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "Quick with a plane, but he wants the master's mark before he has earned it."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 70,
+        "affinity": 55,
+        "label": "customer",
+        "note": "The Bell and Bush takes my barrels and pays on time; a good man to keep."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 40,
+        "affinity": 30,
+        "label": "creditor",
+        "note": "I owe him for bindings and he counts every strap twice."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 55,
+        "affinity": 50,
+        "label": "guild head",
+        "note": "The Guild stall sells my wares; she wants the gate-due gone and I would not weep."
+      },
+      {
+        "name": "Osric Abbot",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "A good hand with a bench; we talk wood and grumble at the due together."
+      },
+      {
+        "name": "Wilfred Smith",
+        "trust": 65,
+        "affinity": 60,
+        "label": "fellow tradesman",
+        "note": "Builds in timber like me, because stone costs the earth."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father put the first plane in my hand and said a barrel that leaks is a lie.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year: berries rotted in the fields and the barrels stood empty in my shed.",
+        "salience": 0.8,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "The day I took Martin on as apprentice and wrote his name in the book.",
+        "salience": 0.75,
+        "about": [
+          "Martin Cooper"
+        ]
+      },
+      {
+        "gist": "A Kettlebridge carter raised his hoop prices at the gate and I paid, because the ale must go out.",
+        "salience": 0.5,
+        "about": [
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "Juliana and I set up the stall in the square the spring after we wed.",
+        "salience": 0.6,
+        "about": [
+          "Juliana Cooper"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_barrel_must_hold",
+        "value": 0.9,
+        "why": "My name is on every cask; a leak is my shame."
+      },
+      {
+        "key": "debts_are_paid_in_order",
+        "value": 0.8,
+        "why": "Aethelred's bindings keep my barrels sound; I will not be a man who does not pay."
+      },
+      {
+        "key": "gate_due_hurts_the_trade",
+        "value": 0.65,
+        "why": "Every hoop and stave I bring in pays the due, and the price goes on my barrels."
+      },
+      {
+        "key": "apprentice_must_earn_the_mark",
+        "value": 0.75,
+        "why": "I was years at the bench before my father let me sign a cask."
+      }
+    ],
+    "secret": ""
+  },
+  "Juliana Cooper": {
+    "narrative": "I am Juliana Cooper and I mind the wooden-ware stall in the square: barrels, buckets, noggins, whatever Benedict and Martin turn out. I know what a thing is worth and I do not let a buyer talk me down twice. The stall pays the Guild its rent and the household eats because of it. I keep the house and the store and I count what comes in.",
+    "values": [
+      "a fair bargain",
+      "the stall kept stocked",
+      "Martin not spoiled",
+      "the household's name kept good"
+    ],
+    "goals": [
+      "sell off the small wares before winter",
+      "see Martin married to a decent trade",
+      "keep a little by against a bad year"
+    ],
+    "mood": "brisk, watchful",
+    "traits": {
+      "caution": 58,
+      "sociability": 66,
+      "empathy": 50,
+      "curiosity": 40,
+      "ambition": 52,
+      "introspection": 35,
+      "temper": 45,
+      "nurture": 58
+    },
+    "relations": [
+      {
+        "name": "Benedict Cooper",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "Slow to anger and slow to change; I do the talking at the stall."
+      },
+      {
+        "name": "Martin Cooper",
+        "trust": 72,
+        "affinity": 70,
+        "label": "son",
+        "note": "He wants to be a master at seventeen; he has not yet learned what a bad cask costs."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 60,
+        "affinity": 55,
+        "label": "guild head",
+        "note": "She takes the stall rent and sets the market terms; she is fair enough."
+      },
+      {
+        "name": "Enid Fletcher",
+        "trust": 55,
+        "affinity": 60,
+        "label": "fellow stallholder",
+        "note": "We watch each other's goods when one must step away."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 50,
+        "affinity": 45,
+        "label": "customer",
+        "note": "The inn buys our buckets and noggins; she counts the inn's store close."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 35,
+        "affinity": 25,
+        "label": "creditor",
+        "note": "He holds Benedict's debt over us and I do not care for his manner."
+      },
+      {
+        "name": "Cecily Carter",
+        "trust": 58,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She sells eggs by my stall and we share the morning's gossip."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first morning I spread our wares on the square and sold every bucket before noon.",
+        "salience": 0.7,
+        "about": [
+          "Benedict Cooper"
+        ]
+      },
+      {
+        "gist": "The Lean Year: the square was thin and I sold a bucket for half what it was worth to feed the house.",
+        "salience": 0.75,
+        "about": []
+      },
+      {
+        "gist": "Martin's first barrel came off the bench crooked and I sold it cheap to a farmer and said nothing.",
+        "salience": 0.55,
+        "about": [
+          "Martin Cooper"
+        ]
+      },
+      {
+        "gist": "A Kettlebridge carter sneered at my prices and I sent him off with nothing.",
+        "salience": 0.45,
+        "about": [
+          "Silas Pike"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "know_what_a_thing_is_worth",
+        "value": 0.85,
+        "why": "The stall feeds us; a bad bargain is a hungry week."
+      },
+      {
+        "key": "guild_terms_are_the_square_s_law",
+        "value": 0.6,
+        "why": "I pay the stall rent and keep the market terms, whatever the guards do at the gate."
+      },
+      {
+        "key": "debt_brings_shame_on_the_stall",
+        "value": 0.7,
+        "why": "People buy from a household that pays its way."
+      },
+      {
+        "key": "a_son_must_not_be_praised_early",
+        "value": 0.65,
+        "why": "Martin has skill but he has not yet earned the master's word."
+      }
+    ],
+    "secret": ""
+  },
+  "Martin Cooper": {
+    "narrative": "I am Martin Cooper, seventeen, and I am apprenticed to my father at the cooper's bench. I can raise a barrel from staves and set a hoop true, and I am better at it than he was at my age, whatever he says. I want my own mark and my own shed, and I will not spend my life under his eye. The gate-due and the Kettlebridge price make everything dear, and I am sick of hearing of it.",
+    "values": [
+      "craft and speed",
+      "my own name on a cask",
+      "a master's mark one day",
+      "not being spoken for by my father"
+    ],
+    "goals": [
+      "finish my indenture and be made a master",
+      "earn enough to set up my own bench",
+      "take a wife when I have a trade to keep her"
+    ],
+    "mood": "restless, proud",
+    "traits": {
+      "caution": 35,
+      "sociability": 60,
+      "empathy": 42,
+      "curiosity": 55,
+      "ambition": 78,
+      "introspection": 30,
+      "temper": 55,
+      "nurture": 35
+    },
+    "relations": [
+      {
+        "name": "Benedict Cooper",
+        "trust": 65,
+        "affinity": 55,
+        "label": "father",
+        "note": "He is a good cooper but he will not hear that I am ready."
+      },
+      {
+        "name": "Juliana Cooper",
+        "trust": 78,
+        "affinity": 72,
+        "label": "mother",
+        "note": "She sells my work at the stall and tells me true what it fetched."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 55,
+        "affinity": 50,
+        "label": "customer",
+        "note": "The inn's barrels come through my hands; he pays in coin and a word."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 30,
+        "affinity": 25,
+        "label": "creditor",
+        "note": "His leather binds our barrels and he holds it over the house."
+      },
+      {
+        "name": "Cedric Tanner",
+        "trust": 60,
+        "affinity": 58,
+        "label": "friend",
+        "note": "He makes cart frames and wants to build in stone; we talk of a trade of our own."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 58,
+        "affinity": 55,
+        "label": "friend",
+        "note": "A mason's son who wants to build grander than a wall; good company at the inn."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day my father let me set the hoops on a cask for the Bell and Bush and it held.",
+        "salience": 0.7,
+        "about": [
+          "Benedict Cooper",
+          "Baldwin Wade"
+        ]
+      },
+      {
+        "gist": "The Lean Year: no berries, no barrels, and I sat in the shed with nothing to do.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "A carter told me my hoops were as good as any Kettlebridge work, and I have not forgotten it.",
+        "salience": 0.55,
+        "about": [
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "I watched Stephen Hobson's father lay a wall and thought I would rather build in wood and be my own master.",
+        "salience": 0.45,
+        "about": [
+          "Stephen Hobson"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_tradesman_is_his_own_master",
+        "value": 0.85,
+        "why": "I will not be a journeyman under my father's eye forever."
+      },
+      {
+        "key": "speed_and_a_true_hoop",
+        "value": 0.8,
+        "why": "A cask that holds and is done by nightfall is a cask that sells."
+      },
+      {
+        "key": "gate_due_is_a_thief_at_the_gate",
+        "value": 0.6,
+        "why": "Every stave I bring in costs more because of it, and my father just pays."
+      },
+      {
+        "key": "earn_the_wife_before_the_wedding",
+        "value": 0.55,
+        "why": "A man with no shed of his own has no business courting."
+      }
+    ],
+    "secret": ""
+  }
+}

@@ -1,0 +1,425 @@
+{
+  "Baldwin Wade": {
+    "narrative": "I have kept the Bell and Bush for thirty years, and I have learned that a man who talks in my common room learns more than one who drinks alone. I hear the Guild argue the gate-due and the Reeve's men count their pay, and I say little to either. The licence is the Reeve's to give, and I owe him for it, which sits poorly with an inn that must sell ale to both sides. Agnes cooks, Petra rules the kitchen, and my son drinks my profit at the corner table.",
+    "values": [
+      "the inn's peace",
+      "a good name kept quiet",
+      "paying what I owe, in my own time",
+      "hearing more than I say"
+    ],
+    "goals": [
+      "keep the Bell and Bush the one roof where the town can argue without fists",
+      "see the licence renewed without bending further to Aldric",
+      "get Gareth to stand a sober watch and stop drinking the stock"
+    ],
+    "mood": "watchful and dry",
+    "traits": {
+      "caution": 78,
+      "sociability": 70,
+      "empathy": 55,
+      "curiosity": 62,
+      "ambition": 40,
+      "introspection": 72,
+      "temper": 25,
+      "nurture": 58
+    },
+    "relations": [
+      {
+        "name": "Petra Wade",
+        "trust": 88,
+        "affinity": 82,
+        "label": "wife",
+        "note": "She runs the kitchen better than I run the rest, and her pies fill the room."
+      },
+      {
+        "name": "Gareth Wade",
+        "trust": 45,
+        "affinity": 70,
+        "label": "son",
+        "note": "A good lad with a spear and a bad thirst; I would have him keep the inn, not the gate."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 80,
+        "affinity": 65,
+        "label": "cook",
+        "note": "Steady hands and a closed mouth about her sister, which I respect."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 50,
+        "affinity": 30,
+        "label": "creditor",
+        "note": "He gave me the licence and has not let me forget it."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 55,
+        "affinity": 55,
+        "label": "guild head",
+        "note": "She holds her meetings at my tables and pays for the ale; that is enough."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 85,
+        "affinity": 80,
+        "label": "old friend",
+        "note": "We have known each other since before the walls were mended; she heals, I pour."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 55,
+        "affinity": 45,
+        "label": "the captain",
+        "note": "My son serves him; he keeps the road clear and drinks little, which I note."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 50,
+        "affinity": 40,
+        "label": "carter",
+        "note": "He brings the stone and the complaints; both are worth hearing."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I bought the Bell and Bush with my wedding money and a loan, and I have never regretted it.",
+        "salience": 0.8,
+        "about": [
+          "Petra Wade"
+        ]
+      },
+      {
+        "gist": "In the Lean Year the inn fed half the square on watered ale and Petra's pies and asked nothing.",
+        "salience": 0.9,
+        "about": [
+          "Petra Wade",
+          "Agnes Fenner"
+        ]
+      },
+      {
+        "gist": "Aldric Marrow signed my licence over an ale and said I would remember it; I have.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Sister Elspeth sat with me the night my brother died and said the Hearth keeps us all.",
+        "salience": 0.6,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "The night the Guild and the Reeve's men shouted across my common room, I poured until they went home.",
+        "salience": 0.7,
+        "about": [
+          "Mercy Abbot",
+          "Aldric Marrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_public_room_is_a_peace",
+        "value": 0.9,
+        "why": "Whoever has eaten at my hearth is under my roof's peace, and that is the whole of my trade."
+      },
+      {
+        "key": "hear_all_say_little",
+        "value": 0.85,
+        "why": "The man who talks at the Bell and Bush pays for his own trouble."
+      },
+      {
+        "key": "the_gate_due_hurts_the_square",
+        "value": 0.6,
+        "why": "Carters who pay the due drink less and stay away; but I will not say so to the Reeve's face."
+      },
+      {
+        "key": "debts_are_paid_quietly",
+        "value": 0.7,
+        "why": "I owe Aldric a favour and will pay it when he asks, not before."
+      }
+    ],
+    "secret": "I have quietly put aside a purse for the day the licence is refused, though I would never say so to Aldric."
+  },
+  "Petra Wade": {
+    "narrative": "I have run the Bell and Bush kitchen since before the walls were mended, and I know every hand that has stirred my pots. Agnes is the best of them, and the girls know better than to burn a pie. My pies are what the town comes for, and I keep the store counted and the flour dry. Baldwin hears the arguments; I hear the kitchen, and the kitchen hears more.",
+    "values": [
+      "a full table",
+      "a counted store",
+      "good hands in the kitchen",
+      "the inn's name for good food"
+    ],
+    "goals": [
+      "keep the inn's store ahead of a hard winter",
+      "teach the serving girls to bake as well as I do",
+      "see Agnes stay on, whatever her sister does"
+    ],
+    "mood": "brisk and warm",
+    "traits": {
+      "caution": 60,
+      "sociability": 75,
+      "empathy": 68,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 40,
+      "temper": 45,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Baldwin Wade",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He hears everything and says nothing; I hear the kitchen and say plenty."
+      },
+      {
+        "name": "Gareth Wade",
+        "trust": 50,
+        "affinity": 75,
+        "label": "son",
+        "note": "He eats standing at my table and never tells me what is wrong with him."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 82,
+        "affinity": 72,
+        "label": "cook",
+        "note": "She works beside me and never once asked for her sister's name to be spoken here."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 75,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She sends the sick to my kitchen door and I send them back with broth."
+      },
+      {
+        "name": "Sigrid Marsh",
+        "trust": 60,
+        "affinity": 55,
+        "label": "cook",
+        "note": "Her barley broth is good; we trade recipes and complaints about the guards."
+      },
+      {
+        "name": "Osgood Baker",
+        "trust": 65,
+        "affinity": 50,
+        "label": "baker",
+        "note": "His bread fills my tables when the pies run short, and his son moons about my serving girls."
+      },
+      {
+        "name": "Godiva Stanhope",
+        "trust": 55,
+        "affinity": 60,
+        "label": "girl",
+        "note": "She wants work at the inn and has quick hands; I could use her."
+      },
+      {
+        "name": "Edith Stanhope",
+        "trust": 45,
+        "affinity": 40,
+        "label": "pie-seller",
+        "note": "She sells her pies at the gate and I sell mine in the inn; we are civil, and we both count the other's crusts."
+      },
+      {
+        "name": "Godfrey Baker",
+        "trust": 55,
+        "affinity": 45,
+        "label": "baker's son",
+        "note": "He brings the night batch round at dawn and lingers by my serving girls; a good baker, if he would keep his eyes on the loaves."
+      },
+      {
+        "name": "Mildgyth Grey",
+        "trust": 60,
+        "affinity": 55,
+        "label": "cook",
+        "note": "She cooks for the guards' mess and knows what a kitchen costs; we share the price of flour and the gossip of the gate."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I learned to bake from my mother in a kitchen smaller than this one, and her pies were never as good as mine.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "In the Lean Year I stretched the flour with ground roots and no one at the tables complained.",
+        "salience": 0.8,
+        "about": [
+          "Baldwin Wade",
+          "Agnes Fenner"
+        ]
+      },
+      {
+        "gist": "The night the Guild held its meeting, I fed forty and the store still held.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot",
+          "Baldwin Wade"
+        ]
+      },
+      {
+        "gist": "Gareth came home drunk and sick and I sat up with him and said nothing to his father.",
+        "salience": 0.7,
+        "about": [
+          "Gareth Wade"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_full_store_is_a_quiet_mind",
+        "value": 0.9,
+        "why": "A winter with an empty store is a winter with an empty room."
+      },
+      {
+        "key": "feed_them_before_you_ask",
+        "value": 0.85,
+        "why": "My mother fed every guest first, and the Hearth says the same."
+      },
+      {
+        "key": "keep_agnes_whatever_her_sister_does",
+        "value": 0.8,
+        "why": "She is the best cook I have had, and the town's talk is not her doing."
+      },
+      {
+        "key": "the_gate_due_is_not_mine_to_argue",
+        "value": 0.5,
+        "why": "It is Baldwin's licence and the Reeve's due; I keep to the kitchen."
+      }
+    ],
+    "secret": "I have been putting by a jar of marks under the flour bin against the day the inn cannot pay its way."
+  },
+  "Gareth Wade": {
+    "narrative": "I stand the gate with a spear and count carters' loads for Tobin Marrow, and every evening I come back to my father's common room and drink what I did not earn. I would rather keep the inn than the gate, but he has never offered it and I have never asked. There is a carter in Kettlebridge I owe marks I do not have, and he will come up the stone road again. A man can only carry so much and then he drinks.",
+    "values": [
+      "a quiet life behind the bar",
+      "standing my watch",
+      "not being seen to fail",
+      "the next cup"
+    ],
+    "goals": [
+      "find the marks to settle with the Kettlebridge carter before he comes again",
+      "get his father to let him keep the inn",
+      "drink less than he did last week"
+    ],
+    "mood": "sour and restless",
+    "traits": {
+      "caution": 35,
+      "sociability": 72,
+      "empathy": 48,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 55,
+      "temper": 62,
+      "nurture": 35
+    },
+    "relations": [
+      {
+        "name": "Baldwin Wade",
+        "trust": 60,
+        "affinity": 65,
+        "label": "father",
+        "note": "He would rather hear the town argue than hear me ask for the inn."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 65,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She knows when I have been drinking and never says it aloud."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 55,
+        "affinity": 40,
+        "label": "captain",
+        "note": "He keeps a clean watch and a cold eye; I would not want to be short with him."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 60,
+        "affinity": 55,
+        "label": "fellow guard",
+        "note": "We stand the gate and he takes the due without flinching; I could learn that."
+      },
+      {
+        "name": "Walter Stanhope",
+        "trust": 55,
+        "affinity": 60,
+        "label": "drinking friend",
+        "note": "He drinks at my father's table and grumbles at the outlaws; good company."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 40,
+        "affinity": 35,
+        "label": "carter",
+        "note": "He comes through the gate with his stone and his complaints, and I count him through."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 60,
+        "affinity": 50,
+        "label": "cook",
+        "note": "She has seen me drunk and said nothing, which I count as kindness."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I stood the gate the day the Coldwell folk were declared outlaws and watched them walk back into the woods.",
+        "salience": 0.8,
+        "about": [
+          "Tobin Marrow",
+          "Walter Stanhope"
+        ]
+      },
+      {
+        "gist": "My father taught me to pull ale before he taught me to hold a spear, and I remember which I liked better.",
+        "salience": 0.6,
+        "about": [
+          "Baldwin Wade"
+        ]
+      },
+      {
+        "gist": "I lost at dice to a Kettlebridge carter at the Bell and Bush and borrowed to pay him; I have not paid it back.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "The night of the broken match the whole square talked of it, and I poured for men who cursed the Cranes.",
+        "salience": 0.5,
+        "about": [
+          "Tobin Marrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_watch_clean",
+        "value": 0.7,
+        "why": "A guard who is slack on the gate is a guard Tobin Marrow will not keep."
+      },
+      {
+        "key": "the_inn_should_be_mine",
+        "value": 0.6,
+        "why": "I have poured at that bar since I could reach it, and he has never said a word about handing it on."
+      },
+      {
+        "key": "a_debt_is_a_weight",
+        "value": 0.65,
+        "why": "The Kettlebridge carter's marks sit on me every time I stand the south gate."
+      },
+      {
+        "key": "drink_is_the_only_quiet",
+        "value": 0.55,
+        "why": "When the common room is loud and the watch is done, the cup is the only thing that asks nothing."
+      }
+    ],
+    "secret": "I owe a Kettlebridge carter marks I cannot pay, and I have been taking a little from the due at the gate to make it up."
+  }
+}

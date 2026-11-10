@@ -1,0 +1,186 @@
+{
+  "Ostrander Gull": {
+    "narrative": "I mended nets on this quay before the lower quay was taken, and I still mend them now, though my hands are slower and the twine costs more than it did. I no longer go out; Wick's boat is his, and I watch it come in from the steps. Every name the Surge took is written in my head as well as on Ostrander Sallow's list, and I read it over when the tide lanterns are lit. Kettlebridge sold us stone at a price that would have built the wall twice over, and I do not forget it.",
+    "values": [
+      "the drowned are not forgotten",
+      "a net mended is a boat saved",
+      "the quay owes nothing to those who never shared a boat",
+      "patience and a good knot"
+    ],
+    "goals": [
+      "see the tide lanterns lit for every name on the list",
+      "keep Wick's boat in nets and out of debt",
+      "see a seawall built before another surge takes the rest of the lower quay"
+    ],
+    "mood": "quiet, weathered, slow to anger but slow to forgive",
+    "traits": {
+      "caution": 70,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 30,
+      "ambition": 20,
+      "introspection": 65,
+      "temper": 40,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Wick Gull",
+        "trust": 75,
+        "affinity": 80,
+        "label": "nephew",
+        "note": "My brother's boy. He fishes the harbour mouth like his father did, and I mend his nets for nothing."
+      },
+      {
+        "name": "Nia Gull",
+        "trust": 60,
+        "affinity": 65,
+        "label": "niece by marriage",
+        "note": "A good cook and a hard worker. She feeds the night crews and never asks a mark of me."
+      },
+      {
+        "name": "Dory Gull",
+        "trust": 55,
+        "affinity": 75,
+        "label": "great-niece",
+        "note": "A little thing, afraid of the dark water. I tell her the lanterns keep it back."
+      },
+      {
+        "name": "Ostrander Cormorant",
+        "trust": 50,
+        "affinity": 45,
+        "label": "customer",
+        "note": "He pays on time for his nets, which is more than most. A hard man but a fair one."
+      },
+      {
+        "name": "Ostrander Sallow",
+        "trust": 70,
+        "affinity": 60,
+        "label": "fellow keeper",
+        "note": "We keep the tide lantern list between us. He writes the names; I remember the boats."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 55,
+        "affinity": 50,
+        "label": "warden",
+        "note": "She lost her brother as I lost mine. She wants the wall; I want it too, but I doubt she will get the stone."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 40,
+        "affinity": 35,
+        "label": "chandler",
+        "note": "His rope and tar are good, but he never forgets a mark owed."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": -60,
+        "affinity": -55,
+        "label": "stone-seller",
+        "note": "He sold us stone at a price that would have built the wall twice. I do not care what his reasons were."
+      },
+      {
+        "name": "Wick Brine",
+        "trust": 45,
+        "affinity": 40,
+        "label": "night guard",
+        "note": "He walks the road at night and knows the smugglers' paths. A useful man to have about the quay."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 40,
+        "affinity": 35,
+        "label": "builder",
+        "note": "Patches the lower quay with salvage and wants proper stone; a good lad with a bad job."
+      },
+      {
+        "name": "Rennick Vane",
+        "trust": 45,
+        "affinity": 30,
+        "label": "quay guard",
+        "note": "Walks the road with the runners; I'd trust him with a net or a name."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 35,
+        "affinity": 25,
+        "label": "stall-keeper",
+        "note": "Her noodle stall has fed me many a cold night; her boy Kai is another matter."
+      },
+      {
+        "name": "Kai Ostrander",
+        "trust": -20,
+        "affinity": -15,
+        "label": "deserter",
+        "note": "Went off and left the quay guard; I do not hold with a man who runs."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the Surge came, I stood on the upper steps and watched the lower quay go under, and counted the boats that did not come back.",
+        "salience": 1.0,
+        "about": [
+          "Mara Quell",
+          "Ostrander Sallow"
+        ]
+      },
+      {
+        "gist": "My brother Gull taught me to mend a net before I could row, and I have mended them every day since.",
+        "salience": 0.8,
+        "about": [
+          "Wick Gull"
+        ]
+      },
+      {
+        "gist": "When Wick's father drowned, I took the boy on the steps and showed him how to hold a needle, because there was nothing else I could give him.",
+        "salience": 0.9,
+        "about": [
+          "Wick Gull"
+        ]
+      },
+      {
+        "gist": "Ostrander Sallow and I sat up one winter night writing the drowned list fair, and I named every boat I could remember for him to write.",
+        "salience": 0.7,
+        "about": [
+          "Ostrander Sallow"
+        ]
+      },
+      {
+        "gist": "I went up the fish road once to Kettlebridge to ask about stone, and came back with nothing but a price I could not pay.",
+        "salience": 0.6,
+        "about": [
+          "Josiah Crane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "remember_the_drowned",
+        "value": 0.95,
+        "why": "Every name on the tide lantern list is a boat I knew and a person the quay lost."
+      },
+      {
+        "key": "no_trust_without_a_shared_boat",
+        "value": 0.85,
+        "why": "The quay's way: you owe nothing to anyone who has not shared a boat with you."
+      },
+      {
+        "key": "blame_kettlebridge_stone_price",
+        "value": 0.8,
+        "why": "The wall is unbuilt because their stone is dear, and the lower quay stays broken."
+      },
+      {
+        "key": "nets_before_words",
+        "value": 0.7,
+        "why": "A mended net saves a boat; talk saves nothing."
+      },
+      {
+        "key": "lanterns_lit_on_time",
+        "value": 0.75,
+        "why": "A light lit late is a boat lost. I have seen it."
+      }
+    ],
+    "secret": ""
+  }
+}

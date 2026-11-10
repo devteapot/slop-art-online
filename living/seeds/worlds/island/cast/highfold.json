@@ -1,0 +1,173 @@
+{
+ "households": [
+  {
+   "key": "highfold-hollow",
+   "members": [
+    {
+     "name": "Rannoch Voss",
+     "age": 47,
+     "sex": "m",
+     "occupation": "hunter",
+     "role": "head of the fold; hunts the high meadows and trades hides with the giants on the shelf",
+     "knows": [
+      "archery",
+      "trapping",
+      "tanning",
+      "fire",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Elska Voss",
+      "father of Jorunn Voss and Soren Voss",
+      "trades hides with Orrum of Highshelf",
+      "trusted by Hollbrenna on the shelf",
+      "friendly with Beorn Beornson of Brackenford"
+     ]
+    },
+    {
+     "name": "Elska Voss",
+     "age": 44,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "works the fold's small barley and root plots and keeps the goats; the fold's cook and healer of small hurts",
+     "knows": [
+      "planting",
+      "cooking",
+      "medicine",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Rannoch Voss",
+      "mother of Jorunn Voss and Soren Voss",
+      "barters barley with Gaudra of Highshelf",
+      "trades seeds with Merrow Stave of Thornby",
+      "worries about the winter store"
+     ]
+    },
+    {
+     "name": "Jorunn Voss",
+     "age": 19,
+     "sex": "f",
+     "occupation": "hunter",
+     "role": "hunts the high pastures with her father and knows the fold's traps and paths; a fair shot with a bow",
+     "knows": [
+      "archery",
+      "trapping",
+      "mending",
+      "fire",
+      "shelter"
+     ],
+     "parents": [
+      "Rannoch Voss",
+      "Elska Voss"
+     ],
+     "ties": [
+      "daughter of Rannoch Voss and Elska Voss",
+      "sister of Soren Voss",
+      "learns stonework from Liv of Highshelf",
+      "friendly with Harl of Highshelf",
+      "wants to see Lanternquay"
+     ]
+    },
+    {
+     "name": "Soren Voss",
+     "age": 12,
+     "sex": "m",
+     "occupation": "child",
+     "role": "helps his father skin and smoke the catch and his mother with the goats; dreams of the shelf",
+     "knows": [
+      "trapping",
+      "fire"
+     ],
+     "parents": [
+      "Rannoch Voss",
+      "Elska Voss"
+     ],
+     "ties": [
+      "son of Rannoch Voss and Elska Voss",
+      "brother of Jorunn Voss",
+      "plays with Vellmund of Highshelf when the giants come down",
+      "afraid of the wolves that come up the track"
+     ]
+    },
+    {
+     "name": "Torek Voss",
+     "age": 72,
+     "sex": "m",
+     "occupation": "hunter",
+     "role": "Rannoch's widowed father; too stiff for the high hunt but keeps the fold's snares and tells the old stories of the shelf",
+     "knows": [
+      "trapping",
+      "archery",
+      "tanning",
+      "fire",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "father of Rannoch Voss",
+      "grandfather of Jorunn Voss and Soren Voss",
+      "old friend of Steinar of Highshelf",
+      "grudges Kettlebridge for the cairn cutting",
+      "remembers the Lean Year and the wolves after it"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "winter-store",
+   "kind": "failing harvest",
+   "summary": "The fold's barley and root plots have come in thin, and the goats give less milk than they should; Elska reckons the store will not last the winter without trading for grain.",
+   "secret": false,
+   "people": [
+    "Elska Voss",
+    "Rannoch Voss",
+    "Torek Voss"
+   ],
+   "sides": {
+    "Elska Voss": "She has counted the store three times and knows it is short; she wants Rannoch to take hides down to Kettlebridge to trade for grain, whatever the giants think of that town.",
+    "Rannoch Voss": "He knows the store is thin but will not go to Kettlebridge while Hollbrenna has closed the shelf to it; he would rather ask the shelf for meat or send Jorunn to Fernhollow for roots.",
+    "Torek Voss": "He remembers the Lean Year and fears a hungry winter more than he fears the giants' displeasure; he has said so at the fold's table."
+   }
+  },
+  {
+   "id": "shelf-trust",
+   "kind": "quarrel with another settlement",
+   "summary": "Rannoch still trades hides with the giants on the shelf, but Hollbrenna's ban on Kettlebridge has made the shelf wary of all human traders, and some on the shelf say the fold should be watched too.",
+   "secret": false,
+   "people": [
+    "Rannoch Voss",
+    "Jorunn Voss",
+    "Orrum",
+    "Hollbrenna"
+   ],
+   "sides": {
+    "Rannoch Voss": "He believes the fold has earned the shelf's trust and will not stop trading; he is stung that Orrum has begun to count the hides twice and ask where the timber in the fold's roof came from.",
+    "Jorunn Voss": "She feels the coolness when she goes up with her father and wants to prove the fold's friendship; she has offered to help Liv dress stone without pay.",
+    "Orrum": "He does not accuse the fold of anything, but since the cairn cutting he trusts no human's timber; he wants Rannoch to swear the fold takes nothing from Kettlebridge.",
+    "Hollbrenna": "She remembers the fold kindly but will not be hurried; she has said the shelf will speak of it after everyone has spoken, and until then the hides are weighed twice."
+   }
+  },
+  {
+   "id": "wolf-track",
+   "kind": "illness",
+   "summary": "Wolves have come up the track from Kettlebridge and taken two of the fold's goats; Torek set snares and fell in the dark and has a bad leg that is not healing clean.",
+   "secret": false,
+   "people": [
+    "Torek Voss",
+    "Elska Voss",
+    "Soren Voss"
+   ],
+   "sides": {
+    "Torek Voss": "He is ashamed of the fall and says the leg is nothing, but he cannot walk to the high pastures and knows he is a burden at the worst time.",
+    "Elska Voss": "She has cleaned and bound the leg and fears the redness spreading; she wants to send for a healer from Tanglewood or ask the shelf's Yrsa for a poultice, and Rannoch is away.",
+    "Soren Voss": "He saw the wolves at the goat pen and is afraid to go out alone; he follows his grandfather about the yard and has taken to sleeping by the hearth."
+   }
+  }
+ ]
+}

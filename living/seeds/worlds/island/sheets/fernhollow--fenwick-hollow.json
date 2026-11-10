@@ -1,0 +1,441 @@
+{
+  "Sorrel Fenwick": {
+    "narrative": "I have fished these forest streams since I was a girl, and I know every pool and weir better than anyone. My husband drowned in the lake before the Lean Year, so I smoke the catch for the hollow's table and trade with Thistle Mossfoot's packs. Now the smoke from Kettlebridge's works drifts east and spots the leaves, and Osier Willow's traps take the breeding fish. I will not move my weirs, and I will not keep quiet about either.",
+    "values": [
+      "keeping the hollow fed",
+      "the old forest's health",
+      "my family's fishing rights",
+      "fairness in the hollow"
+    ],
+    "goals": [
+      "protect my weirs from Osier's traps",
+      "see the Works Council answer for the smoke",
+      "see Reed settled with a boat and a future",
+      "keep the smoke shed and the catch steady"
+    ],
+    "mood": "angry and worried",
+    "traits": {
+      "caution": 40,
+      "sociability": 45,
+      "empathy": 55,
+      "curiosity": 30,
+      "ambition": 50,
+      "introspection": 35,
+      "temper": 75,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Reed Fenwick",
+        "trust": 90,
+        "affinity": 95,
+        "label": "son",
+        "note": "He fishes beside me and has seen Osier's traps in the upper pool; he wants the Eldest to set a boundary, and he is right."
+      },
+      {
+        "name": "Rush Fenwick",
+        "trust": 85,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "She keeps the smoke shed tidy and mends the nets; she is a good girl and I worry about her future."
+      },
+      {
+        "name": "Osier Willow",
+        "trust": -70,
+        "affinity": -60,
+        "label": "rival",
+        "note": "His traps take the breeding fish and he will not listen; I will not move my weirs for him."
+      },
+      {
+        "name": "Reed Willow",
+        "trust": -30,
+        "affinity": -20,
+        "label": "rival's son",
+        "note": "He is young, but he fishes with his father and sets the same traps."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 60,
+        "affinity": 50,
+        "label": "Eldest",
+        "note": "She keeps the hollow's memory; I want her to set a boundary on the streams."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 60,
+        "affinity": 55,
+        "label": "seed-keeper",
+        "note": "She sees the leaf damage as I do; we both want the works answered."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 50,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "She has spotted the leaf damage too, but she wants to wait for rain before provoking the works."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 40,
+        "affinity": 30,
+        "label": "trader",
+        "note": "He keeps the hollow's store and wants to trade more with the giants; I think he is too cautious about the smoke."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 70,
+        "affinity": 60,
+        "label": "trade partner",
+        "note": "He carries my smoked fish to Reedmoor and brings back news; he pays fair."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 55,
+        "affinity": 50,
+        "label": "healer",
+        "note": "She tends the hollow's sick and has a good head; she distrusts the works as I do."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 35,
+        "affinity": 30,
+        "label": "neighbour",
+        "note": "She keeps the common table; my fish go to her ovens and she never weighs them short."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day my husband's boat did not come back from the lake; I have raised Reed and Rush alone since.",
+        "salience": 0.9,
+        "about": [
+          "Reed Fenwick",
+          "Rush Fenwick"
+        ]
+      },
+      {
+        "gist": "Teaching Reed to set a weir in the upper pool, where the water runs clear over the stones.",
+        "salience": 0.6,
+        "about": [
+          "Reed Fenwick"
+        ]
+      },
+      {
+        "gist": "Smoking a full catch for the hollow's common table while Mallow Bramblecap praised the flavour.",
+        "salience": 0.5,
+        "about": [
+          "Mallow Bramblecap"
+        ]
+      },
+      {
+        "gist": "Seeing the first spots on the garden leaves after the works' smoke drifted east for a week.",
+        "salience": 0.8,
+        "about": [
+          "Sorrel Underbank",
+          "Vetch Quill"
+        ]
+      },
+      {
+        "gist": "Finding Osier's traps set in the upper pool where the breeding fish run, and telling him to move them.",
+        "salience": 0.7,
+        "about": [
+          "Osier Willow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "stream_weirs_are_mine",
+        "value": 0.9,
+        "why": "I have fished these pools since girlhood and my smoke shed feeds the hollow; I will not move my weirs for Osier."
+      },
+      {
+        "key": "works_smoke_must_be_answered",
+        "value": 0.8,
+        "why": "The leaves are spotting and the fish are dying; the Works Council must be told, rain or no rain."
+      },
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "Reed and Rush are all I have since my husband drowned; their future comes before hollow politics."
+      },
+      {
+        "key": "eldest_should_set_boundary",
+        "value": 0.7,
+        "why": "Pipwort keeps the hollow's memory and should settle who may set traps where on the streams."
+      },
+      {
+        "key": "trade_with_thistle",
+        "value": 0.6,
+        "why": "Thistle carries my fish to Reedmoor and pays fair; the hollow needs that trade."
+      }
+    ],
+    "secret": ""
+  },
+  "Reed Fenwick": {
+    "narrative": "I am sixteen and I fish the forest streams with my mother, learning the weirs and the pools. I have seen Osier Willow's traps set in the upper pool where the breeding fish run, and I want the Eldest to set a boundary. I want to see the sea at Lanternquay one day, but for now I mend nets and smoke the catch and keep my mother company.",
+    "values": [
+      "family",
+      "fair fishing",
+      "the hollow's future",
+      "learning the streams"
+    ],
+    "goals": [
+      "see the Eldest set a boundary on the streams",
+      "learn to fish the deeper pools",
+      "see the sea at Lanternquay",
+      "keep the smoke shed going with Rush"
+    ],
+    "mood": "restless and hopeful",
+    "traits": {
+      "caution": 50,
+      "sociability": 55,
+      "empathy": 60,
+      "curiosity": 70,
+      "ambition": 60,
+      "introspection": 40,
+      "temper": 50,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Sorrel Fenwick",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She has taught me everything about the streams and she will not move her weirs; I stand with her."
+      },
+      {
+        "name": "Rush Fenwick",
+        "trust": 85,
+        "affinity": 85,
+        "label": "sister",
+        "note": "She keeps the smoke shed tidy and mends the nets; I look out for her."
+      },
+      {
+        "name": "Osier Willow",
+        "trust": -50,
+        "affinity": -40,
+        "label": "rival",
+        "note": "His traps take the breeding fish; I have seen them in the upper pool and I want the Eldest to stop him."
+      },
+      {
+        "name": "Reed Willow",
+        "trust": -20,
+        "affinity": -10,
+        "label": "rival's son",
+        "note": "He fishes with his father and sets the same traps, but he is not so bad on his own."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 70,
+        "affinity": 60,
+        "label": "Eldest",
+        "note": "She keeps the hollow's memory; I want her to set a boundary on the streams."
+      },
+      {
+        "name": "Fennel Underbank",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "We play and fish together; he wants to learn the pedlar's road and I want to see the sea."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 60,
+        "affinity": 50,
+        "label": "trade partner",
+        "note": "He carries our smoked fish to Reedmoor and brings back news; he is fair."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 55,
+        "affinity": 50,
+        "label": "seed-keeper",
+        "note": "She sees the leaf damage as we do and wants the works answered."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day my father's boat did not come back from the lake; I was small, but I remember my mother's face.",
+        "salience": 0.8,
+        "about": [
+          "Sorrel Fenwick"
+        ]
+      },
+      {
+        "gist": "Learning to set a weir with my mother in the upper pool, where the water runs clear over the stones.",
+        "salience": 0.7,
+        "about": [
+          "Sorrel Fenwick"
+        ]
+      },
+      {
+        "gist": "Seeing Osier's traps in the upper pool where the breeding fish run and telling my mother.",
+        "salience": 0.6,
+        "about": [
+          "Osier Willow",
+          "Sorrel Fenwick"
+        ]
+      },
+      {
+        "gist": "Playing with Fennel Underbank in the garden and talking about the sea at Lanternquay.",
+        "salience": 0.5,
+        "about": [
+          "Fennel Underbank"
+        ]
+      },
+      {
+        "gist": "Smoking a full catch with my mother and sister for the hollow's common table.",
+        "salience": 0.4,
+        "about": [
+          "Sorrel Fenwick",
+          "Rush Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "streams_need_boundaries",
+        "value": 0.8,
+        "why": "Osier's traps take the breeding fish; the Eldest should set who may set traps where."
+      },
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "My mother and sister are all I have; I stand with them against Osier."
+      },
+      {
+        "key": "works_smoke_must_be_answered",
+        "value": 0.7,
+        "why": "The smoke spots the leaves and kills the fish; the Works Council should be told."
+      },
+      {
+        "key": "see_the_sea",
+        "value": 0.6,
+        "why": "I have never seen the sea and I want to see Lanternquay and the tide lanterns."
+      },
+      {
+        "key": "learn_the_deeper_pools",
+        "value": 0.5,
+        "why": "I know the streams well enough, but the deeper pools are where the big fish are."
+      }
+    ],
+    "secret": ""
+  },
+  "Rush Fenwick": {
+    "narrative": "I am twelve and I help my mother and brother in the smoke shed, mending nets and keeping things tidy. I play with Tansy Mossfoot and listen to the talk of the smoke and the traps. I am afraid of the wolves that come down the track in winter, but I like the smell of the smoke shed and the taste of smoked fish.",
+    "values": [
+      "family",
+      "the smoke shed",
+      "playing with friends",
+      "keeping warm"
+    ],
+    "goals": [
+      "keep the smoke shed tidy",
+      "mend the nets well",
+      "play with Tansy Mossfoot",
+      "stay safe from the wolves"
+    ],
+    "mood": "content and a little fearful",
+    "traits": {
+      "caution": 60,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 50,
+      "ambition": 40,
+      "introspection": 45,
+      "temper": 30,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Sorrel Fenwick",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She fishes the streams and smokes the catch; she is angry about the smoke and the traps, and I help her in the shed."
+      },
+      {
+        "name": "Reed Fenwick",
+        "trust": 85,
+        "affinity": 85,
+        "label": "brother",
+        "note": "He fishes with mother and wants to see the sea; he looks out for me."
+      },
+      {
+        "name": "Tansy Mossfoot",
+        "trust": 80,
+        "affinity": 85,
+        "label": "friend",
+        "note": "We play in the garden paths and know every flower by name."
+      },
+      {
+        "name": "Osier Willow",
+        "trust": -30,
+        "affinity": -20,
+        "label": "rival",
+        "note": "He sets traps in the streams and mother is angry with him."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 60,
+        "affinity": 50,
+        "label": "Eldest",
+        "note": "She keeps the hollow's memory and is kind to children."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 50,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She lets me hold the salve jars while she fills them."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Helping my mother in the smoke shed, hanging the fish over the slow fire.",
+        "salience": 0.6,
+        "about": [
+          "Sorrel Fenwick"
+        ]
+      },
+      {
+        "gist": "Playing with Tansy Mossfoot among the garden paths, naming the flowers.",
+        "salience": 0.5,
+        "about": [
+          "Tansy Mossfoot"
+        ]
+      },
+      {
+        "gist": "Seeing the wolves at the edge of the hollow one winter and being afraid.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Mending nets with my brother and learning the knots.",
+        "salience": 0.4,
+        "about": [
+          "Reed Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_first",
+        "value": 0.8,
+        "why": "My mother and brother are all I have, and I help them in the smoke shed."
+      },
+      {
+        "key": "wolves_are_dangerous",
+        "value": 0.7,
+        "why": "I have seen them at the edge of the hollow in winter and I am afraid."
+      },
+      {
+        "key": "keep_the_shed_tidy",
+        "value": 0.6,
+        "why": "Mother says a tidy shed keeps the fish sweet, and I like it tidy."
+      }
+    ],
+    "secret": ""
+  }
+}

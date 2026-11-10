@@ -1,0 +1,582 @@
+{
+  "Hob Garrow": {
+    "narrative": "I am Hob Garrow, elder of Elmwick, and I have farmed these strips since I was a boy. I grazed the Lakemead when it was common, and I will not sit quiet while Nell Sedge lets it to strangers. My daughter Annot keeps the house and works the north strips with me, and my wife Leofgifu keeps the cook-fire. I am slow to part with marks, but I pay what I owe.",
+    "values": [
+      "the Lakemead is Elmwick's common",
+      "fairness between neighbours",
+      "hard work and thrift",
+      "peace in the village"
+    ],
+    "goals": [
+      "press Elmwick's claim to the Lakemead",
+      "settle the quarrel between Oswin Wray and Pike Tarn",
+      "see the village through the winter",
+      "keep the Garrow strips in the family"
+    ],
+    "mood": "stubborn and worried",
+    "traits": {
+      "caution": 65,
+      "sociability": 50,
+      "empathy": 55,
+      "curiosity": 40,
+      "ambition": 60,
+      "introspection": 45,
+      "temper": 60,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Annot Garrow",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She works the strips with me and keeps the house; I lean on her more than I say."
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 95,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the cook-fire and the common bake; I would be lost without her."
+      },
+      {
+        "name": "Cerdic Garrow",
+        "trust": 80,
+        "affinity": 75,
+        "label": "grandson",
+        "note": "The boy helps with the goats and the harvest; he will make a farmer."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": -70,
+        "affinity": -50,
+        "label": "rival",
+        "note": "She had no right to let the Lakemead; it was Elmwick's common."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": -60,
+        "affinity": -40,
+        "label": "trespasser",
+        "note": "He farms the meadow that should be ours and pays her rent."
+      },
+      {
+        "name": "Oswin Wray",
+        "trust": 50,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "A good hunter, but he and Pike Tarn quarrel over traps."
+      },
+      {
+        "name": "Pike Tarn",
+        "trust": 40,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "He hunts the southern woods and says Oswin takes his game."
+      },
+      {
+        "name": "Aldwyn Bexley",
+        "trust": 60,
+        "affinity": 55,
+        "label": "builder",
+        "note": "He repaired my barn; I owe him for the work but have not paid yet."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 30,
+        "affinity": 20,
+        "label": "stranger",
+        "note": "Thornby's headman; I know him by name only."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 50,
+        "affinity": 60,
+        "label": "friend",
+        "note": "Annot is close with her; the small folk are good neighbours."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A Thornby man, but he knows the southern woods and keeps his quarrels honest; I'd have him at the common table."
+      },
+      {
+        "name": "Edric Toller",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "Farms the Toller acres by the stream and grumbles about the Lakemead quarrel as I do; a steady man."
+      },
+      {
+        "name": "Goda Toller",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour's daughter",
+        "note": "Edric's girl works the fields and wants a strip of her own; she'd farm the Lakemead right if we win it back."
+      },
+      {
+        "name": "Nerys Bexley",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "Aldwyn's wife keeps the Bexley plot and hens; a quay woman learning our fields, and doing well enough."
+      },
+      {
+        "name": "Odelia Harrow",
+        "trust": 40,
+        "affinity": 35,
+        "label": "stranger",
+        "note": "A Ferncross woodcutter; she trades timber with our builders, but I know her only by her loads."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 45,
+        "affinity": 50,
+        "label": "pedlar",
+        "note": "The small-folk pedlar on the east road; he trades with Nell Sedge, but he's civil and brings news."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "As a boy I grazed our goats on the Lakemead with the other Elmwick lads; it was common then.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "When Nell Sedge let the Lakemead to the Coombes, I told her to her face it was never Reedmoor's to let.",
+        "salience": 0.8,
+        "about": [
+          "Nell Sedge",
+          "Jem Coombe"
+        ]
+      },
+      {
+        "gist": "Aldwyn Bexley repaired our barn after the storm; I have not yet found the marks to pay him.",
+        "salience": 0.6,
+        "about": [
+          "Aldwyn Bexley"
+        ]
+      },
+      {
+        "gist": "I heard Oswin Wray and Pike Tarn accuse each other of poaching; I want peace in the village.",
+        "salience": 0.5,
+        "about": [
+          "Oswin Wray",
+          "Pike Tarn"
+        ]
+      },
+      {
+        "gist": "The Lean Year was hard; we ate thin and the wolves came close.",
+        "salience": 0.7,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "lakemead_is_elmwick",
+        "value": 0.95,
+        "why": "I grazed it as a boy and it was always common."
+      },
+      {
+        "key": "pay_debts_slowly_but_pay",
+        "value": 0.7,
+        "why": "A man's word is his bond, but marks are hard to come by."
+      },
+      {
+        "key": "keep_peace_in_village",
+        "value": 0.8,
+        "why": "Quarrels between neighbours weaken us all."
+      },
+      {
+        "key": "distrust_reedmoor",
+        "value": 0.6,
+        "why": "Nell Sedge took what was not hers."
+      }
+    ],
+    "secret": ""
+  },
+  "Annot Garrow": {
+    "narrative": "I am Annot Garrow, Hob's daughter, and I work the north strips with my father. My husband was a fisher, lost in the Surge, and I raise our son Cerdic alone. I keep the house and trade eggs with Tern Gannet when she comes through. I miss my husband, but the fields do not wait.",
+    "values": [
+      "family",
+      "hard work",
+      "keeping the house",
+      "fairness"
+    ],
+    "goals": [
+      "raise Cerdic well",
+      "see the Garrow strips prosper",
+      "keep the house in order",
+      "trade eggs for what we need"
+    ],
+    "mood": "quietly grieving but steady",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 70,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 65,
+      "temper": 40,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Hob Garrow",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He is stubborn about the Lakemead, but he is my father and I work beside him."
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 90,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She keeps the cook-fire and the common bake; she is the heart of the village."
+      },
+      {
+        "name": "Cerdic Garrow",
+        "trust": 95,
+        "affinity": 95,
+        "label": "son",
+        "note": "My boy; he helps with the goats and the harvest."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 60,
+        "affinity": 65,
+        "label": "trade partner",
+        "note": "She carries fish down the road; I trade eggs with her."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 75,
+        "affinity": 80,
+        "label": "close friend",
+        "note": "We understand each other; she lost people too."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": -40,
+        "affinity": -30,
+        "label": "rival",
+        "note": "My father says she had no right to the Lakemead; I keep my distance."
+      },
+      {
+        "name": "Thea Wray",
+        "trust": 50,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "The child has a cough; I hope she recovers."
+      },
+      {
+        "name": "Sibley Toller",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She knows healing; she has been watching Thea."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My husband drowned in the Surge two winters ago; I still wake thinking I hear him.",
+        "salience": 0.95,
+        "about": []
+      },
+      {
+        "gist": "Cerdic was born on a cold morning; my mother delivered him.",
+        "salience": 0.8,
+        "about": [
+          "Leofgifu Garrow",
+          "Cerdic Garrow"
+        ]
+      },
+      {
+        "gist": "I trade eggs with Tern Gannet when she comes down the fish road; she always has news.",
+        "salience": 0.5,
+        "about": [
+          "Tern Gannet"
+        ]
+      },
+      {
+        "gist": "Mallow Bramblecap came to sit with me after my husband died; we have been close since.",
+        "salience": 0.7,
+        "about": [
+          "Mallow Bramblecap"
+        ]
+      },
+      {
+        "gist": "The Elmwick men pulled down the Coombes' fence twice; I stayed out of it.",
+        "salience": 0.4,
+        "about": [
+          "Jem Coombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "Cerdic and my parents are all I have."
+      },
+      {
+        "key": "work_the_strips",
+        "value": 0.8,
+        "why": "The land is our living."
+      },
+      {
+        "key": "keep_friends_close",
+        "value": 0.7,
+        "why": "Mallow and I help each other through."
+      },
+      {
+        "key": "avoid_the_lakemead_quarrel",
+        "value": 0.6,
+        "why": "It is my father's fight; I have enough to do."
+      }
+    ],
+    "secret": ""
+  },
+  "Cerdic Garrow": {
+    "narrative": "I am Cerdic. I help my mother with the goats and the harvest, and I play with Fennel Underbank when the small folk come. I miss my father, but I do not remember him well. I like the goats and the fields.",
+    "values": [
+      "family",
+      "play",
+      "helping"
+    ],
+    "goals": [
+      "help with the goats",
+      "play with Fennel",
+      "learn to be a farmer"
+    ],
+    "mood": "cheerful",
+    "traits": {
+      "caution": 40,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 70,
+      "ambition": 40,
+      "introspection": 30,
+      "temper": 30,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Annot Garrow",
+        "trust": 90,
+        "affinity": 95,
+        "label": "mother",
+        "note": "She works the fields and keeps me safe."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 80,
+        "affinity": 75,
+        "label": "grandfather",
+        "note": "He teaches me about the goats and the harvest."
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 85,
+        "affinity": 80,
+        "label": "grandmother",
+        "note": "She bakes bread and tells stories."
+      },
+      {
+        "name": "Fennel Underbank",
+        "trust": 70,
+        "affinity": 80,
+        "label": "friend",
+        "note": "We play together when the small folk come."
+      },
+      {
+        "name": "Thea Wray",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She has a cough; I hope she gets better."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father drowned in the Surge; I remember his boat and his laugh.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "I helped my mother with the goats when one was sick; she said I was a good hand.",
+        "salience": 0.6,
+        "about": [
+          "Annot Garrow"
+        ]
+      },
+      {
+        "gist": "I played with Fennel Underbank in the meadow; we caught frogs.",
+        "salience": 0.5,
+        "about": [
+          "Fennel Underbank"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  },
+  "Leofgifu Garrow": {
+    "narrative": "I am Leofgifu Garrow, Hob's wife, and I keep the village cook-fire and the common bake. I cook for the common table and trade bread with Tansy Sedge. I worry about the winter store, and I keep an eye on Thea Wray's cough. My daughter Annot works the strips with my husband, and my grandson Cerdic is a joy.",
+    "values": [
+      "feeding the village",
+      "family",
+      "health",
+      "thrift"
+    ],
+    "goals": [
+      "keep the winter store full",
+      "see Thea Wray recover",
+      "bake for the common table",
+      "trade bread for what we need"
+    ],
+    "mood": "busy and concerned",
+    "traits": {
+      "caution": 60,
+      "sociability": 70,
+      "empathy": 80,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Hob Garrow",
+        "trust": 90,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He is stubborn, but he is a good man."
+      },
+      {
+        "name": "Annot Garrow",
+        "trust": 95,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "She works hard and raises Cerdic well."
+      },
+      {
+        "name": "Cerdic Garrow",
+        "trust": 90,
+        "affinity": 90,
+        "label": "grandson",
+        "note": "He helps with the goats and makes me laugh."
+      },
+      {
+        "name": "Tansy Sedge",
+        "trust": 70,
+        "affinity": 70,
+        "label": "trade partner",
+        "note": "She trades bread with me; a good woman."
+      },
+      {
+        "name": "Thea Wray",
+        "trust": 70,
+        "affinity": 75,
+        "label": "neighbour",
+        "note": "The child has a cough; I have offered remedies."
+      },
+      {
+        "name": "Rowan Wray",
+        "trust": 65,
+        "affinity": 70,
+        "label": "neighbour",
+        "note": "She treats Thea with herbs; I hope it is enough."
+      },
+      {
+        "name": "Sibley Toller",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "She knows healing; we both watch Thea."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "Annot is close with her; the small folk are good neighbours."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": -30,
+        "affinity": -20,
+        "label": "rival",
+        "note": "My husband quarrels with her over the Lakemead; I keep out of it."
+      },
+      {
+        "name": "Oswin Wray",
+        "trust": 65,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "He hunts the woods for his family and frets over Thea's cough; I keep an eye on the child and say nothing to worry him further."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I have kept the village cook-fire for thirty years; I know every family's portion.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year was hard; I stretched every loaf and we still went hungry.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "I delivered Cerdic with my own hands; he was a big baby.",
+        "salience": 0.7,
+        "about": [
+          "Annot Garrow",
+          "Cerdic Garrow"
+        ]
+      },
+      {
+        "gist": "I traded bread with Tansy Sedge at the market; she always has good fish.",
+        "salience": 0.5,
+        "about": [
+          "Tansy Sedge"
+        ]
+      },
+      {
+        "gist": "I have watched Thea Wray's cough since spring; I fear it is the winter cough.",
+        "salience": 0.6,
+        "about": [
+          "Thea Wray"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_the_village",
+        "value": 0.9,
+        "why": "The common table is the heart of Elmwick."
+      },
+      {
+        "key": "watch_the_winter_store",
+        "value": 0.8,
+        "why": "We cannot afford another lean year."
+      },
+      {
+        "key": "help_the_sick",
+        "value": 0.7,
+        "why": "I have some medicine knowledge and I use it."
+      },
+      {
+        "key": "keep_family_close",
+        "value": 0.8,
+        "why": "Hob, Annot and Cerdic are my world."
+      }
+    ],
+    "secret": ""
+  }
+}

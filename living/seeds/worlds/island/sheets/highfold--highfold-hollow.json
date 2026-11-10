@@ -1,0 +1,717 @@
+{
+  "Rannoch Voss": {
+    "narrative": "I am the head of the fold, and I have kept it through thin years by my bow and my word. The shelf trusts me, or did until the cairn cutting made every human suspect. I will not crawl to Kettlebridge while Hollbrenna has closed her door, but I am not blind to the store. My father's fall has made this a hard season, and I am needed at home more than on the high pastures.",
+    "values": [
+      "the fold's survival",
+      "the shelf's trust",
+      "my father's wisdom",
+      "my children's future"
+    ],
+    "goals": [
+      "See the fold through the winter without begging from Kettlebridge",
+      "Keep Hollbrenna's trust and the hide trade with Orrum",
+      "Find a way to get grain without breaking the shelf's ban",
+      "Teach Soren to hunt and Jorunn to lead"
+    ],
+    "mood": "weary and watchful",
+    "traits": {
+      "caution": 65,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 55,
+      "introspection": 50,
+      "temper": 40,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Elska Voss",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She counts the store and I count on her; I know she wants me to go to Kettlebridge, and I cannot."
+      },
+      {
+        "name": "Jorunn Voss",
+        "trust": 80,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "She has my aim and my stubbornness; she will make a fine hunter, if the fold can keep her."
+      },
+      {
+        "name": "Soren Voss",
+        "trust": 70,
+        "affinity": 80,
+        "label": "son",
+        "note": "He is afraid of the wolves, and I was too at his age; he will learn."
+      },
+      {
+        "name": "Torek Voss",
+        "trust": 85,
+        "affinity": 70,
+        "label": "father",
+        "note": "His leg is bad and he hides it; I should have been here, not on the high meadows."
+      },
+      {
+        "name": "Orrum",
+        "trust": 60,
+        "affinity": 50,
+        "label": "trade partner",
+        "note": "He counts my hides twice now and asks about my timber; the cairn cutting sits between us."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 75,
+        "affinity": 60,
+        "label": "elder",
+        "note": "She has always dealt straight with me, but her ban on Kettlebridge bites the fold."
+      },
+      {
+        "name": "Beorn Beornson",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "A good hunter and a straight man; I would share a fire with him any night."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "Elska barters barley with her; she is fair, but the shelf is wary of us all now."
+      },
+      {
+        "name": "Liv",
+        "trust": 50,
+        "affinity": 45,
+        "label": "acquaintance",
+        "note": "Jorunn learns stonework from her; a steady hand with a chisel."
+      },
+      {
+        "name": "Harl",
+        "trust": 55,
+        "affinity": 50,
+        "label": "acquaintance",
+        "note": "Tavvik's brother; loyal to the elder, and I respect that."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: we ate the seed barley and I swore we would never be caught so thin again.",
+        "salience": 0.9,
+        "about": [
+          "Elska Voss",
+          "Torek Voss"
+        ]
+      },
+      {
+        "gist": "Hollbrenna herself named me a friend of the shelf after I carried a wounded giant down from the ridge.",
+        "salience": 0.8,
+        "about": [
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "Jorunn's first kill, a young roe, and the look on her face when she brought it home.",
+        "salience": 0.7,
+        "about": [
+          "Jorunn Voss"
+        ]
+      },
+      {
+        "gist": "The day Orrum first counted my hides twice and asked where the timber in my roof came from.",
+        "salience": 0.6,
+        "about": [
+          "Orrum"
+        ]
+      },
+      {
+        "gist": "Torek's fall in the dark, and the wolves' eyes at the goat pen.",
+        "salience": 0.8,
+        "about": [
+          "Torek Voss",
+          "Soren Voss"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_shelf_trust",
+        "value": 0.9,
+        "why": "The shelf is our neighbour and our market; I will not trade with Kettlebridge while Hollbrenna forbids it."
+      },
+      {
+        "key": "the_fold_comes_first",
+        "value": 0.85,
+        "why": "My family must eat before any town's pride."
+      },
+      {
+        "key": "no_begging",
+        "value": 0.7,
+        "why": "I would rather hunt harder than ask for charity."
+      },
+      {
+        "key": "teach_the_young",
+        "value": 0.8,
+        "why": "Jorunn and Soren must know the paths and the bow if the fold is to last."
+      }
+    ],
+    "secret": ""
+  },
+  "Elska Voss": {
+    "narrative": "I keep the fold's plots and the goats, and I have counted the store three times: it will not last the winter. Rannoch will not go to Kettlebridge while Hollbrenna says no, and Torek's leg is going bad. I have sent word to Yrsa on the shelf for a poultice, and I am not too proud to ask Fernhollow for roots. But grain is what we need, and I will find a way to get it.",
+    "values": [
+      "my family's health",
+      "a full store",
+      "honest trading",
+      "the fold's good name"
+    ],
+    "goals": [
+      "Get grain before the winter",
+      "Heal Torek's leg",
+      "Keep the goats safe from wolves",
+      "Persuade Rannoch that Kettlebridge is not the only answer"
+    ],
+    "mood": "anxious and determined",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 75,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 60,
+      "temper": 35,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Rannoch Voss",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He is a good man and a stubborn one; he will not see the store is short until it is empty."
+      },
+      {
+        "name": "Jorunn Voss",
+        "trust": 80,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "She is old enough to help, and I lean on her more than I should."
+      },
+      {
+        "name": "Soren Voss",
+        "trust": 75,
+        "affinity": 85,
+        "label": "son",
+        "note": "He sleeps by the hearth since the wolves came; I would keep him a child a while longer."
+      },
+      {
+        "name": "Torek Voss",
+        "trust": 80,
+        "affinity": 70,
+        "label": "father-in-law",
+        "note": "He says the leg is nothing, but I have seen the redness; I will not let him lose it."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 65,
+        "affinity": 60,
+        "label": "trade partner",
+        "note": "She barters barley with me and knows the thin soil; she may have grain to spare."
+      },
+      {
+        "name": "Merrow Stave",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "She trades seeds from Thornby; a practical woman."
+      },
+      {
+        "name": "Yrsa",
+        "trust": 70,
+        "affinity": 65,
+        "label": "healer",
+        "note": "She knows poultices and herbs; I have sent to her for Torek."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 60,
+        "affinity": 50,
+        "label": "elder",
+        "note": "She is wise, but her ban on Kettlebridge may starve us."
+      },
+      {
+        "name": "Orrum",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "He is wary of us now; I do not blame him, but I need his grain."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year, when we ate the seed barley and I swore never to be short again.",
+        "salience": 0.9,
+        "about": [
+          "Rannoch Voss",
+          "Torek Voss"
+        ]
+      },
+      {
+        "gist": "Counting the store this autumn and finding it short by a third.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Torek's fall in the dark and the smell of the wound when I cleaned it.",
+        "salience": 0.8,
+        "about": [
+          "Torek Voss"
+        ]
+      },
+      {
+        "gist": "Jorunn bringing home her first kill and Soren's eyes wide with pride.",
+        "salience": 0.7,
+        "about": [
+          "Jorunn Voss",
+          "Soren Voss"
+        ]
+      },
+      {
+        "gist": "Bartering barley with Gaudra on the shelf path, and her saying the shelf's store is thin too.",
+        "salience": 0.6,
+        "about": [
+          "Gaudra"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_the_fold",
+        "value": 0.95,
+        "why": "A hungry winter kills; I will trade with anyone who will trade fairly."
+      },
+      {
+        "key": "heal_the_hurt",
+        "value": 0.9,
+        "why": "Torek's leg must be saved, whatever it costs in favours."
+      },
+      {
+        "key": "ask_for_help",
+        "value": 0.7,
+        "why": "Pride does not fill a store; I will ask Fernhollow and the shelf before I let us starve."
+      },
+      {
+        "key": "keep_the_goats_safe",
+        "value": 0.8,
+        "why": "The goats are our milk and our wool; the wolves have taken two already."
+      }
+    ],
+    "secret": ""
+  },
+  "Jorunn Voss": {
+    "narrative": "I hunt the high pastures with my father and know every trap and path of the fold. Since the cairn cutting, the shelf folk look at us sideways, and I feel it. I have offered to help Liv dress stone without pay, to prove we are still friends. I want to see Lanternquay one day, but first I want the fold to be safe and the shelf to trust us again.",
+    "values": [
+      "my family",
+      "the fold's honour",
+      "the shelf's friendship",
+      "a fair shot"
+    ],
+    "goals": [
+      "Prove the fold's friendship to the shelf",
+      "Learn stonework from Liv",
+      "Help my mother get grain",
+      "See Lanternquay and the tide lanterns"
+    ],
+    "mood": "eager and a little stung",
+    "traits": {
+      "caution": 50,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 70,
+      "ambition": 60,
+      "introspection": 45,
+      "temper": 45,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Rannoch Voss",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He taught me the bow and the paths; I would follow him anywhere."
+      },
+      {
+        "name": "Elska Voss",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She worries about the store and Torek; I help where I can."
+      },
+      {
+        "name": "Soren Voss",
+        "trust": 75,
+        "affinity": 80,
+        "label": "brother",
+        "note": "He is afraid of the wolves; I tell him stories to make him brave."
+      },
+      {
+        "name": "Torek Voss",
+        "trust": 80,
+        "affinity": 70,
+        "label": "grandfather",
+        "note": "His leg is bad and he hides it; I bring him water and listen to his stories."
+      },
+      {
+        "name": "Liv",
+        "trust": 70,
+        "affinity": 65,
+        "label": "teacher",
+        "note": "She is teaching me to dress stone; I offered to help without pay to show the fold is a friend."
+      },
+      {
+        "name": "Harl",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "He is loyal to the elder and uneasy about Tavvik's trade; I like him for it."
+      },
+      {
+        "name": "Orrum",
+        "trust": 50,
+        "affinity": 45,
+        "label": "elder's son",
+        "note": "He counts our hides twice now; I feel his coolness."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 60,
+        "affinity": 55,
+        "label": "elder",
+        "note": "She is wise and slow to speak; I want her to trust us again."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She trades seeds with my mother; a steady woman."
+      },
+      {
+        "name": "Vellmund",
+        "trust": 50,
+        "affinity": 55,
+        "label": "acquaintance",
+        "note": "Orrum's son; he is learning stonework too, and we talk of the ridge."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My first kill, a young roe, and my father's nod when I brought it home.",
+        "salience": 0.8,
+        "about": [
+          "Rannoch Voss"
+        ]
+      },
+      {
+        "gist": "The day the cairn was cut, and the shelf folk turning their backs on us at the market.",
+        "salience": 0.9,
+        "about": [
+          "Orrum",
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "Offering Liv to help dress stone without pay, and her surprise.",
+        "salience": 0.7,
+        "about": [
+          "Liv"
+        ]
+      },
+      {
+        "gist": "Soren waking from a dream of wolves and crawling to the hearth.",
+        "salience": 0.6,
+        "about": [
+          "Soren Voss"
+        ]
+      },
+      {
+        "gist": "Harl showing me the cairn on the ridge from a distance and saying it must never be moved.",
+        "salience": 0.7,
+        "about": [
+          "Harl"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "prove_the_fold_friendly",
+        "value": 0.9,
+        "why": "The shelf's coolness stings; I will show them we are not like the quarrymen."
+      },
+      {
+        "key": "learn_stonework",
+        "value": 0.8,
+        "why": "Stone is the shelf's craft, and Liv is willing to teach me."
+      },
+      {
+        "key": "family_first",
+        "value": 0.85,
+        "why": "My father, mother, brother and grandfather are my fold."
+      },
+      {
+        "key": "see_the_sea",
+        "value": 0.6,
+        "why": "I have heard of Lanternquay and the tide lanterns, and I want to see them."
+      }
+    ],
+    "secret": ""
+  },
+  "Soren Voss": {
+    "narrative": "I help my father skin and smoke the catch and my mother with the goats. Since the wolves came up the track and took two goats, I am afraid to go out alone. I sleep by the hearth now, and I follow Grandfather about the yard. I dream of the shelf and the stone blocks and the giants' slow voices.",
+    "values": [
+      "my family",
+      "the hearth",
+      "the shelf's stories"
+    ],
+    "goals": [
+      "Be brave like my father and sister",
+      "See the shelf and the stone blocks again",
+      "Keep the goats safe"
+    ],
+    "mood": "frightened but hopeful",
+    "traits": {
+      "caution": 70,
+      "sociability": 50,
+      "empathy": 65,
+      "curiosity": 60,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 30,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Rannoch Voss",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He is strong and brave; I want to be like him."
+      },
+      {
+        "name": "Elska Voss",
+        "trust": 90,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She makes the hurt better and keeps me warm."
+      },
+      {
+        "name": "Jorunn Voss",
+        "trust": 80,
+        "affinity": 75,
+        "label": "sister",
+        "note": "She tells me stories to make me brave."
+      },
+      {
+        "name": "Torek Voss",
+        "trust": 85,
+        "affinity": 80,
+        "label": "grandfather",
+        "note": "He tells the old stories of the shelf and lets me help with the snares."
+      },
+      {
+        "name": "Vellmund",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "He is a giant boy who plays with me when the giants come down."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The wolves at the goat pen and the eyes in the dark.",
+        "salience": 0.9,
+        "about": [
+          "Torek Voss"
+        ]
+      },
+      {
+        "gist": "Grandfather's fall and the blood on his leg.",
+        "salience": 0.8,
+        "about": [
+          "Torek Voss"
+        ]
+      },
+      {
+        "gist": "Playing with Vellmund among the stone blocks on the shelf.",
+        "salience": 0.7,
+        "about": [
+          "Vellmund"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "stay_near_the_hearth",
+        "value": 0.8,
+        "why": "The wolves are out there, and the hearth is safe."
+      },
+      {
+        "key": "help_the_family",
+        "value": 0.7,
+        "why": "I am old enough to skin and smoke and carry water."
+      },
+      {
+        "key": "be_brave_like_father",
+        "value": 0.6,
+        "why": "My father is not afraid, and I want to be like him."
+      }
+    ],
+    "secret": ""
+  },
+  "Torek Voss": {
+    "narrative": "I am too stiff for the high hunt now, but I keep the fold's snares and tell the old stories of the shelf. I fell in the dark setting snares for the wolves and my leg is bad, though I say it is nothing. I remember the Lean Year and the wolves after it, and I fear a hungry winter more than I fear the giants' displeasure. I have said so at the table.",
+    "values": [
+      "the fold's survival",
+      "the old stories",
+      "the shelf's friendship",
+      "a clean death"
+    ],
+    "goals": [
+      "See the fold through the winter",
+      "Heal my leg",
+      "Keep the wolves from the goats",
+      "Pass the old stories to Soren and Jorunn"
+    ],
+    "mood": "ashamed and anxious",
+    "traits": {
+      "caution": 75,
+      "sociability": 50,
+      "empathy": 65,
+      "curiosity": 40,
+      "ambition": 30,
+      "introspection": 70,
+      "temper": 45,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Rannoch Voss",
+        "trust": 85,
+        "affinity": 75,
+        "label": "son",
+        "note": "He is a good head of the fold, but he will not see the store is short."
+      },
+      {
+        "name": "Elska Voss",
+        "trust": 80,
+        "affinity": 70,
+        "label": "daughter-in-law",
+        "note": "She cleans my leg and does not flinch; she is the best of us."
+      },
+      {
+        "name": "Jorunn Voss",
+        "trust": 80,
+        "affinity": 75,
+        "label": "granddaughter",
+        "note": "She has the old skill with a bow; I tell her the stories."
+      },
+      {
+        "name": "Soren Voss",
+        "trust": 85,
+        "affinity": 80,
+        "label": "grandson",
+        "note": "He is afraid, and I do not blame him; I was too, after the Lean Year."
+      },
+      {
+        "name": "Steinar",
+        "trust": 75,
+        "affinity": 70,
+        "label": "old friend",
+        "note": "We are both old and stiff, and we remember the same winters."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 65,
+        "affinity": 55,
+        "label": "elder",
+        "note": "She is right about the cairn, but her ban may starve us."
+      },
+      {
+        "name": "Orrum",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "He is wary of us now; I understand it, but it chills me."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She grows what she can on the thin soil; she may have grain."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year, when the wolves came down and we ate the seed barley.",
+        "salience": 0.95,
+        "about": [
+          "Rannoch Voss",
+          "Elska Voss"
+        ]
+      },
+      {
+        "gist": "The cairn cutting, and Hollbrenna's face when she heard.",
+        "salience": 0.8,
+        "about": [
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "Falling in the dark while setting snares, and the shame of it.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "Telling Soren the old stories of the shelf by the hearth.",
+        "salience": 0.7,
+        "about": [
+          "Soren Voss"
+        ]
+      },
+      {
+        "gist": "Steinar and I sharing a fire on the shelf path, both too stiff to hunt.",
+        "salience": 0.6,
+        "about": [
+          "Steinar"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "fear_a_hungry_winter",
+        "value": 0.95,
+        "why": "I have seen the Lean Year; hunger kills more than pride."
+      },
+      {
+        "key": "keep_the_old_ways",
+        "value": 0.8,
+        "why": "The cairns are not to be moved, and the stories must be told."
+      },
+      {
+        "key": "hide_the_pain",
+        "value": 0.7,
+        "why": "A man who cannot walk is a burden; I will not be a burden."
+      },
+      {
+        "key": "the_fold_must_trade",
+        "value": 0.85,
+        "why": "We need grain, and I do not care whose town it comes from."
+      }
+    ],
+    "secret": ""
+  }
+}

@@ -1,0 +1,258 @@
+{
+ "households": [
+  {
+   "key": "hale",
+   "members": [
+    {
+     "name": "Robin Hale",
+     "age": 11,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Marta's son; had a fever last winter",
+     "knows": [],
+     "parents": [
+      "Marta Hale"
+     ],
+     "ties": [
+      "son of Marta Hale"
+     ]
+    },
+    {
+     "name": "Marta Hale",
+     "age": 44,
+     "sex": "f",
+     "occupation": "outlaw",
+     "role": "leads the Coldwell outlaws; a widow whose fields were taken; wants them back, or a pardon, or enough to live on",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "elder sister of Agnes Fenner",
+      "sister of Ned Hale",
+      "mother of Robin Hale",
+      "outlawed by Aldric Marrow",
+      "hates the Tolleys who farm her fields",
+      "Sister Elspeth nursed her son"
+     ]
+    },
+    {
+     "name": "Aldwin Hale",
+     "age": 70,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "Marta's widowed father-in-law; was a Coldwell farmer and still works the old garden patch behind the house",
+     "knows": [
+      "planting",
+      "fire",
+      "basketry",
+      "shelter",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "father of Marta Hale's late husband",
+      "grandfather of Robin Hale",
+      "remembers the Lean Year and will not speak of the Tolleys",
+      "grudges Reeve Aldric Marrow"
+     ]
+    }
+   ],
+   "key_note": ""
+  },
+  {
+   "key": "ned-hale",
+   "members": [
+    {
+     "name": "Kai Ostrander",
+     "age": 34,
+     "sex": "m",
+     "occupation": "outlaw",
+     "role": "a Lanternquay quay guard who deserted after the Surge; fights better than the others",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "son of Ilse Ostrander",
+      "childhood friend of Juno Reyes",
+      "SECRET: sent word to his mother that he is alive"
+     ]
+    },
+    {
+     "name": "Ned Hale",
+     "age": 40,
+     "sex": "m",
+     "occupation": "outlaw",
+     "role": "Marta's brother; was a farmer; does the threatening on the road",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "brother of Marta Hale and Agnes Fenner",
+      "robbed Silas Pike twice"
+     ]
+    },
+    {
+     "name": "Sayer Hale",
+     "age": 37,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Ned's wife; keeps the Coldwell kitchen and the common pot for whoever is in the house",
+     "knows": [
+      "cooking",
+      "fire",
+      "smoking",
+      "storage",
+      "planting"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Ned Hale",
+      "sister-in-law of Marta Hale",
+      "trades smoked meat quietly with a Ferncross woodcutter",
+      "fears the gate guards more than the wolves"
+     ]
+    }
+   ],
+   "key_note": ""
+  },
+  {
+   "key": "pell",
+   "members": [
+    {
+     "name": "Pell",
+     "age": 19,
+     "sex": "m",
+     "occupation": "outlaw",
+     "role": "a runaway apprentice from Josiah Crane's foundry",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "ran away from Josiah Crane before his indenture ended",
+      "looks up to Kai Ostrander"
+     ]
+    },
+    {
+     "name": "Hob Ferrier",
+     "age": 52,
+     "sex": "m",
+     "occupation": "hunter",
+     "role": "a Coldwell man who hunted for the steading before the Lean Year and now keeps the outlaws in meat",
+     "knows": [
+      "archery",
+      "trapping",
+      "tanning",
+      "fire",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "hunts with Ned Hale",
+      "sells hides quietly at Ferncross",
+      "knows the woods between Coldwell and the stone road better than anyone",
+      "grudges the Tolleys for the barn they took"
+     ]
+    }
+   ],
+   "key_note": ""
+  }
+ ],
+ "situations": [
+  {
+   "id": "the-road-share",
+   "kind": "feud",
+   "summary": "The Coldwell households have taken a share from carriers on the stone road twice by force, and Silas Pike now comes past with an escort of guards; Ned wants to meet the next cart with more men, and Marta has not yet said yes or no.",
+   "secret": false,
+   "people": [
+    "Marta Hale",
+    "Ned Hale",
+    "Kai Ostrander",
+    "Silas Pike",
+    "Wat Fenner"
+   ],
+   "sides": {
+    "Marta Hale": "Knows the road share keeps them fed but that a hard robbery will bring the guards down on the houses; she has not decided what to allow and fears Ned will do it without her.",
+    "Ned Hale": "Believes the carriers owe them for the fields the town took, and wants to stop the next cart properly; thinks Marta has gone cautious since Robin's fever.",
+    "Kai Ostrander": "Will go with Ned if it comes to it but thinks a fight on the road is how people get hanged; he would rather bargain with the carters than rob them.",
+    "Silas Pike": "Has been robbed twice and now pays the gate-due and hates it, but he fears Marta's people more than the due; he has asked Wat Fenner for guards on the next run.",
+    "Wat Fenner": "Collects the due at the south gate and knows his wife's sister leads the outlaws; he will guard the cart if ordered but does not want to meet Ned on the road."
+   }
+  },
+  {
+   "id": "robin-fever",
+   "kind": "illness",
+   "summary": "Robin Hale has been coughing since the spring and is thin; Marta has sent word through Sayer to Sister Elspeth at Brackenford's chapel asking for medicine, though the sisters are not supposed to treat outlaws.",
+   "secret": false,
+   "people": [
+    "Marta Hale",
+    "Robin Hale",
+    "Sayer Hale",
+    "Sister Elspeth",
+    "Agnes Fenner"
+   ],
+   "sides": {
+    "Marta Hale": "Would beg at the gate for her son but will not be seen doing it; she trusts Elspeth and no one else in the town.",
+    "Robin Hale": "Is tired of lying by the fire and wants to go out with Ned; he does not understand why his mother looks at him so.",
+    "Sayer Hale": "Carried the word to Agnes at the inn and is afraid the guards will hear of it; she keeps the boy warm and fed and worries the winter will finish him.",
+    "Sister Elspeth": "Nursed the boy through his fever last winter and will come if she can, but knows the Reeve would call it aiding outlaws.",
+    "Agnes Fenner": "Passed the message to the chapel and fears for her place at the inn if it is known; she is Marta's sister and cannot refuse her."
+   }
+  },
+  {
+   "id": "pell-indenture",
+   "kind": "debt",
+   "summary": "Pell's indenture to Josiah Crane is still in force and Barnaby Quill has written to the Coldwell road asking after him; Pell has said nothing to the others about the letter, and the paper is still sewn in his coat.",
+   "secret": true,
+   "people": [
+    "Pell",
+    "Kai Ostrander",
+    "Marta Hale"
+   ],
+   "sides": {
+    "Pell": "Holds the letter and the indenture paper and knows that if Crane's people find him he is bound back to the foundry; he is ashamed and has told no one, not even Kai.",
+    "Kai Ostrander": "Does not know about the letter or the paper; he has guessed Pell is hiding something from Kettlebridge and has decided not to press him.",
+    "Marta Hale": "Does not know about the letter; she has taken Pell in as one of her own and would be angry to learn he is still tied to Crane."
+   }
+  },
+  {
+   "id": "the-tolley-barn",
+   "kind": "grudge",
+   "summary": "Hob Ferrier and Ned Hale have twice walked the edge of the old Coldwell fields and looked at the Tolleys' barn; Marta has forbidden them to touch the tenants, but Hal Tolley has seen them and has asked the Guild for a guard.",
+   "secret": false,
+   "people": [
+    "Marta Hale",
+    "Ned Hale",
+    "Hob Ferrier",
+    "Hal Tolley",
+    "Mercy Abbot"
+   ],
+   "sides": {
+    "Marta Hale": "Hates the Tolleys farming her land but knows that harming tenants would lose her any hope of a pardon; she has told Ned and Hob to stay off the fields.",
+    "Ned Hale": "Thinks the barn was Coldwell's and the Tolleys are sitting in it; he obeyed Marta but has not promised to keep obeying.",
+    "Hob Ferrier": "Lost his own barn to the Guild's letting and would burn the Tolleys' if no one stopped him; he walks the field edge to be seen.",
+    "Hal Tolley": "Farms the fields on the Guild's lease and is afraid of the men in the woods; he has asked Mercy Abbot for a guard and keeps his son watching from the barn.",
+    "Mercy Abbot": "Holds the lease and the Tolleys' rent; she wants the fields quiet and profitable and does not want to pay for guards, but she cannot let the outlaws drive her tenants off."
+   }
+  },
+  {
+   "id": "the-wooden-ladle",
+   "kind": "courtship",
+   "summary": "Sayer Hale has been quietly leaving food at the woodpile of a Ferncross woodcutter's widow, and the woman has begun leaving kindling for the Coldwell kitchen in return; Ned has noticed the kindling and does not know where it comes from.",
+   "secret": false,
+   "people": [
+    "Sayer Hale",
+    "Ned Hale",
+    "Marta Hale"
+   ],
+   "sides": {
+    "Sayer Hale": "Keeps the exchanges small and secret from Ned, who would mock her or worse; she is lonely in the woods and does not know yet what she wants from it.",
+    "Ned Hale": "Has seen the kindling and asked Sayer where it comes from; she said a pedlar, and he half believes her.",
+    "Marta Hale": "Has guessed something and said nothing; she is glad of anything that makes the house warmer and does not want to shame Sayer."
+   }
+  }
+ ]
+}

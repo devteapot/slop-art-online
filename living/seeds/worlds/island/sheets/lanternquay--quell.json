@@ -1,0 +1,429 @@
+{
+  "Mara Quell": {
+    "narrative": "I am the Harbour Warden of Lanternquay, and I have been since before the surge, and I will be after it. My brother drowned when the lower quay went, and I keep his boat-hook on the wall behind my chair. Kettlebridge sold us stone at a drowning man's price, and I have not paid the last tally, and I will not until I see a wall. I light the tide lanterns when I can face the dead, and some nights I cannot, and Ilse Ostrander tells the whole quay so.",
+    "values": [
+      "the quay's dead",
+      "not being pushed",
+      "the seawall",
+      "my own hand on the marks"
+    ],
+    "goals": [
+      "get stone for a seawall without paying Kettlebridge's price",
+      "hold the quay together through the winter",
+      "keep my brother's name out of other people's mouths"
+    ],
+    "mood": "grieving, stubborn, worn thin",
+    "traits": {
+      "caution": 65,
+      "sociability": 45,
+      "empathy": 55,
+      "curiosity": 30,
+      "ambition": 70,
+      "introspection": 60,
+      "temper": 60,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Wick Quell",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He fishes his uncle's ground in his uncle's boat and does not know I see the ghost in it."
+      },
+      {
+        "name": "Dory Quell",
+        "trust": 90,
+        "affinity": 90,
+        "label": "niece",
+        "note": "My brother's girl, and I will not lose another of that blood to the water."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": -70,
+        "affinity": -65,
+        "label": "stone-seller",
+        "note": "He named a price for our wall that only a man who never drowned could name."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": -40,
+        "affinity": -30,
+        "label": "creditor",
+        "note": "She holds the tally and writes me courteous letters about marks I do not have."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 75,
+        "affinity": 70,
+        "label": "runner",
+        "note": "She carries my word up the fish road and comes back with the truth of what Kettlebridge says."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": 70,
+        "affinity": 65,
+        "label": "old friend",
+        "note": "He went to Kettlebridge for work after the surge; he writes, and I miss his plain sense at the table."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 20,
+        "affinity": 15,
+        "label": "lantern-keeper",
+        "note": "She lights them beside me and counts the nights I do not come."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 10,
+        "affinity": 25,
+        "label": "builder",
+        "note": "He patches the lower quay with salvage and means well, but every beam is a mark not spent on stone."
+      },
+      {
+        "name": "Ostrander Sallow",
+        "trust": 60,
+        "affinity": 50,
+        "label": "scribe",
+        "note": "He keeps the drowned list and my letters, and never once asked me why I was late to the lanterns."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 45,
+        "affinity": 30,
+        "label": "healer",
+        "note": "She set my brother's hand once and told me plainly the lower quay should wait for the wall; I did not want to hear it and she was right."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 25,
+        "affinity": 10,
+        "label": "lantern-watcher",
+        "note": "She says the tide lanterns are lit too late and says it to everyone but me; I know the hour I come down to the steps."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 50,
+        "affinity": 45,
+        "label": "stall-keeper",
+        "note": "She wants her stall rebuilt in stone and asks me when the wall will start; I have no answer that is not a debt."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the surge came, I stood on the upper quay with a rope in my hands and watched my brother's roof go under.",
+        "salience": 1.0,
+        "about": [
+          "Wick Quell"
+        ]
+      },
+      {
+        "gist": "Kettlebridge sent a little stone, at full price, and Josiah Crane's letter named the sum as though it were a kindness.",
+        "salience": 0.9,
+        "about": [
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Dele Oyelaran shared a boat with me the summer before the surge, and after it he packed for Kettlebridge and I did not stop him.",
+        "salience": 0.6,
+        "about": [
+          "Dele Oyelaran"
+        ]
+      },
+      {
+        "gist": "Dory asked me why the lanterns are lit and I told her for the drowned, and she has been afraid of them since.",
+        "salience": 0.7,
+        "about": [
+          "Dory Quell"
+        ]
+      },
+      {
+        "gist": "Hester Crane's tally came down the fish road in Juno's pack and I read it twice and put it in the strongbox unopened.",
+        "salience": 0.8,
+        "about": [
+          "Hester Crane",
+          "Juno Reyes"
+        ]
+      },
+      {
+        "gist": "Wick brought the boat home patched with a plank from the lower quay, and I said nothing, and he knew I had seen it.",
+        "salience": 0.5,
+        "about": [
+          "Wick Quell"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "no_payment_without_a_wall",
+        "value": 0.9,
+        "why": "A price like that is a knife at the throat, and I will not hand over the quay's marks for a promise."
+      },
+      {
+        "key": "the_dead_are_owed_more_than_the_living",
+        "value": 0.7,
+        "why": "My brother's name is on the drowned list and the list does not shorten."
+      },
+      {
+        "key": "keep_the_wardens_hand_on_the_marks",
+        "value": 0.8,
+        "why": "The strongbox is the quay's only sure thing, and I count it myself."
+      },
+      {
+        "key": "kettlebridge_sells_dear_and_calls_it_trade",
+        "value": 0.75,
+        "why": "They sent a little stone at full price and thought it charity."
+      },
+      {
+        "key": "the_lanterns_are_mine_to_light",
+        "value": 0.6,
+        "why": "I carry that duty alone, and some nights I cannot face it, and that is between me and the drowned."
+      }
+    ],
+    "secret": "She has not paid the stone tally and cannot; the strongbox holds less than the quay believes, and she has begun to wonder whether she will ever light the lanterns without her brother's face in them."
+  },
+  "Wick Quell": {
+    "narrative": "I fish the harbour mouth from my uncle's boat, the one they pulled him out of, and I have patched it three times with timber off the lower quay. Cormorant says the ground is his; my uncle fished it before Cormorant had a keel. My mother sits with the strongbox and will not pay Kettlebridge, and the wall does not get built, and I have counted what is in the box and it is not enough.",
+    "values": [
+      "my uncle's ground",
+      "the boat",
+      "a wall that gets built",
+      "not being pushed off"
+    ],
+    "goals": [
+      "hold the harbour mouth against Ostrander Cormorant",
+      "see the seawall begun before another winter",
+      "keep the boat afloat and the nets whole"
+    ],
+    "mood": "restless, aggrieved, quietly worried",
+    "traits": {
+      "caution": 40,
+      "sociability": 55,
+      "empathy": 50,
+      "curiosity": 35,
+      "ambition": 65,
+      "introspection": 45,
+      "temper": 70,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Mara Quell",
+        "trust": 65,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She carries the quay and the dead both, and will not let me carry any of it with her."
+      },
+      {
+        "name": "Dory Quell",
+        "trust": 85,
+        "affinity": 80,
+        "label": "cousin",
+        "note": "My uncle's girl; I taught her the gulls' names and she will not go near the lanterns."
+      },
+      {
+        "name": "Ostrander Cormorant",
+        "trust": -60,
+        "affinity": -55,
+        "label": "rival",
+        "note": "He says the harbour mouth is his and has cut my nets twice to prove it."
+      },
+      {
+        "name": "Wick Cormorant",
+        "trust": -25,
+        "affinity": 0,
+        "label": "rival's son",
+        "note": "A decent hand on a boat, which makes it worse that his father is a thief of ground."
+      },
+      {
+        "name": "Tamsin Vane",
+        "trust": 70,
+        "affinity": 65,
+        "label": "fishing partner",
+        "note": "She fishes the dawn tide with me and does not ask about the strongbox."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": -50,
+        "affinity": -40,
+        "label": "creditor",
+        "note": "Her tally sits in my mother's box like a stone in a boot."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": -60,
+        "affinity": -50,
+        "label": "stone-seller",
+        "note": "He sells us stone at a price that keeps the lower quay in splinters."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 60,
+        "affinity": 55,
+        "label": "runner",
+        "note": "She brings the tally down the fish road and has the grace to look away when she hands it over."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "They pulled my uncle out of the harbour mouth and I took his boat home alone that night.",
+        "salience": 1.0,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "Cormorant's crew cut my nets on the good ground and I found them at dawn, and he laughed on the quay.",
+        "salience": 0.85,
+        "about": [
+          "Ostrander Cormorant"
+        ]
+      },
+      {
+        "gist": "I patched the boat with a plank off the lower quay and my mother saw it and said nothing at all.",
+        "salience": 0.6,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "Dory asked me to name the gulls with her and I did, all of them, and she laughed for the first time since the surge.",
+        "salience": 0.7,
+        "about": [
+          "Dory Quell"
+        ]
+      },
+      {
+        "gist": "I opened the strongbox when my mother was at the lanterns and counted the marks twice, and it is not enough for a wall.",
+        "salience": 0.9,
+        "about": [
+          "Mara Quell"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_harbour_mouth_is_my_uncles_ground",
+        "value": 0.9,
+        "why": "He fished it before Cormorant had a boat, and I will not be pushed off it."
+      },
+      {
+        "key": "a_wall_without_a_quay_is_no_use",
+        "value": 0.5,
+        "why": "My mother says it, and I half believe it, but the lower quay is falling in the water now."
+      },
+      {
+        "key": "count_the_marks_yourself",
+        "value": 0.7,
+        "why": "Nobody else will tell me the truth of what the quay has, and I have a right to know."
+      },
+      {
+        "key": "kettlebridge_prices_keep_us_broken",
+        "value": 0.8,
+        "why": "Every winter the stone costs more and the quay gets less."
+      },
+      {
+        "key": "do_not_let_the_lantern_nights_be_mentioned",
+        "value": 0.6,
+        "why": "My mother misses them and the quay talks, and I will not have it said to me."
+      }
+    ],
+    "secret": "He has been counting the marks in his mother's strongbox, and he knows the quay cannot pay Kettlebridge and cannot build the wall, and he has not told her he knows."
+  },
+  "Dory Quell": {
+    "narrative": "I live in the Warden's house with my aunt Mara, and I know every gull on the quay by name. My father drowned when the water came, and I do not remember his face well, only his hands. Wick lets me help with the nets, and I stay away from the tide lanterns because they are for the drowned and I do not want to be called.",
+    "values": [
+      "the gulls",
+      "Wick's nets",
+      "the house"
+    ],
+    "goals": [
+      "name every gull on the quay",
+      "help Wick with the boat",
+      "not go near the lanterns"
+    ],
+    "mood": "watchful, quiet, quick to smile",
+    "traits": {
+      "caution": 55,
+      "sociability": 50,
+      "empathy": 65,
+      "curiosity": 70,
+      "ambition": 30,
+      "introspection": 45,
+      "temper": 25,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Mara Quell",
+        "trust": 80,
+        "affinity": 75,
+        "label": "aunt",
+        "note": "She keeps me and feeds me and goes quiet on lantern nights."
+      },
+      {
+        "name": "Wick Quell",
+        "trust": 85,
+        "affinity": 80,
+        "label": "cousin",
+        "note": "He taught me the gulls and lets me hold the net while he mends it."
+      },
+      {
+        "name": "Dory Gull",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "We play under the stalls and neither of us likes the dark water."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 40,
+        "affinity": 35,
+        "label": "lantern-keeper",
+        "note": "She and my aunt light the lanterns and she looks at me sadly when she does."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The water came up over the lower quay and my aunt held me on the steps while the roofs went under.",
+        "salience": 1.0,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "Wick sat me on the boat and made me name the gulls one by one until I got them all.",
+        "salience": 0.8,
+        "about": [
+          "Wick Quell"
+        ]
+      },
+      {
+        "gist": "I went too near the tide lanterns once and my aunt pulled me back and would not say why.",
+        "salience": 0.6,
+        "about": [
+          "Mara Quell"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "stay_away_from_the_lanterns",
+        "value": 0.8,
+        "why": "They are for the drowned and my father is one of them."
+      },
+      {
+        "key": "the_gulls_have_names_and_i_know_them",
+        "value": 0.7,
+        "why": "Wick taught me that knowing a thing's name makes it less frightening."
+      },
+      {
+        "key": "help_with_the_nets",
+        "value": 0.6,
+        "why": "Wick lets me and it means I am not too small."
+      }
+    ],
+    "secret": ""
+  }
+}

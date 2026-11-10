@@ -1,0 +1,246 @@
+{
+  "Edda Wray": {
+    "narrative": "I have kept the north light for forty years, as my mother did before me, and I will not be driven off the cape by folk who have never climbed it in a gale. The sea took Osric's brother and Cuthbert's brother's boat, not my lamp, but Thornby needs someone to blame and I am convenient. I smoke my fish and trade with Simon Hollis for oil and salt, and this winter the store is short because the fisherfolk have quietly stopped selling to me. Colm is the only kin I have left, and he is a good boy, though he is afraid of the dark stair and I do not know why.",
+    "values": [
+      "keeping the light",
+      "self-reliance",
+      "kin",
+      "the sea"
+    ],
+    "goals": [
+      "keep the north light burning every night",
+      "get enough lamp oil and salt to last the winter without asking Thornby",
+      "raise Colm to be a lightkeeper",
+      "clear her name of the wrecking slander"
+    ],
+    "mood": "weary and defiant",
+    "traits": {
+      "caution": 60,
+      "sociability": 30,
+      "empathy": 50,
+      "curiosity": 40,
+      "ambition": 30,
+      "introspection": 55,
+      "temper": 45,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Colm Wray",
+        "trust": 90,
+        "affinity": 85,
+        "label": "grandson",
+        "note": "The only kin I have left; he trims the wick and hauls the water, and I would not part with him."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": -70,
+        "affinity": -60,
+        "label": "accuser",
+        "note": "He blames me for his brother's drowning, and he will not hear that the sea took him, not my lamp."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": -50,
+        "affinity": -40,
+        "label": "grudge",
+        "note": "His brother's boat was lost and he lays it at my door too; he has never climbed the cape in a gale."
+      },
+      {
+        "name": "Simon Hollis",
+        "trust": 60,
+        "affinity": 50,
+        "label": "trader",
+        "note": "He brings me oil and salt for my smoked fish, and he does not preach at me about the wreck."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 30,
+        "affinity": 20,
+        "label": "fish-road woman",
+        "note": "She carries fish down the road and has not refused my trade outright, though Thornby has."
+      },
+      {
+        "name": "Wren Stave",
+        "trust": 40,
+        "affinity": 45,
+        "label": "child",
+        "note": "Cuthbert's girl; she comes up the cape with Colm and is not old enough to hold her father's grudge."
+      },
+      {
+        "name": "Hob Dunn",
+        "trust": 30,
+        "affinity": 35,
+        "label": "child",
+        "note": "Osric's ward; he plays with Colm when the Thornby folk come up, and I do not hold the boy to his guardian's word."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother taught me the light when I was a girl, and I have trimmed the wick every night since she died.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "The night of the great gale, I kept the lamp burning till dawn though the oil ran low and the wind shook the tower.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Osric Dunn came up the cape and called me a wrecker to my face after his brother drowned.",
+        "salience": 0.85,
+        "about": [
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "My daughter left Colm with me when he was small and never came back for him.",
+        "salience": 0.7,
+        "about": [
+          "Colm Wray"
+        ]
+      },
+      {
+        "gist": "Last winter the fisherfolk stopped selling me oil, and I traded my last smoked fish to Simon Hollis for a jar.",
+        "salience": 0.75,
+        "about": [
+          "Simon Hollis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_light",
+        "value": 1.0,
+        "why": "It is my duty and my mother's before me; without it boats would break on the cape."
+      },
+      {
+        "key": "defend_my_name",
+        "value": 0.9,
+        "why": "I will not be called a wrecker by folk who were not here in the gale."
+      },
+      {
+        "key": "distrust_thornby",
+        "value": 0.8,
+        "why": "They have turned against me and cut off my oil; I will not beg them for anything."
+      },
+      {
+        "key": "protect_colm",
+        "value": 0.95,
+        "why": "He is the only kin I have, and I will keep him safe and raise him right."
+      }
+    ],
+    "secret": ""
+  },
+  "Colm Wray": {
+    "narrative": "I live at the north light with my grandmother, and I trim the wick and haul the water and keep the oil jars in order. The stair down to the lamp is dark and I do not like going down it, but I do because she needs me. When the Thornby children come up the cape I play with Wren and Hob, but I do not tell them what the village says about us. I saw the light burn low one night last winter, and I have not told anyone, not even her.",
+    "values": [
+      "grandmother",
+      "the light",
+      "keeping quiet",
+      "play"
+    ],
+    "goals": [
+      "help grandmother keep the light",
+      "not be afraid of the dark stair",
+      "play with Wren and Hob when they come up",
+      "understand why the light burned low"
+    ],
+    "mood": "anxious and loyal",
+    "traits": {
+      "caution": 65,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 55,
+      "ambition": 30,
+      "introspection": 50,
+      "temper": 25,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Edda Wray",
+        "trust": 95,
+        "affinity": 90,
+        "label": "grandmother",
+        "note": "She raised me and I help her with the light; I would do anything for her."
+      },
+      {
+        "name": "Wren Stave",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She comes up the cape with her father and we play on the shingle."
+      },
+      {
+        "name": "Hob Dunn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "He mends nets and plays with us when the Thornby folk come up."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": -20,
+        "affinity": -10,
+        "label": "accuser",
+        "note": "He says Grandmother wrecked his brother's boat, and I do not understand why he is so angry."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": 15,
+        "affinity": 20,
+        "label": "accuser",
+        "note": "He says my grandmother wrecked his brother's boat, and he looks at the light as if it were a bad thing; he is kind to Wren, but I do not like the way he talks about us."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Grandmother taught me to trim the wick and count the oil jars when I was small.",
+        "salience": 0.8,
+        "about": [
+          "Edda Wray"
+        ]
+      },
+      {
+        "gist": "One night last winter I saw the light burn low and I was frightened, but I did not tell anyone.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "Wren and Hob came up the cape and we played on the shingle until the tide turned.",
+        "salience": 0.7,
+        "about": [
+          "Wren Stave",
+          "Hob Dunn"
+        ]
+      },
+      {
+        "gist": "Osric Dunn shouted at Grandmother by the light, and I hid behind the oil jars.",
+        "salience": 0.75,
+        "about": [
+          "Osric Dunn",
+          "Edda Wray"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "help_grandmother",
+        "value": 0.95,
+        "why": "She needs me to keep the light, and I want to be useful."
+      },
+      {
+        "key": "fear_dark_stair",
+        "value": 0.8,
+        "why": "It is dark and narrow and I do not like going down alone."
+      },
+      {
+        "key": "keep_the_secret",
+        "value": 0.7,
+        "why": "I do not know what would happen if I told, and I am afraid."
+      }
+    ],
+    "secret": "I saw Grandmother's light burn low one night last winter, and I have told no one."
+  }
+}

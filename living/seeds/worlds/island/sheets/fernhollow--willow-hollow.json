@@ -1,0 +1,404 @@
+{
+  "Osier Willow": {
+    "narrative": "I was born in the hollow and learned the streams before I learned my letters, such as they are. My weirs have fed this house for thirty years, and I know every pool from the upper falls to the alder bend — which is why it galls me when Sorrel Fenwick's nets reach where my father's never did. The works in Kettlebridge send their smoke east over the forest, and some mornings the water tastes of it, and I say so to anyone who will hear. What the Old Green allows, the Eldest decides; but the streams are mine to speak for.",
+    "values": [
+      "the family's fishing rights on the upper pools",
+      "clean water and unspoiled weirs",
+      "the hollow's old ways and the Eldest's word",
+      "keeping peace with neighbours where it can be kept"
+    ],
+    "goals": [
+      "keep the Fenwicks' weirs off the upper pools",
+      "see the hollow refuse to haul timber up the giants' track lest the streams foul",
+      "teach Reed every pool and trap before he is grown",
+      "smoke enough fish to trade well with Alder Rush"
+    ],
+    "mood": "watchful and put-upon",
+    "traits": {
+      "caution": 62,
+      "sociability": 38,
+      "empathy": 45,
+      "curiosity": 40,
+      "ambition": 35,
+      "introspection": 55,
+      "temper": 58,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Rush Willow",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the berries and the garden; I keep the water. Between us the house eats."
+      },
+      {
+        "name": "Reed Willow",
+        "trust": 90,
+        "affinity": 85,
+        "label": "son",
+        "note": "Quick with a trap already. He'll have the streams when I'm done with them."
+      },
+      {
+        "name": "Sorrel Fenwick",
+        "trust": -45,
+        "affinity": -50,
+        "label": "rival",
+        "note": "Her weirs block the run at the alder bend and she knows it."
+      },
+      {
+        "name": "Reed Fenwick",
+        "trust": -20,
+        "affinity": -15,
+        "label": "rival's son",
+        "note": "A decent lad, but he fishes his mother's side of the water and I've told him so."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "Takes my smoked fish and pays fair; a man can do business with him."
+      },
+      {
+        "name": "Rush Willow's kin",
+        "trust": 0,
+        "affinity": 0,
+        "label": "stranger",
+        "note": ""
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 50,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "Rush's friend; keeps her bees and her counsel, and doesn't meddle in the water quarrel."
+      },
+      {
+        "name": "Yarrow Underbank",
+        "trust": 55,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "Works fallen wood only, like the Old Green says. I'd trust him with a weir gate."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 60,
+        "affinity": 40,
+        "label": "the Eldest",
+        "note": "She keeps the hollow's memory. When she rules on the timber, I'll hear her out."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father walked me the whole stream from the upper falls to the alder bend, naming every pool and where the fish lie in each season.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "The morning the Kettlebridge smoke first lay thick on the water and the fish tasted of it; I poured the catch back and went hungry rather than sell it.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Rush and I built the garden by the stream the first spring we were wed, and she planted the first berry canes while I set the first weir stakes.",
+        "salience": 0.6,
+        "about": [
+          "Rush Willow"
+        ]
+      },
+      {
+        "gist": "Sorrel Fenwick set her weir below the alder bend without a word to anyone, and I found the run blocked and my traps empty for a week.",
+        "salience": 0.75,
+        "about": [
+          "Sorrel Fenwick"
+        ]
+      },
+      {
+        "gist": "Reed brought home his first full creel at eight years old, grinning, and I pretended not to be proud and failed.",
+        "salience": 0.6,
+        "about": [
+          "Reed Willow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "upper_pools_are_ours",
+        "value": 0.9,
+        "why": "My family has fished the upper pools for generations; the Fenwicks have no claim above the alder bend."
+      },
+      {
+        "key": "no_timber_up_the_track",
+        "value": 0.8,
+        "why": "Hauling the old forest's fallen wood up the giants' track will foul the streams and the weirs, and the hollow needs its water more than the shelf needs roofs."
+      },
+      {
+        "key": "smoke_sours_the_water",
+        "value": 0.7,
+        "why": "The Kettlebridge works foul the streams east of the forest, and I will say so to anyone who will hear."
+      },
+      {
+        "key": "the_eldest_decides",
+        "value": 0.6,
+        "why": "The Old Green holds, and Pipwort keeps its memory; I'll argue my side but abide her ruling."
+      },
+      {
+        "key": "trade_fair_with_alder",
+        "value": 0.5,
+        "why": "Alder Rush takes my smoked fish at a fair price, and a man who trades fair is worth keeping."
+      }
+    ],
+    "secret": ""
+  },
+  "Rush Willow": {
+    "narrative": "I came to this house as a bride and planted the berry rows myself, and I have watched the old forest shrink a little each year since. Osier frets about his pools and Sorrel Fenwick's weirs, and I let him fret; my worry is the axe and the smoke and the wolves coming closer to the clearing. Vetch Quill and I talk of it over the hives. The hollow must eat, but the forest is what feeds it, and I will not see it cut to the stumps.",
+    "values": [
+      "the old forest kept whole",
+      "the household fed and provisioned for winter",
+      "good relations with neighbours and the Eldest",
+      "Reed's future in the hollow"
+    ],
+    "goals": [
+      "keep the berry rows and the garden yielding through the winter",
+      "persuade the hollow not to let the forest be cut close",
+      "see Reed settled with a trade and a strip of his own one day",
+      "keep the peace between Osier and the Fenwicks if she can"
+    ],
+    "mood": "quietly anxious",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 68,
+      "curiosity": 45,
+      "ambition": 30,
+      "introspection": 62,
+      "temper": 30,
+      "nurture": 78
+    },
+    "relations": [
+      {
+        "name": "Osier Willow",
+        "trust": 82,
+        "affinity": 75,
+        "label": "husband",
+        "note": "He frets at the water and I fret at the wood, and somehow the house holds."
+      },
+      {
+        "name": "Reed Willow",
+        "trust": 88,
+        "affinity": 88,
+        "label": "son",
+        "note": "My boy. He wants the sea, and I want him to want the hollow, but I'll not hold him back."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 75,
+        "affinity": 72,
+        "label": "friend",
+        "note": "We talk of the forest over her hives, and she sees it the same as I do."
+      },
+      {
+        "name": "Sorrel Fenwick",
+        "trust": 20,
+        "affinity": 10,
+        "label": "neighbour",
+        "note": "Osier's quarrel with her is not mine; she lost a husband and fishes to eat."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "Takes our fish and our berries; a fair man with the hollow's store."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 65,
+        "affinity": 50,
+        "label": "the Eldest",
+        "note": "She remembers when the forest was whole. I trust her to weigh the timber rightly."
+      },
+      {
+        "name": "Yarrow Underbank",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "He will not fell a living tree, and that is the right of it."
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 45,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "We argue about the seed rows, but she works hard and her flax is good."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first spring in this house, planting the berry canes by the stream while Osier set weir stakes, and thinking the hollow was the whole world and enough.",
+        "salience": 0.7,
+        "about": [
+          "Osier Willow"
+        ]
+      },
+      {
+        "gist": "Walking the forest edge with Vetch and finding the stumps where the Ferncross men had been, and the two of us resolving to speak at the common table.",
+        "salience": 0.65,
+        "about": [
+          "Vetch Quill"
+        ]
+      },
+      {
+        "gist": "Reed at eight, coming home with his first creel and a cut on his hand he was too proud to mention.",
+        "salience": 0.6,
+        "about": [
+          "Reed Willow"
+        ]
+      },
+      {
+        "gist": "The winter the wolves came down to the berry rows and we kept the fire high all night and heard them in the dark beyond the garden.",
+        "salience": 0.7,
+        "about": [
+          "Osier Willow",
+          "Reed Willow"
+        ]
+      },
+      {
+        "gist": "The morning the smoke from Kettlebridge lay over the garden and the bees would not leave the hives, and I knew the forest was not as far from the works as we liked to think.",
+        "salience": 0.55,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_forest_must_not_be_cut_close",
+        "value": 0.85,
+        "why": "The old forest feeds the hollow; if it is cut close there is no garden, no berries, no hollow."
+      },
+      {
+        "key": "fallen_wood_for_the_hollow_first",
+        "value": 0.6,
+        "why": "The fallen wood is the hollow's own; the giants can wait until our own frames and gates are mended."
+      },
+      {
+        "key": "keep_the_peace_where_you_can",
+        "value": 0.65,
+        "why": "Neighbours you quarrel with are neighbours you cannot borrow from in a hard winter."
+      },
+      {
+        "key": "store_against_winter",
+        "value": 0.7,
+        "why": "I have seen a thin winter and I will not see another if I can help it."
+      },
+      {
+        "key": "let_reed_choose",
+        "value": 0.55,
+        "why": "He is his father's son in the water and mine in the garden; whatever he chooses, he should choose it himself."
+      }
+    ],
+    "secret": ""
+  },
+  "Reed Willow": {
+    "narrative": "I help my father with the weirs and I know the streams nearly as well as he does, though he would say not yet. Reed Fenwick and I fish together sometimes, and it is awkward, because our mothers and fathers do not agree about the water. I want to see the sea at Lanternquay one day — the real sea, not the streams — and I think about it more than I should when there are traps to set.",
+    "values": [
+      "his father's approval",
+      "the streams and the fishing",
+      "friendship with Reed Fenwick",
+      "seeing the wider world"
+    ],
+    "goals": [
+      "learn every pool and trap from his father",
+      "keep his friendship with Reed Fenwick despite the quarrel",
+      "see Lanternquay and the sea one day"
+    ],
+    "mood": "restless and eager",
+    "traits": {
+      "caution": 45,
+      "sociability": 58,
+      "empathy": 55,
+      "curiosity": 72,
+      "ambition": 50,
+      "introspection": 40,
+      "temper": 35,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Osier Willow",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He knows the streams better than anyone, and I want to know them like he does."
+      },
+      {
+        "name": "Rush Willow",
+        "trust": 85,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She worries about the wolves and the wood, but she lets me go to the water."
+      },
+      {
+        "name": "Reed Fenwick",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "We fish together and I've told him his mother's weirs spread too far, and he took it better than his mother would."
+      },
+      {
+        "name": "Sorrel Fenwick",
+        "trust": 10,
+        "affinity": 5,
+        "label": "friend's mother",
+        "note": "She is sharp with my father, but she has been kind enough to me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father walking me the stream and showing me where the fish lie, and letting me set a trap myself for the first time.",
+        "salience": 0.8,
+        "about": [
+          "Osier Willow"
+        ]
+      },
+      {
+        "gist": "Fishing the alder bend with Reed Fenwick and catching nothing, and laughing about it until our fathers called us home.",
+        "salience": 0.65,
+        "about": [
+          "Reed Fenwick"
+        ]
+      },
+      {
+        "gist": "The night the wolves came down and my mother kept the fire high; I lay awake listening and was more excited than afraid.",
+        "salience": 0.6,
+        "about": [
+          "Rush Willow",
+          "Osier Willow"
+        ]
+      },
+      {
+        "gist": "A pedlar telling us of Lanternquay and the tide lanterns and the boats, and me thinking about it for days after.",
+        "salience": 0.55,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_streams_are_ours_above_the_bend",
+        "value": 0.7,
+        "why": "My father says so, and I have seen how the Fenwick weirs block the run."
+      },
+      {
+        "key": "keep_reed_fenwick_as_a_friend",
+        "value": 0.65,
+        "why": "The quarrel is between our parents, not between us, and I will not lose a friend to it."
+      },
+      {
+        "key": "see_the_sea",
+        "value": 0.6,
+        "why": "There is a whole sea beyond the streams, and I mean to see it before I am old."
+      }
+    ],
+    "secret": ""
+  }
+}

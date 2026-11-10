@@ -1,0 +1,314 @@
+{
+  "Maren Vane": {
+    "narrative": "I have set bones and eased coughs in this room behind the fish market for thirty years, and I know the quay's aches better than the Warden does. My son Ostrander is right that the lower quay cannot wait for a seawall that may never be paid for — I have seen what the tide does — but I will not say so where Mara Quell can hear me. I keep my mouth shut and my door open, and I mend what the sea and the stone leave broken.",
+    "values": [
+      "the quay's people before its plans",
+      "a healer owes no quarrel to a patient",
+      "patched things must be kept until better comes",
+      "silence is safer than a Warden's anger"
+    ],
+    "goals": [
+      "keep her healer's room and her good name on the quay",
+      "see Ostrander's patched lower quay hold through the winter without open quarrel with Mara Quell",
+      "keep Ilse Ostrander's knees tended and her stall fed",
+      "buy enough salves from the Tanglewood woman before the winter coughs come"
+    ],
+    "mood": "watchful and tired, with a warm word for anyone who comes in hurt",
+    "traits": {
+      "caution": 68,
+      "sociability": 55,
+      "empathy": 78,
+      "curiosity": 40,
+      "ambition": 30,
+      "introspection": 62,
+      "temper": 35,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Ostrander Vane",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He is right about the lower quay, and I will not say it aloud to the Warden."
+      },
+      {
+        "name": "Rennick Vane",
+        "trust": 90,
+        "affinity": 75,
+        "label": "son",
+        "note": "Steady on the road; I sleep easier when he walks it."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 40,
+        "affinity": 35,
+        "label": "Warden",
+        "note": "She speaks for the quay and I owe her my respect, but she will not hear the builders' side."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 65,
+        "affinity": 70,
+        "label": "patient",
+        "note": "Her knees ache worse each winter; I strap them and take no mark for it."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 55,
+        "affinity": 50,
+        "label": "runner",
+        "note": "Rennick walks her road; a brave girl carrying fish and stone both."
+      },
+      {
+        "name": "Mira Sallow",
+        "trust": 60,
+        "affinity": 65,
+        "label": "fellow healer",
+        "note": "We share herbs and complaints; she frets at the terrace cough as I do."
+      },
+      {
+        "name": "Odile Wrack",
+        "trust": 55,
+        "affinity": 55,
+        "label": "fellow healer",
+        "note": "Good hands with a broken bone; her family came down hard and I say nothing of it."
+      },
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 45,
+        "affinity": 45,
+        "label": "salve-seller",
+        "note": "Her salves are honest and her prices are not; I buy from her anyway."
+      },
+      {
+        "name": "Wick Brine",
+        "trust": 50,
+        "affinity": 40,
+        "label": "guard",
+        "note": "He walks the night road; I keep a light in the window for him and Rennick."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 60,
+        "affinity": 60,
+        "label": "stall-keeper",
+        "note": "She cooks at the fish market and wants her stall rebuilt in stone; I say mend the wall first, but her fried bread has fed my boys often enough."
+      },
+      {
+        "name": "Tamsin Vane",
+        "trust": 75,
+        "affinity": 70,
+        "label": "good-daughter",
+        "note": "She fishes the dawn tide with my Ostrander and smokes the catch for Ilse's stall; a hard worker, and I set her shoulder after a fall last spring."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge came in the night and took the lower quay; I spent until dawn setting bones in the fish market with seawater to my knees.",
+        "salience": 1.0,
+        "about": [
+          "Mara Quell",
+          "Ostrander Vane"
+        ]
+      },
+      {
+        "gist": "Ostrander dragged salvage timber up from the shore and patched the lower quay himself; I bound his hands after and told him to be careful of the Warden.",
+        "salience": 0.8,
+        "about": [
+          "Ostrander Vane"
+        ]
+      },
+      {
+        "gist": "Rennick came back from the fish road with a cut from a wolf and would not sit still for the stitching.",
+        "salience": 0.6,
+        "about": [
+          "Rennick Vane"
+        ]
+      },
+      {
+        "gist": "I strapped Ilse Ostrander's knees through a bad winter and she fed me noodles for a month after, which I did not refuse.",
+        "salience": 0.5,
+        "about": [
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "I bought salves from the Tanglewood woman at the fish market and asked her what she put in them; she would not say, and they worked.",
+        "salience": 0.4,
+        "about": [
+          "Ysolde Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "heal_anyone_who_comes",
+        "value": 0.9,
+        "why": "A healer's room has no quarrel in it; I have stitched guards and smugglers alike."
+      },
+      {
+        "key": "lower_quay_cannot_wait",
+        "value": 0.7,
+        "why": "Patched shelter is better than none, whatever the Warden's plan says."
+      },
+      {
+        "key": "do_not_cross_the_warden_openly",
+        "value": 0.75,
+        "why": "Mara Quell speaks for the quay, and my room stands on her goodwill."
+      },
+      {
+        "key": "buy_salves_before_winter",
+        "value": 0.8,
+        "why": "The coughs come every year and the Tanglewood woman's salves are the only thing that eases them."
+      }
+    ],
+    "secret": "I have told Ostrander plainly that I think the Warden is wrong to hold the lower quay back, and that if it comes to a quarrel at the stalls I will stand with my son."
+  },
+  "Rennick Vane": {
+    "narrative": "I walk the fish road with the runners and keep the peace at the stalls, and I have seen enough of the road to know what a man does when he is afraid. Kai Ostrander did not run from cowardice — I have carried the same fear myself on the night watch — and I will not have him called a deserter in my hearing. My mother thinks I am too ready to say what I think; my brother thinks I am too slow to say it. Both of them are wrong, and both of them are family.",
+    "values": [
+      "the road is kept by those who walk it",
+      "a man's fear is not the same as his shame",
+      "the stalls settle their own quarrels before the guard does",
+      "family is family, whatever the Warden says"
+    ],
+    "goals": [
+      "keep the fish road clear and the runners safe between the quay and Kettlebridge",
+      "see the truth of Kai Ostrander's desertion known, or at least not spat on",
+      "keep his post under Mara Quell without being made her instrument against his brother",
+      "earn enough marks to keep his own room near his mother's"
+    ],
+    "mood": "steady and a little stubborn, slow to speak and slower to be moved",
+    "traits": {
+      "caution": 55,
+      "sociability": 48,
+      "empathy": 62,
+      "curiosity": 35,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Maren Vane",
+        "trust": 90,
+        "affinity": 78,
+        "label": "mother",
+        "note": "She mends what the road breaks; I bring her the cuts and say nothing of the rest."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 80,
+        "affinity": 72,
+        "label": "brother",
+        "note": "He is right about the lower quay and wrong to say it so loud."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 60,
+        "affinity": 45,
+        "label": "Warden",
+        "note": "She pays me and I serve her; she is not always right about the builders."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 65,
+        "affinity": 55,
+        "label": "runner",
+        "note": "I walk her road and she does not slow for me, which I respect."
+      },
+      {
+        "name": "Kai Ostrander",
+        "trust": 40,
+        "affinity": 60,
+        "label": "old friend of the quay",
+        "note": "I knew him before the Surge; a man does not turn coward in one night."
+      },
+      {
+        "name": "Wick Brine",
+        "trust": 70,
+        "affinity": 55,
+        "label": "fellow guard",
+        "note": "He knows the smugglers' paths and I know the wolves'; between us the road is kept."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 55,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "Her son is gone and she still sets a bowl out for the night crews; I eat there."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 45,
+        "affinity": 40,
+        "label": "stall-keeper",
+        "note": "She wants her stall in stone; I keep the peace while she argues for it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge took the lower quay in the night; I pulled two men out of the water and lost a third I could not reach.",
+        "salience": 1.0,
+        "about": [
+          "Mara Quell",
+          "Ostrander Vane"
+        ]
+      },
+      {
+        "gist": "Kai Ostrander and I stood the night watch together before the Surge, and he was the calmest man on the quay when the wind got up.",
+        "salience": 0.7,
+        "about": [
+          "Kai Ostrander"
+        ]
+      },
+      {
+        "gist": "I walked Juno Reyes up the fish road through a pack of wolves and we came through with the fish and the stone both.",
+        "salience": 0.7,
+        "about": [
+          "Juno Reyes"
+        ]
+      },
+      {
+        "gist": "My mother bound a gash on my arm from a road wolf and told me I was a fool to walk it alone; I walked it again the next night.",
+        "salience": 0.5,
+        "about": [
+          "Maren Vane"
+        ]
+      },
+      {
+        "gist": "I broke up a quarrel at the morning stalls between two fishers over a net, and both of them cursed me for it equally, which I took as fair.",
+        "salience": 0.4,
+        "about": [
+          "Wick Brine",
+          "Sella Mackerel"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "kai_did_not_desert_for_cowardice",
+        "value": 0.8,
+        "why": "I stood the watch with him; fear does not make a coward of a man who does his duty."
+      },
+      {
+        "key": "keep_the_fish_road_clear",
+        "value": 0.85,
+        "why": "The runners carry the quay's living up and down that road, and the wolves do not wait."
+      },
+      {
+        "key": "serve_the_warden_but_keep_my_own_counsel",
+        "value": 0.7,
+        "why": "She pays my wage, but she is not always right, and I will not be her hand against my brother."
+      },
+      {
+        "key": "let_the_stalls_settle_their_own",
+        "value": 0.6,
+        "why": "A guard who steps in too early makes two quarrels where there was one."
+      }
+    ],
+    "secret": "I have told no one but my mother that I think Kai Ostrander ran because he was ordered to do something he would not do, and that if he came back to the quay I would hear him out before I raised a spear."
+  }
+}

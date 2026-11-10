@@ -1,0 +1,778 @@
+{
+ "households": [
+  {
+   "key": "crane",
+   "members": [
+    {
+     "name": "Hester Crane",
+     "age": 24,
+     "sex": "f",
+     "occupation": "scribe",
+     "role": "keeps the foundry's books; once promised to Tobin Marrow",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Josiah Crane"
+     ],
+     "ties": [
+      "daughter of Josiah Crane",
+      "was promised to Tobin Marrow",
+      "corresponds with Mercy Abbot about reopening trade",
+      "SECRET: was relieved when Tobin broke the match; she did not want to leave the works"
+     ]
+    },
+    {
+     "name": "Josiah Crane",
+     "age": 58,
+     "sex": "m",
+     "occupation": "mason",
+     "role": "foundry master and chair of the Works Council; the broken match was an insult to his house; sends stone south to Lanternquay as much as north",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "father of Hester Crane",
+      "despises Aldric Marrow and his son Tobin",
+      "employs Dele Oyelaran cheaply",
+      "master of the runaway apprentice Pell, and wants him back"
+     ]
+    },
+    {
+     "name": "Prudence Crane",
+     "age": 56,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Josiah's wife; keeps the foundry house and its table, where the Council's masters are fed after meetings",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Josiah Crane",
+      "mother of Hester Crane",
+      "feeds the Works Council after its sittings",
+      "thinks the Marrows owe her house an apology"
+     ]
+    },
+    {
+     "name": "Ambrose Vell",
+     "age": 63,
+     "sex": "m",
+     "occupation": "mason",
+     "role": "old master of the brickworks, second voice on the Works Council; slow to speak and slower to forgive",
+     "knows": [
+      "masonry",
+      "fire",
+      "toolmaking",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "sits on the Works Council with Josiah Crane",
+      "rents a kiln yard to Ezra Holt's crew",
+      "old friend of the late Crane foundry hands",
+      "grudges the gate-due at Brackenford"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "pike",
+   "members": [
+    {
+     "name": "Ruth Pike",
+     "age": 39,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "cook for the works' kitchen; wants Silas off the road",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Silas Pike"
+     ]
+    },
+    {
+     "name": "Silas Pike",
+     "age": 41,
+     "sex": "m",
+     "occupation": "stone carter",
+     "role": "carter on the stone road: takes stone from the works to Brackenford's market and brings berries back; robbed twice by the Coldwell outlaws; pays the gate-due and hates it",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Ruth Pike",
+      "pays the due to Wat Fenner",
+      "sells to Mercy Abbot",
+      "knows Marta Hale by sight and fears her people"
+     ]
+    },
+    {
+     "name": "Elias Pike",
+     "age": 14,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Silas and Ruth's son; rides the cart's tail and is learning the road's ruts and tolls",
+     "knows": [
+      "mending",
+      "fire"
+     ],
+     "parents": [
+      "Silas Pike",
+      "Ruth Pike"
+     ],
+     "ties": [
+      "son of Silas Pike",
+      "helps his father load stone",
+      "wants to drive the cart alone one day"
+     ]
+    },
+    {
+     "name": "Tamsin Pike",
+     "age": 8,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Silas and Ruth's daughter; keeps the kitchen scraps for the works' dogs",
+     "knows": [
+      "cooking"
+     ],
+     "parents": [
+      "Silas Pike",
+      "Ruth Pike"
+     ],
+     "ties": [
+      "daughter of Ruth Pike",
+      "plays in the works' kitchen yard"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "holt",
+   "members": [
+    {
+     "name": "Ezra Holt",
+     "age": 37,
+     "sex": "m",
+     "occupation": "quarrier",
+     "role": "quarryman who led the cutting on the ridge that broke into a giants' cairn; says he did not know",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "works for Josiah Crane",
+      "afraid of the giants",
+      "owes Tavvik for meat"
+     ]
+    },
+    {
+     "name": "Corin Holt",
+     "age": 35,
+     "sex": "f",
+     "occupation": "mason",
+     "role": "Ezra's wife; dresses and dresses again the stone his crew raises, and keeps the quarry's tally",
+     "knows": [
+      "masonry",
+      "toolmaking",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Ezra Holt",
+      "keeps the quarry tally for Josiah Crane",
+      "fears the giants will come down the track",
+      "thinks her husband was careless and says so at home"
+     ]
+    },
+    {
+     "name": "Bramwell Holt",
+     "age": 11,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Ezra and Corin's son; carries water to the quarry crew and listens to the men talk of the cairn",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Ezra Holt",
+      "Corin Holt"
+     ],
+     "ties": [
+      "son of Ezra Holt",
+      "afraid of the ridge since the cairn was cut"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "oyelaran",
+   "members": [
+    {
+     "name": "Dele Oyelaran",
+     "age": 45,
+     "sex": "m",
+     "occupation": "builder",
+     "role": "a Lanternquay builder who came after the Surge; lives on the poor terrace and works for low pay",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "works for Josiah Crane",
+      "old friend of Mara Quell",
+      "resented by Kettlebridge builders for undercutting them"
+     ]
+    },
+    {
+     "name": "Ife Oyelaran",
+     "age": 42,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Dele's wife; cooks at a stall on the poor terrace and feeds the terrace's children for a mark a bowl",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage",
+      "fishing"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Dele Oyelaran",
+      "keeps a cook-stall on the poor terrace",
+      "resents the works' kitchen for paying less than it might",
+      "mother of Bisi Oyelaran"
+     ]
+    },
+    {
+     "name": "Bisi Oyelaran",
+     "age": 13,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Dele and Ife's daughter; quick with numbers and quick with her tongue, and minds the stall when her mother is out",
+     "knows": [
+      "cooking",
+      "mending"
+     ],
+     "parents": [
+      "Dele Oyelaran",
+      "Ife Oyelaran"
+     ],
+     "ties": [
+      "daughter of Dele Oyelaran",
+      "minds her mother's stall",
+      "wants to learn the foundry books from Hester Crane"
+     ]
+    },
+    {
+     "name": "Tayo Oyelaran",
+     "age": 6,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Dele and Ife's son; born on the quay and still afraid of the smoke and the bells",
+     "knows": [],
+     "parents": [
+      "Dele Oyelaran",
+      "Ife Oyelaran"
+     ],
+     "ties": [
+      "son of Ife Oyelaran",
+      "follows his sister about the terrace"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "vance",
+   "members": [
+    {
+     "name": "Silas Vance",
+     "age": 49,
+     "sex": "m",
+     "occupation": "quarrier",
+     "role": "quarry foreman on the ridge; worked the cutting beside Ezra and has not gone back up since",
+     "knows": [
+      "masonry",
+      "toolmaking",
+      "fire",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "foreman under Ezra Holt",
+      "works for Josiah Crane",
+      "grudges Ezra for choosing the ridge",
+      "husband of Odile Vance"
+     ]
+    },
+    {
+     "name": "Odile Vance",
+     "age": 47,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "keeps a healer's room by the clock tower; sets quarrymen's bones and sells salves to the works",
+     "knows": [
+      "medicine",
+      "planting",
+      "fire",
+      "writing"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Silas Vance",
+      "heals the quarry crews",
+      "buys herbs from a Tanglewood woman",
+      "disapproves of the cairn cutting and has said so"
+     ]
+    },
+    {
+     "name": "Corwin Vance",
+     "age": 22,
+     "sex": "m",
+     "occupation": "quarrier",
+     "role": "Silas and Odile's son; works the quarry floor and wants his father's foreman's place",
+     "knows": [
+      "masonry",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [
+      "Silas Vance",
+      "Odile Vance"
+     ],
+     "ties": [
+      "son of Silas Vance",
+      "works Ezra Holt's quarry",
+      "courts Bisi Oyelaran's cousin on the terrace",
+      "thinks his father has gone soft about the ridge"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "fenwick",
+   "members": [
+    {
+     "name": "Gideon Fenwick",
+     "age": 44,
+     "sex": "m",
+     "occupation": "builder",
+     "role": "a Kettlebridge builder who has lost work to Dele's cheap hands and says so in the Council yard",
+     "knows": [
+      "masonry",
+      "carpentry",
+      "bridging",
+      "fire",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Mabel Fenwick",
+      "resents Dele Oyelaran for undercutting",
+      "builds the seawall stone crates for the fish road",
+      "owes Josiah Crane for a load of brick"
+     ]
+    },
+    {
+     "name": "Mabel Fenwick",
+     "age": 41,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "Gideon's wife; keeps a stall in the square selling ironware and works' seconds",
+     "knows": [
+      "storage",
+      "mending",
+      "fire",
+      "writing"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Gideon Fenwick",
+      "keeps an ironware stall in the square",
+      "trades with Hester Crane's foundry",
+      "mother of Lottie Fenwick"
+     ]
+    },
+    {
+     "name": "Lottie Fenwick",
+     "age": 15,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Gideon and Mabel's daughter; minds the stall and has a good eye for a cracked pot",
+     "knows": [
+      "mending",
+      "storage"
+     ],
+     "parents": [
+      "Gideon Fenwick",
+      "Mabel Fenwick"
+     ],
+     "ties": [
+      "daughter of Mabel Fenwick",
+      "minds the square stall",
+      "friendly with Bisi Oyelaran despite their fathers"
+     ]
+    },
+    {
+     "name": "Perry Fenwick",
+     "age": 9,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Gideon and Mabel's son; climbs the clock tower steps when nobody is looking",
+     "knows": [],
+     "parents": [
+      "Gideon Fenwick",
+      "Mabel Fenwick"
+     ],
+     "ties": [
+      "son of Gideon Fenwick",
+      "plays at the clock tower"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "ashcombe",
+   "members": [
+    {
+     "name": "Hedley Ashcombe",
+     "age": 52,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "farms the terrace strips below the clock tower; sells greens and roots to the works' kitchen and grumbles that the town grows nothing",
+     "knows": [
+      "planting",
+      "storage",
+      "fire",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Verity Ashcombe",
+      "sells to Ruth Pike's kitchen",
+      "owes the Works Council a tithe of grain",
+      "neighbour of the Fenwick yard"
+     ]
+    },
+    {
+     "name": "Verity Ashcombe",
+     "age": 50,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Hedley's wife; keeps the terrace hens and the seed store, and knows which strips will fail",
+     "knows": [
+      "planting",
+      "storage",
+      "cooking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Hedley Ashcombe",
+      "keeps the seed store",
+      "mother of Rosalind Ashcombe",
+      "trades eggs at Mabel Fenwick's stall"
+     ]
+    },
+    {
+     "name": "Rosalind Ashcombe",
+     "age": 24,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Hedley and Verity's daughter; works the terrace and wants to try a new crop on the poor ground",
+     "knows": [
+      "planting",
+      "storage",
+      "fire",
+      "basketry"
+     ],
+     "parents": [
+      "Hedley Ashcombe",
+      "Verity Ashcombe"
+     ],
+     "ties": [
+      "daughter of Hedley Ashcombe",
+      "courts Corwin Vance",
+      "argues with her father about the poor strip"
+     ]
+    },
+    {
+     "name": "Ottilie Ashcombe",
+     "age": 12,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Hedley and Verity's younger daughter; drives the hens off the seed rows and dreams of the harbour",
+     "knows": [
+      "planting"
+     ],
+     "parents": [
+      "Hedley Ashcombe",
+      "Verity Ashcombe"
+     ],
+     "ties": [
+      "daughter of Verity Ashcombe",
+      "wants to see Lanternquay"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "quill",
+   "members": [
+    {
+     "name": "Barnaby Quill",
+     "age": 57,
+     "sex": "m",
+     "occupation": "scribe",
+     "role": "clockkeeper and town scribe; winds the clock tower and writes the Council's contracts and indentures",
+     "knows": [
+      "writing",
+      "mending",
+      "fire",
+      "toolmaking"
+     ],
+     "parents": [],
+     "ties": [
+      "keeps the clock and the Council's contracts",
+      "writes Pell's indenture and wants it honoured",
+      "lodges Juno Reyes when she is in town",
+      "old friend of Ambrose Vell"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "marsh-end",
+   "members": [
+    {
+     "name": "Tobiah Marsh",
+     "age": 38,
+     "sex": "m",
+     "occupation": "carpenter",
+     "role": "makes the works' crates, props and shutter-boards; a careful man with a saw and a short word for everyone",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "fire",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Sabina Marsh",
+      "makes crates for Silas Pike's loads",
+      "grudges the Brackenford gate-due on his timber",
+      "works for Gideon Fenwick's yard"
+     ]
+    },
+    {
+     "name": "Sabina Marsh",
+     "age": 36,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "Tobiah's wife; buys and sells worked iron and clay at the square, and keeps the household's marks in a locked box",
+     "knows": [
+      "storage",
+      "mending",
+      "writing",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Tobiah Marsh",
+      "trades clay with the potters of Brackenford",
+      "mother of Nella Marsh",
+      "owes Mabel Fenwick for a stall fee"
+     ]
+    },
+    {
+     "name": "Nella Marsh",
+     "age": 10,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Tobiah and Sabina's daughter; counts the crates and is proud of knowing her letters",
+     "knows": [
+      "mending"
+     ],
+     "parents": [
+      "Tobiah Marsh",
+      "Sabina Marsh"
+     ],
+     "ties": [
+      "daughter of Sabina Marsh",
+      "learns letters from Barnaby Quill"
+     ]
+    },
+    {
+     "name": "Ewan Marsh",
+     "age": 4,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Tobiah and Sabina's son; underfoot in the sawyard and afraid of the clock's striking",
+     "knows": [],
+     "parents": [
+      "Tobiah Marsh",
+      "Sabina Marsh"
+     ],
+     "ties": [
+      "son of Tobiah Marsh"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "cairn-fallout",
+   "kind": "feud",
+   "summary": "Since the cairn cutting, Hollbrenna has closed the shelf to Kettlebridge, and the quarry crews will not go back up the ridge. Josiah needs ridge stone for the Lanternquay order and presses Ezra to answer for it; Ezra says he did not know and will not climb.",
+   "secret": false,
+   "people": [
+    "Josiah Crane",
+    "Ezra Holt",
+    "Silas Vance",
+    "Corin Holt"
+   ],
+   "sides": {
+    "Josiah Crane": "Wants the ridge reopened and the Lanternquay order met; thinks Ezra's fear is costing the works and will not be the one to beg a giant's pardon.",
+    "Ezra Holt": "Swears he did not know the stones were a cairn and is frightened of the giants; he owes Tavvik for meat and dreads the track.",
+    "Silas Vance": "Worked the cutting beside Ezra and blames him for choosing the ridge; will not take a crew up there and says so plainly.",
+    "Corin Holt": "Thinks her husband was careless and tells him so at home; she keeps the tally and knows how much ridge stone the order still needs."
+   }
+  },
+  {
+   "id": "seawall-stone",
+   "kind": "debt",
+   "summary": "Josiah has promised Lanternquay a great quantity of seawall stone at a price Hester set, and the works cannot cut it fast enough while the ridge is closed. Hester is quietly writing to Mercy Abbot about reopening the northern trade to cover the shortfall.",
+   "secret": false,
+   "people": [
+    "Josiah Crane",
+    "Hester Crane",
+    "Juno Reyes",
+    "Gideon Fenwick"
+   ],
+   "sides": {
+    "Josiah Crane": "Proud of the contract and will not admit the works are short; would rather buy time than break his word to the quay.",
+    "Hester Crane": "Keeps the books and knows the shortfall to the crate; she writes to Mercy Abbot without telling her father how far the letters go.",
+    "Juno Reyes": "Carries the stone back down the fish road for Mara Quell and counts every crate; she wants the wall built before the next winter surge.",
+    "Gideon Fenwick": "Builds the crates and is owed for the last load of brick; he will not lift a finger to help Dele's crew and says the quay can wait."
+   }
+  },
+  {
+   "id": "runaway-pell",
+   "kind": "secret",
+   "summary": "Pell ran from Josiah's foundry before his indenture ended and is with the Coldwell outlaws. Josiah wants him back and has offered marks for word of him; only a few people know where he went.",
+   "secret": true,
+   "people": [
+    "Josiah Crane",
+    "Barnaby Quill",
+    "Juno Reyes",
+    "Silas Pike"
+   ],
+   "sides": {
+    "Josiah Crane": "Holds Pell's indenture and calls it theft; he wants the boy back to make an example and has offered marks for word of him.",
+    "Barnaby Quill": "Wrote Pell's indenture and wants it honoured; he has heard the boy is at Coldwell and has not told Josiah, because the boy was beaten.",
+    "Juno Reyes": "Heard from a Coldwell carrier that Pell is alive and with the outlaws; she says nothing because Kai Ostrander is there too.",
+    "Silas Pike": "Was told by a Coldwell man on the road that a foundry boy had joined them; he fears the boy will be made to rob him a third time."
+   }
+  },
+  {
+   "id": "terrace-resentment",
+   "kind": "feud",
+   "summary": "Gideon Fenwick's yard has lost two jobs to Dele Oyelaran's cheap hands, and Gideon has said in the Council yard that the terrace should be sent back to the quay. Dele keeps working and keeps his temper, but the poor terrace has heard.",
+   "secret": false,
+   "people": [
+    "Gideon Fenwick",
+    "Dele Oyelaran",
+    "Ife Oyelaran",
+    "Mabel Fenwick"
+   ],
+   "sides": {
+    "Gideon Fenwick": "Believes Dele undercuts honest Kettlebridge rates and would have the Council bar him from works contracts.",
+    "Dele Oyelaran": "Needs the work to feed his family and will not apologise for taking a price he can live on; he keeps his temper and his friends.",
+    "Ife Oyelaran": "Resents the works' kitchen for paying less than it might and resents Gideon more; she has started charging the yard boys for their bowls.",
+    "Mabel Fenwick": "Sells ironware to the terrace and wishes her husband would hold his tongue; she still takes Ife's marks over the stall."
+   }
+  },
+  {
+   "id": "clock-contract",
+   "kind": "debt",
+   "summary": "Barnaby Quill holds the Council's contracts, and a disputed clause in the seawall indenture says who pays if the stone is late. Josiah says the clause favours the quay; Juno says it favours the works; Barnaby says the wording is plain.",
+   "secret": false,
+   "people": [
+    "Barnaby Quill",
+    "Josiah Crane",
+    "Hester Crane",
+    "Juno Reyes"
+   ],
+   "sides": {
+    "Barnaby Quill": "Wrote the clause and is sure it is plain; he will not change a contract once sealed, and he dislikes being pressed by either side.",
+    "Josiah Crane": "Reads the clause as putting the penalty on the works and wants it read again in his favour before the next load goes south.",
+    "Hester Crane": "Copied the indenture into the foundry book and knows the clause is ambiguous; she has not told her father or Barnaby which way she reads it.",
+    "Juno Reyes": "Speaks for the quay and says the works agreed to the risk; she wants the clause enforced, not rewritten."
+   }
+  },
+  {
+   "id": "ashcombe-tithe",
+   "kind": "debt",
+   "summary": "Hedley Ashcombe is behind on the grain tithe he owes the Works Council, and the Council's store is short this winter. Hedley wants the tithe counted in greens and roots; the Council's clerk counts only grain.",
+   "secret": false,
+   "people": [
+    "Hedley Ashcombe",
+    "Verity Ashcombe",
+    "Barnaby Quill",
+    "Ambrose Vell"
+   ],
+   "sides": {
+    "Hedley Ashcombe": "Says the terrace grows greens, not grain, and the Council should take what the ground gives; he is proud and will not beg.",
+    "Verity Ashcombe": "Keeps the seed store and knows the tithe cannot be met in grain this year; she would trade eggs and roots against it if the clerk allowed.",
+    "Barnaby Quill": "Keeps the Council's ledger and counts only grain; he is sorry for Hedley but will not falsify an account.",
+    "Ambrose Vell": "Sits on the Council and thinks the tithe should be forgiven this winter; Josiah wants it paid, and Ambrose will not fight him over a farmer."
+   }
+  },
+  {
+   "id": "road-robberies",
+   "kind": "feud",
+   "summary": "Silas Pike has been robbed twice on the stone road and will not take the cart out without a guard. Ruth begs him to take the fish road instead, but the stone road is his trade and the works need the berries.",
+   "secret": false,
+   "people": [
+    "Silas Pike",
+    "Ruth Pike",
+    "Ezra Holt",
+    "Juno Reyes"
+   ],
+   "sides": {
+    "Silas Pike": "Fears Marta Hale's people and knows the road's ambush places by heart; he will not go without a guard and the Council will not pay for one.",
+    "Ruth Pike": "Wants Silas off the stone road and onto the fish road with Juno; she would take less money for a husband who comes home.",
+    "Ezra Holt": "Owes Silas for a load of props and wants the road kept open; he half thinks the outlaws would leave a quarry cart alone.",
+    "Juno Reyes": "Runs the fish road and has offered Silas a place beside her; she thinks the stone road is a fool's road now and says so."
+   }
+  },
+  {
+   "id": "courting-vance",
+   "kind": "courtship",
+   "summary": "Corwin Vance is courting Rosalind Ashcombe, and both fathers have opinions: Silas Vance thinks a farmer's daughter beneath his son's foremanship, Hedley Ashcombe thinks a quarryman's son is no better than the tithe collector.",
+   "secret": false,
+   "people": [
+    "Corwin Vance",
+    "Rosalind Ashcombe",
+    "Silas Vance",
+    "Hedley Ashcombe"
+   ],
+   "sides": {
+    "Corwin Vance": "Wants Rosalind and his father's foreman's place, and cannot see why the two should not go together.",
+    "Rosalind Ashcombe": "Wants to try a new crop on the poor strip and to marry Corwin; she is tired of her father's grumbling about quarrymen.",
+    "Silas Vance": "Thinks his son should look higher than a terrace farmer, and has said so once too often.",
+    "Hedley Ashcombe": "Thinks the Vances are proud for men who work other men's stone, and has told Rosalind to wait a year."
+   }
+  }
+ ]
+}

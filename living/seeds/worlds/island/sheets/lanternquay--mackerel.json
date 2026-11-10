@@ -1,0 +1,350 @@
+{
+  "Ostrander Mackerel": {
+    "narrative": "I crew on Ostrander Cormorant's boat and I mean to have a net and a boat of my own before I am thirty. My mother Sella Pike the elder keeps a fried-fish stall by the tide steps and fed me on credit for years; my sister Sella Mackerel cooks at the fish market and is the better hand with a pan of anyone on the quay. I am courting Sella Tallow, and her father Bramwell wants a fisher with a boat, not a crewman with a net still to buy, so every tide I put by what I can. The wall is not built and the stone stays dear, and I fear the sea will take the lower quay again before the quay folk ever agree on it.",
+    "values": [
+      "a boat of my own",
+      "paying what I owe",
+      "the quay's wall built before the next surge",
+      "Sella Tallow",
+      "an honest catch"
+    ],
+    "goals": [
+      "save enough marks for a net of my own",
+      "prove to Bramwell Tallow I am worth his daughter",
+      "clear what I owe Ilse Ostrander for a winter's suppers",
+      "see the seawall begun"
+    ],
+    "mood": "hopeful and short of marks",
+    "traits": {
+      "caution": 45,
+      "sociability": 70,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 65,
+      "introspection": 35,
+      "temper": 35,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Sella Pike",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She fed half the quay on credit, me first among them; I pay her back a little each catch."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 80,
+        "affinity": 75,
+        "label": "sister",
+        "note": "The better cook of the two of us, and she never lets me forget it."
+      },
+      {
+        "name": "Sella Tallow",
+        "trust": 70,
+        "affinity": 90,
+        "label": "sweetheart",
+        "note": "Worth every tide I put by for the net."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 30,
+        "affinity": 25,
+        "label": "her father",
+        "note": "He wants a fisher with a boat. I am working on the boat."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 40,
+        "affinity": 45,
+        "label": "her mother",
+        "note": "She knows the price of everything, me included; I think she half likes me."
+      },
+      {
+        "name": "Ostrander Cormorant",
+        "trust": 55,
+        "affinity": 40,
+        "label": "master",
+        "note": "A good boat and a bad temper; I crew for him and learn the deep water."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 50,
+        "affinity": 45,
+        "label": "creditor",
+        "note": "A winter's suppers on credit; she has not pressed me, but I have not forgotten."
+      },
+      {
+        "name": "Jory Pike",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "We drink together and owe everyone a little between us."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 35,
+        "affinity": 30,
+        "label": "warden",
+        "note": "She speaks for the quay and wants the seawall; I wish she would get on with it."
+      },
+      {
+        "name": "Wick Quell",
+        "trust": 45,
+        "affinity": 40,
+        "label": "shipmate",
+        "note": "Fishes the harbour mouth; we share a tide and argue over the best ground."
+      },
+      {
+        "name": "Wick Gull",
+        "trust": 40,
+        "affinity": 45,
+        "label": "harbour rival",
+        "note": "Loud, knows every tide, and I owe him a share of a catch."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the Surge came, I carried my mother's stall pots up the steps and watched the lower quay go under.",
+        "salience": 0.9,
+        "about": [
+          "Sella Pike"
+        ]
+      },
+      {
+        "gist": "My first full season crewing for Ostrander Cormorant, and the first coin I ever put by toward a net.",
+        "salience": 0.6,
+        "about": [
+          "Ostrander Cormorant"
+        ]
+      },
+      {
+        "gist": "Sella Tallow laughed at my landing and shared her fried fish with me on the tide steps, and I have been courting her since.",
+        "salience": 0.8,
+        "about": [
+          "Sella Tallow"
+        ]
+      },
+      {
+        "gist": "Ilse Ostrander fed me suppers all one lean winter and told me to pay when I had a boat.",
+        "salience": 0.7,
+        "about": [
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "The carters came down the fish road saying the stone from Kettlebridge would cost more again, and the quay folk cursed.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_boat_before_a_wedding",
+        "value": 0.85,
+        "why": "Bramwell Tallow will not give me Sella without one, and I would not ask him to."
+      },
+      {
+        "key": "pay_what_you_owe",
+        "value": 0.8,
+        "why": "Ilse fed me when I had nothing; a debt like that is paid, not forgotten."
+      },
+      {
+        "key": "the_wall_before_the_stalls",
+        "value": 0.6,
+        "why": "If the sea takes the lower quay again there will be no stalls to rebuild."
+      },
+      {
+        "key": "stone_price_is_robbery",
+        "value": 0.7,
+        "why": "Kettlebridge sells us stone dear and the quay goes unbuilt for it."
+      },
+      {
+        "key": "crew_for_a_master_and_learn",
+        "value": 0.65,
+        "why": "Ostrander Cormorant knows the deep water and I mean to learn it off him."
+      }
+    ],
+    "secret": ""
+  },
+  "Sella Mackerel": {
+    "narrative": "I cook at the fish market and keep a stall of fried fish and bread, and I mean to have that stall rebuilt in stone before the next surge takes it. My mother Sella Pike the elder has fed the quay on credit for years and taught me the pan; my brother Ostrander Mackerel crews on Ostrander Cormorant's boat and is courting Sella Tallow, and I hear both sides of the quay's quarrels while I fry. The Warden will not hear of building until the seawall is paid for, and I think the rebuild would bring trade enough to pay for the wall twice over. I hear Marrow Wrack and Gideon Fenwick each call the other a cheat, and I think the quarrel keeps good stone out of the quay.",
+    "values": [
+      "a stall built in stone",
+      "good fried fish and fair prices",
+      "my brother's boat",
+      "the quay rebuilt",
+      "keeping the stall's marks in my own apron"
+    ],
+    "goals": [
+      "rebuild her stall in stone",
+      "see the lower quay rebuilt",
+      "keep her brother from overreaching on credit",
+      "get the Warden to listen about the rebuild"
+    ],
+    "mood": "busy and impatient with the Warden",
+    "traits": {
+      "caution": 50,
+      "sociability": 75,
+      "empathy": 55,
+      "curiosity": 45,
+      "ambition": 70,
+      "introspection": 40,
+      "temper": 50,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Sella Pike",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She taught me the pan and fed the quay on credit; I learned both from her."
+      },
+      {
+        "name": "Ostrander Mackerel",
+        "trust": 80,
+        "affinity": 75,
+        "label": "brother",
+        "note": "He puts by for a net and I tell him not to owe half the quay doing it."
+      },
+      {
+        "name": "Nia Gull",
+        "trust": 70,
+        "affinity": 65,
+        "label": "workmate",
+        "note": "We cook side by side at the fish market and she thinks the Warden should have rebuilt the lower quay first."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 55,
+        "affinity": 50,
+        "label": "trade",
+        "note": "I buy rope and nails off him and he buys my fried fish; he is watching my brother closely."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 55,
+        "affinity": 60,
+        "label": "ally",
+        "note": "He wants the lower quay built in stone and I want my stall in stone; we want the same thing."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 30,
+        "affinity": 35,
+        "label": "warden",
+        "note": "She says no building until the wall is paid, and I say the building would pay for the wall."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 40,
+        "affinity": 35,
+        "label": "healer",
+        "note": "She disapproves of rebuilding the lower quay before the wall, and she is not wrong about the sea."
+      },
+      {
+        "name": "Marrow Wrack",
+        "trust": 45,
+        "affinity": 50,
+        "label": "mason",
+        "note": "He knows stonework better than most on the quay and would build my stall right if the Warden let him."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "Her noodle stall is by mine; we trade customers and gossip and she fed my brother all winter."
+      },
+      {
+        "name": "Jory Pike",
+        "trust": 55,
+        "affinity": 55,
+        "label": "friend",
+        "note": "Cheerful and owing everyone a little; he buys his supper off my stall and pays most of it."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 50,
+        "affinity": 50,
+        "label": "trade",
+        "note": "She knows the price of everything and I keep up with her."
+      },
+      {
+        "name": "Odile Wrack",
+        "trust": 50,
+        "affinity": 55,
+        "label": "salve-seller",
+        "note": "She mends the builders' hands and sells me salve for mine. She keeps her husband's quarrel with Fenwick out of the stall, which I respect."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge took the lower quay and my mother's stall with it; we fried fish on the upper steps for a month after.",
+        "salience": 0.9,
+        "about": [
+          "Sella Pike"
+        ]
+      },
+      {
+        "gist": "I fried my first fish at my mother's stall and sold the whole batch before the morning boats came in.",
+        "salience": 0.6,
+        "about": [
+          "Sella Pike"
+        ]
+      },
+      {
+        "gist": "Ostrander Mackerel told me he meant to court Sella Tallow, and I told him to save for the net first.",
+        "salience": 0.7,
+        "about": [
+          "Ostrander Mackerel",
+          "Sella Tallow"
+        ]
+      },
+      {
+        "gist": "I heard Marrow Wrack and Gideon Fenwick each call the other a cheat over a load of brick, and the carters took sides.",
+        "salience": 0.5,
+        "about": [
+          "Marrow Wrack"
+        ]
+      },
+      {
+        "gist": "Ostrander Vane patched the lower quay with salvage timber and I thought, that should be stone, and said so.",
+        "salience": 0.55,
+        "about": [
+          "Ostrander Vane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "build_the_stall_in_stone",
+        "value": 0.85,
+        "why": "Timber went under in the Surge; stone would not have."
+      },
+      {
+        "key": "rebuild_brings_trade",
+        "value": 0.75,
+        "why": "A working lower quay would pay for the wall twice over, and the Warden will not see it."
+      },
+      {
+        "key": "keep_my_own_marks",
+        "value": 0.7,
+        "why": "My mother fed the quay on credit and got little back; I keep the stall's marks in my own apron."
+      },
+      {
+        "key": "the_quarrel_keeps_stone_out",
+        "value": 0.6,
+        "why": "Wrack and Fenwick each call the other a cheat and the good stone stays in Kettlebridge for it."
+      },
+      {
+        "key": "watch_my_brother",
+        "value": 0.65,
+        "why": "He would owe the whole quay for a net; someone in the family should count."
+      }
+    ],
+    "secret": ""
+  }
+}

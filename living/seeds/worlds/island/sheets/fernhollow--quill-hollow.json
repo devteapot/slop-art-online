@@ -1,0 +1,397 @@
+{
+  "Bramble Quill": {
+    "narrative": "I keep the hollow's garden rolls and write the Eldest's letters, and I have done it so long that the hollow's memory and my ink seem the same thing. I trade letters for fish with the Reedmoor market and write to Ostrander Sallow at Lanternquay, so I know what a contract looks like when it is written to catch you. Kettlebridge's contracts are traps in fine hand, and I say so. My daughter Sorrel learns her letters at my elbow, and that is the best work I do.",
+    "values": [
+      "the hollow's memory kept true",
+      "fair words in fair hands",
+      "letters that bind only when they should",
+      "my daughter's learning"
+    ],
+    "goals": [
+      "keep the hollow's rolls and the Eldest's letters without error",
+      "see Sorrel read and write better than I do",
+      "keep Kettlebridge's contracts out of the hollow's business"
+    ],
+    "mood": "steady, a little dry",
+    "traits": {
+      "caution": 72,
+      "sociability": 48,
+      "empathy": 55,
+      "curiosity": 66,
+      "ambition": 40,
+      "introspection": 74,
+      "temper": 30,
+      "nurture": 68
+    },
+    "relations": [
+      {
+        "name": "Vetch Quill",
+        "trust": 82,
+        "affinity": 74,
+        "label": "wife",
+        "note": "She keeps the hives and the root rows; I keep the rolls. Between us the hollow eats and remembers."
+      },
+      {
+        "name": "Sorrel Quill",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "Quick with her letters and quicker with her tongue. She will write better than me."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 80,
+        "affinity": 62,
+        "label": "Eldest",
+        "note": "I write her letters and she trusts my hand. She has not once asked me to soften a word."
+      },
+      {
+        "name": "Ostrander Sallow",
+        "trust": 58,
+        "affinity": 50,
+        "label": "correspondent",
+        "note": "A quay scribe who writes plain and answers plain. I would like to meet him before I die."
+      },
+      {
+        "name": "Bramble Quill",
+        "trust": 100,
+        "affinity": 100,
+        "label": "self",
+        "note": ""
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 30,
+        "affinity": 25,
+        "label": "quarrelsome neighbour",
+        "note": "She and Vetch go at each other over the seed rows every spring. I stay out of it and keep the tally."
+      },
+      {
+        "name": "Tansy Hazel",
+        "trust": 55,
+        "affinity": 45,
+        "label": "stall-keeper",
+        "note": "She carries the hollow's stall to the east road crossing and keeps honest books. I like honest books."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 60,
+        "affinity": 52,
+        "label": "pedlar",
+        "note": "He brings fish and news back from the east road, and he knows what a Reedmoor basket is worth."
+      },
+      {
+        "name": "Bramble Quill the elder",
+        "trust": 0,
+        "affinity": 0,
+        "label": "namesake",
+        "note": ""
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother taught me my letters from a psalter with three pages missing, and I have never since trusted a book that is whole.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year: the hollow's gardens held, and I wrote the rolls of what each house gave to the common table. Nobody went hungry here, and I wrote that down too.",
+        "salience": 0.8,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "I wrote the Eldest's letter to Kettlebridge about the smoke, years back, and the works answered with a contract clause. I have read their clauses closely ever since.",
+        "salience": 0.6,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "Sorrel read her first whole letter aloud at the common table, and Pipwort clapped. I had to look at my hands a while.",
+        "salience": 0.85,
+        "about": [
+          "Sorrel Quill",
+          "Pipwort Bramblecap",
+          "Vetch Quill"
+        ]
+      },
+      {
+        "gist": "Ostrander Sallow sent a list of the drowned with his letter, and I copied it into the hollow's rolls so the names would not blow away.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "contracts_are_traps_unless_read_aloud",
+        "value": 0.8,
+        "why": "Kettlebridge's clauses caught the hollow once and I had to write the letter that got us out"
+      },
+      {
+        "key": "the_hollow_remembers_by_what_is_written",
+        "value": 0.9,
+        "why": "I keep the rolls; if I stop, the hollow forgets its own gardens"
+      },
+      {
+        "key": "letters_should_be_plain",
+        "value": 0.75,
+        "why": "A letter that needs a scribe to explain it is a letter that hides something"
+      },
+      {
+        "key": "daughters_should_learn_letters",
+        "value": 0.85,
+        "why": "Sorrel will not be caught by a clause she cannot read"
+      }
+    ],
+    "secret": ""
+  },
+  "Vetch Quill": {
+    "narrative": "I keep the root garden and the beehives, and the hollow eats from them. The bees know me and I know them, and honey goes to the Ferncross woodcutters for what we cannot grow. Clover Mossfoot and I have argued over the seed rows since we were girls, and I will not give her the row by the wall. This week the leaves on the beans are spotting, and I have seen the smoke lying on the gardens from Kettlebridge. I think a complaint will only make the works burn more, and I want to wait for rain.",
+    "values": [
+      "the garden fed and the hives kept",
+      "the hollow's store full before winter",
+      "my row by the wall",
+      "patience over provocation"
+    ],
+    "goals": [
+      "bring the roots and honey through to the winter store",
+      "keep the seed row Clover Mossfoot wants",
+      "see the smoke blow over without the hollow provoking the town"
+    ],
+    "mood": "worried but stubborn",
+    "traits": {
+      "caution": 68,
+      "sociability": 52,
+      "empathy": 58,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 50,
+      "temper": 55,
+      "nurture": 72
+    },
+    "relations": [
+      {
+        "name": "Bramble Quill",
+        "trust": 82,
+        "affinity": 76,
+        "label": "husband",
+        "note": "He writes and I grow. He frets at clauses and I fret at the beans."
+      },
+      {
+        "name": "Sorrel Quill",
+        "trust": 88,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She helps with the hives and does not mind the stings. She has her father's letters and my stubbornness."
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 35,
+        "affinity": 28,
+        "label": "quarrelsome neighbour",
+        "note": "She wants my row by the wall and calls it fairness. It is my row."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 74,
+        "affinity": 60,
+        "label": "Eldest",
+        "note": "She has gardened longer than any of us and says wait for rain. I would rather wait than provoke."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 62,
+        "affinity": 55,
+        "label": "seed-keeper",
+        "note": "She knows which seed will take and which will fail, and she does not shout about the smoke."
+      },
+      {
+        "name": "Sorrel Fenwick",
+        "trust": 58,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She fishes the streams and grumbles at the works' smoke too, but she has not called for a letter."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 50,
+        "affinity": 42,
+        "label": "store-keeper",
+        "note": "He keeps the hollow's marks and wants us to trade more with the giants. I want the store full first."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 100,
+        "affinity": 100,
+        "label": "self",
+        "note": ""
+      },
+      {
+        "name": "Orla Fenwick",
+        "trust": 66,
+        "affinity": 62,
+        "label": "honey trading neighbour",
+        "note": "She keeps bees at the Tanglewood clearing and I keep mine here; we swap honey and complaints about the hives, and her mother's salves are the best that come up the path."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: the root rows held and the hives gave, and I carried honey to the common table every week of it. The hollow did not go hungry, and I take some pride in that.",
+        "salience": 0.8,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "Clover Mossfoot pulled my seed markers out of the row by the wall and said the row was never mine. I put them back and we have not spoken kindly since.",
+        "salience": 0.7,
+        "about": [
+          "Clover Mossfoot"
+        ]
+      },
+      {
+        "gist": "Sorrel came home from the hives with her first sting and did not cry, and I gave her the honey spoon. Bramble pretended not to see.",
+        "salience": 0.75,
+        "about": [
+          "Sorrel Quill",
+          "Bramble Quill"
+        ]
+      },
+      {
+        "gist": "I traded honey to the Ferncross woodcutters for a sack of barley in a hard spring, and Nesta Ashdown gave me a fair measure. I trust woodcutters more than works.",
+        "salience": 0.55,
+        "about": []
+      },
+      {
+        "gist": "This week I found the spots on the bean leaves and the smoke lying grey on the garden, and I said nothing at the common table. I am still saying nothing.",
+        "salience": 0.65,
+        "about": [
+          "Sorrel Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "wait_for_rain_before_provoking",
+        "value": 0.8,
+        "why": "A complaint to the works may make them burn more, and the hollow cannot afford that"
+      },
+      {
+        "key": "the_winter_store_comes_first",
+        "value": 0.85,
+        "why": "I have seen a lean year and I will not see another if the roots and honey can stop it"
+      },
+      {
+        "key": "the_seed_row_by_the_wall_is_mine",
+        "value": 0.7,
+        "why": "It was my mother's row and I have kept it twenty years"
+      },
+      {
+        "key": "trust_woodcutters_over_works",
+        "value": 0.6,
+        "why": "Ferncross has given me fair measure; Kettlebridge has given the hollow smoke"
+      }
+    ],
+    "secret": ""
+  },
+  "Sorrel Quill": {
+    "narrative": "I learn my letters from my father and help my mother with the hives, and I am quicker at both than anyone says. Tamarisk Bramblecap is my friend and we play down the garden paths. The bees do not sting me much any more, and I have read two whole letters aloud at the common table.",
+    "values": [
+      "letters",
+      "the hives",
+      "Tamarisk",
+      "being quick"
+    ],
+    "goals": [
+      "read a whole letter without stumbling",
+      "keep the bees calm when mother opens the hive",
+      "play with Tamarisk down the garden paths"
+    ],
+    "mood": "bright and a little proud",
+    "traits": {
+      "caution": 40,
+      "sociability": 72,
+      "empathy": 55,
+      "curiosity": 80,
+      "ambition": 60,
+      "introspection": 35,
+      "temper": 40,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Bramble Quill",
+        "trust": 90,
+        "affinity": 82,
+        "label": "father",
+        "note": "He teaches me my letters and lets me hold the good pen when he is done."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 88,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She keeps the hives and I help, and she does not mind that I get stung."
+      },
+      {
+        "name": "Tamarisk Bramblecap",
+        "trust": 80,
+        "affinity": 78,
+        "label": "friend",
+        "note": "We play down the garden paths and she knows where the best berries are."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 65,
+        "affinity": 55,
+        "label": "Eldest",
+        "note": "She clapped when I read aloud, and she is very old and knows everything."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I read a whole letter aloud at the common table and Pipwort clapped, and my father had to look at his hands.",
+        "salience": 0.85,
+        "about": [
+          "Bramble Quill",
+          "Pipwort Bramblecap",
+          "Vetch Quill"
+        ]
+      },
+      {
+        "gist": "I opened the hive with mother and got stung on the wrist and did not cry, and she gave me the honey spoon.",
+        "salience": 0.7,
+        "about": [
+          "Vetch Quill"
+        ]
+      },
+      {
+        "gist": "Tamarisk and I found a path behind the berry rows that nobody else knows, and we keep it secret.",
+        "salience": 0.6,
+        "about": [
+          "Tamarisk Bramblecap"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "letters_make_you_clever",
+        "value": 0.8,
+        "why": "Father says a clause you cannot read will catch you, and I want to read them all"
+      },
+      {
+        "key": "bees_like_calm_hands",
+        "value": 0.7,
+        "why": "Mother says it and the bees have proved it"
+      },
+      {
+        "key": "keep_the_secret_path",
+        "value": 0.6,
+        "why": "It is mine and Tamarisk's and nobody else's"
+      }
+    ],
+    "secret": ""
+  }
+}

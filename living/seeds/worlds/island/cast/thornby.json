@@ -1,0 +1,367 @@
+{
+ "households": [
+  {
+   "key": "dunn",
+   "members": [
+    {
+     "name": "Osric Dunn",
+     "age": 55,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "headman of Thornby; owes Brackenford's store forty baskets of grain and pays slowly in fish",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "owes Aldric Marrow's town store forty baskets",
+      "thinks Edda at the north light wrecked his brother's boat"
+     ]
+    },
+    {
+     "name": "Rona Dunn",
+     "age": 52,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Osric's wife; keeps the village cook-fire and smokes the catch for the common store",
+     "knows": [
+      "cooking",
+      "smoking",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Osric Dunn",
+      "mother of Perrin Dunn",
+      "works with Inga Dunn",
+      "trades smoked fish with Simon Hollis"
+     ]
+    },
+    {
+     "name": "Perrin Dunn",
+     "age": 27,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "Osric's son; fishes the north shore with his father and keeps the boat",
+     "knows": [
+      "fishing",
+      "fire",
+      "mending",
+      "smoking"
+     ],
+     "parents": [
+      "Osric Dunn",
+      "Rona Dunn"
+     ],
+     "ties": [
+      "son of Osric Dunn",
+      "courts Inga Dunn",
+      "fishes with his father",
+      "owes Simon Hollis for a net"
+     ]
+    },
+    {
+     "name": "Inga Dunn",
+     "age": 24,
+     "sex": "f",
+     "occupation": "fisher",
+     "role": "Osric's niece; fishes the shallows from a small boat and mends the village nets",
+     "knows": [
+      "fishing",
+      "mending",
+      "fire",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "niece of Osric Dunn",
+      "courts Perrin Dunn",
+      "works with Rona Dunn",
+      "thinks Edda Wray should be watched"
+     ]
+    },
+    {
+     "name": "Hob Dunn",
+     "age": 9,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Perrin's cousin, raised in the Dunn house; mends nets and plays on the shingle",
+     "knows": [
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "ward of Osric Dunn",
+      "plays with Wren Stave"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "stave",
+   "members": [
+    {
+     "name": "Cuthbert Stave",
+     "age": 48,
+     "sex": "m",
+     "occupation": "hunter",
+     "role": "hunts the north shore and the cape for the village; keeps the fish road clear of wolves",
+     "knows": [
+      "archery",
+      "trapping",
+      "fire",
+      "cloak"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Merrow Stave",
+      "father of Wren Stave",
+      "sells hides to Aethelred Tanner",
+      "grudges Edda Wray for his brother's boat",
+      "friendly with Osric Dunn"
+     ]
+    },
+    {
+     "name": "Merrow Stave",
+     "age": 45,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Cuthbert's wife; keeps the village's small barley and vegetable plots above the shore",
+     "knows": [
+      "planting",
+      "storage",
+      "cooking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Cuthbert Stave",
+      "mother of Wren Stave",
+      "sells barley to Brackenford's store against the debt",
+      "trades seeds with Rona Dunn"
+     ]
+    },
+    {
+     "name": "Wren Stave",
+     "age": 11,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Cuthbert and Merrow's daughter; helps in the plots and follows her father to the cape",
+     "knows": [
+      "planting"
+     ],
+     "parents": [
+      "Cuthbert Stave",
+      "Merrow Stave"
+     ],
+     "ties": [
+      "daughter of Cuthbert Stave",
+      "plays with Hob Dunn",
+      "afraid of the north light"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "gannet",
+   "members": [
+    {
+     "name": "Sedge Gannet",
+     "age": 38,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "fishes the deep water off the cape from a tarred boat; a quiet man with a sharp eye for weather",
+     "knows": [
+      "fishing",
+      "smoking",
+      "fire",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Tern Gannet",
+      "father of Minnow Gannet",
+      "sells his catch to Rona Dunn",
+      "owes Osric Dunn for a share of a net",
+      "blames Edda Wray's light for a near wreck last winter"
+     ]
+    },
+    {
+     "name": "Tern Gannet",
+     "age": 36,
+     "sex": "f",
+     "occupation": "fish runner",
+     "role": "carries smoked fish from Thornby down the fish road to Brackenford's market and brings grain back",
+     "knows": [
+      "smoking",
+      "cooking",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Sedge Gannet",
+      "mother of Minnow Gannet",
+      "runs the fish road with Simon Hollis",
+      "pays the gate-due at Brackenford and hates it"
+     ]
+    },
+    {
+     "name": "Minnow Gannet",
+     "age": 6,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Sedge and Tern's daughter; plays on the shingle and helps her mother pack the fish",
+     "knows": [],
+     "parents": [
+      "Sedge Gannet",
+      "Tern Gannet"
+     ],
+     "ties": [
+      "daughter of Tern Gannet",
+      "plays with Wren Stave"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "tarn",
+   "members": [
+    {
+     "name": "Rook Tarn",
+     "age": 61,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "old fisher who no longer goes out; mends nets and keeps the village's tally of the debt to Brackenford",
+     "knows": [
+      "fishing",
+      "mending",
+      "basketry",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "keeps the debt tally for Osric Dunn",
+      "old friend of Cuthbert Stave",
+      "grudges Edda Wray",
+      "trades nets with Sedge Gannet"
+     ]
+    },
+    {
+     "name": "Mavis Tarn",
+     "age": 58,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Rook's wife; keeps the goats and the herb plot behind their house",
+     "knows": [
+      "planting",
+      "medicine",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Rook Tarn",
+      "tends the village's sick",
+      "trades herbs with Merrow Stave",
+      "worries about the winter store"
+     ]
+    },
+    {
+     "name": "Pike Tarn",
+     "age": 31,
+     "sex": "m",
+     "occupation": "hunter",
+     "role": "Rook and Mavis's son; hunts the cape and the shore for birds and small game",
+     "knows": [
+      "archery",
+      "trapping",
+      "fire",
+      "tanning"
+     ],
+     "parents": [
+      "Rook Tarn",
+      "Mavis Tarn"
+     ],
+     "ties": [
+      "son of Rook Tarn",
+      "hunts with Cuthbert Stave",
+      "sells hides to Aethelred Tanner",
+      "thinks the debt to Brackenford will never be paid"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "thornby-debt",
+   "kind": "debt",
+   "summary": "Thornby still owes Brackenford's store forty baskets of grain from the Lean Year; Osric pays in fish and barley as he can, and the ledger in Brackenford records every basket. Rook Tarn keeps the village tally, and the two counts have begun to drift apart.",
+   "secret": false,
+   "people": [
+    "Osric Dunn",
+    "Rook Tarn",
+    "Tern Gannet"
+   ],
+   "sides": {
+    "Osric Dunn": "He knows the debt is real and feels it every time he loads fish for Brackenford; he wants it paid but fears the village cannot pay and eat.",
+    "Rook Tarn": "He keeps the tally and believes Brackenford's ledger has more baskets on it than Thornby ever took; he wants Osric to demand a recount.",
+    "Tern Gannet": "She carries the payments down the fish road and pays the gate-due on top; she feels the debt as a weight on every trip and resents the due more than the debt."
+   }
+  },
+  {
+   "id": "north-light",
+   "kind": "feud",
+   "summary": "Thornby blames old Edda Wray at the north light for wrecking boats, and Sedge Gannet's near wreck last winter has hardened the talk. Edda says she lights it every night. No one has gone up to the cape to ask her plainly.",
+   "secret": false,
+   "people": [
+    "Sedge Gannet",
+    "Cuthbert Stave",
+    "Osric Dunn",
+    "Rook Tarn"
+   ],
+   "sides": {
+    "Sedge Gannet": "He came close to losing his boat in the dark and is sure the light was wrong; he wants the village to take the light away from her.",
+    "Cuthbert Stave": "His brother drowned off the cape years ago and he has blamed Edda since; he feels the grudge as a family duty.",
+    "Osric Dunn": "He thinks Edda wrecked his brother's boat and says so, but he is headman and knows an accusation is not a proof.",
+    "Rook Tarn": "He grumbles with the rest but remembers Edda's light guiding him home in bad weather; he is not sure."
+   }
+  },
+  {
+   "id": "dunn-courtship",
+   "kind": "courtship",
+   "summary": "Perrin Dunn and Inga Dunn are courting; they are cousins by marriage and the village has begun to talk about whether the headman's house should keep it in the family. Rona Dunn has said nothing to either of them.",
+   "secret": false,
+   "people": [
+    "Perrin Dunn",
+    "Inga Dunn",
+    "Rona Dunn",
+    "Osric Dunn"
+   ],
+   "sides": {
+    "Perrin Dunn": "He wants to marry Inga and take the boat with her; he does not see what the talk is about.",
+    "Inga Dunn": "She wants Perrin but feels the village's eyes on her; she has not told him what the women say at the smoke shed.",
+    "Rona Dunn": "She has heard the talk and is uneasy about the match; she keeps her counsel but watches Inga at the cook-fire.",
+    "Osric Dunn": "He is fond of Inga and has not thought about it at all; he assumes Perrin will do as he likes."
+   }
+  },
+  {
+   "id": "cape-wolves",
+   "kind": "rivalry",
+   "summary": "Cuthbert Stave and Pike Tarn both hunt the cape and both claim the best trapping ground above the shore; each has moved the other's snares, and neither will say so to Osric.",
+   "secret": false,
+   "people": [
+    "Cuthbert Stave",
+    "Pike Tarn",
+    "Osric Dunn"
+   ],
+   "sides": {
+    "Cuthbert Stave": "He has hunted the cape since he was a boy and thinks Pike's snares are too close to his line; he moved them and feels justified.",
+    "Pike Tarn": "He found his snares shifted and knows who did it; he wants the headman to settle the ground but will not be the one to ask.",
+    "Osric Dunn": "He has heard both men grumble and wants the cape hunt kept quiet; he has not chosen between them."
+   }
+  }
+ ]
+}

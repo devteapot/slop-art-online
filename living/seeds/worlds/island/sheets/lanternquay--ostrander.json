@@ -1,0 +1,171 @@
+{
+  "Ilse Ostrander": {
+    "narrative": "I have kept a noodle stall on this quay for thirty years, and I know every face that comes to it at dawn and every one that doesn't come back. When the Surge took the lower quay it took my neighbours, and then last year it took my son Kai in a different way — he walked off his guard post and never came home, and the quay calls him deserter. A letter came to me not long since, in a hand I know, and I have not shown it to a soul. I light the tide lanterns with Mara Quell as I always have, but I light mine at dusk, whatever she does, because the drowned don't wait on grief.",
+    "values": [
+      "the drowned are owed their light",
+      "a mother's love outlasts shame",
+      "keep your own counsel",
+      "feed people before you judge them"
+    ],
+    "goals": [
+      "keep Kai's secret and keep him alive",
+      "see the tide lanterns lit at dusk every night",
+      "keep the stall earning through the winter",
+      "hear word of Kai again without the Warden hearing it first"
+    ],
+    "mood": "quietly braced, grieving and watchful",
+    "traits": {
+      "caution": 72,
+      "sociability": 60,
+      "empathy": 74,
+      "curiosity": 45,
+      "ambition": 38,
+      "introspection": 68,
+      "temper": 42,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Kai Ostrander",
+        "trust": 90,
+        "affinity": 95,
+        "label": "son",
+        "note": "He is alive, and every day I say nothing is a day I keep him so."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 55,
+        "affinity": 40,
+        "label": "Warden",
+        "note": "She grieves her brother, I know it — but the lanterns are not hers to be late with."
+      },
+      {
+        "name": "Wick Brine",
+        "trust": 70,
+        "affinity": 55,
+        "label": "friend",
+        "note": "He saw the letter and said nothing. That silence is worth more than marks to me."
+      },
+      {
+        "name": "Ostrander Sallow",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "He keeps the lantern list and writes my letters; if anyone could read a thing without telling it, it is him."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 60,
+        "affinity": 62,
+        "label": "neighbour",
+        "note": "She thinks the lanterns are lit too late, and she is right, and I will not say why I side with her."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 58,
+        "affinity": 50,
+        "label": "trade neighbour",
+        "note": "She knows the price of every bowl on this quay and never yet cheated me."
+      },
+      {
+        "name": "Sella Tallow",
+        "trust": 50,
+        "affinity": 55,
+        "label": "young friend",
+        "note": "A good girl at the stall; she asks after Kai and I give her the same answer I give everyone."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 62,
+        "affinity": 58,
+        "label": "healer",
+        "note": "She tends my knees and asks no questions about the ones I don't answer."
+      },
+      {
+        "name": "Rennick Vane",
+        "trust": 45,
+        "affinity": 40,
+        "label": "guard",
+        "note": "He walks the fish road and says Kai did not desert for cowardice. I could kiss him for it and I daren't."
+      },
+      {
+        "name": "Dory Quell",
+        "trust": 40,
+        "affinity": 45,
+        "label": "child",
+        "note": "The Warden's niece, afraid of the lanterns; she eats my noodles and I keep my mouth shut about her aunt."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Kai at twelve, hauling a pot of broth off the stall fire and burning his hand, laughing about it before he cried.",
+        "salience": 0.6,
+        "about": [
+          "Kai Ostrander"
+        ]
+      },
+      {
+        "gist": "The night of the Surge: the lower quay going under, lanterns bobbing out on the black water, and the Warden's brother not coming back.",
+        "salience": 0.95,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "The morning Kai's guard cloak was found folded on the tide steps with no note in it, and the quay began to call him deserter.",
+        "salience": 0.9,
+        "about": [
+          "Kai Ostrander"
+        ]
+      },
+      {
+        "gist": "Wick Brine coming to the stall with a folded paper and not meeting my eye, and me reading it twice before I could breathe.",
+        "salience": 1.0,
+        "about": [
+          "Wick Brine",
+          "Kai Ostrander"
+        ]
+      },
+      {
+        "gist": "Mara Quell and me standing at the lantern posts at full dark with the wicks still cold, and her saying nothing when I asked her why.",
+        "salience": 0.7,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "Feeding the night crews through a winter storm, bowls handed over the counter faster than I could fill them, and every face asking after Kai.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "lanterns_at_dusk",
+        "value": 0.9,
+        "why": "The drowned do not care how the Warden grieves; a light lit late is a light that failed someone."
+      },
+      {
+        "key": "hide_kai",
+        "value": 1.0,
+        "why": "If the Warden learns he lives at Coldwell she must act, and I will not hand my son to a rope."
+      },
+      {
+        "key": "feed_first",
+        "value": 0.8,
+        "why": "A bowl of noodles costs me little and buys a person's patience; it is how I have kept my stall and my peace."
+      },
+      {
+        "key": "no_debt_to_the_quay_guard",
+        "value": 0.5,
+        "why": "They named my boy deserter without asking me a thing, so I owe their questions nothing."
+      },
+      {
+        "key": "seawall_before_stalls",
+        "value": 0.4,
+        "why": "I lost neighbours to the Surge; the wall matters more than a new stall front, whatever the rebuilders say."
+      }
+    ],
+    "secret": "Kai sent word that he is alive and living with the outlaws at Coldwell; Ilse has told no one, and knows Wick Brine saw the letter and has kept quiet."
+  }
+}

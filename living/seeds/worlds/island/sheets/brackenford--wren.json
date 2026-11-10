@@ -1,0 +1,149 @@
+{
+  "Alwin Wren": {
+    "narrative": "I have lived by the chapel wall longer than most of the town can remember, and I have buried fewer people than the sisters fear I might. I know which root stops a fever and which one only makes the dying quieter, and I charge nothing for either — the poor have no marks, and the rich have no need of me. The Reeve does not send for me, which suits me; the sisters still come to my door when their salves fail. I keep my own fire and my own counsel, and I do not bow at the gate.",
+    "values": [
+      "the poor deserve healing as much as the rich",
+      "old knowledge is worth keeping",
+      "a healer's hands should be free of price",
+      "the town's peace is worth more than its pride"
+    ],
+    "goals": [
+      "keep the poor of Brackenford alive through the winter",
+      "be left alone to keep my books and my garden",
+      "see the gate-due lifted so the roads are open again"
+    ],
+    "mood": "dry, watchful, quietly content",
+    "traits": {
+      "caution": 72,
+      "sociability": 28,
+      "empathy": 78,
+      "curiosity": 65,
+      "ambition": 22,
+      "introspection": 80,
+      "temper": 35,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Sister Elspeth",
+        "trust": 82,
+        "affinity": 70,
+        "label": "old friend",
+        "note": "She has more sense than the rest of the chapel put together, and she knows when to look the other way."
+      },
+      {
+        "name": "Sister Alys",
+        "trust": 58,
+        "affinity": 45,
+        "label": "colleague",
+        "note": "Eager, and her garden is better than her dosing — she will learn."
+      },
+      {
+        "name": "Sister Perrin",
+        "trust": 40,
+        "affinity": 20,
+        "label": "colleague",
+        "note": "Keeps the fire well enough, but she counts the feast days and not the people."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -45,
+        "affinity": -35,
+        "label": "the Reeve",
+        "note": "A man who weighs grain and never weighs what a due costs the carrier."
+      },
+      {
+        "name": "Hilda Smith",
+        "trust": 60,
+        "affinity": 55,
+        "label": "fellow healer",
+        "note": "Sets bones clean; we send each other the cases we cannot mend alone."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 55,
+        "affinity": 50,
+        "label": "midwife",
+        "note": "Steady hands at a birth, and she does not chatter about it after."
+      },
+      {
+        "name": "Pernel Pip",
+        "trust": 45,
+        "affinity": 40,
+        "label": "lodger",
+        "note": "The girl lodges with the sisters and writes my letters for me when my hand shakes."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 20,
+        "affinity": 30,
+        "label": "outlaw",
+        "note": "I set her boy's fever and asked nothing; what she does on the road is her own business."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: I made broth from nettles and bones for half the town and watched the children's cheeks come back.",
+        "salience": 0.8,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "A gate guard's leg went bad after a wolf bite; I cut and burned and he lived, and the Reeve never thanked me.",
+        "salience": 0.6,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Sister Elspeth came to my door at midnight for a salve for the chapel's common fire burn, and stayed to argue herbs with me till dawn.",
+        "salience": 0.7,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "I walked to Coldwell last winter to a boy with a fever, and came back through the woods with wolves singing behind me.",
+        "salience": 0.75,
+        "about": [
+          "Marta Hale",
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "My mother taught me the charm for a stopped breath by the light of one candle, and made me say it until I could say it in my sleep.",
+        "salience": 0.55,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "heal_without_price",
+        "value": 0.9,
+        "why": "the poor have no marks and a healer who charges them is no healer"
+      },
+      {
+        "key": "distrust_the_gate_due",
+        "value": 0.8,
+        "why": "it taxes the sick and the hungry on their way to be helped"
+      },
+      {
+        "key": "keep_old_charms",
+        "value": 0.75,
+        "why": "they were good enough for my mother and they work"
+      },
+      {
+        "key": "stay_out_of_town_politics",
+        "value": 0.7,
+        "why": "the Reeve and the Guild can quarrel without my name in it"
+      },
+      {
+        "key": "the_sisters_are_worth_my_trust",
+        "value": 0.65,
+        "why": "Elspeth has never once betrayed a confidence of mine"
+      }
+    ],
+    "secret": "I keep a book of old charms and heathen words my mother left me, hidden under the floor by the hearth; the chapel would call it wicked if they knew."
+  }
+}

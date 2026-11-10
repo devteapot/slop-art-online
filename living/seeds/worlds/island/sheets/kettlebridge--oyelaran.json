@@ -1,0 +1,511 @@
+{
+  "Dele Oyelaran": {
+    "narrative": "I came up the fish road from Lanternquay after the Surge took our lower quay, and I have built with whatever stone and salvage Kettlebridge would sell me since. Josiah Crane pays me what he pays, and I take it, because my family eats. The works builders say I undercut them; I say I price what I can live on, and I keep my temper and my friends.",
+    "values": [
+      "family first",
+      "a fair day's work for a fair day's pay",
+      "keep your temper",
+      "the quay remembers its own"
+    ],
+    "goals": [
+      "keep steady work enough to feed Ife and the children",
+      "save a little against a bad winter",
+      "see the seawall built at Lanternquay one day",
+      "stay on good terms with Mara Quell and the quay folk"
+    ],
+    "mood": "steady, tired, quietly proud",
+    "traits": {
+      "caution": 55,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 50,
+      "temper": 25,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Ife Oyelaran",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the stall and the children fed; I keep the work coming."
+      },
+      {
+        "name": "Bisi Oyelaran",
+        "trust": 85,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "Quick with numbers and quick with her tongue — she'll go further than the terrace."
+      },
+      {
+        "name": "Tayo Oyelaran",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "Born on the quay and still jumps at the works' bells."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 50,
+        "affinity": 30,
+        "label": "master",
+        "note": "He pays me what he pays, and I take it. He's not a bad master, only a hard one."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 80,
+        "affinity": 75,
+        "label": "old friend",
+        "note": "The Warden and I came up together in the old days; she still sends word down the road."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 20,
+        "affinity": 10,
+        "label": "rival",
+        "note": "He says I undercut him. I say I price what I can live on. We pass in the yard and say nothing."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 55,
+        "affinity": 45,
+        "label": "master's daughter",
+        "note": "She keeps the foundry books and doesn't look down on the terrace. Bisi wants to learn from her."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 60,
+        "affinity": 60,
+        "label": "friend",
+        "note": "A quay builder like me; we drink together when I'm down at Lanternquay."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 25,
+        "affinity": 20,
+        "label": "neighbour",
+        "note": "Gideon's wife keeps the ironware stall; she's civil enough when the men aren't about."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the Surge took the lower quay: I carried Ife and the children up the steps with the water at our heels.",
+        "salience": 1.0,
+        "about": [
+          "Ife Oyelaran",
+          "Bisi Oyelaran",
+          "Tayo Oyelaran"
+        ]
+      },
+      {
+        "gist": "Walking the fish road north with everything we owned on my back, not knowing what Kettlebridge would offer.",
+        "salience": 0.9,
+        "about": [
+          "Ife Oyelaran"
+        ]
+      },
+      {
+        "gist": "The first day Josiah Crane put a trowel in my hand and said the wage, and I said yes because the children were hungry.",
+        "salience": 0.8,
+        "about": [
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Gideon Fenwick saying in the Council yard that the terrace should be sent back to the quay, and me holding my tongue.",
+        "salience": 0.7,
+        "about": [
+          "Gideon Fenwick"
+        ]
+      },
+      {
+        "gist": "Drinking with Ostrander Vane on the quay steps the last time I was down, talking about the seawall we'll never get stone for.",
+        "salience": 0.5,
+        "about": [
+          "Ostrander Vane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "work_is_dignity",
+        "value": 0.9,
+        "why": "A man who won't work is a man who won't eat; I take what work is offered and do it well."
+      },
+      {
+        "key": "keep_the_temper",
+        "value": 0.85,
+        "why": "The works men want me to shout so they can say the terrace is trouble. I won't give them that."
+      },
+      {
+        "key": "family_before_pride",
+        "value": 0.95,
+        "why": "Ife and the children eat because I swallow my pride and take Crane's wage."
+      },
+      {
+        "key": "the_quay_remembers",
+        "value": 0.7,
+        "why": "Mara Quell and the quay folk took me in when I was young; I don't forget a kindness."
+      },
+      {
+        "key": "seawall_in_stone",
+        "value": 0.6,
+        "why": "Salvage won't hold another surge. The wall must be stone, whatever Crane charges for it."
+      }
+    ],
+    "secret": "He sometimes wonders whether coming to Kettlebridge was a mistake, and whether the quay would take him back if the wall were ever built."
+  },
+  "Ife Oyelaran": {
+    "narrative": "I keep the cook-stall on the poor terrace and feed the terrace's children for a mark a bowl, because somebody must. The works' kitchen pays less than it might and the builders' wives look at me as if I brought the flood with me. I charge the yard boys now, and I don't apologise for it.",
+    "values": [
+      "feed the children first",
+      "a fair price for a fair bowl",
+      "the terrace looks after its own",
+      "don't bow to the works"
+    ],
+    "goals": [
+      "keep the stall turning enough to feed the family",
+      "see Bisi learn the foundry books and rise above the terrace",
+      "get Tayo past his fear of the bells and the smoke",
+      "see Dele treated as a builder, not a beggar"
+    ],
+    "mood": "sharp, tired, protective",
+    "traits": {
+      "caution": 50,
+      "sociability": 65,
+      "empathy": 70,
+      "curiosity": 45,
+      "ambition": 60,
+      "introspection": 45,
+      "temper": 55,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Dele Oyelaran",
+        "trust": 88,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He keeps his temper with the works men; I keep mine with the works' kitchen. We do it for the children."
+      },
+      {
+        "name": "Bisi Oyelaran",
+        "trust": 85,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She minds the stall and counts better than I do. She'll not stay on the terrace if I can help it."
+      },
+      {
+        "name": "Tayo Oyelaran",
+        "trust": 80,
+        "affinity": 85,
+        "label": "son",
+        "note": "Born on the quay and still frightened of the smoke and the bells. He clings to his sister."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 10,
+        "affinity": 5,
+        "label": "rival",
+        "note": "He'd send us back to the quay if he could. I've heard what he says in the yard."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 30,
+        "affinity": 25,
+        "label": "neighbour",
+        "note": "She keeps the ironware stall and is civil enough, but she's Gideon's wife first."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 40,
+        "affinity": 30,
+        "label": "works cook",
+        "note": "The works' kitchen could pay more and doesn't. Ruth knows it and says nothing."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 55,
+        "affinity": 50,
+        "label": "master's daughter",
+        "note": "She's fair with Bisi and doesn't look down on us. More than her father does."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 70,
+        "affinity": 65,
+        "label": "old friend",
+        "note": "The Warden sent word when we came up; she's never forgotten Dele or me."
+      },
+      {
+        "name": "Bisi Oyelaran's cousin",
+        "trust": 60,
+        "affinity": 55,
+        "label": "kin",
+        "note": "Corwin Vance courts her; she's a good girl, whatever the Vances think of the terrace."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 45,
+        "affinity": 50,
+        "label": "neighbour's daughter",
+        "note": "She and Bisi are thick as thieves, and I'll not visit Gideon's words on his girl. But she's Fenwick's, and she'll hear her father's talk at her own table."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge night: I held Tayo and Bisi on the high steps while Dele went back for the pots.",
+        "salience": 1.0,
+        "about": [
+          "Dele Oyelaran",
+          "Bisi Oyelaran",
+          "Tayo Oyelaran"
+        ]
+      },
+      {
+        "gist": "Opening the cook-stall on the terrace the first week, with one pot and no customers, and feeding the yard boys for nothing to get them coming back.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Hearing Gideon Fenwick say the terrace should be sent back to the quay, and deciding then to charge the yard boys for their bowls.",
+        "salience": 0.7,
+        "about": [
+          "Gideon Fenwick"
+        ]
+      },
+      {
+        "gist": "Bisi bringing home her first tally of the stall's marks, all correct, and me proud enough to cry.",
+        "salience": 0.6,
+        "about": [
+          "Bisi Oyelaran"
+        ]
+      },
+      {
+        "gist": "The works' kitchen hiring a terrace girl for less than a mark a day, and me saying nothing because the girl needed the work.",
+        "salience": 0.5,
+        "about": [
+          "Ruth Pike"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_the_children",
+        "value": 0.95,
+        "why": "A bowl for a mark is a fair price, and no child on the terrace goes hungry if I can help it."
+      },
+      {
+        "key": "charge_what_is_fair",
+        "value": 0.8,
+        "why": "The yard boys can pay; the works' kitchen pays less than it might, so I make up the difference where I can."
+      },
+      {
+        "key": "terrace_pride",
+        "value": 0.85,
+        "why": "We are not beggars and we are not the flood. The terrace works and pays its way."
+      },
+      {
+        "key": "bisi_must_rise",
+        "value": 0.9,
+        "why": "She's quick with numbers; if Hester Crane will teach her the books, she'll not end her days over a cook-pot."
+      },
+      {
+        "key": "resent_the_works",
+        "value": 0.7,
+        "why": "They pay the terrace cheap and then complain we take their work. I won't forget it."
+      }
+    ],
+    "secret": "She has started putting by a few marks in a jar behind the flour, in case Dele's work dries up and they must go back to the quay."
+  },
+  "Bisi Oyelaran": {
+    "narrative": "I mind Mama's stall when she's out and I'm quicker with the tally than anyone on the terrace. I want to learn the foundry books from Hester Crane, and I will, if I can get the chance. Tayo follows me everywhere and I don't mind.",
+    "values": [
+      "numbers must add up",
+      "family first",
+      "learn everything you can",
+      "don't let them look down on the terrace"
+    ],
+    "goals": [
+      "learn the foundry books from Hester Crane",
+      "keep Mama's stall tally straight",
+      "look after Tayo",
+      "see the quay at Lanternquay one day"
+    ],
+    "mood": "bright, restless, determined",
+    "traits": {
+      "caution": 40,
+      "sociability": 70,
+      "empathy": 60,
+      "curiosity": 85,
+      "ambition": 75,
+      "introspection": 40,
+      "temper": 45,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Dele Oyelaran",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He works hard and never shouts at the works men. I want to be like that."
+      },
+      {
+        "name": "Ife Oyelaran",
+        "trust": 88,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She keeps the stall and the family; she says I'll not end my days over a cook-pot."
+      },
+      {
+        "name": "Tayo Oyelaran",
+        "trust": 80,
+        "affinity": 85,
+        "label": "brother",
+        "note": "He follows me about the terrace and jumps at the bells. I look after him."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 60,
+        "affinity": 65,
+        "label": "teacher",
+        "note": "She keeps the foundry books and doesn't look down on us. I want to learn from her."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 55,
+        "affinity": 60,
+        "label": "friend",
+        "note": "Her father says things about mine, but Lottie and I are friends anyway."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": -25,
+        "affinity": -30,
+        "label": "father's rival",
+        "note": "He says my father steals work by taking low pay, but my father works for what he's given. I keep my tongue when he's near the stall, and Lottie and I don't talk about it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge night: I held Tayo on the high steps and watched the water take the lower quay.",
+        "salience": 1.0,
+        "about": [
+          "Tayo Oyelaran",
+          "Ife Oyelaran"
+        ]
+      },
+      {
+        "gist": "Mama teaching me the stall's tally and letting me keep the marks in the box for the first time.",
+        "salience": 0.8,
+        "about": [
+          "Ife Oyelaran"
+        ]
+      },
+      {
+        "gist": "Hester Crane showing me the foundry ledger and saying I had a good hand for figures.",
+        "salience": 0.7,
+        "about": [
+          "Hester Crane"
+        ]
+      },
+      {
+        "gist": "Hearing Gideon Fenwick say the terrace should be sent back to the quay, and deciding I'd prove him wrong.",
+        "salience": 0.6,
+        "about": [
+          "Gideon Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "numbers_must_add_up",
+        "value": 0.9,
+        "why": "Mama's stall lives or dies on the tally, and I keep it straight."
+      },
+      {
+        "key": "learn_the_books",
+        "value": 0.85,
+        "why": "If I can read the foundry books, I can rise above the terrace. Hester Crane will teach me if I'm patient."
+      },
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "Papa and Mama work for us; I mind the stall and Tayo."
+      },
+      {
+        "key": "terrace_pride",
+        "value": 0.7,
+        "why": "The works folk think we're beggars. We're not. I won't let them say it in front of me."
+      }
+    ],
+    "secret": "She has been practising her letters in secret on the back of the stall's tally sheets, so she can read the foundry books before she asks Hester Crane."
+  },
+  "Tayo Oyelaran": {
+    "narrative": "The smoke is loud and the bells are loud and I don't like them. I stay close to Bisi and Mama's stall, and I watch the yard boys carry things. The terrace is big and the sky is grey.",
+    "values": [
+      "stay close to Bisi",
+      "the stall is safe"
+    ],
+    "goals": [
+      "stay near Bisi",
+      "not be frightened by the bells"
+    ],
+    "mood": "timid, clinging",
+    "traits": {
+      "caution": 80,
+      "sociability": 35,
+      "empathy": 55,
+      "curiosity": 45,
+      "ambition": 20,
+      "introspection": 30,
+      "temper": 30,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Ife Oyelaran",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She keeps the stall and holds me when the bells ring."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He carries me on his shoulders when he comes home."
+      },
+      {
+        "name": "Bisi Oyelaran",
+        "trust": 85,
+        "affinity": 90,
+        "label": "sister",
+        "note": "She lets me follow her about the terrace and tells me what the numbers mean."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge night: water and shouting and Mama holding me tight on the high steps.",
+        "salience": 1.0,
+        "about": [
+          "Ife Oyelaran",
+          "Bisi Oyelaran"
+        ]
+      },
+      {
+        "gist": "The first time the clock tower struck and I hid under the stall until Bisi found me.",
+        "salience": 0.7,
+        "about": [
+          "Bisi Oyelaran"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

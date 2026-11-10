@@ -1,0 +1,578 @@
+{
+  "Hedley Ashcombe": {
+    "narrative": "I've worked the terrace strips below the clock tower since I was a boy, and I know exactly what that thin ground will and won't give. Greens and roots it gives; grain it grudges, and the Council's clerk counts only grain. So I sell my greens to Ruth Pike's kitchen and I pay what I can, and I will not beg any man for the difference. Let a quarryman's son come courting my Rosalind if he likes — she can wait a year and see sense.",
+    "values": [
+      "honest work on poor ground",
+      "pride that does not bend",
+      "family first",
+      "the town should eat what the terrace grows"
+    ],
+    "goals": [
+      "get the grain tithe counted in greens and roots",
+      "see the winter through with the seed store intact",
+      "keep Rosalind from rushing into a quarryman's marriage"
+    ],
+    "mood": "sour and stubborn, but worried underneath",
+    "traits": {
+      "caution": 58,
+      "sociability": 42,
+      "empathy": 48,
+      "curiosity": 35,
+      "ambition": 55,
+      "introspection": 44,
+      "temper": 62,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Verity Ashcombe",
+        "trust": 88,
+        "affinity": 82,
+        "label": "wife",
+        "note": "She knows which strips will fail before I do; I'd be lost without her seed store."
+      },
+      {
+        "name": "Rosalind Ashcombe",
+        "trust": 70,
+        "affinity": 66,
+        "label": "daughter",
+        "note": "Stubborn as me, and set on that Vance boy and her new crop. She can wait a year."
+      },
+      {
+        "name": "Ottilie Ashcombe",
+        "trust": 75,
+        "affinity": 74,
+        "label": "daughter",
+        "note": "Always chasing hens off the rows and talking of the harbour. Let her dream."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 38,
+        "affinity": 30,
+        "label": "clerk",
+        "note": "Writes the Council's contracts and counts only grain. A fair man with a hard ledger."
+      },
+      {
+        "name": "Ambrose Vell",
+        "trust": 45,
+        "affinity": 40,
+        "label": "councillor",
+        "note": "Slow to speak and slower to forgive, but he has heard my case and not laughed at it."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 60,
+        "affinity": 55,
+        "label": "customer",
+        "note": "Buys my greens for the works' kitchen and pays on time. A good woman with a hard husband."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "Her yard is next to my strips; we trade eggs and gossip over the fence."
+      },
+      {
+        "name": "Corwin Vance",
+        "trust": 30,
+        "affinity": 22,
+        "label": "suitor",
+        "note": "Proud for a man who works another man's stone. Wants my daughter and a foreman's place."
+      },
+      {
+        "name": "Silas Vance",
+        "trust": 28,
+        "affinity": 20,
+        "label": "rival",
+        "note": "Thinks my girl beneath his son. We'll see whose ground feeds the town this winter."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: the terrace strips gave next to nothing and we ate the seed store down to the last sack.",
+        "salience": 0.85,
+        "about": [
+          "Verity Ashcombe"
+        ]
+      },
+      {
+        "gist": "The Council's clerk came round with the tithe book and would not write down a single bunch of greens, only grain.",
+        "salience": 0.7,
+        "about": [
+          "Barnaby Quill"
+        ]
+      },
+      {
+        "gist": "Rosalind told me she means to marry Corwin Vance, and I told her to wait a year and see if he's still standing.",
+        "salience": 0.75,
+        "about": [
+          "Rosalind Ashcombe",
+          "Corwin Vance"
+        ]
+      },
+      {
+        "gist": "The cairn cutting on the ridge: the quarrymen broke into the giants' stones and now the shelf has shut its gate on us.",
+        "salience": 0.6,
+        "about": [
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "Verity and I planted the poor strip together the spring we married, and it came up better than anyone said it would.",
+        "salience": 0.5,
+        "about": [
+          "Verity Ashcombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "tithe_in_greens_not_grain",
+        "value": 0.9,
+        "why": "the terrace grows greens and roots; the Council should take what the ground gives or take nothing"
+      },
+      {
+        "key": "no_begging",
+        "value": 0.85,
+        "why": "a man who begs for his tithe has already lost the argument"
+      },
+      {
+        "key": "quarrymen_are_proud_for_hirelings",
+        "value": 0.7,
+        "why": "the Vances work other men's stone and talk as if they own the ridge"
+      },
+      {
+        "key": "rosalind_should_wait",
+        "value": 0.75,
+        "why": "a year will show whether the boy is steady or only eager"
+      },
+      {
+        "key": "sell_to_the_works_kitchen",
+        "value": 0.8,
+        "why": "Ruth Pike pays on time and the town must eat what we grow"
+      }
+    ],
+    "secret": ""
+  },
+  "Verity Ashcombe": {
+    "narrative": "I keep the terrace hens and the seed store, and I can tell you which strip will fail by the look of the soil in spring. Hedley frets at the tithe and the clerk's hard ledger, and I let him fret; I would trade eggs and roots against it tomorrow if the clerk would write them down. Rosalind is set on her new crop and her quarryman, and I say let the girl try — the poor ground will teach her what I cannot. Ottilie talks of nothing but the harbour, and I have not the heart to tell her I have never seen it either.",
+    "values": [
+      "thrift and a full seed store",
+      "practical peace over pride",
+      "the girls' futures",
+      "knowing the ground"
+    ],
+    "goals": [
+      "trade eggs and roots against the grain tithe",
+      "keep the seed store through the winter",
+      "see Rosalind settled without a family quarrel"
+    ],
+    "mood": "steady and watchful, tired of the tithe talk",
+    "traits": {
+      "caution": 72,
+      "sociability": 55,
+      "empathy": 68,
+      "curiosity": 50,
+      "ambition": 40,
+      "introspection": 62,
+      "temper": 38,
+      "nurture": 78
+    },
+    "relations": [
+      {
+        "name": "Hedley Ashcombe",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "Proud and stubborn, but he works that poor ground harder than any man could ask."
+      },
+      {
+        "name": "Rosalind Ashcombe",
+        "trust": 80,
+        "affinity": 76,
+        "label": "daughter",
+        "note": "She has my eye for the strips and her father's stubbornness. Let her try her crop."
+      },
+      {
+        "name": "Ottilie Ashcombe",
+        "trust": 82,
+        "affinity": 84,
+        "label": "daughter",
+        "note": "Dreams of the harbour and the tide lanterns. I've never seen them either."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "Trades eggs at her stall and hears the square's gossip before anyone."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 45,
+        "affinity": 42,
+        "label": "clerk",
+        "note": "If anyone can put eggs and roots in the tithe book, it's him, if he'll hear it."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 58,
+        "affinity": 52,
+        "label": "customer",
+        "note": "Feeds the works' kitchen and knows what a fair price is."
+      },
+      {
+        "name": "Corwin Vance",
+        "trust": 50,
+        "affinity": 48,
+        "label": "suitor",
+        "note": "Eager and not unkind. He may do for Rosalind yet."
+      },
+      {
+        "name": "Mabel Fenwick's stall",
+        "trust": 55,
+        "affinity": 50,
+        "label": "trade",
+        "note": "Eggs for ironware seconds, and a word about the Council's doings."
+      },
+      {
+        "name": "Ambrose Vell",
+        "trust": 35,
+        "affinity": 30,
+        "label": "council master",
+        "note": "Old Vell is slow to hear anything new, and the tithe is his to rule on."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: I rationed the seed store by the handful and the hens kept us alive when the strips gave nothing.",
+        "salience": 0.85,
+        "about": [
+          "Hedley Ashcombe"
+        ]
+      },
+      {
+        "gist": "Rosalind came to me about Corwin Vance, and I told her a farmer's daughter can marry a quarryman if he's steady.",
+        "salience": 0.7,
+        "about": [
+          "Rosalind Ashcombe",
+          "Corwin Vance"
+        ]
+      },
+      {
+        "gist": "The Council's clerk counted only grain and would not write down a single basket of roots or eggs.",
+        "salience": 0.65,
+        "about": [
+          "Barnaby Quill"
+        ]
+      },
+      {
+        "gist": "I taught Ottilie the names of the hens and which eggs to leave for setting.",
+        "salience": 0.5,
+        "about": [
+          "Ottilie Ashcombe"
+        ]
+      },
+      {
+        "gist": "The spring the poor strip came up green, Hedley laughed for the first time in months.",
+        "salience": 0.55,
+        "about": [
+          "Hedley Ashcombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "tithe_can_be_paid_in_kind",
+        "value": 0.85,
+        "why": "eggs and roots are what the terrace gives; the clerk should write what is given"
+      },
+      {
+        "key": "keep_the_seed_store_whole",
+        "value": 0.9,
+        "why": "a household that eats its seed has nothing next spring"
+      },
+      {
+        "key": "let_rosalind_try",
+        "value": 0.7,
+        "why": "the poor ground will teach her more than my warnings can"
+      },
+      {
+        "key": "pride_feeds_no_one",
+        "value": 0.75,
+        "why": "Hedley's stubbornness is right in its heart but it will not fill the tithe book"
+      },
+      {
+        "key": "trade_with_the_fenwick_stall",
+        "value": 0.6,
+        "why": "Mabel hears everything and her stall takes our eggs without a word"
+      }
+    ],
+    "secret": ""
+  },
+  "Rosalind Ashcombe": {
+    "narrative": "I work the terrace strips with my father, and I have a mind to try a new crop on the poor ground — clover and roots to hold the soil, whatever the old men say. I am courting Corwin Vance, and both our fathers have opinions they were not asked for; mine says wait a year, and Corwin's says a farmer's daughter is beneath a foreman's son. I am tired of the grumbling on both sides. The ground is the only thing here that tells the truth.",
+    "values": [
+      "trying what the old men won't",
+      "honest courtship",
+      "the ground's truth",
+      "a strip of her own"
+    ],
+    "goals": [
+      "prove a new crop on the poor strip",
+      "marry Corwin Vance without the fathers' quarrel",
+      "win a strip of her own to farm"
+    ],
+    "mood": "restless and determined",
+    "traits": {
+      "caution": 40,
+      "sociability": 58,
+      "empathy": 60,
+      "curiosity": 78,
+      "ambition": 72,
+      "introspection": 50,
+      "temper": 52,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Hedley Ashcombe",
+        "trust": 65,
+        "affinity": 58,
+        "label": "father",
+        "note": "He knows the ground better than anyone, but he will not hear of a new crop or of Corwin."
+      },
+      {
+        "name": "Verity Ashcombe",
+        "trust": 82,
+        "affinity": 78,
+        "label": "mother",
+        "note": "She says let me try, and she means it. She has my back against Father."
+      },
+      {
+        "name": "Ottilie Ashcombe",
+        "trust": 76,
+        "affinity": 72,
+        "label": "sister",
+        "note": "All hens and harbour dreams. I'd take her to see the sea myself if I could."
+      },
+      {
+        "name": "Corwin Vance",
+        "trust": 72,
+        "affinity": 80,
+        "label": "suitor",
+        "note": "Steady on the quarry floor and gentler than his father. I mean to have him."
+      },
+      {
+        "name": "Silas Vance",
+        "trust": 25,
+        "affinity": 20,
+        "label": "his father",
+        "note": "Thinks me beneath his son. A foreman's pride is a thin thing to build a marriage on."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 55,
+        "affinity": 52,
+        "label": "neighbour",
+        "note": "Her stall hears everything; she trades fair and doesn't talk down to farmers."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 50,
+        "affinity": 48,
+        "label": "friend",
+        "note": "We talk at the stall about the boys and the Council and the price of everything."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 48,
+        "affinity": 45,
+        "label": "customer",
+        "note": "Buys our greens for the works' kitchen; she'd buy clover seed too if it grew."
+      },
+      {
+        "name": "Bisi Oyelaran",
+        "trust": 50,
+        "affinity": 45,
+        "label": "acquaintance",
+        "note": "Quick with numbers, and she wants to learn the foundry books."
+      },
+      {
+        "name": "Odile Vance",
+        "trust": 60,
+        "affinity": 58,
+        "label": "his mother",
+        "note": "She set my mother's wrist straight last winter and never once spoke down to us. If Corwin takes after anyone, it's her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I told Father I meant to marry Corwin Vance, and he told me to wait a year as if I were a child.",
+        "salience": 0.8,
+        "about": [
+          "Hedley Ashcombe",
+          "Corwin Vance"
+        ]
+      },
+      {
+        "gist": "Corwin walked me along the clock tower steps and said his father would come round; I am not so sure.",
+        "salience": 0.7,
+        "about": [
+          "Corwin Vance",
+          "Silas Vance"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the strips failed and Mother rationed the seed store by the handful.",
+        "salience": 0.75,
+        "about": [
+          "Verity Ashcombe"
+        ]
+      },
+      {
+        "gist": "I sowed a patch of clover on the poor strip without telling Father, and it came up thick as a mat.",
+        "salience": 0.65,
+        "about": []
+      },
+      {
+        "gist": "Silas Vance looked me up and down at the square and said nothing, which was worse than saying it.",
+        "salience": 0.55,
+        "about": [
+          "Silas Vance"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "try_the_new_crop",
+        "value": 0.85,
+        "why": "the poor ground needs clover and roots, not another year of the same failing grain"
+      },
+      {
+        "key": "marry_corwin",
+        "value": 0.9,
+        "why": "he is steady and kind, and his father's pride is not his"
+      },
+      {
+        "key": "fathers_should_not_choose",
+        "value": 0.75,
+        "why": "both of them have opinions they were never asked for"
+      },
+      {
+        "key": "a_strip_of_my_own",
+        "value": 0.8,
+        "why": "I have worked other people's rows long enough"
+      },
+      {
+        "key": "the_ground_tells_the_truth",
+        "value": 0.7,
+        "why": "the soil says what will grow, and no clerk or foreman can argue with it"
+      }
+    ],
+    "secret": ""
+  },
+  "Ottilie Ashcombe": {
+    "narrative": "I drive the hens off the seed rows and help Mother with the eggs, and when the work is done I climb the clock tower steps and look south as far as I can see. They say Lanternquay is all neon and boats and tide lanterns lit for the drowned, and I have never been past the square. Rosalind says she will take me one day. I keep a gull's feather in my pocket for luck.",
+    "values": [
+      "the harbour and the wide world",
+      "the hens and the eggs",
+      "her sister's promises"
+    ],
+    "goals": [
+      "see Lanternquay and the tide lanterns",
+      "keep the hens out of the seed rows",
+      "grow tall enough to climb the clock tower alone"
+    ],
+    "mood": "bright and daydreaming",
+    "traits": {
+      "caution": 35,
+      "sociability": 66,
+      "empathy": 62,
+      "curiosity": 85,
+      "ambition": 45,
+      "introspection": 30,
+      "temper": 35,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Verity Ashcombe",
+        "trust": 85,
+        "affinity": 82,
+        "label": "mother",
+        "note": "She teaches me the hens and the eggs and never laughs at my harbour talk."
+      },
+      {
+        "name": "Hedley Ashcombe",
+        "trust": 70,
+        "affinity": 65,
+        "label": "father",
+        "note": "Grumbles about the tithe, but he lets me climb the tower steps when the work's done."
+      },
+      {
+        "name": "Rosalind Ashcombe",
+        "trust": 88,
+        "affinity": 86,
+        "label": "sister",
+        "note": "She says she'll take me to Lanternquay one day. I believe her."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 55,
+        "affinity": 52,
+        "label": "friend",
+        "note": "She minds her mother's stall and knows the price of everything in the square."
+      },
+      {
+        "name": "Perry Fenwick",
+        "trust": 48,
+        "affinity": 50,
+        "label": "playmate",
+        "note": "He climbs the clock tower steps too, and we race to the top."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 60,
+        "affinity": 55,
+        "label": "mother's friend",
+        "note": "She has an ironware stall and sometimes gives me a sweet."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Rosalind told me about Lanternquay and the tide lanterns, and I have wanted to see them ever since.",
+        "salience": 0.7,
+        "about": [
+          "Rosalind Ashcombe"
+        ]
+      },
+      {
+        "gist": "I chased the hens off the seed rows for a whole morning and Mother gave me a cake for it.",
+        "salience": 0.5,
+        "about": [
+          "Verity Ashcombe"
+        ]
+      },
+      {
+        "gist": "The clock struck while I was on the tower steps and I near fell down the stair with fright.",
+        "salience": 0.45,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "see_lanternquay",
+        "value": 0.8,
+        "why": "the harbour and the tide lanterns are the only thing worth dreaming of past the square"
+      },
+      {
+        "key": "mind_the_hens",
+        "value": 0.6,
+        "why": "the hens and eggs are my work and Mother trusts me with them"
+      }
+    ],
+    "secret": ""
+  }
+}

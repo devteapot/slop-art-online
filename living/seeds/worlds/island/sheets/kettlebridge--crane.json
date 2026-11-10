@@ -1,0 +1,807 @@
+{
+  "Hester Crane": {
+    "narrative": "I keep the foundry's books, and I know to the crate how short we are on the Lanternquay order. My father is proud and will not admit it, so I write to Mercy Abbot without telling him how far the letters go. Two years ago Tobin Marrow shamed me before both towns, and I have not forgotten; but I was relieved when he broke it, and that is mine to keep.",
+    "values": [
+      "competence",
+      "family",
+      "pride",
+      "discretion"
+    ],
+    "goals": [
+      "Meet the Lanternquay stone order without breaking the works",
+      "Settle Lanternquay's debt before another load goes down",
+      "Reopen northern trade with Brackenford through Mercy Abbot",
+      "Keep the foundry books straight and her own counsel"
+    ],
+    "mood": "composed, watchful, quietly resentful",
+    "traits": {
+      "caution": 70,
+      "sociability": 45,
+      "empathy": 55,
+      "curiosity": 60,
+      "ambition": 65,
+      "introspection": 75,
+      "temper": 30,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Josiah Crane",
+        "trust": 70,
+        "affinity": 60,
+        "label": "father",
+        "note": "I keep his books and his secrets, but I cannot tell him how far my letters go."
+      },
+      {
+        "name": "Prudence Crane",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She feeds the Council and hears everything; I can be quiet with her."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": -60,
+        "affinity": -40,
+        "label": "former betrothed",
+        "note": "He shamed me before both towns; I will not forget, though I was glad of it."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 50,
+        "affinity": 40,
+        "label": "correspondent",
+        "note": "She wants the gate-due gone and trade back; I write to her without my father knowing how far."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 40,
+        "affinity": 30,
+        "label": "clerk",
+        "note": "He wrote the seawall indenture; I copied it and know the clause is ambiguous."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 30,
+        "affinity": 20,
+        "label": "runner",
+        "note": "She carries our stone south and wants the debt settled; we are polite."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": -20,
+        "affinity": -10,
+        "label": "debtor",
+        "note": "She has not paid for the last load and calls our price a drowning man's price."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 20,
+        "affinity": 10,
+        "label": "quarryman",
+        "note": "His fear keeps the ridge closed and the order short; I wish he would answer for it."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": 40,
+        "affinity": 35,
+        "label": "workman",
+        "note": "He works cheap and well; my father uses him, and I count his hours in the book."
+      },
+      {
+        "name": "Bisi Oyelaran",
+        "trust": 45,
+        "affinity": 40,
+        "label": "would-be apprentice",
+        "note": "She wants to learn the foundry books from me; she is quick and I am inclined to teach her."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 45,
+        "affinity": 40,
+        "label": "carter",
+        "note": "He brings our stone north and pays the gate-due. He hates it and I do not blame him."
+      },
+      {
+        "name": "Ambrose Vell",
+        "trust": 65,
+        "affinity": 50,
+        "label": "council master",
+        "note": "He says little at the Council table and means all of it. He grumbles at the gate-due as I do, and he has never once asked me to soften a figure in the book."
+      },
+      {
+        "name": "Corin Holt",
+        "trust": 45,
+        "affinity": 35,
+        "label": "quarry tally-keeper",
+        "note": "Her tally is the cleanest of any crew's, and she says to my face that her husband was careless on the ridge. I would rather have her honesty than his excuses."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 40,
+        "affinity": 25,
+        "label": "builder",
+        "note": "He builds the seawall crates and complains about Dele's wages in the same breath. He is owed for brick and he is owed nothing for the grudge."
+      },
+      {
+        "name": "Ife Oyelaran",
+        "trust": 35,
+        "affinity": 45,
+        "label": "terrace cook",
+        "note": "She feeds the terrace's children for a mark a bowl and says the works' kitchen could pay more. She is not wrong, and I write the figures that prove it."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 50,
+        "affinity": 55,
+        "label": "stallkeeper's daughter",
+        "note": "She has a good eye for a cracked pot and a better one for people. She stays friendly with Bisi though her father will not, and I notice such things."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 55,
+        "affinity": 50,
+        "label": "ironware trader",
+        "note": "She trades our foundry's seconds and never tries to hide a flaw in them. Her stall fee is owed and she will get it; I keep the book straight."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 60,
+        "affinity": 55,
+        "label": "works cook",
+        "note": "She wants Silas off the road and I want the stone moving. We have argued it over the kitchen table and neither of us has won."
+      },
+      {
+        "name": "Wenna Marrow",
+        "trust": 20,
+        "affinity": -10,
+        "label": "the other woman",
+        "note": "The town blames her and my mother blames her, but she did not break the promise. I cannot look at her without seeing the broken match, and that is my burden, not hers."
+      },
+      {
+        "name": "Wick Quell",
+        "trust": 30,
+        "affinity": 35,
+        "label": "fisher",
+        "note": "He fishes his uncle's drowned boat and resents our stone price. His mother owes us for the last load; he will hear the tally from me sooner or later."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Tobin broke our match a month before the wedding and married Wenna; I stood in the foundry yard while the town talked.",
+        "salience": 0.9,
+        "about": [
+          "Tobin Marrow",
+          "Josiah Crane",
+          "Prudence Crane"
+        ]
+      },
+      {
+        "gist": "I was relieved when it ended; I did not want to leave the works for Brackenford.",
+        "salience": 0.8,
+        "about": [
+          "Tobin Marrow"
+        ]
+      },
+      {
+        "gist": "I copied the seawall indenture into the foundry book and saw the clause could be read two ways.",
+        "salience": 0.7,
+        "about": [
+          "Barnaby Quill",
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "I began writing to Mercy Abbot about reopening the northern trade, without telling my father how far it goes.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "My mother set the Council's table after a sitting and I heard the masters argue the tithe and the stone price.",
+        "salience": 0.5,
+        "about": [
+          "Prudence Crane",
+          "Ambrose Vell",
+          "Josiah Crane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_books_honest",
+        "value": 0.9,
+        "why": "The numbers are the only thing in the works that cannot be argued with."
+      },
+      {
+        "key": "settle_lanternquay_debt",
+        "value": 0.8,
+        "why": "They owe us for the last load, and we cannot carry them forever."
+      },
+      {
+        "key": "reopen_northern_trade",
+        "value": 0.7,
+        "why": "The ridge is closed and the order is short; Brackenford is the way to cover it."
+      },
+      {
+        "key": "never_show_the_shortfall",
+        "value": 0.8,
+        "why": "My father would rather buy time than break his word, and I will not shame him."
+      },
+      {
+        "key": "hold_the_insult",
+        "value": 0.6,
+        "why": "Tobin shamed me before both towns; I will not forget, even if I was glad."
+      }
+    ],
+    "secret": "I was relieved when Tobin broke the match; I did not want to leave the works."
+  },
+  "Josiah Crane": {
+    "narrative": "I am foundry master and chair of the Works Council, and I built this works with my hands and my word. Aldric Marrow's son insulted my house when he broke his promise to Hester, and Kettlebridge remembers: stone goes south now as much as north. The cairn cutting closed the ridge, and I will not beg a giant's pardon, but the Lanternquay order must be met.",
+    "values": [
+      "pride",
+      "work",
+      "contract",
+      "family"
+    ],
+    "goals": [
+      "Meet the Lanternquay seawall order and keep the works' name",
+      "Reopen the ridge quarry without begging the giants",
+      "Get Pell back and make an example of him",
+      "Keep the gate-due fought at every turn"
+    ],
+    "mood": "proud, pressed, stubborn",
+    "traits": {
+      "caution": 55,
+      "sociability": 60,
+      "empathy": 35,
+      "curiosity": 40,
+      "ambition": 80,
+      "introspection": 45,
+      "temper": 70,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Hester Crane",
+        "trust": 75,
+        "affinity": 70,
+        "label": "daughter",
+        "note": "She keeps my books and knows the works better than any clerk; I am proud of her."
+      },
+      {
+        "name": "Prudence Crane",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps my house and my table, and the Council eats from her hand."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -80,
+        "affinity": -70,
+        "label": "rival",
+        "note": "His son insulted my house, and he keeps the gate-due that robs every carter."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": -90,
+        "affinity": -80,
+        "label": "betrayer",
+        "note": "He broke his promise to my daughter and shamed my house before both towns."
+      },
+      {
+        "name": "Ambrose Vell",
+        "trust": 65,
+        "affinity": 60,
+        "label": "council second",
+        "note": "Slow to speak and slower to forgive; he sits with me and I count on him."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 50,
+        "affinity": 45,
+        "label": "clerk",
+        "note": "He holds the contracts and reads the seawall clause against me; I want it read again."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 20,
+        "affinity": 10,
+        "label": "quarryman",
+        "note": "He led the cutting and now will not climb; his fear costs the works, and he must answer."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 60,
+        "affinity": 55,
+        "label": "carter",
+        "note": "He has been robbed twice and still carries our stone; I trust him on the road."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": 40,
+        "affinity": 30,
+        "label": "hired hand",
+        "note": "He works cheap and does not complain; the quay folk are useful."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 55,
+        "affinity": 50,
+        "label": "builder",
+        "note": "He builds the seawall crates and resents the cheap hands; I keep him working."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": -30,
+        "affinity": -20,
+        "label": "debtor",
+        "note": "She has not paid for the last load and calls our price a drowning man's price."
+      },
+      {
+        "name": "Pell",
+        "trust": -70,
+        "affinity": -60,
+        "label": "runaway apprentice",
+        "note": "He ran from his indenture; I hold it and want him back to answer for it."
+      },
+      {
+        "name": "Silas Vance",
+        "trust": 40,
+        "affinity": 30,
+        "label": "foreman",
+        "note": "He worked the cutting beside Ezra and has not gone back up. He is steadier than Ezra, and I need him."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 35,
+        "affinity": 25,
+        "label": "runner",
+        "note": "She carries our stone south and reads the clause her way. She will have her marks when the stone is cut."
+      },
+      {
+        "name": "Corin Holt",
+        "trust": 45,
+        "affinity": 25,
+        "label": "quarry tally",
+        "note": "She keeps the quarry tally straight and tells me her husband was careless. I would hear that from her before I hear it from anyone."
+      },
+      {
+        "name": "Corwin Vance",
+        "trust": 35,
+        "affinity": 30,
+        "label": "quarry hand",
+        "note": "Silas's boy works the floor and wants his father's place. Ambition is no bad thing in a quarryman."
+      },
+      {
+        "name": "Odile Vance",
+        "trust": 40,
+        "affinity": 15,
+        "label": "healer",
+        "note": "She sets the quarrymen's bones and says the cutting was wrong. I do not want a healer's sermons, but she is good at what she does."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 50,
+        "affinity": 40,
+        "label": "works cook",
+        "note": "She feeds the works and wants her husband off the road. A sensible woman with a sensible worry."
+      },
+      {
+        "name": "Tobiah Marsh",
+        "trust": 50,
+        "affinity": 35,
+        "label": "crate-maker",
+        "note": "He makes the crates for Silas's loads and grumbles at the Brackenford due. A careful man with a saw, and I pay him for it."
+      },
+      {
+        "name": "Wenna Marrow",
+        "trust": 0,
+        "affinity": -50,
+        "label": "the weaver's daughter",
+        "note": "She is the reason my daughter was shamed. I have nothing to say to her and less to say of her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Tobin Marrow broke his promise to Hester a month before the wedding; I stood in the Council yard and heard the town talk.",
+        "salience": 0.9,
+        "about": [
+          "Tobin Marrow",
+          "Hester Crane",
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "The quarrymen cut into a giants' cairn on the ridge, and Hollbrenna closed the shelf to us; I will not beg her pardon.",
+        "salience": 0.8,
+        "about": [
+          "Ezra Holt",
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "I promised Lanternquay a great quantity of seawall stone at Hester's price, and the works cannot cut it fast enough.",
+        "salience": 0.7,
+        "about": [
+          "Hester Crane",
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "Pell ran from the foundry before his indenture ended; I offered marks for word of him.",
+        "salience": 0.6,
+        "about": [
+          "Pell",
+          "Barnaby Quill"
+        ]
+      },
+      {
+        "gist": "Silas Pike was robbed twice on the stone road and still brought the load through; I remember that.",
+        "salience": 0.5,
+        "about": [
+          "Silas Pike"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_works_name",
+        "value": 0.9,
+        "why": "A contract is a man's word, and mine is the works."
+      },
+      {
+        "key": "never_beg_the_giants",
+        "value": 0.8,
+        "why": "Hollbrenna closed the shelf; I will not go to her on my knees."
+      },
+      {
+        "key": "get_pell_back",
+        "value": 0.7,
+        "why": "He ran from his indenture, and if one boy runs the rest will follow."
+      },
+      {
+        "key": "fight_the_gate_due",
+        "value": 0.8,
+        "why": "Brackenford's due robs every carter and drives trade away."
+      },
+      {
+        "key": "hold_the_insult",
+        "value": 0.9,
+        "why": "Aldric's son insulted my house, and Kettlebridge remembers."
+      }
+    ],
+    "secret": ""
+  },
+  "Prudence Crane": {
+    "narrative": "I keep the foundry house and its table, and the Council's masters eat here after every sitting. I hear what they say and I keep it. The Marrows owe my house an apology, and I have not had it; until I do, they will not sit at my table.",
+    "values": [
+      "family",
+      "hospitality",
+      "loyalty",
+      "pride"
+    ],
+    "goals": [
+      "Keep the foundry house and its table as it should be",
+      "See the Marrows apologise for the broken match",
+      "Keep the Council's masters fed and their talk in the house"
+    ],
+    "mood": "warm to her own, cold to the Marrows",
+    "traits": {
+      "caution": 60,
+      "sociability": 70,
+      "empathy": 65,
+      "curiosity": 50,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 45,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Josiah Crane",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He built this works with his hands, and I keep his house and his table."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 80,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "She keeps the books and her own counsel; I am proud of her."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -70,
+        "affinity": -60,
+        "label": "grudge",
+        "note": "His son insulted my house, and he has never come to apologise."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": -80,
+        "affinity": -70,
+        "label": "betrayer",
+        "note": "He broke his promise to my daughter and shamed us before both towns."
+      },
+      {
+        "name": "Ambrose Vell",
+        "trust": 65,
+        "affinity": 60,
+        "label": "council master",
+        "note": "He eats at my table and speaks slowly; I keep his plate warm."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 50,
+        "affinity": 45,
+        "label": "clerk",
+        "note": "He winds the clock and writes the contracts; he is careful at my table."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": 30,
+        "affinity": 25,
+        "label": "workman",
+        "note": "He works cheap for my husband; I have no quarrel with him."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 55,
+        "affinity": 50,
+        "label": "builder",
+        "note": "He builds the crates and grumbles about the cheap hands; I feed him all the same."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": -20,
+        "affinity": -15,
+        "label": "debtor",
+        "note": "She has not paid for the stone, and I hear it at my table."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 55,
+        "affinity": 50,
+        "label": "works cook",
+        "note": "She feeds the works and I feed the masters. We understand each other's work."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 50,
+        "affinity": 45,
+        "label": "stallkeeper",
+        "note": "She keeps an ironware stall in the square and trades with our foundry. She is sharp and I like her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Tobin Marrow broke his promise to Hester a month before the wedding; I set the table that night for a house that had been shamed.",
+        "salience": 0.9,
+        "about": [
+          "Tobin Marrow",
+          "Hester Crane",
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "I fed the Council's masters after the sitting where they argued the gate-due and the stone price.",
+        "salience": 0.7,
+        "about": [
+          "Ambrose Vell",
+          "Josiah Crane",
+          "Barnaby Quill"
+        ]
+      },
+      {
+        "gist": "Hester told me she was glad the match broke; I have kept that to myself.",
+        "salience": 0.6,
+        "about": [
+          "Hester Crane"
+        ]
+      },
+      {
+        "gist": "I heard at my own table that Lanternquay had not paid for the last load.",
+        "salience": 0.5,
+        "about": [
+          "Mara Quell",
+          "Josiah Crane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_house_and_table",
+        "value": 0.9,
+        "why": "The Council eats here, and a house is judged by its table."
+      },
+      {
+        "key": "demand_the_apology",
+        "value": 0.8,
+        "why": "The Marrows shamed my house and have never come to say sorry."
+      },
+      {
+        "key": "keep_the_council_fed",
+        "value": 0.7,
+        "why": "A fed master speaks freely, and I hear what is said."
+      },
+      {
+        "key": "hold_the_family_close",
+        "value": 0.8,
+        "why": "Hester and Josiah are my house, and I will not see them shamed again."
+      }
+    ],
+    "secret": ""
+  },
+  "Ambrose Vell": {
+    "narrative": "I am old master of the brickworks and second voice on the Works Council. I speak slowly and forgive more slowly. Josiah is my chair and my friend, but I think the tithe should be forgiven this winter, though I will not fight him over a farmer. The gate-due at Brackenford is a robbery, and I have said so.",
+    "values": [
+      "work",
+      "fairness",
+      "patience",
+      "loyalty"
+    ],
+    "goals": [
+      "Keep the brickworks and the kiln yard in good order",
+      "See the gate-due at Brackenford dropped",
+      "Hold the Council together behind Josiah"
+    ],
+    "mood": "slow, steady, quietly stubborn",
+    "traits": {
+      "caution": 75,
+      "sociability": 50,
+      "empathy": 60,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 70,
+      "temper": 35,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Josiah Crane",
+        "trust": 75,
+        "affinity": 70,
+        "label": "council chair",
+        "note": "He chairs the Council and I sit second; he is a hard man but a straight one."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 60,
+        "affinity": 55,
+        "label": "clerk",
+        "note": "She keeps the foundry books and knows them; I respect that."
+      },
+      {
+        "name": "Prudence Crane",
+        "trust": 65,
+        "affinity": 60,
+        "label": "hostess",
+        "note": "She feeds the Council after every sitting, and I am glad of it."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 55,
+        "affinity": 50,
+        "label": "clerk",
+        "note": "He writes the contracts and winds the clock; a careful man."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 30,
+        "affinity": 25,
+        "label": "tenant",
+        "note": "He rents my kiln yard and led the cutting; I keep my peace with him."
+      },
+      {
+        "name": "Hedley Ashcombe",
+        "trust": 40,
+        "affinity": 35,
+        "label": "farmer",
+        "note": "He is behind on his tithe, and I think it should be forgiven this winter."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 45,
+        "affinity": 40,
+        "label": "builder",
+        "note": "He builds the seawall crates; he owes Josiah for brick and I hear of it."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 50,
+        "affinity": 45,
+        "label": "carter",
+        "note": "He has been robbed twice and still carries; a good man on the road."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -50,
+        "affinity": -40,
+        "label": "reeve",
+        "note": "He keeps the gate-due that robs every carter, and I have no love for it."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": 45,
+        "affinity": 50,
+        "label": "works hand",
+        "note": "He came up from the quay and works cheap. The builders resent him, but the man has to eat."
+      },
+      {
+        "name": "Silas Vance",
+        "trust": 55,
+        "affinity": 45,
+        "label": "quarry foreman",
+        "note": "He worked the cutting beside Ezra and has not gone back up the ridge since. A foreman who will not go where he sends his men is no foreman; still, he has not lied about it, and I am slow to condemn a man for fear."
+      },
+      {
+        "name": "Verity Ashcombe",
+        "trust": 60,
+        "affinity": 65,
+        "label": "farmer's wife",
+        "note": "She knows which strips will fail and keeps the seed store against it. If the Council had her sense, we would count Hedley's greens and be done. I will not fight Josiah over a farmer, but she is the one I would listen to."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I sat second on the Council when Josiah sent stone south to Lanternquay as much as north to Brackenford.",
+        "salience": 0.7,
+        "about": [
+          "Josiah Crane",
+          "Hester Crane"
+        ]
+      },
+      {
+        "gist": "The quarrymen cut into a giants' cairn on the ridge; I said little, but I remember the silence in the Council yard.",
+        "salience": 0.6,
+        "about": [
+          "Ezra Holt",
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "I argued at the sitting that Hedley Ashcombe's tithe should be forgiven this winter, and Josiah would not hear it.",
+        "salience": 0.5,
+        "about": [
+          "Hedley Ashcombe",
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "I buried an old foundry hand who had worked beside me; the Crane men carried him.",
+        "salience": 0.4,
+        "about": [
+          "Josiah Crane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "forgive_the_tithe",
+        "value": 0.6,
+        "why": "The winter is hard and the store is short; a farmer cannot pay in grain he does not have."
+      },
+      {
+        "key": "drop_the_gate_due",
+        "value": 0.8,
+        "why": "Brackenford's due robs every carter and sours the road."
+      },
+      {
+        "key": "hold_the_council_together",
+        "value": 0.7,
+        "why": "The works stand on the Council, and the Council stands on Josiah."
+      },
+      {
+        "key": "keep_the_works_running",
+        "value": 0.8,
+        "why": "The brickworks and the kiln yard are my life's work."
+      }
+    ],
+    "secret": ""
+  }
+}

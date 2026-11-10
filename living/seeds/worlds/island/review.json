@@ -1,0 +1,315 @@
+{
+ "Brackenford": [
+  {
+   "person": "Marta Tolley",
+   "with": "Hal Tolley",
+   "problem": "Her children Tib and Nell Tolley both list Hal Tolley as their father, but Marta Tolley's sheet lists no husband at all.",
+   "fix": "Add Hal Tolley as her husband in her family sheet."
+  },
+  {
+   "person": "Sister Elspeth",
+   "with": "Cuth Marrow",
+   "problem": "Cuth Marrow lists Sister Elspeth as her sister, but Elspeth's sheet names only Sister Alys and Sister Perrin as sisters.",
+   "fix": "Add Cuth Marrow to Elspeth's sisters (or mark Cuth's tie as chapel sisterhood on Cuth's sheet)."
+  },
+  {
+   "person": "Sister Elspeth",
+   "with": "Hilda Smith",
+   "problem": "Hilda Smith lists Sister Elspeth as her elder sister, but Elspeth's sheet names only Alys and Perrin as sisters.",
+   "fix": "Add Hilda Smith to Elspeth's sisters (or mark Hilda's tie as chapel sisterhood on Hilda's sheet)."
+  },
+  {
+   "person": "Sister Elspeth",
+   "with": "Mildgyth Grey",
+   "problem": "Mildgyth Grey lists Sister Elspeth as her sister, but Elspeth's sheet names only Alys and Perrin as sisters.",
+   "fix": "Add Mildgyth Grey to Elspeth's sisters (or mark Mildgyth's tie as chapel sisterhood on Mildgyth's sheet)."
+  },
+  {
+   "person": "Sister Alys",
+   "with": "Edith Ashby",
+   "problem": "Edith Ashby lists Sister Alys as her sister, but Alys's sheet names only Sister Elspeth and Sister Perrin as sisters.",
+   "fix": "Add Edith Ashby to Alys's sisters (or mark Edith's tie as chapel sisterhood on Edith's sheet)."
+  },
+  {
+   "person": "Osric Dunn",
+   "with": "Edda Wray",
+   "problem": "Osric publicly blames Edda for wrecking his brother's boat and wants her to answer for it, yet his relation shows trust 10 and affinity 5 — mildly positive feelings that flatly contradict the accusation.",
+   "fix": "Change his trust/affinity toward Edda Wray to clearly negative values (e.g., trust -40, affinity -60) while keeping the 'accused' label and blame."
+  }
+ ],
+ "Thornby": [
+  {
+   "person": "Osric Dunn",
+   "with": "dunn-courtship",
+   "problem": "His side says he 'has not thought about it at all', but his own memory records 'I thought it a good match until the talk began' and he holds a goal to keep the courtship from causing talk, so he is plainly aware of both the match and the talk.",
+   "fix": "His side should say he has heard the talk but waves it off and assumes Perrin will do as he likes, rather than that he has not thought about it at all."
+  }
+ ],
+ "Reedmoor": [
+  {
+   "person": "Nell Sedge",
+   "with": "situation sedge-courtship",
+   "problem": "Nell's stance 'no_word_without_a_boat' says the match waits 'until the boy has a net of his own', but the situation, her own relation note ('he needs a boat before I give my word'), and her goal all make the condition a boat of his own.",
+   "fix": "Change the stance description to 'Wyn's match to Godric can wait until the boy has a boat of his own.'"
+  }
+ ],
+ "Coldwell": [
+  {
+   "person": "Pell",
+   "with": "Kai Ostrander",
+   "problem": "Pell's sheet labels Kai 'friend' while Kai's sheet and the family record call Pell Kai's younger brother.",
+   "fix": "Change Pell's relation label for Kai to 'brother' (or Kai's to 'friend') so both sheets agree."
+  },
+  {
+   "person": "Marta Hale",
+   "with": "pell-indenture",
+   "problem": "Marta's relation note says Pell is 'still tied to Crane's indenture, though he does not speak of it', but the situation says she does not know and would be angry to learn it.",
+   "fix": "Her note on Pell should say she has taken him in as one of her own without knowing about the indenture, at most a vague suspicion."
+  },
+  {
+   "person": "Sayer Hale",
+   "with": "Sister Elspeth",
+   "problem": "Sayer's memory says she carried Robin to the chapel in Brackenford during the fever, but Elspeth, Marta, Robin and Agnes all say Elspeth came to Coldwell to nurse him.",
+   "fix": "Sayer's memory should say Sister Elspeth came through the snow to Coldwell and sat up with Robin."
+  },
+  {
+   "person": "Sister Elspeth",
+   "with": "Sayer Hale",
+   "problem": "Elspeth's note says Sayer herself came by the chapel door with the word, but Sayer and Agnes agree the message went Sayer to Agnes at the inn to the chapel.",
+   "fix": "Elspeth's note on Sayer should say the word reached her through Agnes Fenner, not from Sayer at the chapel door."
+  },
+  {
+   "person": "Silas Pike",
+   "with": "Wat Fenner",
+   "problem": "Silas's note says Wat 'has said he will ride out with me', but Wat's sheet only commits to guarding the cart if ordered and makes no promise.",
+   "fix": "Silas's note should say he has asked Wat for an escort and means to hold him to it, not that Wat has agreed."
+  },
+  {
+   "person": "Ned Hale",
+   "with": "Aldwin Hale",
+   "problem": "The family record lists Aldwin Hale as Ned's father-in-law, but Aldwin is Marta's late husband's father and no sheet supports the tie to Ned.",
+   "fix": "Remove Aldwin Hale from Ned's family entries."
+  },
+  {
+   "person": "Sayer Hale",
+   "with": "Aldwin Hale",
+   "problem": "The family record lists Aldwin Hale as Sayer's father-in-law, but she is Ned's wife and Aldwin is not Ned's father.",
+   "fix": "Remove Aldwin Hale from Sayer's family entries."
+  },
+  {
+   "person": "Kai Ostrander",
+   "with": "Sayer Hale",
+   "problem": "The family record lists Sayer Hale as Kai's sister-in-law, but Kai's sheets show no kinship with the Hale family.",
+   "fix": "Remove Sayer Hale from Kai's family entries; his only listed kin is Pell."
+  },
+  {
+   "person": "Aldwin Hale",
+   "with": "Sayer Hale",
+   "problem": "The family record lists Sayer as Aldwin's daughter-in-law, but she is married to Ned, not to Aldwin's son.",
+   "fix": "Remove Sayer from Aldwin's family entries or relabel her as Ned's wife."
+  }
+ ],
+ "Highfold": [],
+ "Elmwick": [],
+ "Sootwood": [
+  {
+   "person": "Durrow Hollis",
+   "with": "Pell Tarn",
+   "problem": "Durrow's note says Pell was also chased to the door and is as scared of the woods as him, but Pell's sheet says only Durrow was chased and Pell hid behind the stacks insisting he isn't afraid.",
+   "fix": "Change the note to say the wolves chased Durrow while Pell hid behind the stacks and kept his head, and Pell claims not to be scared."
+  },
+  {
+   "person": "Thistle Mossfoot",
+   "with": "Sena Tarn",
+   "problem": "Thistle's note says Sena 'will not hear it' about the smoke complaint, but Sena has quietly offered him a load of charcoal to smooth the grievance over.",
+   "fix": "Change the note to say Sena has offered a load of charcoal to settle the smoke complaint, though the pits' smoke still drifts over the hollow."
+  },
+  {
+   "person": "Cael Tarn",
+   "with": "situation winter-wolves",
+   "problem": "Cael's memory dates the wolves taking two of Orvin's goats to 'last winter', but the situation presents the goat-taking as a current event of this ill.",
+   "fix": "Change the memory to 'Wolves took two of Orvin's goats just recently; we heard them in the night' so it matches the present situation."
+  }
+ ],
+ "Lakemead": [
+  {
+   "person": "Jem Coombe",
+   "with": "Tibbott Coombe",
+   "problem": "Jem's sheet lists Tibbott as his father in relations, but his family sheet records parents as empty, contradicting Tibbott's claim of son Jem.",
+   "fix": "Jem Coombe's family sheet should list his parents as ['Tibbott Coombe']."
+  }
+ ],
+ "Saltings": [
+  {
+   "person": "Hollis Brine",
+   "with": "Rook Tarn",
+   "problem": "Hollis remembers promising to pay for the net by harvest, but Rook remembers the promise was to pay by the next storm season (which the debt situation also states).",
+   "fix": "Hollis's memory should say he took Rook Tarn's net and promised to pay by the next storm season, which then passed with the debt unpaid."
+  }
+ ],
+ "the North Light": [
+  {
+   "person": "Colm Wray",
+   "with": "Edda Wray",
+   "problem": "Colm's family sheet lists Edda Wray as his parent, but both his sheet and Edda's sheet state she is his grandmother (and Edda's narrative gives no parentage link), so the two records disagree on their relationship.",
+   "fix": "Change Colm Wray's parents list to [] (or unknown parents) and keep 'grandmother Edda Wray' as the stated relation, matching Edda's 'grandson Colm Wray'."
+  }
+ ],
+ "Ferncross": [
+  {
+   "person": "Alder Rush",
+   "with": "charcoal-debt",
+   "problem": "His memory says Bramwell 'sent it to Elmwick instead', but the situation and Bramwell's sheet say the charcoal share was never delivered because the pits burned slow.",
+   "fix": "Change the memory to 'Bramwell Ashdown promised me charcoal after last winter's burn and it has not come, because the pits burned slow and the Elmwick order came first.'"
+  },
+  {
+   "person": "Bramwell Ashdown",
+   "with": "Odelia Harrow",
+   "problem": "His narrative and stance say 'my wife sold the timber', but Odelia Harrow is Roderick Harrow's wife; Bramwell's wife is Nesta Ashdown.",
+   "fix": "His narrative and stance should say Odelia Harrow (his fellow woodcutter's wife) sold the timber fair, not 'my wife'."
+  }
+ ],
+ "Ashby": [
+  {
+   "person": "Marta Hale",
+   "with": "Hal Tolley",
+   "problem": "Marta Hale's sheet says Hal 'has asked the Guild for a guard,' but Hal's own sheet and the situation say he asked Mercy Abbot for stone to build a wall — a disagreement over what Hal actually requested.",
+   "fix": "Change Marta Hale's relation note on Hal Tolley to say he asked Mercy Abbot for stone for a wall round the yard, and the Guild has not sent any."
+  }
+ ],
+ "Tanglewood": [],
+ "Fernhollow": [
+  {
+   "person": "Tansy Hazel",
+   "with": "Clover Mossfoot",
+   "problem": "Tansy's sheet labels Clover Mossfoot as his 'wife' ('my wife Clover... our Sorrel'), but the pedlar-courtship situation and Clover's own sheet say Clover is Thistle Mossfoot's wife; the family list even gives Tansy two wives.",
+   "fix": "Tansy's sheet should list Clover Hazel as his wife (mother of Sorrel) and describe Clover Mossfoot as Thistle's wife with whom he has grown close — a close friend and confidant, not a wife."
+  },
+  {
+   "person": "Thistle Mossfoot",
+   "with": "Mallow Bramblecap",
+   "problem": "Thistle's family entry calls Mallow Bramblecap his 'mother-in-law', but Mallow's sheet says 'Betony is my wife, and Thistle is our son', and Betony's sheet also lists Thistle as her son.",
+   "fix": "Thistle's sheet should list Mallow Bramblecap as his mother (alongside Betony), not his mother-in-law."
+  },
+  {
+   "person": "Sorrel Fenwick",
+   "with": "Vetch Quill",
+   "problem": "Sorrel Fenwick's relation note says Vetch 'is as hot as I am to send word to the works', but Vetch's sheet plainly wants to wait for rain and send nothing, having said nothing at the common table.",
+   "fix": "Sorrel Fenwick's note on Vetch should say Vetch has spotted the leaf damage too but wants to wait for rain before provoking the works."
+  },
+  {
+   "person": "Alder Rush",
+   "with": "Vetch Quill",
+   "problem": "Alder's relation note says Vetch 'wants word sent to the Works Council over the smoke', which flatly contradicts Vetch's stance that a complaint will only make the works burn more and she wants to wait for rain.",
+   "fix": "Alder's note on Vetch should say she has seen the spots but wants to wait for rain rather than have the hollow provoke the works."
+  }
+ ],
+ "Highshelf": [
+  {
+   "person": "Tavvik",
+   "with": "Ezra Holt",
+   "problem": "His side text says he owes Ezra Holt for meat, but his own relations and Ezra's sheet both say Ezra Holt owes Tavvik for meat.",
+   "fix": "Change the side text so that Ezra Holt owes Tavvik for meat (matching the relations, memories, and Ezra's sheet)."
+  }
+ ],
+ "Kettlebridge": [
+  {
+   "person": "Silas Vance",
+   "with": "Ezra Holt",
+   "problem": "Relation labels Ezra as 'foreman', but Ezra is a quarryman and Silas is the foreman.",
+   "fix": "Change the label to 'quarryman'."
+  },
+  {
+   "person": "Silas Vance",
+   "with": "Corin Holt",
+   "problem": "Relation labels Corin as 'foreman's wife', but she is Ezra's wife; Silas's wife is Odile.",
+   "fix": "Change the label to 'quarryman's wife' or 'Ezra's wife'."
+  },
+  {
+   "person": "Josiah Crane",
+   "with": "Silas Pike",
+   "problem": "Note says Silas has not failed a load, but Silas was robbed twice and lost loads on the stone road.",
+   "fix": "Change the note to acknowledge the two robberies, e.g. 'He has been robbed twice and still carries our stone.'"
+  },
+  {
+   "person": "Barnaby Quill",
+   "with": "Hester Crane",
+   "problem": "Note says Hester reads the clause the same as Barnaby, but Hester's sheet says she finds it ambiguous and has not said which way she reads it.",
+   "fix": "Change the note to say she has not said which way she reads the clause."
+  },
+  {
+   "person": "Juno Reyes",
+   "with": "clock-contract",
+   "problem": "Side says the works agreed to the risk (favouring the quay), but the situation says Juno argues the clause favours the works.",
+   "fix": "Change the side to say she argues the clause favours the works, as the situation states."
+  },
+  {
+   "person": "Hedley Ashcombe",
+   "with": "Ambrose Vell",
+   "problem": "Note says Ambrose has no love for farmers who cannot pay, but Ambrose's sheet says he thinks Hedley has a case and would forgive the tithe.",
+   "fix": "Change the note to reflect Ambrose's sympathy or neutrality toward the tithe."
+  }
+ ],
+ "Lanternquay": [
+  {
+   "person": "Juno Reyes",
+   "with": "kai-alive",
+   "problem": "Her sheet says she keeps Kai Ostrander's secret safe, but the kai-alive secret situation lists only Ilse Ostrander and Wick Brine.",
+   "fix": "Remove Kai's secret from Juno's sheet, or add her to the kai-alive situation as a secret-keeper."
+  },
+  {
+   "person": "Ostrander Mackerel",
+   "with": "Sella Mackerel",
+   "problem": "His family entry lists Sella Mackerel as both a parent and his sister, though she is younger.",
+   "fix": "Make his parent Sella Mackerel the elder, not his sister Sella Mackerel."
+  },
+  {
+   "person": "Sella Mackerel",
+   "with": "Ostrander Mackerel",
+   "problem": "Her family entry lists Sella Mackerel as her own parent and also as Ostrander Mackerel's parent while she is his sister.",
+   "fix": "Make her parent Sella Mackerel the elder, not Sella Mackerel."
+  },
+  {
+   "person": "Perrin Tallow",
+   "with": "Sella Tallow",
+   "problem": "Her family entry lists her daughter Sella Tallow as her parent.",
+   "fix": "Make her parent Sella Tallow the elder, not her daughter Sella Tallow."
+  },
+  {
+   "person": "Mira Sallow",
+   "with": "Ostrander Sallow",
+   "problem": "Her family entry lists Sallow the elder as her parent, the same parent as her husband Ostrander, making them siblings.",
+   "fix": "Change Mira's parent from Sallow the elder to a different name."
+  },
+  {
+   "person": "Wick Brine",
+   "with": "Nia Brine",
+   "problem": "His family entry lists his wife Nia Brine as his parent and shares parent Brine the elder with her.",
+   "fix": "Give Wick different parents, not Nia Brine and not Brine the elder."
+  },
+  {
+   "person": "Marrow Wrack",
+   "with": "Odile Wrack",
+   "problem": "His family entry lists his wife Odile Wrack as his parent and shares parent Wrack the elder with her.",
+   "fix": "Make Marrow's parents Wrack the elder and Odile the elder, not Odile Wrack, and change the shared Wrack the elder."
+  },
+  {
+   "person": "Brannock Sedge",
+   "with": "Dory Sedge",
+   "problem": "His family entry and Dory's both list Sedge the elder as a parent while they are married.",
+   "fix": "Change one of their parents so the spouses are not siblings."
+  },
+  {
+   "person": "Ostrander Gull",
+   "with": "Wick Gull",
+   "problem": "His family entry gives him the same parents, Gull the elder and Mira Gull, as Wick Gull, but he is listed as Wick's uncle.",
+   "fix": "Give Ostrander Gull different parents, e.g., a sibling of Gull the elder."
+  },
+  {
+   "person": "Nia Gull",
+   "with": "Ostrander Gull",
+   "problem": "Her family entry lists Ostrander Gull as her parent, but Ostrander's sheet says she is his niece by marriage (Wick Gull's wife).",
+   "fix": "Change Nia's parent from Ostrander Gull to a different person."
+  }
+ ]
+}

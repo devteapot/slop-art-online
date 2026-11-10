@@ -1,0 +1,317 @@
+{
+  "Jory Pike": {
+    "narrative": "I fish the harbour from a boat that isn't mine, and I owe half the quay a little and pay most of it back when the catch is good. My mother has fed me on credit all my life, and now I'm courting Nia Wrack, and her mother looks at me like a bad tide. I'm cheerful about it, mostly. The debts will sort themselves out; a man with a good arm and a borrowed boat can always find work on the water.",
+    "values": [
+      "keeping cheerful when the tide turns",
+      "paying what I owe, most of it, eventually",
+      "the harbour and the people in it",
+      "Nia Wrack"
+    ],
+    "goals": [
+      "ask Nia Wrack properly, with her mother's blessing if I can get it",
+      "pay off what I owe Wick Gull and the rest",
+      "save enough for a net of my own, maybe a boat",
+      "help my mother clear her debt to Mira Sallow"
+    ],
+    "mood": "hopeful, a little anxious about Odile Wrack's cold eye",
+    "traits": {
+      "caution": 25,
+      "sociability": 78,
+      "empathy": 62,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 35,
+      "temper": 30,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Sella Pike",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She's fed me on credit since I could hold a line; I should be paying her back, not courting."
+      },
+      {
+        "name": "Nia Wrack",
+        "trust": 70,
+        "affinity": 90,
+        "label": "sweetheart",
+        "note": "Quick with a joke and quicker with a ladle; I'd ask her tomorrow if her mother would have me."
+      },
+      {
+        "name": "Odile Wrack",
+        "trust": 30,
+        "affinity": 20,
+        "label": "her mother",
+        "note": "She looks at me and sees a debt with legs. I'll win her round or die trying."
+      },
+      {
+        "name": "Wick Gull",
+        "trust": 55,
+        "affinity": 60,
+        "label": "creditor",
+        "note": "I owe him for a share of a catch, and he crews me when my boat's laid up. He's loud but fair."
+      },
+      {
+        "name": "Ostrander Mackerel",
+        "trust": 65,
+        "affinity": 70,
+        "label": "drinking friend",
+        "note": "Good lad, saving for his own net. We drink and complain about the stone price together."
+      },
+      {
+        "name": "Mira Sallow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "my mother's creditor",
+        "note": "She's kind enough, but she keeps the tally, and the tally's got my mother's name on it."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 60,
+        "affinity": 55,
+        "label": "stall neighbour",
+        "note": "Cooks a good fried fish and knows the price of everything. Nia's friendly with her."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 45,
+        "affinity": 40,
+        "label": "Harbour Warden",
+        "note": "She speaks for the quay, but my mother says the poor terrace should be fed before any seawall."
+      },
+      {
+        "name": "Lyss Fenner",
+        "trust": 60,
+        "affinity": 55,
+        "label": "stall neighbour",
+        "note": "Her soup stall's by the tide steps where the early boats come in; she knows who's paid and who hasn't, and she's never once dunned my mother for it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the surge came, I was out on the harbour mouth and rowed back through the wreckage of the lower quay; I pulled a neighbour's boy out of the water and never found his father.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "My mother's stall at the tide steps, the smell of frying fish and the way she'd slip a bowl to anyone who looked hungry, no marks asked.",
+        "salience": 0.7,
+        "about": [
+          "Sella Pike"
+        ]
+      },
+      {
+        "gist": "The first time Nia Wrack laughed at one of my jokes and didn't stop, at Ilse Ostrander's noodle stall after the night crews came in.",
+        "salience": 0.8,
+        "about": [
+          "Nia Wrack"
+        ]
+      },
+      {
+        "gist": "Wick Gull's boat laid up, so I crewed for him a whole season and learned the deep water past the harbour mouth; I still owe him a share of one catch.",
+        "salience": 0.6,
+        "about": [
+          "Wick Gull"
+        ]
+      },
+      {
+        "gist": "My mother took to her bed with the cough last winter and Mira Sallow's medicines pulled her through; I heard her tell Mira she'd pay when the season turned.",
+        "salience": 0.65,
+        "about": [
+          "Sella Pike",
+          "Mira Sallow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_what_you_can_when_you_can",
+        "value": 0.8,
+        "why": "A man who pays nothing gets no boat lent to him twice."
+      },
+      {
+        "key": "the_quay_looks_after_its_own",
+        "value": 0.7,
+        "why": "My mother fed half the quay on credit; that's how it's done, and it comes back round."
+      },
+      {
+        "key": "win_the_mother_or_no_wedding",
+        "value": 0.75,
+        "why": "Nia won't go against Odile Wrack, and I wouldn't ask her to."
+      },
+      {
+        "key": "debts_sort_themselves_out",
+        "value": 0.55,
+        "why": "I've been behind before and the tide always brought something in."
+      },
+      {
+        "key": "feed_the_poor_terrace_first",
+        "value": 0.6,
+        "why": "My mother says it, and she's right; a wall doesn't fill a belly."
+      }
+    ],
+    "secret": ""
+  },
+  "Sella Pike": {
+    "narrative": "I've kept a fried-fish stall by the tide steps for thirty years and fed half the quay on credit, and now the lean season has come round and I'm the one who owes. Mira Sallow's medicines kept me breathing through the winter and I haven't paid her a mark of it. My Jory is a good lad with a borrowed boat and a sweetheart, and I wish he'd ask the girl properly instead of leaving me to watch Odile Wrack's face. The stall-keepers are starting to talk about who pays and who doesn't, and I can hear my name in it.",
+    "values": [
+      "feeding people before asking questions",
+      "my son, settled and steady",
+      "the quay's poor before any seawall",
+      "paying my debts, though I can't bring myself to dun my neighbours"
+    ],
+    "goals": [
+      "pay Mira Sallow what I owe her for the medicines",
+      "see Jory ask Nia Wrack properly, with her mother's leave",
+      "keep the stall going through the lean weeks",
+      "stop the stall-keepers' talk before it hardens"
+    ],
+    "mood": "weary, proud, quietly ashamed of the tally",
+    "traits": {
+      "caution": 55,
+      "sociability": 70,
+      "empathy": 82,
+      "curiosity": 35,
+      "ambition": 30,
+      "introspection": 60,
+      "temper": 40,
+      "nurture": 88
+    },
+    "relations": [
+      {
+        "name": "Jory Pike",
+        "trust": 85,
+        "affinity": 90,
+        "label": "son",
+        "note": "A good lad with a borrowed boat; I wish he'd pay off a debt before he courts one."
+      },
+      {
+        "name": "Mira Sallow",
+        "trust": 60,
+        "affinity": 55,
+        "label": "creditor",
+        "note": "Her medicines kept me breathing and I can't look her in the eye till I've paid."
+      },
+      {
+        "name": "Nia Wrack",
+        "trust": 65,
+        "affinity": 70,
+        "label": "my son's sweetheart",
+        "note": "A hard worker and a good cook; she'd steady him, if her mother would have him."
+      },
+      {
+        "name": "Odile Wrack",
+        "trust": 35,
+        "affinity": 30,
+        "label": "her mother",
+        "note": "She counts every mark my Jory owes and never counts the ones he's paid."
+      },
+      {
+        "name": "Lyss Fenner",
+        "trust": 70,
+        "affinity": 65,
+        "label": "stall neighbour",
+        "note": "We trade soup and fried fish across the tide steps and neither of us keeps a tally."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 65,
+        "affinity": 60,
+        "label": "healer",
+        "note": "She set my wrist when I fell on the steps and never asked for payment."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 40,
+        "affinity": 35,
+        "label": "Harbour Warden",
+        "note": "She wants her seawall; I want the poor terrace fed first, and I've said so."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 55,
+        "affinity": 55,
+        "label": "stall neighbour",
+        "note": "Her noodle stall and mine have fed the night crews for years; we don't talk about who owes."
+      },
+      {
+        "name": "Ostrander Mackerel",
+        "trust": 60,
+        "affinity": 60,
+        "label": "young fisher",
+        "note": "He's eaten at my stall since he was a boy crewing for Cormorant; a steady lad, and he pays what he can when he can."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 65,
+        "affinity": 70,
+        "label": "stall neighbour",
+        "note": "We share a name and a trade and the same tide steps; she fries her fish and I fry mine, and we've never once quarrelled over a customer."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The surge took the lower quay and the houses on it, and I fried fish all night for the families who came up the steps with nothing but what they stood in.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "The winter the cough took me, Mira Sallow came with her medicines three times and wouldn't take a mark; I told her I'd pay when the season turned.",
+        "salience": 0.8,
+        "about": [
+          "Mira Sallow"
+        ]
+      },
+      {
+        "gist": "Jory's father drowned before the surge, and I raised the boy on the stall, teaching him to gut a fish before he could read.",
+        "salience": 0.75,
+        "about": [
+          "Jory Pike"
+        ]
+      },
+      {
+        "gist": "The lean season when the boats came in light and I kept feeding the crews on credit, telling myself the quay pays its debts.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The first time Jory brought Nia Wrack to the stall and she ate two bowls and laughed at his jokes, and I saw he was lost.",
+        "salience": 0.6,
+        "about": [
+          "Jory Pike",
+          "Nia Wrack"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_them_first",
+        "value": 0.9,
+        "why": "A hungry neighbour is a debt you pay with a bowl, not a tally."
+      },
+      {
+        "key": "never_dun_a_neighbour",
+        "value": 0.8,
+        "why": "I've fed half the quay on credit; I won't be the one who turns the talk ugly."
+      },
+      {
+        "key": "the_poor_terrace_before_the_seawall",
+        "value": 0.75,
+        "why": "A wall doesn't fill a belly; the Warden should feed the terrace first."
+      },
+      {
+        "key": "a_wife_would_steady_him",
+        "value": 0.7,
+        "why": "Jory needs someone to count the marks with him, and Nia Wrack is that someone."
+      },
+      {
+        "key": "pride_is_all_i_have_left",
+        "value": 0.65,
+        "why": "I'll pay Mira Sallow before the stall-keepers can say I didn't."
+      }
+    ],
+    "secret": "I've been selling the stall's best fish cheap to Lyss Fenner under the counter so I can put by a few marks for Mira without anyone seeing me save."
+  }
+}

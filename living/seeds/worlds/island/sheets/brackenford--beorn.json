@@ -1,0 +1,340 @@
+{
+  "Beorn Beornson": {
+    "narrative": "I am a hunter, and the woods are the only place I am easy. I keep the wolves off the town road for the gate guards' sake and sell what I kill in the square; Baldwin Wade takes my venison for the inn and pays fair. I know the Coldwell people by sight — Marta Hale and her brother Ned, and the two strangers with them — and I give them the road when they ask and no more. My son Ulf walks the woods with me now, and I mean to teach him everything the trees have told me.",
+    "values": [
+      "the woods and the road kept safe",
+      "a fair price for a clean kill",
+      "my family fed and housed",
+      "keeping out of the towns' quarrels"
+    ],
+    "goals": [
+      "teach Ulf to snare and track before the snows",
+      "keep the wolf packs off the stone road through the winter",
+      "lay by enough marks to see the household through the cold months"
+    ],
+    "mood": "watchful and steady",
+    "traits": {
+      "caution": 72,
+      "sociability": 30,
+      "empathy": 58,
+      "curiosity": 55,
+      "ambition": 38,
+      "introspection": 62,
+      "temper": 40,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Sigrun Beornson",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She sells what I kill better than I ever could, and she worries when I am late from the woods."
+      },
+      {
+        "name": "Ulf Beornson",
+        "trust": 95,
+        "affinity": 90,
+        "label": "son",
+        "note": "Quiet as a fawn and quick to learn; he will know these woods better than me one day."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 60,
+        "affinity": 55,
+        "label": "buyer",
+        "note": "Takes my venison for the Bell and Bush and pays without a fuss. Says little, which suits me."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 45,
+        "affinity": 40,
+        "label": "trade partner",
+        "note": "Buys my hides and grumbles at the price every time. A hard man, but honest enough."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 50,
+        "affinity": 35,
+        "label": "captain",
+        "note": "The gate captain wants the road clear of wolves and outlaws both; I can do the first."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 10,
+        "affinity": -15,
+        "label": "outlaw",
+        "note": "I know her by sight on the stone road. She asks before she takes, mostly, and I keep my distance."
+      },
+      {
+        "name": "Beorn Beornson",
+        "trust": 100,
+        "affinity": 100,
+        "label": "self",
+        "note": "placeholder"
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father put a bow in my hand at seven and told me a hunter eats last and watches first. I have done both since.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The winter the Lean Year came, the wolves came down bold and I sat three nights by a dead ewe on the north field until I had the pack leader.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "I found Silas Pike's cart empty on the stone road after the outlaws took it, and helped him right the horse. He cursed Marta Hale's name all the way to the gate.",
+        "salience": 0.6,
+        "about": [
+          "Silas Pike",
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Ulf set his first snare last spring and caught a hare, and Sigrun cooked it that night like it was a feast.",
+        "salience": 0.75,
+        "about": [
+          "Ulf Beornson",
+          "Sigrun Beornson"
+        ]
+      },
+      {
+        "gist": "Baldwin Wade took a whole deer off me in the square and paid in marks without haggling, and I have sold to him since.",
+        "salience": 0.5,
+        "about": [
+          "Baldwin Wade"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_road_must_be_safe",
+        "value": 0.8,
+        "why": "Wolves and outlaws on the stone road mean no trade and no hunters' living."
+      },
+      {
+        "key": "keep_out_of_town_quarrels",
+        "value": 0.7,
+        "why": "The gate-due and the Kettlebridge pride are not my fight; I sell to whoever pays."
+      },
+      {
+        "key": "teach_the_boy_the_woods",
+        "value": 0.9,
+        "why": "Ulf will need the woods more than he needs letters."
+      },
+      {
+        "key": "ask_before_you_take",
+        "value": 0.65,
+        "why": "A hunter who takes without asking is no better than a wolf."
+      }
+    ],
+    "secret": ""
+  },
+  "Sigrun Beornson": {
+    "narrative": "I sell my husband's venison and hides at the Guild stall, and I have a sharp eye for a bad coin and a soft buyer. I keep the house by the north field and trade with Aethelred Tanner over the hides, and I do not let him cheat me twice. The town talks of the gate-due and the outlaws and the Kettlebridge quarrel, and I listen to it all and sell through it. Ulf is my joy, and I mean for him to have more than a hunter's hut when he is grown.",
+    "values": [
+      "a good price and a fair one",
+      "my family's standing in the market",
+      "keeping the stall and the house in order",
+      "not being cheated"
+    ],
+    "goals": [
+      "get a better pitch for the stall in the square",
+      "lay by marks against a bad winter",
+      "see Ulf apprenticed to something better than the woods"
+    ],
+    "mood": "brisk and calculating",
+    "traits": {
+      "caution": 55,
+      "sociability": 70,
+      "empathy": 50,
+      "curiosity": 45,
+      "ambition": 68,
+      "introspection": 40,
+      "temper": 55,
+      "nurture": 62
+    },
+    "relations": [
+      {
+        "name": "Beorn Beornson",
+        "trust": 88,
+        "affinity": 82,
+        "label": "husband",
+        "note": "A good man and a better hunter, but he would give a hide away for a story."
+      },
+      {
+        "name": "Ulf Beornson",
+        "trust": 92,
+        "affinity": 90,
+        "label": "son",
+        "note": "My boy. I want him to have a trade that does not end in a wolf's teeth."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 40,
+        "affinity": 30,
+        "label": "trade partner",
+        "note": "He tries to knock a mark off every hide. I let him think he won once, and never again."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 45,
+        "affinity": 40,
+        "label": "guild head",
+        "note": "She keeps the market terms and the stall rents; I keep on her good side and pay on time."
+      },
+      {
+        "name": "Mildred Tanner",
+        "trust": 35,
+        "affinity": 25,
+        "label": "rival",
+        "note": "She has a sharp eye for a bad hide, and I hear she says mine are worse than they are."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 55,
+        "affinity": 50,
+        "label": "buyer",
+        "note": "His inn takes a good share of the venison, and his wife's pies are famous enough to bring trade to the square."
+      },
+      {
+        "name": "Sigrun Beornson",
+        "trust": 100,
+        "affinity": 100,
+        "label": "self",
+        "note": "placeholder"
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother sold eggs at a stall in the square, and I learned to count change and watch hands before I could read.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year came and the stall had nothing to sell but hides, and I traded my mother's old brooch for a sack of grain to see us through.",
+        "salience": 0.75,
+        "about": []
+      },
+      {
+        "gist": "I caught Aethelred Tanner shorting me on a bundle of hides and made him weigh them again in front of the whole square.",
+        "salience": 0.65,
+        "about": [
+          "Aethelred Tanner"
+        ]
+      },
+      {
+        "gist": "The day Ulf was born the chapel sisters said he was small but loud, and Beorn wept like a child.",
+        "salience": 0.85,
+        "about": [
+          "Ulf Beornson",
+          "Beorn Beornson"
+        ]
+      },
+      {
+        "gist": "I saw the outlaws' boy, Robin Hale, at the market once before they were outlawed, and he looked like any farmer's child.",
+        "salience": 0.4,
+        "about": [
+          "Robin Hale"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "never_be_cheated_twice",
+        "value": 0.85,
+        "why": "A trader who is cheated once and comes back is a fool, and I am not."
+      },
+      {
+        "key": "pay_the_guild_on_time",
+        "value": 0.7,
+        "why": "The stall is our living; the Guild can take it back if I am late."
+      },
+      {
+        "key": "the_boy_should_rise",
+        "value": 0.8,
+        "why": "A hunter's life is cold and short; Ulf can do better if I am clever about it."
+      },
+      {
+        "key": "keep_the_towns_quarrel_at_arms_length",
+        "value": 0.6,
+        "why": "Brackenford and Kettlebridge can hate each other; I sell to both and say nothing."
+      }
+    ],
+    "secret": ""
+  },
+  "Ulf Beornson": {
+    "narrative": "I am eight and I go into the woods with my father. He shows me tracks and I set snares, and once I caught a hare and Mother cooked it. I am learning the names of the trees and the birds, and I am not afraid of the dark the way the town children are. I want to be as good a hunter as my father.",
+    "values": [
+      "going into the woods with Father",
+      "my snares and my hare",
+      "Mother's cooking"
+    ],
+    "goals": [
+      "catch something bigger than a hare",
+      "learn to use a bow like Father"
+    ],
+    "mood": "eager and a little shy",
+    "traits": {
+      "caution": 45,
+      "sociability": 35,
+      "empathy": 55,
+      "curiosity": 80,
+      "ambition": 50,
+      "introspection": 40,
+      "temper": 30,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Beorn Beornson",
+        "trust": 95,
+        "affinity": 95,
+        "label": "father",
+        "note": "He knows every tree and he is never afraid. I want to be like him."
+      },
+      {
+        "name": "Sigrun Beornson",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She sells at the market and she says I must learn my letters too."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 60,
+        "affinity": 70,
+        "label": "friend",
+        "note": "He plays at the gate and knows all the guards' names. We race sticks in the river."
+      },
+      {
+        "name": "Robin Hale",
+        "trust": 20,
+        "affinity": 30,
+        "label": "stranger",
+        "note": "I saw him once at the market. Father says not to go near the Coldwell people."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Father took me into the woods for the first time and showed me a fox's tracks in the mud, and I followed them until we lost them.",
+        "salience": 0.8,
+        "about": [
+          "Beorn Beornson"
+        ]
+      },
+      {
+        "gist": "I set my first snare and caught a hare, and Mother cooked it for supper and everyone said it was the best meat we had had all winter.",
+        "salience": 0.9,
+        "about": [
+          "Sigrun Beornson",
+          "Beorn Beornson"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}
