@@ -325,7 +325,10 @@ def arrival(s):
     ids = {c["id"] for c in newcomers}
     time.sleep(65)
     after = s.rows(founders, "cooldown")
-    s.expect("cooldown prevents another group below the floor", {c["id"] for c in after} == ids)
+    # The cooldown is about no second group coming in; a newcomer may meet a wolf meanwhile
+    # (the scene's waits are over by the time the migration comes), so its death is recorded.
+    fates = s.rows("SELECT id, alive, cause FROM character WHERE " + " OR ".join(f"id = {i}" for i in sorted(ids)), "cooldown-newcomers")
+    s.expect("cooldown prevents another group below the floor", {c["id"] for c in after} <= ids, {"other_founders": sorted({c["id"] for c in after} - ids), "newcomers_dead": [c for c in fates if not c["alive"]]})
 
 
 def infant(s):

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Summarize `eco_sample.py` samples: deaths per hour by kind and cause, the population over
-time, and for wolves what hunting looked like (how near the nearest deer was, attack episodes,
-kills, meat carried, hunger).
+time, births per hour, and for wolves what hunting looked like (how near the nearest deer was,
+attack episodes, kills, meat carried, hunger) and how often each wolf had a meal.
 
-  living/tools/eco_report.py DIR [--json]
+  living/tools/eco_report.py DIR
+
+A meal is a sample in which the meat a wolf carries rose: a kill puts the carcass's meat in the
+killer's pack, and the wolf eats it a piece at a time. With `DIR/packs.json`
+(`{"<wolf id>": "<pack name>"}`, from the `background` table) the meals are also given per pack.
 """
 import json, math, sys
 from collections import Counter, defaultdict
@@ -46,6 +50,11 @@ def main():
         for h in range(0, int(span_min // 60) + 1):
             if by_hour[(kind, h)]:
                 print(f"   hour {h + 1}: {dict(by_hour[(kind, h)])}")
+    births = defaultdict(Counter)
+    for c in chars.values():
+        if c["born_ms"] - start >= 60000:
+            births[c["kind"]][int((c["born_ms"] - start) / 3600000) + 1] += 1
+    print("births per hour:", {k: dict(sorted(v.items())) for k, v in births.items()})
     # Population every 10 minutes.
     print("population (min: wolves, deer):", end=" ")
     seen = set()
@@ -89,6 +98,28 @@ def main():
     share60 = [sum(1 for x in v if x <= 60) / len(v) for v in near.values() if v]
     print(f"share of a wolf's samples with a deer within 60 m: median {sorted(share60)[len(share60)//2]:.0%}" if share60 else "")
     print(f"attack starts by wolves (on any target): {sum(len(v) for v in attacks.values())}; wolves that ever carried meat: {len(meat)}")
+    # Meals per wolf: samples in which the meat it carries rose (a kill puts the carcass's
+    # meat in the killer's pack; it then eats it a piece at a time).
+    feeds, carried = defaultdict(list), defaultdict(int)
+    for r in rows:
+        alive = {c["id"] for c in r["chars"] if c["alive"] and c["kind"] == "wolf"}
+        now = {m["owner"]: m["qty"] for m in r["meat"] if m["owner"] in alive}
+        for i in alive:
+            feeds.setdefault(i, [])
+            if now.get(i, 0) > carried[i]:
+                feeds[i].append(round((r["clock"][0]["last_ms"] - start) / 60000))
+            carried[i] = now.get(i, 0)
+    packs_file = d / "packs.json"
+    packs = json.loads(packs_file.read_text()) if packs_file.exists() else {}
+    groups = defaultdict(list)
+    for i, times in feeds.items():
+        groups[packs.get(str(i), "born later" if chars[i]["born_ms"] - start >= 60000 else "other")].append((i, times))
+    for g, members in sorted(groups.items()):
+        n = [len(t) for _, t in members]
+        fate = Counter(cls(chars[i]["cause"]) if not chars[i]["alive"] else "alive" for i, _ in members)
+        print(f"wolves {g}: {len(members)}; meals per wolf {sorted(n)}; 3+ meals: {sum(1 for x in n if x >= 3)}; at end {dict(fate)}")
+        for i, t in members:
+            print(f"   {i}: meals at min {t}{'' if chars[i]['alive'] else f'; died min {(chars[i]["died_ms"] - start) / 60000:.0f} ({chars[i]["cause"]})'}")
     kills = [c for c in chars.values() if c["kind"] == "deer" and "killed by" in c["cause"].lower()]
     print(f"deer killed: {len(kills)}: " + ", ".join(f"{(c['died_ms'] - start) / 60000:.0f} min ({c['cause']})" for c in kills))
 

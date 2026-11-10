@@ -24,4 +24,5 @@ Run the fresh wildlife recipe in [SKILL.md](../SKILL.md). Hold initial character
 - The edge search normally uses 12 tiles, with a 40-tile fallback. The group jitters up to three tiles around its center. The valley scene allows 15.5 tiles for founders.
 - The chronicle kind is `arrival`, not `migration`.
 - Count parentless founders separately from later offspring. Births can increase the herd during a delayed arrival probe without violating migration's cooldown.
+- The initial `wait` graphs last 120 s, so the world's wolves hunt again long before the deer arrive. Since wolves smell deer at 150 tiles (2026-11-10) they can kill a newcomer within the cooldown probe's 65 s; the check asserts no founder outside the first group and records dead newcomers and their causes (`wildlife-cooldown-newcomers.json`).
 - This bounded scene does not prove ecological equilibrium. Wolf arrivals at 30 minutes, update recovery of cooldowns and seasonal pasture remain unverified.

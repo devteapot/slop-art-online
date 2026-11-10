@@ -348,6 +348,10 @@ pub struct Laws {
     pub crowd_hz: f32,
     pub chase_hz: f32,
     pub combat_hz: f32,
+    /// How often a body smells afresh (Hz): between reads it keeps what it last smelled while
+    /// it has moved less than a few tiles. Scent is coarse (rough direction, distance to 10
+    /// tiles), and a fresh read sweeps every chunk within the scent radius.
+    pub scent_hz: f32,
     /// Running speed multiplier (a player's run, a flight).
     pub run_speed: f32,
     /// Movement input a player may send per second (sustained) and in a burst.
@@ -398,6 +402,7 @@ impl Default for Laws {
             crowd_hz: 3.0,
             chase_hz: 4.0,
             combat_hz: 8.0,
+            scent_hz: 1.0,
             run_speed: 1.5,
             input_hz: 30.0,
             input_burst: 15.0,
@@ -964,6 +969,7 @@ impl Scripts {
             crowd_hz: g("crowd_hz", l.crowd_hz).clamp(0.5, 30.0),
             chase_hz: g("chase_hz", l.chase_hz).clamp(0.5, 30.0),
             combat_hz: g("combat_hz", l.combat_hz).clamp(0.5, 30.0),
+            scent_hz: g("scent_hz", l.scent_hz).clamp(0.1, 60.0),
             run_speed: g("run_speed", l.run_speed).clamp(1.0, 4.0),
             input_hz: g("input_hz", l.input_hz).clamp(1.0, 120.0),
             input_burst: g("input_burst", l.input_burst).clamp(1.0, 240.0),

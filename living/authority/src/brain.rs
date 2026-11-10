@@ -200,8 +200,7 @@ impl<'a> Ev<'a> {
         if self.smelled.is_none() {
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             let me = self.me.id;
-            let mut v = common::smelled_near(self.ctx, &self.me.kind, self.at, r, self.now);
-            v.retain(|c| c.id != me);
+            let v = common::smelled_near(self.ctx, me, &self.me.kind, self.at, r, self.now);
             self.smelled = Some(v);
         }
         self.smelled.as_deref().unwrap()

@@ -5,7 +5,8 @@ use crate::tables::*;
 use crate::common;
 use living_rules::map::{chunk_of, Terrain};
 use serde::Deserialize;
-use spacetimedb::rand::Rng;
+use spacetimedb::rand::rngs::StdRng;
+use spacetimedb::rand::{Rng, SeedableRng};
 use spacetimedb::{Identity, ReducerContext, Table};
 
 /// The seed compiled into this module: `seeds/world.json` (the active world; `just living-seed
@@ -486,6 +487,10 @@ pub struct SeedNewcomer {
 /// newcomers' arrival point; a settlement kind such as `town`; or an animal kind such as
 /// `deer`, one of that kind already placed, so a pack starts where its prey lives), outside
 /// every settlement.
+/// `band` keeps the group's centre within a distance band of a second point (`arrival` or a
+/// settlement kind), so a pack placed near its prey also stays away from the town; with an
+/// animal kind as `near`, only animals of that kind from which the band can be reached are
+/// considered. `road_clear_m` keeps the centre that far from every road tile.
 /// `bold` animals do not fear people (the rules read it from their background); `instinct`
 /// names their starting graph in instincts.json.
 #[derive(Deserialize)]
@@ -499,11 +504,25 @@ pub struct SeedPack {
     #[serde(default = "pack_far")]
     pub to_m: f32,
     #[serde(default)]
+    pub band: Option<SeedBandOf>,
+    #[serde(default)]
+    pub road_clear_m: f32,
+    #[serde(default)]
     pub bold: bool,
     #[serde(default)]
     pub instinct: String,
     #[serde(default)]
     pub name: String,
+}
+
+/// A distance band round a point: `of` is `arrival` or a settlement kind.
+#[derive(Deserialize)]
+pub struct SeedBandOf {
+    #[serde(default = "arrival_ref")]
+    pub of: String,
+    #[serde(default)]
+    pub from_m: f32,
+    pub to_m: f32,
 }
 
 fn arrival_ref() -> String {
@@ -529,41 +548,99 @@ pub fn newcomer_kit(ctx: &ReducerContext, id: u32, now: u64) {
     }
 }
 
+/// The random draws that place a world's founding animals (herds and packs). Seeded from the
+/// world's seed rather than the reducer's timestamp (`ctx.rng()`), so the same seed, map and
+/// seed file put every founding animal in the same place on every publish.
+fn animal_rng(seed: u64) -> StdRng {
+    StdRng::seed_from_u64(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x616e_696d_616c_73)
+}
+
+/// A point named by a seed: the arrival point or the first settlement of a kind.
+fn named_point(ctx: &ReducerContext, settlements: &[Settlement], name: &str) -> Option<(f32, f32)> {
+    if name == "arrival" {
+        Some(crate::island::arrival(ctx))
+    } else {
+        settlements.iter().find(|s| s.kind == name).map(|s| (s.x, s.y))
+    }
+}
+
+/// No road tile within `r` m of `q`.
+fn clear_of_roads(map: &living_rules::map::Map, q: (f32, f32), r: f32) -> bool {
+    if r <= 0.0 {
+        return true;
+    }
+    let (cx, cy, n) = (q.0.floor() as i32, q.1.floor() as i32, r.ceil() as i32);
+    for dy in -n..=n {
+        for dx in -n..=n {
+            if ((dx * dx + dy * dy) as f32) <= r * r && map.get(cx + dx, cy + dy) == Terrain::Road {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// The seed's packs, placed after the world's other animals.
-fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack], now: u64) {
+fn packs(ctx: &ReducerContext, rng: &mut StdRng, map: &living_rules::map::Map, packs: &[SeedPack], now: u64) {
     let settlements: Vec<Settlement> = ctx.db.settlement().iter().collect();
     for p in packs {
-        let reference = if p.near == "arrival" {
-            Some(crate::island::arrival(ctx))
-        } else if let Some(s) = settlements.iter().find(|s| s.kind == p.near) {
-            Some((s.x, s.y))
+        let band = match &p.band {
+            Some(b) => match named_point(ctx, &settlements, &b.of) {
+                Some(at) => Some((at, b)),
+                None => {
+                    log::warn!("pack of {}: no {} for its band", p.kind, b.of);
+                    continue;
+                }
+            },
+            None => None,
+        };
+        // Reference points: the named point, or every living animal of the kind (by id, so the
+        // order does not depend on the index).
+        let mut refs: Vec<(f32, f32)> = if let Some(at) = named_point(ctx, &settlements, &p.near) {
+            vec![at]
         } else if common::species(&p.near).is_some() {
-            // One of that kind, at random (a herd: they start together).
-            let there: Vec<u32> = ctx.db.character().kind().filter(p.near.as_str()).filter(|c| c.alive).map(|c| c.id).collect();
-            let pick = (!there.is_empty()).then(|| there[ctx.rng().gen_range(0..there.len())]);
-            pick.and_then(|id| ctx.db.body().id().find(id)).map(|b| (b.x, b.y))
+            let mut there: Vec<u32> = ctx.db.character().kind().filter(p.near.as_str()).filter(|c| c.alive).map(|c| c.id).collect();
+            there.sort_unstable();
+            there.iter().filter_map(|id| ctx.db.body().id().find(*id)).map(|b| (b.x, b.y)).collect()
         } else {
-            None
+            Vec::new()
         };
-        let Some(r) = reference else {
-            log::warn!("pack of {}: no {} to place it near", p.kind, p.near);
-            continue;
-        };
+        if let Some((at, b)) = band {
+            refs.retain(|r| {
+                let d = common::dist(*r, at);
+                d + p.to_m >= b.from_m && d - p.to_m <= b.to_m
+            });
+        }
+        for i in (1..refs.len()).rev() {
+            refs.swap(i, rng.gen_range(0..=i));
+        }
         let outside = |q: (f32, f32)| settlements.iter().all(|s| common::dist(q, (s.x, s.y)) > s.radius_m + 15.0);
-        let centre = (0..400).find_map(|_| {
-            let ang: f32 = ctx.rng().gen_range(0.0..std::f32::consts::TAU);
-            let d: f32 = ctx.rng().gen_range(p.from_m..p.to_m.max(p.from_m + 1.0));
-            let q = (r.0 + ang.cos() * d, r.1 + ang.sin() * d);
-            (map.free(q.0, q.1) && outside(q)).then_some(q)
-        });
-        let Some(centre) = centre else {
+        let in_band = |q: (f32, f32)| band.map_or(true, |(at, b)| (b.from_m..=b.to_m).contains(&common::dist(q, at)));
+        let tries = if refs.len() == 1 { 400 } else { 60 };
+        let pick = |rng: &mut StdRng, r: (f32, f32), lo: f32, hi: f32, tries: usize| {
+            (0..tries).find_map(|_| {
+                let ang: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+                let d: f32 = rng.gen_range(lo..hi.max(lo + 1.0));
+                let q = (r.0 + ang.cos() * d, r.1 + ang.sin() * d);
+                (map.free(q.0, q.1) && outside(q) && in_band(q) && clear_of_roads(map, q, p.road_clear_m)).then_some((q, r))
+            })
+        };
+        let mut found = refs.iter().find_map(|r| pick(rng, *r, p.from_m, p.to_m, tries));
+        if found.is_none() {
+            if let Some((at, b)) = band {
+                // Nothing of `near` within reach of the band: the band alone places the pack.
+                log::warn!("pack of {}: no {} within reach of {}..{} m from {}; placed by the band alone", p.kind, p.near, b.from_m, b.to_m, b.of);
+                found = pick(rng, at, b.from_m, b.to_m, 400);
+            }
+        }
+        let Some((centre, r)) = found else {
             log::warn!("pack of {}: no room {}..{} m from {}", p.kind, p.from_m, p.to_m, p.near);
             continue;
         };
         let w = common::world(ctx);
         let (admin, minded) = common::mind_controller(ctx);
         for _ in 0..p.count {
-            let at = (0..30).map(|_| (centre.0 + ctx.rng().gen_range(-4.0f32..4.0), centre.1 + ctx.rng().gen_range(-4.0f32..4.0))).find(|q| map.free(q.0, q.1)).unwrap_or(centre);
+            let at = (0..30).map(|_| (centre.0 + rng.gen_range(-4.0f32..4.0), centre.1 + rng.gen_range(-4.0f32..4.0))).find(|q| map.free(q.0, q.1)).unwrap_or(centre);
             let name = animal_name(ctx, &p.kind);
             let age = common::life_of(&p.kind).age_at(0.3 + 0.3 * ctx.rng().gen::<f32>(), common::pace(&w));
             let id = spawn_with(ctx, &name, &p.kind, admin, minded, at, now, age, (0, 0));
@@ -589,8 +666,23 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
                 }
             }
         }
-        log::info!("placed {} {}s at ({:.0}, {:.0}), {:.0} m from {}", p.count, p.kind, centre.0, centre.1, common::dist(centre, r), p.near);
+        let from_band = band.map_or(String::new(), |(at, b)| format!(", {:.0} m from {}", common::dist(centre, at), b.of));
+        log::info!("placed {} {}s at ({:.0}, {:.0}), {:.0} m from {}{from_band}", p.count, p.kind, centre.0, centre.1, common::dist(centre, r), p.near);
     }
+}
+
+/// A digest of where the founding animals start (kind and start point, in that order), so
+/// two publishes of one seed can be compared from their logs.
+fn animal_digest(ctx: &ReducerContext) -> (usize, u64) {
+    let mut starts: Vec<(String, u32, u32)> = ctx.db.character().iter().filter(|c| c.kind != "person").map(|c| (c.kind, c.home_x.to_bits(), c.home_y.to_bits())).collect();
+    starts.sort();
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for (k, x, y) in &starts {
+        for b in k.bytes().chain(x.to_le_bytes()).chain(y.to_le_bytes()) {
+            h = (h ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    (starts.len(), h)
 }
 
 pub fn communities(ctx: &ReducerContext, now: u64) {
@@ -833,14 +925,15 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
     set_habitats(ctx, s);
     // Animals start in their species' groups (herds, packs), so a few wolves on a large map
     // are a pack that can breed rather than strangers who never meet.
+    let mut rng = animal_rng(s.seed);
     for (kind, count) in [("deer", s.animals.deer), ("wolf", s.animals.wolf)] {
         let group = common::species(kind).map_or(1, |sp| sp.group.max(1));
         let mut left = count;
         while left > 0 {
-            let Some(at) = animal_spot(ctx, &map, kind) else { break };
+            let Some(at) = animal_spot(&mut rng, &map, kind) else { break };
             for _ in 0..group.min(left) {
                 let spot = (0..20)
-                    .map(|_| (at.0 + ctx.rng().gen_range(-3.0f32..3.0), at.1 + ctx.rng().gen_range(-3.0f32..3.0)))
+                    .map(|_| (at.0 + rng.gen_range(-3.0f32..3.0), at.1 + rng.gen_range(-3.0f32..3.0)))
                     .find(|p| animal_ground(&map, kind, p.0 as i32, p.1 as i32))
                     .unwrap_or(at);
                 spawn_animal(ctx, kind, spot, now);
@@ -848,7 +941,9 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
             left -= group.min(left);
         }
     }
-    packs(ctx, &map, &s.packs, now);
+    packs(ctx, &mut rng, &map, &s.packs, now);
+    let (n, digest) = animal_digest(ctx);
+    log::info!("founding animals: {n}, starts digest {digest:016x}");
 }
 
 fn animal_ground(map: &living_rules::map::Map, kind: &str, x: i32, y: i32) -> bool {
@@ -946,10 +1041,10 @@ fn animal_name(ctx: &ReducerContext, kind: &str) -> String {
     name
 }
 
-pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str) -> Option<(f32, f32)> {
+fn animal_spot(rng: &mut StdRng, map: &living_rules::map::Map, kind: &str) -> Option<(f32, f32)> {
     for _ in 0..200 {
-        let x = ctx.rng().gen_range(4..map.w as i32 - 4);
-        let y = ctx.rng().gen_range(4..map.h as i32 - 4);
+        let x = rng.gen_range(4..map.w as i32 - 4);
+        let y = rng.gen_range(4..map.h as i32 - 4);
         if animal_ground(map, kind, x, y) {
             return Some((x as f32 + 0.5, y as f32 + 0.5));
         }
@@ -959,7 +1054,7 @@ pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &st
     let step = 7;
     let (w, h) = ((map.w as i32 - 8) / step, (map.h as i32 - 8) / step);
     let n = (w.max(1) * h.max(1)) as u32;
-    let start = ctx.rng().gen_range(0..n);
+    let start = rng.gen_range(0..n);
     (0..n).map(|k| (start + k) % n).find_map(|c| {
         let (x, y) = (4 + (c as i32 % w.max(1)) * step, 4 + (c as i32 / w.max(1)) * step);
         animal_ground(map, kind, x, y).then_some((x as f32 + 0.5, y as f32 + 0.5))
@@ -1824,6 +1919,19 @@ mod tests {
             let s: Seed = serde_json::from_str(text).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(s.towns.iter().chain(s.villages.iter()).all(|t| t.residents.is_empty()), "{name}");
         }
+    }
+
+    #[test]
+    fn island_packs_start_near_deer_and_the_bold_pack_keeps_its_band() {
+        let s: Seed = serde_json::from_str(include_str!("../../seeds/island.json")).expect("island seed");
+        let bold = s.packs.iter().find(|p| p.bold).expect("a bold pack");
+        let band = bold.band.as_ref().expect("the bold pack's band");
+        assert_eq!((bold.near.as_str(), band.of.as_str(), band.from_m, band.to_m, bold.road_clear_m), ("deer", "arrival", 370.0, 800.0, 40.0));
+        assert!(s.packs.iter().all(|p| p.near == "deer"));
+        // Founding animals draw from the world's seed, not the clock: the same seed repeats.
+        let draws = |seed| (0..8).map(|_| animal_rng(seed).gen::<u64>()).collect::<Vec<_>>();
+        assert_eq!(draws(7), draws(7));
+        assert_ne!(animal_rng(7).gen::<u64>(), animal_rng(11).gen::<u64>());
     }
 
     #[test]

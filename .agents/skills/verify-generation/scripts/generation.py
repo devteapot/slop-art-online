@@ -260,6 +260,25 @@ def check_land(seed, rows, side, tiles):
         home = min(settlements, key=lambda s: math.dist(a, (s["x"], s["y"])))
         d = math.dist(a, (home["x"], home["y"]))
         present("arrival point inside a settlement, near its square", d <= 0.5 * home["radius_m"], {"settlement": home["id"], "kind": home["kind"], "style": home["style"], "from_its_square_m": round(d, 1), "radius_m": round(home["radius_m"], 1)})
+    if land:
+        # A pack with a `band` starts within it (from the arrival point), and one with
+        # `road_clear_m` that far from any road (members spread up to about 6 m from the centre).
+        a = (land[0]["arrive_x"], land[0]["arrive_y"])
+        bgs = {r["id"]: json.loads(r["text"]) for r in rows["background"] if r["text"].startswith("{")}
+        for pack in seed.get("packs", []):
+            band, clear = pack.get("band"), pack.get("road_clear_m", 0)
+            if not pack.get("name") or not (band or clear):
+                continue
+            members = [c for c in rows["character"] if c["kind"] == pack["kind"] and bgs.get(c["id"], {}).get("pack") == pack["name"]]
+            starts = [(c["home_x"], c["home_y"]) for c in members]
+            if band and band.get("of", "arrival") == "arrival":
+                off = [round(math.dist(q, a)) for q in starts if not band.get("from_m", 0) - 6 <= math.dist(q, a) <= band["to_m"] + 6]
+                present(f"pack {pack['name']} starts {band.get('from_m', 0)}-{band['to_m']} m from the arrival", bool(members) and not off, {"members": len(members), "from_arrival_m": sorted(round(math.dist(q, a)) for q in starts)})
+            if clear:
+                r = max(clear - 6, 0)
+                n = int(r) + 1
+                roads = [q for q in starts if any(dx * dx + dy * dy <= r * r and tile(q[0] + dx, q[1] + dy) == 6 for dy in range(-n, n + 1) for dx in range(-n, n + 1))]
+                present(f"pack {pack['name']} starts {clear} m clear of roads", bool(members) and not roads, {"members": len(members), "near_a_road": roads})
     communities = {r["name"]: r for r in rows["community"]}
     entries = seed.get("towns", []) + seed.get("villages", [])
     present("settlement rows", len(settlements) >= len(entries), {"rows": len(settlements), "seeded": len(entries)})
@@ -441,7 +460,13 @@ def repeatability(first, second):
         return sorted({(bg["band"], *bg["camp"]) for row in rows["background"] if (bg := json.loads(row["text"])).get("origin") == "band"})
     a, b = band_sites(first), band_sites(second)
     report["band sites"] = {"equal": a == b, "first": a, "second": b}
-    report["pass"] = all(report[k]["equal"] for k in ("terrain", "settlement sites", "band sites"))
+    # Founding animals (herds and packs) are placed by a generator seeded from the world's seed
+    # (`seed::animal_rng`), so their kinds and start points repeat; ids may not.
+    def animal_starts(rows):
+        return sorted([r["kind"], r["home_x"], r["home_y"]] for r in rows["character"] if r["kind"] != "person" and r["born_ms"] == min(c["born_ms"] for c in rows["character"]))
+    a, b = animal_starts(first), animal_starts(second)
+    report["founding animal starts"] = {"equal": a == b, "rows_first": len(a), "rows_second": len(b), "sha256_first": hashlib.sha256(json.dumps(a).encode()).hexdigest(), "sha256_second": hashlib.sha256(json.dumps(b).encode()).hexdigest()}
+    report["pass"] = all(report[k]["equal"] for k in ("terrain", "settlement sites", "band sites", "founding animal starts"))
     return report
 
 

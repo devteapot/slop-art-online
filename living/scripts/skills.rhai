@@ -16,6 +16,8 @@ fn laws() {
         turn_rate: 6.0, turn_slow: 0.4, slow_radius: 1.2, corner_radius: 0.9,
         separation: 0.8, separation_weight: 0.9,
         steer_s: 2.0, crowd_hz: 3.0, chase_hz: 4.0, combat_hz: 8.0,
+        // How often a body smells afresh; between reads it keeps what it last smelled.
+        scent_hz: 1.0,
         run_speed: 1.5, input_hz: 30.0, input_burst: 15.0,
         // Grass regrowth per grassy tile per growing minute: about one grazer per 300 grassy
         // tiles (it was one per 70, and the wilds filled with deer).

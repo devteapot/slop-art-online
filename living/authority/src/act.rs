@@ -276,7 +276,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
             // Itself among them, as before; others when seen (a clear sight line) or smelled.
             let map = common::map(ctx);
             let seen = common::creatures_near(ctx, from, sight, now).into_iter().filter(|c| c.id == id || map.sight_clear(from, c.pos));
-            for c in seen.chain(common::smelled_near(ctx, &actor.kind, from, sight, now)) {
+            for c in seen.chain(common::smelled_near(ctx, id, &actor.kind, from, sight, now)) {
                 match sensed.iter_mut().find(|(k, _)| *k == *c.kind) {
                     Some(e) => e.1 += 1,
                     None => sensed.push((c.kind.to_string(), 1)),
