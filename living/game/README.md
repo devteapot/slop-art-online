@@ -138,6 +138,7 @@ The player's UI is Bevy UI (`src/ui/`); egui stays for the F1 panels. It is mini
 - the pack (I) and know-how (K) panels, hidden by default;
 - the chat log when there is new speech or the input is open (only what you heard);
 - the death screen: the cause, who saw it, then "Arrive as a new stranger" (click or Enter);
+- a notice at the top while a lost connection is restored; no one is drawn meanwhile;
 - a small compass at the top right, with north and nearby places.
 
 Widgets draw a view-model (`ui/model.rs`) filled by one source:

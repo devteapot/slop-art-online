@@ -17,10 +17,25 @@ use living_bindings::*;
 #[derive(Resource, Default)]
 pub struct Target(pub Option<Vec3>);
 
+/// An intent no key gives: set as the last one sent, it makes the next frame send what the keys
+/// hold, a stop included.
+const RESEND: (i32, i32, bool) = (i32::MIN, i32::MIN, false);
+/// After a refused move (the authority's input bucket is empty, `input_hz`), wait this long (s)
+/// before sending the held intent again: about one token at 30 Hz.
+const RETRY_S: f64 = 0.04;
+
 #[derive(Resource, Default)]
 pub struct Input {
     /// Last intent sent: quantized direction (sim axes) and gait.
     sent: Option<(i32, i32, bool)>,
+    /// Movement intents sent, and the latest of them the authority refused (set from the
+    /// reply, which `frame_tick` runs): a refused intent is sent again.
+    sends: u64,
+    refused: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    retry_at: Option<f64>,
+    /// The character the last intent was sent for: a new one (a rejoin, a reconnect) starts
+    /// from what the keys hold, since the authority may still be steering the old intent.
+    sent_for: Option<u32>,
     pub chat_open: bool,
     pub chat: String,
     /// Where the last click-to-move was sent, and when (seconds), for the marker.
@@ -37,6 +52,9 @@ pub struct Input {
     pub moved_at: Option<std::time::Instant>,
     /// Whether a movement direction is held (the camera keeps the keys' frame meanwhile).
     pub moving: bool,
+    /// When a direction was last held (`Time` seconds), so my body is carried on a moment
+    /// after the keys are let go (`bodies.rs`).
+    pub held_s: f64,
     /// The direction held (sim axes, unit or zero): a dodge goes this way.
     pub dir: Vec2,
     /// Face the cursor: you move with WASD and look where the mouse points.
@@ -85,9 +103,23 @@ pub fn movement(
     ui: Res<crate::hud::UiWants>,
     time: Res<Time>,
 ) {
+    if net.my_id != input.sent_for {
+        input.sent_for = net.my_id;
+        input.sent = Some(RESEND);
+        input.retry_at = None;
+    }
     let Some(conn) = &net.conn else { return };
     if net.my_id.is_none() {
         return;
+    }
+    let now = time.elapsed_secs_f64();
+    // The latest intent was refused ("too many movement inputs"): send what is held again soon.
+    if input.sends > 0 && input.refused.load(std::sync::atomic::Ordering::Relaxed) == input.sends && input.retry_at.is_none() {
+        input.retry_at = Some(now + RETRY_S);
+    }
+    if input.retry_at.is_some_and(|t| now >= t) {
+        input.retry_at = None;
+        input.sent = Some(RESEND);
     }
     input.look = input.scripted_look.or_else(|| {
         let me = target.0?;
@@ -116,14 +148,24 @@ pub fn movement(
         (d.normalize_or_zero(), keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight))
     };
     input.moving = dir != Vec2::ZERO;
+    if input.moving {
+        input.held_s = time.elapsed_secs_f64();
+    }
     input.dir = dir;
     let (qx, qy) = quantize(dir);
     let intent = (qx, qy, run && (qx, qy) != (0, 0));
     // Release of all keys sends one stop; idle frames send nothing.
     let changed = input.sent != Some(intent) && !(input.sent.is_none() && intent.0 == 0 && intent.1 == 0);
-    if changed {
+    if changed && input.retry_at.is_none() {
         input.sent = Some(intent);
-        let r = conn.reducers.human_move_then(qx as f32 / 1000.0, qy as f32 / 1000.0, intent.2, net.on_reply("move"));
+        input.sends += 1;
+        let (seq, refused, report) = (input.sends, input.refused.clone(), net.on_reply("move"));
+        let r = conn.reducers.human_move_then(qx as f32 / 1000.0, qy as f32 / 1000.0, intent.2, move |ctx, r| {
+            if matches!(r, Ok(Err(_))) {
+                refused.fetch_max(seq, std::sync::atomic::Ordering::Relaxed);
+            }
+            report(ctx, r);
+        });
         net.report("move", r);
         input.moved_at = Some(std::time::Instant::now());
     }

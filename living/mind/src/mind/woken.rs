@@ -48,10 +48,19 @@ const READ_WAIT: Duration = Duration::from_secs(30);
 /// A cap report per resident at most this often.
 const REPORT_EVERY: Duration = Duration::from_secs(60);
 
+/// Attempts at making a woken resident's mind, back to back (with a pause), before its first
+/// thoughts go ahead without it; after that, one more round at most every [`WAKE_RETRY`].
+const WAKE_ATTEMPTS: u32 = 3;
+const WAKE_PAUSE: Duration = Duration::from_secs(10);
+const WAKE_RETRY: Duration = Duration::from_secs(300);
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum State {
     Making,
     Made,
+    /// Its last round of attempts failed at this time: it thinks meanwhile (with no identity
+    /// yet) and is woken again after `WAKE_RETRY`.
+    Failed(Instant),
 }
 
 #[derive(Default)]
@@ -71,7 +80,7 @@ impl Minds {
 
     /// Whether a woken resident's mind is still being made (its first thought waits).
     pub(super) fn woken_waiting(&self, id: u32) -> bool {
-        self.is_woken(id) && self.wakes.lock().unwrap().state.get(&id) != Some(&State::Made)
+        self.is_woken(id) && matches!(self.wakes.lock().unwrap().state.get(&id), None | Some(State::Making))
     }
 
     /// Make a woken resident's mind, once (idempotent; a restart finds what is already made).
@@ -81,18 +90,34 @@ impl Minds {
         }
         {
             let mut w = self.wakes.lock().unwrap();
-            if w.state.contains_key(&id) {
-                return;
+            match w.state.get(&id) {
+                Some(State::Making | State::Made) => return,
+                Some(State::Failed(at)) if at.elapsed() < WAKE_RETRY => return,
+                _ => {}
             }
             w.state.insert(id, State::Making);
         }
+        // A failed waking is not marked made: its identity would then be written by whatever
+        // path found none, or never (a woken resident is left to its waking).
         tokio::spawn(async move {
             let started = Instant::now();
-            if let Err(e) = self.make_mind(id).await {
-                log::warn!("{}: its mind was not fully made on waking: {e:#}", self.name(id));
+            for attempt in 1..=WAKE_ATTEMPTS {
+                match self.make_mind(id).await {
+                    Ok(()) => {
+                        log::info!("{} (#{id}) woke: its mind made in {:.1} s", self.name(id), started.elapsed().as_secs_f64());
+                        self.wakes.lock().unwrap().state.insert(id, State::Made);
+                        return;
+                    }
+                    Err(e) => {
+                        log::warn!("{}: its mind was not made on waking (attempt {attempt} of {WAKE_ATTEMPTS}): {e:#}", self.name(id));
+                        if attempt < WAKE_ATTEMPTS {
+                            tokio::time::sleep(WAKE_PAUSE * attempt).await;
+                        }
+                    }
+                }
             }
-            log::info!("{} (#{id}) woke: its mind made in {:.1} s", self.name(id), started.elapsed().as_secs_f64());
-            self.wakes.lock().unwrap().state.insert(id, State::Made);
+            log::warn!("{} (#{id}): its waking is tried again in {:.0} s; it thinks meanwhile", self.name(id), WAKE_RETRY.as_secs_f64());
+            self.wakes.lock().unwrap().state.insert(id, State::Failed(Instant::now()));
         });
     }
 

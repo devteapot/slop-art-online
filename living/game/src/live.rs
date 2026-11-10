@@ -40,6 +40,7 @@ use crate::envs::Roam;
 use crate::island::{Island, LotRow};
 use crate::lookdev::{Fitted, Model};
 use crate::net::{Mode, Net};
+use crate::phase::Phase;
 use crate::anim::Motion;
 use crate::world::Scene;
 use bevy::prelude::*;
@@ -70,20 +71,23 @@ impl Plugin for LivePlugin {
         let island = resource_exists::<Island>;
         app.init_resource::<Live>()
             .init_resource::<LandWorld>()
-            .add_systems(Update, mirror.after(crate::net::pump).before(crate::bodies::update))
+            .add_systems(Update, mirror.in_set(Phase::Mirror).before(crate::bodies::update))
             .insert_resource(Roam { facing: Vec2::new(0.0, 1.0), ..default() })
             .add_systems(Startup, crate::lookdev::setup)
-            .add_systems(Update, (land, lots, bodies, me).chain().after(crate::controls::target).after(crate::town::shows).before(crate::demo::run))
+            // What each body plays is decided this frame (combat's actions, town's shows) before
+            // it is drawn.
+            .add_systems(Update, (land, lots, bodies, me).chain().in_set(Phase::Present).after(crate::combat::actions).after(crate::town::shows))
             .add_systems(
                 Update,
                 (crate::envs::hdr, crate::island::stream, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
                     .chain()
+                    .in_set(Phase::Present)
                     .after(me)
                     .run_if(island),
             )
-            .add_systems(Update, ground_cursor.after(crate::camera::follow).run_if(island));
+            .add_systems(Update, ground_cursor.in_set(Phase::Camera).after(crate::camera::follow).run_if(island));
         if let Some(s) = Script::from_env() {
-            app.insert_resource(s).add_systems(Update, script.after(me).before(crate::controls::movement));
+            app.insert_resource(s).add_systems(Update, script.in_set(Phase::Input).before(crate::controls::movement));
         }
     }
 }
@@ -318,7 +322,15 @@ fn bodies(
     mut q: Query<Drawn>,
     time: Res<Time>,
 ) {
-    let (Some(island), Some(conn)) = (island, net.conn.as_ref()) else { return };
+    let Some(island) = island else { return };
+    let Some(conn) = net.conn.as_ref() else {
+        // Offline: no body is drawn (`bodies::update` has cleared the tracks too).
+        for (_, s) in live.shown.drain() {
+            commands.entity(s.entity).despawn();
+        }
+        live.heights.clear();
+        return;
+    };
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
@@ -333,15 +345,9 @@ fn bodies(
     let gone: Vec<u32> = live.shown.keys().copied().filter(|id| !scene.shown.contains_key(id)).collect();
     for id in gone {
         // Someone I saw die stays where they fell for a while, playing their death. The body row
-        // goes in the same update as the death's `my_combat` row, and `combat::ingest` runs after
-        // this system, so a death arriving this frame is read here from the row itself.
-        let fresh = || {
-            conn.db.my_combat().iter().any(|r| r.kind == living_rules::combat::seen::DEATH && r.actor == id).then(|| {
-                let animal = live.shown.get(&id).is_some_and(|s| !s.person);
-                crate::combat::death(animal, scene.now_ms)
-            })
-        };
-        if let Some(a) = combat.deaths.contains_key(&id).then(|| combat.actions.get(&id).copied()).flatten().or_else(fresh) {
+        // goes in the same update as the death's `my_combat` row, which `combat::ingest` has
+        // read this frame (Mirror) and `combat::actions` turned into the death clip (Present).
+        if let Some(a) = combat.deaths.contains_key(&id).then(|| combat.actions.get(&id).copied()).flatten() {
             if let Some(s) = live.shown.get(&id) {
                 if let Ok((_, _, _, _, mut motion, _)) = q.get_mut(s.entity) {
                     motion.action = Some(a);
@@ -443,12 +449,22 @@ fn bodies(
                 s.drawn = if gap.length() <= step || gap.length() > SNAP_M { p } else { s.drawn + gap / gap.length() * step };
             }
         }
-        // The gait follows the drawn motion, so a catching-up body's feet match its steps.
+        // The gait takes up the displayed segment's speed at once when it rises: the authority
+        // starts a body at full speed, and an eased speed slid the feet as it set off. It eases
+        // down as before, so a stop finishes its step (the planted foot held) rather than
+        // freezing mid-stride and blending to standing, which slid both feet (foot_slide, 2026-11-10).
+        // A body held or catching up (getting up, a startle) is drawn off its segment: its gait
+        // follows the drawn motion.
+        let on_segment = held.is_none() && s.drawn == p;
         let v = (s.drawn - before).length() / dt;
         let p = s.drawn;
         let ground = island.height(p.x, p.y);
         let v = if v.is_finite() && v < 20.0 { v } else { 0.0 };
-        s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp());
+        match scene.speeds.get(&id) {
+            Some(&seg) if on_segment && seg >= s.speed => s.speed = seg,
+            Some(&seg) if on_segment => s.speed += (seg - s.speed) * (1.0 - (-dt * 8.0).exp()),
+            _ => s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp()),
+        }
         if let Some(h) = h {
             s.yaw += living_rules::steer::wrap(h - s.yaw) * (1.0 - (-dt * YAW_RATE).exp());
             s.yaw = living_rules::steer::wrap(s.yaw);
@@ -526,15 +542,11 @@ fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, liv
     }
 }
 
-/// Where the cursor meets the island's ground (the camera's own ray uses the tile ground), and
-/// keep the eye above the island's hills.
-fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, mut cams: Query<(&Camera, &mut Transform, &GlobalTransform), With<Camera3d>>, windows: Query<&Window>) {
+/// Where the cursor meets the island's ground (the camera's own ray uses the tile ground). The
+/// eye's height over the island's hills is the camera's own (`camera::follow`).
+fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, windows: Query<&Window>) {
     let Some(island) = island else { return };
-    let Ok((camera, mut tf, gtf)) = cams.single_mut() else { return };
-    let floor = island.height(tf.translation.x, tf.translation.z) + 1.0;
-    if tf.translation.y < floor {
-        tf.translation.y = floor;
-    }
+    let Ok((camera, gtf)) = cams.single() else { return };
     let Some(c) = windows.iter().next().and_then(|w| w.cursor_position()) else { return };
     let Ok(ray) = camera.viewport_to_world(gtf, c) else { return };
     let (o, d) = (ray.origin, *ray.direction);
@@ -637,9 +649,33 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   know-how[:SKILL]|none` shows a panel (know-how with SKILL selected);
 /// - `sync:NAME`: until `<dir>/NAME.go` exists (an outside driver sets the scene: the hour, the
 ///   weather, where I stand), then delete it; a number in the file turns the view to that yaw;
+/// - `key:NAME:down|up|tap` and `mouse:left|right|middle:down|up`: a key or button as the
+///   window would report it (`KeyE`, `KeyQ`, `Enter`, `ShiftLeft`, …), read by every input
+///   system this frame; `chat:open|close` opens or closes the text box, as Enter and Esc do;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
+/// A key of the `key:` step.
+fn key_code(name: &str) -> Option<KeyCode> {
+    Some(match name {
+        "KeyQ" => KeyCode::KeyQ,
+        "KeyE" => KeyCode::KeyE,
+        "KeyR" => KeyCode::KeyR,
+        "KeyF" => KeyCode::KeyF,
+        "KeyG" => KeyCode::KeyG,
+        "KeyB" => KeyCode::KeyB,
+        "KeyV" => KeyCode::KeyV,
+        "KeyW" => KeyCode::KeyW,
+        "KeyA" => KeyCode::KeyA,
+        "KeyS" => KeyCode::KeyS,
+        "KeyD" => KeyCode::KeyD,
+        "Enter" => KeyCode::Enter,
+        "Escape" => KeyCode::Escape,
+        "ShiftLeft" => KeyCode::ShiftLeft,
+        _ => return None,
+    })
+}
+
 #[derive(Resource)]
 pub struct Script {
     dir: std::path::PathBuf,
@@ -673,6 +709,7 @@ fn script(
     (mut skills, mut gestures, mut verbs): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>),
     (hud, loading): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>),
     target: Option<Res<crate::capture::Target>>,
+    (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     time: Res<Time>,
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -684,7 +721,7 @@ fn script(
     let (verb, arg) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
     let first = s.since <= dt;
     if first {
-        info!("live script: {step} (me {:?} at {:?}, t {:.1} s)", net.my_id, mine.map(|m| m.1), time.elapsed_secs());
+        info!("live script: {step} (me {:?} at {:?}, t {:.3} s)", net.my_id, mine.map(|m| m.1), time.elapsed_secs());
     }
     let done = match verb {
         "ready" => {
@@ -799,6 +836,40 @@ fn script(
                 info!("live script: waiting for {}", go.display());
             }
             there || s.since > 900.0
+        }
+        "key" => {
+            let (name, how) = arg.rsplit_once(':').unwrap_or((arg, "tap"));
+            match key_code(name) {
+                Some(k) if how == "down" => keys.press(k),
+                Some(k) if how == "up" => keys.release(k),
+                Some(k) => {
+                    keys.press(k);
+                    keys.release(k);
+                }
+                None => warn!("live script: unknown key {name}"),
+            }
+            true
+        }
+        "mouse" => {
+            let (name, how) = arg.rsplit_once(':').unwrap_or((arg, "down"));
+            let b = match name {
+                "left" => MouseButton::Left,
+                "right" => MouseButton::Right,
+                _ => MouseButton::Middle,
+            };
+            if how == "up" {
+                buttons.release(b);
+            } else {
+                buttons.press(b);
+            }
+            true
+        }
+        "chat" => {
+            // As Enter opens it and Esc closes it (the script's own keys may land after the
+            // chat's system has looked this frame).
+            input.chat_open = arg == "open";
+            input.chat.clear();
+            true
         }
         "dead" => hud.death.is_some() || s.since > 120.0,
         "rejoin" => {

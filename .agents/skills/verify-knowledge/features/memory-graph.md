@@ -12,6 +12,8 @@
 - `hearsay_fades_faster_until_corroborated` proves single-source testimony closes at 40 minutes while a lived belief and one backed by a second teller hold; the same teller twice is still hearsay.
 - `childhood_memories_last_longer` proves a childhood memory survives eight hours that forget an ordinary one.
 - The non-ignored unit test `attributes_hearsay_by_teller` covers provenance rules (lived, own words, testimony about the teller, unknown experiences).
+- The non-ignored unit test `shorthand_entries_cite_their_own_experiences` covers evidence for shorthand relations and stances (2026-11-10): each cites only the ids in its own `because` (an array or one id, numeric strings included) among the batch's experiences, none without one, at most `BECAUSE_CAP` (8); a model edge's `because` is capped the same way, with a note. The store keeps the newest 8 when a belief is re-asserted, so a kept memory GROUNDS only what cites it.
+- `missed_things_weaken` proves what a failure at a thing weakens: the idea and the memory naming `#66219`, not `#662190` nor a memory whose own key is `exp:66219`; and `weakened_upto`, the bound a restarted mind resumes reading failures from.
 
 Sources: `living/mind/src/memory.rs:109`, `memory.rs:152`, `memory.rs:185`, `memory.rs:344`, `memory.rs:421`, `memory.rs:498`, `memory.rs:1118` (`attribute`); consolidation attribution in `living/mind/src/mind.rs` `consolidate`; ignored tests at `memory.rs:1288`, `memory.rs:1348`, `memory.rs:1402`, `memory.rs:1430`, `memory.rs:1577`, `memory.rs:1628`, `memory.rs:1664`.
 

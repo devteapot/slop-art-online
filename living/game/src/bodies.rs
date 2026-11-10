@@ -253,6 +253,14 @@ pub fn spawn_beast(commands: &mut Commands, assets: &AssetServer, kind: &str, at
     )
 }
 
+/// Longest my own moving segment is carried on past its end (ms) while a direction is held: the
+/// renewal is written by the first tick after the end (up to 16.7 ms) and then delivered, and a
+/// crowd's subscription updates can delay it further.
+const CARRY_MS: f64 = 150.0;
+/// ... and for this long after the keys are let go (s), so a carried body does not step back
+/// to the end of its segment before the stop arrives.
+const CARRY_AFTER_S: f64 = 0.25;
+
 /// Input → drawn in this client: my movement input paired with my next new segment, timed to the
 /// frame my own clock reaches its start, and to the frame the old display time would have. Also
 /// how far the display runs behind the newest fresh row, real and shadow. Logged every 10 s as
@@ -331,16 +339,28 @@ pub fn update(
     mut limbs: Query<(&Limb, &mut Transform), Without<Creature>>,
     time: Res<Time>,
 ) {
-    let Some(conn) = &net.conn else { return };
+    let Some(conn) = &net.conn else {
+        // Offline: nothing is known to stand anywhere now. Bodies left as they were would freeze
+        // mid-step and read as people; they come back with the next connection's rows.
+        scene.tracks.retain(|_| false);
+        scene.shown.clear();
+        scene.speeds.clear();
+        for (_, e) in scene.creatures.drain() {
+            commands.entity(e).despawn();
+        }
+        return;
+    };
     let now = scene.clock.frame(net.body_t.swap(0, std::sync::atomic::Ordering::Relaxed));
     let shadow = scene.shadow.frame(net.body_t_all.swap(0, std::sync::atomic::Ordering::Relaxed));
     scene.now_ms = now;
     // My own body is drawn as soon as its new segment arrives, not with the others' delay
     // (docs/LATENCY.md, step 3).
     let mine_at = now + scene.clock.lead();
+    scene.mine_ms = mine_at;
     let bodies: HashMap<u32, Body> = crate::net::bodies(conn).map(|b| (b.id, b)).collect();
     let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
     let scene = &mut *scene;
+    scene.mine_seg = net.my_id.and_then(|id| bodies.get(&id)).map_or((0, 0, 0.0), |b| (b.t_ms, b.next_ms, b.vx.hypot(b.vy)));
     let dt = time.delta_secs().max(1e-4);
     scene.tracks.retain(|id| bodies.contains_key(&id));
     scene.shown.retain(|id, _| bodies.contains_key(id));
@@ -351,7 +371,15 @@ pub fn update(
         shown.insert(id, (Vec2::new(p.x, p.y), heading.or(prev)));
     };
     scene.tracks.update(bodies.values().filter(|b| Some(b.id) != me), now, dt, &mut put);
-    scene.tracks.update(bodies.values().filter(|b| Some(b.id) == me), mine_at, dt, &mut put);
+    // Walking a held direction, my segment is carried on past its end until the authority's
+    // renewal arrives (`Tracks::update_ahead`), rather than stopping for a frame at every one.
+    let past = if input.moving || time.elapsed_secs_f64() - input.held_s < CARRY_AFTER_S { CARRY_MS } else { 0.0 };
+    scene.tracks.update_ahead(bodies.values().filter(|b| Some(b.id) == me), mine_at, dt, past, &mut put);
+    scene.speeds.clear();
+    for b in bodies.values() {
+        let (t, past) = if Some(b.id) == me { (mine_at, past) } else { (now, 0.0) };
+        scene.speeds.insert(b.id, scene.tracks.speed(b.id, t, past));
+    }
     measure(&mut scene.lat, me.and_then(|id| bodies.get(&id)), input.moved_at, mine_at, shadow, now, scene.clock.delay_ms(), scene.shadow.delay_ms(), (scene.clock.resyncs, scene.shadow.resyncs));
     scene.creatures.retain(|id, e| {
         let keep = bodies.contains_key(id);
