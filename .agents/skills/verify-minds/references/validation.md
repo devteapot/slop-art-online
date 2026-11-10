@@ -1,5 +1,11 @@
 # Internal mind validation
 
+## 2026-11-10 mind feedback (Mac)
+
+On the Mac (Docker Desktop), branch `feedback-1` (ffb4280 on main 6de2bad) in a worktree, against its own server `feedback-verify-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3343`), private target: docs/MIND_FEEDBACK.md.
+
+- Full suite `minds-fb1-005416`: roundtrip (now also the body line in think and compile requests), conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night and jev pass; consolidation is its known XFAIL. `acts` failed on its new check's wait condition (it waited for `#id` in the outcome, which names the resolved kind: "gather → boulder (+1 stone)") and passed on `minds-fb1acts-011707` after the fix.
+
 ## 2026-11-10 woken minds (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).

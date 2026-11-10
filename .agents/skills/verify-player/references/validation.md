@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-10 mind feedback (Mac)
+
+Branch `feedback-1` (ffb4280) on `feedback-verify-stdb` (3343), island seed, `player-fb1-012517`: `combat.py --scene kill` 2 of 2 (the resident's cause "killed by a stranger", no `acquaintance` row; the chronicle "FbPlayer killed Kelhan") and `--scene death` 3 of 3 ("killed by a wolf", where an earlier run read "killed by Storm the wolf").
+
 ## 2026-11-10 hospitality and the name rule (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
