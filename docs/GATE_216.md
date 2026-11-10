@@ -2,7 +2,7 @@
 
 2026-11-09. The first measurement of the [performance contract](PERFORMANCE_CONTRACT.md)'s immediate gate on the living core: 216 active characters for 30 minutes with a crowded battle, at 80 ms round trip, against every requirement the contract lists. Branch `gate-1`, code under test `14f3a72` (main) plus the measurement tools below. Earlier 216-character evidence came from the removed legacy stack ([short baseline](PERFORMANCE_BASELINE_25.md)).
 
-**Update (2026-11-10, branch `scale-1`).** Perceived state is now delivered once per frame per player, and the feeds' and views' hidden costs are gone ([scale change](#scale-change-frames-2026-11-10-branch-scale-1)). The 30-minute gate still fails 60 Hz and both latency lines: after merging main `fe6ec66` the battle runs at 4.0 steps a second with the queue at 0 instead of 0.5 with a queue of minutes, the calm's moves meet the client line (p95 133 ms) and miss the server line by 1.6 ms, and housekeeping passes. In arm B (30 fighters) moves meet the client line in the battle too. The new verdict table and the next bottleneck are in that section; what follows here is the first measurement as it was.
+**Update (2026-11-10, branch `scale-1`).** Perceived state is now delivered once per frame per player, and the feeds' and views' hidden costs are gone ([scale change](#scale-change-frames-2026-11-10-branch-scale-1)). The 30-minute gate still fails 60 Hz and both latency lines: after merging main `fe6ec66` the battle runs at 4.0 steps a second with the queue at 0 instead of 0.5 with a queue of minutes, the calm's moves meet the client line (p95 133 ms) and miss the server line by 1.6 ms, and housekeeping passes. In arm B (30 fighters) moves meet the client line in the battle too. After merging main `0812ada`, measured with two client arms ([below](#after-merging-main-0812ada-path-1-rethink-1-two-client-arms)): with confirmed reads arm B's battle passes both lines for moves; with the game's unconfirmed reads the full gate's calm passes both lines (moves 10.8 ms at the server, 92.3 ms at the client, p95), and the battle still runs at 4.7 steps a second. The new verdict table and the next bottleneck are in that section; what follows here is the first measurement as it was.
 
 **Result: the gate fails.** The 30-minute run fails 60 Hz cadence, both latency requirements and the slow-system deadlines, by orders of magnitude once the battle starts. The authority's single database thread saturates. Most of its time goes to per-sender perception views re-run for every player who perceives a change, in a cluster of 100 human-driven characters. That is about 1.1 of the container's 16 cores. Frame pacing on the one headless game client passes, but the world it drew was mostly frozen, so that pass is weak evidence. A real authority defect was also found: a tick panics and rolls back when a missile kills the owner of another missile in flight ([defect](#defect-found-the-missile-sweep-panics)).
 
@@ -362,6 +362,46 @@ Calm (2 min): both hold 60 Hz (59.9 and 59.7 steps/s). Frames cost the calm tick
 This run's calm, free of my verification load, answers the calm regression of `gate-20261110-001148`: move p95 51.6 ms at the server and 132.7 ms at the client, against 94.5 and 176.7 ms in the gate's own run. The battle and the last ten minutes are where `gate-20261110-001148` left them, and the world grew the same way (6,083 characters, 6,178 structures by the end).
 
 The harness found one more defect on the way: with the shell's soft limit of 1,024 open files, the relay ran out of descriptors after about 170 players ("Too many open files"), and the players' process then died with exit 101 and no message. `gate.py` now raises its soft limit to the hard one at start (an earlier unexplained exit 101 in this work was probably the same).
+
+### After merging main `0812ada` (path-1, rethink-1): two client arms
+
+The merge with main `0812ada` (merge `0c39794`, module `f32ced6837`; main's module `91887f0844`) carries the player verbs' client (`fa53e0b`, already in `fe6ec66`): `living/game` now reads unconfirmed, subscribes the `skills` script row and `resource_node` and `structure` in its near window, and sends input in the frame it is made. The players `gate.py` runs stand for one client or the other (`--client`, recorded in each manifest as `workload.client`):
+- **`gate`**: what the gate first measured: confirmed reads (the SDK default) and the gate's subscriptions. Every number above this section used it.
+- **`game`**: `living/game` since the player verbs: unconfirmed reads, the script row, the resource and structure windows.
+
+The headless game client in every run is `living/game` itself, reading unconfirmed since `fa53e0b`; it gives only the frame-pacing line. All runs below were back to back with nothing else of mine on the host (load p50 7–12).
+
+**Arm B (30 fighters), battle (8 min).** Before is main `0812ada`, after is the merge.
+
+| | `gate` client: main `gate-20261110-114536` | `gate` client: merge `-115926` | `game` client: main `-121259` | `game` client: merge `-122701` |
+|---|---|---|---|---|
+| Steps/s; grid steps skipped | 33.9; 12,545 of 28,799 | 53.1; 3,350 | 28.2; 15,317 | 43.9; 7,738 |
+| Tick transaction mean (ms) | 17.8 | 7.6 | 24.0 | 11.5 |
+| Move, server p95 / p99 (ms) | 51.4 / 61.5 | **31.0 / 38.0** | **46.5 / 59.8** | 51.6 / 67.2 |
+| Move, client p95 / p99 (ms) | **132.7 / 146.9** | **112.0 / 123.7** | **127.9 / 144.8** | **133.3 / 151.7** |
+| Skill outcome, server p95 / p99 (ms) | 93.3 / 107.7 | 50.9 / 61.1 | 103.6 / 123.0 | **41.5 / 52.1** |
+| Skill outcome, client p95 / p99 (ms) | 174.5 / 190.8 | **132.1 / 145.5** | 184.8 / 206.9 | **122.7 / 138.2** |
+| Queue wait, `human_move` mean (ms) | 11.2 | 3.2 | 16.3 | 9.6 |
+
+Bold: within the contract's line (≤50 / ≤100 ms at the server, ≤150 / ≤250 ms at the client). Calm (2 min) holds about 60 Hz and passes both lines in all four; with the `game` client, moves arrive in 88–90 ms at p95 at the client and 7–8 ms at the server, the fsync gone from both.
+
+- With the `gate` client the merge passes both lines for moves and the client line for skills in the battle (skills miss the server's p95 by 0.9 ms); 60 Hz still fails (11.6% of grid steps skipped).
+- With the `game` client the server line no longer includes the fsync, so skills pass both lines; moves miss the server's p95 by 1.6 ms.
+- The merge's `game`-client run cost the tick far more than its `gate`-client run (297 against 165 ms/s of tick code: `tick.wakes` 101 against 28, `tick.activity` 100 against 41) with fewer deaths (555 rejoins against 736) and fewer accepted skills (9,400 against 11,877; more refused as "already in the middle of" a move, since the players see their own moves sooner). Rows the subscriptions scanned and sent were lower, so the windows are not the cause. One run each: whether the client arm or run-to-run variance in the battle (who else joins it) explains the difference is not established.
+
+**The full gate on the merge, `game` client** (`gate-20261110-124038`; 100 fighters, 116 walkers, 30 min):
+
+| Requirement (locked) | Verdict | Measured, 30-min window |
+|---|---|---|
+| 60 Hz authoritative simulation, battle included | **fail** | 13.2 steps/s overall: calm 56.1, battle 4.7, last 10 min 2.4; operation queue 70 at the end. |
+| Server receipt → committed outcome ≤50 ms p95, ≤100 ms p99 | **fail** | Moves: calm p95 10.8 / p99 19.2 ms (passes); window p95 390 / p99 525 ms. Skill outcomes: window p95 702 / p99 933 ms. |
+| Client input → outcome received at 80 ms RTT ≤150 ms p95, ≤250 ms p99 | **fail** | Moves: calm p95 92.3 / p99 103.8 ms (passes); window p95 471 / p99 606 ms. Skill outcomes: window p95 783 / p99 1,014 ms. |
+| Client 60 FPS, 99% of frames ≤ ~16.7 ms | **pass, weak** | Battle: 100.0% within 16.7 ms. |
+| Slow systems at their deadlines (1 Hz housekeeping) | **pass** | 1,800 runs; interval p99 1,272 ms. |
+
+Against the same gate with the `gate` client on the earlier merge (`gate-20261110-090632`): calm moves fall from 51.6 to 10.8 ms at the server and from 132.7 to 92.3 ms at the client at p95, which is the fsync; the battle is where the database thread's saturation leaves it either way (4.0 and 4.7 steps a second, moves 439 and 405 ms at the server's p95).
+
+**On main as well:** `verify-player`'s `combat.py` fails five checks on main `0812ada` exactly as on the merge (the bow's arrow "struck a wall"; the graph attacker never reaches the player in the block, dodge and heal scenes): the scene's fixed offsets from the arrival point meet walls on the island the merged generator now builds. A driver fixture to move, not a rule failure, and not this branch's.
 
 ### Next measured bottleneck
 
