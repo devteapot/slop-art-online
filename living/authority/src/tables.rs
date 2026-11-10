@@ -1252,6 +1252,19 @@ pub struct FighterSeen {
     pub fighter: Fighter,
 }
 
+/// A person's current character (private): the one they play, or the one that died last until
+/// they join again. Written at `join` and when the world's minds hand a character back
+/// (`presence`). The views and the player reducers read this one row instead of every
+/// character the identity ever controlled (`character.controller`), which grows with each
+/// death and rejoin.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = player)]
+pub struct Player {
+    #[primary_key]
+    pub identity: Identity,
+    pub character: u32,
+}
+
 /// How a perceived creature moves, as its viewer was last shown it (private; frames,
 /// `frame.rs`): one row per creature in a player's perceived set, keyed
 /// `frame::key(viewer's character, creature)`, written when it comes into sight and then at

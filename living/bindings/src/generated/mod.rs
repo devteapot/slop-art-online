@@ -125,10 +125,13 @@ pub mod missile_type;
 pub mod motion_seen_table;
 pub mod motion_seen_type;
 pub mod motion_type;
+pub mod my_body_table;
 pub mod my_characters_table;
 pub mod my_combat_table;
 pub mod my_deliberations_table;
+pub mod my_doing_table;
 pub mod my_experience_table;
+pub mod my_fighter_table;
 pub mod my_inventory_table;
 pub mod my_know_how_table;
 pub mod my_places_table;
@@ -152,6 +155,8 @@ pub mod place_structure_reducer;
 pub mod place_table;
 pub mod place_type;
 pub mod planned_act_type;
+pub mod player_table;
+pub mod player_type;
 pub mod practice_table;
 pub mod practice_type;
 pub mod presence_table;
@@ -364,10 +369,13 @@ pub use missile_type::Missile;
 pub use motion_seen_table::*;
 pub use motion_seen_type::MotionSeen;
 pub use motion_type::Motion;
+pub use my_body_table::*;
 pub use my_characters_table::*;
 pub use my_combat_table::*;
 pub use my_deliberations_table::*;
+pub use my_doing_table::*;
 pub use my_experience_table::*;
+pub use my_fighter_table::*;
 pub use my_inventory_table::*;
 pub use my_know_how_table::*;
 pub use my_places_table::*;
@@ -391,6 +399,8 @@ pub use place_structure_reducer::place_structure;
 pub use place_table::*;
 pub use place_type::Place;
 pub use planned_act_type::PlannedAct;
+pub use player_table::*;
+pub use player_type::Player;
 pub use practice_table::*;
 pub use practice_type::Practice;
 pub use presence_table::*;
@@ -965,10 +975,13 @@ pub struct DbUpdate {
     mind_state: __sdk::TableUpdate<MindState>,
     missile: __sdk::TableUpdate<Missile>,
     motion_seen: __sdk::TableUpdate<MotionSeen>,
+    my_body: __sdk::TableUpdate<Motion>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
+    my_doing: __sdk::TableUpdate<Doing>,
     my_experience: __sdk::TableUpdate<Experience>,
+    my_fighter: __sdk::TableUpdate<Fighter>,
     my_inventory: __sdk::TableUpdate<Inventory>,
     my_know_how: __sdk::TableUpdate<KnowHow>,
     my_places: __sdk::TableUpdate<Place>,
@@ -980,6 +993,7 @@ pub struct DbUpdate {
     perceived: __sdk::TableUpdate<Perceived>,
     persona: __sdk::TableUpdate<Persona>,
     place: __sdk::TableUpdate<Place>,
+    player: __sdk::TableUpdate<Player>,
     practice: __sdk::TableUpdate<Practice>,
     presence: __sdk::TableUpdate<Presence>,
     prior: __sdk::TableUpdate<Prior>,
@@ -1157,6 +1171,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "motion_seen" => db_update
                     .motion_seen
                     .append(motion_seen_table::parse_table_update(table_update)?),
+                "my_body" => db_update
+                    .my_body
+                    .append(my_body_table::parse_table_update(table_update)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(my_characters_table::parse_table_update(table_update)?),
@@ -1166,9 +1183,15 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_deliberations" => db_update
                     .my_deliberations
                     .append(my_deliberations_table::parse_table_update(table_update)?),
+                "my_doing" => db_update
+                    .my_doing
+                    .append(my_doing_table::parse_table_update(table_update)?),
                 "my_experience" => db_update
                     .my_experience
                     .append(my_experience_table::parse_table_update(table_update)?),
+                "my_fighter" => db_update
+                    .my_fighter
+                    .append(my_fighter_table::parse_table_update(table_update)?),
                 "my_inventory" => db_update
                     .my_inventory
                     .append(my_inventory_table::parse_table_update(table_update)?),
@@ -1202,6 +1225,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "place" => db_update
                     .place
                     .append(place_table::parse_table_update(table_update)?),
+                "player" => db_update
+                    .player
+                    .append(player_table::parse_table_update(table_update)?),
                 "practice" => db_update
                     .practice
                     .append(practice_table::parse_table_update(table_update)?),
@@ -1483,6 +1509,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.place = cache
             .apply_diff_to_table::<Place>("place", &self.place)
             .with_updates_by_pk(|row| &row.id);
+        diff.player = cache
+            .apply_diff_to_table::<Player>("player", &self.player)
+            .with_updates_by_pk(|row| &row.identity);
         diff.practice = cache
             .apply_diff_to_table::<Practice>("practice", &self.practice)
             .with_updates_by_pk(|row| &row.id);
@@ -1582,14 +1611,23 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.world = cache
             .apply_diff_to_table::<World>("world", &self.world)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_body = cache
+            .apply_diff_to_table::<Motion>("my_body", &self.my_body)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_characters = cache
             .apply_diff_to_table::<Character>("my_characters", &self.my_characters)
             .with_updates_by_pk(|row| &row.id);
         diff.my_combat = cache.apply_diff_to_table::<CombatSeen>("my_combat", &self.my_combat);
         diff.my_deliberations =
             cache.apply_diff_to_table::<Deliberation>("my_deliberations", &self.my_deliberations);
+        diff.my_doing = cache
+            .apply_diff_to_table::<Doing>("my_doing", &self.my_doing)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_experience = cache
             .apply_diff_to_table::<Experience>("my_experience", &self.my_experience)
+            .with_updates_by_pk(|row| &row.id);
+        diff.my_fighter = cache
+            .apply_diff_to_table::<Fighter>("my_fighter", &self.my_fighter)
             .with_updates_by_pk(|row| &row.id);
         diff.my_inventory = cache
             .apply_diff_to_table::<Inventory>("my_inventory", &self.my_inventory)
@@ -1759,6 +1797,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "motion_seen" => db_update
                     .motion_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_body" => db_update
+                    .my_body
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1768,8 +1809,14 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_deliberations" => db_update
                     .my_deliberations
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_doing" => db_update
+                    .my_doing
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_experience" => db_update
                     .my_experience
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_fighter" => db_update
+                    .my_fighter
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
@@ -1803,6 +1850,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "place" => db_update
                     .place
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "player" => db_update
+                    .player
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "practice" => db_update
                     .practice
@@ -2060,6 +2110,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "motion_seen" => db_update
                     .motion_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_body" => db_update
+                    .my_body
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2069,8 +2122,14 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_deliberations" => db_update
                     .my_deliberations
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_doing" => db_update
+                    .my_doing
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_experience" => db_update
                     .my_experience
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_fighter" => db_update
+                    .my_fighter
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
@@ -2104,6 +2163,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "place" => db_update
                     .place
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "player" => db_update
+                    .player
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "practice" => db_update
                     .practice
@@ -2275,10 +2337,13 @@ pub struct AppliedDiff<'r> {
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
     missile: __sdk::TableAppliedDiff<'r, Missile>,
     motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
+    my_body: __sdk::TableAppliedDiff<'r, Motion>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
+    my_doing: __sdk::TableAppliedDiff<'r, Doing>,
     my_experience: __sdk::TableAppliedDiff<'r, Experience>,
+    my_fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     my_inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     my_know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     my_places: __sdk::TableAppliedDiff<'r, Place>,
@@ -2290,6 +2355,7 @@ pub struct AppliedDiff<'r> {
     perceived: __sdk::TableAppliedDiff<'r, Perceived>,
     persona: __sdk::TableAppliedDiff<'r, Persona>,
     place: __sdk::TableAppliedDiff<'r, Place>,
+    player: __sdk::TableAppliedDiff<'r, Player>,
     practice: __sdk::TableAppliedDiff<'r, Practice>,
     presence: __sdk::TableAppliedDiff<'r, Presence>,
     prior: __sdk::TableAppliedDiff<'r, Prior>,
@@ -2404,6 +2470,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
         callbacks.invoke_table_row_callbacks::<Missile>("missile", &self.missile, event);
         callbacks.invoke_table_row_callbacks::<MotionSeen>("motion_seen", &self.motion_seen, event);
+        callbacks.invoke_table_row_callbacks::<Motion>("my_body", &self.my_body, event);
         callbacks.invoke_table_row_callbacks::<Character>(
             "my_characters",
             &self.my_characters,
@@ -2415,11 +2482,13 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.my_deliberations,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<Doing>("my_doing", &self.my_doing, event);
         callbacks.invoke_table_row_callbacks::<Experience>(
             "my_experience",
             &self.my_experience,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<Fighter>("my_fighter", &self.my_fighter, event);
         callbacks.invoke_table_row_callbacks::<Inventory>(
             "my_inventory",
             &self.my_inventory,
@@ -2443,6 +2512,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Perceived>("perceived", &self.perceived, event);
         callbacks.invoke_table_row_callbacks::<Persona>("persona", &self.persona, event);
         callbacks.invoke_table_row_callbacks::<Place>("place", &self.place, event);
+        callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
         callbacks.invoke_table_row_callbacks::<Practice>("practice", &self.practice, event);
         callbacks.invoke_table_row_callbacks::<Presence>("presence", &self.presence, event);
         callbacks.invoke_table_row_callbacks::<Prior>("prior", &self.prior, event);
@@ -3212,10 +3282,13 @@ impl __sdk::SpacetimeModule for RemoteModule {
         mind_state_table::register_table(client_cache);
         missile_table::register_table(client_cache);
         motion_seen_table::register_table(client_cache);
+        my_body_table::register_table(client_cache);
         my_characters_table::register_table(client_cache);
         my_combat_table::register_table(client_cache);
         my_deliberations_table::register_table(client_cache);
+        my_doing_table::register_table(client_cache);
         my_experience_table::register_table(client_cache);
+        my_fighter_table::register_table(client_cache);
         my_inventory_table::register_table(client_cache);
         my_know_how_table::register_table(client_cache);
         my_places_table::register_table(client_cache);
@@ -3227,6 +3300,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         perceived_table::register_table(client_cache);
         persona_table::register_table(client_cache);
         place_table::register_table(client_cache);
+        player_table::register_table(client_cache);
         practice_table::register_table(client_cache);
         presence_table::register_table(client_cache);
         prior_table::register_table(client_cache);
@@ -3310,10 +3384,13 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "mind_state",
         "missile",
         "motion_seen",
+        "my_body",
         "my_characters",
         "my_combat",
         "my_deliberations",
+        "my_doing",
         "my_experience",
+        "my_fighter",
         "my_inventory",
         "my_know_how",
         "my_places",
@@ -3325,6 +3402,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "perceived",
         "persona",
         "place",
+        "player",
         "practice",
         "presence",
         "prior",

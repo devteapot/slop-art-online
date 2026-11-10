@@ -167,6 +167,7 @@ fn hand_back(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     c.controller = p.player;
     c.ai = false;
     ctx.db.character().id().update(c);
+    crate::perception::set_player(ctx, p.player, p.id);
     // What the minds had going stops: a pending thought, decided acts, the activity under way.
     ctx.db.deliberation().actor().delete(p.id);
     ctx.db.act_queue().actor().delete(p.id);

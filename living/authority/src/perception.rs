@@ -583,10 +583,44 @@ pub fn reveal(ctx: &ReducerContext, observer: u32, target: u32, what: &str, secs
 
 // ---- views --------------------------------------------------------------------------------
 
-/// The characters this connection's person controls (not minds' characters: a mind service's
-/// identity reads the tables themselves).
-fn mine(ctx: &ViewContext) -> impl Iterator<Item = Character> + '_ {
-    ctx.db.character().controller().filter(ctx.sender()).filter(|c| !c.ai)
+/// The character this connection's person plays now, or the one that died last until they
+/// join again (`player`). Not a character the world's minds hold while its person is away
+/// (`ai`), and not minds' characters: a mind service's identity reads the tables themselves.
+/// A person with no `player` row yet (a world from before the table) is found by the old
+/// walk over every character it controlled, until its next reducer call writes the row.
+pub(crate) fn current(ctx: &ViewContext) -> Option<Character> {
+    let me = ctx.sender();
+    match ctx.db.player().identity().find(me) {
+        Some(p) => ctx.db.character().id().find(p.character).filter(|c| c.controller == me && !c.ai),
+        None => ctx.db.character().controller().filter(me).filter(|c| !c.ai).max_by_key(|c| (c.alive, c.id)),
+    }
+}
+
+/// The current character while it lives.
+pub(crate) fn living(ctx: &ViewContext) -> Option<Character> {
+    current(ctx).filter(|c| c.alive)
+}
+
+/// The caller's living character for a player reducer (`player`; a person with no row yet is
+/// found by the old walk, and the row is written).
+pub fn player_character(ctx: &ReducerContext) -> Option<Character> {
+    let me = ctx.sender();
+    if let Some(p) = ctx.db.player().identity().find(me) {
+        return ctx.db.character().id().find(p.character).filter(|c| c.alive && !c.ai && c.controller == me);
+    }
+    let c = ctx.db.character().controller().filter(me).find(|c| c.alive && !c.ai)?;
+    set_player(ctx, me, c.id);
+    Some(c)
+}
+
+/// `who` plays `character` now.
+pub fn set_player(ctx: &ReducerContext, who: Identity, character: u32) {
+    let row = Player { identity: who, character };
+    if ctx.db.player().identity().find(who).is_some() {
+        ctx.db.player().identity().update(row);
+    } else {
+        ctx.db.player().insert(row);
+    }
 }
 
 /// What I perceive of each creature in my scene, mine included (the projections).
@@ -594,14 +628,18 @@ fn projections(ctx: &ViewContext) -> impl Iterator<Item = Projected> + '_ {
     ctx.db.projected().viewer().filter(ctx.sender())
 }
 
-/// How the bodies in my scene move (the narrow stream; my own body included): my own body as
-/// it is, the others as my last frame showed them (`motion_seen`, `frame.rs`).
+/// How the bodies in my scene move (the narrow stream): the others, as my last frame showed
+/// them (`motion_seen`, `frame.rs`). My own body is `my_body`, so my own moves and steering
+/// re-run one row, not my whole scene.
 #[spacetimedb::view(accessor = seen_bodies, public, primary_key = id)]
 pub fn seen_bodies(ctx: &ViewContext) -> Vec<Motion> {
-    // My own character is never a row of my perceived set, so the two parts do not overlap.
-    let mut out: Vec<Motion> = mine(ctx).filter(|c| c.alive).filter_map(|c| ctx.db.body().id().find(c.id)).map(|b| Motion::from(&b)).collect();
-    out.extend(ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.motion));
-    out
+    ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.motion).collect()
+}
+
+/// How my own living character's body moves, as it is.
+#[spacetimedb::view(accessor = my_body, public, primary_key = id)]
+pub fn my_body(ctx: &ViewContext) -> Vec<Motion> {
+    living(ctx).and_then(|c| ctx.db.body().id().find(c.id)).map(|b| Motion::from(&b)).into_iter().collect()
 }
 
 /// What I perceive of the creatures in my scene, mine included: their records through the
@@ -615,34 +653,43 @@ pub fn seen_characters(ctx: &ViewContext) -> Vec<SeenCharacter> {
 }
 
 /// How the fighters in my scene look: the move under way, and the health band as I perceive
-/// it (the projection's; 255 when not perceived). Mine as it is; the others' as my last frame
-/// showed them (`fighter_seen`, `frame.rs`).
+/// it (the projection's; 255 when not perceived), as my last frame showed them (`fighter_seen`,
+/// `frame.rs`). Mine is `my_fighter`.
 #[spacetimedb::view(accessor = seen_fighters, public, primary_key = id)]
 pub fn seen_fighters(ctx: &ViewContext) -> Vec<Fighter> {
-    let mut out: Vec<Fighter> = mine(ctx).filter(|c| c.alive).filter_map(|c| ctx.db.fighter().id().find(c.id)).collect();
-    out.extend(ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter));
-    out
+    ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter).collect()
+}
+
+/// My own living character's move under way and health band, as they are.
+#[spacetimedb::view(accessor = my_fighter, public, primary_key = id)]
+pub fn my_fighter(ctx: &ViewContext) -> Vec<Fighter> {
+    living(ctx).and_then(|c| ctx.db.fighter().id().find(c.id)).into_iter().collect()
 }
 
 /// What the creatures in my scene are visibly doing: mine as it is, the others' as my last
 /// frame showed them (`doing_seen`, `frame.rs`).
 #[spacetimedb::view(accessor = seen_doing, public, primary_key = id)]
 pub fn seen_doing(ctx: &ViewContext) -> Vec<Doing> {
-    let mut out: Vec<Doing> = mine(ctx).filter(|c| c.alive).filter_map(|c| ctx.db.doing().id().find(c.id)).collect();
-    out.extend(ctx.db.doing_seen().viewer().filter(ctx.sender()).map(|d| d.doing));
-    out
+    ctx.db.doing_seen().viewer().filter(ctx.sender()).map(|d| d.doing).collect()
 }
 
-/// My characters, the dead included (the death screen).
+/// What my own living character is visibly doing, as it is.
+#[spacetimedb::view(accessor = my_doing, public, primary_key = id)]
+pub fn my_doing(ctx: &ViewContext) -> Vec<Doing> {
+    living(ctx).and_then(|c| ctx.db.doing().id().find(c.id)).into_iter().collect()
+}
+
+/// My current character, alive, or the one that died last until I join again (the death
+/// screen). Not every character I ever had.
 #[spacetimedb::view(accessor = my_characters, public, primary_key = id)]
 pub fn my_characters(ctx: &ViewContext) -> Vec<Character> {
-    mine(ctx).collect()
+    current(ctx).into_iter().collect()
 }
 
-/// My living characters' exact needs and health.
+/// My living character's exact needs and health.
 #[spacetimedb::view(accessor = my_vitals, public, primary_key = id)]
 pub fn my_vitals(ctx: &ViewContext) -> Vec<Vitals> {
-    mine(ctx).filter(|c| c.alive).filter_map(|c| ctx.db.vitals().id().find(c.id)).collect()
+    living(ctx).and_then(|c| ctx.db.vitals().id().find(c.id)).into_iter().collect()
 }
 
 /// What reached my character's senses lately: the newest `frame::LINES_SHOWN` lines of my
@@ -651,26 +698,23 @@ pub fn my_vitals(ctx: &ViewContext) -> Vec<Vitals> {
 /// dies often would re-read all of their windows at each line.
 #[spacetimedb::view(accessor = my_experience, public, primary_key = id)]
 pub fn my_experience(ctx: &ViewContext) -> Vec<Experience> {
-    let chars: Vec<Character> = mine(ctx).collect();
-    let living: Vec<u32> = chars.iter().filter(|c| c.alive).map(|c| c.id).collect();
-    let ids = if living.is_empty() { chars.iter().map(|c| c.id).max().into_iter().collect() } else { living };
-    ids.into_iter().flat_map(|id| ctx.db.line_seen().by_observer_shown().filter((id, true)).map(|l| l.line).collect::<Vec<_>>()).collect()
+    current(ctx).map(|c| ctx.db.line_seen().by_observer_shown().filter((c.id, true)).map(|l| l.line).collect()).unwrap_or_default()
 }
 
 /// The places my living characters know.
 #[spacetimedb::view(accessor = my_places, public, primary_key = id)]
 pub fn my_places(ctx: &ViewContext) -> Vec<Place> {
-    mine(ctx).filter(|c| c.alive).flat_map(|c| ctx.db.place().actor().filter(c.id).collect::<Vec<_>>()).collect()
+    living(ctx).map(|c| ctx.db.place().actor().filter(c.id).collect()).unwrap_or_default()
 }
 
 /// What my living characters carry.
 #[spacetimedb::view(accessor = my_inventory, public, primary_key = id)]
 pub fn my_inventory(ctx: &ViewContext) -> Vec<Inventory> {
-    mine(ctx).filter(|c| c.alive).flat_map(|c| ctx.db.inventory().owner().filter(c.id as u64).collect::<Vec<_>>()).collect()
+    living(ctx).map(|c| ctx.db.inventory().owner().filter(c.id as u64).collect()).unwrap_or_default()
 }
 
 /// What my living characters know how to do.
 #[spacetimedb::view(accessor = my_know_how, public, primary_key = id)]
 pub fn my_know_how(ctx: &ViewContext) -> Vec<KnowHow> {
-    mine(ctx).filter(|c| c.alive).flat_map(|c| ctx.db.know_how().actor().filter(c.id).collect::<Vec<_>>()).collect()
+    living(ctx).map(|c| ctx.db.know_how().actor().filter(c.id).collect()).unwrap_or_default()
 }

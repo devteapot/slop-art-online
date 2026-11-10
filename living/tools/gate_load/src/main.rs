@@ -278,7 +278,7 @@ fn windows(x: f32, y: f32, size: u32, client: Client) -> Vec<String> {
 
 /// What the game client subscribes once per connection, plus `my_skill_uses` (the correlation).
 const BASE: &[&str] = &[
-    "world", "land", "settlement", "seen_bodies", "seen_characters", "seen_fighters", "seen_doing", "my_characters", "my_vitals", "my_experience", "my_places",
+    "world", "land", "settlement", "seen_bodies", "seen_characters", "seen_fighters", "seen_doing", "my_body", "my_fighter", "my_doing", "my_characters", "my_vitals", "my_experience", "my_places",
     "my_inventory", "my_know_how", "my_combat", "my_readiness", "skill_card", "act_card", "weather", "my_skill_uses",
 ];
 
@@ -358,8 +358,8 @@ fn hook(p: &Player, log: &Log) {
         }
     };
     let st2 = st.clone();
-    conn.db.seen_bodies().on_update(move |ctx, _, b| mine(ctx, b.id, &st2));
-    conn.db.seen_bodies().on_insert(move |ctx, b| mine(ctx, b.id, &st));
+    conn.db.my_body().on_update(move |ctx, _, b| mine(ctx, b.id, &st2));
+    conn.db.my_body().on_insert(move |ctx, b| mine(ctx, b.id, &st));
     // Every state of my skill uses, as it reaches me.
     let (st, lg, idx) = (p.st.clone(), log.clone(), p.idx);
     conn.db.my_skill_uses().on_insert(move |ctx, u| {
@@ -511,7 +511,7 @@ fn fight(p: &Player, log: &Log, cards: &HashMap<String, Card>, center: (f32, f32
     }
     let db = &p.conn.db;
     let now = now_ms();
-    let Some(mb) = db.seen_bodies().id().find(&me) else { return };
+    let Some(mb) = db.my_body().id().find(&me) else { return };
     let here = pos(&mb, now);
     let current = p.st.lock().unwrap().target;
     let mut best: Option<(u32, (f32, f32), f32)> = None;
@@ -661,7 +661,7 @@ fn players_mode() {
     for p in &players {
         let me = p.st.lock().unwrap().me.unwrap();
         let at = loop {
-            if let Some(b) = p.conn.db.seen_bodies().id().find(&me) {
+            if let Some(b) = p.conn.db.my_body().id().find(&me) {
                 break (b.x, b.y);
             }
             assert!(t.elapsed() < Duration::from_secs(60), "no body for player {}", p.idx);

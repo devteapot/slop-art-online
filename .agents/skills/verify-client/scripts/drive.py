@@ -67,16 +67,20 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            # A floor module's staged genesis (floor.rs), private since floors were added.
            'floor_seed', 'genesis_timer',
            # Frames: what each player was last shown of others (docs/PERCEPTION.md, "Frames").
-           'motion_seen', 'fighter_seen', 'doing_seen', 'line_seen']
+           'motion_seen', 'fighter_seen', 'doing_seen', 'line_seen',
+           # Which character each person plays (perception.rs `current`); a player reads it through my_characters.
+           'player']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
-VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_characters',
+VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
          'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
-OWN = ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how']
+# The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
+BODY = ['my_body', 'my_fighter', 'my_doing']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
@@ -611,7 +615,9 @@ class Run:
         def scoped_to_self(label, v):
             p = v['final']['perception']
             mine = {c['id'] for c in p['my_characters']}
-            return (v['status'] == 'applied' and mine and all(c['controller'] == v['identity'] and not c['ai'] for c in p['my_characters'])
+            # my_characters is the character the person plays now: one row.
+            return (v['status'] == 'applied' and len(mine) == 1 and all(c['controller'] == v['identity'] and not c['ai'] for c in p['my_characters'])
+                    and set(p['my_body']) == mine and set(p['my_fighter']) <= mine and set(p['my_doing']) <= mine
                     and p['my_vitals'] and set(p['my_vitals']) <= mine and {e['observer'] for e in p['my_experience']} <= mine
                     # Lived by the person, or by the world's minds while the person was away.
                     and all(e['controller'].lower().removeprefix('0x') in (v['identity'].lower().removeprefix('0x'), admin_identity) for e in p['my_experience'])
@@ -634,7 +640,7 @@ class Run:
             time.sleep(1.0)
             seen = {}
             for who, token in [(me, t1), (other, t2)]:
-                v = self.probe(f'sight-{step}-{who}', ['SELECT * FROM ' + t for t in SEEN], token, seconds=0)
+                v = self.probe(f'sight-{step}-{who}', ['SELECT * FROM ' + t for t in SEEN + ['my_body']], token, seconds=0)
                 seen[who] = v['final']['perception']
             steps.append({'step': step, 'positions': {me: a, other: b}, 'seen': seen})
             write(self.directory / 'sight.json', {'spots': spots, 'steps': steps, 'players': [me, other]})
@@ -643,7 +649,9 @@ class Run:
         sees = lambda p, who: {t: who in p[t] for t in ['seen_bodies', 'seen_characters']}
         near = scene('in-sight', *spots['open'])
         self.check('in sight: both players receive each other\'s body and character', all(sees(near[me], other).values()) and
-                   all(sees(near[other], me).values()) and me in near[me]['seen_bodies'] and other in near[other]['seen_bodies'],
+                   # Its own body comes through my_body, not as a copy in seen_bodies.
+                   all(sees(near[other], me).values()) and near[me]['my_body'] == [me] and near[other]['my_body'] == [other]
+                   and me not in near[me]['seen_bodies'] and other not in near[other]['seen_bodies'],
                    'sight.json', f"3 tiles apart at {spots['open'][0]}")
         # What a player perceives of another is the `perceived_of` projection: no controller,
         # home, parents or cause of death, and a stranger's name only once it is known.

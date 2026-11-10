@@ -608,7 +608,7 @@ pub const NOT_ON_BAR: u8 = u8::MAX;
 // ---- the player's skill input ------------------------------------------------------------
 
 fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
-    ctx.db.character().controller().filter(ctx.sender()).find(|c| c.alive && !c.ai).ok_or_else(|| "you have no living character".into())
+    crate::perception::player_character(ctx).ok_or_else(|| "you have no living character".into())
 }
 
 /// Use a skill on the bar (the rules' `skill_bar()`; `skill_card.slot`): `target` is the creature
@@ -715,12 +715,12 @@ pub fn my_combat(ctx: &ViewContext) -> Vec<CombatSeen> {
 /// My characters' cooldowns and recovery.
 #[spacetimedb::view(accessor = my_readiness, public)]
 pub fn my_readiness(ctx: &ViewContext) -> Vec<Readiness> {
-    ctx.db.character().controller().filter(ctx.sender()).filter(|c| c.alive).filter_map(|c| ctx.db.readiness().id().find(c.id)).collect()
+    crate::perception::living(ctx).and_then(|c| ctx.db.readiness().id().find(c.id)).into_iter().collect()
 }
 
 /// My characters' recent combat skill uses: what I tried, what the rules accepted and what
 /// happened.
 #[spacetimedb::view(accessor = my_skill_uses, public)]
 pub fn my_skill_uses(ctx: &ViewContext) -> Vec<SkillUse> {
-    ctx.db.character().controller().filter(ctx.sender()).filter(|c| c.alive).flat_map(|c| ctx.db.skill_use().actor().filter(c.id).collect::<Vec<_>>()).collect()
+    crate::perception::living(ctx).map(|c| ctx.db.skill_use().actor().filter(c.id).collect()).unwrap_or_default()
 }

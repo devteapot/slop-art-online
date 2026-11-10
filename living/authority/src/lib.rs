@@ -460,7 +460,7 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     if name.is_empty() || name.len() > 24 {
         return Err("name must be 1..=24 bytes".into());
     }
-    if ctx.db.character().controller().filter(ctx.sender()).any(|c| c.alive && !c.ai) || ctx.db.presence().player().filter(ctx.sender()).next().is_some() {
+    if perception::player_character(ctx).is_some() || ctx.db.presence().player().filter(ctx.sender()).next().is_some() {
         return Err("you already have a living character".into());
     }
     let now = common::now_ms(ctx);
@@ -468,6 +468,7 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     let arrive = island::arrival(ctx);
     let at = map.nearest_walkable(arrive.0, arrive.1).ok_or("no room")?;
     let id = seed::spawn_creature(ctx, &name, "person", ctx.sender(), false, at, now);
+    perception::set_player(ctx, ctx.sender(), id);
     mind::set_graph(ctx, id, r#"{"wait":30}"#, "waiting for you", "human", now)?;
     // What the world gives every newcomer (the seed's `newcomer`): nothing of anyone before.
     seed::newcomer_kit(ctx, id, now);
@@ -501,7 +502,7 @@ pub fn spawn_newcomer(ctx: &ReducerContext, name: String) -> Result<(), String> 
 }
 
 fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
-    ctx.db.character().controller().filter(ctx.sender()).find(|c| c.alive && !c.ai).ok_or_else(|| "you have no living character".into())
+    perception::player_character(ctx).ok_or_else(|| "you have no living character".into())
 }
 
 /// Perform one action (behavior graph node JSON, e.g. `{"do":{"skill":"gather","target":{"nearest":"tree"}}}`).
