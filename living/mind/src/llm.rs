@@ -2226,7 +2226,8 @@ mod tests {
     }
 
     /// A runaway generation stops near what the purpose needs (measured p99 output on
-    /// rules2-r2: think 465, compile 1,008, consolidate 2,388) instead of at 24,000 tokens:
+    /// rules2-r2: think 465, compile 1,008, consolidate 2,388; the longest usable compile
+    /// 4,547, most of it reasoning) instead of at 24,000 tokens:
     /// every profile caps every purpose the mind sends, and only `reorganize` goes past 6,000.
     #[test]
     fn every_profile_caps_each_purpose_near_its_need() {

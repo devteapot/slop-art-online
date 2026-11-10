@@ -19,7 +19,7 @@
       "purpose_max_tokens": {
         "think": 1500,
         "talk": 1000,
-        "deliberate": 4000,
+        "deliberate": 6000,
         "rethink": 1000,
         "consolidate": 6000,
         "internalize": 6000,
@@ -58,7 +58,7 @@
       "purpose_max_tokens": {
         "think": 1500,
         "talk": 1000,
-        "deliberate": 4000,
+        "deliberate": 6000,
         "rethink": 1000,
         "consolidate": 6000,
         "internalize": 6000,
@@ -73,7 +73,7 @@
       "purpose_max_tokens": {
         "think": 1500,
         "talk": 1000,
-        "deliberate": 4000,
+        "deliberate": 6000,
         "rethink": 1000,
         "consolidate": 6000,
         "internalize": 6000,
@@ -88,7 +88,7 @@
       "purpose_max_tokens": {
         "think": 1500,
         "talk": 1000,
-        "deliberate": 4000,
+        "deliberate": 6000,
         "rethink": 1000,
         "consolidate": 6000,
         "internalize": 6000,
