@@ -8,8 +8,9 @@
 
 `run` publishes a fresh `verify-lat-<stamp>` (seed island, the module from CARGO_TARGET_DIR) and
 runs `latency-probe` (living/tools/latency_probe) once per configuration, each as a new player
-identity and character: confirmed reads on/off x messages processed as they arrive (`thread`) or
-once per 60 Hz frame (`frame`, as the game client's `net::pump`). Server metrics are scraped
+identity and character: confirmed reads on/off x messages processed as they arrive (`thread`),
+once per 60 Hz frame (`frame`, as the game client's `net::pump` did), or once per frame and again
+right after each input (`flush`, as the game client's `net::flush` does since 2026-11-10). Server metrics are scraped
 before and after each configuration. `--url` and `--container`/`--ssh` point it at another
 server (the dev-box over the LAN); the probe always runs here, on this host's clock.
 
@@ -143,6 +144,9 @@ CONFIGS = [
     {"name": "unconfirmed-thread", "confirmed": False, "pump": "thread"},
     {"name": "confirmed-frame", "confirmed": True, "pump": "frame"},
     {"name": "unconfirmed-frame", "confirmed": False, "pump": "frame"},
+    # The game client since 2026-11-10 (docs/LATENCY.md steps 1-2): unconfirmed, sent the frame it is made.
+    {"name": "unconfirmed-flush", "confirmed": False, "pump": "flush"},
+    {"name": "confirmed-flush", "confirmed": True, "pump": "flush"},
 ]
 
 
@@ -250,15 +254,18 @@ def server_hists(mfile, reducers=("human_move", "use_skill", "tick")):
     return out
 
 
-def server_clock(bodies, frame_ms=FRAME_MS):
+def server_clock(bodies, frame_ms=FRAME_MS, fresh_only=False):
     """The game client's display clock, step by step: living/viewer/src/sync.rs `ServerClock` as
     living/game/src/bodies.rs drives it, with its constants (4 s window, 2% late share, 4 ms margin,
     10% slew, 1 s resync, 100 ms before the first row). Each 60 Hz frame takes the newest `t_ms`
     among body rows applied since the previous frame (net.rs `body_t.fetch_max`, inserts included)
     and records `t_ms - local`; the display shows authority time `local + off`.
     Frames run on a grid of this host's wall clock (ms); the real client's phase differs by < 1 frame.
+    `fresh_only`: fed only by rows whose segment changed (not a body entering view, not a row whose
+    `t_ms` is the one it replaces), as net.rs feeds it since 2026-11-10 (docs/LATENCY.md, step 3).
     Returns (frame times, off per frame)."""
-    arr = sorted((b["ts"] / 1000, b["t"]) for b in bodies if b["t"])
+    fresh = lambda b: not b.get("ins") and b.get("prev") is not None and b["prev"] != b["t"]
+    arr = sorted((b["ts"] / 1000, b["t"]) for b in bodies if b["t"] and (not fresh_only or fresh(b)))
     if not arr:
         return [], []
     start = arr[0][0]
@@ -368,10 +375,29 @@ def analyze_config(path, cards, same_clock=False):
         m["applied_frame_wait"] = times[bisect.bisect_left(times, arrival)] - arrival if bisect.bisect_left(times, arrival) < len(times) else None
         m["display_wait"] = times[f] - arrival
         m["send_to_drawn_start"] = times[f] - m["send_us"] / 1000
+    # Since 2026-11-10 my own body is drawn from its newest segment in the frame that applies it
+    # (bodies.rs `mine_at`): with a pump per frame, the row's callback time is that frame.
+    pump = next((e.get("pump") for e in ev if e["k"] == "joined"), "frame")
+    for m in mv:
+        if not m["row"]:
+            continue
+        arrival = m["row"]["ts"] / 1000
+        if pump == "thread":
+            f = bisect.bisect_left(times, arrival)
+            applied = times[f] if f < len(times) else None
+        else:
+            applied = arrival
+        if applied is not None:
+            m["send_to_drawn_own"] = applied - m["send_us"] / 1000
     out["moves"] = {k: summ([m[k] for m in mv if m.get(k) is not None]) for k in ("send_to_receipt", "receipt_to_reply", "send_to_reply", "row_lag", "seg_t_minus_receipt_ms",
-                                                                                "display_wait", "send_to_drawn_start")}
+                                                                                "display_wait", "send_to_drawn_start", "send_to_drawn_own")}
     # How far the display runs behind each frame's newest fresh row: local - (local + off) = -off, minus the authority-to-local offset.
     out["display_behind_local_ms"] = summ([-o for o in offs[len(offs) // 20:]])
+    # The same clock fed only by changed segments (net.rs since 2026-11-10): what others are drawn at.
+    _, offs_fresh = server_clock(bodies, fresh_only=True)
+    out["display_behind_local_ms_fresh_rows"] = summ([-o for o in offs_fresh[len(offs_fresh) // 20:]])
+    jumps = lambda o: sum(1 for a, b in zip(o, o[1:]) if abs(b - a) > 500)
+    out["display_resyncs"] = {"all_rows": jumps(offs), "fresh_rows": jumps(offs_fresh)}
     rows = sorted((b["ts"] / 1000, b["t"]) for b in bodies if b["t"])
     stale = [1 for ts, t in rows if ts - t > 300]
     out["body_rows"] = {"n": len(rows), "older_than_300ms_at_arrival": len(stale)}
@@ -441,6 +467,8 @@ def print_table(rep):
         if not x:
             continue
         print(f"== {c['name']}  offset half-width ms (windowed) {x['clock_offset_us']['windowed_half_width_ms']}  display behind {x['display_behind_local_ms']}  rows {x['body_rows']}")
+        if "display_behind_local_ms_fresh_rows" in x:
+            print(f"   display behind, fed by changed segments only: {x['display_behind_local_ms_fresh_rows']}  resyncs {x.get('display_resyncs')}")
         for sec in ("moves", "skills"):
             for k, v in x[sec].items():
                 if isinstance(v, dict) and v.get("n"):

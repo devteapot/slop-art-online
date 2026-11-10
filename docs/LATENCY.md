@@ -4,6 +4,8 @@
 
 ## Short answer
 
+**Update 2026-11-10:** steps 1–3 of the recommendation are in the game client. A movement input is now drawn about 13 ms (p50) and 21–24 ms (p95) after it is sent, on the Mac and over the LAN, Before, the reply alone took 24 ms (Mac) and 54 ms (LAN) at p50, and the old display clock added 50 ms or more, with tails of seconds. See [section 5](#5-steps-13-in-the-game-client-2026-11-10).
+
 - **80 ms is not something we measured on our network. It is a test condition the contract chose** to model a remote internet player. [Gate 216](GATE_216.md) added it on purpose with `netem`. With no added delay, the network costs about 0.3 ms on the dev-box loopback and about 3–4 ms over the home LAN.
 - **The milliseconds that matter today are ours, not the network's or SpacetimeDB's compute.** With no network delay, a movement input starts to be drawn about **108 ms (p50) / 184 ms (p95)** after the key is handled (dev-box). Over the home LAN it is 140 / 428 ms. SpacetimeDB's own work is about 1 ms of that. The rest comes from three things:
   1. **Confirmed reads**, the SDK default: about 35 ms (p50) of fsync wait per delivery on the dev-box.
@@ -250,6 +252,68 @@ The authority stays the single source of truth. No table, reducer or subscriptio
 5. **Leave skills as they are.** The predicted clip at the press, outcomes from the authority. If needed later, start a missile's cosmetic flight at the predicted release time, never its hit.
 6. **Not latency work, but the bigger gap at scale:** the server queue and per-viewer view refreshes ([gate 216](GATE_216.md#next-measured-bottleneck)). With 30 fighters they cost 90 ms at p95 server-side before any network. Prediction hides your own movement, but not other people's actions or your skill outcomes.
 
+## 5. Steps 1–3 in the game client (2026-11-10)
+
+**What changed in `living/game`:**
+1. **Inputs leave in their frame.** `net::flush` runs `frame_tick` after the input systems (movement, the skill bar, gestures, verbs), so a call made in frame *k* is sent in frame *k* instead of at the start of *k*+1.
+2. **Unconfirmed reads.** The game connects with `with_confirmed_reads(false)`. Minds, the observer and tools keep confirmed reads.
+3. **The display clock:**
+   - It learns its delay only from body rows whose segment changed (`on_update` with a new `t_ms`), not from bodies entering view.
+   - My own body is drawn at the display time plus `ServerClock::lead`, the margin by which the freshest rows arrive ahead of the display, so my new segment is drawn in the frame that applies it.
+   - Others keep the small interpolation delay.
+   - For comparison, every 10 s the game logs a shadow clock fed the old way (`clock:` lines, `bodies.rs`).
+
+**Tools.**
+- `latency_probe` has a `flush` pump: a `frame_tick` per 60 Hz frame and one right after each input, as `net::flush` does. Its body rows now carry `ins` and `prev`.
+- `latency.py` adds the configurations `unconfirmed-flush` (the game now) and `confirmed-flush`.
+- Its analysis adds:
+  - `send_to_drawn_own`: my row applied, which is when it is now drawn;
+  - the display clock emulated with changed segments only;
+  - resync counts.
+
+**Moves, n = 201 per configuration, p50 / p95 / p99 ms.** "Before" is the game as it was: confirmed reads, a pump per frame, and the old clock. "After" is unconfirmed reads, `flush`, and my body drawn on its lead. Drawn times stop at the frame that draws the input, before render and present.
+
+| Host | Before: send → reply applied | Before: send → drawn (old clock) | After: send → reply applied = drawn |
+|---|---|---|---|
+| Mac, Docker Desktop loopback (`mac-verbs-20261109-232442`) | 24.4 / 33.7 / 36.2 | 78.3 / 1,657 / 1,806 | **13.1 / 24.4 / 29.8** |
+| Mac → dev-box over the LAN: Wi-Fi and an SSH tunnel, ping p50 9.7 ms, dev-box load average about 16 from other agents (`lan-verbs-20261109-234813`) | 53.8 / 84.2 / 92.6 | 19,500 / 47,779 / 50,261 | **13.3 / 21.2 / 23.6** |
+
+The other configurations of the same runs, send → reply applied:
+
+| Host | Unconfirmed, pump per frame | Confirmed, `flush` |
+|---|---|---|
+| Mac | 26.3 / 34.8 / 37.3 | 11.6 / 37.9 / 78.4 |
+| LAN | 24.4 / 33.4 / 36.5 | 42.0 / 61.2 / 78.6 |
+
+What the steps buy:
+- `flush` saves about a frame: unconfirmed reads, 24–26 → 13 ms.
+- Unconfirmed reads remove the dev-box's fsync wait: 42 → 13 ms with `flush` over the LAN. On the Mac they cut only the tail, because Docker Desktop's fsync is cheap.
+- Changing the clock's feed removes the slip.
+
+**The slip is real, and in the game it was worse than 1–2 s.**
+
+Display behind the newest row, p50 / p95, from the clock emulated over each run's own rows:
+
+| Run | Fed every row | Fed changed segments only |
+|---|---|---|
+| Mac, before | 55 / 1,465 ms, 2 resyncs | 44 / 64 ms, 0 resyncs |
+| LAN, before | 973 / 52,797 ms, 37 resyncs | 77 / 130 ms, 0 resyncs |
+| Mac, after | 49 / 123 ms | 49 / 57 ms |
+| LAN, after | 45 ms / 156 s | 45 / 46 ms |
+
+- Across all eight configurations, the changed-segments feed never resynced.
+- Bodies entering view with segments minutes old drag the old estimate back by that much; each time they leave the 4 s window it resyncs forward again.
+
+**In the game client itself.** Mac, island scratch world `verify-client-verbs-1110-003532`, run `game3`: 40 direction changes through `human_move` while walking. Input handled → my new segment's start reached by the clock that draws it, in three 10 s windows:
+
+- **New clock:** p50 18–22, p95 22–36, max 38 ms (n = 41).
+- **Shadow clock, the old feed, the same frames:** p50 39–52, p95 52–59 ms.
+- **At load:** the shadow clock ran 415.7 s behind (3 resyncs) while standing residents came into view. The real clock had no resyncs in the whole run, and ran behind the newest fresh row by p50 14–18 and p95 25–30 ms while walking.
+
+**Still to do, as recommended:**
+- **Step 4, movement prediction,** waits on the product questions below. At the contract's 80 ms round trip only prediction meets the 50 ms line.
+- **Render and present** are not measured. The headless client is capped at 60 Hz.
+
 ## Open product questions for the user
 
 1. **Who connects, from where?**
@@ -276,7 +340,7 @@ export CARGO_TARGET_DIR=$PWD/.local/living/latency-target
 LIVING_SEED=island cargo build --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release
 cargo build --release --manifest-path living/tools/latency_probe/Cargo.toml
 living/tools/latency.py up                    # own container lat-stdb on 127.0.0.1:3391
-living/tools/latency.py run --label mac       # verify-lat-* world, 4 configurations, about 11 minutes
+living/tools/latency.py run --label mac       # verify-lat-* world, 6 configurations, about 15 minutes (--only to pick)
 living/tools/latency.py analyze .local/living/latency/<run> [--same-clock]
 living/tools/latency.py down                  # delete its databases, the container and its volume
 ```
