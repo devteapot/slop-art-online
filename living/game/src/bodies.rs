@@ -338,9 +338,11 @@ pub fn update(
     // My own body is drawn as soon as its new segment arrives, not with the others' delay
     // (docs/LATENCY.md, step 3).
     let mine_at = now + scene.clock.lead();
+    scene.mine_ms = mine_at;
     let bodies: HashMap<u32, Body> = crate::net::bodies(conn).map(|b| (b.id, b)).collect();
     let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
     let scene = &mut *scene;
+    scene.mine_seg = net.my_id.and_then(|id| bodies.get(&id)).map_or((0, 0), |b| (b.t_ms, b.next_ms));
     let dt = time.delta_secs().max(1e-4);
     scene.tracks.retain(|id| bodies.contains_key(&id));
     scene.shown.retain(|id, _| bodies.contains_key(id));

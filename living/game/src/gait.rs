@@ -376,6 +376,7 @@ fn record(
     bones: Query<(&Name, &GlobalTransform)>,
     anims: Query<&crate::anim::Anim>,
     roam: Res<crate::envs::Roam>,
+    scene: Option<NonSend<crate::world::Scene>>,
     mut feet: Local<HashMap<Entity, Tracked>>,
 ) {
     // The island's ground, else the look-dev environment's.
@@ -419,6 +420,9 @@ fn record(
             "t": time.elapsed_secs_f64(),
             "root": [p.x, p.y, p.z],
             "speed": roam.speed,
+            // Connected play: the authority time my body is drawn at, and its segment then.
+            "mine_ms": scene.as_ref().map(|s| s.mine_ms),
+            "seg": scene.as_ref().map(|s| [s.mine_seg.0, s.mine_seg.1]),
             "clip": anim.map_or("", |a| a.showing()),
             // The shared phase, the gaits and their weights, and each foot's marker contact.
             "phase": anim.map(|a| a.phase),
