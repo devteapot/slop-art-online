@@ -327,6 +327,21 @@ impl Minds {
 
     /// The character's routines as the mind sees them: how each has gone, and its graph.
     fn repertoire_text(&self, actor: u32) -> String {
+        let mut out = String::new();
+        for (i, (r, head)) in self.routine_digest(actor).iter().enumerate() {
+            out.push_str(&format!("## {head} [{}]\n", r.source));
+            if i < 12 {
+                if let Ok(g) = living_rules::graph::parse(&r.graph) {
+                    out.push_str(&living_rules::graph::outline(&g.root));
+                }
+            }
+        }
+        out
+    }
+
+    /// One line per routine (those the top level calls first, then the latest changed): its
+    /// name, what it serves and how that need stands, and how it has gone since it last changed.
+    fn routine_digest(&self, actor: u32) -> Vec<(Routine, String)> {
         let top = self.conn.db.brain().id().find(&actor).and_then(|b| living_rules::graph::parse(&b.graph).ok());
         let called: Vec<String> = top.as_ref().map(|g| living_rules::graph::routines_called(&g.root).into_iter().map(|r| r.to_lowercase()).collect()).unwrap_or_default();
         let mut rs: Vec<Routine> = self.conn.db.routine().iter().filter(|r| r.actor == actor).collect();
@@ -359,23 +374,19 @@ impl Minds {
                 .collect(),
             _ => Vec::new(),
         };
-        let mut out = String::new();
-        for (i, r) in rs.iter().enumerate() {
-            let stat = self.conn.db.routine_stat().id().find(&r.id);
-            let how = match &stat {
-                Some(s) if s.failed > 0 && !s.last_fail.is_empty() => format!("done {}×, failed {}× (last: {})", s.ok, s.failed, s.last_fail),
-                Some(s) => format!("done {}×, failed {}×", s.ok, s.failed),
-                None => "not tried yet".into(),
-            };
-            let serve = serves.iter().filter(|(n, _)| *n == r.name.to_lowercase()).map(|(_, t)| format!(" ({t})")).collect::<String>();
-            out.push_str(&format!("## {}{serve} — {} [{}]\n", r.name, how, r.source));
-            if i < 12 {
-                if let Ok(g) = living_rules::graph::parse(&r.graph) {
-                    out.push_str(&living_rules::graph::outline(&g.root));
-                }
-            }
-        }
-        out
+        rs.into_iter()
+            .map(|r| {
+                let stat = self.conn.db.routine_stat().id().find(&r.id);
+                let how = match &stat {
+                    Some(s) if s.failed > 0 && !s.last_fail.is_empty() => format!("done {}×, failed {}× (last: {})", s.ok, s.failed, s.last_fail),
+                    Some(s) => format!("done {}×, failed {}×", s.ok, s.failed),
+                    None => "not tried yet".into(),
+                };
+                let serve = serves.iter().filter(|(n, _)| *n == r.name.to_lowercase()).map(|(_, t)| format!(" ({t})")).collect::<String>();
+                let head = format!("{}{serve} — {how}", r.name);
+                (r, head)
+            })
+            .collect()
     }
 
     /// A reply's `intent` ({"weight", "graph"}) as ordinary edits: the graph becomes the
@@ -1477,7 +1488,7 @@ impl Minds {
         };
         let repertoire = self.repertoire_text(actor);
         // Think first, as the person and without the grammar; then compile the decision.
-        let habits: String = self.conn.db.routine().iter().filter(|r| r.actor == actor).map(|r| r.name).collect::<Vec<_>>().join(", ");
+        let habits: String = self.routine_digest(actor).into_iter().map(|(_, head)| format!("- {head}\n")).collect();
         let think_msgs = vec![
             Msg { role: "system", content: prompts::think_system() },
             Msg { role: "user", content: prompts::think_user(&ctx, &d.scene, &plan, &reason, &habits) },
