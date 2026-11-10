@@ -98,7 +98,7 @@ def run(d):
         for m in set(re.findall(r"did not work out: ((give|teach|host)[^:\n]*?→ #%d: [^.\n\\]*)" % S, text)):
             refused[m[1]] += 1
             why[re.sub(r"\d+", "#", m[0].split(": ", 1)[1])[:70]] += 1
-    reached = [e["text"] for e in exps if re.search(r"gave you|takes you in as their guest|taught you", e.get("text", ""))]
+    reached = [e["text"] for e in exps if e.get("kind") not in ("said", "repeat") and re.search(r"gave you|takes you in as their guest|taught you", e.get("text", ""))]
     for e in reached:
         done["food" if "gave you" in e else "lodging" if "guest" in e else "lesson"] += 1
     # Techniques the newcomer was taught by someone (not worked out alone by experimenting).
