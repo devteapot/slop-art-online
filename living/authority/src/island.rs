@@ -28,6 +28,8 @@ pub struct Hosted {
     pub info: LandInfo,
     pub settlements: Vec<Planned>,
     pub lots: Vec<PlannedLot>,
+    /// The roads as a graph, for the stages of a known way (`town::seat`); dropped with the rest.
+    pub ways: living_rules::ways::Ways,
 }
 
 pub struct Planned {
@@ -36,6 +38,8 @@ pub struct Planned {
     /// its own style (`living_rules::land::Site::id`).
     pub site_id: String,
     pub style: String,
+    /// The region kind it stands in (`meadow`, `forest`, ...), for seeds that choose a site.
+    pub region: String,
     pub centre: (f32, f32),
     pub radius_m: f32,
     pub scale: f32,
@@ -149,6 +153,7 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
             kind: s.kind,
             site_id: land.sites[s.site as usize].id(),
             style: s.style.clone(),
+            region: serde_json::to_value(land.sites[s.site as usize].region).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default(),
             centre: c,
             radius_m: s.radius_m,
             scale: s.scale,
@@ -193,28 +198,48 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
         arrive_x: arrive.0,
         arrive_y: arrive.1,
     };
-    Ok(Hosted { map, info, settlements, lots })
+    let ways = living_rules::ways::Ways::of(&land);
+    Ok(Hosted { map, info, settlements, lots, ways })
 }
 
-/// The seed's settlement entry for each planned settlement: the k-th entry of a site kind
-/// (`site`, or `town` for `towns` and `village` for `villages`) takes the k-th settlement of
-/// that kind. A town in its own style is its own kind (`steampunk_town`). Settlements without
-/// an entry stand empty.
+/// The seed's settlement entry for each planned settlement. An entry of a site kind (`site`, or
+/// `town` for `towns` and `village` for `villages`; a town in its own style is its own kind,
+/// `steampunk_town`) takes the next settlement of that kind, in order. An entry that chooses
+/// (`near`, `region`) goes after those and takes the unused one of its kind in one of its
+/// region kinds if any, nearest the settlement it names. Settlements without an entry stand
+/// empty.
 pub fn match_seed<'a>(h: &Hosted, towns: &'a [SeedTown], villages: &'a [SeedTown]) -> Vec<Option<&'a SeedTown>> {
     let entries: Vec<(&str, &SeedTown)> = towns
         .iter()
         .map(|t| (if t.site.is_empty() { "town" } else { t.site.as_str() }, t))
         .chain(villages.iter().map(|t| (if t.site.is_empty() { "village" } else { t.site.as_str() }, t)))
         .collect();
-    let mut used = vec![false; entries.len()];
-    h.settlements
-        .iter()
-        .map(|s| {
-            let i = entries.iter().enumerate().position(|(i, (k, _))| !used[i] && *k == s.site_id)?;
-            used[i] = true;
-            Some(entries[i].1)
-        })
-        .collect()
+    let chooses = |t: &SeedTown| !t.near.is_empty() || !t.region.is_empty();
+    let mut out: Vec<Option<&SeedTown>> = vec![None; h.settlements.len()];
+    for (k, t) in entries.iter().filter(|(_, t)| !chooses(t)) {
+        if let Some(i) = (0..out.len()).find(|&i| out[i].is_none() && h.settlements[i].site_id == *k) {
+            out[i] = Some(*t);
+        }
+    }
+    for (k, t) in entries.iter().filter(|(_, t)| chooses(t)) {
+        let anchor = (0..out.len()).find(|&j| out[j].is_some_and(|o| o.name == t.near)).map(|j| h.settlements[j].centre);
+        if anchor.is_none() && !t.near.is_empty() {
+            log::warn!("{}: near {:?}, which is not a settlement placed before it; nearness ignored", t.name, t.near);
+        }
+        let key = |i: usize| {
+            let s = &h.settlements[i];
+            let off_region = !t.region.is_empty() && !t.region.contains(&s.region);
+            (off_region, anchor.map_or(0.0, |a| (s.centre.0 - a.0).hypot(s.centre.1 - a.1)))
+        };
+        let best = (0..out.len()).filter(|&i| out[i].is_none() && h.settlements[i].site_id == *k).min_by(|&a, &b| {
+            let (ka, kb) = (key(a), key(b));
+            ka.0.cmp(&kb.0).then(ka.1.total_cmp(&kb.1))
+        });
+        if let Some(i) = best {
+            out[i] = Some(*t);
+        }
+    }
+    out
 }
 
 /// The layout `seed::town` builds a seeded settlement from.
@@ -277,9 +302,10 @@ pub fn settle(ctx: &ReducerContext, h: &Hosted, seeded: &[Option<&SeedTown>], li
             bg.text = v.to_string();
             ctx.db.background().id().update(bg);
         }
-        // The places its residents know: home, work, the square, where they spend evenings.
+        // The places its residents know: home, work, the square, where they spend evenings, and
+        // what their authors gave them.
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.town.seat");
-        crate::town::seat(ctx, h, i, community, life);
+        crate::town::seat(ctx, h, i, community, life, seeded);
     }
 }
 

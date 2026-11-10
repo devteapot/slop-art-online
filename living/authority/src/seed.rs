@@ -153,6 +153,13 @@ pub struct SeedTown {
     /// center with a sign giving the name; residents know them as places.
     #[serde(default)]
     pub buildings: Vec<SeedBuilding>,
+    /// On a land map, which site of its kind it takes when the seed cares (docs/SEEDED_LIVES.md):
+    /// the unused one nearest the named settlement, in one of `region`'s region kinds when any
+    /// is (`forest`, `meadow`, ...). Without either it takes the next site of its kind.
+    #[serde(default)]
+    pub near: String,
+    #[serde(default)]
+    pub region: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -195,6 +202,10 @@ pub struct SeedResident {
     /// stances, places, secret), passed to the mind with people resolved to ids.
     #[serde(default)]
     pub sheet: serde_json::Value,
+    /// Places this person knows beyond the seed's `town_life` ones, or in place of one of
+    /// them by name (`work`): see [`crate::town::SeedPlace`].
+    #[serde(default)]
+    pub places: Vec<crate::town::SeedPlace>,
 }
 
 fn thirty() -> f32 {
@@ -693,7 +704,7 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     for (t, layout) in &settlements {
         authored.extend(town(ctx, &map, t, layout, now));
     }
-    settle_authored(ctx, &s, &authored);
+    settle_authored(ctx, &s, &authored, now);
     if let Some(h) = &hosted {
         crate::island::settle(ctx, h, &seeded, &s.town_life);
     }
@@ -1464,7 +1475,7 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
 /// Once every settlement has its people: authored parents who live elsewhere are linked (a
 /// child whose parents were both born later takes its genes from them now), and each
 /// authored sheet goes into its person's background with the people it names resolved.
-fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)]) {
+fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], now: u64) {
     if authored.is_empty() {
         return;
     }
@@ -1521,6 +1532,26 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)]) {
         let (sheet, dropped) = resolve_sheet(&r.sheet, &lookup);
         for d in dropped {
             log::warn!("{}: sheet {d} names no one in the world; left out", r.name);
+        }
+        // How they feel about the people they know is a fact of the world from the start, for
+        // instinct and mind alike: the `relation` rows graphs read (`friend`, `enemy`, a label)
+        // and that a mind's projection later replaces (docs/SEEDED_LIVES.md).
+        for rel in sheet["relations"].as_array().into_iter().flatten() {
+            let Some(other) = rel["id"].as_u64().map(|o| o as u32).filter(|o| *o != id) else { continue };
+            if ctx.db.relation().by_pair().filter((id, other)).next().is_some() {
+                continue;
+            }
+            let num = |k: &str| rel[k].as_f64().unwrap_or(0.0).clamp(-100.0, 100.0) as f32;
+            ctx.db.relation().insert(Relation {
+                id: 0,
+                actor: id,
+                other,
+                trust: num("trust"),
+                affinity: num("affinity"),
+                label: rel["label"].as_str().unwrap_or_default().chars().take(32).collect(),
+                note: rel["note"].as_str().unwrap_or_default().chars().take(240).collect(),
+                updated_ms: now,
+            });
         }
         if let Some(mut bg) = ctx.db.background().id().find(id) {
             let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&bg.text) else { continue };
