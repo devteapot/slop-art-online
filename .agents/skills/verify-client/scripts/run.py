@@ -31,8 +31,8 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'client-[a-zA-Z0-9-]+', args.run):
         parser.error('run must be client- followed by letters, digits or hyphens')
-    if V.URL != 'http://127.0.0.1:3300':
-        parser.error('this skill requires http://127.0.0.1:3300')
+    if not re.fullmatch(r'http://(127\.0\.0\.1|localhost):\d+', V.URL):
+        parser.error('this skill needs a local server: http://127.0.0.1:<port> (LIVING_STDB_URL; the shared one is :3300)')
     directory = ROOT / '.local/living/verify' / args.run
     if directory.exists():
         parser.error('use a fresh run name; earlier evidence is immutable')

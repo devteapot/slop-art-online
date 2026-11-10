@@ -898,11 +898,15 @@ pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String 
 
 /// The same, to begin a sentence with.
 pub fn label_cap(ctx: &ReducerContext, observer: &Character, id: u32) -> String {
-    let l = label_for(ctx, observer, id);
+    capitalized(&label_for(ctx, observer, id))
+}
+
+/// A label to begin a sentence with.
+pub fn capitalized(l: &str) -> String {
     let mut c = l.chars();
     match c.next() {
         Some(f) => f.to_uppercase().chain(c).collect(),
-        None => l,
+        None => String::new(),
     }
 }
 

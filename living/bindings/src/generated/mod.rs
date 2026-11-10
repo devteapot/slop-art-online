@@ -44,6 +44,8 @@ pub mod cry_prompt_type;
 pub mod cursor_type;
 pub mod deliberation_table;
 pub mod deliberation_type;
+pub mod doing_seen_table;
+pub mod doing_seen_type;
 pub mod doing_table;
 pub mod doing_type;
 pub mod expecting_table;
@@ -52,6 +54,8 @@ pub mod experience_table;
 pub mod experience_type;
 pub mod familiar_table;
 pub mod familiar_type;
+pub mod fighter_seen_table;
+pub mod fighter_seen_type;
 pub mod fighter_table;
 pub mod fighter_type;
 pub mod gate_table;
@@ -86,6 +90,8 @@ pub mod know_how_type;
 pub mod land_info_type;
 pub mod land_table;
 pub mod leaf_result_type;
+pub mod line_seen_table;
+pub mod line_seen_type;
 pub mod lot_table;
 pub mod lot_type;
 pub mod mark_type;
@@ -106,6 +112,8 @@ pub mod mind_update_reducer;
 pub mod mind_update_type;
 pub mod missile_table;
 pub mod missile_type;
+pub mod motion_seen_table;
+pub mod motion_seen_type;
 pub mod motion_type;
 pub mod my_characters_table;
 pub mod my_combat_table;
@@ -256,6 +264,8 @@ pub use cry_prompt_type::CryPrompt;
 pub use cursor_type::Cursor;
 pub use deliberation_table::*;
 pub use deliberation_type::Deliberation;
+pub use doing_seen_table::*;
+pub use doing_seen_type::DoingSeen;
 pub use doing_table::*;
 pub use doing_type::Doing;
 pub use expecting_table::*;
@@ -264,6 +274,8 @@ pub use experience_table::*;
 pub use experience_type::Experience;
 pub use familiar_table::*;
 pub use familiar_type::Familiar;
+pub use fighter_seen_table::*;
+pub use fighter_seen_type::FighterSeen;
 pub use fighter_table::*;
 pub use fighter_type::Fighter;
 pub use gate_table::*;
@@ -298,6 +310,8 @@ pub use know_how_type::KnowHow;
 pub use land_info_type::LandInfo;
 pub use land_table::*;
 pub use leaf_result_type::LeafResult;
+pub use line_seen_table::*;
+pub use line_seen_type::LineSeen;
 pub use lot_table::*;
 pub use lot_type::Lot;
 pub use mark_type::Mark;
@@ -318,6 +332,8 @@ pub use mind_update_reducer::mind_update;
 pub use mind_update_type::MindUpdate;
 pub use missile_table::*;
 pub use missile_type::Missile;
+pub use motion_seen_table::*;
+pub use motion_seen_type::MotionSeen;
 pub use motion_type::Motion;
 pub use my_characters_table::*;
 pub use my_combat_table::*;
@@ -860,10 +876,12 @@ pub struct DbUpdate {
     connection: __sdk::TableUpdate<Connection>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
+    doing_seen: __sdk::TableUpdate<DoingSeen>,
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
     familiar: __sdk::TableUpdate<Familiar>,
     fighter: __sdk::TableUpdate<Fighter>,
+    fighter_seen: __sdk::TableUpdate<FighterSeen>,
     gate: __sdk::TableUpdate<Gate>,
     genome: __sdk::TableUpdate<Genome>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
@@ -873,11 +891,13 @@ pub struct DbUpdate {
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
     land: __sdk::TableUpdate<LandInfo>,
+    line_seen: __sdk::TableUpdate<LineSeen>,
     lot: __sdk::TableUpdate<Lot>,
     membership: __sdk::TableUpdate<Membership>,
     mind_cursor: __sdk::TableUpdate<MindCursor>,
     mind_state: __sdk::TableUpdate<MindState>,
     missile: __sdk::TableUpdate<Missile>,
+    motion_seen: __sdk::TableUpdate<MotionSeen>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
@@ -988,6 +1008,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "doing" => db_update
                     .doing
                     .append(doing_table::parse_table_update(table_update)?),
+                "doing_seen" => db_update
+                    .doing_seen
+                    .append(doing_seen_table::parse_table_update(table_update)?),
                 "expecting" => db_update
                     .expecting
                     .append(expecting_table::parse_table_update(table_update)?),
@@ -1000,6 +1023,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "fighter" => db_update
                     .fighter
                     .append(fighter_table::parse_table_update(table_update)?),
+                "fighter_seen" => db_update
+                    .fighter_seen
+                    .append(fighter_seen_table::parse_table_update(table_update)?),
                 "gate" => db_update
                     .gate
                     .append(gate_table::parse_table_update(table_update)?),
@@ -1027,6 +1053,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "land" => db_update
                     .land
                     .append(land_table::parse_table_update(table_update)?),
+                "line_seen" => db_update
+                    .line_seen
+                    .append(line_seen_table::parse_table_update(table_update)?),
                 "lot" => db_update
                     .lot
                     .append(lot_table::parse_table_update(table_update)?),
@@ -1042,6 +1071,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "missile" => db_update
                     .missile
                     .append(missile_table::parse_table_update(table_update)?),
+                "motion_seen" => db_update
+                    .motion_seen
+                    .append(motion_seen_table::parse_table_update(table_update)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(my_characters_table::parse_table_update(table_update)?),
@@ -1266,6 +1298,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.doing = cache
             .apply_diff_to_table::<Doing>("doing", &self.doing)
             .with_updates_by_pk(|row| &row.id);
+        diff.doing_seen = cache
+            .apply_diff_to_table::<DoingSeen>("doing_seen", &self.doing_seen)
+            .with_updates_by_pk(|row| &row.id);
         diff.expecting = cache
             .apply_diff_to_table::<Expecting>("expecting", &self.expecting)
             .with_updates_by_pk(|row| &row.id);
@@ -1277,6 +1312,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.fighter = cache
             .apply_diff_to_table::<Fighter>("fighter", &self.fighter)
+            .with_updates_by_pk(|row| &row.id);
+        diff.fighter_seen = cache
+            .apply_diff_to_table::<FighterSeen>("fighter_seen", &self.fighter_seen)
             .with_updates_by_pk(|row| &row.id);
         diff.gate = cache
             .apply_diff_to_table::<Gate>("gate", &self.gate)
@@ -1305,6 +1343,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.land = cache
             .apply_diff_to_table::<LandInfo>("land", &self.land)
             .with_updates_by_pk(|row| &row.id);
+        diff.line_seen = cache
+            .apply_diff_to_table::<LineSeen>("line_seen", &self.line_seen)
+            .with_updates_by_pk(|row| &row.id);
         diff.lot = cache
             .apply_diff_to_table::<Lot>("lot", &self.lot)
             .with_updates_by_pk(|row| &row.id);
@@ -1319,6 +1360,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.missile = cache
             .apply_diff_to_table::<Missile>("missile", &self.missile)
+            .with_updates_by_pk(|row| &row.id);
+        diff.motion_seen = cache
+            .apply_diff_to_table::<MotionSeen>("motion_seen", &self.motion_seen)
             .with_updates_by_pk(|row| &row.id);
         diff.pasture = cache
             .apply_diff_to_table::<Pasture>("pasture", &self.pasture)
@@ -1520,6 +1564,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "doing" => db_update
                     .doing
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "doing_seen" => db_update
+                    .doing_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "expecting" => db_update
                     .expecting
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1531,6 +1578,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fighter_seen" => db_update
+                    .fighter_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "gate" => db_update
                     .gate
@@ -1559,6 +1609,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "land" => db_update
                     .land
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "line_seen" => db_update
+                    .line_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "lot" => db_update
                     .lot
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1573,6 +1626,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "missile" => db_update
                     .missile
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "motion_seen" => db_update
+                    .motion_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_characters" => db_update
                     .my_characters
@@ -1785,6 +1841,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "doing" => db_update
                     .doing
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "doing_seen" => db_update
+                    .doing_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "expecting" => db_update
                     .expecting
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1796,6 +1855,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fighter_seen" => db_update
+                    .fighter_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "gate" => db_update
                     .gate
@@ -1824,6 +1886,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "land" => db_update
                     .land
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "line_seen" => db_update
+                    .line_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "lot" => db_update
                     .lot
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1838,6 +1903,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "missile" => db_update
                     .missile
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "motion_seen" => db_update
+                    .motion_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_characters" => db_update
                     .my_characters
@@ -2016,10 +2084,12 @@ pub struct AppliedDiff<'r> {
     connection: __sdk::TableAppliedDiff<'r, Connection>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
+    doing_seen: __sdk::TableAppliedDiff<'r, DoingSeen>,
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
+    fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
     gate: __sdk::TableAppliedDiff<'r, Gate>,
     genome: __sdk::TableAppliedDiff<'r, Genome>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
@@ -2029,11 +2099,13 @@ pub struct AppliedDiff<'r> {
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
+    line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
     lot: __sdk::TableAppliedDiff<'r, Lot>,
     membership: __sdk::TableAppliedDiff<'r, Membership>,
     mind_cursor: __sdk::TableAppliedDiff<'r, MindCursor>,
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
     missile: __sdk::TableAppliedDiff<'r, Missile>,
+    motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
@@ -2121,10 +2193,16 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Doing>("doing", &self.doing, event);
+        callbacks.invoke_table_row_callbacks::<DoingSeen>("doing_seen", &self.doing_seen, event);
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
+        callbacks.invoke_table_row_callbacks::<FighterSeen>(
+            "fighter_seen",
+            &self.fighter_seen,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Gate>("gate", &self.gate, event);
         callbacks.invoke_table_row_callbacks::<Genome>("genome", &self.genome, event);
         callbacks.invoke_table_row_callbacks::<InfantCry>("infant_cry", &self.infant_cry, event);
@@ -2138,11 +2216,13 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
         callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
+        callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
         callbacks.invoke_table_row_callbacks::<Lot>("lot", &self.lot, event);
         callbacks.invoke_table_row_callbacks::<Membership>("membership", &self.membership, event);
         callbacks.invoke_table_row_callbacks::<MindCursor>("mind_cursor", &self.mind_cursor, event);
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
         callbacks.invoke_table_row_callbacks::<Missile>("missile", &self.missile, event);
+        callbacks.invoke_table_row_callbacks::<MotionSeen>("motion_seen", &self.motion_seen, event);
         callbacks.invoke_table_row_callbacks::<Character>(
             "my_characters",
             &self.my_characters,
@@ -2913,10 +2993,12 @@ impl __sdk::SpacetimeModule for RemoteModule {
         connection_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
+        doing_seen_table::register_table(client_cache);
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
         familiar_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
+        fighter_seen_table::register_table(client_cache);
         gate_table::register_table(client_cache);
         genome_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
@@ -2926,11 +3008,13 @@ impl __sdk::SpacetimeModule for RemoteModule {
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
         land_table::register_table(client_cache);
+        line_seen_table::register_table(client_cache);
         lot_table::register_table(client_cache);
         membership_table::register_table(client_cache);
         mind_cursor_table::register_table(client_cache);
         mind_state_table::register_table(client_cache);
         missile_table::register_table(client_cache);
+        motion_seen_table::register_table(client_cache);
         my_characters_table::register_table(client_cache);
         my_combat_table::register_table(client_cache);
         my_deliberations_table::register_table(client_cache);
@@ -2999,10 +3083,12 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "connection",
         "deliberation",
         "doing",
+        "doing_seen",
         "expecting",
         "experience",
         "familiar",
         "fighter",
+        "fighter_seen",
         "gate",
         "genome",
         "infant_cry",
@@ -3012,11 +3098,13 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "judgment",
         "know_how",
         "land",
+        "line_seen",
         "lot",
         "membership",
         "mind_cursor",
         "mind_state",
         "missile",
+        "motion_seen",
         "my_characters",
         "my_combat",
         "my_deliberations",

@@ -150,6 +150,7 @@ pub fn shown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activ
     let indoors = sc.shows().get(&a.skill).is_some_and(|s| s.look == "rest")
         && ctx.db.character().id().find(a.id).zip(ctx.db.body().id().find(a.id)).is_some_and(|(c, b)| (c.home_x != 0.0 || c.home_y != 0.0) && common::dist(common::pos(&b, now), (c.home_x, c.home_y)) <= INDOORS_M);
     let row = Doing { id: a.id, code, target: if a.target.class == 3 { a.target.id as u32 } else { 0 }, x, y, since_ms: now, until_ms: a.ends_ms, indoors };
+    crate::frame::did(a.id);
     if ctx.db.doing().id().find(a.id).is_some() {
         ctx.db.doing().id().update(row);
     } else {
@@ -160,6 +161,7 @@ pub fn shown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activ
 /// A shown skill ended (finished, broken off, or its doer died).
 pub fn unshown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32, skill: &str) {
     if sc.shows().code(skill) != 0 {
+        crate::frame::did(id);
         ctx.db.doing().id().delete(id);
     }
 }

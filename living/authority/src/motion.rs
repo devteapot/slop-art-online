@@ -96,6 +96,7 @@ fn put(ctx: &ReducerContext, b: Body, chunk_before: u32) {
     if b.chunk != chunk_before {
         common::invalidate_bodies();
     }
+    crate::frame::moved(b.id);
     ctx.db.body().id().update(b);
 }
 
@@ -731,6 +732,7 @@ pub fn resteer_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) {
                 anchor(&mut b, t0);
                 resumed(b.id, t0, now);
                 b.next_ms = now;
+                crate::frame::moved(b.id);
                 ctx.db.body().id().update(b);
             }
         }
@@ -752,6 +754,7 @@ pub fn place(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Result<
     b.path.clear();
     b.next_ms = IDLE;
     b.chunk = chunk_of(at.0, at.1);
+    crate::frame::moved(b.id);
     ctx.db.body().id().update(b);
     common::invalidate_bodies();
     Ok(())

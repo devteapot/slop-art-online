@@ -143,7 +143,7 @@ fn take_over(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     p.control_ms = now;
     crate::combat::invalidate_humans();
     // Its person sees nothing while away; a fresh set is made on return.
-    crate::perception::forget(ctx, p.player);
+    crate::perception::forget(ctx, p.id, p.player);
     // Asked first: reinstalling a mind's graph counts as having just thought (`think_min_s`).
     crate::perceive::request_deliberation(ctx, p.id, "A quiet moment to take stock of how things are going.", now);
     // The behaviour its minds installed before is its own again.

@@ -35,6 +35,10 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
         salience,
     });
     common::count(|k| k.percepts += 1);
+    // A player's line reaches its client at the character's next frame (`frame.rs`).
+    if crate::combat::human(ctx, observer.id).is_some() {
+        crate::frame::line(ctx, &row);
+    }
     // Bound the per-character window (checked periodically, not on every insert).
     if row.id % 32 == 0 {
         let mut ids: Vec<u64> = ctx.db.experience().observer().filter(observer.id).map(|p| p.id).collect();
@@ -84,8 +88,14 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
         if !crate::perception::in_sight(&map, eye, at, d, common::sight_for(ctx, c.id, &w, now)) {
             continue;
         }
-        let a = if template.starts_with("{a}") { common::label_cap(ctx, &c, subject) } else { common::label_for(ctx, &c, subject) };
-        let text = template.replacen("{a}", &a, 1).replace("{a}", &common::label_for(ctx, &c, subject)).replace("{b}", &common::label_for(ctx, &c, object));
+        // How this onlooker refers to the two (each projected once; the template's first `{a}`
+        // capitalized when it begins the sentence).
+        let ids: Vec<u32> = if template.contains("{b}") { vec![subject, object] } else { vec![subject] };
+        let mut named = crate::perception::labels(ctx, &c, &ids, now).into_iter();
+        let a = named.next().unwrap_or_default();
+        let b = named.next().unwrap_or_default();
+        let first = if template.starts_with("{a}") { common::capitalized(&a) } else { a.clone() };
+        let text = template.replacen("{a}", &first, 1).replace("{a}", &a).replace("{b}", &b);
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
         percept(ctx, &c, now, kind, subject, object, at, text, sal);

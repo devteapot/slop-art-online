@@ -9,12 +9,13 @@ What a player's client may read is what its character perceives now, plus its ow
 - In sight: two players 3 tiles apart on open ground receive each other's body and character, and their own (`sight.json`, step `in-sight`).
 - Beyond sight: the same players 20-30 tiles apart receive no body, character, fighter or doing row of the other (step `beyond-sight`).
 - Behind a wall or rock: two players at most 4 tiles apart (within even night sight, 6 tiles), on one axis with only rock or wall tiles between, receive nothing of the other (step `behind-wall`).
-- `my_characters` (the dead included), `my_vitals`, `my_experience`, `my_places`, `my_inventory` and `my_know_how` hold only the caller's characters' rows; anonymous receives none of them and no `seen_*` rows (`own-*.json`).
+- `my_characters` (the dead included), `my_vitals`, `my_experience`, `my_places`, `my_inventory` and `my_know_how` hold only the caller's characters' rows; anonymous receives none of them and no `seen_*` rows (`own-*.json`). `my_experience` holds the newest 64 lines of the living character, or of the last one while none lives (since 2026-11-10; it was every character's 400-line window).
+- Frames (since 2026-11-10, docs/PERCEPTION.md "Frames"): others' rows in `seen_bodies`, `seen_fighters` and `seen_doing` are per-viewer copies (`motion_seen`, `fighter_seen`, `doing_seen`, private) that the tick writes at the viewer's frame, every 33–100 ms; the caller's own body, fighter and doing rows are read directly. Experience lines are released at the character's frame (`line_seen`, private). The four tables are in the driver's private inventory.
 - In a `scoped` build the tables behind these views are private to anyone but the database owner, players included (`visibility.json`). In a `LIVING_PERCEPTION=open` build (diagnostics only; the default is `scoped`) they are public, so the views are correct but are not the boundary there.
 
 ## How to get to it (user POV)
 
-A player connects with its identity, joins, and subscribes `SELECT * FROM seen_bodies` and the other views. As its character moves, the rows of creatures coming into and going out of its sight arrive as inserts and deletes; a perceived creature's steering updates arrive as updates.
+A player connects with its identity, joins, and subscribes `SELECT * FROM seen_bodies` and the other views. As its character moves, the rows of creatures coming into and going out of its sight arrive as inserts and deletes; a perceived creature's steering updates arrive as updates at the player's next frame (within 100 ms).
 
 ## Driving it with drive.py
 
@@ -30,6 +31,6 @@ LIVING_PERCEPTION=scoped .agents/skills/verify-client/scripts/run.py --run "$R"
 
 - The geometry search assumes the realm map has a thin rock or wall run (gap 1-3 tiles) somewhere; on a map without one the check fails with "no sight-check geometry", which is a fixture failure, not a product one.
 - `drive.py` records which build it drives from the run's state (`perception`, set from `LIVING_PERCEPTION` at launch). Run the suite on both builds when a change touches visibility: `scoped` (the default) proves the boundary, `open` proves the diagnostic build still makes those tables public and the views still answer there.
-- The sweep runs every 200 ms; a probe right after `place_at` can still see the old set. The driver waits 1 s.
+- The sweep runs every 200 ms and frames every 33–100 ms; a probe right after `place_at` can still see the old set. The driver waits 1 s.
 - Since 2026-11-09 the combat feed (`my_combat`) and minds' percepts see by the same rule (sight and a clear sight line): a blow behind a wall no longer reaches a player's feed. `verify-minds`'s `sight` case drives the minds' side.
 - `my_experience` rows of a character the world's minds controlled while its person was away carry the mind service's identity as `controller`; the own-state check accepts the caller's identity or the world admin's.

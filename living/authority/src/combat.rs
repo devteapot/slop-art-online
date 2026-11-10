@@ -17,9 +17,12 @@ use std::collections::HashMap;
 
 /// Uses of combat skills kept per character in `skill_use`.
 pub const USES_KEPT: usize = 24;
-/// How long a perceived event stays in `combat_seen` (ms); a death and its witnesses longer,
-/// for the death screen.
-const SEEN_MS: u64 = 4_000;
+/// How long a perceived event stays in `combat_seen` for the two involved (ms): the client
+/// reads each row once, by id. A refusal stays longer (`REFUSED_MS`), and a death and its
+/// witnesses longer still, for the death screen. Onlookers' rows stay `frame::ONLOOKER_MS`
+/// from their frame.
+const SEEN_MS: u64 = 1_500;
+const REFUSED_MS: u64 = 4_000;
 const DEATH_SEEN_MS: u64 = 120_000;
 
 thread_local! {
@@ -32,7 +35,8 @@ pub fn invalidate_humans() {
     HUMANS.with(|h| *h.borrow_mut() = None);
 }
 
-fn human(ctx: &ReducerContext, id: u32) -> Option<Identity> {
+/// The player of character `id`, if a person controls it (alive, not a mind's).
+pub fn human(ctx: &ReducerContext, id: u32) -> Option<Identity> {
     HUMANS.with(|h| {
         let mut h = h.borrow_mut();
         let map = h.get_or_insert_with(|| {
@@ -71,8 +75,9 @@ pub struct Seen {
     pub note: String,
 }
 
-fn insert(ctx: &ReducerContext, viewer: Identity, now: u64, ev: &Seen, amount: f32, keep_ms: u64) {
-    ctx.db.combat_seen().insert(CombatSeen {
+/// One feed row for a viewer (no frame bookkeeping); returns its id.
+pub fn feed_row(ctx: &ReducerContext, viewer: Identity, now: u64, ev: &Seen, amount: f32, keep_ms: u64) -> u64 {
+    let row = ctx.db.combat_seen().insert(CombatSeen {
         id: 0,
         viewer,
         expires_ms: now + keep_ms,
@@ -89,22 +94,32 @@ fn insert(ctx: &ReducerContext, viewer: Identity, now: u64, ev: &Seen, amount: f
         ms: ev.ms,
         note: ev.note.clone(),
     });
+    row.id
+}
+
+/// A feed row for character `id`'s player at once (the two involved, a death, a refusal).
+fn insert(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64, ev: &Seen, amount: f32, keep_ms: u64) {
+    let row = feed_row(ctx, viewer, now, ev, amount, keep_ms);
+    crate::frame::fed(id, viewer, now + keep_ms, row);
 }
 
 /// Tell every human player whose character can see `ev.at` (within its sight) what
-/// happened. The two involved (actor and target) always learn of it, with the amount;
-/// onlookers see that it happened, not the numbers.
+/// happened. The two involved (actor and target) always learn of it, with the amount, at once;
+/// onlookers see that it happened, not the numbers, at their next frame (`frame.rs`), except
+/// a death, which leaves with the body in the same update so the client keeps the corpse.
 pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
     if !any_humans(ctx) {
         return;
     }
-    let keep = if ev.kind == seen::DEATH { DEATH_SEEN_MS } else { SEEN_MS };
     let w = common::world(ctx);
     let mut told: Vec<u32> = Vec::new();
     for id in [ev.actor, ev.target] {
         if id != 0 && !told.contains(&id) {
             if let Some(viewer) = human(ctx, id) {
-                insert(ctx, viewer, now, &ev, ev.amount, keep);
+                // The one who died keeps its death for the death screen; everyone else needs a
+                // death only as it happens (the corpse).
+                let keep = if ev.kind == seen::DEATH && id == ev.actor { DEATH_SEEN_MS } else { SEEN_MS };
+                insert(ctx, id, viewer, now, &ev, ev.amount, keep);
             }
             told.push(id);
         }
@@ -122,21 +137,39 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
         }
         told.push(c.id);
         let amount = if ev.kind == seen::LAUNCH { ev.amount } else { 0.0 };
-        insert(ctx, viewer, now, &ev, amount, keep);
+        if ev.kind == seen::DEATH {
+            insert(ctx, c.id, viewer, now, &ev, amount, SEEN_MS);
+        } else {
+            crate::frame::witness(c.id, viewer, &ev, amount);
+        }
     }
 }
 
 /// Tell one character's player only (a refusal, a witness of their own death).
 pub fn show_to(ctx: &ReducerContext, id: u32, now: u64, ev: Seen) {
     if let Some(viewer) = human(ctx, id) {
-        let keep = if ev.kind == seen::WITNESS { DEATH_SEEN_MS } else { SEEN_MS };
-        insert(ctx, viewer, now, &ev, ev.amount, keep);
+        let keep = match ev.kind {
+            seen::WITNESS => DEATH_SEEN_MS,
+            seen::REFUSED => REFUSED_MS,
+            _ => SEEN_MS,
+        };
+        insert(ctx, id, viewer, now, &ev, ev.amount, keep);
     }
 }
 
-/// Perceived events older than their time are dropped (every tick; index range).
+/// A player (re)takes a character (a join, a return): what its previous character perceived,
+/// its death screen included, is gone from its feed.
+pub fn clear_feed(ctx: &ReducerContext, viewer: Identity) {
+    for id in ctx.db.combat_seen().viewer().filter(viewer).map(|r| r.id).collect::<Vec<_>>() {
+        ctx.db.combat_seen().id().delete(id);
+    }
+}
+
+/// Perceived events are dropped at their viewer's frame (`frame.rs`); this catches the rest
+/// (rows of a module instance since replaced, of players gone): once a second, those more than
+/// a second past their time (index range).
 pub fn expire(ctx: &ReducerContext, now: u64) {
-    let old: Vec<u64> = ctx.db.combat_seen().expires_ms().filter(..=now).map(|r| r.id).collect();
+    let old: Vec<u64> = ctx.db.combat_seen().expires_ms().filter(..=now.saturating_sub(1_000)).map(|r| r.id).collect();
     for id in old {
         ctx.db.combat_seen().id().delete(id);
     }
@@ -237,6 +270,7 @@ fn fighter(ctx: &ReducerContext, id: u32, now: u64) -> Fighter {
 }
 
 fn put_fighter(ctx: &ReducerContext, f: Fighter) {
+    crate::frame::fought(f.id);
     match ctx.db.fighter().id().find(f.id) {
         Some(old) if old == f => {}
         Some(_) => {
@@ -271,6 +305,7 @@ pub fn act_until(ctx: &ReducerContext, id: u32, until: u64) {
     if let Some(mut f) = ctx.db.fighter().id().find(id) {
         if f.until_ms != until {
             f.until_ms = until;
+            crate::frame::fought(id);
             ctx.db.fighter().id().update(f);
         }
     }
@@ -290,6 +325,7 @@ pub fn refresh_band(ctx: &ReducerContext, id: u32, now: u64) {
         None => {
             let mut f = fighter(ctx, id, now);
             f.band = b;
+            crate::frame::fought(id);
             ctx.db.fighter().insert(f);
         }
     }
@@ -513,12 +549,13 @@ pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64
         }
     }
     ctx.db.fighter().id().delete(id);
+    crate::frame::fought(id);
     ctx.db.readiness().id().delete(id);
     for m in ctx.db.missile().iter().filter(|m| m.owner == id).map(|m| m.id).collect::<Vec<_>>() {
         ctx.db.missile().id().delete(m);
     }
     if let Some(viewer) = human(ctx, id) {
-        crate::perception::forget(ctx, viewer);
+        crate::perception::forget(ctx, id, viewer);
     }
     crate::perception::gone(ctx, id);
     invalidate_humans();

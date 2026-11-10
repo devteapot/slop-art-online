@@ -56,7 +56,7 @@ SHAPED_PORT = int(os.environ.get("GATE_RELAY_PORT", "3398"))
 LOCAL_PORT = int(os.environ.get("GATE_LOCAL_RELAY_PORT", "3396"))
 FAKE_PORT = int(os.environ.get("GATE_FAKE_PORT", "3395"))
 TARGET = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "living/target"))
-WASM_DIR = TARGET / "wasm32-unknown-unknown/release"
+WASM_DIR = Path(os.environ.get("GATE_WASM_DIR", TARGET / "wasm32-unknown-unknown/release"))
 LOAD = Path(os.environ.get("GATE_LOAD", TARGET / "release/gate-load"))
 GAME = Path(os.environ.get("GATE_GAME", TARGET / "release/living-game"))
 MIND = Path(os.environ.get("GATE_MIND", TARGET / "release/living-mind"))
@@ -109,6 +109,17 @@ def http(path, body=None, token=None, raw=False, timeout=60):
             return r.status, r.read().decode()
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()
+
+
+def new_identity():
+    """A fresh identity's token; retried, since a busy server sometimes resets the connection."""
+    for attempt in range(5):
+        try:
+            return json.loads(http("/v1/identity", {})[1])["token"]
+        except OSError:
+            if attempt == 4:
+                raise
+            time.sleep(1)
 
 
 def call(db, reducer, args, token):
@@ -205,8 +216,11 @@ def container_up(r):
         sh("docker", "run", "-d", "--name", CONTAINER, "--cpus", "16", "--security-opt", "label=disable", "--stop-signal", "SIGINT",
            "-p", f"127.0.0.1:{PORT}:3000", "-v", f"{VOLUME}:/home/spacetime", "-v", f"{WASM_DIR}:/wasm:ro", IMAGE, "start", "--listen-addr", "0.0.0.0:3000")
     for _ in range(60):
-        if http("/v1/ping", timeout=5)[0] == 200:
-            return
+        try:
+            if http("/v1/ping", timeout=5)[0] == 200:
+                return
+        except OSError:
+            pass  # a fresh container resets connections while it starts
         time.sleep(1)
     raise RuntimeError("the server did not answer /v1/ping")
 
@@ -440,7 +454,7 @@ def _run(a, procs):
         mind = Proc(r, "mind", [str(MIND)], env=env, stdin=False, lines=False)
     # Player identities.
     n = a.battle + a.walkers
-    tokens = [json.loads(http("/v1/identity", {})[1])["token"] for _ in range(n + 1)]
+    tokens = [new_identity() for _ in range(n + 1)]
     players = [{"token": tokens[i], "name": f"GateB{i}" if i < a.battle else f"GateW{i - a.battle}", "role": "battle" if i < a.battle else "walk"} for i in range(n)]
     watch = Proc(r, "watch", [str(LOAD), "watch"])
     watch.send(json.dumps({"uri": URL, "db": db, "token": token, "out": str(r.dir / "ticks.csv")}))

@@ -61,7 +61,8 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence',
-           'woken', 'prior', 'prior_head']
+           'woken', 'prior', 'prior_head', 'judged', 'motion_seen', 'fighter_seen',
+           'doing_seen', 'line_seen']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
@@ -71,13 +72,17 @@ VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_ch
          'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 OWN = ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how']
+# The server the harness talks to (verify.py: the shared container on :3300, or a worker's
+# own with LIVING_STDB_CONTAINER and LIVING_STDB_URL); the drop proxy relays to its port.
+LOCAL_URL = re.compile(r'http://(127\.0\.0\.1|localhost):(\d+)')
+SERVER_PORT = int(LOCAL_URL.fullmatch(V.URL).group(2)) if LOCAL_URL.fullmatch(V.URL) else 3300
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
 # `my_combat`, so these calls succeed for any living character.
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block']}
 MIND = ['mind_routines', 'mind_install', 'mind_say', 'mind_act', 'mind_skip',
-        'mind_consolidated', 'mind_update']
+        'mind_consolidated', 'mind_update', 'mind_judged']
 ADMIN = {
     'set_paused': [False], 'install_script': [''], 'set_profile': [False],
     'spawn_crowd': [0, False], 'grant_know_how': [0, 'gather'], 'own_habits': [],
@@ -107,6 +112,7 @@ def mind_args(name, actor, marker):
         'mind_say': [actor, '', 0, 0, t],
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
+        'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': 'probe', 'ttl_ms': 1000}]],
         'mind_update': [actor, {'persona': {'some': {'narrative': marker, 'values': [],
                          'goals': [], 'traits': '{}', 'mood': 'probe'}},
                          'relations': [], 'beliefs': {'none': []}, 'judgments': [],
@@ -140,7 +146,7 @@ class DropProxy:
                 continue
             except OSError:
                 return
-            upstream = socket.create_connection(('127.0.0.1', 3300), timeout=5)
+            upstream = socket.create_connection(('127.0.0.1', SERVER_PORT), timeout=5)
             self.pairs.append((client, upstream))
             self.accepted += 1
             threading.Thread(target=self.relay, args=(client, upstream), daemon=True).start()
@@ -742,8 +748,8 @@ def main():
     parser.add_argument('--seconds', type=int, default=10, help='live query duration, 0 to 300 seconds')
     parser.add_argument('--save', help='fresh evidence basename for --query, without an extension')
     args = parser.parse_args()
-    if V.URL != 'http://127.0.0.1:3300':
-        parser.error('this driver and drop proxy require the local shared server on :3300')
+    if not LOCAL_URL.fullmatch(V.URL):
+        parser.error('this driver and drop proxy need a local server: http://127.0.0.1:<port> (LIVING_STDB_URL; the shared one is :3300)')
     run = Run(args.run)
     if args.query is not None:
         if not 0 <= args.seconds <= 300:
