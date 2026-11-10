@@ -666,8 +666,8 @@ pub fn my_fighter(ctx: &ViewContext) -> Vec<Fighter> {
     living(ctx).and_then(|c| ctx.db.fighter().id().find(c.id)).into_iter().collect()
 }
 
-/// What the creatures in my scene are visibly doing: mine as it is, the others' as my last
-/// frame showed them (`doing_seen`, `frame.rs`).
+/// What the creatures in my scene are visibly doing, as my last frame showed them
+/// (`doing_seen`, `frame.rs`). Mine is `my_doing`.
 #[spacetimedb::view(accessor = seen_doing, public, primary_key = id)]
 pub fn seen_doing(ctx: &ViewContext) -> Vec<Doing> {
     ctx.db.doing_seen().viewer().filter(ctx.sender()).map(|d| d.doing).collect()
