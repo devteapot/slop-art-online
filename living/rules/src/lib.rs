@@ -45,6 +45,26 @@ pub fn is_night(hour: f32) -> bool {
     !(6.0..20.0).contains(&hour)
 }
 
+/// The compass direction from one tile position to another (+y is south), or "here".
+pub fn direction(from: (f32, f32), to: (f32, f32)) -> &'static str {
+    let dx = to.0 - from.0;
+    let dy = to.1 - from.1;
+    if dx.abs() < 0.5 && dy.abs() < 0.5 {
+        return "here";
+    }
+    let a = dy.atan2(dx).to_degrees();
+    match a {
+        a if (-22.5..22.5).contains(&a) => "east",
+        a if (22.5..67.5).contains(&a) => "southeast",
+        a if (67.5..112.5).contains(&a) => "south",
+        a if (112.5..157.5).contains(&a) => "southwest",
+        a if (-67.5..-22.5).contains(&a) => "northeast",
+        a if (-112.5..-67.5).contains(&a) => "north",
+        a if (-157.5..-112.5).contains(&a) => "northwest",
+        _ => "west",
+    }
+}
+
 /// A span of world days in words ("a few hours", "about 2 days").
 pub fn describe_days(d: f32) -> String {
     if d < 0.2 {
