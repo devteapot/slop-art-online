@@ -18,7 +18,7 @@ cp "$W/sb_guest.wasm" guest.wasm
 cargo build -q -p sb-module --target wasm32-unknown-unknown --release --features rhai
 cp "$W/sb_module.wasm" "$OUT/rhai.wasm"
 cargo build -q -p sb-host --release
-"$CARGO_TARGET_DIR/release/sb-host" "$OUT/rhai.wasm" rhai --laws rates,rates-law,strike,cooldown,perceived --batches "${BATCHES:-200}" > "$OUT/gate.jsonl" 2> "$OUT/gate.err"
+"$CARGO_TARGET_DIR/release/sb-host" "$OUT/rhai.wasm" rhai --laws rates,rates-law,strike,cooldown,perceived,hook --batches "${BATCHES:-200}" > "$OUT/gate.jsonl" 2> "$OUT/gate.err"
 python3 - "$OUT/gate.jsonl" budgets.json <<'EOF'
 import json, sys
 rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]

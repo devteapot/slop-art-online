@@ -999,9 +999,9 @@ fn delivered(a, item, n, to_id, to_home) {
             } else if done >= owed {
                 fx.push(#{ op: "tell", to: them, ask: true, salience: 0.85, text: `{actor} has delivered all ${goods(item, owed)} you agreed on. You owe them ${goods(t[other + "_gives"], left)} by dusk.` });
                 fx.push(#{ op: "tell", to: a.actor.id, text: `you have delivered your part (${goods(item, owed)}); {id:${them}} owes you ${goods(t[other + "_gives"], left)}` });
-            } else {
-                fx.push(#{ op: "tell", to: them, salience: 0.4, text: `{actor} has delivered ${done} of the ${owed} ${item} you agreed on.` });
             }
+            // A part delivered is not told piece by piece: a give is seen by its receiver anyway,
+            // and each side reads how far the other has got in its dealings (`record_text`).
         } else if r.kind == "demand" && r.me == "of" && to_id == r.parties.by && r.terms.item == item {
             let done = r.terms.done + n;
             if done >= r.terms.qty {

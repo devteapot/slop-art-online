@@ -9,7 +9,7 @@ Started 2026-11-09. This note records how residents of the island's settlements 
 ## Rules this follows
 
 - **Routines are made of skills.** Everything a resident does is a skill the rules define (`living/scripts/skills.rhai`: `_check`, `_duration`, `_done`), chosen by the resident's own starting graph. The graphs are seed content (`living/seeds/island.json`, `ways`), not Rust: there is no routine library and no decision in the engine. They are starting graphs; a mind can rework them like any other.
-- **Gestures are skills.** `wave`, `nod`, `face`, `step_aside`, `keep` and `play` have their rules in the script and their catalog entries in `living/rules/src/catalog.rs`. Players use them through `human_act`, residents through their graphs: the same `act::begin`, checks, durations and effects.
+- **Gestures are skills.** `wave`, `nod`, `face`, `step_aside`, `keep` and `play` have their rules and (since `rules-2`) their specs in the script; there is no catalog entry in Rust. Players use them through `human_act`, residents through their graphs: the same `act::begin`, checks, durations and effects.
 - **The engine picks primitives by trait, never by skill name**, as combat does: `<skill>_shows()` declares what others see and which primitive applies (`faces`, `turn`, `aside`, `record`). The meaning of a gesture to the one it is made at is an effect the script returns (`hail`).
 - **Presentation goes through public data**, like `skill_card` and `fighter`: `act_card` and `doing`, plus a `weather` row. `living/game` was not edited; what it must draw is listed below.
 

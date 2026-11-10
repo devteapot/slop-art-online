@@ -137,7 +137,7 @@ The limits were set from the install samples (`measure_limits`): each function's
 
 - `laws()`, `skill_bar()`, each `_combat()` and `_shows()`;
 - each number by name over its names;
-- `skill_io` over the catalog skills;
+- `skill_io` over the catalog skills (since `rules-2`, 2026-11-10, each skill's `<skill>_spec()` instead, read at compile; a skill with rules and no spec is refused, and hooks and `record_text` are probed too: [world rules](WORLD_RULES.md));
 - `rates`, `body_state` and `move_speed` over six bodies in five kinds of weather and warmth;
 - every skill the script has rules for: six bodies (adult, elder, child, infant, wolf, deer) against 28 targets (none, a place, oneself, people, animals, the dead, each resource and structure), and every item and technique for skills that take one. On each, the check runs, then the duration, effects, missile and hit when it passes, as the engine calls them;
 - `perceived_of` over 16 observer/target cases.
@@ -161,6 +161,7 @@ A world that installed a script before this change is not re-validated on a modu
 | strike | 247,041 | 310,000 |
 | cooldown | 1,694 | 2,200 |
 | `perceived` | 59,088 | 75,000 |
+| `hook` (added on `rules-2`: `on_give` over a giver's agreement, demand and regard; [world rules](WORLD_RULES.md#costs)) | 446,967 | 560,000 |
 
 It is a bench gate, not a rules test. Measuring fuel needs the module and wasmtime, which a `cargo test` of the rules crate does not build.
 

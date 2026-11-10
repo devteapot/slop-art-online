@@ -132,6 +132,7 @@ fn parties(ctx: &ReducerContext, record: u64) -> Vec<(String, u64)> {
 
 /// The records a character is a party to, itself or through its community (as `a.records`).
 pub fn of(ctx: &ReducerContext, id: u32, now: u64) -> Vec<RecordFacts> {
+    let _t = common::span("records.read");
     let (me, community) = parties_of(ctx, id);
     let mut out: Vec<RecordFacts> = Vec::new();
     for party in [me, community].into_iter().filter(|p| *p != 0) {
@@ -366,6 +367,7 @@ pub fn after_skill(ctx: &ReducerContext, sctx: &SkillCtx, now: u64) {
     if !sc.has_hook(&sctx.skill) {
         return;
     }
+    let _t = common::span("records.hook");
     match sc.hook(&sctx.skill, sctx) {
         Ok(fx) => {
             for e in fx {

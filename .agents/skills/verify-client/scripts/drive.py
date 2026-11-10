@@ -61,14 +61,16 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence',
-           'woken', 'prior', 'prior_head', 'guest', 'judged']
+           'woken', 'prior', 'prior_head', 'guest', 'judged',
+           # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
+           'record', 'record_party', 'record_clock']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 OWN = ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
@@ -142,7 +144,7 @@ class DropProxy:
                 continue
             except OSError:
                 return
-            upstream = socket.create_connection(('127.0.0.1', 3300), timeout=5)
+            upstream = socket.create_connection(('127.0.0.1', int(V.URL.rsplit(':', 1)[1])), timeout=5)
             self.pairs.append((client, upstream))
             self.accepted += 1
             threading.Thread(target=self.relay, args=(client, upstream), daemon=True).start()
@@ -744,8 +746,9 @@ def main():
     parser.add_argument('--seconds', type=int, default=10, help='live query duration, 0 to 300 seconds')
     parser.add_argument('--save', help='fresh evidence basename for --query, without an extension')
     args = parser.parse_args()
-    if V.URL != 'http://127.0.0.1:3300':
-        parser.error('this driver and drop proxy require the local shared server on :3300')
+    # The shared server on :3300, or a worker's own on another loopback port (LIVING_STDB_URL).
+    if not re.fullmatch(r'http://127\.0\.0\.1:\d+', V.URL):
+        parser.error('this driver and drop proxy require a local server at http://127.0.0.1:<port>')
     run = Run(args.run)
     if args.query is not None:
         if not 0 <= args.seconds <= 300:

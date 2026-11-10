@@ -234,7 +234,10 @@ pub fn choices(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, s
                     t.inv.push((i.to_string(), 1));
                 }
             }
-            SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, night: me.night, hour: me.hour, season: "summer".into(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
+            // A skill that asks something in return is checked with something to ask for (each
+            // thing there is becomes its own choice below).
+            let want = if spec.args.iter().any(|a| a == "want") { catalog::ITEMS.iter().map(|i| i.name).find(|w| *w != item).unwrap_or_default() } else { "" };
+            SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, want: want.to_string(), want_qty: (!want.is_empty()) as u32, night: me.night, hour: me.hour, season: "summer".into(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
         };
         let allowed = |item: &str, text: &str| sc.check(skill, &ctx(item, text, (!item.is_empty()).then_some(item))).is_ok();
         // Words: refused without, allowed with.
@@ -1020,6 +1023,24 @@ mod tests {
         // Last time I waved: a tap waves again.
         let wave = c.iter().find(|c| c.skill == "wave").cloned();
         assert_eq!(likely(&sc, &aim, &c, wave.as_ref()).map(|c| c.skill.as_str()), Some("wave"));
+    }
+
+    /// Terms and demands toward a person come from their specs like any act: what I carry for
+    /// each thing to ask for (and lodging, the terms' own word), and the node `human_act` takes.
+    #[test]
+    fn to_a_person_i_offer_terms_and_make_demands() {
+        let sc = Scripts::new(SKILLS).unwrap();
+        let (aim, t) = person();
+        let m = me(&[("berries", 4)], &[]);
+        let c = choices(&sc, &m, &aim, Some(&t), &skills_of(&sc));
+        let terms: Vec<&Choice> = c.iter().filter(|c| c.skill == "offer_terms").collect();
+        assert!(terms.iter().any(|c| c.item.as_deref() == Some("berries") && c.want.as_deref() == Some("wood")), "{terms:?}");
+        assert!(terms.iter().any(|c| c.want.as_deref() == Some("lodging")), "{terms:?}");
+        assert!(terms.iter().all(|c| c.item.as_deref() != Some("stone")), "only what I carry is promised: {terms:?}");
+        let node = terms.iter().find(|c| c.want.as_deref() == Some("wood")).unwrap().node(&aim, None);
+        assert_eq!(node, serde_json::json!({"do": "offer_terms", "target": {"id": 7}, "item": "berries", "qty": 1, "want": "wood", "want_qty": 1}));
+        living_rules::graph::parse(&node.to_string()).unwrap();
+        assert!(c.iter().any(|c| c.skill == "demand" && c.item.as_deref() == Some("berries")), "{c:?}");
     }
 
     /// A skill the world's script adds is offered with no change here: declared by its spec,

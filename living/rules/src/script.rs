@@ -719,8 +719,10 @@ impl Scripts {
             let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
             list.push(spec_of(skill, &m)?);
         }
-        if list.is_empty() {
-            return Self::new(include_str!("../../scripts/skills.rhai")).map(|s| (*s.skills).clone());
+        // The shipped script's, unless it is this one or declares none either (no recursion).
+        const SHIPPED: &str = include_str!("../../scripts/skills.rhai");
+        if list.is_empty() && SHIPPED.contains("_spec() {") && !self.nullary.is_empty() {
+            return Self::new(SHIPPED).map(|s| (*s.skills).clone());
         }
         list.sort_by_key(|k: &crate::catalog::SkillSpec| (declared(&k.name), k.name.clone()));
         Ok(crate::catalog::Skills::new(list))
@@ -876,9 +878,11 @@ impl Scripts {
         self.plan(f).top & (1 << i) != 0
     }
 
-    /// Whether a skill's rules or its hook read the actor's records.
-    pub fn skill_reads_records(&self, skill: &str) -> bool {
-        ["_check", "_duration", "_done"].iter().any(|p| self.reads(&format!("{skill}{p}"), "records")) || self.reads(&format!("on_{skill}"), "records")
+    /// Whether a skill's rules read the actor's records: on its way (`performing` false) its
+    /// check and duration; once performed, its check, effects and hook too.
+    pub fn skill_reads_records(&self, skill: &str, performing: bool) -> bool {
+        let parts: &[&str] = if performing { &["_check", "_duration", "_done"] } else { &["_check", "_duration"] };
+        parts.iter().any(|p| self.reads(&format!("{skill}{p}"), "records")) || (performing && self.reads(&format!("on_{skill}"), "records"))
     }
 
     fn effects(&self, f: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {

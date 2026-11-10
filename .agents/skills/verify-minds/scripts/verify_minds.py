@@ -19,7 +19,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'wake', 'animals', 'night', 'jev', 'rethink', 'rethink-llm')
+         'takeover', 'sight', 'wake', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 
@@ -107,6 +107,8 @@ def run_case(run, case):
         return rethink_case(run, 'jev' if case == 'rethink' else 'llm')
     if case == 'takeover':
         return takeover_case(run)
+    if case == 'dealings':
+        return dealings_case(run)
     if case == 'sight':
         return sight_case(run)
     if case == 'wake':
@@ -434,6 +436,37 @@ def takeover_case(run):
     assert final['source'] == 'human', final
     return {'status': 'pass', 'takeover_after_s': (taken['control_ms'] - pending['changed_ms']) / 1000,
             'held_graph': 'kept and reinstalled', 'in_flight': 'refused'}
+
+
+def dealings_case(run):
+    """A mind sees and acts on a record (docs/WORLD_RULES.md): another character demands a stone
+    of it; the rules tell it and ask its mind; its deliberation shows the demand among its
+    dealings (worded by the script's `record_text`), and the (fake) model's act pays it, which
+    the rules count: the demand is met and the demander told. Its conversation turns list the
+    acts the rules mark for talk (offer_terms, demand)."""
+    people = prepare(run)
+    actor, other = [p['id'] for p in people]
+    run.admin('place_near', other, actor)
+    run.admin('grant_items', actor, 'stone', 2)
+    pay = basic_reply(acts=[{'do': 'give', 'target': {'id': other}, 'item': 'stone', 'qty': 1}])
+    script = {'replies': {'think': {'thought': 'I am asked for a stone.', 'intend': ['give them the stone'], 'say': None},
+                          'deliberate': basic_reply()},
+              'rules': [{'purpose': 'deliberate', 'contains': 'demanded 1 stone of you', 'reply': pay, 'times': -1}]}
+    models = model(run, script)
+    run.start(models, [actor])
+    accepted_before = len(run.thoughts(actor))
+    run.admin('mind_act', other, [json.dumps({'do': 'demand', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'text': 'verify dealing'})], 'verify-minds')
+    demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 30)[0]
+    told = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'told') if e['kind'] == 'record' and 'demands 1 stone of you' in e['text']], 'told the demand', 30)
+    met = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-met') if r['id'] == demand['id'] and r['status'] == 'met'], 'demand met', 90)
+    sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
+    shown = [e for e in sent if "Your dealings and your people's standing" in json.dumps(e) and 'demanded 1 stone of you' in json.dumps(e)]
+    assert shown, 'the deliberation showed the demand among its dealings'
+    paid = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {other}', 'demander-told') if 'paid the 1 stone you demanded' in e['text']], 'demander told', 30)
+    inv = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {other}', 'demander-inventory')}
+    assert inv.get('stone') == 1, inv
+    return {'status': 'pass', 'told': told[0]['text'], 'record': met[0]['status'], 'demander_told': paid[0]['text'],
+            'deliberations_with_dealings': len(shown), 'thoughts_before': accepted_before}
 
 
 def sight_case(run):

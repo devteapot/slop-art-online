@@ -308,7 +308,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         }
         _ => {}
     }
-    let records = if sc.skill_reads_records(&a.skill) { crate::records::of(ctx, id, now) } else { Vec::new() };
+    let records = if sc.skill_reads_records(&a.skill, a.phase == 1) { crate::records::of(ctx, id, now) } else { Vec::new() };
     SkillCtx {
         records,
         want: a.want.clone(),
