@@ -476,9 +476,12 @@ impl Minds {
         let named: Vec<u32> = if to != 0 {
             vec![to]
         } else {
-            // Unaddressed words count as speaking to a waiting speaker they name.
+            // Unaddressed words count as speaking to a waiting speaker they name, or to the only
+            // one waiting (the authority hears such words as addressed to the only person close by).
             let words = memory::cue_words(say);
-            t.parked.get(&actor).map(|v| v.iter().map(|(s, _)| *s).filter(|s| memory::cue_words(&self.name(*s)).iter().any(|w| words.contains(w))).collect()).unwrap_or_default()
+            let waiting: Vec<u32> = t.parked.get(&actor).map(|v| v.iter().map(|(s, _)| *s).collect()).unwrap_or_default();
+            let named: Vec<u32> = waiting.iter().copied().filter(|s| memory::cue_words(&self.name(*s)).iter().any(|w| words.contains(w))).collect();
+            if named.is_empty() && waiting.len() == 1 { waiting } else { named }
         };
         for o in named {
             t.deliberated_to.insert((actor, o), now);
