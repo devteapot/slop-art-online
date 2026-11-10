@@ -13,6 +13,23 @@ pub struct Fixtures {
     pub skills: &'static [&'static str],
     /// Observers looking at targets, for `perceived_of(p)`.
     pub perceived: Vec<living_rules::script::RegardIn>,
+    /// Gives by a party to an agreement, a demand and a regard, for `on_give(a)`.
+    pub hooks: Vec<SkillCtx>,
+}
+
+/// A giver's records: an agreement it is delivering on (as `from` or `to`), a demand made of it
+/// and its community's regard, the kinds the shipped rules make (docs/WORLD_RULES.md).
+fn records(r: &mut Rng, giver: u32, other: u32) -> Vec<living_rules::records::RecordFacts> {
+    use living_rules::records::{RecordFacts, COMMUNITY};
+    let t = |v: serde_json::Value| v.as_object().cloned().unwrap_or_default();
+    let me = if r.chance(0.5) { "from" } else { "to" };
+    let (from, to) = if me == "from" { (giver, other) } else { (other, giver) };
+    let done = r.n(0, 9) as i64;
+    vec![
+        RecordFacts { id: 1, kind: "agreement".into(), status: "agreed".into(), open: true, terms: t(serde_json::json!({"from_gives": "wood", "from_qty": 10, "to_gives": "wood", "to_qty": 10, "from_done": done, "to_done": done, "from_home": "10,10", "to_home": "40,12", "words": "stack it at my store"})), parties: vec![("from".into(), from as u64), ("to".into(), to as u64)], me: me.into(), by: from, age_s: 60.0, due_s: Some(300.0) },
+        RecordFacts { id: 2, kind: "demand".into(), status: "open".into(), open: true, terms: t(serde_json::json!({"item": "wood", "qty": 3, "done": 0, "words": "the gate-due"})), parties: vec![("by".into(), other as u64), ("of".into(), giver as u64)], me: "of".into(), by: other, age_s: 30.0, due_s: Some(60.0) },
+        RecordFacts { id: 3, kind: "regard".into(), status: "held".into(), open: true, terms: t(serde_json::json!({"label": "rival town", "value": -35, "why": "the broken match"})), parties: vec![("holder".into(), COMMUNITY | 2), ("toward".into(), COMMUNITY | 3)], me: "holder".into(), by: 0, age_s: 9_000.0, due_s: None },
+    ]
 }
 
 struct Rng(u64);
@@ -42,9 +59,12 @@ impl Rng {
 }
 
 const ITEMS: [&str; 10] = ["berries", "wood", "cloak", "spear", "armor", "arrow", "bow", "basket", "fiber", "hide"];
-const TECHNIQUES: [&str; 8] = ["fire", "cooking", "shelter", "tanning", "mending", "fire_bolt", "carpentry", "smoking"];
+const TECHNIQUES: [&str; 8] = ["fire", "cooking", "shelter", "tanning", "wound_tending", "fire_bolt", "carpentry", "smoking"];
 const ACTIVITIES: [&str; 8] = ["", "", "sleep", "rest", "block", "gather", "walk", "craft"];
 const SEASONS: [&str; 4] = ["spring", "summer", "autumn", "winter"];
+/// The skills the Rust catalog listed before skills were declared in the script (2026-11-10),
+/// in its order: the fixtures' knacks stay what they were.
+const KNACK_SKILLS: [&str; 57] = ["goto", "wander", "gather", "eat", "sleep", "rest", "build", "pave", "open", "close", "craft", "cook", "smoke", "clear", "give", "store", "drop", "take", "attack", "seize", "threaten", "yield", "offer", "accept", "found", "join", "welcome", "host", "leave", "dodge", "block", "strike", "bowshot", "firebolt", "heal", "throw", "shoot", "follow", "flee", "wait", "conceive", "teach", "experiment", "write", "tend", "read", "plant", "signal", "rework", "wave", "appraise", "nod", "face", "step_aside", "keep", "play", "graze"];
 const COOLDOWN_SKILLS: [&str; 8] = ["strike", "bowshot", "firebolt", "heal", "dodge", "block", "attack", "gather"];
 
 fn genes(r: &mut Rng) -> Genes {
@@ -53,9 +73,9 @@ fn genes(r: &mut Rng) -> Genes {
         g.insert(b.to_string(), r.range(0.8, 1.25));
     }
     // A knack for every skilled skill in the catalog, as `genes::founder` gives a person.
-    for sk in living_rules::catalog::SKILLS {
-        if !matches!(sk.name, "wait" | "sleep" | "rest" | "eat" | "signal" | "goto" | "follow" | "wander" | "flee") {
-            g.insert(format!("knack:{}", sk.name), r.range(0.85, 1.15));
+    for sk in KNACK_SKILLS {
+        if !matches!(sk, "wait" | "sleep" | "rest" | "eat" | "signal" | "goto" | "follow" | "wander" | "flee") {
+            g.insert(format!("knack:{sk}"), r.range(0.85, 1.15));
         }
     }
     for t in living_rules::genes::PERSON_TRAITS {
@@ -129,6 +149,8 @@ fn actor(r: &mut Rng, id: u32) -> ActorFacts {
         sensed,
         bold: r.chance(0.05),
         room: r.n(8, 25),
+        community: 0,
+        home: String::new(),
     }
 }
 
@@ -159,6 +181,9 @@ fn target(r: &mut Rng, actor_id: u32) -> TargetFacts {
         company: r.n(0, 3),
         bearing: r.range(0.0, 3.1),
         closing: r.range(-2.0, 2.0),
+        community: 0,
+        owner: 0,
+        home: String::new(),
     }
 }
 
@@ -206,5 +231,15 @@ pub fn build() -> Fixtures {
             night: r.chance(0.4),
         });
     }
-    Fixtures { rates, strike, skills: &COOLDOWN_SKILLS, perceived }
+    let mut hooks = Vec::new();
+    for i in 0..16u32 {
+        let (giver, other) = (1 + i, 100 + i);
+        let mut c = SkillCtx { skill: "give".into(), item: "wood".into(), qty: r.n(1, 4), ..Default::default() };
+        c.actor.id = giver;
+        c.actor.kind = "person".into();
+        c.target = TargetFacts { class: "creature".into(), id: other as u64, kind: "person".into(), alive: true, dist: 1.0, ..Default::default() };
+        c.records = records(&mut r, giver, other);
+        hooks.push(c);
+    }
+    Fixtures { rates, strike, skills: &COOLDOWN_SKILLS, perceived, hooks }
 }

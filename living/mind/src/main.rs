@@ -164,6 +164,10 @@ async fn main() -> Result<()> {
                     // Standing proposals (tiny tables): a conversation turn knows what is on offer.
                     "SELECT * FROM bond_offer",
                     "SELECT * FROM trade_offer",
+                    // Records the rules keep (agreements, demands, regard; bounded per party): a
+                    // character is shown only its own (mind/dealings.rs).
+                    "SELECT * FROM record",
+                    "SELECT * FROM record_party",
                     "SELECT * FROM my_deliberations",
                     // Whether the people who play characters are there (private; the owner reads it).
                     "SELECT * FROM presence",

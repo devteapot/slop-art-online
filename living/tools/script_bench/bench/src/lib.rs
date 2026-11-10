@@ -37,13 +37,16 @@ pub enum Law {
     /// `rates(a)` asked every time: the law's own cost where the authority shares one answer
     /// per state (`Scripts::rates_unshared`; other engines run `rates`).
     RatesLaw = 4,
+    /// `on_give(a)`: the hook after a give, over a giver's records (an agreement, a demand, a
+    /// regard; docs/WORLD_RULES.md). Rhai only.
+    Hook = 5,
 }
 
 impl Law {
     /// The laws every engine runs (run.sh's equivalence check).
     pub const ALL: [Law; 3] = [Law::Rates, Law::Strike, Law::Cooldown];
     /// Cases added after the spike, run when asked (`sb-host --laws`).
-    pub const EXTRA: [Law; 2] = [Law::Perceived, Law::RatesLaw];
+    pub const EXTRA: [Law; 3] = [Law::Perceived, Law::RatesLaw, Law::Hook];
     pub fn from_u32(v: u32) -> Option<Law> {
         Self::ALL.into_iter().chain(Self::EXTRA).find(|l| *l as u32 == v)
     }
@@ -57,6 +60,7 @@ impl Law {
             Law::Cooldown => "cooldown",
             Law::Perceived => "perceived",
             Law::RatesLaw => "rates-law",
+            Law::Hook => "hook",
         }
     }
 }
@@ -73,6 +77,9 @@ pub trait Engine {
     }
     fn perceived(&mut self, _p: &RegardIn) -> Regard {
         unimplemented!("perceived_of is benchmarked for native and rhai only")
+    }
+    fn hook(&mut self, _c: &SkillCtx) -> StrikeOut {
+        unimplemented!("hooks are benchmarked for rhai only")
     }
 }
 
@@ -192,6 +199,10 @@ pub fn run(e: &mut dyn Engine, fx: &fixtures::Fixtures, law: Law, cursor: &mut u
                 let r = e.rates_law(&fx.rates[i % fx.rates.len()]);
                 (r.hunger_per_min.to_bits() ^ r.energy_per_min.to_bits().rotate_left(7) ^ r.hp_per_min.to_bits().rotate_left(13)) as u64
             },
+            Law::Hook => match e.hook(&fx.hooks[i % fx.hooks.len()]) {
+                Ok(v) => v.len() as u64 + 1,
+                Err(s) => s.len() as u64,
+            },
         });
         i += 1;
     }
@@ -228,6 +239,11 @@ pub fn dump(e: &mut dyn Engine, fx: &fixtures::Fixtures, law: Law) -> String {
             for (i, c) in fx.rates.iter().enumerate() {
                 let r = e.rates_law(c);
                 let _ = writeln!(s, "{i} {:?} {:?} {:?}", r.hunger_per_min, r.energy_per_min, r.hp_per_min);
+            }
+        },
+        Law::Hook => {
+            for (i, c) in fx.hooks.iter().enumerate() {
+                let _ = writeln!(s, "{i} {:?}", e.hook(c));
             }
         },
     }

@@ -13,77 +13,133 @@ pub enum KindClass {
 /// Terrain kinds usable as targets (`{"nearest": "grass"}`).
 pub const TERRAINS: &[&str] = &["grass", "forest"];
 
+/// What a skill is, as the world's rule script declares it (`<skill>_spec()` in
+/// `living/scripts/skills.rhai`): read once when the script compiles. The engine, graph
+/// normalization, the mind's prompts and the client's verbs all take skills from it; no skill
+/// is named here.
+#[derive(Clone, Debug, PartialEq)]
 pub struct SkillSpec {
-    pub name: &'static str,
+    pub name: String,
     pub needs_target: bool,
     pub needs_item: bool,
+    /// What the item names, in a prompt's argument list (`item`, `technique`, `signal name`).
+    pub item_arg: String,
+    /// Further arguments the skill reads (`qty`, `want`, `text`...), for prompts.
+    pub args: Vec<String>,
     /// Distance (tiles) within which the skill can be performed; walking closes the gap.
     pub reach: f32,
-    pub help: &'static str,
+    /// What it is, for a mind or a player: what it does, when it is useful, what it is not.
+    pub about: String,
+    /// What it takes and what it gives, from the rules' own numbers.
+    pub takes: String,
+    pub gives: String,
+    /// Listed for bodies whose species names no skills (people); a species that names it still
+    /// gets it (grazing is the animals').
+    pub listed: bool,
+    /// Offered in a conversation turn among the acts one may do right there.
+    pub talk: bool,
+    /// The item words it is given (`build`: campfire, shelter...): choices for clients and
+    /// prompts, and accepted for it even when they are not items, structures or techniques
+    /// (e.g. `lodging`).
+    pub items: Vec<String>,
 }
 
-pub const SKILLS: &[SkillSpec] = &[
-    SkillSpec { name: "goto", needs_target: true, needs_item: false, reach: 0.8, help: "walk to a target" },
-    SkillSpec { name: "wander", needs_target: false, needs_item: false, reach: 0.0, help: "stroll to a random nearby spot (explore)" },
-    SkillSpec { name: "gather", needs_target: true, needs_item: false, reach: 1.3, help: "harvest one unit from a resource" },
-    SkillSpec { name: "eat", needs_target: false, needs_item: true, reach: 0.0, help: "eat a food item from your pack" },
-    SkillSpec { name: "sleep", needs_target: false, needs_item: false, reach: 0.0, help: "sleep until rested; faster and safe from cold near a shelter" },
-    SkillSpec { name: "rest", needs_target: false, needs_item: false, reach: 0.0, help: "sit and recover a little energy" },
-    SkillSpec { name: "build", needs_target: false, needs_item: true, reach: 1.5, help: "build a structure where you stand (item: campfire|shelter|storage|house|trap), or a wall, gate or bridge on the tile you point at beside you (target {\"at\": [x, y]}; a bridge goes on water)" },
-    SkillSpec { name: "pave", needs_target: false, needs_item: false, reach: 0.0, help: "lay road on the tile you stand on (1 stone); walking on roads is faster" },
-    SkillSpec { name: "open", needs_target: true, needs_item: false, reach: 1.8, help: "open a gate (only its community may)" },
-    SkillSpec { name: "close", needs_target: true, needs_item: false, reach: 1.8, help: "close a gate (only its community may); a closed gate blocks the way like a wall" },
-    SkillSpec { name: "craft", needs_target: false, needs_item: true, reach: 0.0, help: "craft an item (item: spear|cloak|torch|axe|pick|net|basket|bow|arrow|salve|leather|armor)" },
-    SkillSpec { name: "cook", needs_target: true, needs_item: true, reach: 1.5, help: "cook raw fish or meat at a campfire" },
-    SkillSpec { name: "smoke", needs_target: true, needs_item: true, reach: 1.5, help: "smoke raw fish or meat at a campfire so it keeps (needs smoking)" },
-    SkillSpec { name: "clear", needs_target: false, needs_item: false, reach: 0.0, help: "clear the forest where you stand into open ground" },
-    SkillSpec { name: "give", needs_target: true, needs_item: true, reach: 1.8, help: "hand items to another creature" },
-    SkillSpec { name: "store", needs_target: true, needs_item: true, reach: 1.5, help: "put items into a storage" },
-    SkillSpec { name: "drop", needs_target: false, needs_item: true, reach: 0.0, help: "set items down where you stand (they are left behind), e.g. to free your pack" },
-    SkillSpec { name: "take", needs_target: true, needs_item: true, reach: 1.5, help: "take items from a storage or remains" },
-    SkillSpec { name: "attack", needs_target: true, needs_item: false, reach: 1.4, help: "strike a creature (spear hits harder); every blow does its full damage and whoever reaches 0 health dies; to frighten someone without harm, threaten; killing game yields meat" },
-    SkillSpec { name: "seize", needs_target: true, needs_item: true, reach: 1.8, help: "take items from a person's pack against their will: only from someone who has yielded to force, or is badly hurt" },
-    SkillSpec { name: "threaten", needs_target: true, needs_item: false, reach: 3.0, help: "menace a creature within a few tiles for 2 s, weapon raised; no harm is done, but they (and anyone watching) see it" },
-    SkillSpec { name: "yield", needs_target: false, needs_item: false, reach: 12.0, help: "give in: guard down, hands up (target: whom you yield to; without one, whoever last hurt you); for a while you do not strike back" },
-    SkillSpec { name: "offer", needs_target: true, needs_item: true, reach: 3.0, help: "offer a trade to a person beside you: item + qty you give, want + want_qty you ask in return; they may accept" },
-    SkillSpec { name: "accept", needs_target: true, needs_item: false, reach: 3.0, help: "accept the trade a person just offered you (both sides are exchanged at once, if both still have the goods)" },
-    SkillSpec { name: "found", needs_target: false, needs_item: false, reach: 0.0, help: "found a community with its home here (text: its name); you become its first member" },
-    SkillSpec { name: "join", needs_target: true, needs_item: false, reach: 3.0, help: "ask a member of a community to let you join it (a member must welcome you)" },
-    SkillSpec { name: "welcome", needs_target: true, needs_item: false, reach: 3.0, help: "welcome a person who asked to join your community" },
-    SkillSpec { name: "host", needs_target: true, needs_item: false, reach: 3.0, help: "take a person in as your guest: a bed in your household's house until morning, and food from its store" },
-    SkillSpec { name: "leave", needs_target: false, needs_item: false, reach: 0.0, help: "leave your community" },
-    SkillSpec { name: "dodge", needs_target: false, needs_item: false, reach: 0.0, help: "dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses (costs energy)" },
-    SkillSpec { name: "block", needs_target: false, needs_item: false, reach: 0.0, help: "raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it); hits from the front while blocking do a quarter of the damage, from behind it does not help" },
-    SkillSpec { name: "strike", needs_target: true, needs_item: false, reach: 1.6, help: "a quick blow at a creature within reach, telegraphed for a moment (spear hits harder); \"item\": \"hurt\" or \"kill\" as for attack" },
-    SkillSpec { name: "bowshot", needs_target: true, needs_item: false, reach: 22.0, help: "loose an arrow toward a creature or a point (target {\"at\": [x, y]}): it flies straight and hits the first creature in its path; needs a bow and an arrow" },
-    SkillSpec { name: "firebolt", needs_target: true, needs_item: false, reach: 16.0, help: "hurl a bolt of fire toward a creature or a point: it flies straight and burns the first creature it meets; needs fire_bolt and a lot of energy" },
-    SkillSpec { name: "heal", needs_target: false, needs_item: false, reach: 8.0, help: "mend the wounds of yourself or an ally you can see within 8 tiles, quickly, even in a fight; needs mending and a lot of energy" },
-    SkillSpec { name: "throw", needs_target: true, needs_item: false, reach: 7.0, help: "throw your spear at a creature up to 7 tiles away (you lose the spear)" },
-    SkillSpec { name: "shoot", needs_target: true, needs_item: false, reach: 9.0, help: "shoot an arrow from your bow at a creature up to 9 tiles away" },
-    SkillSpec { name: "follow", needs_target: true, needs_item: false, reach: 2.0, help: "walk alongside a creature for a while" },
-    SkillSpec { name: "flee", needs_target: true, needs_item: false, reach: 0.0, help: "run away from a creature or place" },
-    SkillSpec { name: "wait", needs_target: false, needs_item: false, reach: 0.0, help: "pause briefly" },
-    SkillSpec { name: "conceive", needs_target: true, needs_item: false, reach: 2.0, help: "start a family with a willing adult partner: both must choose it toward each other within 2 minutes, while fed" },
-    SkillSpec { name: "teach", needs_target: true, needs_item: true, reach: 2.0, help: "teach a technique you know to a person beside you (item: technique); takes a while, both must stay close" },
-    SkillSpec { name: "experiment", needs_target: false, needs_item: true, reach: 0.0, help: "tinker with a material from your pack (item) hoping to work out a new technique; uses up the material, often fails" },
-    SkillSpec { name: "write", needs_target: false, needs_item: true, reach: 0.0, help: "write on a tablet you keep or a sign you leave here (item: tablet|sign; text: your words; topic: a technique you know to describe) — needs writing and 1 wood" },
-    SkillSpec { name: "tend", needs_target: true, needs_item: false, reach: 1.5, help: "tend someone's wounds (target a person, or \"self\"); slow, and not while they are fighting" },
-    SkillSpec { name: "read", needs_target: false, needs_item: false, reach: 1.5, help: "read a tablet you carry, or a sign (target: {\"nearest\": \"sign\"}) — needs writing; a tablet describing a technique can teach it" },
-    SkillSpec { name: "plant", needs_target: false, needs_item: false, reach: 0.0, help: "plant 2 berries here to grow a new berry bush (needs planting; open grass or dirt)" },
-    SkillSpec { name: "signal", needs_target: false, needs_item: true, reach: 0.0, help: "make one of your species' signals (item: its name); others nearby hear it" },
-    SkillSpec { name: "rework", needs_target: false, needs_item: true, reach: 0.0, help: "sit and rework one of your ways (item: a routine's name, or \"top level\" for your desires; graph: the new version, or \"retire\": true to drop a routine); takes a while, and the old way must have been lived with first" },
-    SkillSpec { name: "wave", needs_target: true, needs_item: false, reach: 12.0, help: "wave to someone you can see (a greeting, a farewell or an answer to one); they see it and may answer" },
-    SkillSpec { name: "appraise", needs_target: true, needs_item: false, reach: 6.0, help: "look someone over closely (a person or an animal near you): for a while you see exactly how hurt they are" },
-    SkillSpec { name: "nod", needs_target: true, needs_item: false, reach: 6.0, help: "nod to someone near you (a quiet greeting or a yes); they see it and may answer" },
-    SkillSpec { name: "face", needs_target: true, needs_item: false, reach: 15.0, help: "turn where you stand to face someone or something you can see (a person who comes up to you or speaks, a fight, a sound)" },
-    SkillSpec { name: "step_aside", needs_target: true, needs_item: false, reach: 3.0, help: "step a pace to the side to let someone coming toward you pass (in a narrow street or a doorway)" },
-    SkillSpec { name: "keep", needs_target: false, needs_item: false, reach: 0.0, help: "keep your post a while (a stall, a workshop, a gate, a door): stand at it and attend to whoever comes by" },
-    SkillSpec { name: "play", needs_target: false, needs_item: false, reach: 0.0, help: "play for a little while where you are (run about, skip, make up a game)" },
-    SkillSpec { name: "graze", needs_target: false, needs_item: false, reach: 0.0, help: "(animals) eat grass where you stand" },
-];
+/// Every skill a world has, in the order the script declares them.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Skills {
+    list: Vec<SkillSpec>,
+    /// Indexes into `list` by name.
+    by_name: Vec<(String, usize)>,
+    /// The world's skills are not known here (a build without the script runtime, such as the
+    /// lab viewer, which only shows graphs the authority accepted): any skill name is taken.
+    pub open: bool,
+}
 
-pub fn skill(name: &str) -> Option<&'static SkillSpec> {
-    SKILLS.iter().find(|s| s.name == name)
+impl Skills {
+    /// The skills in the order given (the script's).
+    pub fn new(list: Vec<SkillSpec>) -> Self {
+        let mut by_name: Vec<(String, usize)> = list.iter().enumerate().map(|(i, s)| (s.name.clone(), i)).collect();
+        by_name.sort();
+        Self { list, by_name, open: false }
+    }
+
+    /// Whether a name is a skill here (any name, when the skills are not known).
+    pub fn has(&self, name: &str) -> bool {
+        self.open || self.get(name).is_some()
+    }
+
+    pub fn get(&self, name: &str) -> Option<&SkillSpec> {
+        self.by_name.binary_search_by(|(n, _)| n.as_str().cmp(name)).ok().map(|i| &self.list[self.by_name[i].1])
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &SkillSpec> {
+        self.list.iter()
+    }
+
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.list.iter().map(|s| s.name.as_str())
+    }
+
+    pub fn len(&self) -> usize {
+        self.list.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.list.is_empty()
+    }
+}
+
+/// The world's skills in this process: set where a process adopts a world's script
+/// ([`set_skills`]: the authority's script cache, the mind's `set_rules`, the client's compile),
+/// otherwise the shipped script's. [`scoped`] overrides it on one thread (tests).
+static WORLD: std::sync::RwLock<Option<std::sync::Arc<Skills>>> = std::sync::RwLock::new(None);
+
+thread_local! {
+    static SCOPED: std::cell::RefCell<Option<std::sync::Arc<Skills>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The skills of the world this process serves.
+pub fn skills() -> std::sync::Arc<Skills> {
+    if let Some(s) = SCOPED.with(|s| s.borrow().clone()) {
+        return s;
+    }
+    if let Some(s) = WORLD.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        return s.clone();
+    }
+    WORLD.write().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(shipped).clone()
+}
+
+#[cfg(feature = "scripting")]
+fn shipped() -> std::sync::Arc<Skills> {
+    crate::script::Scripts::new(include_str!("../../scripts/skills.rhai")).map(|s| s.skills().clone()).unwrap_or_default()
+}
+
+#[cfg(not(feature = "scripting"))]
+fn shipped() -> std::sync::Arc<Skills> {
+    std::sync::Arc::new(Skills { open: true, ..Default::default() })
+}
+
+/// Adopt a world's skills (its installed script's).
+pub fn set_skills(s: std::sync::Arc<Skills>) {
+    *WORLD.write().unwrap_or_else(|e| e.into_inner()) = Some(s);
+}
+
+/// Run `f` with `s` as the world's skills on this thread.
+pub fn scoped<T>(s: std::sync::Arc<Skills>, f: impl FnOnce() -> T) -> T {
+    let before = SCOPED.with(|c| c.replace(Some(s)));
+    let out = f();
+    SCOPED.with(|c| *c.borrow_mut() = before);
+    out
+}
+
+/// A skill of the world this process serves.
+pub fn skill(name: &str) -> Option<SkillSpec> {
+    skills().get(name).cloned()
+}
+
+/// Whether the world has this skill.
+pub fn is_skill(name: &str) -> bool {
+    skills().has(name)
 }
 
 pub struct ItemSpec {
@@ -149,12 +205,25 @@ pub const TECHNIQUES: &[TechniqueSpec] = &[
     TechniqueSpec { name: "trapping", help: "build a trap (2 wood, 2 fiber) that catches small game over time", requires: &[] },
     TechniqueSpec { name: "bridging", help: "build a bridge (4 wood, 2 stone) over water beside you", requires: &["carpentry"] },
     TechniqueSpec { name: "fire_bolt", help: "hurl a bolt of fire (firebolt) that burns the first creature in its path", requires: &["fire"] },
-    TechniqueSpec { name: "mending", help: "mend wounds quickly with your hands (heal), yourself or an ally, even in a fight", requires: &[] },
+    TechniqueSpec { name: "wound_tending", help: "close wounds quickly with your hands (the heal skill), your own or an ally's, even in a fight; not mending things", requires: &[] },
     TechniqueSpec { name: "toolmaking", help: "craft an axe (2 wood, 1 stone; cuts wood twice as fast) or a pick (2 wood, 2 stone; breaks stone twice as fast)", requires: &[] },
 ];
 
+/// A technique by its name (a renamed technique by its old name too, see [`RENAMED`]).
 pub fn technique(name: &str) -> Option<&'static TechniqueSpec> {
+    let name = technique_name(name);
     TECHNIQUES.iter().find(|t| t.name == name)
+}
+
+/// Techniques that were renamed, old name first: seeds, stored know-how and written topics
+/// under the old name are read as the new one, and an install renames a world's rows.
+/// `mending` was the heal skill's wound-closing, and models read it as mending tools and hinges
+/// (docs/TRIALS.md, `i8`).
+pub const RENAMED: &[(&str, &str)] = &[("mending", "wound_tending")];
+
+/// A technique's current name.
+pub fn technique_name(name: &str) -> &str {
+    RENAMED.iter().find(|(old, _)| *old == name).map_or(name, |(_, new)| new)
 }
 
 pub fn item(name: &str) -> Option<&'static ItemSpec> {
@@ -195,34 +264,36 @@ pub fn resource_yield(kind: &str) -> Option<&'static str> {
 
 /// Compact skill reference for prompts.
 pub fn skills_help() -> String {
-    skills_help_io(&|_| None)
+    skills_help_of(&skills())
 }
 
-/// What a skill takes and gives, from the world rules (see `script::Scripts::skill_io`).
-pub type SkillIo<'a> = &'a dyn Fn(&str) -> Option<(String, String)>;
-
 /// One skill's prompt line: its arguments, what it is, and what it takes and gives.
-pub fn skill_line(s: &SkillSpec, item_arg: &str, io: SkillIo) -> String {
-    let mut args = Vec::new();
+pub fn skill_line(s: &SkillSpec) -> String {
+    let mut args: Vec<String> = Vec::new();
     if s.needs_target {
-        args.push("target");
+        args.push("target".into());
     }
     if s.needs_item {
-        args.push(item_arg);
+        args.push(if !s.items.is_empty() {
+            format!("item: {}", s.items.join("|"))
+        } else if s.item_arg.is_empty() || s.item_arg == "item" {
+            "item".into()
+        } else {
+            format!("item: {}", s.item_arg)
+        });
     }
-    let mut line = format!("- {}({}): {}", s.name, args.join(", "), s.help);
-    if let Some((takes, gives)) = io(s.name) {
-        if !takes.is_empty() {
-            line.push_str(&format!("\n    takes: {takes}"));
-        }
-        if !gives.is_empty() {
-            line.push_str(&format!("\n    gives: {gives}"));
-        }
+    args.extend(s.args.iter().cloned());
+    let mut line = format!("- {}({}): {}", s.name, args.join(", "), s.about);
+    if !s.takes.is_empty() {
+        line.push_str(&format!("\n    takes: {}", s.takes));
+    }
+    if !s.gives.is_empty() {
+        line.push_str(&format!("\n    gives: {}", s.gives));
     }
     line
 }
 
-/// Skill reference with each skill's inputs and outputs.
-pub fn skills_help_io(io: SkillIo) -> String {
-    SKILLS.iter().filter(|s| s.name != "graze").map(|s| skill_line(s, "item", io)).collect::<Vec<_>>().join("\n")
+/// Skill reference with each skill's inputs and outputs, for people.
+pub fn skills_help_of(skills: &Skills) -> String {
+    skills.iter().filter(|s| s.listed).map(skill_line).collect::<Vec<_>>().join("\n")
 }

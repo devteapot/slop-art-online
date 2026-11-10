@@ -33,6 +33,9 @@ impl Engine for RhaiEmbed {
     fn perceived(&mut self, p: &crate::RegardIn) -> crate::Regard {
         self.s.perceived_of(p)
     }
+    fn hook(&mut self, c: &SkillCtx) -> StrikeOut {
+        self.s.hook("give", c)
+    }
 }
 
 /// Diagnostic: the context map alone. `Scripts::call` builds `to_map(ctx, knack)` for every

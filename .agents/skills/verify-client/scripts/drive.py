@@ -61,14 +61,18 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence',
-           'woken', 'prior', 'prior_head', 'guest', 'judged']
+           'woken', 'prior', 'prior_head', 'guest', 'judged',
+           # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
+           'record', 'record_party', 'record_clock',
+           # A floor module's staged genesis (floor.rs), private since floors were added.
+           'floor_seed', 'genesis_timer']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 OWN = ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
@@ -87,6 +91,8 @@ ADMIN = {
     'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
     'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
     'spawn_newcomer': ['probe'],
+    # A floor module's runtime seed (floor.rs, admin only).
+    'create_floor': ['{}'],
 }
 
 
@@ -142,7 +148,7 @@ class DropProxy:
                 continue
             except OSError:
                 return
-            upstream = socket.create_connection(('127.0.0.1', 3300), timeout=5)
+            upstream = socket.create_connection(('127.0.0.1', int(V.URL.rsplit(':', 1)[1])), timeout=5)
             self.pairs.append((client, upstream))
             self.accepted += 1
             threading.Thread(target=self.relay, args=(client, upstream), daemon=True).start()
@@ -316,7 +322,8 @@ class Run:
         exact = re.findall(r'"(SELECT [^"]+)"', match[1])
         if exact != BASE_QUERIES:
             raise RuntimeError('viewer query set changed; update BASE_QUERIES and the feature map')
-        tables = (ROOT / 'living/authority/src/tables.rs').read_text()
+        # Tables are declared in tables.rs and in a few modules of their own (records.rs).
+        tables = '\n'.join(p.read_text() for p in sorted((ROOT / 'living/authority/src').glob('*.rs')))
         accessor = lambda d: re.search(r'accessor\s*=\s*(\w+)', d)[1]
         definitions = re.findall(r'^#\[spacetimedb::table\((.*?)\)\]', tables, re.S | re.M)
         private = [accessor(d) for d in definitions if not re.search(r'\bpublic\b', d)]
@@ -337,7 +344,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'tick', 'housekeeping'}
+        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
@@ -744,8 +751,9 @@ def main():
     parser.add_argument('--seconds', type=int, default=10, help='live query duration, 0 to 300 seconds')
     parser.add_argument('--save', help='fresh evidence basename for --query, without an extension')
     args = parser.parse_args()
-    if V.URL != 'http://127.0.0.1:3300':
-        parser.error('this driver and drop proxy require the local shared server on :3300')
+    # The shared server on :3300, or a worker's own on another loopback port (LIVING_STDB_URL).
+    if not re.fullmatch(r'http://127\.0\.0\.1:\d+', V.URL):
+        parser.error('this driver and drop proxy require a local server at http://127.0.0.1:<port>')
     run = Run(args.run)
     if args.query is not None:
         if not 0 <= args.seconds <= 300:

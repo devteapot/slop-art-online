@@ -776,7 +776,7 @@ fn strike_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: tru
 fn bowshot_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
 fn firebolt_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
 fn block_combat() { #{ aim: "facing", timed: true, reflex: true, real_time: true, hold_ms: 8000, arc: 75.0, takes: 0.25 } }
-fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["mending"] } }
+fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
 fn dodge_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true } }
 fn attack_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
 fn shoot_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
@@ -842,9 +842,9 @@ fn firebolt_done(a) { [#{ op: "launch" }] + spent("firebolt") }
 fn firebolt_missile(a) { #{ speed: 16.0, range: 16.0, radius: 0.35 } }
 fn firebolt_hit(a) { [#{ op: "damage", amount: 24.0 * a.actor.factor * armor(a) }] }
 
-// Mending by hand: yourself or an ally in sight, quickly, even mid-fight.
+// Closing wounds by hand (wound_tending): yourself or an ally in sight, quickly, even mid-fight.
 fn heal_check(a) {
-    if !knows(a, "mending") { return "you don't know how to mend wounds" + learn_how("mending"); }
+    if !knows(a, "wound_tending") { return "you don't know how to close wounds by hand" + learn_how("wound_tending"); }
     if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to heal"; }
     if a.target.hp >= a.target.max_hp - 0.5 { return if a.target.id == a.actor.id { "you are not hurt" } else { "they are not hurt" }; }
     // An ally: not someone fighting you, nor someone you are fighting.
@@ -890,7 +890,225 @@ fn accept_check(a) {
     ""
 }
 fn accept_duration(a) { 1500 }
-fn accept_done(a) { [#{ op: "accept" }] }
+// Terms the person proposed to you come first; otherwise their standing trade.
+fn accept_done(a) {
+    let r = proposal_from(a);
+    if r == () { return [#{ op: "accept" }]; }
+    let t = r.terms;
+    [#{ op: "amend", id: r.id, status: "agreed", due_h: due_by_dark(a) },
+     #{ op: "tell", to: r.parties.from, salience: 0.8, text: `{actor} accepted your terms: ${terms_line(t, "from")}, by dusk.` },
+     #{ op: "tell", to: a.actor.id, text: `agreed with {target}: ${terms_line(t, "to")}, by dusk` },
+     #{ op: "witness", text: "{a} and {b} came to an agreement." }]
+}
+
+// ---- agreements, demands and regard (docs/WORLD_RULES.md) ---------------------------------
+// Built on the engine's records: a record has a kind, a status, parties by role, terms and a
+// time it falls due (world hours). The engine keeps them, indexed by party, hands a law the
+// actor's own (`a.records`, through its community too), and tells these rules when something
+// happens: `on_<skill>` after a skill is done (`on_give`, `on_store`, `on_host` here),
+// `on_expire` when a record falls due (`a.record`), `on_death`. A hook only makes, amends and
+// closes records and tells; it moves nothing. People make, keep and break agreements and
+// demands with the ordinary skills: nothing here is a role or a schedule.
+//   record ops   #{ op: "record", kind, status, parties: #{ role: id }, terms: #{...}, due_h }
+//                #{ op: "amend", id, status, terms (merged), due_h }
+//                #{ op: "close", id, status, keep_h }
+//   telling      #{ op: "tell", to: id, text, salience, ask } ({actor}, {target}, {id:N} become
+//                how the one told refers to them; ask: their mind thinks about it; told to the
+//                actor, it is the act's outcome)
+//                #{ op: "witness", text, salience } (those who see the actor; {a}, {b})
+// A record between a `holder` and a `toward` side whose terms have a `label` and a `value`
+// (-100..100) is a stance: relation filters and minds read it (a community's regard, seeded).
+
+// How long a proposal stands, a demand waits, and a closed record is remembered (world hours).
+fn proposal_h(x) { 4.0 }
+fn demand_h(x) { 3.0 }
+fn kept_h(x) { 12.0 }
+// An agreement falls due at dusk (20:00), or the next one when dusk is under two hours away.
+fn due_by_dark(a) { let h = 20.0 - a.hour; if h < 2.0 { h += 24.0; } h }
+
+fn other_role(me) { if me == "from" { "to" } else { "from" } }
+fn qty_of(n) { if n < 1 { 1 } else { n } }
+fn goods(item, n) { if item == "lodging" { "a night's lodging" } else { `${n} ${item}` } }
+fn words(t) { if t == "" { "" } else { ` ("${t}")` } }
+// What each side owes, as the side `me` reads it.
+fn terms_line(t, me) {
+    let other = other_role(me);
+    `you give ${goods(t[me + "_gives"], t[me + "_qty"])}, they give ${goods(t[other + "_gives"], t[other + "_qty"])}`
+}
+// Terms the target proposed to the actor, still standing.
+fn proposal_from(a) {
+    for r in a.records {
+        if r.open && r.kind == "agreement" && r.status == "offered" && r.me == "to" && r.parties.from == a.target.id { return r; }
+    }
+    ()
+}
+// How the actor's community regards another (its stance record's terms), or ().
+fn regard_toward(a, community) {
+    for r in a.records {
+        if r.kind == "regard" && r.me == "holder" && r.parties.toward == community { return r.terms; }
+    }
+    ()
+}
+
+fn offer_terms_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to make an agreement with"; }
+    if a.target.id == a.actor.id { return "not with yourself"; }
+    if young(a) { return "too young to make agreements"; }
+    if a.item == "" || a.want == "" { return "say what you will give (item, qty) and what they will give (want, want_qty)"; }
+    let open = 0;
+    for r in a.records { if r.open { open += 1; } }
+    if open >= 12 { return "you have too many dealings in hand already"; }
+    ""
+}
+fn offer_terms_duration(a) { 2000 }
+fn offer_terms_done(a) {
+    let t = #{ from_gives: a.item, from_qty: qty_of(a.qty), to_gives: a.want, to_qty: qty_of(a.want_qty), from_done: 0, to_done: 0, from_home: a.actor.home, to_home: a.target.home, words: a.text };
+    if a.item == "lodging" { t.from_qty = 1; }
+    if a.want == "lodging" { t.to_qty = 1; }
+    [#{ op: "record", kind: "agreement", status: "offered", parties: #{ from: a.actor.id, to: a.target.id }, terms: t, due_h: proposal_h(0) },
+     #{ op: "tell", to: a.target.id, ask: true, salience: 0.85, text: `{actor} proposes an agreement: ${terms_line(t, "to")}${words(a.text)}, by dusk. If you accept (accept, toward them), the world counts what each of you hands over or stores for the other.` },
+     #{ op: "tell", to: a.actor.id, text: `proposed to {target}: ${terms_line(t, "from")}${words(a.text)}` }]
+}
+
+// What the actor handed over or stored for someone, counted toward its agreements with them
+// and the demands they made of it.
+fn delivered(a, item, n, to_id, to_home) {
+    let fx = [];
+    for r in a.records {
+        if !r.open { continue; }
+        if r.kind == "agreement" && r.status == "agreed" {
+            let me = r.me;
+            let other = other_role(me);
+            let t = r.terms;
+            let them = r.parties[other];
+            let to_them = to_id == them || (to_home != "" && to_home == t[other + "_home"]);
+            if t[me + "_gives"] != item || !to_them { continue; }
+            let owed = t[me + "_qty"];
+            let done = t[me + "_done"];
+            if done >= owed { continue; }
+            done += n;
+            if done > owed { done = owed; }
+            let change = #{};
+            change[me + "_done"] = done;
+            fx.push(#{ op: "amend", id: r.id, terms: change });
+            let left = t[other + "_qty"] - t[other + "_done"];
+            if done >= owed && left <= 0 {
+                fx.push(#{ op: "close", id: r.id, status: "kept", keep_h: kept_h(0) });
+                fx.push(#{ op: "tell", to: them, salience: 0.75, text: `{actor} has delivered ${goods(item, owed)}: your agreement with them is kept on both sides.` });
+                fx.push(#{ op: "tell", to: a.actor.id, text: `with that your agreement with {id:${them}} is kept on both sides` });
+            } else if done >= owed {
+                fx.push(#{ op: "tell", to: them, ask: true, salience: 0.85, text: `{actor} has delivered all ${goods(item, owed)} you agreed on. You owe them ${goods(t[other + "_gives"], left)} by dusk.` });
+                fx.push(#{ op: "tell", to: a.actor.id, text: `you have delivered your part (${goods(item, owed)}); {id:${them}} owes you ${goods(t[other + "_gives"], left)}` });
+            }
+            // A part delivered is not told piece by piece: a give is seen by its receiver anyway,
+            // and each side reads how far the other has got in its dealings (`record_text`).
+        } else if r.kind == "demand" && r.me == "of" && to_id == r.parties.by && r.terms.item == item {
+            let done = r.terms.done + n;
+            if done >= r.terms.qty {
+                fx.push(#{ op: "amend", id: r.id, terms: #{ done: done } });
+                fx.push(#{ op: "close", id: r.id, status: "met", keep_h: kept_h(0) });
+                fx.push(#{ op: "tell", to: r.parties.by, salience: 0.7, text: `{actor} paid the ${r.terms.qty} ${item} you demanded.` });
+                fx.push(#{ op: "tell", to: a.actor.id, text: `you have paid what {id:${r.parties.by}} demanded` });
+            } else {
+                fx.push(#{ op: "amend", id: r.id, terms: #{ done: done } });
+            }
+        }
+    }
+    fx
+}
+fn on_give(a) { delivered(a, a.item, qty_of(a.qty), a.target.id, "") }
+fn on_store(a) { delivered(a, a.item, qty_of(a.qty), a.target.owner, a.target.home) }
+fn on_host(a) { delivered(a, "lodging", 1, a.target.id, "") }
+
+// A record fell due: a proposal not taken, an agreement kept by one side only or by neither,
+// a demand not paid. Whoever did not deliver is told so, and so is the other side.
+fn on_expire(a) {
+    let r = a.record;
+    if r.kind == "agreement" { return agreement_due(r); }
+    if r.kind == "demand" { return demand_due(r); }
+    []
+}
+fn agreement_due(r) {
+    let t = r.terms;
+    let f = r.parties.from;
+    let to = r.parties.to;
+    if r.status == "offered" {
+        return [#{ op: "close", id: r.id, status: "not taken", keep_h: 1.0 },
+                #{ op: "tell", to: f, salience: 0.5, text: `{id:${to}} did not take up your terms (${terms_line(t, "from")}).` }];
+    }
+    let f_ok = t.from_done >= t.from_qty;
+    let to_ok = t.to_done >= t.to_qty;
+    if f_ok && to_ok { return [#{ op: "close", id: r.id, status: "kept", keep_h: kept_h(0) }]; }
+    if f_ok || to_ok {
+        let kept = if f_ok { "from" } else { "to" };
+        let broke = other_role(kept);
+        let k = r.parties[kept];
+        let b = r.parties[broke];
+        let owed = goods(t[broke + "_gives"], t[broke + "_qty"] - t[broke + "_done"]);
+        return [#{ op: "amend", id: r.id, terms: #{ broken_by: broke } },
+                #{ op: "close", id: r.id, status: "broken", keep_h: kept_h(0) },
+                #{ op: "tell", to: k, salience: 0.85, text: `{id:${b}} has not delivered ${owed} by dusk as agreed, though you delivered your part: they broke your agreement.` },
+                #{ op: "tell", to: b, salience: 0.8, text: `Dusk has passed and you have not delivered ${owed} to {id:${k}}, who delivered their part: you broke your agreement.` }];
+    }
+    [#{ op: "close", id: r.id, status: "lapsed", keep_h: kept_h(0) },
+     #{ op: "tell", to: f, salience: 0.6, text: `Your agreement with {id:${to}} has lapsed at dusk: neither of you delivered all of your part.` },
+     #{ op: "tell", to: to, salience: 0.6, text: `Your agreement with {id:${f}} has lapsed at dusk: neither of you delivered all of your part.` }]
+}
+fn demand_due(r) {
+    let by = r.parties.by;
+    let of = r.parties.of;
+    let what = `${r.terms.qty} ${r.terms.item}`;
+    [#{ op: "close", id: r.id, status: "unpaid", keep_h: kept_h(0) },
+     #{ op: "tell", to: by, salience: 0.7, text: `{id:${of}} has not paid the ${what} you demanded.` },
+     #{ op: "tell", to: of, salience: 0.5, text: `You did not pay the ${what} {id:${by}} demanded.` }]
+}
+
+// How a party reads one of its records, for minds and players ({id:N} becomes how they refer to
+// N: a person, or a community). Read by the mind service and the client, never per tick.
+fn record_text(r) {
+    if r.kind == "agreement" {
+        let other = r.parties[other_role(r.me)];
+        let t = r.terms;
+        if r.status == "offered" {
+            return if r.me == "from" { `you proposed to {id:${other}}: ${terms_line(t, "from")}${words(t.words)}; they have not accepted yet` } else { `{id:${other}} proposed to you: ${terms_line(t, "to")}${words(t.words)}; accept (toward them) to agree` };
+        }
+        let mine = t[r.me + "_done"];
+        let theirs = t[other_role(r.me) + "_done"];
+        if r.status == "agreed" {
+            return `agreement with {id:${other}}, by dusk: ${terms_line(t, r.me)}${words(t.words)}; so far you delivered ${mine} of ${t[r.me + "_qty"]}, they ${theirs} of ${t[other_role(r.me) + "_qty"]}`;
+        }
+        return `agreement with {id:${other}} (${terms_line(t, r.me)}): ${r.status}`;
+    }
+    if r.kind == "demand" {
+        let what = `${r.terms.qty} ${r.terms.item}${words(r.terms.words)}`;
+        if r.me == "by" { return `you demanded ${what} of {id:${r.parties.of}}: ${if r.open { "not paid yet" } else { r.status }}`; }
+        return `{id:${r.parties.by}} demanded ${what} of you: ${if r.open { "not paid yet" } else { r.status }}`;
+    }
+    if r.kind == "regard" {
+        if r.me == "holder" { return `your people hold {id:${r.parties.toward}} as ${r.terms.label} (${r.terms.why})`; }
+        return `{id:${r.parties.holder}} holds your people as ${r.terms.label} (${r.terms.why})`;
+    }
+    `${r.kind}: ${r.status}`
+}
+
+fn demand_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to demand of"; }
+    if a.target.id == a.actor.id { return "not of yourself"; }
+    if young(a) { return "too young to make demands"; }
+    if a.item == "" { return "say what you demand (item, qty)"; }
+    for r in a.records {
+        if r.open && r.kind == "demand" && r.me == "by" && r.parties.of == a.target.id { return "you already have a demand of them standing"; }
+    }
+    ""
+}
+fn demand_duration(a) { 1500 }
+fn demand_done(a) {
+    let n = qty_of(a.qty);
+    [#{ op: "record", kind: "demand", status: "open", parties: #{ by: a.actor.id, of: a.target.id }, terms: #{ item: a.item, qty: n, done: 0, words: a.text }, due_h: demand_h(0) },
+     #{ op: "tell", to: a.target.id, ask: true, salience: 0.85, text: `{actor} demands ${n} ${a.item} of you${words(a.text)}. You may give it to them, or not.` },
+     #{ op: "witness", text: `{a} demanded ${n} ${a.item} of {b}.` },
+     #{ op: "tell", to: a.actor.id, text: `demanded ${n} ${a.item} of {target}; you will know whether they pay` }]
+}
 
 // ---- hospitality ----------------------------------------------------------------------
 // Taking someone in: a grown person offers another a bed in their household's house (the
@@ -944,7 +1162,7 @@ fn wakes(e) {
     if p[1] == "woken" && !["hurt", "theft"].contains(what) && !["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 0; }
     if ["speech", "hurt", "theft"].contains(what) { return 1; }
     // Kindness, dealings, lessons, asking to belong, and anything hostile.
-    if ["wave", "nod", "give", "offer", "accept", "teach", "tend", "heal", "join", "welcome", "host"].contains(what) { return 1; }
+    if ["wave", "nod", "give", "offer", "offer_terms", "demand", "accept", "teach", "tend", "heal", "join", "welcome", "host"].contains(what) { return 1; }
     if ["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 1; }
     0
 }
@@ -977,9 +1195,9 @@ fn woken_ring(k) {
     }
 }
 
-// ---- what each skill takes and gives -------------------------------------------------
-// Read by minds to compose routines from skills: keep these beside the rules above, and
-// build them from the same numbers so they change when the rules do.
+// ---- text helpers for the skills' specs (below) -----------------------------------------
+// Specs are read by minds to compose routines from skills: build them from the same numbers
+// as the rules so they change when the rules do.
 
 fn list(parts) {
     let out = "";
@@ -1014,62 +1232,196 @@ fn source_of(item) {
         _ => if cost(item) == () { "someone who has it can give or trade it to you" } else { `craft it (${cost_text(item)})` },
     }
 }
-fn skill_io(skill) {
+// ---- what each skill is ----------------------------------------------------------------
+// `<skill>_spec()`, read once when the script compiles (the engine never asks per tick). Every
+// skill with rules (a duration or effects) declares one; graph normalization, the minds'
+// prompts, the client's verbs and the acts path all take skills from here, so a skill added
+// here needs no engine change. A floor overrides a skill's description by redefining its spec.
+//   target  it is aimed at something (true/false)
+//   item    it takes an item (true), or a word for what the item names ("technique")
+//   args    further arguments it reads, for prompts ("qty", "want", "text"...)
+//   reach   tiles within which it is done; an act walks into reach first
+//   about   what it is, for a mind: what it does, when it is useful, what it is not
+//   takes   what it uses up or needs, from the rules' own numbers
+//   gives   what comes of it
+//   listed  shown to people (false: only species that name it, e.g. grazing)
+//   talk    offered in a conversation turn among the acts one may do right there
+//   items   the item words it is given (choices for clients and prompts); accepted for it even
+//           when they are not items, structures or techniques
+
+fn goto_spec() {
     let l = laws();
-    switch skill {
-        "goto" => #{ takes: "a target in sight or a known place", gives: `you there; within ${l.fire_warmth} tiles of a campfire or ${l.shelter_warmth} of a shelter or house the night cold can't hurt you` },
-        "wander" => #{ takes: "", gives: "you at a nearby spot you may not have seen" },
-        "gather" => #{ takes: "a resource in reach with some left, room in your pack, a little energy",
-            gives: "1 unit into your pack: berry_bush→berries, tree→wood (faster with an axe), boulder→stone (faster with a pick), reeds→fiber, fishing_spot→fish (faster with a spear, two at a time with a net), clay_bank→clay" },
-        "eat" => #{ takes: "1 food item from your own pack (item: its name, or \"food\" for your best)", gives: `hunger down by its worth (${foods_text()}), a little health` },
-        "cook" => #{ takes: "1 raw fish or meat from your pack, a campfire in reach, knowing cooking", gives: "1 cooked_fish or cooked_meat: about twice as filling, keeps longer" },
-        "smoke" => #{ takes: "1 raw fish or meat from your pack, a campfire in reach, knowing smoking, 10 seconds", gives: "1 smoked_fish or smoked_meat: more filling than raw, keeps for weeks (food to carry far or trade)" },
-        "clear" => #{ takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" },
-        "graze" => #{ takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" },
-        "sleep" => #{ takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" },
-        "rest" => #{ takes: "8 seconds", gives: "a little energy" },
-        "wait" => #{ takes: "time", gives: "nothing: time passes" },
-        "host" => #{ takes: "a person beside you, and a house of your household's (at your home door), 2 s", gives: "they are your guest until 7 in the morning: they know where your house is (their place \"lodging\"), may sleep there, and may take from your household's store" },
-        "wave" => #{ takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them: a greeting, or an answer to theirs" },
-        "nod" => #{ takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them: a greeting, or an answer to theirs" },
-        "appraise" => #{ takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" },
-        "face" => #{ takes: "something or someone in sight", gives: "you turn where you stand to face it" },
-        "step_aside" => #{ takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" },
-        "keep" => #{ takes: "10 seconds at your post", gives: "you are seen at work there (a stall, a workshop, a gate)" },
-        "play" => #{ takes: "4 seconds, not a baby", gives: "a little fun; tires a little" },
-        "build" => #{ takes: `its materials from your pack (campfire ${cost_text("campfire")}; shelter ${cost_text("shelter")}; storage ${cost_text("storage")}; house ${cost_text("house")}; wall ${cost_text("wall")}; gate ${cost_text("gate")}; trap ${cost_text("trap")}; bridge ${cost_text("bridge")}) and knowing its technique`,
-            gives: `the structure here: a campfire warms within ${l.fire_warmth} tiles at night, a shelter or house within ${l.shelter_warmth} and makes sleep restful, a storage keeps items (food spoils slower), a trap catches game over time (take the meat from it), a bridge makes the water tile beside you a way across` },
-        "pave" => #{ takes: cost_text("road"), gives: "road under you (faster walking)" },
-        "craft" => #{ takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}; net ${cost_text("net")}; basket ${cost_text("basket")}; bow ${cost_text("bow")}; arrow ${cost_text("arrow")} for 3; salve ${cost_text("salve")}; leather ${cost_text("leather")}; armor ${cost_text("armor")}) and knowing how`,
-            gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster, a net catches two fish at a time, a basket carries 20 more, a bow shoots arrows, a salve helps tending, armor softens blows" },
-        "give" => #{ takes: "the items from your pack", gives: "the items in their pack" },
-        "store" => #{ takes: `the items from your pack, a storage in reach with room (a storage holds ${storage_holds(0)} things in all)`, gives: "the items in the storage, for anyone to take" },
-        "take" => #{ takes: "items in a storage, remains or a trap in reach, room in your pack", gives: "the items in your pack" },
-        "drop" => #{ takes: "the items from your pack", gives: "room in your pack; the items are left behind" },
-        "attack" => #{ takes: "a creature in reach, a little energy",
-            gives: "a blow (harder with a spear, strength and practice) that does its full damage: whoever it takes to 0 health dies. To frighten someone without harm, threaten. A creature killed leaves remains with meat and hide to take" },
-        "threaten" => #{ takes: "a creature within a few tiles, 2 seconds", gives: "no harm: they see you menacing them (weapon raised), and so does anyone watching" },
-        "seize" => #{ takes: "a person in reach who has yielded to force or is badly hurt, the items in their pack", gives: "the items in your pack; they and anyone watching see you take them" },
-        "yield" => #{ takes: "a second (target: whom you give in to; without one, whoever last hurt you)",
-            gives: `you stop resisting, guard down and hands up: for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in` },
-        "throw" => #{ takes: "your spear", gives: "a hard hit at range; the spear is gone" },
-        "shoot" => #{ takes: "a bow and 1 arrow, a creature within 9 tiles", gives: "a hit at range (softened by armor); the arrow is spent" },
-        "strike" => #{ takes: `a creature within reach, ${combat_cost("strike")} energy; ready again ${combat_cooldown("strike")} ms after you start`, gives: "a quick blow (harder with a spear, strength and practice) after a short windup they can see; out of reach by then, it misses; a raised guard in front of them takes most of it" },
-        "bowshot" => #{ takes: `a bow and 1 arrow, ${combat_cost("bowshot")} energy, a creature or a point to aim at (up to 22 tiles)`, gives: "an arrow that flies straight and hits the first creature in its path (softened by armor); the arrow is spent" },
-        "firebolt" => #{ takes: `knowing fire_bolt, ${combat_cost("firebolt")} energy, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`, gives: "a bolt of fire that burns the first creature it meets, hard" },
-        "heal" => #{ takes: `knowing mending, ${combat_cost("heal")} energy, yourself or a hurt ally in sight within 8 tiles; ready again after ${combat_cooldown("heal") / 1000} s`, gives: "their wounds mended at once, even in a fight" },
-        "tend" => #{ takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" },
-        "plant" => #{ takes: "2 berries, open grass or dirt outside winter, knowing planting", gives: "a new berry bush in time" },
-        "experiment" => #{ takes: "1 of the material", gives: "sometimes a new technique" },
-        "teach" => #{ takes: "a technique you know, a person beside you staying close for a while", gives: "they know it too" },
-        "write" => #{ takes: "1 wood, knowing writing", gives: "a tablet you keep or a sign left here, with your words" },
-        "read" => #{ takes: "a tablet you carry or a sign here, knowing writing", gives: "its words; a tablet describing a technique can teach it" },
-        "rework" => #{ takes: "a while sitting still; an old way must have been tried about 4 times, failed twice or kept 15 minutes (the top level: about two days)",
-            gives: "that way replaced by your new version (or dropped); how it goes starts counting afresh" },
-        "conceive" => #{ takes: "a willing adult partner choosing it too, both fed", gives: "a child in time" },
-        _ => #{ takes: "", gives: "" },
-    }
+    #{ target: true, reach: 0.8,
+       about: "Walk to something in sight or a place you know and stop beside it. An act aimed at a target walks there by itself, so you need goto only to be somewhere (home before dark, a meeting place). Not following someone who moves (follow), not running away (flee).",
+       takes: "a target in sight or a known place",
+       gives: `you there; within ${l.fire_warmth} tiles of a campfire or ${l.shelter_warmth} of a shelter or house the night cold can't hurt you` }
 }
+fn wander_spec() { #{ about: "Stroll to a random spot nearby, to look around when nothing you need is in sight. It searches for nothing in particular.", gives: "you at a nearby spot you may not have seen" } }
+fn gather_spec() {
+    #{ target: true, reach: 1.3,
+       about: "Take one unit from a resource beside you: berries from a berry_bush, wood from a tree, stone from a boulder, fiber from reeds, fish from a fishing_spot, clay from a clay_bank. The way to get food and materials from the land. Taking from a storage, remains or a trap is take.",
+       takes: "a resource in reach with some left, room in your pack, a little energy",
+       gives: "1 unit into your pack: berry_bush→berries, tree→wood (faster with an axe), boulder→stone (faster with a pick), reeds→fiber, fishing_spot→fish (faster with a spear, two at a time with a net), clay_bank→clay" }
+}
+fn eat_spec() {
+    #{ item: "a food you carry, or \"food\" for your best",
+       about: "Eat one food item from your own pack. Only what you carry: food in a storage must be taken out first, food someone else has must be given to you.",
+       takes: "1 food item from your own pack",
+       gives: `hunger down by its worth (${foods_text()}), a little health` }
+}
+fn cook_spec() { #{ target: true, item: true, reach: 1.5, about: "Cook raw fish or meat at a campfire beside you: about twice as filling, and it keeps longer. Needs cooking.", takes: "1 raw fish or meat from your pack, a campfire in reach, knowing cooking", gives: "1 cooked_fish or cooked_meat" } }
+fn smoke_spec() { #{ target: true, item: true, reach: 1.5, about: "Smoke raw fish or meat at a campfire beside you so it keeps for weeks: food to store, carry far or trade. Needs smoking.", takes: "1 raw fish or meat from your pack, a campfire in reach, knowing smoking, 10 seconds", gives: "1 smoked_fish or smoked_meat: more filling than raw" } }
+fn clear_spec() { #{ about: "Turn the forest where you stand into open ground. For making room to build; gathering at a tree is the quicker way to get wood.", takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" } }
+fn graze_spec() { #{ listed: false, about: "Eat grass where you stand (grazing animals).", takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" } }
+fn sleep_spec() { #{ about: "Sleep until rested. Night is the time for it; beside a shelter or house it is much faster and the night cold can't hurt you. A short break is rest.", takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" } }
+fn rest_spec() { #{ about: "Sit a few seconds and recover a little energy. Sleep restores far more.", takes: "8 seconds", gives: "a little energy" } }
+fn wait_spec() { #{ args: ["qty"], about: "Pause where you are (qty: seconds, at most 120).", takes: "time", gives: "nothing: time passes" } }
+
+fn build_spec() {
+    let l = laws();
+    #{ item: true, items: ["campfire", "shelter", "storage", "house", "trap", "wall", "gate", "bridge"], reach: 1.5,
+       about: "Build a structure where you stand (campfire, shelter, storage, house, trap), or a wall, gate or bridge on the tile beside you that you point at (target {\"at\": [x, y]}; a bridge goes on water). There is no repairing or mending of anything: a structure stands until it is gone.",
+       takes: `its materials from your pack (campfire ${cost_text("campfire")}; shelter ${cost_text("shelter")}; storage ${cost_text("storage")}; house ${cost_text("house")}; wall ${cost_text("wall")}; gate ${cost_text("gate")}; trap ${cost_text("trap")}; bridge ${cost_text("bridge")}) and knowing its technique`,
+       gives: `the structure here: a campfire warms within ${l.fire_warmth} tiles at night, a shelter or house within ${l.shelter_warmth} and makes sleep restful, a storage keeps items (food spoils slower), a trap catches game over time (take the meat from it), a bridge makes the water tile beside you a way across` }
+}
+fn pave_spec() { #{ about: "Lay road on the tile you stand on. Walking on road is faster: worth it on ways walked often.", takes: cost_text("road"), gives: "road under you" } }
+fn open_spec() { #{ target: true, reach: 1.8, about: "Open a gate. Only members of the gate's community may; anyone else must ask one of them.", takes: "a gate in reach, belonging to your community", gives: "the gate open: anyone may pass" } }
+fn close_spec() { #{ target: true, reach: 1.8, about: "Close a gate: closed, it blocks the way like a wall. Only members of its community may.", takes: "a gate in reach, belonging to your community", gives: "the gate shut" } }
+fn craft_spec() {
+    #{ item: true, items: ["spear", "cloak", "torch", "axe", "pick", "net", "basket", "bow", "arrow", "salve", "leather", "armor"],
+       about: "Make a tool, weapon or garment from materials in your pack. Each needs its technique. Structures are built (build); nothing is repaired.",
+       takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}; net ${cost_text("net")}; basket ${cost_text("basket")}; bow ${cost_text("bow")}; arrow ${cost_text("arrow")} for 3; salve ${cost_text("salve")}; leather ${cost_text("leather")}; armor ${cost_text("armor")}) and knowing how`,
+       gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster, a net catches two fish at a time, a basket carries 20 more, a bow shoots arrows, a salve helps tending, armor softens blows" }
+}
+
+fn give_spec() {
+    #{ target: true, item: true, args: ["qty"], reach: 1.8, talk: true,
+       about: "Hand items from your pack to someone beside you. Nothing is asked in return; for an exchange now, offer. It is also how you pay what you agreed to or what is demanded of you: the world counts it.",
+       takes: "the items from your pack, room in their pack", gives: "the items in their pack" }
+}
+fn store_spec() {
+    #{ target: true, item: true, args: ["qty"], reach: 1.5,
+       about: "Put items from your pack into a storage beside you. Storing into someone's household store is how goods are delivered to them while they are away.",
+       takes: `the items from your pack, a storage in reach with room (a storage holds ${storage_holds(0)} things in all)`, gives: "the items in the storage" }
+}
+fn take_spec() {
+    #{ target: true, item: true, args: ["qty"], reach: 1.5,
+       about: "Take items from a storage, remains or a trap beside you. From another household's store, unless you are their guest or of their community, it is theft: its owner and anyone watching see it.",
+       takes: "items in a storage, remains or a trap in reach, room in your pack", gives: "the items in your pack" }
+}
+fn drop_spec() { #{ item: true, args: ["qty"], about: "Set items down where you stand and leave them, e.g. to free your pack. What is dropped is kept for no one.", takes: "the items from your pack", gives: "room in your pack; the items are left behind" } }
+
+fn attack_spec() {
+    #{ target: true, reach: 1.4,
+       about: "Strike a creature beside you. Every blow does its full damage and whoever reaches 0 health dies; there is no holding back. To frighten someone without harm, threaten. Killing game yields meat and hide.",
+       takes: "a creature in reach, a little energy",
+       gives: "a blow (harder with a spear, strength and practice); a creature killed leaves remains with meat and hide to take" }
+}
+fn strike_spec() {
+    #{ target: true, reach: 1.6,
+       about: "A quick blow at a creature in reach, after a short windup they can see. It does its full damage like any blow; 0 health is death.",
+       takes: `a creature within reach, ${combat_cost("strike")} energy; ready again ${combat_cooldown("strike")} ms after you start`,
+       gives: "a quick blow (harder with a spear, strength and practice); out of reach by then, it misses; a raised guard in front of them takes most of it" }
+}
+fn bowshot_spec() {
+    #{ target: true, reach: 22.0,
+       about: "Loose an arrow toward a creature or a point (target {\"at\": [x, y]}): it flies straight and hits the first creature in its path, whoever that is.",
+       takes: `a bow and 1 arrow, ${combat_cost("bowshot")} energy, a creature or a point to aim at (up to 22 tiles)`,
+       gives: "a hit at range (softened by armor); the arrow is spent" }
+}
+fn firebolt_spec() {
+    #{ target: true, reach: 16.0,
+       about: "Hurl a bolt of fire toward a creature or a point: it burns the first creature it meets, hard. Needs the fire_bolt technique.",
+       takes: `knowing fire_bolt, ${combat_cost("firebolt")} energy, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`,
+       gives: "a bolt of fire that burns the first creature it meets" }
+}
+fn throw_spec() { #{ target: true, reach: 7.0, about: "Throw your spear at a creature up to 7 tiles away. The spear is gone afterwards.", takes: "your spear", gives: "a hard hit at range" } }
+fn shoot_spec() { #{ target: true, reach: 9.0, about: "Shoot an arrow from your bow at a creature up to 9 tiles away.", takes: "a bow and 1 arrow, a creature within 9 tiles", gives: "a hit at range (softened by armor); the arrow is spent" } }
+fn threaten_spec() {
+    #{ target: true, reach: 3.0,
+       about: "Menace a creature within a few tiles for 2 s, weapon raised. No harm is done, but they and anyone watching see it: a way to make a warning or a demand felt without a blow.",
+       takes: "a creature within a few tiles, 2 seconds", gives: "no harm: they see you menacing them, and so does anyone watching" }
+}
+fn seize_spec() {
+    #{ target: true, item: true, args: ["qty"], reach: 1.8,
+       about: "Take items from a person's pack against their will: only from someone who has yielded to you or is badly hurt. Everyone who sees it knows it was taken by force.",
+       takes: "a person in reach who has yielded to force or is badly hurt, the items in their pack", gives: "the items in your pack; they and anyone watching see you take them" }
+}
+fn yield_spec() {
+    #{ reach: 12.0,
+       about: "Give in: guard down, hands up (target: whom you yield to; without one, whoever last hurt you). It says you surrender; it does not stop blows by itself.",
+       takes: "a second",
+       gives: `for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in` }
+}
+fn dodge_spec() { #{ about: "Dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses. For fights, not travel.", takes: `${combat_cost("dodge")} energy`, gives: "a quick dash of a few tiles" } }
+fn block_spec() { #{ args: ["qty"], about: "Raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it). Blows from the front do a quarter of their damage; from behind it does not help.", takes: `${combat_cost("block")} energy, holding still`, gives: "a guard in front of you" } }
+fn heal_spec() {
+    #{ reach: 8.0,
+       about: "Close wounds at once with your hands, your own or an ally's in sight within 8 tiles, even in a fight. Needs the wound_tending technique. It heals bodies only: it does not mend tools, hinges, nets or anything else.",
+       takes: `knowing wound_tending, ${combat_cost("heal")} energy, yourself or a hurt ally in sight within 8 tiles; ready again after ${combat_cooldown("heal") / 1000} s`,
+       gives: "their wounds closed at once" }
+}
+fn tend_spec() {
+    #{ target: true, reach: 1.5,
+       about: "Tend someone's wounds by hand (a person beside you, or \"self\"): slow, and not while they are fighting. Anyone can tend; a salve helps if you know medicine. heal is the quick way, for those who know wound_tending.",
+       takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" }
+}
+
+fn follow_spec() { #{ target: true, reach: 2.0, about: "Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone. It does not make them follow you.", takes: "a creature in sight", gives: "you beside them as they go" } }
+fn flee_spec() { #{ target: true, about: "Run away from a creature or place until you are clear of it.", takes: "something to run from", gives: "distance between you and it" } }
+
+fn offer_spec() {
+    #{ target: true, item: true, args: ["qty", "want", "want_qty"], reach: 3.0, talk: true,
+       about: "Propose a swap now to a person beside you: item × qty you give for want × want_qty you ask. If they accept, both sides change hands at once. For goods in hand; for work, or for something delivered later, offer_terms.",
+       takes: "the goods in your pack when they accept", gives: "their goods in your pack, if they accept" }
+}
+fn accept_spec() {
+    #{ target: true, reach: 3.0, talk: true,
+       about: "Accept what a person beside you just proposed to you: their terms (offer_terms: it becomes an agreement the world keeps count of), or else their swap (both sides change hands at once, if both still have the goods).",
+       takes: "a standing proposal from them to you", gives: "the swap done, or the agreement made" }
+}
+fn offer_terms_spec() {
+    #{ target: true, item: true, items: ["lodging"], args: ["qty", "want", "want_qty", "text"], reach: 3.0, talk: true,
+       about: "Propose an agreement to a person beside you, kept over time: you will deliver item × qty, they will deliver want × want_qty, by dusk; text: the terms in your words (\"stack it at my store\"). A delivery is handing it to them or storing it in their household's store; \"lodging\" is delivered by taking them in (host). If they accept, the world keeps count and tells you both when it is kept, or broken or lapsed at dusk. For a swap of goods in hand now, offer.",
+       takes: "a person beside you who accepts", gives: "an agreement both of you are told the outcome of" }
+}
+fn demand_spec() {
+    #{ target: true, item: true, args: ["qty", "text"], reach: 6.0, talk: true,
+       about: "Demand items of a person near you: a toll, a due, rent or a debt (text: why, in your words). They are told and may give them to you; refusing is simply not paying, and the world tells you when they have paid or have not, after a while. What you do then is up to you: a demand takes nothing by itself.",
+       takes: "a person near you", gives: "your demand, which they may pay" }
+}
+fn found_spec() { #{ args: ["text"], about: "Found a community with its home where you stand (text: its name); you become its first member.", takes: "a name, not being in a community", gives: "a new community of one" } }
+fn join_spec() { #{ target: true, reach: 3.0, about: "Ask a member of a community to let you join it; a member must welcome you.", takes: "a member beside you", gives: "your request, which they may answer" } }
+fn welcome_spec() { #{ target: true, reach: 3.0, talk: true, about: "Welcome into your community a person who asked to join it.", takes: "a person beside you who asked to join", gives: "they are a member" } }
+fn leave_spec() { #{ about: "Leave your community.", takes: "", gives: "you belong to no community" } }
+fn host_spec() {
+    #{ target: true, reach: 3.0, talk: true,
+       about: "Take a person in as your household's guest until morning: a bed in your house and food from its store. Needs a house at your home door.",
+       takes: "a person beside you, and a house of your household's (at your home door), 2 s",
+       gives: "they are your guest until 7 in the morning: they know where your house is (their place \"lodging\"), may sleep there, and may take from your household's store" }
+}
+
+fn conceive_spec() { #{ target: true, reach: 2.0, talk: true, about: "Start a family with a willing adult partner: it happens when both of you choose it toward each other within 2 minutes, while fed.", takes: "a willing adult partner choosing it too, both fed", gives: "a child in time" } }
+fn teach_spec() { #{ target: true, item: "technique", reach: 2.0, talk: true, about: "Teach a technique you know to a person beside you. It takes a while and both must stay close; afterwards they know it and you still do.", takes: "a technique you know, a person beside you staying close for a while", gives: "they know it too" } }
+fn experiment_spec() { #{ item: "material", about: "Tinker with a material from your pack hoping to work out a new technique. It uses up the material and often fails; learning from someone who knows is surer.", takes: "1 of the material", gives: "sometimes a new technique" } }
+fn write_spec() { #{ item: true, items: ["tablet", "sign"], args: ["text", "topic"], about: "Write on a tablet you keep or a sign you leave here (text: your words; topic: a technique you know, so that readers can learn it). Needs writing.", takes: "1 wood, knowing writing", gives: "a tablet you keep or a sign left here, with your words" } }
+fn read_spec() { #{ reach: 1.5, about: "Read a tablet you carry, or a sign beside you (target {\"nearest\": \"sign\"}). Needs writing.", takes: "a tablet you carry or a sign here, knowing writing", gives: "its words; a tablet describing a technique can teach it" } }
+fn plant_spec() { #{ about: "Plant 2 berries where you stand to grow a new berry bush. Needs planting.", takes: "2 berries, open grass or dirt outside winter, knowing planting", gives: "a new berry bush in time" } }
+fn signal_spec() { #{ item: "signal name", about: "Make one of your species' signals; others nearby hear it.", takes: "a moment", gives: "your call, heard by those nearby" } }
+fn rework_spec() {
+    #{ item: "a routine's name, or \"top level\"", args: ["graph", "retire"],
+       about: "Sit and rework one of your ways (graph: the new version, or retire: true to drop it). It takes a while, and the old way must have been lived with first.",
+       takes: "a while sitting still; an old way must have been tried about 4 times, failed twice or kept 15 minutes (the top level: about two days)",
+       gives: "that way replaced by your new version (or dropped); how it goes starts counting afresh" }
+}
+
+fn wave_spec() { #{ target: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
+fn nod_spec() { #{ target: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
+fn appraise_spec() { #{ target: true, reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
+fn face_spec() { #{ target: true, reach: 15.0, about: "Turn where you stand to face someone or something you can see (a person coming up to you or speaking, a fight, a sound).", takes: "something or someone in sight", gives: "you turn to face it" } }
+fn step_aside_spec() { #{ target: true, reach: 3.0, about: "Step a pace aside to let someone coming toward you pass, in a narrow street or a doorway.", takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" } }
+fn keep_spec() { #{ about: "Keep your post a while (a stall, a workshop, a gate, a door): stand at it and attend to whoever comes by.", takes: "10 seconds at your post", gives: "you are seen at work there" } }
+fn play_spec() { #{ about: "Play a little while where you are (run about, skip, make up a game).", takes: "4 seconds, not a baby", gives: "a little fun; tires a little" } }
 
 // ---- gestures and town life (docs/TOWN_LIFE.md) ---------------------------------------
 // A gesture is seen, not heard: its target must be in sight within the gesture's reach.

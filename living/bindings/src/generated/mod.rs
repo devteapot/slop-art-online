@@ -125,6 +125,8 @@ pub mod my_inventory_table;
 pub mod my_know_how_table;
 pub mod my_places_table;
 pub mod my_readiness_table;
+pub mod my_record_type;
+pub mod my_records_table;
 pub mod my_skill_uses_table;
 pub mod my_vitals_table;
 pub mod own_habits_reducer;
@@ -158,6 +160,12 @@ pub mod readiness_type;
 pub mod ready_type;
 pub mod rearing_table;
 pub mod rearing_type;
+pub mod record_clock_table;
+pub mod record_clock_type;
+pub mod record_party_table;
+pub mod record_party_type;
+pub mod record_table;
+pub mod record_type;
 pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
@@ -348,6 +356,8 @@ pub use my_inventory_table::*;
 pub use my_know_how_table::*;
 pub use my_places_table::*;
 pub use my_readiness_table::*;
+pub use my_record_type::MyRecord;
+pub use my_records_table::*;
 pub use my_skill_uses_table::*;
 pub use my_vitals_table::*;
 pub use own_habits_reducer::own_habits;
@@ -381,6 +391,12 @@ pub use readiness_type::Readiness;
 pub use ready_type::Ready;
 pub use rearing_table::*;
 pub use rearing_type::Rearing;
+pub use record_clock_table::*;
+pub use record_clock_type::RecordClock;
+pub use record_party_table::*;
+pub use record_party_type::RecordParty;
+pub use record_table::*;
+pub use record_type::Record;
 pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
@@ -937,6 +953,7 @@ pub struct DbUpdate {
     my_know_how: __sdk::TableUpdate<KnowHow>,
     my_places: __sdk::TableUpdate<Place>,
     my_readiness: __sdk::TableUpdate<Readiness>,
+    my_records: __sdk::TableUpdate<MyRecord>,
     my_skill_uses: __sdk::TableUpdate<SkillUse>,
     my_vitals: __sdk::TableUpdate<Vitals>,
     pasture: __sdk::TableUpdate<Pasture>,
@@ -950,6 +967,9 @@ pub struct DbUpdate {
     projected: __sdk::TableUpdate<Projected>,
     readiness: __sdk::TableUpdate<Readiness>,
     rearing: __sdk::TableUpdate<Rearing>,
+    record: __sdk::TableUpdate<Record>,
+    record_clock: __sdk::TableUpdate<RecordClock>,
+    record_party: __sdk::TableUpdate<RecordParty>,
     relation: __sdk::TableUpdate<Relation>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     reveal: __sdk::TableUpdate<Reveal>,
@@ -1129,6 +1149,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_readiness" => db_update
                     .my_readiness
                     .append(my_readiness_table::parse_table_update(table_update)?),
+                "my_records" => db_update
+                    .my_records
+                    .append(my_records_table::parse_table_update(table_update)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(my_skill_uses_table::parse_table_update(table_update)?),
@@ -1168,6 +1191,15 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "rearing" => db_update
                     .rearing
                     .append(rearing_table::parse_table_update(table_update)?),
+                "record" => db_update
+                    .record
+                    .append(record_table::parse_table_update(table_update)?),
+                "record_clock" => db_update
+                    .record_clock
+                    .append(record_clock_table::parse_table_update(table_update)?),
+                "record_party" => db_update
+                    .record_party
+                    .append(record_party_table::parse_table_update(table_update)?),
                 "relation" => db_update
                     .relation
                     .append(relation_table::parse_table_update(table_update)?),
@@ -1428,6 +1460,15 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.rearing = cache
             .apply_diff_to_table::<Rearing>("rearing", &self.rearing)
             .with_updates_by_pk(|row| &row.id);
+        diff.record = cache
+            .apply_diff_to_table::<Record>("record", &self.record)
+            .with_updates_by_pk(|row| &row.id);
+        diff.record_clock = cache
+            .apply_diff_to_table::<RecordClock>("record_clock", &self.record_clock)
+            .with_updates_by_pk(|row| &row.id);
+        diff.record_party = cache
+            .apply_diff_to_table::<RecordParty>("record_party", &self.record_party)
+            .with_updates_by_pk(|row| &row.id);
         diff.relation = cache
             .apply_diff_to_table::<Relation>("relation", &self.relation)
             .with_updates_by_pk(|row| &row.id);
@@ -1517,6 +1558,7 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.my_readiness =
             cache.apply_diff_to_table::<Readiness>("my_readiness", &self.my_readiness);
+        diff.my_records = cache.apply_diff_to_table::<MyRecord>("my_records", &self.my_records);
         diff.my_skill_uses =
             cache.apply_diff_to_table::<SkillUse>("my_skill_uses", &self.my_skill_uses);
         diff.my_vitals = cache
@@ -1685,6 +1727,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_readiness" => db_update
                     .my_readiness
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_records" => db_update
+                    .my_records
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1723,6 +1768,15 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "rearing" => db_update
                     .rearing
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "record" => db_update
+                    .record
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "record_clock" => db_update
+                    .record_clock
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "record_party" => db_update
+                    .record_party
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "relation" => db_update
                     .relation
@@ -1962,6 +2016,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_readiness" => db_update
                     .my_readiness
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_records" => db_update
+                    .my_records
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2000,6 +2057,15 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "rearing" => db_update
                     .rearing
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "record" => db_update
+                    .record
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "record_clock" => db_update
+                    .record_clock
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "record_party" => db_update
+                    .record_party
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "relation" => db_update
                     .relation
@@ -2145,6 +2211,7 @@ pub struct AppliedDiff<'r> {
     my_know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     my_places: __sdk::TableAppliedDiff<'r, Place>,
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
+    my_records: __sdk::TableAppliedDiff<'r, MyRecord>,
     my_skill_uses: __sdk::TableAppliedDiff<'r, SkillUse>,
     my_vitals: __sdk::TableAppliedDiff<'r, Vitals>,
     pasture: __sdk::TableAppliedDiff<'r, Pasture>,
@@ -2158,6 +2225,9 @@ pub struct AppliedDiff<'r> {
     projected: __sdk::TableAppliedDiff<'r, Projected>,
     readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     rearing: __sdk::TableAppliedDiff<'r, Rearing>,
+    record: __sdk::TableAppliedDiff<'r, Record>,
+    record_clock: __sdk::TableAppliedDiff<'r, RecordClock>,
+    record_party: __sdk::TableAppliedDiff<'r, RecordParty>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     reveal: __sdk::TableAppliedDiff<'r, Reveal>,
@@ -2282,6 +2352,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.my_readiness,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<MyRecord>("my_records", &self.my_records, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>(
             "my_skill_uses",
             &self.my_skill_uses,
@@ -2299,6 +2370,17 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Projected>("projected", &self.projected, event);
         callbacks.invoke_table_row_callbacks::<Readiness>("readiness", &self.readiness, event);
         callbacks.invoke_table_row_callbacks::<Rearing>("rearing", &self.rearing, event);
+        callbacks.invoke_table_row_callbacks::<Record>("record", &self.record, event);
+        callbacks.invoke_table_row_callbacks::<RecordClock>(
+            "record_clock",
+            &self.record_clock,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<RecordParty>(
+            "record_party",
+            &self.record_party,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
             "resource_node",
@@ -3054,6 +3136,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_know_how_table::register_table(client_cache);
         my_places_table::register_table(client_cache);
         my_readiness_table::register_table(client_cache);
+        my_records_table::register_table(client_cache);
         my_skill_uses_table::register_table(client_cache);
         my_vitals_table::register_table(client_cache);
         pasture_table::register_table(client_cache);
@@ -3067,6 +3150,9 @@ impl __sdk::SpacetimeModule for RemoteModule {
         projected_table::register_table(client_cache);
         readiness_table::register_table(client_cache);
         rearing_table::register_table(client_cache);
+        record_table::register_table(client_cache);
+        record_clock_table::register_table(client_cache);
+        record_party_table::register_table(client_cache);
         relation_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         reveal_table::register_table(client_cache);
@@ -3144,6 +3230,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_know_how",
         "my_places",
         "my_readiness",
+        "my_records",
         "my_skill_uses",
         "my_vitals",
         "pasture",
@@ -3157,6 +3244,9 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "projected",
         "readiness",
         "rearing",
+        "record",
+        "record_clock",
+        "record_party",
         "relation",
         "resource_node",
         "reveal",
