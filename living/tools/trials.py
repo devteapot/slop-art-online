@@ -887,11 +887,15 @@ class Instance:
         env.update({k: str(x) for k, x in v.get("env", {}).items()})
         (self.dir / "mind-env.json").write_text(json.dumps({k: env[k] for k in sorted(env) if k.startswith("LIVING_") and k not in ("LIVING_TOKEN", "LIVING_NEO4J_PASSWORD")}, indent=1))
         log = open(self.dir / "mind.log", "a")
-        p = subprocess.Popen([str(TARGET / "release/living-mind")], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        # A variant may run a mind built from another branch (an iteration's mind change): `mind_bin`,
+        # a path under the repository or absolute; the default is this tree's build.
+        binary = Path(os.path.expanduser(v["mind_bin"])) if v.get("mind_bin") else TARGET / "release/living-mind"
+        binary = binary if binary.is_absolute() else ROOT / binary
+        p = subprocess.Popen([str(binary)], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         log.close()
         self.mind = Mind(p.pid, p)
         self.starts.append(time.time())
-        self.log(f"mind pid {p.pid} LIVING_ONLY={self.subject} variant {self.variant} (start {len(self.starts)})")
+        self.log(f"mind pid {p.pid} LIVING_ONLY={self.subject} variant {self.variant} (start {len(self.starts)}) from {binary}")
         self.save()
 
     def stop_mind(self):
