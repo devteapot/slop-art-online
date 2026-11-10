@@ -182,6 +182,74 @@ Lane B's base: iterations launched before 00:28 ran on the trials module of f381
 - A mind change: the variant names a mind binary built from the branch (`"mind_bin"`, absolute or under the repository); the control names one built from the base it branched from. From iteration 8 the base is main itself (built in a detached worktree at that commit, `~/slop-trials-target-i8`), and the variant also names that commit's `skills.rhai` and `models.json` so both arms run main's rules.
 - Iteration variants live in an untracked file (`TRIALS_VARIANTS`), and iteration trials are named by path, so the tracked lists stay as they are.
 
+### Lane A results (`la1`, `la2`, 2026-11-09 23:08 – 2026-11-10 05:10)
+
+All 15 worlds ran the full 360 minutes (30 game days) on `trials-1` f381b4a, with one mind start each and no runaways, and every subject survived. Per-run end reports are `timeline.md` in each run directory and the batch reports are `la1/report.md` and `la2/report.md` (on the Spark under `.local/living/trials/`). The runner does not rewrite `timeline.md` when a life run ends. The ones read here were regenerated with `trials.py life --batch la1|la2` after the batches ended. The copies written mid-run (minute 100) were stale.
+
+**A caveat on every island world before main 9be23e9.** Island residents starved from about minute 30: in [SOAK.md](SOAK.md) D2, 86 of 277 starved in 90 minutes, fixed on `hunger-1`. The newcomers in lane A and in the social preset lived among a town that was dying of hunger.
+
+#### `la1`: the newcomer's life, three arms
+
+Mean (range) over 3 replicates; glm-flash for every purpose unless the arm says otherwise.
+
+| Measure | `default` (control) | `people` mix | `recall600` |
+| --- | --- | --- | --- |
+| Tokens per run | 6.07M (5.59–6.44M) | 6.52M (5.49–7.31M) | 6.20M (5.85–6.50M) |
+| Model calls per run | 731 (686–786) | 787 (685–859) | 763 (714–796) |
+| Cost per run | $1.00 ($0.93–1.06) | $1.10 ($0.96–1.25) | $1.00 ($0.94–1.09) |
+| Mean prompt of a deliberation | 10.8k (10.6–11.0k) | 10.8k (10.7–10.9k) | 10.7k (10.6–10.8k) |
+| Techniques learned | 3.3 (3–4) | 3.0 (0–6) | 5.7 (2–9) |
+| Structures built | 10.0 (0–26) | 5.7 (3–10) | 5.0 (0–8) |
+| Lines said | 177 (118–212) | 127 (114–141) | 131 (83–222) |
+| People spoken to | 7.7 (5–10) | 7.3 (5–10) | 8.3 (7–10) |
+| Memories kept | 256 (226–276) | 252 (223–275) | 248 (237–257) |
+| Highest hunger | 75 (66–90) | 69 (67–72) | 76 (68–86) |
+| Refused acts | 219 (160–274) | 380 (197–490) | 277 (173–429) |
+| Graph revisions | 306 (293–329) | 331 (282–367) | 324 (303–335) |
+
+- **End reports, per run (learned; built).**
+  - Control: archery, storage, torch, writing (10 campfires, 10 storages, 6 signs); archery, toolmaking, torch (nothing); spear, storage, writing (a campfire, a storage, 2 signs).
+  - `people`: nothing learned (10 campfires); storage, torch, trapping (a campfire, 2 storages); six techniques (a campfire, 2 storages, a sign).
+  - `recall600`: six techniques (a campfire, 2 storages, 4 signs); nine, including carpentry, bridging and shelter (4 campfires, 2 signs, a shelter, a storage); toolmaking and writing (nothing).
+  - Every newcomer ended in or beside Brackenford.
+  - All 36 techniques were worked out by experimenting. No newcomer received a gift.
+  - Typical end relations were thin and named by silence ("Nodded to my offer day 29 — first answer Brackenford gave", "hailed, not in earshot — no more chasing"). Most lines went to nobody in particular: 75–162 per run.
+- **The `people` mix** sent 10–35% of deliberations to deepseek-flash (101 of 286, 35 of 348, 35 of 368). It cost about 10% more per run, with no gain in what was learned or built. It had more refused acts, a wide spread.
+- **A recall budget of 600 against 800 changed almost nothing in what a decision costs.** Deliberation prompts were 10.7k against 10.8k tokens, because recall is a small part of an 11k prompt. Tokens per run were the same. The arm learned the most (5.7, range 2–9), within the spread of the others.
+- **Night reorganization (`night-batch`).** It ran 15–16 times per run, about every two game days: 141 calls, 2.72M tokens (5% of `la1`), p50 72 s, p95 437 s, 5 invalid replies and 1 empty.
+  - It merged 329–558 nodes per run (stances 205–430, places 44–144, ideas 34–73) and retracted 147–376.
+  - **It merges different people.** 31 merges joined one `person:<id>` into another with a different id (control 0, 0, 2; `people` 7, 17, 1; `recall600` 0, 3, 1). In `life-people-r1`, `person:46` and `person:78` were merged into `person:50`, renamed "unresponsive townsfolk". In `life-people-r2`, `person:76` was merged into `person:2`, renamed "stranger seen south".
+  - The ids are the authority's character ids, so each such merge collapses two real individuals into one memory. The mind applies them without a check (`sleep.rs` reorganize, `memory.rs` merge). A guard that refuses a merge between two different `person:<id>` keys is a small mind-service change for the mind-harness owners.
+
+#### `la2`: every animal with a mind
+
+All 34 island animals (10 wolves, 24 deer) are subjects; a person has no mind. An animal is asked to think only while a person is within 25 tiles.
+
+| Measure | `default` (switches off) | `animal-switches` (`pack,salient,choose`) |
+| --- | --- | --- |
+| Calls per run | 583 (521–691) | 483 (437–523) |
+| Tokens per run | 1.37M (1.19–1.67M) | 1.12M (0.99–1.27M) |
+| Deliberations per run | 28, 4, 210 | 8, 7, 21 |
+| Consolidations per run | 493, 534, 481 | 482, 430, 502 |
+| Calls per wolf-hour | 2.6–3.4 | 2.1–2.6 |
+| Tokens per wolf-hour | 5.8k–8.2k | 4.9k–6.2k |
+| Wolves dead at the end | 10, 10, 9 of 10 | 10, 10, 10 of 10 |
+| Deer killed by wolves | 4, 0, 7 | 4, 0, 0 |
+| Deer dead (all causes) | 6, 2, 7 of 24 | 4, 7, 2 of 24 |
+| People killed | 0 | 0 |
+
+- **Consolidation is the animals' cost, not thinking.** About 480 consolidations per run in both arms are 90–99% of the tokens. The switches cut deliberations near people and save about 18% of tokens. With people rarely near the animals, there is little for them to save.
+- **The wolves starve, minds or not.** 56 of the 60 wolf deaths were starvation, in two waves at minutes 56–62 and 86–89 in every run. Two were killed by residents and one died of old age. The packs killed 0–7 deer per run before dying. `hunger-1` changed people's food routine, not the wolves'. Why the wolves' starting ways do not feed them is not established here: the same clock in every run, minds or not, points at the instinct graph or the deer's reach, not at the minds. A no-mind check on main 9be23e9 follows below.
+- **Hunting and herding realism** cannot be read from these runs. Deliberations were few (4–210 per run, a median of 14), and the wolves were dead by minute 90.
+
+#### Tokens and cost
+
+| Batch | Calls | Tokens | Cost |
+| --- | ---: | ---: | ---: |
+| `la1` (9 runs) | 6,843 | 56.4M | $9.32 |
+| `la2` (6 runs) | 3,200 | 7.46M | $1.92 |
+| Lane A | 10,043 | 63.8M | $11.24 |
+
 ### The social preset (`ls1`, `ls2`, 2026-11-10 00:29–03:22)
 
 `life-social` (residents wake into minds when engaged; town life layer 2, main 6de2bad) on `trials-1` f39f92c with the moved pack, island seeds 7, 11 and 13 (one per replicate, `world_seeds`), 150 minutes, `LIVING_ONLY=<subject>,woken`. `ls1`: people on glm-flash (default); `ls2`: on deepseek-flash. Woken residents think on the models file's `woken` route (the `people` mix) in both.
