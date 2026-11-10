@@ -768,6 +768,7 @@ impl Minds {
         }
         // Agreements and demands between the two, as the world keeps them.
         between.extend(self.dealings_with(me, other));
+        between.push(self.at_hand(&c, other, &other_name, heard.at));
         let t = prompts::TalkUser {
             name: &c.name,
             identity: &identity,
@@ -786,6 +787,61 @@ impl Minds {
             between: &between,
         };
         (prompts::talk_system(), prompts::talk_user(&t))
+    }
+}
+
+impl Minds {
+    /// One line of what one has to act with in a conversation: one's pack as one last looked
+    /// (the latest deliberation's scene; nothing before a first one), one's know-how, one's
+    /// home, and whether the other person, where one heard them, is within reach to hand
+    /// things over or teach.
+    fn at_hand(&self, c: &Character, other: u32, other_name: &str, heard_at: (f32, f32)) -> String {
+        let me = c.id;
+        let you = self.felt.lock().unwrap().get(&me).map(|(_, you)| you.clone());
+        let pack = match you.as_ref().and_then(|you| you["pack"].as_object().cloned()) {
+            Some(pack) => {
+                let items: Vec<String> = pack.iter().filter_map(|(k, q)| q.as_f64().filter(|q| *q > 0.0).map(|q| format!("{k} {q}"))).collect();
+                if items.is_empty() { "you carry nothing (as you last looked)".to_string() } else { format!("you carry {} (as you last looked)", items.join(", ")) }
+            }
+            None => "you have not looked in your pack yet".to_string(),
+        };
+        let mut knows: Vec<String> = self.conn.db.know_how().iter().filter(|k| k.actor == me).map(|k| k.technique).collect();
+        knows.sort();
+        let knows = if knows.is_empty() { "you know no technique".to_string() } else { format!("you know {}", knows.join(", ")) };
+        let at = self.conn.db.body().id().find(&me).map(|b| (b.x, b.y));
+        let home = if c.home_x != 0.0 || c.home_y != 0.0 {
+            match at {
+                Some(at) => {
+                    let d = ((c.home_x - at.0).powi(2) + (c.home_y - at.1).powi(2)).sqrt();
+                    if d < 1.0 {
+                        format!("your home is here [{:.0}, {:.0}]", c.home_x, c.home_y)
+                    } else {
+                        format!("your home is at [{:.0}, {:.0}], {d:.0} tiles away", c.home_x, c.home_y)
+                    }
+                }
+                None => format!("your home is at [{:.0}, {:.0}]", c.home_x, c.home_y),
+            }
+        } else {
+            "you have no home".to_string()
+        };
+        let reach = ["give", "teach"].iter().filter_map(|n| living_rules::catalog::skills().get(n).map(|s| s.reach)).fold(0.0f32, f32::max);
+        let near = match at {
+            Some(at) if reach > 0.0 => {
+                let d = ((heard_at.0 - at.0).powi(2) + (heard_at.1 - at.1).powi(2)).sqrt();
+                if d <= reach {
+                    format!("{other_name} is about {d:.0} tiles from you, within reach to give or teach ({reach:.0} tiles)")
+                } else {
+                    format!("{other_name} is about {d:.0} tiles from you, beyond reach to give or teach ({reach:.0} tiles): an act walks you over first, while they stay in sight")
+                }
+            }
+            _ => String::new(),
+        };
+        let mut line = format!("What you have to act with: {pack}; {knows}; {home}");
+        if !near.is_empty() {
+            line.push_str(&format!("; {near}"));
+        }
+        line.push('.');
+        line
     }
 }
 
