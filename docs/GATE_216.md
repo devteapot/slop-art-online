@@ -2,7 +2,7 @@
 
 2026-11-09. The first measurement of the [performance contract](PERFORMANCE_CONTRACT.md)'s immediate gate on the living core: 216 active characters for 30 minutes with a crowded battle, at 80 ms round trip, against every requirement the contract lists. Branch `gate-1`, code under test `14f3a72` (main) plus the measurement tools below. Earlier 216-character evidence came from the removed legacy stack ([short baseline](PERFORMANCE_BASELINE_25.md)).
 
-**Update (2026-11-10, branch `scale-1`).** Perceived state is now delivered once per frame per player, and the feeds' and views' hidden costs are gone ([scale change](#scale-change-frames-2026-11-10-branch-scale-1)). [Final measurements](#final-measurements-after-merging-main-67cdb0a-rules-2), on main `67cdb0a` merged: the 30-minute gate still fails 60 Hz and both latency lines (battle 4.4 steps a second, with the queue at 0 instead of 7,333), the calm passes both latency lines with the game client's unconfirmed reads, and housekeeping passes. With 30 fighters every latency line passes in the battle with either client arm; 60 Hz does not (54–56 steps a second). What follows here is the first measurement as it was.
+**Update (2026-11-10, branch `scale-1`).** Perceived state is now delivered once per frame per player, and the feeds' and views' hidden costs are gone ([scale change](#scale-change-frames-2026-11-10-branch-scale-1)). [Final measurements](#final-measurements-after-merging-main-3ff9e8a-arrival-1-the-battle-in-the-town), on main `3ff9e8a` merged, with the battle inside the town since `arrival-1`: the 30-minute gate still fails 60 Hz and both latency lines (battle 4.9 steps a second, the queue bounded), the calm passes both latency lines with the game client's unconfirmed reads, and housekeeping misses by one interval (1,530 ms against 1,500). With 30 fighters every latency line passes in the battle with the game client; 60 Hz does not (56 steps a second). What follows here is the first measurement as it was.
 
 **Result: the gate fails.** The 30-minute run fails 60 Hz cadence, both latency requirements and the slow-system deadlines, by orders of magnitude once the battle starts. The authority's single database thread saturates. Most of its time goes to per-sender perception views re-run for every player who perceives a change, in a cluster of 100 human-driven characters. That is about 1.1 of the container's 16 cores. Frame pacing on the one headless game client passes, but the world it drew was mostly frozen, so that pass is weak evidence. A real authority defect was also found: a tick panics and rolls back when a missile kills the owner of another missile in flight ([defect](#defect-found-the-missile-sweep-panics)).
 
@@ -365,7 +365,7 @@ The harness found one more defect on the way: with the shell's soft limit of 1,0
 
 ### After merging main `0812ada` (path-1, rethink-1): two client arms
 
-Superseded by the [final measurements](#final-measurements-after-merging-main-67cdb0a-rules-2) below; kept as measured.
+Superseded by the [final measurements](#final-measurements-after-merging-main-3ff9e8a-arrival-1-the-battle-in-the-town) below; kept as measured.
 
 The merge with main `0812ada` (merge `0c39794`, module `f32ced6837`; main's module `91887f0844`) carries the player verbs' client (`fa53e0b`, already in `fe6ec66`): `living/game` now reads unconfirmed, subscribes the `skills` script row and `resource_node` and `structure` in its near window, and sends input in the frame it is made. The players `gate.py` runs stand for one client or the other (`--client`, recorded in each manifest as `workload.client`):
 - **`gate`**: what the gate first measured: confirmed reads (the SDK default) and the gate's subscriptions. Every number above this section used it.
@@ -407,7 +407,7 @@ Against the same gate with the `gate` client on the earlier merge (`gate-2026111
 
 ### After merging main `8fd4f43` (hunger-1, trials-1, merge-guard)
 
-Superseded by the [final measurements](#final-measurements-after-merging-main-67cdb0a-rules-2) below; kept as measured.
+Superseded by the [final measurements](#final-measurements-after-merging-main-3ff9e8a-arrival-1-the-battle-in-the-town) below; kept as measured.
 
 The branch was merged with main `8fd4f43` (merge `2a8e0fa`; it already held seeded lives `bdca15f` and `path-1` `7e5de53` from the `0812ada` merge, so the island's 277 authored residents and the hierarchical routes were in the runs above too; `8fd4f43` changed the island seed again: residents' food places). Before is main `8fd4f43`'s module (`c2c30cd071`), after is the merge (`4dd8559b3e`), back to back, nothing else of mine on the host (load p50 7–12). Every run starts with 528 characters. The client arm of each run is named.
 
@@ -442,9 +442,11 @@ The battle's tick is the next bottleneck, as named below: 329 ms/s of tick code 
 
 Verification on this merge: `just living-check` exit 0 (rules 116 passed); `verify-client` scoped 30 of 30; `verify-core` `sight` 6 of 6, `skirmish` 8 of 8, `town.py` 20 of 21 (the approach scene, known to be flaky); `verify-player` `gesture.py` 10 of 10.
 
-### Final measurements: after merging main `67cdb0a` (rules-2)
+### After merging main `67cdb0a` (rules-2)
 
-The branch was merged with main `67cdb0a` (merge `d1d39be`): `rules-2` (skill specs in the script, `mending` renamed `wound_tending`, private record tables and a `my_records` view) on top of the `8fd4f43` merge. Before is main `67cdb0a`'s module (`b4c67ef585`), after is the merge (`9dc1cd8f0a`), back to back, nothing else of mine on the host (load p50 7–12). Every run starts with 528 characters. **These are the branch's final numbers**; the client arm of each run is named (`gate`: confirmed reads and the gate's subscriptions; `game`: `living/game`'s unconfirmed reads and windows).
+Superseded by the [final measurements](#final-measurements-after-merging-main-3ff9e8a-arrival-1-the-battle-in-the-town) below (a new arrival, the battle in the town); kept as measured, on the road site.
+
+The branch was merged with main `67cdb0a` (merge `d1d39be`): `rules-2` (skill specs in the script, `mending` renamed `wound_tending`, private record tables and a `my_records` view) on top of the `8fd4f43` merge. Before is main `67cdb0a`'s module (`b4c67ef585`), after is the merge (`9dc1cd8f0a`), back to back, nothing else of mine on the host (load p50 7–12). Every run starts with 528 characters. The client arm of each run is named (`gate`: confirmed reads and the gate's subscriptions; `game`: `living/game`'s unconfirmed reads and windows).
 
 **Arm B (30 fighters), battle (8 min):**
 
@@ -473,6 +475,46 @@ Bold: within the line. Calm (2 min) holds about 60 Hz and passes both lines in a
 The battle's tick is the next bottleneck, as named below: 329 ms/s of tick code (`tick.activity` 143, `tick.wakes` 90, `tick.frames` 49, `tick.perception` 38), and the world grows from 528 to 6,182 characters and 6,263 structures over the 30 minutes.
 
 Verification on this merge: `just living-check` exit 0 (rules 120 passed); `verify-client` scoped 30 of 30 (with `rules-2`'s `record`, `record_party` and `record_clock` and the frame tables in the private inventory); `verify-core` `sight` 6 of 6, `skirmish` 8 of 8, `town.py` 20 of 21 (the approach scene, known to be flaky); `verify-player` `gesture.py` 10 of 10.
+
+### Final measurements: after merging main `3ff9e8a` (arrival-1), the battle in the town
+
+`arrival-1` moved the island's arrival onto the first town's square, and `gate.py` stages its battle 30 m north of the arrival, so **this round's battle is fought inside the town**, among walls and houses, where every earlier round fought on open ground. Which arrival each round used (all on the `island` seed, battle site = arrival − 30 m in y):
+
+| Rounds | Island | Arrival (x, y) | Battle site |
+|---|---|---|---|
+| The gate's first runs and arm B, base to frames6 (`gate-20261109-*`, `gate-20261110-000002`, `-001148`) | main `1693f3e` and earlier | (512.5, 174.5) | (512.5, 144.5), open ground north of the arrival |
+| The `fe6ec66`, `0812ada`, `8fd4f43` and `67cdb0a` merges (`gate-20261110-08*` to `-180100`) | megacity's generator | (304.5, 319.5) | (304.5, 289.5), on the road outside the town |
+| **This round** (`gate-20261110-193642` to `-203153`) | `arrival-1` | **(410.5, 258.5)**, the first town's square | **(410.5, 228.5), inside the town** |
+
+The walls cut what each player perceives: at placement a battle player held 8–14 creatures in arm B (22–24 at the road site) and 31–40 in the full gate (78–79 at the road site), and a battle player received 6.5–7.8 kB/s against 9.4–11.5. Merge `5362933` (module `5e219e3c14`) against main `3ff9e8a`'s module (`ec59719c54`), back to back, nothing else of mine on the host (load p50 6–11); every run starts with 528 characters. **These are the branch's final numbers.**
+
+**Arm B (30 fighters), battle (8 min), in the town:**
+
+| | `gate` client: main `gate-20261110-193642` | `gate` client: merge `-195036` | `game` client: main `-200412` | `game` client: merge `-201818` |
+|---|---|---|---|---|
+| Steps/s; grid steps skipped | 41.8; 8,796 of 28,798 | 56.5; 1,709 | 46.4; 6,586 | 56.1; 1,926 |
+| Tick transaction mean (ms) | 12.4 | 5.9 | 10.1 | 6.4 |
+| Move, server p95 / p99 (ms) | **46.1 / 62.7** | **27.9 / 42.6** | **24.1 / 39.1** | **13.6 / 22.2** |
+| Move, client p95 / p99 (ms) | **127.9 / 149.3** | **109.3 / 131.8** | **105.7 / 127.0** | **94.5 / 108.1** |
+| Skill outcome, server p95 / p99 (ms) | 89.2 / 116.6 | 52.4 / 79.8 | 63.8 / 93.7 | **37.1 / 53.1** |
+| Skill outcome, client p95 / p99 (ms) | 171.3 / 199.8 | **134.5 / 165.7** | **145.7 / 179.6** | **118.3 / 139.1** |
+| Queue wait, `human_move` mean (ms) | 7.9 | 2.4 | 5.8 | 2.6 |
+
+Bold: within the line. Calm (2 min) holds about 60 Hz and passes both lines in all four. With fewer creatures in each scene, main itself runs the town battle far faster than the road battle (41.8 and 46.4 steps a second against 24.6 and 27.1), and the merge's margin narrows: 56 steps a second against 42–46. **On the merge with the `game` client every latency line passes in arm B's battle; with the `gate` client all but the skills' server p95 (52.4 ms). 60 Hz does not: 56 steps a second, 6–7% of grid steps skipped.**
+
+**The full gate on the merge, `game` client, in the town** (`gate-20261110-203153`; 100 fighters, 116 walkers, 30 min):
+
+| Requirement (locked) | Before: the gate's run `gate-20261109-200119` (`gate` client, open ground) | After |
+|---|---|---|
+| 60 Hz authoritative simulation, battle included | **fail**: 9.0 steps/s; battle 0.51; queue 7,333 | **fail**: 13.2 steps/s overall; calm 55.2 (1,445 of 17,999 grid steps skipped), battle 4.9, last 10 min 3.2; operation queue 76 at the end |
+| Server receipt → committed outcome ≤50 ms p95, ≤100 ms p99 | **fail**: moves p95 16.4 s | **fail**: moves calm p95 13.1 / p99 21.5 ms (passes), window p95 333 / p99 468 ms; skills window p95 619 / p99 838 ms |
+| Client input → outcome received at 80 ms RTT ≤150 ms p95, ≤250 ms p99 | **fail**: moves p95 16.5 s; 21,471 unanswered | **fail**: moves calm p95 94.6 / p99 104.5 ms (passes), window p95 414 / p99 549 ms; skills window p95 699 / p99 918 ms; 0 unanswered |
+| Client 60 FPS, 99% of frames ≤ ~16.7 ms | pass, weak | **pass, weak**: battle 99.99% within 16.7 ms, 2 frames over 25 ms |
+| Slow systems at their deadlines (1 Hz housekeeping) | **fail**: 827 runs | **fail, by one interval**: 1,800 runs, interval p50 1,000 ms, p99 1,266 ms; the longest was 1,530 ms, over the 1,500 ms the verdict allows (the road-site run's longest was 1,441 ms) |
+
+In the town the battle's tick spends less on frames (42 against 49 ms/s) and twice as much waking creatures: 389 ms/s of tick code, `tick.wakes` 173 (90 at the road site), `tick.activity` 126, `tick.frames` 42, `tick.perception` 36. Residents in the streets around the fight witness it and are woken; that is the town's next cost on top of those named below. The world grows from 528 to 6,272 characters and 6,415 structures over the 30 minutes.
+
+Verification on this merge: `just living-check` exit 0 (rules 121 passed); `verify-client` scoped 30 of 30; `verify-core` `sight` 6 of 6, `skirmish` 8 of 8, `town.py` 21 of 21; `verify-player` `gesture.py` 10 of 10, `combat.py` 20 of 25, the same five checks failing on main `3ff9e8a` run from a worktree of it (the fire bolt meets a wall, the dodge is cut to 1.95 m, and the graph attacker of the block, dodge and heal scenes never reaches the player: the scenes' fixed offsets meet the town's buildings around the new arrival).
 
 ### Next measured bottleneck
 
