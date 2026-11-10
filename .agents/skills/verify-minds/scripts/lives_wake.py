@@ -271,6 +271,24 @@ def main():
                 seen.append({"id": x["id"], "summary": x["summary"], "side": x["sides"].get(name, ""), "named_in_prompt": named})
             rec["situations"] = seen
             lab.check(f"{name} is in its seeded situations", mine_s and all(z["named_in_prompt"] for z in seen), json.dumps([(z["id"], z["named_in_prompt"]) for z in seen]))
+            # Consolidation: never shown an empty identity; when it rewrites the identity (the
+            # identity sentence: wants follow the life lived), what became of the seeded wants
+            # and the situations is recorded for reading.
+            consol = [e for e in ex if e.get("purpose") == "consolidate"]
+            blind = [i for i, e in enumerate(consol) if "(no persona yet)" in text_of(e)]
+            lab.check(f"{name}'s consolidations see its identity", not blind, f"{len(consol)} consolidations, {len(blind)} shown no identity")
+            rewrites = []
+            for e in consol:
+                r = e.get("reply") or e.get("response")
+                try:
+                    r = json.loads(r) if isinstance(r, str) else r
+                except ValueError:
+                    continue
+                idn = (r or {}).get("identity") if isinstance(r, dict) else None
+                if idn:
+                    rewrites.append({"goals": idn.get("goals"), "values": idn.get("values"), "narrative": idn.get("narrative"), "why": idn.get("why")})
+            rec["seeded_goals"] = sheet.get("goals", [])
+            rec["identity_rewrites"] = rewrites
             if own:
                 lab.check(f"{name}'s own secret only in its own prompt", own[:60] in "\n".join(prompts), own[:80])
             print(f"  {name} heard by the player: {heard[-3:]}", flush=True)

@@ -1740,6 +1740,17 @@ impl Minds {
     // ---- consolidation ------------------------------------------------------------
 
     async fn consolidate(&self, actor: u32) -> Result<()> {
+        // A woken resident's mind is made first (woken.rs): its identity, from its sheet or the
+        // world's facts, then its ring. A consolidation started meanwhile would be shown no
+        // identity ("(no persona yet)") and write one afresh over the one being installed, so it
+        // waits, as the first deliberation does (the `woken_stage("wait_s")` law).
+        if self.is_woken(actor) {
+            let wait = Duration::from_secs_f64(prompts::woken_laws().wait_s);
+            let started = Instant::now();
+            while self.woken_waiting(actor) && started.elapsed() < wait {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        }
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
         let cursor = self.cursor(actor);
         // A reply that ran too long failed: take fewer experiences at a time until it fits.

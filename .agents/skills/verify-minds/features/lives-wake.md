@@ -12,6 +12,7 @@ Since 2026-11-10 ([seeded lives](../../../../docs/SEEDED_LIVES.md)). The island'
 - Names: its relations across communities are introductions (`acquaintance`); one the sheet marks `knows_name: false` stays "a stranger" in its mind (its `person:` node's name).
 - Its mind marks its sources: `authored` (the sheet) and `world` (its facts), and `instinct` (its ring) and `ai` when a model wrote something (the paid tier).
 - Every seeded situation it is in (`living/seeds/worlds/island/cast/*.json`) shows in its first prompt through the other people in it.
+- No consolidation is shown an empty identity ("(no persona yet)"): consolidation waits for a woken mind to be made. Each identity rewrite's goals are recorded beside the seeded goals (`identity_rewrites`, `seeded_goals` in `wake.json`) for reading.
 - Its own secret reaches its own prompts; no other resident's secret reaches them.
 - Paid tier (`--real PROFILE`, only when authorized): what it says when asked about another settlement, for reading against its sheet and the world tensions.
 
