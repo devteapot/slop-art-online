@@ -66,17 +66,20 @@ pub fn resident(ctx: &ReducerContext, c: &Character) -> bool {
 }
 
 /// Who acted, and how, as the `wakes` law reads it: `player`; `mind` for what a mind decided
-/// (an act, its words); `habit` for what a minded character's behaviour graph did by itself
-/// (its routines' greetings, a graph's `say`); `instinct` for an instinct-only creature.
+/// (an act, its words); `woken` for what a woken resident's mind decided; `habit` for what a
+/// minded character's behaviour graph did by itself (its routines' greetings, a graph's
+/// `say`); `instinct` for an instinct-only creature.
 fn by_class(ctx: &ReducerContext, c: &Character, decided: bool) -> &'static str {
     if instinct_only(ctx, c) {
         "instinct"
     } else if !c.ai {
         "player"
-    } else if decided {
-        "mind"
-    } else {
+    } else if !decided {
         "habit"
+    } else if ctx.db.woken().id().find(c.id).is_some() {
+        "woken"
+    } else {
+        "mind"
     }
 }
 
