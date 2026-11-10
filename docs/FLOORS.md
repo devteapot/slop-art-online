@@ -399,10 +399,11 @@ Built on `megacity-1`. Numbers are from the dev-box (AMD Ryzen AI Max+ 395, 32 t
 **Design:**
 - **Rules.** `land::generate` is now `land::Gen` run to the end, so staged and one-shot generation are the same code and give the same digests. Steps:
   1. the macro pass in two halves: relief, lakes and rivers; then water distances, moisture, regions and sites;
+  1a. dispersed sites (hamlets, [seeded lives](SEEDED_LIVES.md)), at most 24 per step (since 2026-11-10);
   2. tile classification in bands of 4 M tiles (each band computes its own ground with a row of margin);
   3. fords, cleared sites and the connectivity pass;
   4. shore distances on land, then in the water;
-  5. the planner (`settle::Staged`): the city, island roads, streets, stairs, one step per ward's lots and one per band of a ward's back-fill (each band with its own random stream), the remaining towns' lots, painting, the walled connectivity pass, and ornaments one settlement per step.
+  5. the planner (`settle::Staged`): the city, island roads (since 2026-11-10 in three parts: the routing grid, the settlements routed 8 per step, then the landing, cave paths, smoothing and crossings), streets, stairs, one step per ward's lots and one per band of a ward's back-fill (each band with its own random stream), the remaining towns' lots, painting, the walled connectivity pass, ornaments one settlement per step, and the roads as a graph for residents' known ways (`living_rules::ways`, kept on `Land::ways`, not serialized).
 - **Authority** (`authority/src/floor.rs`):
   - A module built with a seed (the island, labs) creates its world in `init` as before when the land is at most 2048 m (`INLINE_MAX_M`).
   - A **floor module** (`LIVING_SEED=none`) starts empty. The admin's `create_floor(seed_json)` checks the seed, keeps it in the private `floor_seed` row, and creates the world.
@@ -422,6 +423,19 @@ Built on `megacity-1`. Numbers are from the dev-box (AMD Ryzen AI Max+ 395, 32 t
 | Worst step | 77.6 × 10⁹ (lots, before they were split per ward) | 40.0 × 10⁹, 33.3% (a band of tiles) | 50.9 × 10⁹, 42.4% (island roads; relief and rivers 42.3%) |
 | Hosting and digests (one step) | 8.8 × 10⁹ | 8.5 × 10⁹ | 35 × 10⁹ (prototype seed) |
 | Linear memory at the end | 207 MB | 213 MB | 847 MB |
+
+**With hamlets (2026-11-10, `lives-1`; the island seed, this branch against `origin/main` at `c0ff89d`, `land_fuel` on the dev-box).** Hamlets are dispersed sites at 3 per km² (2 to 400), so a large floor has many: 133 at 8192 m and 33 at 4096 m against 9 at 2048 m (seed 7). The first build of this placement trapped on fuel at 8192 m in its own step, which scanned every candidate against every placed site through a hashed grid on each of its 24 picks. Then, with that fixed, it trapped in a tile band, where each tile's height looped over all ~140 sites' levelling. Both were rewritten to give the same results (the island's and the megacity floor's digests are unchanged): a candidate keeps whether a site blocks it and its nearest site, updated only near each new site; a site's levelling is skipped by a box test before the distance. Island roads were then split into parts (their worst step had grown from 74 to 91 × 10⁹, 76% of a budget), and each settlement's distance to the network is kept up to date instead of measured afresh each round.
+
+| Island seed | 2048 m, main | 2048 m, this | 4096 m, main | 4096 m, this | 8192 m, main | 8192 m, this |
+|---|---:|---:|---:|---:|---:|---:|
+| Steps | 14 | 18 | 17 | 21 | 29 | 195 (6 hamlet steps, 18 route steps, ornaments for every hamlet) |
+| Total fuel | 57.2 × 10⁹ | 52.9 × 10⁹ | 203.2 × 10⁹ | 197.6 × 10⁹ | 793.5 × 10⁹ | 1,028.7 × 10⁹ |
+| Worst step | 24.6% | 20.0% | 28.5% | 26.5% | 61.9% (island roads) | 40.2% (relief and rivers) |
+| Hamlet steps | — | 0.17 × 10⁹ | — | 0.76 + 0.04 × 10⁹ | — | 3.0 × 10⁹ first, 0.2–0.4 after |
+| Island roads | 3.1 × 10⁹ | grid 1.3, routes ≤ 0.6, end 0.4 | 14.4 × 10⁹ | grid, routes ≤ 1.3, end 2.5 | 74.3 × 10⁹ | grid 37.4, routes ≤ 2.7, end 16.7 |
+| Roads as a graph | — | 0.08 × 10⁹ | — | 0.16 × 10⁹ | — | 0.89 × 10⁹ |
+
+Tile bands at 8192 m cost 26–38% of a budget here against 16–29% on main: the levelling's box test still runs once per site per tile. The megacity floor seed (no hamlets) gives the same digests on both branches, which checks that the rewritten site placement and island roads pick the same sites and roads.
 
 An 8192 m run first trapped on fuel in a slum ward's back-fill, which searched every street of the ward per grid point. That was fixed with a bucket lookup and back-fill bands before anything reached the authority; the harness exists to catch exactly that.
 

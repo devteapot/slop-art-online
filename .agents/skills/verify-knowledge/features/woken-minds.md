@@ -25,6 +25,8 @@ Paid tier: `woken_real.py --allow-live --run knowledge-woken-real-<name>` (a scr
 
 ## Gotchas
 
+- The island's residents are authored since 2026-11-10 ([seeded lives](../../../../docs/SEEDED_LIVES.md)): an authored resident wakes as its sheet says, installed without a model call (`verify-minds` `lives_wake.py` proves that path). This driver proves the other one, so it takes the chosen resident's sheet out of its background with `set_background` before waking it.
+
 - `player_session.py` reads the player's characters through `my_characters` (`character` is private in the scoped default).
 - A lesson whose prerequisite the newcomer lacks is refused by the rules; that is not a mind failure.
 - The cap counts residents on stage, which needs contact with a player within `LIVING_LOD_STICKY_S`; the driver speaks to each resident it wakes.

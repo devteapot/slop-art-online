@@ -113,7 +113,7 @@ class Proof(K.Run):
         login = subprocess.run([str(ROOT / 'living/tools/stdb'), 'login', 'show', '--token'], capture_output=True, text=True, check=True)
         tokens = re.findall(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', login.stdout)
         assert len(tokens) == 1
-        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER='http://127.0.0.1:3300', LIVING_DB=self.db, LIVING_RUN=self.db,
+        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/'), LIVING_DB=self.db, LIVING_RUN=self.db,
                    LIVING_SEED='island', LIVING_MODELS=str(self.directory / 'models.json'), LIVING_ONLY='woken', LIVING_TOKEN=tokens[0],
                    LIVING_NEO4J='on', LIVING_NEO4J_URI=self.state['uri'], LIVING_NEO4J_PASSWORD=self.state['password'],
                    LIVING_VERIFY_FAKE_KEY='local-only', LIVING_LLM_PER_MIN='0', LIVING_CONCURRENCY='8', LIVING_LOD='1',
@@ -160,7 +160,7 @@ def drive(p):
     p.start_neo4j()
     p.cargo(['build', '--release', '-p', 'living-mind'], 'mind-build.log')
     s = S.Session(p.name)
-    me = s.ensure_player('Wren')
+    me = s.ensure_player('Quorvan')  # a name no island resident has (the leak check matches it)
     p.admin('set_weather', False, 3600)
     mine = {k['technique'] for k in p.knowledge(me, 'player-know-how')}
 
@@ -179,6 +179,13 @@ def drive(p):
         return None
     r, first, lesson, bodies = p.wait(pick, 'a resident with a house, a lesson and a neighbour in earshot', 120)
     rid, fid = r['id'], first['id']
+    # The island's residents are authored (docs/SEEDED_LIVES.md), and an authored resident wakes
+    # as its sheet says. This proof is of the other path, a resident without a sheet whose
+    # identity a model writes from the world's facts, so the fixture takes the sheet out of its
+    # background (an admin scene call); its relation rows and places stay world facts.
+    bg = json.loads(p.sql(f'SELECT text FROM background WHERE id = {rid}', 'resident-background')[0]['text'])
+    if bg.pop('sheet', None) is not None:
+        p.admin('set_background', rid, json.dumps(bg))
     p.admin('grant_items', rid, 'berries', 4)
     acts = [{'do': 'give', 'target': {'id': me}, 'item': 'berries', 'qty': 1},
             {'do': 'teach', 'target': {'id': me}, 'item': lesson},
@@ -223,7 +230,8 @@ def drive(p):
     felt = p.wait(lambda: [x for x in p.sql(f'SELECT * FROM relation WHERE actor = {rid}', 'resident-relations') if x['other'] == me], 'the feeling from the ring', 30)
     stranger = p.cypher(f"MATCH (n:Concept {{run: '{p.db}', actor: {rid}, key: 'person:{me}'}}) RETURN n.name AS name;", 'resident-newcomer-node').stdout
     assert 'a stranger' in stranger and newcomer not in stranger, stranger
-    sent = (p.journal / f"{r['name']}.jsonl").read_text()
+    # The mind names a journal by its actor with every non-alphanumeric character as `_`.
+    sent = (p.journal / (re.sub(r'[^0-9A-Za-z]', '_', r['name']) + '.jsonl')).read_text()
     assert newcomer not in sent, f'{newcomer} reached what was sent for {r["name"]}, who was never told the name'
     awaken = json.loads(next(t for t in thoughts if t['kind'] == 'awaken')['detail'])
     assert 'narrative' in awaken['model_written'] and awaken['facts']['occupation'], awaken

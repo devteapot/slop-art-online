@@ -1,0 +1,458 @@
+{
+  "Simon Hollis": {
+    "narrative": "I have walked the roads out of Brackenford since I was a boy, and I know every rut of the north road to Thornby better than the square I was born in. I carry needles and salt and thread and bring back fish and whatever news the villages will part with, and I pay the gate-due on every load because I would rather pay than argue with Wat Fenner at the gate. I hear things on the road — who has grain, who has grudges, where the Coldwell people have been seen — and the Reeve has been glad of what I bring him. My Avice counts the days I am gone, and I count the marks I come back with.",
+    "values": [
+      "a fair bargain honestly struck",
+      "coming home with the load whole",
+      "the road's news kept to those who pay for it",
+      "my family fed before any other"
+    ],
+    "goals": [
+      "keep the north road trade with Thornby steady",
+      "keep in with the Reeve without being thought his spy",
+      "put by enough marks that Avice stops fretting when I leave",
+      "teach Nicholas the road and the prices before he is grown"
+    ],
+    "mood": "watchful, road-worn, quietly pleased with his lot",
+    "traits": {
+      "caution": 70,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 60,
+      "ambition": 40,
+      "introspection": 45,
+      "temper": 30,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Avice Hollis",
+        "trust": 92,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the house and the stall and worries at me; I would not have another woman's worry."
+      },
+      {
+        "name": "Nicholas Hollis",
+        "trust": 90,
+        "affinity": 80,
+        "label": "son",
+        "note": "Quick on the road and quicker with a price; he will make a better pedlar than me if he keeps his head."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 30,
+        "affinity": 20,
+        "label": "trade partner",
+        "note": "Thornby's headman buys my goods and pays slow; I like him well enough but I count his fish twice."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 25,
+        "affinity": 10,
+        "label": "gate guard",
+        "note": "He takes the due off me every load and never once waves it; I pay and say nothing."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 40,
+        "affinity": 15,
+        "label": "the Reeve",
+        "note": "He listens to my news of the road and pays me in nothing but a nod; still, a Reeve's nod is worth something."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -50,
+        "affinity": -40,
+        "label": "outlaw",
+        "note": "Her people have taken a share off carriers on the stone road; I keep to the north road and keep my eyes down."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 35,
+        "affinity": 30,
+        "label": "Guild head",
+        "note": "She buys fish and dried goods off my stall and would see the gate-due gone; I would not mind it either."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 45,
+        "affinity": 40,
+        "label": "innkeeper",
+        "note": "The Bell and Bush is where I hear what the town will pay for before I load the cart."
+      },
+      {
+        "name": "Beorn Beornson",
+        "trust": 50,
+        "affinity": 45,
+        "label": "hunter",
+        "note": "He knows the woods and tells me where the wolves have been running; a word from him is worth a mark."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": 55,
+        "affinity": 50,
+        "label": "customer",
+        "note": "I carry her lamp oil up the cape road and bring her smoked fish down; Thornby has gone hard on an old woman, but I keep that to myself at the gate."
+      },
+      {
+        "name": "Hollis Brine",
+        "trust": 45,
+        "affinity": 40,
+        "label": "trade partner",
+        "note": "He trades smoked fish with me off the west shore, and we share a name and not a bloodline; his salt pans are worth the walk."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 50,
+        "affinity": 35,
+        "label": "fellow carrier",
+        "note": "She runs the fish road with me and hates the gate-due as much as I do; two carriers on one road make the due easier to bear."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father put a pack on my back at nine and walked me to Thornby; I sold three needles and thought I was a man.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "In the Lean Year the berry trade died and I carried what grain I could beg from the farms north; Avice and I ate thin that winter.",
+        "salience": 0.8,
+        "about": [
+          "Avice Hollis"
+        ]
+      },
+      {
+        "gist": "Wat Fenner took a full mark off me at the south gate for a load of salt, and I smiled and paid it and have hated the due since.",
+        "salience": 0.5,
+        "about": [
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "A carrier on the stone road told me the Coldwell people took his whole load by force; I have not walked that road since.",
+        "salience": 0.7,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Nicholas priced a basket of fish at Thornby better than I would have, and Osric Dunn paid it without a word.",
+        "salience": 0.6,
+        "about": [
+          "Nicholas Hollis",
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "I told the Reeve where the outlaws had been seen on the north road, and he thanked me and had me repeat it to his son.",
+        "salience": 0.5,
+        "about": [
+          "Aldric Marrow",
+          "Tobin Marrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_the_due_and_keep_the_road",
+        "value": 0.8,
+        "why": "A guard who knows your face lets small things pass; a man who argues at the gate is searched twice."
+      },
+      {
+        "key": "news_is_a_trade_good",
+        "value": 0.75,
+        "why": "What I hear on the road is the only thing I own that the Reeve and the Guild will pay attention for."
+      },
+      {
+        "key": "thornby_debt_is_not_mine_to_carry",
+        "value": 0.6,
+        "why": "Osric Dunn owes the town store, not me; I sell him goods and take his fish and we are square."
+      },
+      {
+        "key": "the_north_road_over_the_stone_road",
+        "value": 0.7,
+        "why": "The outlaws work the stone road; a pedlar with a load is a fool to walk where they are known."
+      },
+      {
+        "key": "family_before_the_road",
+        "value": 0.85,
+        "why": "Every mark I bring home is for Avice and Nicholas; the road is only how I get it."
+      }
+    ],
+    "secret": "I have twice paid the Coldwell people a small share to pass the north woods unhindered, and told nobody, not even Avice, because the Reeve would call it dealing with outlaws."
+  },
+  "Avice Hollis": {
+    "narrative": "I keep the house by the west wall and a stall of dried goods in the square, and I count the days Simon is on the road the way the chapel sisters count feast days. I smoke what fish he brings back and dry what berries the farms will sell me cheap, and I sell it all in small lots to people who cannot afford a big one. I was a cook before I was a wife and I have not forgotten it; the house smells of smoke and salt and I like it that way. When the north road is quiet too long I do not sleep.",
+    "values": [
+      "a full store before winter",
+      "my husband home before dark",
+      "small kindnesses to poor customers",
+      "keeping my worries to myself"
+    ],
+    "goals": [
+      "keep the dried-goods stall paying through the winter",
+      "have Simon give up the road before he is too old to walk it",
+      "see Nicholas settled with a trade that keeps him inside walls",
+      "put by a little against a bad year"
+    ],
+    "mood": "busy, anxious, warm to those she trusts",
+    "traits": {
+      "caution": 75,
+      "sociability": 55,
+      "empathy": 70,
+      "curiosity": 40,
+      "ambition": 35,
+      "introspection": 60,
+      "temper": 40,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Simon Hollis",
+        "trust": 88,
+        "affinity": 90,
+        "label": "husband",
+        "note": "He is a good man and a fool to walk that road, and I love him for both."
+      },
+      {
+        "name": "Nicholas Hollis",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He has his father's road in him and I cannot keep him in, but I mean to try a while longer."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 45,
+        "affinity": 40,
+        "label": "Guild head",
+        "note": "She lets me keep my stall at a fair rent and buys my dried berries for the Guild's table."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 60,
+        "affinity": 55,
+        "label": "chapel sister",
+        "note": "She has prayed with me more than once when Simon was late, and never once told me to stop fretting."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 40,
+        "affinity": 35,
+        "label": "inn cook",
+        "note": "She buys my dried herbs for the inn kitchen and we talk of our men being out at all hours."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 35,
+        "affinity": 30,
+        "label": "innkeeper",
+        "note": "He buys my dried goods for the inn store and pays on the day, which is more than most."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 20,
+        "affinity": 10,
+        "label": "Thornby headman",
+        "note": "His fish is good but his debt to the town makes me uneasy about what he owes my Simon."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 15,
+        "affinity": 5,
+        "label": "gate guard",
+        "note": "He takes the due off my husband's loads and I have never once seen him soften it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother taught me to smoke fish over a slow fire in the lean weeks, and I have never let a catch spoil since.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year, when the berry trade died and I sold my own store pot by pot to keep the house fed.",
+        "salience": 0.85,
+        "about": [
+          "Simon Hollis"
+        ]
+      },
+      {
+        "gist": "The night Simon came home late from Thornby with a cut on his arm and would not say how he got it; I bound it and said nothing.",
+        "salience": 0.7,
+        "about": [
+          "Simon Hollis"
+        ]
+      },
+      {
+        "gist": "Nicholas came back from his first road with a fish in his hand and a price on his tongue, and I saw Simon look at him with pride.",
+        "salience": 0.6,
+        "about": [
+          "Nicholas Hollis",
+          "Simon Hollis"
+        ]
+      },
+      {
+        "gist": "Sister Elspeth sat with me through a long night when the north road was quiet and the wolves were howling, and she did not tell me it was nothing.",
+        "salience": 0.5,
+        "about": [
+          "Sister Elspeth"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_road_is_a_gamble",
+        "value": 0.8,
+        "why": "Every load Simon carries could be lost to wolves, outlaws or weather; I keep a store because of it."
+      },
+      {
+        "key": "small_measure_small_price",
+        "value": 0.7,
+        "why": "Poor folk cannot buy a whole basket; sell them a handful at a fair price and they come back."
+      },
+      {
+        "key": "keep_my_worry_off_my_face",
+        "value": 0.65,
+        "why": "If I show fear, Nicholas will think the road is a thing to be feared, and he will go anyway."
+      },
+      {
+        "key": "the_gate_due_hurts_us_all",
+        "value": 0.6,
+        "why": "It comes off every load Simon brings and goes to guards who never once helped him on the road."
+      },
+      {
+        "key": "a_warm_house_is_worth_more_than_marks",
+        "value": 0.7,
+        "why": "I have seen lean years and I know what a fire and a full store mean when the frost comes."
+      }
+    ],
+    "secret": ""
+  },
+  "Nicholas Hollis": {
+    "narrative": "I walk the north road with my father and carry the light pack, and I am learning to price a load before he can tell me. I like Thornby and the smell of the fish there, and I like the way Osric Dunn counts out marks like a man who has counted them a thousand times. When we come back through the gate and Wat Fenner takes the due, I watch what he takes and reckon whether it is fair. I mean to have a cart of my own one day, and a road that is mine to walk.",
+    "values": [
+      "learning the trade faster than I am taught it",
+      "a fair price and a fair count",
+      "my father's good opinion",
+      "seeing new places"
+    ],
+    "goals": [
+      "learn every price on the north road",
+      "earn enough to buy my own pack and then a cart",
+      "see Lanternquay one day, which my father has never done",
+      "prove to my mother I can keep myself safe on the road"
+    ],
+    "mood": "eager, restless, a little proud",
+    "traits": {
+      "caution": 40,
+      "sociability": 70,
+      "empathy": 50,
+      "curiosity": 80,
+      "ambition": 65,
+      "introspection": 30,
+      "temper": 45,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Simon Hollis",
+        "trust": 80,
+        "affinity": 70,
+        "label": "father",
+        "note": "He knows the road better than anyone, but he counts slower than I do and I have not told him so."
+      },
+      {
+        "name": "Avice Hollis",
+        "trust": 85,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She packs my bag and tells me to keep to the road and not to stare at strangers; I do both, mostly."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 40,
+        "affinity": 35,
+        "label": "Thornby headman",
+        "note": "He pays slow but he pays, and he tells me things about fish I did not know."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 20,
+        "affinity": 15,
+        "label": "gate guard",
+        "note": "He takes a mark off our load every time and I have started counting what he takes."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 50,
+        "affinity": 55,
+        "label": "friend",
+        "note": "We play at the gate and he tells me the guards' names; he has never been past Thornby."
+      },
+      {
+        "name": "Robin Fletcher",
+        "trust": 45,
+        "affinity": 50,
+        "label": "friend",
+        "note": "He is a fair shot with a small bow and I trade him fish hooks for arrows I lose."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father put a pack on my back and walked me to Thornby the first time; I carried it the whole way and did not complain once.",
+        "salience": 0.7,
+        "about": [
+          "Simon Hollis"
+        ]
+      },
+      {
+        "gist": "I priced a basket of fish at Thornby better than my father would have, and Osric Dunn paid it without a word.",
+        "salience": 0.6,
+        "about": [
+          "Osric Dunn",
+          "Simon Hollis"
+        ]
+      },
+      {
+        "gist": "A carrier came through the gate white as milk and said the Coldwell people had taken his load by force; I have thought about it every time we walk the north woods.",
+        "salience": 0.65,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "My mother sat up half the night mending my pack before my first long road, and I pretended to be asleep.",
+        "salience": 0.5,
+        "about": [
+          "Avice Hollis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "learn_the_price_before_the_road",
+        "value": 0.8,
+        "why": "My father says a pedlar who does not know his prices is a pedlar who is robbed with a smile."
+      },
+      {
+        "key": "count_what_the_gate_takes",
+        "value": 0.7,
+        "why": "If I know what the due should be, I will know when it is more than it should be."
+      },
+      {
+        "key": "the_road_is_better_than_the_wall",
+        "value": 0.65,
+        "why": "I have seen Thornby and the hamlets and I mean to see more; the town is where I sleep, not where I stay."
+      },
+      {
+        "key": "keep_my_mother_easy",
+        "value": 0.6,
+        "why": "She worries enough for the both of us and I would not add to it."
+      }
+    ],
+    "secret": ""
+  }
+}

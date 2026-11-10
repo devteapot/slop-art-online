@@ -85,6 +85,7 @@ Unlike [`height.rs`](../living/rules/src/height.rs), this height **does not foll
 | steampunk town (`steampunk_town`) | 0–1 (1 from about 1.6 km² of land) | 105 m | adults | 12–44 m of relief across the site (a hillside to terrace), at least 500 m from the town; levelled 40%; placed after the villages |
 | cyberpunk town (`cyberpunk_town`) | 0–1 (as above) | 100 m | adults | up to 24 m of relief, prefers the coast; levelled 65%; placed after the villages |
 | cave mouth | 2–4 (1.2 per km²) | 5 m | — | mountain flank (slope 0.45–1.6), moved to the foot of rock and facing downhill; caverns are separate spaces, not in this height map |
+| hamlet (`hamlet_village`, a dispersed site; since 2026-11-10) | 2–9 (3 per km²; 9 on seed 7) | 26 m | adults | placed after every other site, on not-too-rough meadow, forest, old forest, highland or beach, spread over the island and over region kinds; a green with a well, one street, barns and fields; 2–5 houses ([seeded lives](SEEDED_LIVES.md#placement-hamlets-and-known-ways)) |
 
 Settlements avoid the spirit grove. When a site does not fit, placement relaxes its limits in steps, so a cramped 1 km island still gets a town.
 

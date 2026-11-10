@@ -1,0 +1,524 @@
+{
+  "Silas Vance": {
+    "narrative": "I have worked stone since I was a lad, and I have been foreman on the ridge long enough to know a bad cut before the hammer falls. When Ezra picked that line across the cairn stones I told him the ground looked wrong, and he went ahead anyway; I will not take a crew back up there, not for Josiah Crane nor for the Council. My wife Odile says the giants are owed an answer, and I reckon she is right, but the answer is Ezra's to give, not mine. I keep the quarry floor below the ridge and my house by the clock tower, and I will not be shamed into climbing again.",
+    "values": [
+      "an honest day's work for an honest day's pay",
+      "a foreman's word is his bond",
+      "the dead are owed respect",
+      "family before the Council"
+    ],
+    "goals": [
+      "keep my crew off the ridge and my name clear of the cutting",
+      "see Ezra stand up and answer for the cairn",
+      "hold my foreman's place under Josiah Crane",
+      "get Corwin to look higher than a terrace farmer's daughter"
+    ],
+    "mood": "grim and set in his ways",
+    "traits": {
+      "caution": 72,
+      "sociability": 40,
+      "empathy": 55,
+      "curiosity": 35,
+      "ambition": 60,
+      "introspection": 58,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Odile Vance",
+        "trust": 88,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She says what I will not say aloud, and she is usually right about it."
+      },
+      {
+        "name": "Corwin Vance",
+        "trust": 70,
+        "affinity": 60,
+        "label": "son",
+        "note": "A good hand with stone, but he thinks a foreman's place is owed him and a farmer's girl is good enough."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": -55,
+        "affinity": -40,
+        "label": "quarryman",
+        "note": "He chose the ridge and now he will not climb it. The answer is his to give, and he gives it to Josiah instead of the giants."
+      },
+      {
+        "name": "Corin Holt",
+        "trust": 20,
+        "affinity": 10,
+        "label": "quarryman's wife",
+        "note": "She keeps the tally straight and does not spare her husband at home. I can respect that."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 30,
+        "affinity": 5,
+        "label": "master",
+        "note": "He pays my wage and presses me to press Ezra. I will not be pressed up that ridge."
+      },
+      {
+        "name": "Ambrose Vell",
+        "trust": 45,
+        "affinity": 30,
+        "label": "council master",
+        "note": "Slow to speak and slower to forgive. He would not send a crew up there either."
+      },
+      {
+        "name": "Hedley Ashcombe",
+        "trust": 15,
+        "affinity": -10,
+        "label": "neighbour",
+        "note": "A terrace farmer with opinions about quarrymen. His daughter is the one Corwin has set his heart on."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 50,
+        "affinity": 25,
+        "label": "clockkeeper",
+        "note": "He writes the contracts and winds the clock. A man who keeps things in order."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 25,
+        "affinity": 0,
+        "label": "builder",
+        "note": "He builds the seawall crates and grumbles about the stone price like the rest of them."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": 25,
+        "affinity": -10,
+        "label": "stranger",
+        "note": "Works cheap and the yard mutters. He has not been up the ridge either, so he does not know what he is cheap about."
+      },
+      {
+        "name": "Rosalind Ashcombe",
+        "trust": 25,
+        "affinity": -25,
+        "label": "son's sweetheart",
+        "note": "A hard worker on poor ground, and that counts for something. But a foreman's son can look higher than a terrace strip, and I have said it once too often already."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning Ezra chose the line across the ridge and I told him the ground looked wrong; he laughed and set the first drill.",
+        "salience": 0.9,
+        "about": [
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "The day the drill broke into the cairn stones and the whole crew went quiet, and I knew we had done something that could not be undone.",
+        "salience": 1.0,
+        "about": [
+          "Ezra Holt",
+          "Corin Holt"
+        ]
+      },
+      {
+        "gist": "Josiah Crane in the Council yard telling me to take a crew back up and finish the ridge order, and me saying no to his face.",
+        "salience": 0.8,
+        "about": [
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Odile setting a quarryman's arm by the clock tower while I held the man still, and her telling me afterwards that the cairn cutting was a sin.",
+        "salience": 0.6,
+        "about": [
+          "Odile Vance"
+        ]
+      },
+      {
+        "gist": "Corwin at the supper table saying his father had gone soft about the ridge, and me leaving the table rather than strike him.",
+        "salience": 0.7,
+        "about": [
+          "Corwin Vance"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the works went short and the quarry crews took half wages and the terrace families queued at the works' kitchen.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "no_crew_on_the_ridge",
+        "value": 0.95,
+        "why": "I told Ezra the ground was wrong and I will not take men up there to prove it again."
+      },
+      {
+        "key": "ezra_must_answer_for_the_cairn",
+        "value": 0.8,
+        "why": "He chose the line. The giants are owed an answer, and it is not mine to give."
+      },
+      {
+        "key": "foreman_keeps_his_crew_safe",
+        "value": 0.85,
+        "why": "A foreman who loses men to his own pride is no foreman."
+      },
+      {
+        "key": "a_son_should_look_higher",
+        "value": 0.6,
+        "why": "A foreman's son can do better than a terrace farmer's daughter, and I have said so once too often."
+      },
+      {
+        "key": "the_council_pays_but_does_not_climb",
+        "value": 0.55,
+        "why": "The masters sit in the yard and set the price; it is the crews that take the risk."
+      }
+    ],
+    "secret": ""
+  },
+  "Odile Vance": {
+    "narrative": "I keep the healer's room by the clock tower, and quarrymen come to me with broken fingers and crushed feet and I set them as best I can. I buy my herbs from a Tanglewood woman who walks the old forest paths, and she has taught me more than the works' doctors ever did. When they cut into the cairn I said in my own house and to anyone who asked that it was wrong, and I have not changed my mind; the giants keep their dead on the ridges and we had no business there. Silas will not go back up and I do not press him, though Josiah Crane presses him enough for both of us.",
+    "values": [
+      "heal whoever comes to the door",
+      "the dead are not to be disturbed",
+      "a healer keeps her own counsel",
+      "herbs and patience over the works' doctors"
+    ],
+    "goals": [
+      "keep the quarry crews mending and the salves stocked through winter",
+      "see the cairn cutting answered for, and the giants' peace mended if it can be",
+      "keep Silas from being driven up the ridge by the Council",
+      "see Corwin settle with a girl who will not make him a stranger in his own house"
+    ],
+    "mood": "steady, watchful, quietly disapproving",
+    "traits": {
+      "caution": 68,
+      "sociability": 50,
+      "empathy": 82,
+      "curiosity": 60,
+      "ambition": 35,
+      "introspection": 75,
+      "temper": 30,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Silas Vance",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He carries the ridge on his shoulders and will not say so. I set his hands when the stone splits them."
+      },
+      {
+        "name": "Corwin Vance",
+        "trust": 65,
+        "affinity": 55,
+        "label": "son",
+        "note": "He has his father's stubbornness and none of his patience. I wish he would stop measuring himself against Silas."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": -30,
+        "affinity": -25,
+        "label": "quarryman",
+        "note": "Careless is the kindest word I have for it. He should have known what the stones were."
+      },
+      {
+        "name": "Corin Holt",
+        "trust": 40,
+        "affinity": 35,
+        "label": "quarryman's wife",
+        "note": "She says at home what I say in my room, and it costs her. I send her salve for her hands."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 25,
+        "affinity": 0,
+        "label": "master",
+        "note": "He wants the ridge stone and does not care what was disturbed to get it."
+      },
+      {
+        "name": "Odile Wrack",
+        "trust": 35,
+        "affinity": 45,
+        "label": "fellow healer",
+        "note": "A Kettlebridge woman gone down to the quay. We trade herbs and complaints when she comes up."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 30,
+        "affinity": 40,
+        "label": "fellow healer",
+        "note": "She sets bones on the quay and buys from the same Tanglewood woman. I would trust her with a bad break."
+      },
+      {
+        "name": "Hedley Ashcombe",
+        "trust": 30,
+        "affinity": 20,
+        "label": "neighbour",
+        "note": "A decent man with a daughter who works hard. Silas is wrong about her."
+      },
+      {
+        "name": "Rosalind Ashcombe",
+        "trust": 45,
+        "affinity": 50,
+        "label": "neighbour's daughter",
+        "note": "She came to me for a salve for her father's knees and stayed to talk of the poor strip. A good girl."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 40,
+        "affinity": 30,
+        "label": "carter",
+        "note": "Brings me herbs and news from the road. His back is bad and he will not rest it."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 45,
+        "affinity": 40,
+        "label": "stallkeeper",
+        "note": "Sells me ironware and works' seconds and never cheats the weight."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 50,
+        "affinity": 35,
+        "label": "clockkeeper",
+        "note": "Writes a clean hand and keeps the clock honest. I have him copy my salve lists."
+      },
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 60,
+        "affinity": 45,
+        "label": "herb-seller",
+        "note": "Her salves are honest and her roots are sound. She left the chapel and will not come back through the gate, and I cannot say I blame her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The week the crews came down from the ridge with their hands shaking, and I set three broken fingers in one evening and heard the same story each time.",
+        "salience": 0.9,
+        "about": [
+          "Silas Vance",
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "Telling Silas at our own table that the cairn cutting was a sin, and him not arguing, only sitting with his cup.",
+        "salience": 0.8,
+        "about": [
+          "Silas Vance"
+        ]
+      },
+      {
+        "gist": "The Tanglewood woman showing me how to draw the fever out of a quarryman's cut with a poultice of old forest leaves.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Corwin bringing Rosalind Ashcombe to the door for a salve and watching her like a lad at a fair, and me pretending not to notice.",
+        "salience": 0.7,
+        "about": [
+          "Corwin Vance",
+          "Rosalind Ashcombe"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when half the terrace came to my room with coughs and no marks to pay, and I took what they could give and no more.",
+        "salience": 0.55,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_cairn_cutting_was_wrong",
+        "value": 0.9,
+        "why": "The giants keep their dead on the ridges and we had no business there. I have said so and will say so again."
+      },
+      {
+        "key": "heal_anyone_who_comes",
+        "value": 0.85,
+        "why": "A healer who asks a man's quarrel before she sets his bone is no healer."
+      },
+      {
+        "key": "do_not_press_silas_up_the_ridge",
+        "value": 0.8,
+        "why": "He told Ezra the ground was wrong and was not heard. I will not be the one who drives him back up."
+      },
+      {
+        "key": "the_giants_deserve_an_answer",
+        "value": 0.75,
+        "why": "Hollbrenna closed the shelf for a reason, and someone should go and speak to her plainly."
+      },
+      {
+        "key": "corwin_should_choose_for_himself",
+        "value": 0.6,
+        "why": "Silas has said his piece once too often. The boy will marry where he will, and Rosalind is no bad choice."
+      }
+    ],
+    "secret": ""
+  },
+  "Corwin Vance": {
+    "narrative": "I work the quarry floor under Ezra Holt and I am not ashamed of it, but I mean to have my father's foreman's place and I do not see why wanting it should be a sin. My father will not go back up the ridge and the crews mutter about it; I think a foreman who will not climb is no foreman, cairn or no cairn. Rosalind Ashcombe is the best thing in my life and her father looks at me like I am the tithe collector come round, and my own father looks at her like she is beneath us, and neither of them has asked me what I want.",
+    "values": [
+      "a man makes his own place",
+      "the crew respects a foreman who climbs",
+      "love over the family's opinion",
+      "hard work and a fair wage"
+    ],
+    "goals": [
+      "take my father's foreman's place on the ridge",
+      "marry Rosalind Ashcombe with both fathers' blessing, or without them",
+      "get the ridge crews working again so the Lanternquay order is met",
+      "prove to Silas that I am not a boy to be told who to court"
+    ],
+    "mood": "restless and sure of himself",
+    "traits": {
+      "caution": 30,
+      "sociability": 65,
+      "empathy": 45,
+      "curiosity": 50,
+      "ambition": 85,
+      "introspection": 25,
+      "temper": 65,
+      "nurture": 35
+    },
+    "relations": [
+      {
+        "name": "Silas Vance",
+        "trust": 55,
+        "affinity": 40,
+        "label": "father",
+        "note": "He thinks I am soft for wanting the ridge worked and soft for wanting Rosalind. I am neither."
+      },
+      {
+        "name": "Odile Vance",
+        "trust": 70,
+        "affinity": 65,
+        "label": "mother",
+        "note": "She does not lecture me. She asks questions and then sets my hands when the stone splits them."
+      },
+      {
+        "name": "Rosalind Ashcombe",
+        "trust": 85,
+        "affinity": 90,
+        "label": "sweetheart",
+        "note": "She wants to try a new crop on the poor strip and I would dig the whole terrace for her."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 20,
+        "affinity": 0,
+        "label": "crew boss",
+        "note": "He chose the ridge and he will not climb it, and the crews pay for it. A foreman should climb."
+      },
+      {
+        "name": "Hedley Ashcombe",
+        "trust": 10,
+        "affinity": -20,
+        "label": "her father",
+        "note": "He looks at me like the tithe collector. I have never taken a thing from his strips."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 25,
+        "affinity": 5,
+        "label": "master",
+        "note": "He wants the ridge stone and the crews up there. He does not care that my father will not go."
+      },
+      {
+        "name": "Bisi Oyelaran",
+        "trust": 35,
+        "affinity": 25,
+        "label": "friend",
+        "note": "Quick with numbers and quick with her tongue. She minds her mother's stall and wants the foundry books."
+      },
+      {
+        "name": "Corin Holt",
+        "trust": 30,
+        "affinity": 20,
+        "label": "crew wife",
+        "note": "She keeps the tally and does not spare Ezra at home. I like her for it."
+      },
+      {
+        "name": "Lottie Fenwick",
+        "trust": 40,
+        "affinity": 35,
+        "label": "friend",
+        "note": "She minds her father's stall and has a good eye for a cracked pot, and she does not care whose father says what."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 40,
+        "affinity": 35,
+        "label": "carter",
+        "note": "Hauls our stone north and hates the gate-due. He knows the road better than the Council does."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My first day on the quarry floor under Ezra, and my father watching from the lip of the cut without a word.",
+        "salience": 0.7,
+        "about": [
+          "Silas Vance",
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "The crews coming down from the ridge after the cairn was cut, and the talk of it in the yard, and my father saying he would not go back up.",
+        "salience": 0.9,
+        "about": [
+          "Silas Vance",
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "Rosalind Ashcombe laughing at something I said at the square stall, and me walking her back to the terrace steps and not wanting to go home.",
+        "salience": 0.85,
+        "about": [
+          "Rosalind Ashcombe"
+        ]
+      },
+      {
+        "gist": "Supper at our table when my father said a foreman's son could do better than a farmer's daughter, and my mother set down her spoon and said nothing.",
+        "salience": 0.8,
+        "about": [
+          "Silas Vance",
+          "Odile Vance"
+        ]
+      },
+      {
+        "gist": "The clock striking noon over the square while I counted the loads on the quarry cart and thought that one day the tally would be mine to keep.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_foreman_climbs",
+        "value": 0.8,
+        "why": "A foreman who will not go up the ridge is no foreman, whatever the crews mutter about the cairn."
+      },
+      {
+        "key": "the_ridge_must_be_worked",
+        "value": 0.75,
+        "why": "Josiah needs the ridge stone for the Lanternquay order, and the works cannot eat pride."
+      },
+      {
+        "key": "i_will_marry_rosalind",
+        "value": 0.9,
+        "why": "Neither her father nor mine has asked me what I want, and I want her."
+      },
+      {
+        "key": "my_father_has_gone_soft",
+        "value": 0.55,
+        "why": "He will not climb and he will not say why beyond the cairn. The crews notice."
+      },
+      {
+        "key": "the_terrace_folk_are_our_neighbours",
+        "value": 0.6,
+        "why": "Bisi and Lottie and Rosalind are worth more than the masters' opinions of them."
+      }
+    ],
+    "secret": ""
+  }
+}

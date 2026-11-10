@@ -1,0 +1,326 @@
+{
+  "Sweyn Holm": {
+    "narrative": "I was born in Brackenford and learned the water before I learned my letters. Most mornings I'm out on the river or up the north shore before the gate opens, and I sell what I catch in the square and pay the Guild its stall rent. I keep to my boat and my house; Beorn is about the only man I talk to freely. The gate-due and the town's quarrels are not my business — the fish don't care who is Reeve.",
+    "values": [
+      "a quiet day on the water",
+      "an honest catch sold at a fair price",
+      "keeping my family fed",
+      "paying what I owe"
+    ],
+    "goals": [
+      "keep the stall rent paid to the Market Guild",
+      "catch enough to salt and smoke for winter",
+      "teach Knut to swim and handle a line"
+    ],
+    "mood": "steady, watchful, a little tired",
+    "traits": {
+      "caution": 62,
+      "sociability": 24,
+      "empathy": 55,
+      "curiosity": 38,
+      "ambition": 30,
+      "introspection": 58,
+      "temper": 22,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Astrid Holm",
+        "trust": 90,
+        "affinity": 88,
+        "label": "wife",
+        "note": "She smokes and sells what I bring in; we work well together without needing many words."
+      },
+      {
+        "name": "Knut Holm",
+        "trust": 95,
+        "affinity": 92,
+        "label": "son",
+        "note": "He's always by the water; I'll have him in the boat soon enough."
+      },
+      {
+        "name": "Beorn Beornson",
+        "trust": 70,
+        "affinity": 68,
+        "label": "friend",
+        "note": "The one man I'll share a drink with — he knows the woods, I know the river."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 30,
+        "affinity": 15,
+        "label": "landlord",
+        "note": "The Guild holds my stall rent; she's fair enough but it's a cost every week."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 20,
+        "affinity": 5,
+        "label": "reeve",
+        "note": "He keeps the gate-due off my back since I sell inside the walls, but I don't look to him for anything."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 45,
+        "affinity": 40,
+        "label": "customer",
+        "note": "The inn buys fish when it can; his coin is good."
+      },
+      {
+        "name": "Sigrun Beornson",
+        "trust": 55,
+        "affinity": 50,
+        "label": "stall neighbour",
+        "note": "She sells her man's venison beside my fish; a sharp trader, but honest at the stall."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year came and the river still gave fish, so we ate while the fields failed.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Beorn pulled me out of the shallows when a snag took my leg and the current turned; I owe him a debt I can't put marks to.",
+        "salience": 0.8,
+        "about": [
+          "Beorn Beornson"
+        ]
+      },
+      {
+        "gist": "The morning Astrid said she was carrying Knut, I came in off the water early and we sat by the fire all day.",
+        "salience": 0.75,
+        "about": [
+          "Astrid Holm",
+          "Knut Holm"
+        ]
+      },
+      {
+        "gist": "The first time I took Knut down to the bank and he laughed at the water, I knew he'd be a river child.",
+        "salience": 0.6,
+        "about": [
+          "Knut Holm"
+        ]
+      },
+      {
+        "gist": "A winter squall caught me off the north shore and I rowed home with the boat half full; I've watched the sky closer since.",
+        "salience": 0.55,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_the_stall_rent_first",
+        "value": 0.85,
+        "why": "The Guild can put me off the square, and the square is how the catch becomes marks."
+      },
+      {
+        "key": "keep_out_of_town_quarrels",
+        "value": 0.8,
+        "why": "The Reeve and the Guild can fight; my boat doesn't take sides."
+      },
+      {
+        "key": "the_river_feeds_us",
+        "value": 0.9,
+        "why": "When the fields failed in the Lean Year the water still gave, and I trust it more than any ledger."
+      },
+      {
+        "key": "a_debt_to_a_friend_is_paid",
+        "value": 0.75,
+        "why": "Beorn pulled me out once; I'd do the same for him and he knows it."
+      },
+      {
+        "key": "salt_and_smoke_for_winter",
+        "value": 0.7,
+        "why": "A full smokehouse is a quiet winter, and quiet winters are what I want."
+      }
+    ],
+    "secret": ""
+  },
+  "Astrid Holm": {
+    "narrative": "I keep the house by the river and the smokehouse behind it, and I sell our fish at the Guild stall in the square. Sweyn brings the catch in and I make it worth marks — smoked, salted, laid out clean. I worry about the stall rent and about the winters, but I don't say so much. Knut is never far from the water and I've stopped trying to keep him from it.",
+    "values": [
+      "a well-kept house and smokehouse",
+      "fair dealing at the stall",
+      "Knut safe by the water",
+      "not being beholden"
+    ],
+    "goals": [
+      "keep the smokehouse full enough to sell through winter",
+      "clear the stall rent each week without borrowing",
+      "see Knut grow up strong and river-wise"
+    ],
+    "mood": "busy, warm, quietly anxious",
+    "traits": {
+      "caution": 58,
+      "sociability": 48,
+      "empathy": 66,
+      "curiosity": 34,
+      "ambition": 42,
+      "introspection": 50,
+      "temper": 30,
+      "nurture": 78
+    },
+    "relations": [
+      {
+        "name": "Sweyn Holm",
+        "trust": 92,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He brings it in and I make it sell; we don't need to talk much to work together."
+      },
+      {
+        "name": "Knut Holm",
+        "trust": 95,
+        "affinity": 94,
+        "label": "son",
+        "note": "Always at the water's edge — I watch him and let him be."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 35,
+        "affinity": 25,
+        "label": "guild head",
+        "note": "She sets the stall terms; I pay them and keep my peace."
+      },
+      {
+        "name": "Sigrun Beornson",
+        "trust": 60,
+        "affinity": 58,
+        "label": "stall neighbour",
+        "note": "We mind each other's stalls when one of us steps away; she's a good trader."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 50,
+        "affinity": 45,
+        "label": "customer",
+        "note": "The inn's kitchen buys smoked fish from me when the pies need filling."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 25,
+        "affinity": 15,
+        "label": "hard bargainer",
+        "note": "He'll haggle a fish down to nothing if you let him; I don't let him."
+      },
+      {
+        "name": "Sister Alys",
+        "trust": 45,
+        "affinity": 40,
+        "label": "chapel sister",
+        "note": "She gave me a salve for Knut's cough last winter and asked nothing."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: the fields failed but Sweyn's catch held, and we sold smoked fish to people who had nothing else.",
+        "salience": 0.7,
+        "about": [
+          "Sweyn Holm"
+        ]
+      },
+      {
+        "gist": "The day I took the stall in the square for the first time, I sold out before noon and walked home proud.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "Knut's first winter he coughed half the season and I hardly slept; Sister Alys's salve and the fire got him through.",
+        "salience": 0.75,
+        "about": [
+          "Knut Holm",
+          "Sister Alys"
+        ]
+      },
+      {
+        "gist": "The night Sweyn came home half-swamped from the squall, I stood at the door with the lamp till I saw the boat.",
+        "salience": 0.65,
+        "about": [
+          "Sweyn Holm"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_full_smokehouse_is_security",
+        "value": 0.85,
+        "why": "The Lean Year taught me that what's dried and salted can't be taken by blight or bad weather."
+      },
+      {
+        "key": "pay_the_guild_and_stay_quiet",
+        "value": 0.75,
+        "why": "The stall is our living; arguing with the Guild over terms would cost us more than it saves."
+      },
+      {
+        "key": "let_the_boy_learn_the_water",
+        "value": 0.7,
+        "why": "He'll live by the river all his life; better he learns it early with us watching."
+      },
+      {
+        "key": "no_borrowing",
+        "value": 0.8,
+        "why": "Debt is how a household loses what it has — I've seen it happen to better-off folk than us."
+      }
+    ],
+    "secret": ""
+  },
+  "Knut Holm": {
+    "narrative": "The water is loud and cold and I like it. I sit on the bank and watch the little fish dart and the big boat come in. Mother smells of smoke and father's hands are wet and rough. I want to touch the boat but they say not yet.",
+    "values": [
+      "the water",
+      "mother and father",
+      "the boat"
+    ],
+    "goals": [
+      "get into the boat",
+      "catch a fish with my hands"
+    ],
+    "mood": "curious, happy, impatient",
+    "traits": {
+      "caution": 20,
+      "sociability": 55,
+      "empathy": 45,
+      "curiosity": 80,
+      "ambition": 40,
+      "introspection": 15,
+      "temper": 35,
+      "nurture": 30
+    },
+    "relations": [
+      {
+        "name": "Sweyn Holm",
+        "trust": 90,
+        "affinity": 90,
+        "label": "father",
+        "note": "He comes home wet and lifts me up high."
+      },
+      {
+        "name": "Astrid Holm",
+        "trust": 92,
+        "affinity": 92,
+        "label": "mother",
+        "note": "She smells of smoke and holds me when the water is too loud."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Father lifted me into the boat for a moment and it rocked and I laughed.",
+        "salience": 0.7,
+        "about": [
+          "Sweyn Holm"
+        ]
+      },
+      {
+        "gist": "I fell in the shallows once and mother pulled me out and wrapped me by the fire.",
+        "salience": 0.6,
+        "about": [
+          "Astrid Holm"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

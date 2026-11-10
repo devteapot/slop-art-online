@@ -929,8 +929,8 @@ fn leave_done(a) { [#{ op: "leave" }] }
 // (spoken to), the name of a skill aimed at the resident as it starts (`wave`, `give`,
 // `teach`, `offer`, `attack`…), `hurt` (a blow or missile landed) or `theft` (taking from its
 // store as it watched); by is `player`, `mind` (what a mind decided: its acts and words),
-// `habit` (what a minded character's behaviour graph did by itself) or `instinct`. 1 wakes, 0
-// does not. Habits and instincts stay at the level of detail they happen at: a neighbour's
+// `woken` (what a woken resident's mind decided), `habit` (what a minded character's behaviour
+// graph did by itself) or `instinct`. 1 wakes, 0 does not. Habits and instincts stay at the level of detail they happen at: a neighbour's
 // evening nod or a wolf's bite wakes nobody, whether or not the neighbour has a mind (the first
 // paid run, before `habit`, had woken residents' routine nods wake 11 of 15 in 9 minutes).
 // Read once per script revision for each engagement.
@@ -938,6 +938,10 @@ fn wakes(e) {
     let p = e.split(":");
     if p.len() < 2 || p[1] == "instinct" || p[1] == "habit" { return 0; }
     let what = p[0];
+    // A woken resident's words and gestures do not wake its neighbours; a blow or a theft does.
+    // Without this, woken residents talking to each other woke 41 of 48 in three social trials
+    // (docs/TRIALS.md, "Fast iterations", 6), the newcomer 7.
+    if p[1] == "woken" && !["hurt", "theft"].contains(what) && !["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 0; }
     if ["speech", "hurt", "theft"].contains(what) { return 1; }
     // Kindness, dealings, lessons, asking to belong, and anything hostile.
     if ["wave", "nod", "give", "offer", "accept", "teach", "tend", "heal", "join", "welcome", "host"].contains(what) { return 1; }

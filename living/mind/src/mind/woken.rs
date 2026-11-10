@@ -4,7 +4,9 @@
 //! resident someone engages to this service (`woken` row; `ai`, controlled by it). Before its
 //! first thought this service makes its mind, once:
 //!
-//! - **identity from the world's facts:** its background (town, occupation, household), its
+//! - **its authored sheet**, when its world's author wrote one (`background.sheet`): installed
+//!   as written, with no model call, as at bootstrap (docs/SEEDED_LIVES.md);
+//! - otherwise **identity from the world's facts:** its background (town, occupation, household), its
 //!   settlement and community, its family, its places (home, work, square, evening spot), the
 //!   lots they stand on, its know-how and inborn temperament, its relations if any. One
 //!   identity call writes who it is from them. The facts are written to its mind as they are
@@ -102,7 +104,18 @@ impl Minds {
             store.ensure_self(id, &c.name).await?;
         }
         if self.conn.db.persona().id().find(&id).is_none() {
-            self.woken_identity(&c, &w, &lots).await?;
+            match self.authored(&c) {
+                // A resident its world's author wrote: its world facts as given (`world`), then
+                // its sheet as written (`authored`), with no model call (docs/SEEDED_LIVES.md).
+                // A model writes an identity from the world's facts only for a resident without
+                // one. The ring comes after either.
+                Some(bg) => {
+                    let facts = self.world_facts(&c, &w, &lots);
+                    self.given_facts(&c, &facts, &reference(id, "awaken"), llm::now_ms()).await?;
+                    self.sheet_persona(&c, &bg).await?;
+                }
+                None => self.woken_identity(&c, &w, &lots).await?,
+            }
         }
         let Some(store) = &self.store else {
             log::info!("{}: no memory store, so its {} perceptions from before it woke are not taken in", c.name, ring.len());
@@ -195,6 +208,30 @@ impl Minds {
         Value::Object(f)
     }
 
+    /// The people a woken resident lives with and its family, and its places, written to its
+    /// mind as given (`lived_under = ["world"]`). Nothing without a memory store.
+    async fn given_facts(&self, c: &Character, facts: &Value, thought: &str, now: u64) -> Result<()> {
+        let Some(store) = &self.store else { return Ok(()) };
+        let mut given = memory::Patch::default();
+        for (id, name) in self.known_people(facts) {
+            given.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(name), props: Default::default() });
+        }
+        let places: Vec<Value> = facts["places"].as_array().cloned().unwrap_or_default().into_iter().map(|p| json!({"name": p["name"], "x": p["x"], "y": p["y"]})).collect();
+        memory::sugar_into(&json!({"places": places}), &mut given, &[]);
+        given.lived_under = Some("world".into());
+        store.apply(c.id, &given, thought, now).await?;
+        Ok(())
+    }
+
+    /// The household and family the world's facts name, with their names.
+    fn known_people(&self, facts: &Value) -> Vec<(u32, String)> {
+        ["household", "parents", "children"]
+            .iter()
+            .flat_map(|k| facts[*k].as_array().cloned().unwrap_or_default())
+            .filter_map(|p| Some((p["id"].as_u64()? as u32, p["name"].as_str().map(String::from).unwrap_or_else(|| self.name(p["id"].as_u64().unwrap_or(0) as u32)))))
+            .collect()
+    }
+
     /// Its first identity, written by a model from the world's facts only, and marked so.
     async fn woken_identity(&self, c: &Character, w: &Woken, lots: &[Lot]) -> Result<()> {
         let facts = self.world_facts(c, w, lots);
@@ -209,22 +246,10 @@ impl Minds {
         let mut v = llm::parse_json(&reply.content)?;
         let thought = reference(c.id, "awaken");
         let now = llm::now_ms();
-        let known: Vec<(u32, String)> = ["household", "parents", "children"]
-            .iter()
-            .flat_map(|k| facts[*k].as_array().cloned().unwrap_or_default())
-            .filter_map(|p| Some((p["id"].as_u64()? as u32, p["name"].as_str().map(String::from).unwrap_or_else(|| self.name(p["id"].as_u64().unwrap_or(0) as u32)))))
-            .collect();
+        let known = self.known_people(&facts);
         let relations: Vec<Value> = v["relations"].as_array().cloned().unwrap_or_default().into_iter().filter(|r| living_rules::normalize::reply_id(&r["id"]).is_some_and(|i| known.iter().any(|(k, _)| *k as u64 == i))).collect();
         if let Some(store) = &self.store {
-            // The facts as given: the people it lives with and its family, and its places.
-            let mut given = memory::Patch::default();
-            for (id, name) in &known {
-                given.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(name.clone()), props: Default::default() });
-            }
-            let places: Vec<Value> = facts["places"].as_array().cloned().unwrap_or_default().into_iter().map(|p| json!({"name": p["name"], "x": p["x"], "y": p["y"]})).collect();
-            memory::sugar_into(&json!({"places": places}), &mut given, &[]);
-            given.lived_under = Some("world".into());
-            store.apply(c.id, &given, &thought, now).await?;
+            self.given_facts(c, &facts, &thought, now).await?;
             // What the model wrote beyond them: how it feels about those people.
             let mut written = memory::Patch::default();
             memory::sugar_into(&json!({"relations": relations}), &mut written, &[]);

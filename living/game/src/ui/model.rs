@@ -24,8 +24,50 @@ pub struct HudModel {
     /// Floating combat numbers (damage dealt and taken, healing).
     pub numbers: Vec<FloatNumber>,
     pub map: MapInfo,
+    /// The verbs' list, notes and panels (`verbs.rs`); all hidden by default.
+    pub verbs: VerbsView,
     /// Model time (seconds), for fades.
     pub now: f64,
+}
+
+#[derive(Default)]
+pub struct VerbsView {
+    pub menu: Option<MenuView>,
+    /// What the authority said of my acts: text, worked (or not, or just started), age (s).
+    pub toasts: Vec<(String, Option<bool>, f32)>,
+    pub inventory: Option<InventoryView>,
+    pub know_how: Option<KnowHowView>,
+}
+
+pub struct MenuView {
+    pub title: String,
+    pub rows: Vec<String>,
+}
+
+pub struct InventoryView {
+    /// Item, how many, and a short note from the rules (food value).
+    pub rows: Vec<(String, u32, String)>,
+    pub carried: u32,
+    pub limit: u32,
+}
+
+pub struct KnowHowView {
+    /// Techniques I know, and how I came by each.
+    pub techniques: Vec<(String, String)>,
+    /// The skills shown in the list (a window round the selected one), and which is selected.
+    pub skills: Vec<String>,
+    pub selected: usize,
+    /// The first skill shown.
+    pub start: usize,
+    pub detail: SkillDetail,
+}
+
+#[derive(Default)]
+pub struct SkillDetail {
+    pub name: String,
+    pub help: String,
+    pub takes: String,
+    pub gives: String,
 }
 
 pub struct Me {

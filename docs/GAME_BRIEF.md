@@ -25,7 +25,7 @@ Findings move from the lab to the game when a core version is released and the g
 - **The world continues offline.** When a player leaves, their character keeps living under an AI mind. That mind's behavior should come from how the player actually played, so the character stays recognizably theirs. A custom external mind supplied by the player is a later option.
 - **Running cost** of model calls is set aside for now.
 - **Decisions of 2026-11-09 (user):**
-  - **Controls:** WASD movement, and you face the cursor. Left and right mouse are basic attacks; Q/E/R are skills; Shift is the dodge; F interacts (talk, pick up; Genshin-style). The camera aligns on a middle-button tap only, so R is free for a skill. Skillshots fire toward the cursor; targeted skills hit the enemy under or nearest the cursor.
+  - **Controls:** WASD movement, and you face the cursor. Left and right mouse are basic attacks; Q/E/R are skills; Shift is the dodge; F interacts (talk, pick up; Genshin-style). The camera aligns on a middle-button tap only, so R is free for a skill. Skillshots fire toward the cursor; targeted skills hit the enemy under or nearest the cursor. F, and C, I and K beside it, are built as [verbs](#verbs-acting-on-the-world-2026-11-10) (2026-11-10).
   - **Starter skills:** the mixed six (sword strike, targeted; bow shot, skillshot; fire bolt, skillshot spell; block, held; dodge roll; heal, targeted on an ally or yourself), and more where possible. These are shared skills any character can learn; classes emerge from combinations.
   - **Death:** permanent, then you rejoin as a new identity. A development-only shortcut makes rejoining quick on scratch databases.
   - **Day length:** tune freely for testing. The server's effective clock stays as it is for now.
@@ -629,9 +629,9 @@ Built on `megacity-1` for the megacity floor's second pass ([floors](FLOORS.md#t
 
 ### Client notes for the megacity floor
 
-Nothing in `living/game` was changed on `megacity-1`.
+Nothing in `living/game` was changed on `megacity-1`; its client patch landed on 2026-11-10.
 - **Drawn already.** The client draws the new lots and props through their model files and kind folders, and the folder's `cyberpunk` prefix dresses its people in the cyberpunk look (`characters::place_style`).
-- **The patch.** [`docs/patches/megacity-client.patch`](patches/megacity-client.patch) (`git apply` from the repository root) does two things; the captures used a private build with it applied:
+- **The patch** (applied on 2026-11-10 with the verbs work, and deleted; it was `docs/patches/megacity-client.patch`) did two things; the captures used a private build with it applied:
   - `island.rs` `road_layer` asks `living_rules::settle::road_surface(style)` for the paving, so the new district styles get pavers, setts, earth or gravel, and future styles need no client change. Without it, the corporate, neon, megablock and market wards draw cobbles.
   - `assets/envs/cyberpunk_megacity.json` is a showcase environment whose `lamp` and `neon_sign` slots carry the glow that lights the floor's lamps at night. Without it, megacity lamps get no point lights, because the island takes a lamp's light from its environment's slot.
 
@@ -658,6 +658,54 @@ Client presentation and the clip pipeline only.
 - **Camera framing** (`camera.rs`, `Context`): the view frames you with your opponents in a fight you are in (any move or blow between you in the last 4 s; 10–18 m by their spread), with whoever you talk with (8 m), and with whoever you trade a wave or nod with (9–15 m), for the exchange plus 3.5 s. It never turns; it eases in over about 1.5 s and out over about 2.5 s, and a context outlasts its evidence by 1.2 s, so a wave and its answer are one framing. Turning the view yourself dismisses it until that context ends. Someone greeting you now counts too (`town.rs`, `greeted_by`).
 - **Marker check** (`living/tools/marker_check.py`, at the end of `gen_anim.sh`): per character and looping gait, it fails on missing markers and warns on split contacts, a contact share far from the gait's range, unpaired feet, a phase 0 that isn't the synced foot's touchdown, a baked clip whose length differs from its sidecar, and planted feet that slide more than 4 cm in the baked take (pure Python, read from the GLB). Today: the wolf and the deer are clean; the people's Kimodo takes slide 3–10 cm per contact (sneak the most).
 - **Open.** The rules don't show `graze`, so the client can't tell a grazing deer from a standing one. A flee from a place in this build ran toward it in scripted scenes (authority, `motion.rs` `GOAL_FLEE`; not investigated here). Deer have no antlers: the projection carries no sex. No paw IK beyond the body tilt, so steps and banks narrower than the body still gap.
+
+## Verbs: acting on the world (2026-11-10)
+
+A player could move, fight and greet, but not gather, eat, craft, build, give, trade, teach, sleep, read or write, or see their pack. Residents do all of it through the rules. The client now offers every one of those acts, and it does so **from the rules' own data, with nothing written per skill** ([`verbs.rs`](../living/game/src/verbs.rs), [`ui/verbs.rs`](../living/game/src/ui/verbs.rs)). A skill the rules add appears for players with no client change.
+
+**Where the acts come from:**
+- **Which skills exist:** the rules' catalog (`living_rules::catalog::SKILLS`: whether a skill takes a target or an item, and its help). The client also reads the world's installed skill script (the public `script` row, one subscription of about 70 kB, sent again only on an install) and compiles it with the same `living_rules::script` the authority runs. A skill the script defines (`<name>_check` and `<name>_done`) that this client's catalog lacks is listed as well; its check decides whether it takes a target.
+- **What applies to what:** the rules' own `<skill>_check`, run on what my character knows: my pack (`my_inventory`), my know-how (`my_know_how`), my needs (`my_vitals`), and the target as I perceive it (`seen_characters`, the resource or structure row). What a target holds is not perceived, so a check is run as if it holds what is asked of it. A gather is offered on a bush, not on a person; "eat wood" is never offered; "craft bow" is offered only once I know archery and carry the wood, fibre and stone.
+- **What each takes and gives:** the script's `skill_io`.
+- **The authority decides.** An option is a guess from my side of the world. Every act goes through `human_act`, the act path minds use (`acts::submit`); an ongoing skill such as sleep becomes my behaviour as before. The outcome comes back as my `act` experience rows ("You did what you had decided: …", "What you had decided did not work out: …: why") or as the reducer's error.
+
+**Generic rules, not per skill:**
+- Real-time skills (a combat shape with `real_time`) belong to the skill bar and are not listed.
+- A skill whose script has no check says nothing about what it applies to. It is offered only toward people of my kind (join, welcome, walk to, follow), never toward things, and listed after the checked ones.
+- Item choices come from my pack, my know-how and the item names the skill's help lists (`(item: spear|cloak|…)`), plus every item there is toward something that may hold things (taking from a store). A skill whose check refuses an empty text but takes some text needs words: the text box opens with the act's name (write, found).
+- A skill with more than two options becomes one row that opens its own list (`give ›`, `offer ›` and what to ask in return).
+- A skill whose arguments include a behaviour graph (`rework`) is left out: the client cannot write one.
+- A tap does the most likely act: the one I last chose for that kind of target, else on a thing the first the rules allow that needs no further choice and is no use of force (the combat shape's `hostile`, `force`, `menace`). A person has no default: a tap opens the list.
+- Things are named to the authority as acts name them, by kind (`{"nearest": "berry_bush"}`). When the one under the cursor is not the nearest of its kind, the act becomes a walk to it and then the act on the nearest (`{"seq": [goto, act]}`), which runs as my behaviour.
+
+**Controls and HUD** (only relevant information on screen; everything below is hidden until it matters):
+- **F** acts on what is under the cursor, else the nearest thing or creature within 3 m: a tap does the likely act, holding it (0.28 s) or a tap with no likely act opens the list. With nothing to aim at, F opens my own list. When something is in reach, a small hint over the bar names the likely act (`F gather`) or the target (`F a stranger ›`).
+- **C** opens the list of acts on myself (eat, sleep, rest, craft, build, write, drop, experiment, …), with what I carry ("eat berries ×4").
+- **The list** sits over the bar: 1–9 and 0 or a click picks, Esc goes back or closes, F or C closes it. The mouse picks from it rather than firing the bar while it is open.
+- **Notes** of what the authority said rise just over the hint for about 4.5 s: edged green when done, red when refused with the authority's reason ("You don't know how to make a bow (archery: learn it from someone who knows it or from writing, …)"), grey when an ongoing act began.
+- **I** toggles the pack: each item and how many, its worth as food (the rules' `nutrition`), and how much I carry against the rules' `carry_limit`. Clicking an item lists what I can do with it myself.
+- **K** toggles know-how: the techniques I know and how I came by each, then every skill in the rules (the catalog's and the script's own), with the selected one's help and what it takes and gives. Up/Down or a click selects.
+- **Requests to people:** give, offer a trade, accept one, teach what I know, join, welcome, host (the townlife-2 act appeared here when it merged, with no client change), tend, appraise, wave, nod, and asking to be taught a technique I lack (a line through `human_say` to them: "Would you teach me archery?").
+- Gestures stay on G, B and V (`town.rs`).
+
+**On a land world the client now draws resources and small structures** (`world::things`, which was tile worlds only): berry bushes, boulders, reeds, clay banks, fishing spots, stores, hearths, signs, traps and remains, from the `resource_node` and `structure` rows of the near window (±3 chunks, re-centred with the terrain edits). Buildings stay the island's lots, gates its walls, and trees its forest (35,699 tree rows on the island seed; an act names a tree by kind).
+
+**Evidence** (2026-11-10, scratch island world `verify-client-verbs-1110-003532`, the real game client headless, `.local/living/verify/<run>/game2` and `game3`): gather twice at a berry bush, eat berries, craft a spear, write a tablet ("Berries by the arrival road, east side."), give berries to a resident, sleep, and craft a bow refused with the rules' reason; each outcome is an `act` row in the character's experience, and the pack and know-how before and after match. Admin scene setup, named: the spear and writing techniques, 4 wood and 1 stone granted; one resident held still beside the player. Genericity: a scratch authority with a throwaway `polish` skill (a catalog line and three script functions, never committed) on `verify-client-verbs-gen-1110-004303`; the unchanged client binary (same SHA-1) listed `polish` in F's list on a boulder and in know-how with its takes and gives, and the authority performed it (+1 stone).
+
+**Cost** (Mac M4 Pro, 1600×900 headless, uncapped, load average 6–17 from other agents; arm A is `6de2bad`, arm B the same plus this change, both built from one commit's sources with the same assets):
+- **Look-dev at the usual spots, two runs per arm:** models, meshes, distinct meshes, materials and triangles identical; frame means within the runs' spread. Hamlet 5.87 / 5.67 against 5.73 / 5.93 ms, town 7.23 / 5.70 against 5.73 / 7.90 ms, forest 4.57 / 4.67 against 4.63 / 4.67 ms.
+- **Connected, at the island's arrival:**
+  - the drawn resources and stores add 100–150 meshes in view, 3 distinct meshes and 1 material; toon materials stay at 42;
+  - frame means 5.53 / 5.53 ms against 5.22 / 6.90 ms;
+  - the client checks the rules for what F aims at 4 times a second, and for a whole list only when one opens.
+
+**What is still off:**
+- **A skill in `skills.rhai` alone is not a skill yet for anyone.** The authority's graph parser accepts only catalog skills (`graph::check`, "unknown skill"), so a new skill needs a catalog line in `living_rules` too (as `host` had). The client already lists a script-only skill; the core would need to read a skill's spec from the script (`<name>_spec()`) for the script to be the only place.
+- What is offered is checked on what my character knows. The client fills what it does not know: the ground under me is grass, the season summer, the hour noon; a target holds what is asked of it. The authority's refusal covers the rest.
+- Quantities are one at a time (give, store, drop, trade 1 for 1).
+- Reading a sign: `read` takes no target in the catalog, so F does not offer it on a sign; from C it reads a tablet I carry.
+- Storage contents are not perceived, so "take ›" lists every item there is.
+- A list shows 16 rows; the first 10 have number keys, the rest are picked with the mouse.
 
 ## World look and camera research (2026-11-08)
 

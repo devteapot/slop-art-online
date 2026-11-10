@@ -1,0 +1,723 @@
+{
+  "Osric Dunn": {
+    "narrative": "I am headman of Thornby, and the weight of forty baskets of grain sits on me every time I load fish for Brackenford. The sea has been good to us but not good enough to pay that ledger and keep the village fed. My brother drowned below Edda's light, and I will not pretend otherwise. Perrin is a good lad and will do as he likes about Inga; I have heard the talk and I wave it off.",
+    "values": [
+      "family",
+      "the village's good name",
+      "paying what we owe",
+      "the sea's honesty"
+    ],
+    "goals": [
+      "pay down the grain debt without starving Thornby",
+      "see Edda Wray answer for my brother's boat",
+      "keep Perrin and Inga's courtship from becoming village business",
+      "get the marks Aldwyn Bexley owes me"
+    ],
+    "mood": "weary, proud, quietly angry",
+    "traits": {
+      "caution": 55,
+      "sociability": 50,
+      "empathy": 45,
+      "curiosity": 35,
+      "ambition": 40,
+      "introspection": 50,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Rona Dunn",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the fire and the tally in her head; I would be lost without her."
+      },
+      {
+        "name": "Perrin Dunn",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "A good fisherman, and he will do as he likes about Inga."
+      },
+      {
+        "name": "Inga Dunn",
+        "trust": 70,
+        "affinity": 65,
+        "label": "niece",
+        "note": "Fond of her; she works hard at the nets and the smoke shed."
+      },
+      {
+        "name": "Hob Dunn",
+        "trust": 60,
+        "affinity": 70,
+        "label": "ward",
+        "note": "A quiet lad; he earns his bread mending nets."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -30,
+        "affinity": -20,
+        "label": "creditor",
+        "note": "The ledger is his, and he will not forget a basket."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": -40,
+        "affinity": -60,
+        "label": "accused",
+        "note": "My brother's boat went on the rocks below her light; she lit it wrong and Thornby knows it."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "tally-keeper",
+        "note": "He keeps the village count; we do not always agree on the numbers."
+      },
+      {
+        "name": "Simon Hollis",
+        "trust": 50,
+        "affinity": 40,
+        "label": "trader",
+        "note": "He brings fish back and news with it; a fair man on the road."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": 70,
+        "affinity": 60,
+        "label": "friend",
+        "note": "A good hunter; his brother's boat went too, and he blames Edda same as me."
+      },
+      {
+        "name": "Aldwyn Bexley",
+        "trust": 40,
+        "affinity": 35,
+        "label": "debtor",
+        "note": "He owes me for timber; I told him plainly the debt is due at market."
+      },
+      {
+        "name": "Sedge Gannet",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A quiet man with a sharp eye; his near wreck hardened the talk against Edda."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 65,
+        "affinity": 60,
+        "label": "fish runner",
+        "note": "She carries our fish to Brackenford and hates the gate-due as much as I do."
+      },
+      {
+        "name": "Colm Wray",
+        "trust": 20,
+        "affinity": 15,
+        "label": "the old woman's boy",
+        "note": "He trims the wick up at the light and says nothing; I have not asked him what he has seen."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 35,
+        "affinity": 30,
+        "label": "elder of Elmwick",
+        "note": "He is loud about the Lakemead and was loud about the grain we could not pay; no friend to Thornby."
+      },
+      {
+        "name": "Marra Brine",
+        "trust": 35,
+        "affinity": 40,
+        "label": "sister",
+        "note": "She has not spoken to me since the Lean Year, and I do not know what to say to her now."
+      },
+      {
+        "name": "Nerys Bexley",
+        "trust": 60,
+        "affinity": 55,
+        "label": "debtor's wife",
+        "note": "A quay woman learning the fields; she trades eggs fairly and I would not press her husband in front of her."
+      },
+      {
+        "name": "Pike Tarn",
+        "trust": 55,
+        "affinity": 50,
+        "label": "hunter",
+        "note": "He hunts the cape with Cuthbert and they have quarrelled over the trapping ground; I want it kept quiet."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year came and Brackenford lent us grain; I signed for forty baskets and thought we would pay by the next harvest.",
+        "salience": 0.9,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "They brought my brother up from the rocks below the north light; the boat was in pieces and the light was burning.",
+        "salience": 1.0,
+        "about": [
+          "Edda Wray"
+        ]
+      },
+      {
+        "gist": "Perrin came to me and said he wanted to marry Inga; I thought it a good match until the talk began.",
+        "salience": 0.7,
+        "about": [
+          "Perrin Dunn",
+          "Inga Dunn"
+        ]
+      },
+      {
+        "gist": "Rook Tarn read me the tally and it did not match the ledger; we argued and left it half-settled.",
+        "salience": 0.6,
+        "about": [
+          "Rook Tarn"
+        ]
+      },
+      {
+        "gist": "Aldwyn Bexley took a load of timber on credit for Hob Garrow's barn and swore to pay at the next market.",
+        "salience": 0.5,
+        "about": [
+          "Aldwyn Bexley",
+          "Hob Garrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_the_debt_first",
+        "value": 0.9,
+        "why": "A village that does not pay what it owes has no name worth having."
+      },
+      {
+        "key": "edda_must_answer",
+        "value": 0.8,
+        "why": "My brother drowned below her light and someone must be held to it."
+      },
+      {
+        "key": "keep_the_cape_hunt_quiet",
+        "value": 0.6,
+        "why": "Cuthbert and Pike will have each other's snares if no one speaks; I will not choose between them yet."
+      },
+      {
+        "key": "perrin_will_do_as_he_likes",
+        "value": 0.7,
+        "why": "The talk is talk; he is a grown man and the boat is his to keep."
+      }
+    ],
+    "secret": ""
+  },
+  "Rona Dunn": {
+    "narrative": "I keep the cook-fire and the smoke shed, and the village eats because I do. Osric carries the debt and I carry the worry of it. Inga works beside me and I watch her, because the women at the smoke shed have begun to talk about her and Perrin. I have said nothing to either of them, and I will not until I know my own mind.",
+    "values": [
+      "the common store",
+      "family",
+      "keeping counsel",
+      "a full winter larder"
+    ],
+    "goals": [
+      "smoke enough fish to see Thornby through the winter",
+      "keep the common store from running short",
+      "decide what to say about Perrin and Inga",
+      "trade smoked fish with Simon Hollis for what we lack"
+    ],
+    "mood": "watchful, warm to her own, uneasy underneath",
+    "traits": {
+      "caution": 65,
+      "sociability": 55,
+      "empathy": 70,
+      "curiosity": 30,
+      "ambition": 35,
+      "introspection": 60,
+      "temper": 35,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Osric Dunn",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He carries the debt and I carry him; that is how it has always been."
+      },
+      {
+        "name": "Perrin Dunn",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "A good boy; I will not have the village make him ashamed of his choice."
+      },
+      {
+        "name": "Inga Dunn",
+        "trust": 70,
+        "affinity": 65,
+        "label": "niece",
+        "note": "She works hard at the cook-fire; I watch her and say nothing."
+      },
+      {
+        "name": "Hob Dunn",
+        "trust": 65,
+        "affinity": 70,
+        "label": "ward",
+        "note": "He is underfoot at the smoke shed and I would not have him elsewhere."
+      },
+      {
+        "name": "Simon Hollis",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trader",
+        "note": "He brings fish back and takes our smoke; a fair trade and a fair word."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 55,
+        "affinity": 50,
+        "label": "fish-road runner",
+        "note": "She carries our fish to Brackenford and hates the gate-due as much as we do."
+      },
+      {
+        "name": "Mavis Tarn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "herb-wife",
+        "note": "She trades herbs and tends our sick; a good neighbour."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": -20,
+        "affinity": -30,
+        "label": "accused",
+        "note": "Osric blames her and I keep my own counsel; the light is a hard thing to prove."
+      },
+      {
+        "name": "Merrow Stave",
+        "trust": 70,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "We trade seeds and she keeps her plots well."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year came and I stretched the common store with roots and smoked fish until the grain came from Brackenford.",
+        "salience": 0.9,
+        "about": [
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "Inga came to work beside me at the cook-fire and the smoke shed; she has quick hands and a quiet way.",
+        "salience": 0.6,
+        "about": [
+          "Inga Dunn"
+        ]
+      },
+      {
+        "gist": "The women at the smoke shed began to talk about Perrin and Inga being cousins, and I heard them and said nothing.",
+        "salience": 0.7,
+        "about": [
+          "Perrin Dunn",
+          "Inga Dunn"
+        ]
+      },
+      {
+        "gist": "Simon Hollis came up the shore with a load of Brackenford goods and took our smoked fish back; we settled fair.",
+        "salience": 0.5,
+        "about": [
+          "Simon Hollis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_the_village_first",
+        "value": 0.9,
+        "why": "The common store is the village's life and I keep it."
+      },
+      {
+        "key": "keep_counsel_on_the_match",
+        "value": 0.7,
+        "why": "The talk is the women's, not mine to spread; I will speak when I know my mind."
+      },
+      {
+        "key": "pay_the_debt_with_fish",
+        "value": 0.8,
+        "why": "We cannot pay in grain we do not have; smoked fish is what we can give."
+      },
+      {
+        "key": "watch_edda_but_do_not_judge",
+        "value": 0.5,
+        "why": "Osric is sure and I am not; a light is a hard thing to prove wrong."
+      }
+    ],
+    "secret": "I have heard the women say Inga is too close kin for Perrin, and part of me wonders if they are right."
+  },
+  "Perrin Dunn": {
+    "narrative": "I fish the north shore with my father and keep the boat, and I mean to marry Inga and take her out on the water with me. I do not see what the talk is about; she is the best hand with a net in Thornby. I owe Simon Hollis for a net and I will pay him when the catch is good. The debt to Brackenford is my father's worry, but it is mine too.",
+    "values": [
+      "Inga",
+      "the boat",
+      "an honest catch",
+      "paying what he owes"
+    ],
+    "goals": [
+      "marry Inga and keep the boat with her",
+      "pay Simon Hollis for the net",
+      "bring in a catch good enough to help the debt",
+      "keep clear of the talk about him and Inga"
+    ],
+    "mood": "eager, happy, a little puzzled by the village",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Osric Dunn",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He taught me the shore and the boat; I would not shame him."
+      },
+      {
+        "name": "Rona Dunn",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She keeps the fire and the smoke; she watches Inga and me and says nothing."
+      },
+      {
+        "name": "Inga Dunn",
+        "trust": 85,
+        "affinity": 90,
+        "label": "courting",
+        "note": "She is the best hand with a net in Thornby and I mean to marry her."
+      },
+      {
+        "name": "Hob Dunn",
+        "trust": 60,
+        "affinity": 60,
+        "label": "cousin",
+        "note": "He mends nets on the shingle and I let him come out when the sea is kind."
+      },
+      {
+        "name": "Simon Hollis",
+        "trust": 50,
+        "affinity": 45,
+        "label": "creditor",
+        "note": "I owe him for a net; he is fair and I will pay when the catch is good."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A good hunter; he keeps the cape clear of wolves for all of us."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": -30,
+        "affinity": -40,
+        "label": "accused",
+        "note": "My father blames her for my uncle's boat; I keep my mouth shut about it."
+      },
+      {
+        "name": "Sedge Gannet",
+        "trust": 55,
+        "affinity": 50,
+        "label": "fisher",
+        "note": "A quiet man with a good eye for weather, and he near wrecked last winter."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father took me out on the north shore when I was small and showed me how the tide runs past the cape.",
+        "salience": 0.8,
+        "about": [
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "Inga came down to the shallows with her small boat and we raced the tide in; I knew then I wanted her.",
+        "salience": 0.9,
+        "about": [
+          "Inga Dunn"
+        ]
+      },
+      {
+        "gist": "Simon Hollis left me a net on credit and said to pay when the catch was good; I have not paid yet.",
+        "salience": 0.6,
+        "about": [
+          "Simon Hollis"
+        ]
+      },
+      {
+        "gist": "The village began to talk about Inga and me being cousins by marriage, and I do not see what the talk is about.",
+        "salience": 0.5,
+        "about": [
+          "Inga Dunn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "marry_inga",
+        "value": 0.95,
+        "why": "She is the best hand with a net in Thornby and the boat is ours to keep."
+      },
+      {
+        "key": "pay_what_i_owe",
+        "value": 0.8,
+        "why": "Simon Hollis trusted me with a net and I will not have him think me a bad debtor."
+      },
+      {
+        "key": "the_debt_is_ours_too",
+        "value": 0.7,
+        "why": "My father carries it, but the catch I bring in is Thornby's and the ledger is Thornby's."
+      },
+      {
+        "key": "let_the_talk_be_talk",
+        "value": 0.6,
+        "why": "The village will say what it says; I will not let it turn me from Inga."
+      }
+    ],
+    "secret": ""
+  },
+  "Inga Dunn": {
+    "narrative": "I fish the shallows from my small boat and mend the village nets, and I work beside Rona at the cook-fire. Perrin wants to marry me and I want him, but the women at the smoke shed have begun to talk about us being cousins, and I have not told him what they say. I think Edda Wray should be watched; a light that fails once can fail again. I keep my own counsel and my own boat.",
+    "values": [
+      "Perrin",
+      "her own boat",
+      "the village's good opinion",
+      "keeping her counsel"
+    ],
+    "goals": [
+      "decide what to do about the talk and Perrin",
+      "keep her small boat and her share of the catch",
+      "mend the village nets well enough to be thanked for it",
+      "see that someone watches Edda's light"
+    ],
+    "mood": "warm, watchful, a little stung by the talk",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 65,
+      "temper": 35,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Perrin Dunn",
+        "trust": 80,
+        "affinity": 85,
+        "label": "courting",
+        "note": "He wants me and I want him, and I have not told him what the women say."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 70,
+        "affinity": 65,
+        "label": "uncle",
+        "note": "He is fond of me and has not thought about the match at all, I think."
+      },
+      {
+        "name": "Rona Dunn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "aunt",
+        "note": "She watches me at the cook-fire and says nothing; I do not know what she thinks."
+      },
+      {
+        "name": "Hob Dunn",
+        "trust": 60,
+        "affinity": 65,
+        "label": "cousin",
+        "note": "He is a quiet lad and good with a net; I let him help me mend."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": -25,
+        "affinity": -35,
+        "label": "watched",
+        "note": "A light that fails once can fail again; she should be watched."
+      },
+      {
+        "name": "Mavis Tarn",
+        "trust": 55,
+        "affinity": 50,
+        "label": "herb-wife",
+        "note": "She tends the village sick and trades herbs; a good woman to know."
+      },
+      {
+        "name": "Wren Stave",
+        "trust": 40,
+        "affinity": 45,
+        "label": "neighbour's child",
+        "note": "She follows her father to the cape and is afraid of the light; I do not blame her."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "elder",
+        "note": "He keeps the tally and the nets, and he is fair."
+      },
+      {
+        "name": "Tern Gannet",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She runs the fish road and hates the gate-due, and I do not blame her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My uncle Osric gave me a small boat when I came to the Dunn house, and I have fished the shallows from it since.",
+        "salience": 0.8,
+        "about": [
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "Perrin and I raced the tide in from the shallows and he said he wanted me; I said I wanted him too.",
+        "salience": 0.9,
+        "about": [
+          "Perrin Dunn"
+        ]
+      },
+      {
+        "gist": "The women at the smoke shed began to say Perrin and I are too close kin, and I heard them and said nothing.",
+        "salience": 0.7,
+        "about": [
+          "Perrin Dunn"
+        ]
+      },
+      {
+        "gist": "I mended the village nets through a long afternoon with Hob Dunn handing me the twine.",
+        "salience": 0.5,
+        "about": [
+          "Hob Dunn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "marry_perrin_if_the_talk_dies",
+        "value": 0.8,
+        "why": "I want him, but I will not have the village say I brought shame on the Dunn house."
+      },
+      {
+        "key": "keep_my_own_boat",
+        "value": 0.9,
+        "why": "The shallows are mine and the small boat is mine; I will not be beholden."
+      },
+      {
+        "key": "watch_edda_light",
+        "value": 0.7,
+        "why": "A light that fails once can fail again, and boats go on the rocks below it."
+      },
+      {
+        "key": "mend_nets_well",
+        "value": 0.7,
+        "why": "The village nets are the village's catch, and my hands are good at it."
+      }
+    ],
+    "secret": "I have heard the women say Perrin and I are too close kin, and I have not told him."
+  },
+  "Hob Dunn": {
+    "narrative": "I live in the Dunn house and mend nets on the shingle. Perrin lets me come out in the boat when the sea is kind. I play with Wren Stave when the Stave folk come down the shore. I do not like the dark stair at the light and I do not like the wolves.",
+    "values": [
+      "the Dunn house",
+      "mending nets",
+      "playing on the shingle"
+    ],
+    "goals": [
+      "mend a net clean through without a knot slipping",
+      "go out in the boat with Perrin again",
+      "play with Wren Stave"
+    ],
+    "mood": "quiet, content, a little wary of the dark",
+    "traits": {
+      "caution": 55,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 50,
+      "ambition": 30,
+      "introspection": 40,
+      "temper": 30,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Osric Dunn",
+        "trust": 75,
+        "affinity": 65,
+        "label": "guardian",
+        "note": "He took me in and gives me bread; I mend nets to earn it."
+      },
+      {
+        "name": "Rona Dunn",
+        "trust": 80,
+        "affinity": 75,
+        "label": "guardian",
+        "note": "She keeps the fire and lets me sit by it; she is kind to me."
+      },
+      {
+        "name": "Perrin Dunn",
+        "trust": 75,
+        "affinity": 80,
+        "label": "cousin",
+        "note": "He lets me come out in the boat when the sea is kind."
+      },
+      {
+        "name": "Inga Dunn",
+        "trust": 70,
+        "affinity": 70,
+        "label": "cousin",
+        "note": "She lets me hand her the twine when she mends the nets."
+      },
+      {
+        "name": "Wren Stave",
+        "trust": 60,
+        "affinity": 65,
+        "label": "playmate",
+        "note": "She comes down the shore and we play on the shingle."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Perrin took me out in the boat and I held the rope while he pulled the net in.",
+        "salience": 0.8,
+        "about": [
+          "Perrin Dunn"
+        ]
+      },
+      {
+        "gist": "I sat by Rona's cook-fire and she gave me bread and told me to stay out of the smoke.",
+        "salience": 0.6,
+        "about": [
+          "Rona Dunn"
+        ]
+      },
+      {
+        "gist": "Wren Stave and I played on the shingle until the tide came up.",
+        "salience": 0.7,
+        "about": [
+          "Wren Stave"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

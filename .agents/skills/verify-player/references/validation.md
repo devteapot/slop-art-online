@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-10 mind feedback (Mac)
+
+Branch `feedback-1` (ffb4280) on `feedback-verify-stdb` (3343), island seed, `player-fb1-012517`: `combat.py --scene kill` 2 of 2 (the resident's cause "killed by a stranger", no `acquaintance` row; the chronicle "FbPlayer killed Kelhan") and `--scene death` 3 of 3 ("killed by a wolf", where an earlier run read "killed by Storm the wolf").
+
 ## 2026-11-10 hospitality and the name rule (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
@@ -101,9 +105,28 @@ Findings recorded during the run:
 
 Shared container (v2.14.1), Mac checkout at `b7cf7fb` plus the change removing the hurt/kill mode (docs/COMBAT.md "One damage rule"). `combat.py --fresh` on island worlds: `player-fm-combat` 25 of 25, with the new `kill` scene (a resident at 4.5 of 100 health took a 12.3 strike: outcome "killed Nogar (12)", cause "killed by Tester", chronicle "Tester killed Nogar"); after review fixes to the scene (40% of `max_hp`, a margin for settled health, only hits in the trail), `player-fm-kill2` 25 of 25 (1.8 health, an 11.5 strike). The attacker graph in the block and dodge scenes no longer carries `"item": "kill"`. Both worlds cleaned up.
 
+## 2026-11-10 verbs from the game client (Mac)
+
+Shared container (v2.14.1), Mac checkout at `6de2bad` plus the uncommitted verbs change in `living/game` (docs/GAME_BRIEF.md "Verbs"). Island world `verify-client-verbs-1110-003532`; the real game client headless from a private release build, driven by `drive_verbs.py` ([verbs](../features/verbs.md)). Runs `game2` and `game3` (after the list fixes), each a new character (#295, #296):
+
+| Act (game client path) | Authority's `act` row |
+| --- | --- |
+| goto beside a berry bush | "You did what you had decided: goto → (516,184)." |
+| F list → gather (twice in `game2`) | "You did what you had decided: gather → berry_bush (+1 berries)." |
+| C → eat berries | "You did what you had decided: eat berries." |
+| C → craft spear (after admin `grant_know_how` spear, `grant_items` 4 wood, 1 stone) | "You did what you had decided: craft spear (+1 spear)." |
+| C → craft bow (not offered: archery unknown; sent by the script) | "What you had decided did not work out: craft bow x1: you don't know how to make a bow (archery: …)." |
+| C → write tablet, words "Berries by the arrival road, east side." (after admin `grant_know_how` writing) | "You did what you had decided: write tablet (wrote a tablet)." |
+| F on resident #83 (admin `set_behavior` hold, `place_near`) → give berries | "You did what you had decided: give berries → person (gave 1 berries to a stranger)." |
+| C → sleep | behaviour (an ongoing skill), as before |
+
+Pack `game2`: start arrow 30, berries 4, bow 1; end arrow 30, berries 4 (+2 −1 −1), bow 1, spear 1, tablet 1, wood 1 (4 − 2 − 1), know-how + spear, writing. Photographs of the hint, both lists, the refusal note, the text box and both panels in `game2/shots` and `game3/shots`.
+
+Genericity: scratch authority with a throwaway `polish` (catalog line and `polish_check`/`_duration`/`_done` plus a `skill_io` entry, `throwaway-skill.diff`, never committed) on `verify-client-verbs-gen-1110-004303`; the same client binary (SHA-1 `87fefd9a…`) logged `defined only by the script: ["polish"]`, offered it on a boulder, showed it in K with its takes and gives, and the authority answered "You did what you had decided: polish → boulder (+1 stone)."
+
 ## Not verified
 
-- A real player client; none exists in `living/` yet.
+- The game client's keyboard and mouse themselves: the runs drive its script steps, which call the same code as F, C, I, K and the list's keys.
 - Rate-limited movement input from a player identity. `verify-core` proves it on its steering scene, through the admin identity.
 - Conception and teaching as player acts. They share the `acts::submit` path proven by the gift, but their effects were not driven from a player identity.
 - Whether Claude Code, Codex, Cursor and Mistral Vibe pick up this skill at runtime.

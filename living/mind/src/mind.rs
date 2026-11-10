@@ -31,6 +31,9 @@ mod sleep;
 mod talk;
 mod woken;
 
+/// How much of a remembered thing's salience and confidence is kept after a step failed at it.
+const MISSED_WEAKEN: f64 = 0.5;
+
 pub enum Event {
     /// Speech heard (or unanswered) by one of this service's characters.
     Speech(Experience),
@@ -61,6 +64,8 @@ struct ActorMind {
     retry_after: Option<Instant>,
     /// Parts of the last graph that were invalid and pruned (fed back next time).
     pruned: Vec<String>,
+    /// The last experience read for failures at remembered things (`weaken_missed`).
+    missed_upto: u64,
     /// Integrations since the last reorganization ("sleep") of the mind.
     since_sleep: u32,
     last_sleep: Option<Instant>,
@@ -298,6 +303,25 @@ impl Minds {
         }
     }
 
+    /// The character's needs and health now, from its `vitals` row (needs move linearly between
+    /// writes, at the row's rates, as `common::needs` in the authority computes them).
+    pub(crate) fn body_now(&self, actor: u32) -> Option<prompts::Body> {
+        let v = self.conn.db.vitals().id().find(&actor)?;
+        let m = llm::now_ms().saturating_sub(v.at_ms) as f32 / 60_000.0;
+        Some(prompts::Body {
+            hp: (v.hp + v.hp_rate * m).clamp(0.0, v.max_hp),
+            max_hp: v.max_hp,
+            hunger: (v.hunger + v.hunger_rate * m).clamp(0.0, 100.0),
+            energy: (v.energy + v.energy_rate * m).clamp(0.0, 100.0),
+            hp_rate: v.hp_rate,
+        })
+    }
+
+    /// How the character's body feels now, in words; empty when its vitals are not known.
+    pub(crate) fn body_text(&self, actor: u32) -> String {
+        self.body_now(actor).map(prompts::felt_body).unwrap_or_default()
+    }
+
     /// The character's routines as the mind sees them: how each has gone, and its graph.
     fn repertoire_text(&self, actor: u32) -> String {
         let top = self.conn.db.brain().id().find(&actor).and_then(|b| living_rules::graph::parse(&b.graph).ok());
@@ -306,7 +330,7 @@ impl Minds {
         rs.sort_by_key(|r| (!called.contains(&r.name.to_lowercase()), std::cmp::Reverse(r.updated_ms)));
         // What each routine is for, and how that need stands now (so a routine that "succeeds"
         // while its need goes unmet shows as such).
-        let vit = self.conn.db.vitals().id().find(&actor);
+        let vit = self.body_now(actor);
         let serves: Vec<(String, String)> = match top.as_ref().map(|g| &g.root) {
             Some(living_rules::graph::Node::Desires(ds)) => ds
                 .iter()
@@ -472,6 +496,44 @@ impl Minds {
     }
 
     /// This character's experiences in the hot window, oldest first.
+    /// A step or act that failed at a thing named by id (not in sight where the body was, or
+    /// bare) weakens what the mind remembered of it before it next thinks, so recall stops
+    /// presenting it as sure (docs/TRIALS.md, "A phantom map"). Returns the ids whose memories
+    /// were weakened, for the feedback line.
+    async fn weaken_missed(&self, actor: u32) -> Vec<u64> {
+        let Some(store) = &self.store else { return Vec::new() };
+        let from = self.actors.lock().unwrap().entry(actor).or_default().missed_upto;
+        let mut ids: Vec<(u64, u64)> = Vec::new();
+        let mut upto = from;
+        for e in self.experiences(actor).into_iter().filter(|e| e.id > from) {
+            upto = upto.max(e.id);
+            if let Some(id) = (e.kind == "act").then(|| memory::failed_at_thing(&e.text)).flatten() {
+                // A person or animal out of sight has not gone anywhere a memory should doubt:
+                // only things (structures, resources) are weakened. An id shared by a creature
+                // and a thing is left alone.
+                if u32::try_from(id).map_or(false, |c| self.conn.db.character().id().find(&c).is_some()) {
+                    continue;
+                }
+                if !ids.iter().any(|(i, _)| *i == id) {
+                    ids.push((id, e.id));
+                }
+            }
+        }
+        self.actors.lock().unwrap().entry(actor).or_default().missed_upto = upto;
+        let mut weakened = Vec::new();
+        for (id, exp) in ids {
+            match store.weaken(actor, id, MISSED_WEAKEN, &format!("exp:{exp}"), llm::now_ms()).await {
+                Ok(n) if n > 0 => {
+                    log::info!("#{actor}: {n} memories of #{id} weakened (failed at it, experience {exp})");
+                    weakened.push(id);
+                }
+                Ok(_) => {}
+                Err(e) => log::warn!("#{actor}: weakening memories of #{id}: {e:#}"),
+            }
+        }
+        weakened
+    }
+
     fn experiences(&self, actor: u32) -> Vec<Experience> {
         let mut v: Vec<Experience> = self.conn.db.experience().iter().filter(|e| e.observer == actor).collect();
         v.sort_by_key(|e| e.id);
@@ -527,7 +589,8 @@ impl Minds {
             }
             if self.conn.db.persona().id().find(&c.id).is_none() {
                 if self.is_woken(c.id) {
-                    // Its mind is made from the world's facts and its ring (woken.rs, below).
+                    // Its mind is made from its authored sheet or the world's facts, and its ring
+                    // (woken.rs, below).
                     continue;
                 }
                 if let Some(bg) = self.authored(&c) {
@@ -766,6 +829,7 @@ impl Minds {
         if let Some(secret) = self.secret(c.id) {
             identity["secret"] = json!(secret);
         }
+        identity["written_by"] = json!("author");
         if let Some(store) = &self.store {
             let mut patch = memory::Patch::default();
             // Everyone they know of: household, the people they feel something about and the
@@ -775,9 +839,15 @@ impl Minds {
             people.extend(sheet["memories"].as_array().into_iter().flatten().flat_map(|m| m["about"].as_array().into_iter().flatten().filter_map(id_of)));
             people.sort_unstable();
             people.dedup();
+            // Named as this person knows them (`known_as`): someone the author says they know
+            // only by sight stays "a stranger" until they are told the name.
             for id in &people {
-                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.name(*id)), props: Default::default() });
+                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.known_as(c.id, *id)), props: Default::default() });
             }
+            // Everything the sheet installs is the author's (`lived_under = ["authored"]`), apart
+            // from world facts (`world`), what a model writes (`ai`) and what was lived (`instinct`,
+            // `human`).
+            patch.lived_under = Some("authored".into());
             // `sugar_into` bounds a model reply's lists; an authored sheet is taken whole.
             for chunk in relations.chunks(12) {
                 memory::sugar_into(&json!({"relations": chunk}), &mut patch, &[]);
@@ -1368,6 +1438,7 @@ impl Minds {
         let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
         let at = self.attention(actor, Some(&d.scene));
         self.felt.lock().unwrap().insert(actor, (Instant::now(), scene["you"].clone()));
+        let missed = self.weaken_missed(actor).await;
         // What this moment brings to mind (see recall.rs).
         let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 18, 5, "decide").await;
         let (mind, memories) = (recalled.mind, recalled.memories);
@@ -1385,9 +1456,13 @@ impl Minds {
         if !pruned.is_empty() {
             reason.push_str(&format!("\n(Note: parts of your previous graph were invalid and dropped: {})", pruned.join("; ")));
         }
+        for id in &missed {
+            reason.push_str(&format!("\n(You went by what you remembered of #{id}, and it was not there to act on where you were; that memory feels less sure now.)"));
+        }
         let ctx = prompts::Ctx {
             name: &c.name,
             clock: fmt(llm::now_ms()),
+            body: self.body_text(actor),
             persona: self.persona_text(actor),
             relations: self.relations(actor),
             mind,
@@ -1483,6 +1558,8 @@ impl Minds {
                         Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(living_rules::normalize::reply_id).unwrap_or(0) as u32),
                         _ => (String::new(), 0),
                     };
+                    // A format placeholder ("text", "your words") is not something to say aloud.
+                    let say = if living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
                     let acts = acts_of(&v);
                     let t = ThoughtIn {
@@ -1526,6 +1603,8 @@ impl Minds {
                         Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(living_rules::normalize::reply_id).unwrap_or(0) as u32),
                         _ => (String::new(), 0),
                     };
+                    // A format placeholder ("text", "your words") is not something to say aloud.
+                    let say = if living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
                     let plan = v["plan"].as_str().unwrap_or_default().to_string();
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
                     let mut patch = memory::Patch::default();
@@ -1686,6 +1765,17 @@ impl Minds {
     // ---- consolidation ------------------------------------------------------------
 
     async fn consolidate(&self, actor: u32) -> Result<()> {
+        // A woken resident's mind is made first (woken.rs): its identity, from its sheet or the
+        // world's facts, then its ring. A consolidation started meanwhile would be shown no
+        // identity ("(no persona yet)") and write one afresh over the one being installed, so it
+        // waits, as the first deliberation does (the `woken_stage("wait_s")` law).
+        if self.is_woken(actor) {
+            let wait = Duration::from_secs_f64(prompts::woken_laws().wait_s);
+            let started = Instant::now();
+            while self.woken_waiting(actor) && started.elapsed() < wait {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        }
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
         let cursor = self.cursor(actor);
         // A reply that ran too long failed: take fewer experiences at a time until it fits.
@@ -1706,6 +1796,7 @@ impl Minds {
         let ctx = prompts::Ctx {
             name: &c.name,
             clock: fmt(llm::now_ms()),
+            body: String::new(),
             persona: self.persona_text(actor),
             relations: self.relations(actor),
             mind,

@@ -1,0 +1,373 @@
+{
+  "Brannock Sedge": {
+    "narrative": "I've run my cart of salt and dried fish along this shore since I was old enough to push it, and I know every stall-keeper from the tide steps to the far end of the market. The quay buys fish and sells it back to itself twice before noon, and I take my share in the middle of that, honestly enough. Mara Quell's stall fee is due and I'll pay it when the cart comes back full, not before. Bramwell Tallow can have the rope trade; I'll keep the salt.",
+    "values": [
+      "a fair price, paid and taken",
+      "salt keeps longer than promises",
+      "the quay looks after its own"
+    ],
+    "goals": [
+      "clear the stall fee owed to Mara Quell",
+      "keep the salt-fish trade with the Reedmoor reed-cutters steady",
+      "see the seawall built so the lower quay trades again"
+    ],
+    "mood": "brisk, a little put-upon",
+    "traits": {
+      "caution": 55,
+      "sociability": 70,
+      "empathy": 45,
+      "curiosity": 40,
+      "ambition": 60,
+      "introspection": 35,
+      "temper": 50,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Dory Sedge",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She smokes it, I sell it; we've never needed to say which of us is the better trader."
+      },
+      {
+        "name": "Tam Sedge",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "Good lad in the shed, but he won't go near the harbour after dark and I don't push him."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 40,
+        "affinity": 30,
+        "label": "Warden",
+        "note": "She holds the stall fee over me like a net over a fish. I owe it; I'll pay it."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 25,
+        "affinity": 20,
+        "label": "rival",
+        "note": "He'd sell rope to a drowning man and charge him for the knot."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "Her lamp oil and dried fish move well beside mine at the morning stalls."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "Knows the price of everything on the quay, and most of the time she's right."
+      },
+      {
+        "name": "Eadric Sedge",
+        "trust": 55,
+        "affinity": 60,
+        "label": "trade partner",
+        "note": "His reed-bed salt fish fills my cart cheap and never spoils."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 45,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "Patches the lower quay with salvage and swears at the Kettlebridge price. I'd do the same."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "The Reedmoor reed-cutters send salt fish through her; we've done well by it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the surge came, I hauled my cart up the slip and watched the lower quay go under; I lost a season's salt in the water.",
+        "salience": 0.9,
+        "about": [
+          "Dory Sedge",
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "The morning I first took Eadric Sedge's salt fish on the cart and sold the lot before the bells.",
+        "salience": 0.6,
+        "about": [
+          "Eadric Sedge"
+        ]
+      },
+      {
+        "gist": "Bramwell Tallow cornered the rope trade and told me to my face the cart men should stick to fish.",
+        "salience": 0.5,
+        "about": [
+          "Bramwell Tallow"
+        ]
+      },
+      {
+        "gist": "Tam was born in the room over the smoke shed and Dory was back at the stalls inside a week.",
+        "salience": 0.7,
+        "about": [
+          "Dory Sedge",
+          "Tam Sedge"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_what_you_owe",
+        "value": 0.85,
+        "why": "A trader who doesn't pay his stall fee is a trader nobody sells to."
+      },
+      {
+        "key": "seawall_before_stalls",
+        "value": 0.7,
+        "why": "The lower quay went under once; it will go under again, and my cart with it."
+      },
+      {
+        "key": "kettlebridge_stone_too_dear",
+        "value": 0.75,
+        "why": "They send us stone at a price that keeps the wall unbuilt, and call it trade."
+      },
+      {
+        "key": "salt_is_patience",
+        "value": 0.8,
+        "why": "Everything I own keeps because I salt it and wait; that's the whole of my trade."
+      }
+    ],
+    "secret": ""
+  },
+  "Dory Sedge": {
+    "narrative": "I've smoked fish in the shed behind the market for near twenty years, and the morning stalls know my smoke by the smell of it. Brannock carts what I smoke and I keep the shed and the boy and the fire. The cough goes round the poor terrace every winter and I've buried neighbours from it. I'd feed the whole quay if the shed held more.",
+    "values": [
+      "feed people before you count marks",
+      "smoke slow, sell fresh",
+      "the poor terrace is still the quay"
+    ],
+    "goals": [
+      "keep the smoke shed and the morning stall paying",
+      "see the winter cough off the poor terrace",
+      "keep Tam out of the night harbour"
+    ],
+    "mood": "steady, tired, warm",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 75,
+      "curiosity": 35,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 40,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Brannock Sedge",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He carts and haggles; I smoke and keep the fire. It's worked this long."
+      },
+      {
+        "name": "Tam Sedge",
+        "trust": 85,
+        "affinity": 85,
+        "label": "son",
+        "note": "He's a good hand in the shed and I won't have him feared into the dark water."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 70,
+        "affinity": 65,
+        "label": "trade partner",
+        "note": "We trade oil for smoke and worry over the same coughs."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 65,
+        "affinity": 60,
+        "label": "healer",
+        "note": "When the cough takes the terrace, she's the one I send for."
+      },
+      {
+        "name": "Mira Sallow",
+        "trust": 60,
+        "affinity": 60,
+        "label": "healer",
+        "note": "Her herbs and salves have kept more than one shed family through a winter."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 45,
+        "affinity": 40,
+        "label": "Warden",
+        "note": "She wants the wall; I want the poor terrace fed. Both can be true."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "Her noodle stall buys my smoked fish and never once haggled me down."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "Sharp on price, but she'll lend you her apron if yours is burning."
+      },
+      {
+        "name": "Tam Sedge's friend Dory Gull",
+        "trust": 60,
+        "affinity": 55,
+        "label": "child's friend",
+        "note": "She's a good child and Tam plays with her; I keep an eye on them both by the water."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The surge took the shed roof and half the smoke racks; I rebuilt the racks from salvage before the fish rotted.",
+        "salience": 0.9,
+        "about": [
+          "Brannock Sedge",
+          "Tam Sedge"
+        ]
+      },
+      {
+        "gist": "Tam was small when the cough went round the terrace, and I sat up nights with the neighbours' children as well as my own.",
+        "salience": 0.7,
+        "about": [
+          "Tam Sedge",
+          "Maren Vane"
+        ]
+      },
+      {
+        "gist": "The first morning my smoked fish sold out at the stall before the sun was over the masts.",
+        "salience": 0.5,
+        "about": [
+          "Brannock Sedge"
+        ]
+      },
+      {
+        "gist": "Nia Brine and I split a barrel of lamp oil when neither of us had the marks for a whole one.",
+        "salience": 0.5,
+        "about": [
+          "Nia Brine"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_the_terrace_first",
+        "value": 0.8,
+        "why": "I've seen what an empty pot does to a house, and the seawall won't fill it."
+      },
+      {
+        "key": "smoke_slow_never_cheat",
+        "value": 0.85,
+        "why": "My name is on every fish I sell at the morning stalls."
+      },
+      {
+        "key": "the_cough_is_the_real_enemy",
+        "value": 0.7,
+        "why": "Wolves and stone prices don't kill half so many on this quay as the winter cough."
+      },
+      {
+        "key": "keep_the_boy_from_the_night_water",
+        "value": 0.75,
+        "why": "The harbour at night took my uncle and I'll not have it take Tam."
+      }
+    ],
+    "secret": ""
+  },
+  "Tam Sedge": {
+    "narrative": "I help Mam in the smoke shed, turning the racks and keeping the fire low, and I know the smell of fish smoke better than I know my letters. Da lets me ride the cart sometimes when it goes no further than the morning stalls. I don't like the harbour when it's dark; the water makes noises like breathing. Dory Gull and me play under the stalls where the lamps don't reach.",
+    "values": [
+      "help Mam in the shed",
+      "the lamps and the stalls",
+      "Dory Gull"
+    ],
+    "goals": [
+      "be trusted with the whole smoke rack",
+      "not go down to the harbour at night"
+    ],
+    "mood": "watchful, pleased with himself",
+    "traits": {
+      "caution": 65,
+      "sociability": 55,
+      "empathy": 55,
+      "curiosity": 60,
+      "ambition": 40,
+      "introspection": 40,
+      "temper": 35,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Dory Sedge",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She lets me keep the fire low and says I've a good hand for it."
+      },
+      {
+        "name": "Brannock Sedge",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He lets me ride the cart when it's only the morning stalls."
+      },
+      {
+        "name": "Dory Gull",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "We play under the stalls where the lamps don't reach."
+      },
+      {
+        "name": "Sable Harrow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "stallkeeper",
+        "note": "She gave me a mark to carry a crate and didn't say what was in it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the water came over the lower quay, Da carried me up the slip and Mam's shed roof came off.",
+        "salience": 0.8,
+        "about": [
+          "Brannock Sedge",
+          "Dory Sedge"
+        ]
+      },
+      {
+        "gist": "The first time Mam let me turn the racks by myself and the fish came out brown and sweet.",
+        "salience": 0.6,
+        "about": [
+          "Dory Sedge"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_dark_water_is_not_for_me",
+        "value": 0.75,
+        "why": "It makes noises like breathing and I stay up by the lamps."
+      },
+      {
+        "key": "keep_mams_fire_low",
+        "value": 0.8,
+        "why": "She says a low fire smokes sweet, and she's never wrong about fish."
+      }
+    ],
+    "secret": ""
+  }
+}

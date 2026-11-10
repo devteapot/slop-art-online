@@ -122,7 +122,12 @@ def run_case(run, case):
         other = run.sql("SELECT id FROM character WHERE name = 'MindsReceiver'", 'receiver')[0]['id']
         run.admin('place_near', actor, other)
         run.admin('grant_items', actor, 'stone', 3)
-        act_reply = basic_reply(acts=[
+        # A thing the scene lists by id is a target like a creature (feedback-1): a gather aimed
+        # at a resource id in sight goes ahead instead of "no #N in sight".
+        me = run.private(f'SELECT * FROM body WHERE id = {actor}', 'actor-body')[0]
+        near = run.sql(f"SELECT * FROM resource_node WHERE x > {me['x'] - 6} AND x < {me['x'] + 6} AND y > {me['y'] - 6} AND y < {me['y'] + 6}", 'resources-near')
+        rid = min(near, key=lambda n: (n['x'] - me['x']) ** 2 + (n['y'] - me['y']) ** 2)['id'] if near else None
+        act_reply = basic_reply(acts=([{'do': 'gather', 'target': {'id': rid}}] if rid else []) + [
             {'do': 'give', 'target': {'id': other}, 'item': 'stone', 'qty': 1},
             {'do': 'offer', 'target': {'id': other}, 'item': 'stone', 'qty': 1, 'want': 'wood', 'want_qty': 1},
             {'do': 'give', 'target': {'id': other}, 'item': 'verify_absent_item', 'qty': 1}])
@@ -190,6 +195,10 @@ def run_case(run, case):
         assert json.loads(thought['detail'])['reply']['say'] == 'verify minds round trip speech'
         assert thought['model'] == 'fake-minds' and thought['tokens'] == 34 and thought['reference']
         assert {e['purpose'] for e in run.exchanges()} >= {'think', 'deliberate'}
+        # The body as felt, from the vitals the service subscribes to (owner path): in words, no numbers.
+        sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+        felt = [m.split('How your body feels: ', 1)[1].split('\n', 1)[0] for e in sent for m in [json.dumps(e, ensure_ascii=False).replace('\\n', '\n')] if 'How your body feels: ' in m]
+        assert felt and not any(ch.isdigit() for ch in felt[0]), felt[:2]
     elif case == 'acts':
         run.wait(lambda: any(i['item'] == 'stone' and i['qty'] == 1 for i in run.sql(
             f'SELECT * FROM inventory WHERE owner = {other}', 'receiver-inventory-after')), 'give effect')
@@ -198,6 +207,13 @@ def run_case(run, case):
         run.wait(lambda: any('verify_absent_item' in e['text'] and 'could not act' in e['text']
                 for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'act-experiences')),
                 'act failure feedback')
+        if rid:
+            told = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'id-target-experiences')
+                                     if 'decided: gather' in e['text'] or 'did not work out: gather' in e['text'] or f'#{rid}' in e['text']],
+                              'outcome of the act at a resource id', 90)
+            # A resolved target is labelled by its kind ("gather → boulder (+1 stone)").
+            assert not any(f'no #{rid} in sight' in e['text'] for e in told), [e['text'] for e in told]
+            assert any('You did what you had decided: gather' in e['text'] for e in told), [e['text'] for e in told]
     elif case == 'prune':
         assert all('teleport' not in r['graph'] for r in routines)
         assert 'teleport' not in brain['graph']

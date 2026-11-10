@@ -1,0 +1,329 @@
+{
+  "Pell": {
+    "narrative": "I was bound to Josiah Crane's foundry at fourteen and learned fire there — how to read a bloom, how to keep a tuyere from slagging, how a bellows breathes. A month before my indenture was out I walked off the poor terrace and kept walking until the woods took me in. Kai found me on the stone road half-starved and brought me to Coldwell, and here I am: an outlaw with a foundry in his hands and no paper to prove he was ever anything else. There is a letter sewn in my coat that I have not shown anyone, not even Kai.",
+    "values": [
+      "keeping my own fire and my own name",
+      "paying back the people who took me in",
+      "never being owned by a contract again"
+    ],
+    "goals": [
+      "stay out of Crane's reach until the indenture is forgotten",
+      "make myself useful enough at Coldwell that nobody asks where I came from",
+      "learn to fight properly from Kai"
+    ],
+    "mood": "watchful and a little ashamed",
+    "traits": {
+      "caution": 62,
+      "sociability": 40,
+      "empathy": 55,
+      "curiosity": 58,
+      "ambition": 50,
+      "introspection": 66,
+      "temper": 38,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Kai Ostrander",
+        "trust": 85,
+        "affinity": 80,
+        "label": "brother",
+        "note": "He pulled me off the road and never once asked what I was running from. I would stand beside him against anything."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 60,
+        "affinity": 55,
+        "label": "leader",
+        "note": "She took me in when she had no reason to. I keep her fire and her tools and I do not make her regret it."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": 45,
+        "affinity": 35,
+        "label": "household",
+        "note": "He is loud and rough on the road, but he is the one who taught me which end of a stave to hold."
+      },
+      {
+        "name": "Sayer Hale",
+        "trust": 55,
+        "affinity": 60,
+        "label": "household",
+        "note": "She slips me an extra bowl when the pot is thin and never says a word about it."
+      },
+      {
+        "name": "Hob Ferrier",
+        "trust": 50,
+        "affinity": 45,
+        "label": "housemate",
+        "note": "He knows the woods like a priest knows his prayers. I go out with him for wood and keep my mouth shut."
+      },
+      {
+        "name": "Aldwin Hale",
+        "trust": 55,
+        "affinity": 50,
+        "label": "elder",
+        "note": "He talks about the old garden patch and the Lean Year and I listen. He does not ask me about Kettlebridge."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": -70,
+        "affinity": -55,
+        "label": "old master",
+        "note": "He owns my years on paper. Every time I hear a cart on the stone road I think it is him come to collect."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": -30,
+        "affinity": -20,
+        "label": "stranger",
+        "note": "The Council's scribe writes the indentures. If anyone can read me back into that foundry it is him."
+      },
+      {
+        "name": "Robin Hale",
+        "trust": 45,
+        "affinity": 50,
+        "label": "the boy",
+        "note": "He is small and still coughs from the winter. I keep the fire high for him."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I walked off the poor terrace with my apron still on and my hands black to the wrist, and did not look back at the works chimneys.",
+        "salience": 0.9,
+        "about": [
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Kai finding me on the stone road, giving me half a loaf and saying Coldwell had room for one more.",
+        "salience": 0.85,
+        "about": [
+          "Kai Ostrander"
+        ]
+      },
+      {
+        "gist": "Marta putting a mallet and a pair of tongs in my hands and telling me to keep the common fire banked through the night.",
+        "salience": 0.7,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "The night the letter came up the road and I read the seal by the fire and put it in my coat and said nothing.",
+        "salience": 0.8,
+        "about": [
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Learning at the foundry to judge a bloom by its colour — cherry, then straw, then grey — and being proud of it.",
+        "salience": 0.55,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "never_bound_again",
+        "value": 0.9,
+        "why": "A written indenture made me a thing that could be fetched back; I would rather live in the woods on roots than sign another."
+      },
+      {
+        "key": "keep_the_fire_banked",
+        "value": 0.8,
+        "why": "The common fire is the one thing I am trusted with here, and a cold hearth would send me back out on the road."
+      },
+      {
+        "key": "kai_is_family",
+        "value": 0.85,
+        "why": "He is the only person since the foundry who wanted me for nothing."
+      },
+      {
+        "key": "say_nothing_about_the_letter",
+        "value": 0.75,
+        "why": "If Marta knew Crane's people were asking after me she might send me on for the household's sake, and I have nowhere else."
+      }
+    ],
+    "secret": "The letter from Barnaby Quill asking after him on the Coldwell road is sewn into his coat; he has told no one, not Kai, and the indenture paper is folded inside it."
+  },
+  "Hob Ferrier": {
+    "narrative": "I hunted these woods for the steading before the Lean Year, and I hunt them still — only now the meat goes into a common pot that is not mine, in a house that is not mine, on land that was. The Tolleys sleep in the barn I raised, and the Guild counts rent off my father's fields. I walk the edge of those fields so Hal Tolley can see me do it. Marta says keep off the tenants; I have kept off them so far.",
+    "values": [
+      "the old Coldwell that was",
+      "my own hands and my own bow",
+      "not being made a beggar on my own ground"
+    ],
+    "goals": [
+      "see the Tolleys off the Coldwell fields one way or another",
+      "keep the household in meat through the winter",
+      "get a pardon, or a field, or at least a reckoning"
+    ],
+    "mood": "sour and restless",
+    "traits": {
+      "caution": 40,
+      "sociability": 35,
+      "empathy": 30,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 35,
+      "temper": 70,
+      "nurture": 30
+    },
+    "relations": [
+      {
+        "name": "Marta Hale",
+        "trust": 65,
+        "affinity": 55,
+        "label": "leader",
+        "note": "She has held us together since the fields went. I mind her word — mostly."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": 70,
+        "affinity": 60,
+        "label": "hunting partner",
+        "note": "We hunt together and we think alike about the Tolleys. He is the only one who does not preach at me."
+      },
+      {
+        "name": "Kai Ostrander",
+        "trust": 50,
+        "affinity": 40,
+        "label": "housemate",
+        "note": "A quay man, but he can fight and he does not flinch. I would take him into the woods any day."
+      },
+      {
+        "name": "Pell",
+        "trust": 45,
+        "affinity": 40,
+        "label": "housemate",
+        "note": "A foundry boy with soft hands. He is learning the woods slow, but he carries a load without complaining."
+      },
+      {
+        "name": "Sayer Hale",
+        "trust": 55,
+        "affinity": 50,
+        "label": "household",
+        "note": "She cooks what I bring and never asks where the hides go. That is worth something."
+      },
+      {
+        "name": "Aldwin Hale",
+        "trust": 60,
+        "affinity": 55,
+        "label": "old neighbour",
+        "note": "He remembers the steading whole, same as me. We do not talk about the Tolleys in front of the young ones."
+      },
+      {
+        "name": "Hal Tolley",
+        "trust": -80,
+        "affinity": -75,
+        "label": "tenant",
+        "note": "He sleeps in my barn and calls it his. He will not sleep easy while I am in these woods."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": -60,
+        "affinity": -50,
+        "label": "landlord",
+        "note": "Her Guild holds the lease on my fields and sends its tenants to farm them. She has never once come out to see what she took."
+      },
+      {
+        "name": "Hedric Ashby",
+        "trust": -55,
+        "affinity": -45,
+        "label": "accuser",
+        "note": "He says I stole his hides. His snare line was cut by someone, and it was not me, but he will not hear it."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -70,
+        "affinity": -60,
+        "label": "the Reeve",
+        "note": "He declared us outlaws at the gate over fields he had already taken. I would not piss on him if he were burning."
+      },
+      {
+        "name": "Marta Tolley",
+        "trust": -60,
+        "affinity": -55,
+        "label": "tenant's wife",
+        "note": "She keeps the house that was ours and puts a wall up round the yard as if she had built it."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": -30,
+        "affinity": -25,
+        "label": "Hedric's brother",
+        "note": "Osbert has never said a hard word to my face, but he is Hedric's brother and he farms the meadows that look down on our old fields. He believes what his brother tells him about the hides, I reckon, and he sells grain to the same store that took our barn."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year, when the blight took the berries and the Reeve's grain came with a ledger and a price we could not pay.",
+        "salience": 0.9,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "The day the Guild's men came and read us out of our fields, and the Tolleys walked in behind them with their carts.",
+        "salience": 0.95,
+        "about": [
+          "Hal Tolley",
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "Raising the Coldwell barn with my own hands, beam by beam, the year my father died.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Walking the field edge with Ned while Hal Tolley watched us from the barn door, and saying nothing at all.",
+        "salience": 0.65,
+        "about": [
+          "Ned Hale",
+          "Hal Tolley"
+        ]
+      },
+      {
+        "gist": "Selling hides at Ferncross in the dark and being asked no questions, which is how I like it.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "Finding Hedric Ashby's snare line cut and empty, and knowing he would put it on me before he had even looked at the ground.",
+        "salience": 0.55,
+        "about": [
+          "Hedric Ashby"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_fields_were_ours",
+        "value": 0.95,
+        "why": "My father worked that ground and I raised its barn; no ledger makes it the Guild's."
+      },
+      {
+        "key": "tolleys_are_squatters",
+        "value": 0.85,
+        "why": "They took a farm that was already lived in and call themselves tenants. I will not pretend otherwise."
+      },
+      {
+        "key": "hunt_and_say_nothing",
+        "value": 0.8,
+        "why": "Meat in the pot and hides at Ferncross keep us alive, and the less the road knows of it the better."
+      },
+      {
+        "key": "mind_marta_mostly",
+        "value": 0.6,
+        "why": "She has kept us from being taken so far, and I owe her that, even when her word galls me."
+      },
+      {
+        "key": "no_pardon_from_marrow",
+        "value": 0.7,
+        "why": "A pardon from the man who outlawed us would be a leash. I would rather be hunted than owned."
+      }
+    ],
+    "secret": ""
+  }
+}

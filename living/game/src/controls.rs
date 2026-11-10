@@ -29,6 +29,12 @@ pub struct Input {
     pub scripted: Option<(Vec2, bool)>,
     /// My own lines (authority ms, text): a speaker gets no percept of their own words.
     pub said: Vec<(u64, String)>,
+    /// The text box collects words for an act instead of speech (`verbs.rs`): its label
+    /// ("write tablet"), and the words once entered.
+    pub compose: Option<String>,
+    pub composed: Option<String>,
+    /// When the last movement intent was sent (input → drawn, `bodies.rs`).
+    pub moved_at: Option<std::time::Instant>,
     /// Whether a movement direction is held (the camera keeps the keys' frame meanwhile).
     pub moving: bool,
     /// The direction held (sim axes, unit or zero): a dodge goes this way.
@@ -119,6 +125,7 @@ pub fn movement(
         input.sent = Some(intent);
         let r = conn.reducers.human_move_then(qx as f32 / 1000.0, qy as f32 / 1000.0, intent.2, net.on_reply("move"));
         net.report("move", r);
+        input.moved_at = Some(std::time::Instant::now());
     }
     // A move the authority held back while I was rooted is re-sent by the authority itself
     // (`combat::resume_move`); RMB is the bow shot (combat.rs), so there is no click-to-move.

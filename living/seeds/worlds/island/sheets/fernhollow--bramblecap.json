@@ -1,0 +1,761 @@
+{
+  "Pipwort Bramblecap": {
+    "narrative": "I am the Eldest of Fernhollow, and I keep its memory. My mother knew Hollbrenna when they were both young, and I have not forgotten the kindness of the shelf. But the hollow comes first, and I will not be hurried into naming who follows me. The smoke from Kettlebridge's works has been drifting east, and I can smell it on the wind even now.",
+    "values": [
+      "the hollow's memory",
+      "the Old Green",
+      "fairness in trade",
+      "caution with outsiders"
+    ],
+    "goals": [
+      "settle the matter of the fallen timber for the shelf without starving the hollow's own use",
+      "see the hollow's salve store replenished without open quarrel",
+      "name a successor when the hollow has spoken",
+      "keep the old forest from being cut too close"
+    ],
+    "mood": "weary but watchful",
+    "traits": {
+      "caution": 80,
+      "sociability": 55,
+      "empathy": 70,
+      "curiosity": 60,
+      "ambition": 40,
+      "introspection": 85,
+      "temper": 30,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Sorrel Underbank",
+        "trust": 70,
+        "affinity": 65,
+        "label": "cousin",
+        "note": "She has kept the calendar and the seed store beside me for years; I could not have kept the gardens without her."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 60,
+        "affinity": 50,
+        "label": "daughter",
+        "note": "She is a good cook and a good mother, but she assumes too much about what will pass to her."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 75,
+        "affinity": 70,
+        "label": "daughter-in-law",
+        "note": "Her salves have eased half the hollow's coughs; she is careful and kind."
+      },
+      {
+        "name": "Hazel Bramblecap",
+        "trust": 50,
+        "affinity": 45,
+        "label": "niece",
+        "note": "She keeps the salve store, but I have heard it is running low and I suspect a debt she has not spoken of."
+      },
+      {
+        "name": "Yarrow Underbank",
+        "trust": 65,
+        "affinity": 60,
+        "label": "cousin's son",
+        "note": "He works only fallen wood and builds what the hollow needs; I trust his judgement on the forest."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "He keeps the common store and wants the hollow to trade more with the giants; I am not sure that is wise."
+      },
+      {
+        "name": "Osier Willow",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "He fishes the streams and keeps the weirs; he says the fallen wood should stay for the hollow, and he may be right."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 60,
+        "affinity": 70,
+        "label": "old friend's daughter",
+        "note": "My mother was fond of her mother, and I remember that friendship; but the shelf must not take our wood."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 70,
+        "affinity": 80,
+        "label": "grandson",
+        "note": "He walks the east road and brings back fish and news; he is the future of this family."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "She keeps the beehives and argues with Clover about the seed rows; I wish they would settle it."
+      },
+      {
+        "name": "Sorrel Fenwick",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She fishes the streams and grumbles about the Kettlebridge smoke; she is not wrong to grumble."
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 55,
+        "affinity": 55,
+        "label": "grandson's wife",
+        "note": "She tends the flax patch well and fills Thistle's packs, though she quarrels with Sorrel over the seed rows and wants a garden bigger than the hollow has room for."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 45,
+        "affinity": 55,
+        "label": "giant friend",
+        "note": "She trades seeds with Sorrel and coaxes roots from thin soil on the shelf; my mother's friendship with Hollbrenna's house was like this, quiet and given freely."
+      },
+      {
+        "name": "Sorrel Bramblecap",
+        "trust": 60,
+        "affinity": 55,
+        "label": "niece's husband",
+        "note": "He works the grain patch and the berry rows and grumbles at the giants' track for the timber it takes; a steady man, if a little quick to want more."
+      },
+      {
+        "name": "Sunniva",
+        "trust": 45,
+        "affinity": 50,
+        "label": "giant cook",
+        "note": "She smokes meat and trades it with our pedlars, and she is wary of Tavvik's defiance; I would speak with her again when the shelf and the hollow talk of wood."
+      },
+      {
+        "name": "Tamarisk Bramblecap",
+        "trust": 60,
+        "affinity": 70,
+        "label": "great-niece",
+        "note": "She gathers berries and follows Hazel to the salve shed, and she is afraid of the deep caves; a small quick child, and the hollow's memory will need such hands one day."
+      },
+      {
+        "name": "Yrsa",
+        "trust": 45,
+        "affinity": 55,
+        "label": "giant friend",
+        "note": "She keeps the shelf's goats and trades wool with us for fibre, and she speaks plainly of the winter store; the old friendship of our two houses goes on quietly in her, as it does in Gaudra."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother told me of her friendship with Hollbrenna, and how the giants and small folk helped each other before the Settling.",
+        "salience": 0.9,
+        "about": [
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "The Lean Year came and the hollow's gardens failed; we ate the seed store and borrowed from the Ferncross woodcutters.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "I sat at the root table and the hollow spoke of the cairn cutting; I said we would not trade with Kettlebridge while the giants mourned.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Sorrel and I planted the oldest garden plots together when we were young, and she has kept the calendar ever since.",
+        "salience": 0.6,
+        "about": [
+          "Sorrel Underbank"
+        ]
+      },
+      {
+        "gist": "Mallow was born on a spring morning, and my mother sang the planting songs over her cradle.",
+        "salience": 0.5,
+        "about": [
+          "Mallow Bramblecap"
+        ]
+      },
+      {
+        "gist": "The smoke from Kettlebridge's works drifted east for a week, and the leaves in the gardens began to spot.",
+        "salience": 0.7,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_old_green",
+        "value": 0.9,
+        "why": "The hollow lives by its gardens and its memory, and neither should be spent lightly."
+      },
+      {
+        "key": "no_hasty_succession",
+        "value": 0.8,
+        "why": "The memory should pass to whoever the hollow speaks for, not to a daughter by right."
+      },
+      {
+        "key": "settle_debts_openly",
+        "value": 0.7,
+        "why": "A debt hidden is a rot in the store; better to pay it from the common store than let it fester."
+      },
+      {
+        "key": "distrust_kettlebridge",
+        "value": 0.6,
+        "why": "Their smoke sours our gardens and their contracts are not for the likes of us."
+      },
+      {
+        "key": "help_the_shelf_if_we_can",
+        "value": 0.5,
+        "why": "My mother's friendship with Hollbrenna binds me, but the hollow's wood must come first."
+      }
+    ],
+    "secret": "I have not decided who will keep the memory after me, and I am afraid that naming anyone will split the hollow."
+  },
+  "Sorrel Underbank": {
+    "narrative": "I am the seed-keeper of Fernhollow, and I have kept the oldest garden plots since I was a girl. The calendar is mine to keep, and the planting songs are mine to teach. I do not say who should keep the memory after Pipwort, but I know who has kept the gardens. The smoke from Kettlebridge is spotting the leaves, and I will not sit idle while our harvest is spoiled.",
+    "values": [
+      "the seed store",
+      "the old gardens",
+      "the planting songs",
+      "caution with the town"
+    ],
+    "goals": [
+      "keep the seed store and the calendar safe",
+      "see the hollow send a letter to Kettlebridge's Works Council about the smoke",
+      "teach the children the planting songs",
+      "keep the old forest from being cut too close"
+    ],
+    "mood": "anxious and determined",
+    "traits": {
+      "caution": 75,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 55,
+      "ambition": 50,
+      "introspection": 70,
+      "temper": 45,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 80,
+        "affinity": 75,
+        "label": "cousin",
+        "note": "She has kept the memory and I have kept the seeds; we have worked side by side for years."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 50,
+        "affinity": 40,
+        "label": "cousin's daughter",
+        "note": "She assumes the memory will be hers, but she has not kept the gardens as I have."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "She tends the sick and knows her herbs; we have shared many a remedy."
+      },
+      {
+        "name": "Hazel Bramblecap",
+        "trust": 55,
+        "affinity": 50,
+        "label": "cousin",
+        "note": "She keeps the salve store and walks to Tanglewood for herbs; I hope she has not overreached herself."
+      },
+      {
+        "name": "Yarrow Underbank",
+        "trust": 70,
+        "affinity": 65,
+        "label": "son",
+        "note": "He works only fallen wood and builds what the hollow needs; he is a good son."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 45,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "She argues with Clover about the seed rows, and I wish she would not."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "He keeps the common store and wants more trade with the giants; I am not sure that is wise."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "We trade seeds with the shelf, and she is careful with what she grows."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 65,
+        "affinity": 60,
+        "label": "cousin's grandson",
+        "note": "He walks the east road and brings back news; he is a good lad."
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 40,
+        "affinity": 35,
+        "label": "neighbour",
+        "note": "She argues about the seed rows, and I have not the patience for it."
+      },
+      {
+        "name": "Sorrel Fenwick",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She fishes the streams and grumbles about the smoke; she has a right to."
+      },
+      {
+        "name": "Fennel Underbank",
+        "trust": 75,
+        "affinity": 80,
+        "label": "grandson",
+        "note": "He follows his father about the woodpile and knows the garden paths better than some grown folk; I have taught him the planting songs and he sings them true."
+      },
+      {
+        "name": "Marjoram Underbank",
+        "trust": 70,
+        "affinity": 65,
+        "label": "good-daughter",
+        "note": "She bakes for the common table and keeps the herb garden by the oven; she is a steady woman, and Yarrow chose well."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I planted my first seed row with my mother when I was barely tall enough to reach the soil.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year came and the seed store was nearly empty; I saved what I could and we ate the rest.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "I taught the planting songs to the hollow's children, and they sang them back to me at the last planting.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "The smoke from Kettlebridge drifted east and the leaves in my oldest plots began to spot.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Pipwort and I sat up late to count the seed store and plan the spring planting.",
+        "salience": 0.5,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "I traded seeds with Gaudra of Highshelf when she came down the track, and she gave me a root I had not seen before.",
+        "salience": 0.5,
+        "about": [
+          "Gaudra"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_seed_store",
+        "value": 0.9,
+        "why": "Without the seed store the hollow starves; it is the first duty of the seed-keeper."
+      },
+      {
+        "key": "send_word_to_kettlebridge",
+        "value": 0.8,
+        "why": "The smoke is spotting the leaves and we cannot lose a harvest; the Council should know."
+      },
+      {
+        "key": "memory_follows_the_gardens",
+        "value": 0.7,
+        "why": "The memory should go to whoever keeps the gardens and the calendar, not to a daughter by right."
+      },
+      {
+        "key": "teach_the_children",
+        "value": 0.8,
+        "why": "The planting songs and the calendar must pass to the young ones, or the hollow forgets."
+      },
+      {
+        "key": "guard_the_old_forest",
+        "value": 0.7,
+        "why": "The forest is being cut too close, and the hollow cannot live without it."
+      }
+    ],
+    "secret": "I believe the memory should pass to me, but I will not say so openly for fear of splitting the hollow."
+  },
+  "Mallow Bramblecap": {
+    "narrative": "I am Pipwort's daughter, and I keep the common table and the ovens. The hollow eats at my table, and I have begun to sit at the root table beside my mother. I know the memory will pass to me when she is gone, and I will keep it as she did. Betony is my wife, and Thistle is our son, and they are the heart of my house.",
+    "values": [
+      "the common table",
+      "family",
+      "the hollow's unity",
+      "the old ways"
+    ],
+    "goals": [
+      "keep the common table and the ovens running",
+      "see Thistle settled and happy",
+      "take my place at the root table when the time comes",
+      "keep the hollow from quarrelling over the smoke"
+    ],
+    "mood": "warm but watchful",
+    "traits": {
+      "caution": 60,
+      "sociability": 75,
+      "empathy": 80,
+      "curiosity": 50,
+      "ambition": 65,
+      "introspection": 55,
+      "temper": 40,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She is old and I will miss her, but the memory should pass to me."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 90,
+        "affinity": 90,
+        "label": "wife",
+        "note": "She is my heart and my help; we have raised Thistle together."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 85,
+        "affinity": 85,
+        "label": "son",
+        "note": "He walks the east road and brings back fish and news; I am proud of him."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 50,
+        "affinity": 40,
+        "label": "cousin",
+        "note": "She has kept the gardens, but she is not my mother's daughter."
+      },
+      {
+        "name": "Hazel Bramblecap",
+        "trust": 60,
+        "affinity": 55,
+        "label": "cousin",
+        "note": "She keeps the salve store and walks to Tanglewood; she is family."
+      },
+      {
+        "name": "Yarrow Underbank",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "He builds what the hollow needs and works only fallen wood; he is a good man."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "He keeps the common store and wants more trade; I am not sure."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "She argues about the seed rows, but her honey is good."
+      },
+      {
+        "name": "Nesta Ashdown",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "I trade honey with the Ferncross woodcutters, and she is fair."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 55,
+        "affinity": 50,
+        "label": "old friend's daughter",
+        "note": "My grandmother was fond of her mother; I remember that."
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 70,
+        "affinity": 65,
+        "label": "good-daughter",
+        "note": "She married my Thistle and tends the flax that fills his packs; she wants a bigger garden and I can see why, though the seed rows are Sorrel's to say."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I was born on a spring morning, and my grandmother sang the planting songs over my cradle.",
+        "salience": 0.6,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "I learned to cook at my mother's side, and the common table has been mine for years now.",
+        "salience": 0.7,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "Betony and I were married under the old oak, and the whole hollow came to the feast.",
+        "salience": 0.8,
+        "about": [
+          "Betony Mossfoot"
+        ]
+      },
+      {
+        "gist": "Thistle was born in the winter, and Betony and I named him for the prickly weed that grows by the door.",
+        "salience": 0.9,
+        "about": [
+          "Betony Mossfoot",
+          "Thistle Mossfoot"
+        ]
+      },
+      {
+        "gist": "The Lean Year came and I fed the hollow from the common pot with what little we had.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "I began sitting at the root table beside my mother, and Sorrel looked at me as if I had taken her seat.",
+        "salience": 0.6,
+        "about": [
+          "Pipwort Bramblecap",
+          "Sorrel Underbank"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_the_hollow",
+        "value": 0.9,
+        "why": "The common table is the heart of the hollow; no one goes hungry while I keep it."
+      },
+      {
+        "key": "memory_is_my_right",
+        "value": 0.7,
+        "why": "I am my mother's daughter, and the memory should pass to me as it passed to her."
+      },
+      {
+        "key": "keep_the_family_close",
+        "value": 0.8,
+        "why": "Betony and Thistle are my world, and I will keep them close."
+      },
+      {
+        "key": "avoid_open_quarrel",
+        "value": 0.6,
+        "why": "The hollow cannot afford to split over the smoke or the succession; better to talk than to fight."
+      },
+      {
+        "key": "trade_with_fair_neighbours",
+        "value": 0.7,
+        "why": "The Ferncross woodcutters are fair, and honey for their bread is a good trade."
+      }
+    ],
+    "secret": "I am afraid that my mother will name Sorrel instead of me, and I have begun to sit at the root table to make my claim plain."
+  },
+  "Betony Mossfoot": {
+    "narrative": "I am Mallow's wife and the hollow's healer. I make salves from the old forest's plants and tend the sick of Fernhollow. The smoke from Kettlebridge sours the leaves and the lungs, and I have said so. Hazel owes the Tanglewood healer for herbs, and I have offered to share mine, but she must tell the Eldest before the store runs out.",
+    "values": [
+      "the hollow's health",
+      "the old forest's plants",
+      "honesty in debt",
+      "caution with the town"
+    ],
+    "goals": [
+      "keep the hollow's salve store from running out",
+      "see Hazel settle her debt with the Tanglewood healer",
+      "tend the sick through the winter",
+      "keep the Kettlebridge smoke from spoiling the gardens"
+    ],
+    "mood": "concerned but steady",
+    "traits": {
+      "caution": 70,
+      "sociability": 65,
+      "empathy": 85,
+      "curiosity": 60,
+      "ambition": 45,
+      "introspection": 75,
+      "temper": 35,
+      "nurture": 90
+    },
+    "relations": [
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 90,
+        "affinity": 90,
+        "label": "wife",
+        "note": "She is my heart and my home; we have built a life together."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother-in-law",
+        "note": "She is old and wise, and I respect her, but she must not let the store run dry."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 85,
+        "affinity": 85,
+        "label": "son",
+        "note": "He is a good lad, and I miss him when he is on the road."
+      },
+      {
+        "name": "Hazel Bramblecap",
+        "trust": 60,
+        "affinity": 55,
+        "label": "cousin-in-law",
+        "note": "She owes the Tanglewood healer and has not paid; I have offered my herbs, but she must tell the Eldest."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "She keeps the seed store and the calendar, and she is right about the smoke."
+      },
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "She trades salves and herbs, and she has not sent more until the debt is settled; I understand her."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She keeps the beehives and argues about the seed rows, but her honey is good for coughs."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "He keeps the common store and wants more trade; I am not sure that is wise."
+      },
+      {
+        "name": "Sorrel Fenwick",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She fishes the streams and grumbles about the smoke; she has a right to."
+      },
+      {
+        "name": "Mallow Bramblecap's mother",
+        "trust": 0,
+        "affinity": 0,
+        "label": "stranger",
+        "note": ""
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 70,
+        "affinity": 72,
+        "label": "daughter-in-law",
+        "note": "She tends the fibre patch and argues with Sorrel about the seed rows, but she is a good wife to my son and a good mother to Tansy."
+      },
+      {
+        "name": "Orla Fenwick",
+        "trust": 45,
+        "affinity": 50,
+        "label": "trade acquaintance",
+        "note": "Ysolde's daughter carries the cottage's honey and barley to our stall; she is honest, though her mother's quarrel with the gate is not mine."
+      },
+      {
+        "name": "Tansy Mossfoot",
+        "trust": 90,
+        "affinity": 92,
+        "label": "granddaughter",
+        "note": "She follows me about the salve shed and knows every flower by name; I would keep her from the fevers if I could."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I learned my herbs from my mother, who learned from hers, and I have walked the old forest since I was a child.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "I tended the hollow's children through a fever last winter, and only one was lost.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Mallow and I were married under the old oak, and the whole hollow came to the feast.",
+        "salience": 0.9,
+        "about": [
+          "Mallow Bramblecap"
+        ]
+      },
+      {
+        "gist": "Thistle was born in the winter, and I named him for the prickly weed that grows by the door.",
+        "salience": 0.9,
+        "about": [
+          "Thistle Mossfoot"
+        ]
+      },
+      {
+        "gist": "The smoke from Kettlebridge drifted east and the leaves in the gardens began to spot; I said it would sour the lungs as well.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Hazel came to me for herbs and I gave them, but she has not paid the Tanglewood healer, and I cannot cover for her forever.",
+        "salience": 0.6,
+        "about": [
+          "Hazel Bramblecap",
+          "Ysolde Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "heal_the_hollow",
+        "value": 0.9,
+        "why": "The sick must be tended, and I am the one who knows the herbs."
+      },
+      {
+        "key": "settle_debts_honestly",
+        "value": 0.8,
+        "why": "A debt unpaid is a sickness in the hollow; Hazel must tell the Eldest and pay what she owes."
+      },
+      {
+        "key": "distrust_kettlebridge_smoke",
+        "value": 0.8,
+        "why": "The smoke sours the leaves and the lungs, and I will not have it."
+      },
+      {
+        "key": "share_what_i_have",
+        "value": 0.7,
+        "why": "I have offered my herbs to Hazel, and I will share what I can, but not at the cost of the store."
+      },
+      {
+        "key": "keep_the_old_forest",
+        "value": 0.7,
+        "why": "The plants I use grow in the old forest, and it must not be cut too close."
+      }
+    ],
+    "secret": "I know Hazel's debt is larger than she admits, and I am afraid the hollow's store will run out before the winter is over."
+  }
+}

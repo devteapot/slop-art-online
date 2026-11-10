@@ -1,0 +1,705 @@
+{
+  "Steinar": {
+    "narrative": "I have raised every wall on this shelf twice over, and I keep the cairns on the ridges as my father did. Since the quarrymen cut into Hollbrenna's grandmother's cairn, I have not spared a hand or a stone for anything but the cairns and the walls. Liv has drawn a storehouse in her head and wants it before the frost; it is good work, but it can wait a season. The shelf comes first, and the dead before the living.",
+    "values": [
+      "the shelf's stone",
+      "the cairns",
+      "Hollbrenna's word",
+      "good work",
+      "family"
+    ],
+    "goals": [
+      "keep the cairns on the ridges in repair",
+      "raise the shelf's walls and houses sound",
+      "see Liv's storehouse built when the time is right",
+      "keep the shelf from trading with Kettlebridge until the cairn is answered for"
+    ],
+    "mood": "steady, grave, a little tired",
+    "traits": {
+      "caution": 80,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 55,
+      "introspection": 65,
+      "temper": 35,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Hollbrenna",
+        "trust": 90,
+        "affinity": 80,
+        "label": "old friend",
+        "note": "She has led the shelf well since before my beard; I would not go against her word."
+      },
+      {
+        "name": "Yrsa",
+        "trust": 95,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the goats and the wool and never once complained of the stone dust in the house."
+      },
+      {
+        "name": "Liv",
+        "trust": 85,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She cuts stone as well as any man on the shelf; her storehouse will be built, but not at the cairns' cost."
+      },
+      {
+        "name": "Eirik",
+        "trust": 75,
+        "affinity": 65,
+        "label": "son-in-law",
+        "note": "A good builder and a strong back; he works for me and I pay him in meat and stone-room."
+      },
+      {
+        "name": "Steinarr",
+        "trust": 80,
+        "affinity": 90,
+        "label": "grandson",
+        "note": "He plays among the chips and will learn the trade soon enough."
+      },
+      {
+        "name": "Orrum",
+        "trust": 70,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "Hollbrenna's son cuts stone well; he will be elder after her, and I will serve him as I served her."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": -80,
+        "affinity": -70,
+        "label": "quarryman",
+        "note": "He cut into the cairn and says he did not know; a man who works stone should know what he is cutting."
+      },
+      {
+        "name": "Tavvik",
+        "trust": -50,
+        "affinity": -20,
+        "label": "hunter",
+        "note": "He carries meat down the track against the elder's word; it will bring trouble on the shelf."
+      },
+      {
+        "name": "Vellmund",
+        "trust": 78,
+        "affinity": 72,
+        "label": "neighbour's grandson",
+        "note": "Orrum and Gaudra's boy carries water to my cutters without being asked; he has the patience for stone, and Hollbrenna's blood in him besides."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father set the first stone of the shelf wall with me holding the level; I was younger than Steinarr is now.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "When the cairn was cut, Hollbrenna came down to my yard and we walked the ridge together; she said not one stone more to Kettlebridge, and I agreed.",
+        "salience": 0.9,
+        "about": [
+          "Hollbrenna",
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "I raised the roof of Eirik's and Liv's house with my own hands, and Eirik hauled the beams; he is a good builder.",
+        "salience": 0.6,
+        "about": [
+          "Eirik",
+          "Liv"
+        ]
+      },
+      {
+        "gist": "In the Lean Year the wolves came up the track and I stood the night at the fold with a spear; the shelf lost two goats and no giant.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "Yrsa and I traded wool to a Fernhollow pedlar for fibre last autumn; the small folk are honest in a bargain.",
+        "salience": 0.4,
+        "about": [
+          "Yrsa"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "cairns_before_all",
+        "value": 0.95,
+        "why": "The dead are not to be moved or neglected, least of all after the cutting."
+      },
+      {
+        "key": "no_trade_with_kettlebridge",
+        "value": 0.9,
+        "why": "Hollbrenna forbade it, and the cairn is still cut."
+      },
+      {
+        "key": "liv_storehouse_can_wait",
+        "value": 0.8,
+        "why": "Stone and hands are needed for the cairns and the walls this season."
+      },
+      {
+        "key": "good_work_speaks",
+        "value": 0.7,
+        "why": "A wall that stands is worth more than a hundred words."
+      },
+      {
+        "key": "shelf_first",
+        "value": 0.85,
+        "why": "The shelf feeds us and shelters us; its store and its walls come before any one house."
+      }
+    ],
+    "secret": ""
+  },
+  "Yrsa": {
+    "narrative": "I keep the goats and the wool store, and I spin and mend for the whole shelf. Steinar is out at the cairns or the walls from first light, and I keep the house and the store in order. Liv wants her storehouse, and I would see it too, but not before the shelf's own store is full for winter. I trade wool with the Fernhollow small folk when they come, and I do not ask my husband's leave for it.",
+    "values": [
+      "the shelf's store",
+      "family",
+      "good wool",
+      "the old ways",
+      "winter readiness"
+    ],
+    "goals": [
+      "fill the wool store and the root cellar before winter",
+      "see Liv's storehouse built when the shelf can spare the stone",
+      "keep trade with Fernhollow for fibre",
+      "keep the goats healthy"
+    ],
+    "mood": "busy, warm, a little worried about the winter store",
+    "traits": {
+      "caution": 65,
+      "sociability": 60,
+      "empathy": 75,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 30,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Steinar",
+        "trust": 95,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He is a good man and a fine builder, but he thinks of the cairns before the store."
+      },
+      {
+        "name": "Liv",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She has her father's stubbornness and her own plans; I would see her storehouse raised."
+      },
+      {
+        "name": "Eirik",
+        "trust": 85,
+        "affinity": 75,
+        "label": "son-in-law",
+        "note": "He is a good husband to Liv and a hard worker; he thinks we should trade with Kettlebridge for timber, and I am not sure he is wrong."
+      },
+      {
+        "name": "Steinarr",
+        "trust": 85,
+        "affinity": 90,
+        "label": "grandson",
+        "note": "He is underfoot in the goat pen and I would not have him anywhere else."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 80,
+        "affinity": 70,
+        "label": "elder",
+        "note": "She has been a good elder, but she has not spoken of the shelf's store this winter."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 70,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "She grows what roots she can and we trade seeds; she worries about the winter store as I do."
+      },
+      {
+        "name": "Sunniva",
+        "trust": 75,
+        "affinity": 70,
+        "label": "neighbour",
+        "note": "She cooks for the common table and keeps the meat store; we share what we have."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "The Eldest of Fernhollow is old and wise; her small folk bring fibre and take wool."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I spun the wool for Liv's wedding cloak and Eirik's coat, and we ate at the common table with the whole shelf.",
+        "salience": 0.7,
+        "about": [
+          "Liv",
+          "Eirik"
+        ]
+      },
+      {
+        "gist": "The Lean Year took half the goats; I nursed the rest through the winter in the byre with the last of the hay.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "A Fernhollow pedlar brought fibre up the track last autumn and I traded three fleeces for it; Steinar said nothing, but he did not object.",
+        "salience": 0.5,
+        "about": [
+          "Steinar"
+        ]
+      },
+      {
+        "gist": "When the cairn was cut, Hollbrenna came to the shelf and spoke to us all; I have never seen her so angry.",
+        "salience": 0.6,
+        "about": [
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "Steinarr was born in the house and Steinar held him up to the light before he had even cried.",
+        "salience": 0.9,
+        "about": [
+          "Steinarr",
+          "Steinar"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "winter_store_first",
+        "value": 0.9,
+        "why": "The shelf cannot eat stone; the store must be full before the frost."
+      },
+      {
+        "key": "liv_storehouse_worth_building",
+        "value": 0.7,
+        "why": "A proper storehouse would keep the grain and roots dry; it is good sense."
+      },
+      {
+        "key": "small_folk_trade",
+        "value": 0.7,
+        "why": "The Fernhollow folk are honest and bring fibre we cannot grow on the shelf."
+      },
+      {
+        "key": "cairns_deserve_respect",
+        "value": 0.8,
+        "why": "The dead should be left in peace; the cutting was a wrong."
+      },
+      {
+        "key": "family_before_pride",
+        "value": 0.75,
+        "why": "I would rather trade with Kettlebridge for timber than see Liv's storehouse wait another year, though I would not say so to Hollbrenna."
+      }
+    ],
+    "secret": ""
+  },
+  "Liv": {
+    "narrative": "I cut and dress stone beside my father, and I have drawn a storehouse in my head that would keep the shelf's grain dry through any winter. Father says the cairns must come first, and Eirik says we should trade with Kettlebridge for timber before we build. I say the cairns can wait a season and the storehouse cannot. I will raise it before the frost if I have to quarry the stone myself.",
+    "values": [
+      "good stonework",
+      "the shelf's future",
+      "her own plan",
+      "hard work",
+      "family"
+    ],
+    "goals": [
+      "build a new stone storehouse before winter",
+      "persuade Steinar to spare stone and hands",
+      "get Eirik to speak for timber from Kettlebridge",
+      "cut and dress the stone for the storehouse herself"
+    ],
+    "mood": "determined, impatient, hopeful",
+    "traits": {
+      "caution": 40,
+      "sociability": 55,
+      "empathy": 50,
+      "curiosity": 65,
+      "ambition": 85,
+      "introspection": 45,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Steinar",
+        "trust": 80,
+        "affinity": 65,
+        "label": "father",
+        "note": "He taught me everything I know about stone, but he will not see that the storehouse cannot wait."
+      },
+      {
+        "name": "Yrsa",
+        "trust": 90,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She would see the storehouse built and says so when Father is not listening."
+      },
+      {
+        "name": "Eirik",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He thinks we should trade with Kettlebridge for timber; I would rather cut stone, but I would not stand in his way."
+      },
+      {
+        "name": "Steinarr",
+        "trust": 85,
+        "affinity": 90,
+        "label": "son",
+        "note": "He plays with the stone chips and will be a builder if he wants it."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 60,
+        "affinity": 50,
+        "label": "elder",
+        "note": "She forbade trade with Kettlebridge, and I obey, but the shelf still needs a storehouse."
+      },
+      {
+        "name": "Orrum",
+        "trust": 65,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "He will be elder after his mother; he wants the cairn answered for, and I understand that."
+      },
+      {
+        "name": "Eirik",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He raised our roof and hauls stone from the range; he is a good builder."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 70,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "She grows what food she can and wants a storehouse as much as I do."
+      },
+      {
+        "name": "Steinar",
+        "trust": 80,
+        "affinity": 65,
+        "label": "father",
+        "note": "He is too cautious; the cairns can wait a season."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Father let me dress the corner stones of the new byre when I was fifteen; he said I had a good eye, and I have never forgotten it.",
+        "salience": 0.8,
+        "about": [
+          "Steinar"
+        ]
+      },
+      {
+        "gist": "Eirik and I raised the roof of our house together; he hauled the beams and I set the stone, and we ate at the common table after.",
+        "salience": 0.7,
+        "about": [
+          "Eirik"
+        ]
+      },
+      {
+        "gist": "The cairn cutting: I was on the ridge with Father when we saw the cut stones; Hollbrenna came up and wept, and I have not forgotten it.",
+        "salience": 0.9,
+        "about": [
+          "Steinar",
+          "Hollbrenna",
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "Steinarr was born in the house and Father held him up to the light; he said the shelf had a new builder.",
+        "salience": 0.9,
+        "about": [
+          "Steinarr",
+          "Steinar"
+        ]
+      },
+      {
+        "gist": "Last winter the grain store was damp and we lost half the barley to mould; I swore then that I would build a proper storehouse.",
+        "salience": 0.8,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "storehouse_before_frost",
+        "value": 0.95,
+        "why": "The grain store is damp and we lose food every winter; a stone storehouse would keep it dry."
+      },
+      {
+        "key": "cairns_can_wait_a_season",
+        "value": 0.7,
+        "why": "The dead have waited a year; the living need a store before the frost."
+      },
+      {
+        "key": "stone_not_timber",
+        "value": 0.8,
+        "why": "We are stonecutters; a stone storehouse will outlast any timber from Kettlebridge."
+      },
+      {
+        "key": "obey_the_elder",
+        "value": 0.6,
+        "why": "Hollbrenna's word is the shelf's law, even when I disagree with it."
+      },
+      {
+        "key": "work_speaks",
+        "value": 0.75,
+        "why": "A well-cut stone needs no argument."
+      }
+    ],
+    "secret": ""
+  },
+  "Eirik": {
+    "narrative": "I raise roofs and haul stone from the range with the sledge, and I work for Steinar. Liv wants her storehouse before the frost, and I think she is right that it is needed, but we cannot build it without timber, and the only timber worth having is Kettlebridge's. Hollbrenna has forbidden trade with Kettlebridge, and I have not said to her face that the ban must bend. I will say it when the time comes.",
+    "values": [
+      "good building",
+      "the shelf's needs",
+      "family",
+      "honest work",
+      "a fair trade"
+    ],
+    "goals": [
+      "see the storehouse built with timber from Kettlebridge",
+      "persuade Hollbrenna to bend the ban for timber",
+      "keep working for Steinar and earning his keep",
+      "raise the shelf's roofs sound"
+    ],
+    "mood": "thoughtful, a little uneasy, determined",
+    "traits": {
+      "caution": 55,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 55,
+      "ambition": 60,
+      "introspection": 70,
+      "temper": 40,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Liv",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She has the plan and the will; I have the back and the sledge, and I would see her storehouse raised."
+      },
+      {
+        "name": "Steinar",
+        "trust": 80,
+        "affinity": 70,
+        "label": "father-in-law",
+        "note": "He is a good builder and a fair master, but he will not hear of trading with Kettlebridge."
+      },
+      {
+        "name": "Yrsa",
+        "trust": 85,
+        "affinity": 75,
+        "label": "mother-in-law",
+        "note": "She would see the storehouse built and says so quietly; she does not cross Steinar."
+      },
+      {
+        "name": "Steinarr",
+        "trust": 85,
+        "affinity": 90,
+        "label": "son",
+        "note": "He plays with the stone chips and will be a builder if he wants it."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 60,
+        "affinity": 55,
+        "label": "elder",
+        "note": "She forbade trade with Kettlebridge, and I have not yet said to her that the shelf needs timber."
+      },
+      {
+        "name": "Tavvik",
+        "trust": 50,
+        "affinity": 40,
+        "label": "hunter",
+        "note": "He carries meat down the track against the elder's word; he is wrong to defy her, but he brings back timber, and we need it."
+      },
+      {
+        "name": "Orrum",
+        "trust": 65,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "He wants the cairn answered for; I understand that, but the shelf must live."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 70,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "She grows what food she can and worries about the winter store."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 60,
+        "label": "trading friend",
+        "note": "The small folk's storekeeper walks up with fibre and salves and talks of trading more with the shelf; he would hear my mind on timber, and I would hear his."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I raised the roof of our house with Liv and Steinar; it was the first roof I raised on the shelf, and it has not leaked.",
+        "salience": 0.8,
+        "about": [
+          "Liv",
+          "Steinar"
+        ]
+      },
+      {
+        "gist": "I hauled the sledge down from the range with a load of good stone and Steinar said it was the best stone he had seen in years.",
+        "salience": 0.6,
+        "about": [
+          "Steinar"
+        ]
+      },
+      {
+        "gist": "When the cairn was cut, I was on the ridge with the sledge; I saw the cut stones and said nothing, but I knew it was wrong.",
+        "salience": 0.9,
+        "about": [
+          "Ezra Holt",
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "Steinarr was born in the house and I held him up to the light; he will be a builder if he wants it.",
+        "salience": 0.9,
+        "about": [
+          "Steinarr",
+          "Liv"
+        ]
+      },
+      {
+        "gist": "Last winter the grain store was damp and we lost half the barley; Liv swore she would build a proper storehouse, and I said I would help her.",
+        "salience": 0.8,
+        "about": [
+          "Liv"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "storehouse_needs_timber",
+        "value": 0.9,
+        "why": "A stone storehouse needs a timber roof; the shelf has no trees worth felling."
+      },
+      {
+        "key": "ban_must_bend_for_timber",
+        "value": 0.8,
+        "why": "Hollbrenna's ban was against trade with Kettlebridge, but the shelf needs timber and Kettlebridge needs meat."
+      },
+      {
+        "key": "liv_plan_is_right",
+        "value": 0.85,
+        "why": "She has drawn the plan and the shelf needs it; I will back her."
+      },
+      {
+        "key": "respect_the_elder",
+        "value": 0.6,
+        "why": "Hollbrenna is the elder and her word is law, but I will speak my mind when the time comes."
+      },
+      {
+        "key": "good_work_speaks",
+        "value": 0.7,
+        "why": "A roof that does not leak is worth more than a hundred words."
+      }
+    ],
+    "secret": "He has not told Hollbrenna that he thinks the ban on Kettlebridge trade must bend for timber."
+  },
+  "Steinarr": {
+    "narrative": "The stone chips are warm from the sun and I stack them into walls. Grandfather Steinar lifts me up to see the goats on the shelf, and Father lets me ride the sledge when it is empty. I play with Grimhild and we hide among the stone blocks. I am not allowed to go near the deep caves.",
+    "values": [
+      "playing",
+      "stone chips",
+      "the goats",
+      "family"
+    ],
+    "goals": [
+      "build a wall as high as Grandfather's",
+      "play with Grimhild",
+      "ride the sledge with Father"
+    ],
+    "mood": "curious, happy, a little shy",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 60,
+      "curiosity": 80,
+      "ambition": 50,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Liv",
+        "trust": 90,
+        "affinity": 95,
+        "label": "mother",
+        "note": "She lets me play with the stone chips and shows me how to stack them."
+      },
+      {
+        "name": "Eirik",
+        "trust": 90,
+        "affinity": 90,
+        "label": "father",
+        "note": "He lifts me onto the sledge and lets me ride when it is empty."
+      },
+      {
+        "name": "Steinar",
+        "trust": 85,
+        "affinity": 85,
+        "label": "grandfather",
+        "note": "He lifts me up to see the goats and says I will be a builder."
+      },
+      {
+        "name": "Yrsa",
+        "trust": 85,
+        "affinity": 90,
+        "label": "grandmother",
+        "note": "She gives me warm milk and tells me to stay out of the goat pen."
+      },
+      {
+        "name": "Grimhild",
+        "trust": 70,
+        "affinity": 80,
+        "label": "playmate",
+        "note": "We hide among the stone blocks and she is not afraid of the goats."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Grandfather lifted me up to see the goats on the shelf and I was not afraid.",
+        "salience": 0.7,
+        "about": [
+          "Steinar"
+        ]
+      },
+      {
+        "gist": "I stacked the stone chips into a wall and Mother said it was a good wall.",
+        "salience": 0.6,
+        "about": [
+          "Liv"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

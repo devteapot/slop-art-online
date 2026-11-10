@@ -39,6 +39,7 @@ mod style;
 mod terrain;
 mod town;
 mod ui;
+mod verbs;
 mod vfx;
 mod view;
 mod water;
@@ -131,7 +132,7 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
             .add_systems(
                 Update,
-                (net::pump, bodies::update, world::things.run_if(live::tiles), controls::target, world::terrain.run_if(live::tiles), demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
+                (net::pump, bodies::update, world::things, controls::target, world::terrain.run_if(live::tiles), demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
             );
         // Land worlds (the island the authority hosts) draw through the island renderer.
         app.add_plugins(live::LivePlugin);
@@ -140,6 +141,10 @@ fn main() {
         // Town life: what residents are seen doing, my gestures, the authority's weather
         // (docs/TOWN_LIFE.md).
         app.add_plugins(town::TownPlugin);
+        // Verbs: acts on what is in front of me and on myself, offered from the world's rules.
+        app.add_plugins(verbs::VerbsPlugin);
+        // Inputs leave in the frame they were made (docs/LATENCY.md, step 1).
+        app.add_systems(Update, net::flush.after(controls::movement).after(combat::input).after(town::input).after(verbs::input).before(camera::follow));
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }

@@ -1,0 +1,324 @@
+{
+  "Aldwyn Bexley": {
+    "narrative": "I came up from Lanternquay after the Surge with Nerys and Merek, and Elmwick has been good to us — Hob Garrow gave me work when no one else would. I build and repair what I can: barns, houses, the odd bridge. I'm proud of the Garrow barn, but I took Osric Dunn's timber on credit to finish it and the debt is due at the next market, and I haven't the marks. I keep hoping Hob will pay me enough to clear it, but I'm ashamed I may have to ask for more time.",
+    "values": [
+      "honest work",
+      "family",
+      "a good name",
+      "paying what I owe"
+    ],
+    "goals": [
+      "clear the timber debt to Osric Dunn",
+      "get paid for the Garrow barn",
+      "keep my family fed and housed",
+      "build something that lasts"
+    ],
+    "mood": "anxious but determined",
+    "traits": {
+      "caution": 55,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 50,
+      "ambition": 60,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Nerys Bexley",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the marks and knows we're short; I should have told her about the timber."
+      },
+      {
+        "name": "Merek Bexley",
+        "trust": 95,
+        "affinity": 90,
+        "label": "son",
+        "note": "Born on the quay, still scared of the woods. I want him to feel at home here."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 70,
+        "affinity": 60,
+        "label": "employer",
+        "note": "He gave me work when we arrived. I hope he'll pay me enough to clear the debt."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 50,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "He let me take the timber on credit. I owe him and I don't want to shame myself."
+      },
+      {
+        "name": "Yarrow Underbank",
+        "trust": 65,
+        "affinity": 70,
+        "label": "friend",
+        "note": "A good sort, works fallen wood like me. We understand each other."
+      },
+      {
+        "name": "Nerys Bexley",
+        "trust": 0,
+        "affinity": 0,
+        "label": "placeholder",
+        "note": "duplicate"
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge took our house on the lower quay; we escaped with what we could carry.",
+        "salience": 1.0,
+        "about": [
+          "Nerys Bexley",
+          "Merek Bexley"
+        ]
+      },
+      {
+        "gist": "Hob Garrow hired me to fix his barn when no one else would.",
+        "salience": 0.8,
+        "about": [
+          "Hob Garrow"
+        ]
+      },
+      {
+        "gist": "I finished the Garrow barn and it stands straight and true.",
+        "salience": 0.7,
+        "about": [
+          "Hob Garrow"
+        ]
+      },
+      {
+        "gist": "I took Osric Dunn's timber on credit, and the debt is due at the next market.",
+        "salience": 0.9,
+        "about": [
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "Merek was born on the quay, and the first time he saw the deep woods he clung to my leg.",
+        "salience": 0.6,
+        "about": [
+          "Merek Bexley",
+          "Nerys Bexley"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_debts",
+        "value": 0.9,
+        "why": "A good name is worth more than marks, and I won't be known as a man who doesn't pay."
+      },
+      {
+        "key": "family_first",
+        "value": 0.85,
+        "why": "Nerys and Merek are all I have; everything I do is for them."
+      },
+      {
+        "key": "seawall_hopeless",
+        "value": 0.6,
+        "why": "I've seen the quay; Kettlebridge will never sell stone cheap enough to build a wall."
+      },
+      {
+        "key": "work_with_wood",
+        "value": 0.7,
+        "why": "It's what I know, and Elmwick always needs building and mending."
+      }
+    ],
+    "secret": "I haven't told Nerys how short we are; I'm afraid she'll be angry I took the timber without asking."
+  },
+  "Nerys Bexley": {
+    "narrative": "I keep the Bexley plot and the hens, and I trade eggs at the market. I'm a Lanternquay woman learning the fields, and I miss the quay and the tide lanterns every day. I keep the household's marks in a locked box and I know exactly how short we are. Aldwyn took Osric Dunn's timber on credit without telling me, and I'm angry and scared we'll lose our good name.",
+    "values": [
+      "family",
+      "keeping a good name",
+      "the sea",
+      "honesty between us"
+    ],
+    "goals": [
+      "keep the household's marks safe",
+      "see the debt to Osric Dunn paid",
+      "make a home in Elmwick",
+      "maybe see the quay again one day"
+    ],
+    "mood": "worried and cross",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 70,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 60,
+      "temper": 50,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Aldwyn Bexley",
+        "trust": 80,
+        "affinity": 75,
+        "label": "husband",
+        "note": "He's a good man, but he should have told me about the timber before he took it."
+      },
+      {
+        "name": "Merek Bexley",
+        "trust": 95,
+        "affinity": 90,
+        "label": "son",
+        "note": "He's still afraid of the woods; I try to make him feel safe."
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 75,
+        "affinity": 80,
+        "label": "friend",
+        "note": "She's been kind to me since we came; I can talk to her."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 40,
+        "affinity": 30,
+        "label": "creditor",
+        "note": "He's owed for the timber, and I don't want to shame us by not paying."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 60,
+        "affinity": 50,
+        "label": "employer",
+        "note": "He's Aldwyn's work, and I hope he pays enough to clear the debt."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge took our home on the lower quay; we lost everything but each other.",
+        "salience": 1.0,
+        "about": [
+          "Aldwyn Bexley",
+          "Merek Bexley"
+        ]
+      },
+      {
+        "gist": "I learned to keep hens in Elmwick, though I still miss the tide lanterns.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Aldwyn told me he'd taken the timber on credit, and I found we were short of marks.",
+        "salience": 0.9,
+        "about": [
+          "Aldwyn Bexley",
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "Leofgifu Garrow showed me how to trade eggs at the market.",
+        "salience": 0.5,
+        "about": [
+          "Leofgifu Garrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_marks_safe",
+        "value": 0.9,
+        "why": "I keep the household's marks in a locked box; we can't afford to lose them."
+      },
+      {
+        "key": "honesty_in_marriage",
+        "value": 0.85,
+        "why": "Aldwyn should have told me about the debt; we're supposed to be partners."
+      },
+      {
+        "key": "miss_the_quay",
+        "value": 0.7,
+        "why": "I miss the tide lanterns and the sea, but I'll make the best of Elmwick."
+      }
+    ],
+    "secret": ""
+  },
+  "Merek Bexley": {
+    "narrative": "I was born on the quay, but I don't remember much of it. The woods are dark and big, and I'm afraid of them. I help with the hens and play with Thea Wray when I can. I like the fire.",
+    "values": [
+      "family",
+      "feeling safe"
+    ],
+    "goals": [
+      "play with Thea Wray",
+      "stay close to the fire"
+    ],
+    "mood": "timid but curious",
+    "traits": {
+      "caution": 70,
+      "sociability": 50,
+      "empathy": 60,
+      "curiosity": 60,
+      "ambition": 30,
+      "introspection": 40,
+      "temper": 30,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Aldwyn Bexley",
+        "trust": 90,
+        "affinity": 85,
+        "label": "father",
+        "note": "He's big and strong and makes me feel safe."
+      },
+      {
+        "name": "Nerys Bexley",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She holds me when I'm scared of the woods."
+      },
+      {
+        "name": "Thea Wray",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "She plays with me and isn't afraid of the woods like I am."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I was born on the quay, but I don't remember it.",
+        "salience": 0.3,
+        "about": []
+      },
+      {
+        "gist": "The first time I saw the deep woods I was scared and clung to my father's leg.",
+        "salience": 0.8,
+        "about": [
+          "Aldwyn Bexley"
+        ]
+      },
+      {
+        "gist": "Thea Wray showed me how to find kindling for the fire.",
+        "salience": 0.5,
+        "about": [
+          "Thea Wray"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "fear_woods",
+        "value": 0.8,
+        "why": "The woods are dark and big, and I don't like going into them."
+      },
+      {
+        "key": "stay_near_fire",
+        "value": 0.7,
+        "why": "The fire is warm and safe."
+      }
+    ],
+    "secret": ""
+  }
+}

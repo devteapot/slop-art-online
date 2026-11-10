@@ -6,6 +6,7 @@ Since 2026-11-09 (docs/PERCEPTION.md, "Minds see what their character sees" and 
 
 - A behaviour graph's scene (`nearest`, `sees`, a creature by id) holds only creatures with a clear sight line: a resident whose graph waves at someone it `sees` waves from the open and not from behind rock or a wall (`skill_use`).
 - Witnessed events (`perceive::witnessed`): a fight is an experience (`kind` `fight`) for a minded resident in the open within sight, and for none behind rock or a wall.
+- Noticing structures (`brain.rs` `noticed`, since `feedback-1`): new tiles of one kind and owner that touch (within 1.5 tiles) are one structure, noticed once with its extent ("You notice a gate about 7 by 8 tiles, 6 tiles southwest"), and not at all when part of it was already familiar. Unit test `a_row_of_gate_tiles_is_one_gate` (the island's first gate, 24 tiles); in a real island arrival a newcomer's percepts held 24 gate lines before and 1 after (trials `fbbase`, `fbbr`, docs/MIND_FEEDBACK.md).
 - Percepts name others by the projection's label: "A stranger attacked you", "A stranger said to you" until the observer knows the name (family, community, someone its mind has feelings about, someone who said their name).
 - Unchanged: hearing (speech, signals) and smell (scent) are not sight.
 

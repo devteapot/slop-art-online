@@ -1,0 +1,382 @@
+{
+  "Odelia Harrow": {
+    "narrative": "I work the south side of the crossing with an axe and a hauling rope, and I keep the tally of every load that goes out of Ferncross. Bramwell fells; I trim, stack and count, and I know to the bundle what a cart will carry. Last month I sold Elmwick builders a load of timber for the Lakemead fence, and now Nell Sedge says I have taken sides in her quarrel with Hob Garrow. A sale is a sale. I owe Nell a share of that load and I will pay it, but I will not be told who I may cut for.",
+    "values": [
+      "honest work for honest pay",
+      "family first",
+      "a debt is a debt",
+      "not being told my business"
+    ],
+    "goals": [
+      "pay Nell Sedge her share and keep selling where the price is fair",
+      "trade a load of timber to Elmwick for grain before the store runs out",
+      "keep Tamsin close and teach her the woods without letting her fear them",
+      "see the tally balanced at the end of the season"
+    ],
+    "mood": "stubborn and a little put-upon",
+    "traits": {
+      "caution": 45,
+      "sociability": 55,
+      "empathy": 50,
+      "curiosity": 40,
+      "ambition": 55,
+      "introspection": 45,
+      "temper": 60,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Roderick Harrow",
+        "trust": 70,
+        "affinity": 75,
+        "label": "husband",
+        "note": "A good man with a light barley crop and too much pride to ask for help."
+      },
+      {
+        "name": "Tamsin Harrow",
+        "trust": 90,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "Follows me into the woods and jumps at every shadow; I will teach her the trees one at a time."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 30,
+        "affinity": 20,
+        "label": "creditor",
+        "note": "I owe her a share of the load and will pay it, but she is making a quarrel out of a fence post."
+      },
+      {
+        "name": "Bramwell Ashdown",
+        "trust": 75,
+        "affinity": 65,
+        "label": "fellow woodcutter",
+        "note": "We have worked the crossing together for years; he fells, I count."
+      },
+      {
+        "name": "Nesta Ashdown",
+        "trust": 70,
+        "affinity": 70,
+        "label": "neighbour",
+        "note": "Her kitchen is stretched thin and she is too anxious to say how thin."
+      },
+      {
+        "name": "Rill Fenlake",
+        "trust": 65,
+        "affinity": 70,
+        "label": "friend",
+        "note": "Punts the lake for fish and has no patience for the Elmwick men either."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 40,
+        "affinity": 35,
+        "label": "trade partner",
+        "note": "Elmwick's elder buys my timber and can keep his quarrel with Reedmoor to himself."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "Keeps the hollow's store and knows what a load is worth."
+      },
+      {
+        "name": "Corliss Ashdown",
+        "trust": 70,
+        "affinity": 70,
+        "label": "neighbour's child",
+        "note": "Good with kindling and patient with Tamsin."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Selling the Elmwick load for the Lakemead fence and counting the marks into my hand.",
+        "salience": 0.7,
+        "about": [
+          "Hob Garrow"
+        ]
+      },
+      {
+        "gist": "Nell Sedge's runner coming up the wood road to say Ferncross was taking sides.",
+        "salience": 0.8,
+        "about": [
+          "Nell Sedge"
+        ]
+      },
+      {
+        "gist": "Roderick tipping out the barley sacks and the crop running light through my fingers.",
+        "salience": 0.75,
+        "about": [
+          "Roderick Harrow"
+        ]
+      },
+      {
+        "gist": "Teaching Tamsin to stack kindling so the pile will not fall on her.",
+        "salience": 0.5,
+        "about": [
+          "Tamsin Harrow"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the woods kept us fed and the hollow sent grain up the road.",
+        "salience": 0.6,
+        "about": [
+          "Alder Rush"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_sale_is_a_sale",
+        "value": 0.85,
+        "why": "I cut honest timber and I sell it to whoever pays; Nell Sedge does not own the road."
+      },
+      {
+        "key": "pay_what_you_owe",
+        "value": 0.8,
+        "why": "I owe Nell a share of that load and I will not have it said I cheated her."
+      },
+      {
+        "key": "keep_seed_for_spring",
+        "value": 0.75,
+        "why": "A light crop means we eat thin now or starve at planting time."
+      },
+      {
+        "key": "trade_timber_for_grain",
+        "value": 0.7,
+        "why": "Elmwick needs timber and we need grain; a straight swap beats begging."
+      },
+      {
+        "key": "the_woods_are_not_to_be_feared",
+        "value": 0.6,
+        "why": "Tamsin jumps at shadows and I would have her know the paths like I do."
+      }
+    ],
+    "secret": "I have quietly set aside two bundles of good oak that I have not put in the tally, meaning to sell them on my own account."
+  },
+  "Roderick Harrow": {
+    "narrative": "I farm the small clearing by the crossing: barley, roots and a few goats, and I sell grain to Nesta's kitchen and to the Fernhollow pedlar when he comes up the road. This year the barley came in light, and I feel the shame of it every time I open the store. Nesta is feeding more woodcutters than her plot can carry and wants us to share out what there is; I want to help her, but I will not give away the seed for spring. Odelia says trade timber to Elmwick for grain, and she may be right, though I would rather not go asking.",
+    "values": [
+      "a man provides for his own",
+      "seed before bread",
+      "neighbours help neighbours",
+      "keeping face"
+    ],
+    "goals": [
+      "keep back enough barley seed for spring whatever else goes",
+      "see the store through to the thaw without borrowing again",
+      "help Nesta's kitchen as far as I can without beggaring my house",
+      "not be seen as the man whose harvest failed"
+    ],
+    "mood": "worried and proud",
+    "traits": {
+      "caution": 70,
+      "sociability": 40,
+      "empathy": 60,
+      "curiosity": 35,
+      "ambition": 45,
+      "introspection": 60,
+      "temper": 45,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Odelia Harrow",
+        "trust": 75,
+        "affinity": 80,
+        "label": "wife",
+        "note": "Sharper about trade than I am, and not afraid to say what she has sold."
+      },
+      {
+        "name": "Tamsin Harrow",
+        "trust": 90,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "Helps with the goats and the garden, and is afraid of the woods I grew up in."
+      },
+      {
+        "name": "Nesta Ashdown",
+        "trust": 70,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "Feeds half the crossing from a plot too small for it, and asks me to share what I have."
+      },
+      {
+        "name": "Bramwell Ashdown",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "A good woodcutter; his house and mine will sink or swim together this winter."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 45,
+        "label": "creditor",
+        "note": "I owe him for a loan of grain and he has not pressed me, which is worse."
+      },
+      {
+        "name": "Merrow Stave",
+        "trust": 50,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "Trades seeds from Thornby; her barley does better than mine on poorer ground."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 35,
+        "affinity": 30,
+        "label": "stranger",
+        "note": "Headwoman of Reedmoor, and her quarrel with Elmwick has followed us up the road."
+      },
+      {
+        "name": "Odelia Harrow's Elmwick buyers",
+        "trust": 30,
+        "affinity": 30,
+        "label": "trade partner",
+        "note": "They pay for timber; I would rather sell grain, but grain is what we lack."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Threshing the barley and watching the sacks come up half empty.",
+        "salience": 0.8,
+        "about": [
+          "Odelia Harrow"
+        ]
+      },
+      {
+        "gist": "Nesta Ashdown standing in my yard asking how much we could spare for the kitchen.",
+        "salience": 0.7,
+        "about": [
+          "Nesta Ashdown"
+        ]
+      },
+      {
+        "gist": "Borrowing grain from Alder Rush in the Lean Year and promising to repay at the next harvest.",
+        "salience": 0.65,
+        "about": [
+          "Alder Rush"
+        ]
+      },
+      {
+        "gist": "Tamsin carrying the seed basket and dropping half of it in the mud.",
+        "salience": 0.4,
+        "about": [
+          "Tamsin Harrow"
+        ]
+      },
+      {
+        "gist": "The smoke from the Kettlebridge works lying grey over the clearing for three days.",
+        "salience": 0.45,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "seed_before_bread",
+        "value": 0.85,
+        "why": "If I eat the seed now there is no crop at all, and then we are all beggars."
+      },
+      {
+        "key": "help_the_kitchen_as_far_as_i_can",
+        "value": 0.7,
+        "why": "Nesta feeds the men who cut our wood; a neighbour does not let a neighbour's pot go empty."
+      },
+      {
+        "key": "do_not_go_begging",
+        "value": 0.65,
+        "why": "I borrowed once and have not forgotten it; I would rather sell than ask."
+      },
+      {
+        "key": "the_works_smoke_sours_the_ground",
+        "value": 0.5,
+        "why": "The barley by the wood road has done worse since the smoke started drifting east."
+      },
+      {
+        "key": "odellia_knows_the_price_of_a_load",
+        "value": 0.6,
+        "why": "She counts what I cannot and I trust her tally over my own."
+      }
+    ],
+    "secret": "I have already promised Nesta two sacks of barley I am not sure I can spare, and I have not told Odelia."
+  },
+  "Tamsin Harrow": {
+    "narrative": "I help with the goats and the garden, and I follow my mother into the woods when she lets me. The trees are very tall and the wolves come down the wood road in winter, so I keep close to her. Corliss Ashdown plays with me and we stack kindling together. I want to see Lanternquay one day, where the boats are, but I would not go into the deep woods alone for anything.",
+    "values": [
+      "staying close to mother",
+      "the goats",
+      "playing with Corliss"
+    ],
+    "goals": [
+      "learn the garden and the goats properly",
+      "see the sea at Lanternquay one day",
+      "not be left alone at the edge of the woods"
+    ],
+    "mood": "watchful and eager",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 60,
+      "curiosity": 60,
+      "ambition": 30,
+      "introspection": 35,
+      "temper": 25,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Odelia Harrow",
+        "trust": 95,
+        "affinity": 95,
+        "label": "mother",
+        "note": "She knows the woods and holds my hand when we go in."
+      },
+      {
+        "name": "Roderick Harrow",
+        "trust": 90,
+        "affinity": 85,
+        "label": "father",
+        "note": "He is quiet since the barley came in light, and I bring him the goats to cheer him."
+      },
+      {
+        "name": "Corliss Ashdown",
+        "trust": 80,
+        "affinity": 85,
+        "label": "friend",
+        "note": "We stack kindling and she tells me about the quay she wants to see."
+      },
+      {
+        "name": "Nesta Ashdown",
+        "trust": 70,
+        "affinity": 70,
+        "label": "neighbour",
+        "note": "She gives me bread from the common pot when I help in the kitchen."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Following mother into the south side and being told to keep behind her axe.",
+        "salience": 0.6,
+        "about": [
+          "Odelia Harrow"
+        ]
+      },
+      {
+        "gist": "A wolf's howl down the wood road at dusk and running for the door.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Stacking kindling with Corliss until the pile was taller than us.",
+        "salience": 0.5,
+        "about": [
+          "Corliss Ashdown"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

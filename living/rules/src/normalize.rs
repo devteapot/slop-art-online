@@ -15,6 +15,23 @@ thread_local! {
     static BODY: RefCell<Option<crate::species::Species>> = const { RefCell::new(None) };
 }
 
+/// Words a reply copied from a format example instead of writing (`{"say": "text"}` from the
+/// grammar's own line once made bodies say the word "text" aloud: docs/MODEL_COST.md,
+/// sample `talk-00`).
+pub fn placeholder_words(text: &str) -> bool {
+    let t = text.trim().trim_matches(|c: char| matches!(c, '<' | '>' | '"' | '\'' | '“' | '”' | '.' | '…' | '[' | ']' | '(' | ')') || c.is_whitespace());
+    t.is_empty() || matches!(t.to_lowercase().as_str(), "text" | "words" | "the words" | "your words" | "what you say" | "your words here" | "message")
+}
+
+/// A say node must carry words; a format placeholder is pruned with the reason, like any other
+/// invalid branch, so the next deliberation is told instead of the body speaking it.
+fn spoken(text: &str, path: &str) -> Result<(), String> {
+    if placeholder_words(text) {
+        return Err(format!("{path}.say: {text:?} is the format's placeholder, not words; write the words to say"));
+    }
+    Ok(())
+}
+
 /// Normalize for a particular body: skills it lacks, speech it cannot make and signals
 /// outside its vocabulary are pruned like any other invalid branch.
 pub fn graph_for(v: Value, body: &crate::species::Species) -> Result<(Value, Vec<String>), String> {
@@ -102,6 +119,7 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
                     ),
                     _ => return Err(format!("{path}.say: expected text")),
                 };
+                spoken(&text, path)?;
                 let mut out = json!({"say": {"text": text}});
                 if let Some(to) = to {
                     out["say"]["to"] = target(to, &format!("{path}.say.to"))?;
@@ -313,6 +331,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         "say" | "speak" | "talk" => {
             body_check(path, "say", None)?;
             let text = action.get("text").or_else(|| action.get("message")).and_then(|r| r.as_str()).ok_or_else(|| format!("{path}.do: say needs text"))?;
+            spoken(text, path)?;
             let mut out = json!({"say": {"text": text}});
             if let Some(t) = action.get("to").or_else(|| action.get("target")).cloned() {
                 out["say"]["to"] = target(t, &format!("{path}.say.to"))?;
@@ -763,6 +782,25 @@ mod tests {
         assert!(o.contains("signal howl") && o.contains("attack"), "{o}");
         assert!(crate::species::skills_help(wolf).contains("signal"));
         assert!(!crate::species::skills_help(wolf).contains("build"));
+    }
+
+    #[test]
+    fn placeholder_speech_is_pruned_with_its_reason() {
+        // aske-coast-1792435287, Fen's graph: `{"say": "text", "to": 49}` copied from the grammar
+        // line, and three people heard Fen say “text”.
+        let (g, pruned) = crate::graph::from_value_lenient(json!({"first": [
+            {"if": {"near": {"target": {"id": 49}, "within": 1.5}}, "then": {"seq": [{"say": "text", "to": 49}, {"wait": 2}]}},
+            {"do": "say", "text": "<the words>"},
+            {"say": {"text": "Your words", "to": 3}},
+            {"say": "Mira, Hild, I'm coming with food.", "to": 51},
+            {"do": "wander"}
+        ]}))
+        .unwrap();
+        assert_eq!(pruned.len(), 3, "{pruned:?}");
+        assert!(pruned.iter().all(|p| p.contains("placeholder")), "{pruned:?}");
+        let o = outline(&g.root);
+        assert!(o.contains("Mira, Hild") && !o.contains("\"text\""), "{o}");
+        assert!(!super::placeholder_words("Text me when you are back") && super::placeholder_words(" “text”. "));
     }
 
     #[test]

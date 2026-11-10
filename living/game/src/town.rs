@@ -248,7 +248,7 @@ fn whom(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, ahead: Vec2, p
 
 /// My gesture and appraise keys (and a script's), through `human_act`.
 #[allow(clippy::too_many_arguments)]
-fn input(
+pub fn input(
     net: NonSend<Net>,
     scene: NonSend<Scene>,
     keys: Res<ButtonInput<KeyCode>>,

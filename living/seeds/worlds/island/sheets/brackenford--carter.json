@@ -1,0 +1,457 @@
+{
+  "Herbert Carter": {
+    "narrative": "I farm the Carter fields south of the wall, and I keep a cart. The cart earns as much as the field some years, carrying goods up to the gate for the Guild and for anyone who pays. I pay the gate-due on my own loads like any carter, and it rankles, but the guards keep the wolves off the road and I'd not have it said I dodged. Godric Rowan's strip is next to mine and we've shared a plough-team since we were lads.",
+    "values": [
+      "fair dealing",
+      "a man's word",
+      "keeping the cart in repair",
+      "the fields first"
+    ],
+    "goals": [
+      "get Alfred settled with a cart of his own",
+      "pay off the new cart-wheel before winter",
+      "see the gate-due lowered if it can be done without losing the guards"
+    ],
+    "mood": "steady, a little worn",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 55,
+      "curiosity": 35,
+      "ambition": 45,
+      "introspection": 40,
+      "temper": 35,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Cecily Carter",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the hens and the garden and never once let the household go short."
+      },
+      {
+        "name": "Alfred Carter",
+        "trust": 80,
+        "affinity": 80,
+        "label": "son",
+        "note": "Drives better than I did at his age; I want him on the road with a cart that's his."
+      },
+      {
+        "name": "Edith Carter",
+        "trust": 85,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "My little one; she has the hens eating from her hand."
+      },
+      {
+        "name": "Godric Rowan",
+        "trust": 75,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "We share a plough and a grumble; his strip borders mine."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 55,
+        "affinity": 50,
+        "label": "Guild head",
+        "note": "She hires my cart and pays on time; I'd not cross her."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 40,
+        "affinity": 35,
+        "label": "gate guard",
+        "note": "Takes the due off me at the south gate and counts every basket."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 45,
+        "affinity": 40,
+        "label": "fellow carter",
+        "note": "A Kettlebridge man, but he knows the road and his loads come through honest."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour farmer",
+        "note": "Good grain, fair prices; we've helped each other at harvest."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: blight took the berries and I carted the town store's grain out to the farms, glad of the work and shamed to take pay for it.",
+        "salience": 0.8,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "The day I bought the cart off an old carter at Kettlebridge and drove it home empty, proud as a lord.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Alfred drove the cart alone to the gate for the first time and brought back every mark.",
+        "salience": 0.6,
+        "about": [
+          "Alfred Carter"
+        ]
+      },
+      {
+        "gist": "Paying the raised gate-due on a load of my own grain and hearing Wat Fenner say it was the Reeve's word.",
+        "salience": 0.5,
+        "about": [
+          "Wat Fenner",
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Edith was born in the front room with Joan Hobson attending and Cecily gripping my hand fit to break it.",
+        "salience": 0.7,
+        "about": [
+          "Edith Carter",
+          "Cecily Carter"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_what_is_owed",
+        "value": 0.85,
+        "why": "A carter who dodges the due loses his name on the road."
+      },
+      {
+        "key": "guards_earn_their_pay",
+        "value": 0.6,
+        "why": "Wolves are real on the town road; I've seen what's left of a sheep."
+      },
+      {
+        "key": "the_gate_due_is_too_high",
+        "value": 0.55,
+        "why": "It eats a load's profit and the Guild says it drives trade off."
+      },
+      {
+        "key": "family_before_trade",
+        "value": 0.9,
+        "why": "The fields and the cart are for the children, not the other way round."
+      }
+    ],
+    "secret": ""
+  },
+  "Cecily Carter": {
+    "narrative": "I keep the hens and the vegetable plot, and I sell eggs at the Guild stall in the square most market days. Herbert's cart takes him up and down the road, and I mind the house and the children while he's gone. I've no patience for town quarrels; eggs are eggs and folk must eat.",
+    "values": [
+      "thrift",
+      "good neighbours",
+      "a clean stall",
+      "the children's future"
+    ],
+    "goals": [
+      "keep enough eggs back to set a second clutch",
+      "see Edith learn to read a little with the chapel sisters",
+      "put by a few marks against a bad winter"
+    ],
+    "mood": "brisk and content",
+    "traits": {
+      "caution": 65,
+      "sociability": 65,
+      "empathy": 65,
+      "curiosity": 40,
+      "ambition": 40,
+      "introspection": 45,
+      "temper": 40,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Herbert Carter",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "Steady as the wall; I'd have no other on the cart."
+      },
+      {
+        "name": "Alfred Carter",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "Growing tall and full of the road; I'd keep him closer if I could."
+      },
+      {
+        "name": "Edith Carter",
+        "trust": 85,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "My shadow; she knows every hen by name."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 65,
+        "affinity": 60,
+        "label": "Guild head",
+        "note": "Her stall rents are fair and she's never shorted me for an egg."
+      },
+      {
+        "name": "Juliana Cooper",
+        "trust": 60,
+        "affinity": 65,
+        "label": "stall neighbour",
+        "note": "We mind each other's goods at the square and share the gossip."
+      },
+      {
+        "name": "Mildgyth Grey",
+        "trust": 55,
+        "affinity": 55,
+        "label": "friend",
+        "note": "We've cooked for the guards' mess together when the pot was short."
+      },
+      {
+        "name": "Aldith Weaver",
+        "trust": 45,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "Quiet these days, and the town's talk about her daughter was cruel."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Selling my first eggs at the Guild stall and Mercy Abbot counting them out herself.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when we ate our own hens and I cried over the last one.",
+        "salience": 0.75,
+        "about": [
+          "Herbert Carter"
+        ]
+      },
+      {
+        "gist": "Edith was born and Joan Hobson put her in my arms and said she'd be a worker.",
+        "salience": 0.7,
+        "about": [
+          "Edith Carter"
+        ]
+      },
+      {
+        "gist": "A fox got into the henhouse and Edith sat up all night with the survivors.",
+        "salience": 0.5,
+        "about": [
+          "Edith Carter"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "thrift_keeps_a_house",
+        "value": 0.85,
+        "why": "My mother kept us through worse on less."
+      },
+      {
+        "key": "market_is_for_everyone",
+        "value": 0.7,
+        "why": "The square's charter says anyone in peace; I sell to whoever comes with marks."
+      },
+      {
+        "key": "no_truck_with_outlaws",
+        "value": 0.6,
+        "why": "They stopped a carter on the road and I'll not have Herbert treated so."
+      },
+      {
+        "key": "children_first",
+        "value": 0.9,
+        "why": "Everything I put by is for Alfred and Edith."
+      }
+    ],
+    "secret": ""
+  },
+  "Alfred Carter": {
+    "narrative": "I drive the cart for my father and I want to be a carter on the stone road, like Silas Pike, with my own cart and my own loads. I've watched him come through the south gate with stone from Kettlebridge and I know the road's a hard one, but it's the life I want. For now I help with the ploughing and take the eggs to the square when Mother can't.",
+    "values": [
+      "the road",
+      "earning my own cart",
+      "doing a load right",
+      "my father's trust"
+    ],
+    "goals": [
+      "save enough marks for a cart of my own",
+      "learn the stone road as far as Kettlebridge",
+      "prove to Father I can handle a load alone"
+    ],
+    "mood": "restless and eager",
+    "traits": {
+      "caution": 40,
+      "sociability": 60,
+      "empathy": 50,
+      "curiosity": 65,
+      "ambition": 75,
+      "introspection": 35,
+      "temper": 45,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Herbert Carter",
+        "trust": 85,
+        "affinity": 75,
+        "label": "father",
+        "note": "He taught me the reins and the road; I want to make him proud."
+      },
+      {
+        "name": "Cecily Carter",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She packs my bread and tells me to mind the wolves."
+      },
+      {
+        "name": "Edith Carter",
+        "trust": 80,
+        "affinity": 80,
+        "label": "sister",
+        "note": "I let her ride on the cart when Mother isn't looking."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 60,
+        "affinity": 65,
+        "label": "carter I admire",
+        "note": "He's been robbed twice and still drives the stone road; that's a carter."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 35,
+        "affinity": 30,
+        "label": "gate guard",
+        "note": "He counts our load like we're thieves and takes the due off Father."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 55,
+        "affinity": 60,
+        "label": "friend",
+        "note": "We race along the wall and he knows every guard's name."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time Father let me take the reins through the south gate and back.",
+        "salience": 0.7,
+        "about": [
+          "Herbert Carter"
+        ]
+      },
+      {
+        "gist": "Watching Silas Pike's cart come in loaded with Kettlebridge stone and thinking, that's the trade for me.",
+        "salience": 0.65,
+        "about": [
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the cart sat idle and Father sold a plough to buy grain.",
+        "salience": 0.6,
+        "about": [
+          "Herbert Carter"
+        ]
+      },
+      {
+        "gist": "Edith fell in the ditch by the south field and I carried her home dripping.",
+        "salience": 0.5,
+        "about": [
+          "Edith Carter"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_carter_is_his_word",
+        "value": 0.85,
+        "why": "Silas Pike says if a load's late once, it's late forever in folk's minds."
+      },
+      {
+        "key": "i_will_have_my_own_cart",
+        "value": 0.8,
+        "why": "I'll not plough another man's strip all my life."
+      },
+      {
+        "key": "the_road_is_worth_the_risk",
+        "value": 0.7,
+        "why": "Wolves and outlaws both, but a carter's pay is a carter's pay."
+      },
+      {
+        "key": "learn_from_kettlebridge",
+        "value": 0.55,
+        "why": "Their carters know stone and loads better than anyone here."
+      }
+    ],
+    "secret": ""
+  },
+  "Edith Carter": {
+    "narrative": "I help Mother with the hens and carry the eggs to the square in a basket. I like the hens best, even when they peck. When Alfred drives the cart I run after it to the gate until Mother calls me back.",
+    "values": [
+      "the hens",
+      "Mother",
+      "riding on the cart"
+    ],
+    "goals": [
+      "get the brown hen to let me stroke her",
+      "ride on the cart all the way to the gate"
+    ],
+    "mood": "merry",
+    "traits": {
+      "caution": 50,
+      "sociability": 65,
+      "empathy": 65,
+      "curiosity": 70,
+      "ambition": 30,
+      "introspection": 30,
+      "temper": 35,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Cecily Carter",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She lets me hold the eggs if I'm careful."
+      },
+      {
+        "name": "Herbert Carter",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He lifts me up onto the cart."
+      },
+      {
+        "name": "Alfred Carter",
+        "trust": 85,
+        "affinity": 85,
+        "label": "brother",
+        "note": "He lets me ride when Mother isn't looking."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The brown hen laid an egg in my lap and I wasn't even frightened.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Alfred carried me home from the ditch and I got a honey cake.",
+        "salience": 0.5,
+        "about": [
+          "Alfred Carter"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

@@ -1,0 +1,509 @@
+{
+  "Aldric Marrow": {
+    "narrative": "I am the Reeve of Brackenford, and I have kept this town's ledger for thirty years. The gate-due pays the guards who keep the road clear of wolves and outlaws, and I will not see it dropped for Kettlebridge coin. I took the Coldwell fields for the town store when the Hales could not pay, and I outlawed them when they would not leave. My son Tobin shamed me before Josiah Crane, and Mercy Abbot would sell the town's safety for trade. I am old, and I have not named who comes after me.",
+    "values": [
+      "order",
+      "the town's safety",
+      "the ledger",
+      "family name"
+    ],
+    "goals": [
+      "keep the gate-due",
+      "collect Thornby's debt",
+      "find a successor",
+      "clear the outlaws from the stone road"
+    ],
+    "mood": "weary and stubborn",
+    "traits": {
+      "caution": 70,
+      "sociability": 40,
+      "empathy": 30,
+      "curiosity": 30,
+      "ambition": 60,
+      "introspection": 50,
+      "temper": 60,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Cuth Marrow",
+        "trust": 80,
+        "affinity": 70,
+        "label": "wife",
+        "note": "She keeps a quiet house and tends the sick; I rely on her."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 70,
+        "affinity": 60,
+        "label": "son",
+        "note": "He is my captain, but he shamed me before Crane."
+      },
+      {
+        "name": "Maud Marrow",
+        "trust": 60,
+        "affinity": 50,
+        "label": "daughter",
+        "note": "She keeps the rolls well enough, under my eye."
+      },
+      {
+        "name": "Wenna Marrow",
+        "trust": 40,
+        "affinity": 30,
+        "label": "daughter-in-law",
+        "note": "She cost us the Kettlebridge peace, but she is Tobin's wife."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": -60,
+        "affinity": -50,
+        "label": "rival",
+        "note": "She would sell the town's safety for Kettlebridge coin."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": -20,
+        "affinity": -10,
+        "label": "debtor",
+        "note": "Thornby owes forty baskets and pays slowly in fish."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -80,
+        "affinity": -70,
+        "label": "outlaw",
+        "note": "She and hers will not leave Coldwell; they are thieves."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": -50,
+        "affinity": -40,
+        "label": "rival",
+        "note": "The broken match shamed me before him."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 60,
+        "affinity": 50,
+        "label": "guard",
+        "note": "He collects the due at the south gate and serves under Tobin."
+      },
+      {
+        "name": "Godwin Miller",
+        "trust": 30,
+        "affinity": 20,
+        "label": "tenant",
+        "note": "The mill is leased from the town; if he takes more toll, it is a matter for the ledger."
+      },
+      {
+        "name": "Reginald Hobson",
+        "trust": 40,
+        "affinity": 30,
+        "label": "mason",
+        "note": "The wall account will be settled when the store has the marks."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 50,
+        "affinity": 40,
+        "label": "innkeeper",
+        "note": "He owes me a favour for the licence, and hears everything."
+      },
+      {
+        "name": "Edith Ashby",
+        "trust": 40,
+        "affinity": 30,
+        "label": "neighbour",
+        "note": "Osbert's wife, keeps the dairy; no quarrel with her, but her husband's payment waits on the ledger."
+      },
+      {
+        "name": "Hal Tolley",
+        "trust": 50,
+        "affinity": 40,
+        "label": "tenant",
+        "note": "A steady man on the Coldwell fields, leased through the Guild; he holds what the Hales would not give up."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 50,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "He sold grain on my promise; the store has paid half and will pay the rest when Thornby pays."
+      },
+      {
+        "name": "Roland Ashby",
+        "trust": 20,
+        "affinity": 10,
+        "label": "young farmer",
+        "note": "Osbert's son, ploughs and reaps and wants a strip; no business of mine yet."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 10,
+        "affinity": -10,
+        "label": "carter",
+        "note": "He brings stone and pays the due, but he presses Hobson for marks the store has not settled."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: I lent grain to Thornby and to Coldwell against their next harvests, and took the Coldwell fields when they could not pay.",
+        "salience": 0.9,
+        "about": [
+          "Marta Hale",
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "The broken match: Tobin broke his promise to Hester Crane and married Wenna, and I was shamed before Josiah Crane.",
+        "salience": 0.8,
+        "about": [
+          "Tobin Marrow",
+          "Wenna Marrow"
+        ]
+      },
+      {
+        "gist": "The day I outlawed Marta Hale and her household at the gate.",
+        "salience": 0.7,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Mercy Abbot stood in the square and called the gate-due robbery; I told her it pays the guards.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "I wrote Thornby's debt in the ledger myself, forty baskets, and it has not been cleared.",
+        "salience": 0.5,
+        "about": [
+          "Osric Dunn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "gate_due_essential",
+        "value": 0.9,
+        "why": "It pays the guards who keep the road clear of wolves and outlaws."
+      },
+      {
+        "key": "coldwell_fields_town_property",
+        "value": 0.8,
+        "why": "The Hales could not pay, and the town store took the fields lawfully."
+      },
+      {
+        "key": "mercy_abbot_sells_safety",
+        "value": 0.7,
+        "why": "She would drop the due for Kettlebridge coin and leave the road unguarded."
+      },
+      {
+        "key": "debt_must_be_recorded",
+        "value": 0.8,
+        "why": "The ledger is the town's memory; Thornby's debt is not forgotten."
+      },
+      {
+        "key": "tobin_shamed_us",
+        "value": 0.6,
+        "why": "He broke his promise to Hester Crane and married Wenna."
+      }
+    ],
+    "secret": ""
+  },
+  "Cuth Marrow": {
+    "narrative": "I am Aldric's wife, and I keep a quiet house while he keeps the town. I tend the sick with the chapel sisters, and I have seen more of Brackenford's troubles than my husband knows. The gate-due and the Coldwell business are his to settle, but I wish the town would stop talking about Wenna. I am not a woman of many words, but I know what I know.",
+    "values": [
+      "hearth",
+      "healing",
+      "family",
+      "peace"
+    ],
+    "goals": [
+      "keep the house quiet",
+      "tend the sick",
+      "see Wenna's child safely born",
+      "soften Aldric's temper if I can"
+    ],
+    "mood": "calm and watchful",
+    "traits": {
+      "caution": 60,
+      "sociability": 50,
+      "empathy": 80,
+      "curiosity": 40,
+      "ambition": 30,
+      "introspection": 70,
+      "temper": 20,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Aldric Marrow",
+        "trust": 70,
+        "affinity": 60,
+        "label": "husband",
+        "note": "He is stubborn, but he is mine."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 80,
+        "affinity": 70,
+        "label": "son",
+        "note": "He is a good captain, but he broke a promise."
+      },
+      {
+        "name": "Maud Marrow",
+        "trust": 70,
+        "affinity": 60,
+        "label": "daughter",
+        "note": "She works hard under her father's eye."
+      },
+      {
+        "name": "Wenna Marrow",
+        "trust": 60,
+        "affinity": 70,
+        "label": "daughter-in-law",
+        "note": "She is carrying my first grandchild, and the town is unkind."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 80,
+        "affinity": 70,
+        "label": "sister",
+        "note": "We tend the sick together; she is a steady hand."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 70,
+        "affinity": 60,
+        "label": "midwife",
+        "note": "She will deliver Wenna's child, and she knows her trade."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 30,
+        "affinity": 40,
+        "label": "outlaw",
+        "note": "I nursed her son through a fever; she is not a monster."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 20,
+        "affinity": 30,
+        "label": "rival",
+        "note": "She and my husband quarrel, but she means well for the town."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 50,
+        "affinity": 50,
+        "label": "cook",
+        "note": "She is Marta's sister, but she keeps her peace at the inn."
+      },
+      {
+        "name": "Sister Perrin",
+        "trust": 75,
+        "affinity": 55,
+        "label": "chapel sister",
+        "note": "She keeps the common fire and the feast days faithfully; I would trust her with the calendar and the hearth both."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I tended Marta Hale's son through a fever at Coldwell last winter, and she let me in.",
+        "salience": 0.8,
+        "about": [
+          "Marta Hale",
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "The Lean Year: I helped feed the town from the store and watched the Hales lose their fields.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow",
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Tobin's wedding to Wenna: a small affair, and half the town did not come.",
+        "salience": 0.6,
+        "about": [
+          "Tobin Marrow",
+          "Wenna Marrow"
+        ]
+      },
+      {
+        "gist": "I sat with Joan Hobson through a long birth and learned a thing or two.",
+        "salience": 0.5,
+        "about": [
+          "Joan Hobson"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "healing_knows_no_sides",
+        "value": 0.9,
+        "why": "I tend anyone who comes, outlaw or not."
+      },
+      {
+        "key": "family_before_town_talk",
+        "value": 0.8,
+        "why": "Wenna is my son's wife, and the town's talk is cruel."
+      },
+      {
+        "key": "quiet_house_quiet_peace",
+        "value": 0.7,
+        "why": "I keep the house so Aldric can keep the town."
+      },
+      {
+        "key": "the_gate_due_is_not_mine",
+        "value": 0.5,
+        "why": "It is Aldric's business, though I wish it did not split the square."
+      }
+    ],
+    "secret": ""
+  },
+  "Maud Marrow": {
+    "narrative": "I am the Reeve's daughter, and I keep the market rolls and the gate ledger under my father's eye. I am not a girl any more, and I know the ledger better than he thinks. Mercy Abbot asks for copies when my father is asleep, and I give them, because I believe the gate-due does more harm than good. I have not told my father, and I do not know what he would do if he knew.",
+    "values": [
+      "the ledger",
+      "fair trade",
+      "family",
+      "truth"
+    ],
+    "goals": [
+      "keep the rolls accurate",
+      "see the gate-due dropped",
+      "protect my secret",
+      "earn my father's trust"
+    ],
+    "mood": "careful and divided",
+    "traits": {
+      "caution": 70,
+      "sociability": 40,
+      "empathy": 50,
+      "curiosity": 60,
+      "ambition": 50,
+      "introspection": 60,
+      "temper": 30,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Aldric Marrow",
+        "trust": 60,
+        "affinity": 50,
+        "label": "father",
+        "note": "He trusts me with the rolls, but not with my own mind."
+      },
+      {
+        "name": "Cuth Marrow",
+        "trust": 80,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She keeps the house quiet and knows more than she says."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 50,
+        "affinity": 40,
+        "label": "brother",
+        "note": "He is brave, but he thinks with his sword."
+      },
+      {
+        "name": "Wenna Marrow",
+        "trust": 60,
+        "affinity": 50,
+        "label": "sister-in-law",
+        "note": "She did not ask for the town's talk."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 70,
+        "affinity": 60,
+        "label": "confidante",
+        "note": "She asks for copies, and I give them."
+      },
+      {
+        "name": "Pernel Pip",
+        "trust": 50,
+        "affinity": 50,
+        "label": "fellow scribe",
+        "note": "She writes letters for the town, and we share the ink."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 40,
+        "affinity": 30,
+        "label": "guard",
+        "note": "He collects the due and brings me the gate counts."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 30,
+        "affinity": 20,
+        "label": "carter",
+        "note": "He hates the due, and I do not blame him."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time Mercy Abbot asked me for a copy of the gate ledger, and I agreed.",
+        "salience": 0.8,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "The Lean Year: I wrote the Coldwell fields into the town store's ledger, and my father signed it.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow",
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Tobin broke the match with Hester Crane, and the town talked of nothing else for a month.",
+        "salience": 0.6,
+        "about": [
+          "Tobin Marrow",
+          "Hester Crane"
+        ]
+      },
+      {
+        "gist": "I copied the Thornby debt entry for my father, forty baskets, and he said it would not be forgotten.",
+        "salience": 0.5,
+        "about": [
+          "Osric Dunn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "gate_due_hurts_trade",
+        "value": 0.8,
+        "why": "I see the carters' faces when they pay it."
+      },
+      {
+        "key": "ledger_is_for_all",
+        "value": 0.7,
+        "why": "The rolls should be accurate and known, not hidden."
+      },
+      {
+        "key": "father_must_not_know",
+        "value": 0.9,
+        "why": "If he knew I copied for Mercy, he would never trust me again."
+      },
+      {
+        "key": "mercy_means_well",
+        "value": 0.6,
+        "why": "She wants trade back, and she is not a fool."
+      }
+    ],
+    "secret": "Copies the ledger for Mercy Abbot when her father is asleep."
+  }
+}

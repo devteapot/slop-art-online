@@ -15,6 +15,10 @@
 //! display clock reaches its start, so continuous authority motion is drawn continuously; a
 //! row that still arrives late is blended in over about 100 ms instead of snapping, while a
 //! real jump (a teleport) is shown as one.
+//!
+//! A player's own body need not wait with the others (docs/LATENCY.md, step 3): [`ServerClock::lead`]
+//! is how far the freshest arrivals run ahead of the displayed time, so the game draws its own
+//! character that much later in authority time, as soon as its new segment arrives.
 
 use bevy::platform::time::Instant;
 use bevy_egui::egui;
@@ -43,12 +47,17 @@ pub struct ServerClock {
     /// (local ms, row `t_ms` minus local ms at arrival).
     lags: VecDeque<(f64, f64)>,
     scratch: Vec<f64>,
+    /// Offset of the freshest arrivals (the least delayed rows in the window), slewed like `off`.
+    fresh: f64,
+    /// Times the offset was reset because the estimate moved by more than [`RESYNC_MS`].
+    pub resyncs: u32,
 }
 
 impl Default for ServerClock {
     fn default() -> Self {
         let start = Instant::now();
-        Self { start, off: crate::clock::now_ms() as f64 - DEFAULT_DELAY_MS, synced: false, last: 0.0, lags: VecDeque::new(), scratch: Vec::new() }
+        let off = crate::clock::now_ms() as f64 - DEFAULT_DELAY_MS;
+        Self { start, off, synced: false, last: 0.0, lags: VecDeque::new(), scratch: Vec::new(), fresh: off, resyncs: 0 }
     }
 }
 
@@ -76,14 +85,30 @@ impl ServerClock {
             let (_, low, _) = self.scratch.select_nth_unstable_by(k, |a, b| a.total_cmp(b));
             let target = *low - MARGIN_MS;
             let gap = target - self.off;
+            // The freshest arrivals: the most any row in the window was ahead of its delivery.
+            let high = self.scratch.iter().copied().fold(f64::MIN, f64::max) - MARGIN_MS;
             if !self.synced || gap.abs() > RESYNC_MS {
+                if self.synced {
+                    self.resyncs += 1;
+                }
                 self.off = target;
+                self.fresh = high;
                 self.synced = true;
             } else {
                 self.off += gap.clamp(-SLEW * dt, SLEW * dt);
+                let g = high - self.fresh;
+                self.fresh = if g.abs() > RESYNC_MS { high } else { self.fresh + g.clamp(-SLEW * dt, SLEW * dt) };
             }
         }
         now + self.off
+    }
+
+    /// How far ahead of the displayed time the freshest rows arrive (ms, never negative): the
+    /// time a player's own body is drawn at is the displayed time plus this. The game client
+    /// uses it; the observer has no body of its own.
+    #[allow(dead_code)]
+    pub fn lead(&self) -> f64 {
+        (self.fresh - self.off).clamp(0.0, RESYNC_MS)
     }
 
     /// How far behind the newest rows the display runs (ms), for diagnostics.
@@ -262,6 +287,21 @@ mod tests {
         // A teleport is shown as one.
         let c = body(20.0, 1_700, 0.0, u64::MAX);
         assert_eq!(shown(&mut t, &c, 1_710.0, 0.008), 20.0);
+    }
+
+    #[test]
+    fn the_lead_is_how_much_fresher_the_freshest_rows_are() {
+        let mut c = ServerClock::default();
+        // Rows arrive 20 or 60 ms after they were written: the display waits for the late ones,
+        // a player's own body need not.
+        for i in 0..160 {
+            let l = c.local();
+            c.frame((l - if i % 2 == 0 { 60.0 } else { 20.0 }) as u64);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let lead = c.lead();
+        assert!((25.0..=45.0).contains(&lead), "lead {lead}");
+        assert_eq!(c.resyncs, 0);
     }
 
     #[test]

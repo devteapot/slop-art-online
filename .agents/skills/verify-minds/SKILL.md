@@ -31,6 +31,8 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 
 `--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect`, `lod`, `takeover` ([features/takeover.md](features/takeover.md)), `sight` ([features/sight.md](features/sight.md)), `wake` ([features/wake.md](features/wake.md); an island world, built in `.local/living/target-wake-island`), `animals` ([features/animals.md](features/animals.md)), `night` ([features/sleep.md](features/sleep.md)), `jev` ([features/judgments.md](features/judgments.md)) and `rethink`/`rethink-llm` ([features/rethink.md](features/rethink.md)). Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
 
+Seeded island residents (docs/SEEDED_LIVES.md) have their own driver, `scripts/lives_wake.py` ([features/lives-wake.md](features/lives-wake.md)): on an island run it wakes named residents by a player speaking to them, with a scratch Neo4j and the fake model (free) or `--real PROFILE` (paid, only when authorized), and checks that each knows its own past and people and no one else's secrets.
+
 
 Player memory (on by default; the service integrates what human-played characters live) needs a scratch Neo4j, so its proof runs in `verify-knowledge`'s `player_memory.py`; [features/player-memory.md](features/player-memory.md) maps what it proves about this service (switch off, cadence, reconnect, batch mode).
 

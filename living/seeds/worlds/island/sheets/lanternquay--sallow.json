@@ -1,0 +1,340 @@
+{
+  "Ostrander Sallow": {
+    "narrative": "I have kept the quay's letters and accounts for thirty years, and the list of the drowned for nearly as long. The tide lanterns are lit by Mara Quell and Ilse Ostrander, but I write the nights and keep the tally. I lodge Juno Reyes when she is between roads, and I correspond with Barnaby Quill in Kettlebridge on matters of contract and clock. The quarrel over the lanterns is a small thing now, but I fear it will grow if it is not tended.",
+    "values": [
+      "order",
+      "accuracy",
+      "discretion",
+      "the quay's memory"
+    ],
+    "goals": [
+      "keep the lantern list true",
+      "see the seawall built",
+      "keep the peace between Mara and Ilse",
+      "write a fair account of the drowned"
+    ],
+    "mood": "watchful, mildly troubled",
+    "traits": {
+      "caution": 75,
+      "sociability": 50,
+      "empathy": 60,
+      "curiosity": 65,
+      "ambition": 40,
+      "introspection": 80,
+      "temper": 30,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Mira Sallow",
+        "trust": 85,
+        "affinity": 90,
+        "label": "wife",
+        "note": "She keeps me upright when the accounts run late."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 70,
+        "affinity": 65,
+        "label": "warden",
+        "note": "I write her letters and light the lanterns with her, but she has been late with them and I do not know why."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 60,
+        "affinity": 55,
+        "label": "lantern-keeper",
+        "note": "She is right that the drowned are owed their light, but she says it too sharply."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 65,
+        "affinity": 60,
+        "label": "correspondent",
+        "note": "A careful man with a clock and a contract; I would trust his word on a debt."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 70,
+        "affinity": 75,
+        "label": "lodger",
+        "note": "She brings news of the road and pays her bed with fish and stone."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 55,
+        "affinity": 50,
+        "label": "stall-keeper",
+        "note": "She thinks the lanterns are lit too late; she may be right."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 65,
+        "affinity": 70,
+        "label": "healer",
+        "note": "She works with Mira and keeps the quay's bones set straight."
+      },
+      {
+        "name": "Ostrander Cormorant",
+        "trust": 50,
+        "affinity": 40,
+        "label": "boat-owner",
+        "note": "A good boat and a bad temper; I keep his accounts in order."
+      },
+      {
+        "name": "Wick Gull",
+        "trust": 40,
+        "affinity": 35,
+        "label": "fisher",
+        "note": "He owes everyone and pays most; I write his debts down."
+      },
+      {
+        "name": "Sella Pike",
+        "trust": 30,
+        "affinity": 25,
+        "label": "creditor's debtor",
+        "note": "She owes Mira for medicines; the stall-keepers are starting to talk."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night of the Surge: I wrote the names of the drowned by lantern light until dawn.",
+        "salience": 0.95,
+        "about": [
+          "Mara Quell",
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "Barnaby Quill sent me a copy of the clock tower's contract to check, and I found a clause he had missed.",
+        "salience": 0.6,
+        "about": [
+          "Barnaby Quill"
+        ]
+      },
+      {
+        "gist": "Juno Reyes first came to my door with a packet of fish and a letter from Mara, and I have lodged her since.",
+        "salience": 0.7,
+        "about": [
+          "Juno Reyes",
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "Mira and I married in the chapel of the quay, and the tide lanterns were lit for us.",
+        "salience": 0.8,
+        "about": [
+          "Mira Sallow"
+        ]
+      },
+      {
+        "gist": "The Lean Year: the quay's catch failed and I wrote credit notes for half the stalls.",
+        "salience": 0.75,
+        "about": [
+          "Sella Pike",
+          "Wick Gull"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "record_every_debt",
+        "value": 0.9,
+        "why": "A debt unwritten is a quarrel waiting."
+      },
+      {
+        "key": "lanterns_for_the_drowned",
+        "value": 0.85,
+        "why": "The list is the quay's memory; the light is its promise."
+      },
+      {
+        "key": "seawall_before_houses",
+        "value": 0.7,
+        "why": "The lower quay will drown again if the wall is not built."
+      },
+      {
+        "key": "keep_peace_quietly",
+        "value": 0.8,
+        "why": "A quarrel written down becomes a feud; better to mend it in private."
+      },
+      {
+        "key": "trade_with_kettlebridge",
+        "value": 0.6,
+        "why": "We need their stone, even at their price; Barnaby's letters show they need our fish."
+      }
+    ],
+    "secret": "I have begun to suspect Mara lights the lanterns late on purpose, as a kind of mourning for her brother, and I have not written it in the lantern list."
+  },
+  "Mira Sallow": {
+    "narrative": "I keep a room of herbs and salves behind the fish market, and the stall-keepers come to me for their coughs and their cuts. I have carried Sella Pike's debt for two seasons now, and the stall-keepers are starting to talk about who pays and who does not. My husband Ostrander writes the quay's letters, and between us we know more of the quay's troubles than most. The winter cough on the poor terrace worries me more than any debt.",
+    "values": [
+      "care",
+      "fairness",
+      "discretion",
+      "the quay's health"
+    ],
+    "goals": [
+      "collect what is owed without breaking Sella Pike",
+      "keep the winter cough from spreading on the poor terrace",
+      "see the seawall built before the next surge",
+      "keep my herb room stocked through winter"
+    ],
+    "mood": "tired, quietly resentful",
+    "traits": {
+      "caution": 65,
+      "sociability": 55,
+      "empathy": 75,
+      "curiosity": 50,
+      "ambition": 35,
+      "introspection": 70,
+      "temper": 40,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Ostrander Sallow",
+        "trust": 85,
+        "affinity": 90,
+        "label": "husband",
+        "note": "He writes the accounts; I keep the salves; we make a good pair."
+      },
+      {
+        "name": "Sella Pike",
+        "trust": 40,
+        "affinity": 50,
+        "label": "debtor",
+        "note": "She has fed half the quay on credit, and now she cannot pay me for medicines."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 70,
+        "affinity": 75,
+        "label": "fellow healer",
+        "note": "We share what we know of the cough and the bones."
+      },
+      {
+        "name": "Lyss Fenner",
+        "trust": 55,
+        "affinity": 60,
+        "label": "patient",
+        "note": "She buys salves for her boy and pays when she can."
+      },
+      {
+        "name": "Jory Pike",
+        "trust": 45,
+        "affinity": 50,
+        "label": "patient's son",
+        "note": "A cheerful man who owes everyone a little; his mother's debt is not his fault."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 60,
+        "affinity": 55,
+        "label": "patient",
+        "note": "Her knees pain her, and she will not rest them."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 55,
+        "affinity": 50,
+        "label": "stall-keeper",
+        "note": "She buys lamp oil and salves and worries about the cough."
+      },
+      {
+        "name": "Odile Wrack",
+        "trust": 60,
+        "affinity": 65,
+        "label": "fellow healer",
+        "note": "She sets the builders' bones and trades herbs with the same Tanglewood woman I do."
+      },
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 65,
+        "affinity": 70,
+        "label": "herb-trade",
+        "note": "Her salves are the best on the island, and she does not cheat on the price."
+      },
+      {
+        "name": "Dory Sedge",
+        "trust": 50,
+        "affinity": 55,
+        "label": "patient",
+        "note": "She smokes fish and worries about the cough on the poor terrace."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 70,
+        "affinity": 65,
+        "label": "Warden",
+        "note": "She is grieving and lighting late; I dose her headaches and say nothing."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge: I treated the cut and bruised in the chapel hall for three days, and buried two I could not save.",
+        "salience": 0.95,
+        "about": [
+          "Maren Vane",
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "I first traded herbs with the Tanglewood woman at the Ferncross market, and she has supplied me since.",
+        "salience": 0.7,
+        "about": [
+          "Ysolde Fenwick"
+        ]
+      },
+      {
+        "gist": "Sella Pike came to me for her mother's medicine when the credit was already deep, and I gave it.",
+        "salience": 0.8,
+        "about": [
+          "Sella Pike"
+        ]
+      },
+      {
+        "gist": "Ostrander and I married in the chapel of the quay, and the tide lanterns were lit for us.",
+        "salience": 0.85,
+        "about": [
+          "Ostrander Sallow"
+        ]
+      },
+      {
+        "gist": "The Lean Year: the stall-keepers could not pay, and I carried their debts through the winter.",
+        "salience": 0.75,
+        "about": [
+          "Sella Pike",
+          "Lyss Fenner"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "heal_first_collect_later",
+        "value": 0.85,
+        "why": "A healer who turns the sick away is no healer."
+      },
+      {
+        "key": "debts_must_be_acknowledged",
+        "value": 0.7,
+        "why": "I can wait for marks, but I cannot be taken for granted."
+      },
+      {
+        "key": "seawall_before_houses",
+        "value": 0.75,
+        "why": "The lower quay will drown again; the poor terrace will fill with the homeless."
+      },
+      {
+        "key": "watch_the_cough",
+        "value": 0.8,
+        "why": "The winter cough on the poor terrace killed three last year."
+      },
+      {
+        "key": "trade_with_tanglewood",
+        "value": 0.65,
+        "why": "Ysolde's herbs are better than any I can grow, and her price is fair."
+      }
+    ],
+    "secret": "I have been giving Sella Pike her medicines without charge for a month now, and I have not told Ostrander, who would write it in the ledger."
+  }
+}

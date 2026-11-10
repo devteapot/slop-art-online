@@ -1,0 +1,195 @@
+{
+  "id": "cyberpunk_megacity",
+  "name": "Megacity",
+  "note": "The megacity floor (docs/FLOORS.md): its kit (living/tools/blender/city.py) in a small showcase, and the glow of its lamps and signs where the island draws the floor. Night, neon, a longer view than the cyberpunk town.",
+  "mood": {
+    "hour": 20.0,
+    "sun": [
+      0.5,
+      0.5,
+      0.8
+    ],
+    "lux": 1200,
+    "sky": [
+      0.04,
+      0.03,
+      0.1
+    ],
+    "fog": [
+      0.03,
+      0.025,
+      0.07
+    ],
+    "fog_start": 30,
+    "fog_end": 160,
+    "shadow_hue": 0.78,
+    "saturation": 1.3,
+    "grade": [
+      0.9,
+      0.3,
+      1.0
+    ],
+    "grade_strength": 0.1,
+    "exposure": 1.0,
+    "bloom": 0.25,
+    "ambient": 0.12
+  },
+  "ground": {
+    "surface": "paved",
+    "color": [
+      60,
+      62,
+      72
+    ],
+    "radius": 80,
+    "relief": 0.0
+  },
+  "slots": [
+    {
+      "kind": "megatower",
+      "rule": "grid",
+      "rows": 1,
+      "cols": 1,
+      "spacing": 20,
+      "clear": 0,
+      "offset": [
+        0,
+        60
+      ],
+      "height": [
+        200.0,
+        200.0
+      ]
+    },
+    {
+      "kind": "megablock",
+      "rule": "ring",
+      "face": "in",
+      "count": 6,
+      "radius": 110,
+      "height": [
+        90.0,
+        120.0
+      ]
+    },
+    {
+      "kind": "block",
+      "rule": "ring",
+      "face": "out",
+      "count": 8,
+      "radius": 40,
+      "height": [
+        20.0,
+        30.0
+      ]
+    },
+    {
+      "kind": "neon_tower",
+      "rule": "ring",
+      "face": "in",
+      "count": 4,
+      "radius": 70,
+      "height": [
+        45.0,
+        55.0
+      ]
+    },
+    {
+      "kind": "neon_sign",
+      "rule": "scatter",
+      "count": 16,
+      "glow": [
+        1.0,
+        0.2,
+        0.8
+      ],
+      "radius": 52,
+      "clear": 43,
+      "height": [
+        4.0,
+        4.0
+      ]
+    },
+    {
+      "kind": "neon_sign",
+      "rule": "scatter",
+      "count": 12,
+      "glow": [
+        0.2,
+        0.9,
+        1.0
+      ],
+      "radius": 52,
+      "clear": 43,
+      "height": [
+        4.0,
+        4.0
+      ]
+    },
+    {
+      "kind": "hologram",
+      "rule": "scatter",
+      "count": 6,
+      "glow": [
+        0.2,
+        0.9,
+        1.0
+      ],
+      "radius": 30,
+      "clear": 10,
+      "height": [
+        8.0,
+        8.0
+      ]
+    },
+    {
+      "kind": "vending",
+      "rule": "scatter",
+      "count": 10,
+      "radius": 50,
+      "clear": 20,
+      "height": [
+        1.9,
+        1.9
+      ]
+    },
+    {
+      "kind": "vehicle",
+      "rule": "scatter",
+      "count": 10,
+      "radius": 50,
+      "clear": 20,
+      "height": [
+        1.5,
+        1.5
+      ]
+    },
+    {
+      "kind": "lamp",
+      "rule": "scatter",
+      "count": 14,
+      "glow": [
+        0.6,
+        0.8,
+        1.0
+      ],
+      "radius": 52,
+      "clear": 43,
+      "height": [
+        6.5,
+        6.5
+      ]
+    },
+    {
+      "kind": "person",
+      "rule": "scatter",
+      "count": 14,
+      "radius": 24,
+      "clear": 4,
+      "height": [
+        1.6,
+        1.85
+      ]
+    }
+  ]
+}

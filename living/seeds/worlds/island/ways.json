@@ -1,0 +1,685 @@
+{
+  "about": "Starting ways the island's people begin with, merged into the seed's `ways` by author_world.py (docs/SEEDED_LIVES.md). They are starting graphs made of skills every character has; a mind can rework any of them. Carriers' routines are written from world.json's `routes` by the tool (`carry_graph`).",
+  "common": {
+    "stay safe": {
+      "first": [
+        {
+          "if": {
+            "all": [
+              {
+                "hurt_within": 5
+              },
+              {
+                "health": {
+                  "below": 40
+                }
+              },
+              {
+                "near": {
+                  "target": {
+                    "nearest": "wolf"
+                  },
+                  "within": 8
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "flee",
+            "target": "attacker"
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "hurt_within": 5
+              },
+              {
+                "health": {
+                  "below": 40
+                }
+              },
+              {
+                "not": {
+                  "near": {
+                    "target": {
+                      "nearest": "wolf"
+                    },
+                    "within": 8
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "yield",
+            "target": "attacker"
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "hurt_within": 2
+              },
+              {
+                "health": {
+                  "below": 40
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "flee",
+            "target": "attacker"
+          }
+        },
+        {
+          "if": {
+            "hurt_within": 5
+          },
+          "then": {
+            "do": "attack",
+            "target": "attacker"
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "threatened": true
+              },
+              {
+                "count": {
+                  "of": "person",
+                  "within": 7,
+                  "at_least": 2
+                }
+              },
+              {
+                "not": {
+                  "count": {
+                    "of": {
+                      "kind": "person",
+                      "relation": "friend"
+                    },
+                    "within": 7,
+                    "at_least": 1
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "yield"
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "near": {
+                  "target": {
+                    "nearest": "wolf"
+                  },
+                  "within": 10
+                }
+              },
+              {
+                "count": {
+                  "of": "person",
+                  "within": 8,
+                  "at_least": 2
+                }
+              },
+              {
+                "health": {
+                  "above": 60
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "attack",
+            "target": {
+              "nearest": "wolf"
+            }
+          }
+        },
+        {
+          "if": {
+            "near": {
+              "target": {
+                "nearest": "wolf"
+              },
+              "within": 12
+            }
+          },
+          "then": {
+            "do": "flee",
+            "target": {
+              "nearest": "wolf"
+            }
+          }
+        }
+      ]
+    },
+    "mind the people near me": {
+      "first": [
+        {
+          "if": {
+            "all": [
+              {
+                "heard_within": 4
+              },
+              {
+                "near": {
+                  "target": "speaker",
+                  "within": 9
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "face",
+            "target": "speaker"
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "moving": false
+              },
+              {
+                "near": {
+                  "target": {
+                    "nearest": {
+                      "kind": "person",
+                      "relation": "enemy"
+                    }
+                  },
+                  "within": 6
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "face",
+            "target": {
+              "nearest": {
+                "kind": "person",
+                "relation": "enemy"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "chance": 0.03
+              },
+              {
+                "not": {
+                  "near": {
+                    "target": "home",
+                    "within": 8
+                  }
+                }
+              },
+              {
+                "near": {
+                  "target": {
+                    "nearest": {
+                      "kind": "person",
+                      "relation": "friend"
+                    }
+                  },
+                  "within": 11
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "wave",
+            "target": {
+              "nearest": {
+                "kind": "person",
+                "relation": "friend"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "moving": false
+              },
+              {
+                "near": {
+                  "target": {
+                    "nearest": "person"
+                  },
+                  "within": 2.5
+                }
+              }
+            ]
+          },
+          "then": {
+            "first": [
+              {
+                "do": "step_aside",
+                "target": {
+                  "nearest": "person"
+                }
+              },
+              {
+                "do": "face",
+                "target": {
+                  "nearest": "person"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "spend the evening out": {
+      "if": {
+        "all": [
+          {
+            "hour": {
+              "above": 17.5,
+              "below": 22
+            }
+          },
+          {
+            "raining": false
+          }
+        ]
+      },
+      "then": {
+        "first": [
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": {
+                    "place": "evening"
+                  },
+                  "within": 6
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": {
+                "place": "evening"
+              }
+            }
+          },
+          {
+            "if": {
+              "chance": 0.04
+            },
+            "then": {
+              "first": [
+                {
+                  "do": "nod",
+                  "target": {
+                    "nearest": {
+                      "kind": "person",
+                      "relation": "friend"
+                    }
+                  }
+                },
+                {
+                  "do": "nod",
+                  "target": {
+                    "nearest": "person"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "do": "rest"
+          }
+        ]
+      }
+    }
+  },
+  "occupations": {
+    "outlaw": {
+      "routine": "keep the road",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": {
+                    "place": "work"
+                  },
+                  "within": 14
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": {
+                "place": "work"
+              }
+            }
+          },
+          {
+            "if": {
+              "can": {
+                "do": "seize",
+                "target": {
+                  "nearest": {
+                    "kind": "person",
+                    "relation": "outsider"
+                  }
+                },
+                "item": "stone",
+                "qty": 3
+              }
+            },
+            "then": {
+              "do": "seize",
+              "target": {
+                "nearest": {
+                  "kind": "person",
+                  "relation": "outsider"
+                }
+              },
+              "item": "stone",
+              "qty": 3
+            }
+          },
+          {
+            "if": {
+              "can": {
+                "do": "seize",
+                "target": {
+                  "nearest": {
+                    "kind": "person",
+                    "relation": "outsider"
+                  }
+                },
+                "item": "berries",
+                "qty": 3
+              }
+            },
+            "then": {
+              "do": "seize",
+              "target": {
+                "nearest": {
+                  "kind": "person",
+                  "relation": "outsider"
+                }
+              },
+              "item": "berries",
+              "qty": 3
+            }
+          },
+          {
+            "if": {
+              "can": {
+                "do": "seize",
+                "target": {
+                  "nearest": {
+                    "kind": "person",
+                    "relation": "outsider"
+                  }
+                },
+                "item": "cooked_fish",
+                "qty": 2
+              }
+            },
+            "then": {
+              "do": "seize",
+              "target": {
+                "nearest": {
+                  "kind": "person",
+                  "relation": "outsider"
+                }
+              },
+              "item": "cooked_fish",
+              "qty": 2
+            }
+          },
+          {
+            "if": {
+              "can": {
+                "do": "seize",
+                "target": {
+                  "nearest": {
+                    "kind": "person",
+                    "relation": "outsider"
+                  }
+                },
+                "item": "mark",
+                "qty": 1
+              }
+            },
+            "then": {
+              "do": "seize",
+              "target": {
+                "nearest": {
+                  "kind": "person",
+                  "relation": "outsider"
+                }
+              },
+              "item": "mark",
+              "qty": 1
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "near": {
+                    "target": {
+                      "nearest": {
+                        "kind": "person",
+                        "relation": "outsider"
+                      }
+                    },
+                    "within": 11
+                  }
+                },
+                {
+                  "count": {
+                    "of": {
+                      "kind": "person",
+                      "relation": "friend"
+                    },
+                    "within": 9,
+                    "at_least": 1
+                  }
+                },
+                {
+                  "not": {
+                    "threatened": true
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "threaten",
+              "target": {
+                "nearest": {
+                  "kind": "person",
+                  "relation": "outsider"
+                }
+              }
+            }
+          },
+          {
+            "do": "keep"
+          }
+        ]
+      }
+    },
+    "woodcutter": {
+      "routine": "cut wood",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "has": {
+                "item": "wood",
+                "at_least": 6
+              }
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": "goto",
+                  "target": {
+                    "place": "square"
+                  }
+                },
+                {
+                  "do": "store",
+                  "target": {
+                    "nearest": "storage"
+                  },
+                  "item": "wood",
+                  "qty": 6
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": {
+                    "place": "work"
+                  },
+                  "within": 12
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": {
+                "place": "work"
+              }
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "tree"
+            }
+          },
+          {
+            "do": "keep"
+          }
+        ]
+      }
+    },
+    "quarrier": {
+      "routine": "cut stone",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "has": {
+                "item": "stone",
+                "at_least": 5
+              }
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": "goto",
+                  "target": {
+                    "place": "square"
+                  }
+                },
+                {
+                  "do": "store",
+                  "target": {
+                    "nearest": "storage"
+                  },
+                  "item": "stone",
+                  "qty": 5
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": {
+                    "place": "work"
+                  },
+                  "within": 12
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": {
+                "place": "work"
+              }
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "boulder"
+            }
+          },
+          {
+            "do": "keep"
+          }
+        ]
+      }
+    }
+  },
+  "work": {
+    "woodcutter": [
+      "tree",
+      "plaza"
+    ],
+    "quarrier": [
+      "boulder",
+      "plaza"
+    ],
+    "outlaw": [
+      "plaza"
+    ]
+  },
+  "kit": {
+    "woodcutter": {
+      "axe": 1,
+      "berries": 4
+    },
+    "quarrier": {
+      "pick": 1,
+      "berries": 4
+    },
+    "outlaw": {
+      "spear": 1,
+      "berries": 4
+    },
+    "hunter": {
+      "spear": 1,
+      "berries": 4
+    },
+    "guard": {
+      "spear": 1,
+      "berries": 4
+    }
+  }
+}

@@ -1,5 +1,9 @@
 # Knowledge validation
 
+## 2026-11-10 mind feedback (Mac)
+
+Branch `feedback-1` (ffb4280) on its own server `feedback-verify-stdb` (3343): `knowledge-fb1-011838` passes 19 of 19, including the new Cargo test `missed_things_weaken` (memories naming a missed thing's id lose half; another id and `KNOWS` do not). `woken_mind.py`: the first attempt failed because the script started the mind against `:3300`; with `LIVING_STDB_URL` honoured, `knowledge-woken-fb1b-*` passes 8 of 8.
+
 ## 2026-11-10 woken residents' minds (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).

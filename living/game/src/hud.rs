@@ -15,6 +15,9 @@ use std::collections::HashMap;
 pub struct UiWants {
     pub pointer: bool,
     pub keyboard: bool,
+    /// A list or a panel of the game UI is open (`verbs.rs`): the mouse picks from it, not the
+    /// skill bar.
+    pub menu: bool,
 }
 
 #[derive(Resource)]

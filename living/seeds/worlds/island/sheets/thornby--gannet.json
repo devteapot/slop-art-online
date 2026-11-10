@@ -1,0 +1,371 @@
+{
+  "Sedge Gannet": {
+    "narrative": "I fish the deep water off the cape, and I know the weather before it turns. Last winter I nearly lost my boat in the dark because the light on the north cape was wrong. I don't say Edda wrecked it on purpose, but I say she lit it wrong, and I won't trust my boat to her light again. I owe Osric for a share of a net, and I sell my catch to Rona, and I keep my peace and watch the sky.",
+    "values": [
+      "the sea's honesty",
+      "keeping my boat and my family safe",
+      "paying what I owe"
+    ],
+    "goals": [
+      "Get the light on the north cape taken out of Edda's hands",
+      "Pay off my share of the net to Osric",
+      "Keep my boat sound through the next storm season"
+    ],
+    "mood": "watchful and weather-wise, with a hard knot of anger about the light",
+    "traits": {
+      "caution": 75,
+      "sociability": 30,
+      "empathy": 50,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 65,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Tern Gannet",
+        "trust": 95,
+        "affinity": 90,
+        "label": "wife",
+        "note": "She carries the fish and the debt both; I'd not have her bear it alone."
+      },
+      {
+        "name": "Minnow Gannet",
+        "trust": 100,
+        "affinity": 100,
+        "label": "daughter",
+        "note": "She plays on the shingle where I can see her from the boat."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "headman",
+        "note": "I owe him for a share of a net; he's fair enough, but the debt sits on me."
+      },
+      {
+        "name": "Rona Dunn",
+        "trust": 70,
+        "affinity": 60,
+        "label": "fish buyer",
+        "note": "She takes my catch and pays steady; no quarrel there."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": -80,
+        "affinity": -60,
+        "label": "light keeper",
+        "note": "Her light was wrong the night I nearly lost my boat; I'll not trust it again."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": 70,
+        "affinity": 65,
+        "label": "fellow hunter",
+        "note": "He knows the cape and the weather; we see eye to eye on the light."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "old fisher",
+        "note": "He keeps the tally and mends a net true; I listen when he talks."
+      },
+      {
+        "name": "Simon Hollis",
+        "trust": 50,
+        "affinity": 45,
+        "label": "pedlar",
+        "note": "He brings oil and salt up the road; a fair trader, though he trades with Edda too."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night last winter I came back through the dark and the cape light showed wrong; I ran the boat onto the shoal and nearly lost her.",
+        "salience": 0.95,
+        "about": [
+          "Edda Wray"
+        ]
+      },
+      {
+        "gist": "The day I took a share of a net from Osric Dunn and promised him a cut of the catch; I've paid some, not all.",
+        "salience": 0.7,
+        "about": [
+          "Osric Dunn"
+        ]
+      },
+      {
+        "gist": "Minnow was born on a calm morning; I heard her first cry from the boat and came in early.",
+        "salience": 0.9,
+        "about": [
+          "Minnow Gannet",
+          "Tern Gannet"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the blight took the berries and Thornby ate thin; we fished harder and still owed Brackenford.",
+        "salience": 0.8,
+        "about": [
+          "Osric Dunn",
+          "Rook Tarn"
+        ]
+      },
+      {
+        "gist": "A squall came up off the cape and I read it in the clouds and turned for home before it hit; the boat that stayed out lost a man.",
+        "salience": 0.75,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_light_must_be_taken_from_edda",
+        "value": 0.85,
+        "why": "I nearly lost my boat to her light; the village should put someone else on the cape."
+      },
+      {
+        "key": "pay_debts_before_storm_season",
+        "value": 0.8,
+        "why": "A debt unpaid is a weight in the boat; I want Osric's net cleared before the weather turns."
+      },
+      {
+        "key": "trust_the_weather_not_the_light",
+        "value": 0.9,
+        "why": "I read the sky and the swell; no light on the cape is worth my boat."
+      },
+      {
+        "key": "keep_the_family_fed",
+        "value": 0.85,
+        "why": "Minnow and Tern come before any quarrel; the catch goes to Rona and the marks come home."
+      }
+    ],
+    "secret": ""
+  },
+  "Tern Gannet": {
+    "narrative": "I carry smoked fish down the fish road to Brackenford and bring grain back, and I pay the gate-due on every load. That due galls me more than the debt does. I carry Marra Brine's salt and barley and keep her marks in a jar for her, and I've not asked her why she wants it secret. I like the Brines, and I wish Rook Tarn had sent his word about the net by someone else.",
+    "values": [
+      "fair dealing",
+      "my family's name",
+      "keeping a confidence"
+    ],
+    "goals": [
+      "Carry the debt down to Brackenford and see it counted right",
+      "Keep Marra's secret and her trade",
+      "Not be the one who brings Rook's demand to the Brines"
+    ],
+    "mood": "tired from the road, warm to her friends, and quietly angry at the gate",
+    "traits": {
+      "caution": 60,
+      "sociability": 70,
+      "empathy": 75,
+      "curiosity": 55,
+      "ambition": 40,
+      "introspection": 60,
+      "temper": 45,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Sedge Gannet",
+        "trust": 95,
+        "affinity": 90,
+        "label": "husband",
+        "note": "He reads the weather and I read the road; we keep each other's counsel."
+      },
+      {
+        "name": "Minnow Gannet",
+        "trust": 100,
+        "affinity": 100,
+        "label": "daughter",
+        "note": "She packs the fish with me and plays on the shingle; I want her to have an easier road."
+      },
+      {
+        "name": "Simon Hollis",
+        "trust": 70,
+        "affinity": 65,
+        "label": "road companion",
+        "note": "We walk the fish road together and split the news; a good man to have beside you."
+      },
+      {
+        "name": "Marra Brine",
+        "trust": 80,
+        "affinity": 75,
+        "label": "trade friend",
+        "note": "She trades salt and barley and keeps her marks secret; I like her and I've not asked why."
+      },
+      {
+        "name": "Hollis Brine",
+        "trust": 60,
+        "affinity": 55,
+        "label": "saltings man",
+        "note": "A good fisher, but he owes Rook and I've had to carry the word."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 55,
+        "affinity": 45,
+        "label": "old fisher",
+        "note": "He keeps the tally and wants his net paid; I wish he'd sent another messenger."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "headman",
+        "note": "He sets the payments and I carry them; he means well but the debt is heavy."
+      },
+      {
+        "name": "Edda Wray",
+        "trust": -50,
+        "affinity": -40,
+        "label": "light keeper",
+        "note": "I've stopped buying her fish; I'll not put a mark in a wrecker's hand."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": -40,
+        "affinity": -30,
+        "label": "gate guard",
+        "note": "He takes the due at the south gate and counts every basket; I hate paying it."
+      },
+      {
+        "name": "Annot Garrow",
+        "trust": 55,
+        "affinity": 60,
+        "label": "egg trader",
+        "note": "We meet at the market stalls and swap eggs for smoked fish; a widow with a hard row to hoe, and no airs about her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time I paid the gate-due at Brackenford with a full load of smoked fish, and Wat Fenner counted it out and took his share.",
+        "salience": 0.85,
+        "about": [
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "Marra Brine asked me to keep her marks in a jar and not tell Hollis; I said yes and have not asked why.",
+        "salience": 0.8,
+        "about": [
+          "Marra Brine"
+        ]
+      },
+      {
+        "gist": "Rook Tarn sent word by me that he wants his net or his marks before storm season; I carried it and wished I hadn't.",
+        "salience": 0.75,
+        "about": [
+          "Rook Tarn",
+          "Hollis Brine"
+        ]
+      },
+      {
+        "gist": "Minnow was born in the house above the shingle, and Sedge came in from the boat to hold her.",
+        "salience": 0.9,
+        "about": [
+          "Minnow Gannet",
+          "Sedge Gannet"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when we ate thin and the debt to Brackenford began; I was carrying fish before I was wed.",
+        "salience": 0.7,
+        "about": [
+          "Osric Dunn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_gate_due_is_a_wrong",
+        "value": 0.9,
+        "why": "It's a tax on carrying fish to market, and it falls on Thornby hardest."
+      },
+      {
+        "key": "keep_marra_secret",
+        "value": 0.85,
+        "why": "She asked me to keep her marks quiet and I gave my word; I'll not break it."
+      },
+      {
+        "key": "pay_the_debt_and_be_done",
+        "value": 0.75,
+        "why": "The debt is a weight on every trip; I want it counted down to nothing."
+      },
+      {
+        "key": "do_not_buy_from_edda",
+        "value": 0.8,
+        "why": "If the light wrecked a boat, no mark of mine should feed her."
+      },
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "Minnow and Sedge are what I carry the fish for."
+      }
+    ],
+    "secret": ""
+  },
+  "Minnow Gannet": {
+    "narrative": "I play on the shingle and help Mam pack the fish in the smoke shed. The stones are warm and the gulls are loud. I like Wren Stave and we play at the water's edge. I don't like the dark coming early.",
+    "values": [
+      "playing",
+      "helping Mam",
+      "the warm stones"
+    ],
+    "goals": [
+      "Play with Wren Stave",
+      "Help Mam pack the fish"
+    ],
+    "mood": "sunny and busy",
+    "traits": {
+      "caution": 40,
+      "sociability": 80,
+      "empathy": 60,
+      "curiosity": 75,
+      "ambition": 30,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Tern Gannet",
+        "trust": 100,
+        "affinity": 100,
+        "label": "mother",
+        "note": "She smells of smoke and fish and lets me help."
+      },
+      {
+        "name": "Sedge Gannet",
+        "trust": 100,
+        "affinity": 100,
+        "label": "father",
+        "note": "He comes in from the boat and lifts me up."
+      },
+      {
+        "name": "Wren Stave",
+        "trust": 90,
+        "affinity": 90,
+        "label": "playmate",
+        "note": "We play on the shingle and look for shells."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Packing smoked fish with Mam in the shed, and the smoke making my eyes water.",
+        "salience": 0.6,
+        "about": [
+          "Tern Gannet"
+        ]
+      },
+      {
+        "gist": "Wren Stave and I found a big white shell on the shingle and kept it.",
+        "salience": 0.7,
+        "about": [
+          "Wren Stave"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

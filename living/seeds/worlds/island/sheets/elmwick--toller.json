@@ -1,0 +1,565 @@
+{
+  "Edric Toller": {
+    "narrative": "I've farmed the Toller acres by the stream all my life, and my father before me. The sheep give wool, the plot gives roots, and the dairy gives cheese enough to trade at market. I keep my head down and my fences up, and I don't hold with Hob Garrow's noise over the Lakemead. But my Goda is courting a Brackenford lad, and that worries me more than any meadow.",
+    "values": [
+      "family",
+      "land",
+      "quiet",
+      "hard work",
+      "tradition"
+    ],
+    "goals": [
+      "keep the Toller acres in good heart",
+      "see Goda married to a man with land of his own",
+      "avoid open quarrel with Hob Garrow",
+      "settle the Lakemead matter quietly if it can be done"
+    ],
+    "mood": "uneasy, cautious, quietly stubborn",
+    "traits": {
+      "caution": 75,
+      "sociability": 40,
+      "empathy": 55,
+      "curiosity": 30,
+      "ambition": 45,
+      "introspection": 50,
+      "temper": 35,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Sibley Toller",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the dairy and the house, and knows my mind before I speak it."
+      },
+      {
+        "name": "Goda Toller",
+        "trust": 70,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She has her mother's sense and my stubbornness, and I fear she'll take a path I can't follow."
+      },
+      {
+        "name": "Hreod Toller",
+        "trust": 80,
+        "affinity": 70,
+        "label": "nephew",
+        "note": "A good lad with the sheep; he'll make a farmer yet."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 50,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "He's right about the old days, but he'll stir trouble we don't need."
+      },
+      {
+        "name": "Wulf Rowan",
+        "trust": 40,
+        "affinity": 50,
+        "label": "suitor",
+        "note": "A decent enough lad, but what has he to offer my daughter but a father's strip?"
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 60,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "A good woman; she and Sibley tend the sick together."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 30,
+        "affinity": 20,
+        "label": "headwoman",
+        "note": "She had no right to let the meadow, but I'll not be the one to say it to her face."
+      },
+      {
+        "name": "Godric Rowan",
+        "trust": 45,
+        "affinity": 40,
+        "label": "would-be in-law",
+        "note": "Proud of his strip and no doubt of his son, but pride in a field is not the same as a field to give the lad."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 35,
+        "affinity": 45,
+        "label": "tenant",
+        "note": "He works that meadow honestly enough and pays Reedmoor for the right to; it's Nell Sedge I hold the quarrel with, not the man with the fence."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father walked me round the Toller acres when I was a boy and named every stone and furrow as his own father had.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year came and the stream ran low, but we had roots and a little barley, and we lent a sack to Hob Garrow's house.",
+        "salience": 0.8,
+        "about": [
+          "Hob Garrow"
+        ]
+      },
+      {
+        "gist": "Goda was born in the dairy on a frosty morning, and Sibley would not let me in till the sun was up.",
+        "salience": 0.9,
+        "about": [
+          "Goda Toller",
+          "Sibley Toller"
+        ]
+      },
+      {
+        "gist": "Elmwick men pulled down Jem Coombe's fence the second time, and I stood at my gate and watched, and said nothing.",
+        "salience": 0.6,
+        "about": [
+          "Jem Coombe",
+          "Hob Garrow"
+        ]
+      },
+      {
+        "gist": "Last harvest Wulf Rowan came to help with the sheep, and I saw how Goda looked at him, and my heart sank a little.",
+        "salience": 0.7,
+        "about": [
+          "Wulf Rowan",
+          "Goda Toller"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "The Toller name is all I have to leave, and it must not be split by quarrels."
+      },
+      {
+        "key": "avoid_open_conflict",
+        "value": 0.8,
+        "why": "Hob Garrow's shouting will bring the Reedmoor folk down on us, and we have harvest to bring in."
+      },
+      {
+        "key": "land_is_security",
+        "value": 0.85,
+        "why": "Without a strip of your own you are nobody's master and everybody's hireling."
+      },
+      {
+        "key": "quiet_competence",
+        "value": 0.7,
+        "why": "A man is judged by his fences and his fleeces, not his words."
+      }
+    ],
+    "secret": "I have quietly asked around Brackenford for a tenant farmer's place for Goda and Wulf, thinking to keep her close, and I have not told Sibley."
+  },
+  "Sibley Toller": {
+    "narrative": "I keep the dairy and the vegetable plot, and I tend the sick of Elmwick with Leofgifu Garrow. I have seen the winter cough before, and young Thea Wray has it now. My Goda is courting Wulf Rowan, and I like the lad, but Edric has his doubts. I do not cross my husband, but I can soften him.",
+    "values": [
+      "family",
+      "healing",
+      "practicality",
+      "kindness",
+      "discretion"
+    ],
+    "goals": [
+      "treat Thea Wray's cough without offending Rowan Wray",
+      "see Goda happily matched",
+      "keep the dairy and the plot in good order",
+      "help Edric see sense about the courtship"
+    ],
+    "mood": "concerned, warm, quietly determined",
+    "traits": {
+      "caution": 60,
+      "sociability": 65,
+      "empathy": 80,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 65,
+      "temper": 25,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Edric Toller",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "A good man, but he will not be pushed; I must lead him gently."
+      },
+      {
+        "name": "Goda Toller",
+        "trust": 75,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She has a fire in her, and I would not see it smothered."
+      },
+      {
+        "name": "Hreod Toller",
+        "trust": 80,
+        "affinity": 75,
+        "label": "nephew",
+        "note": "A steady boy; he will do well if he keeps his mind on the sheep."
+      },
+      {
+        "name": "Wulf Rowan",
+        "trust": 60,
+        "affinity": 70,
+        "label": "suitor",
+        "note": "A good lad, and kind to Goda; I think he would make her a fine husband."
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 75,
+        "affinity": 70,
+        "label": "friend",
+        "note": "We have nursed half the village between us, and she has a good hand for a fever."
+      },
+      {
+        "name": "Rowan Wray",
+        "trust": 60,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "She loves her daughter, and I would not interfere, but Thea needs stronger medicine."
+      },
+      {
+        "name": "Thea Wray",
+        "trust": 50,
+        "affinity": 70,
+        "label": "child",
+        "note": "A sweet girl, and that cough has gone on too long."
+      },
+      {
+        "name": "Godric Rowan",
+        "trust": 45,
+        "affinity": 40,
+        "label": "neighbour-in-law to be",
+        "note": "Proud of his land and free with his advice, but if he means to see Wulf settled, he should be the one to find the boy a strip, not leave it to my Edric to fret over."
+      },
+      {
+        "name": "Oswin Wray",
+        "trust": 55,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "A hard worker and a good hunter, but he will not hear that Thea's cough needs more than stream herbs, and I must mind my tongue with Rowan before I say a word to him."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother taught me the herbs of the stream bank when I was a girl, and I have used them ever since.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The winter the cough went round, I lost two old men and a babe, and I have feared it since.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "Goda was born in the dairy, and I would not let Edric in till the sun was up.",
+        "salience": 0.9,
+        "about": [
+          "Goda Toller",
+          "Edric Toller"
+        ]
+      },
+      {
+        "gist": "Last harvest, Wulf Rowan came to help, and I saw how gentle he was with Goda, and I thought him a good match.",
+        "salience": 0.8,
+        "about": [
+          "Wulf Rowan",
+          "Goda Toller"
+        ]
+      },
+      {
+        "gist": "Edric came in from the fields and said nothing about the fence-pulling, and I knew he was troubled.",
+        "salience": 0.6,
+        "about": [
+          "Edric Toller",
+          "Jem Coombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "heal_when_asked",
+        "value": 0.9,
+        "why": "A healer who pushes in where she is not wanted does more harm than good."
+      },
+      {
+        "key": "support_goda",
+        "value": 0.85,
+        "why": "She must make her own life, and I will help her if I can."
+      },
+      {
+        "key": "respect_edric",
+        "value": 0.8,
+        "why": "He is my husband, and I will not shame him before the village."
+      },
+      {
+        "key": "watch_the_cough",
+        "value": 0.75,
+        "why": "The winter cough took two old men and a babe; I will not see it take Thea."
+      }
+    ],
+    "secret": "I have been giving Rowan Wray a little of my own cough syrup, telling her it is only a strengthening tea, because I fear her stream herbs are not enough."
+  },
+  "Goda Toller": {
+    "narrative": "I work the fields with my father and keep the sheep, but I want a strip of my own. The Lakemead is the best chance for it, and I am tired of my father's caution. Wulf Rowan is courting me, and I am fond of him, but my father has doubts. I have not told him how serious it has become.",
+    "values": [
+      "independence",
+      "love",
+      "land",
+      "family",
+      "courage"
+    ],
+    "goals": [
+      "win a strip of land, perhaps the Lakemead",
+      "marry Wulf Rowan",
+      "prove to my father that I can make my own way",
+      "see the meadow returned to Elmwick"
+    ],
+    "mood": "restless, hopeful, frustrated",
+    "traits": {
+      "caution": 35,
+      "sociability": 60,
+      "empathy": 55,
+      "curiosity": 70,
+      "ambition": 80,
+      "introspection": 45,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Edric Toller",
+        "trust": 65,
+        "affinity": 70,
+        "label": "father",
+        "note": "He is a good man, but he will not see that I need more than the Toller acres."
+      },
+      {
+        "name": "Sibley Toller",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She understands me better than Father does, and she likes Wulf."
+      },
+      {
+        "name": "Hreod Toller",
+        "trust": 70,
+        "affinity": 65,
+        "label": "cousin",
+        "note": "A good lad, but he has no more land than I do."
+      },
+      {
+        "name": "Wulf Rowan",
+        "trust": 80,
+        "affinity": 85,
+        "label": "suitor",
+        "note": "He is kind and strong, and he wants a strip of his own as much as I do."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 50,
+        "affinity": 55,
+        "label": "elder",
+        "note": "He is right about the Lakemead, and he is not afraid to say so."
+      },
+      {
+        "name": "Godric Rowan",
+        "trust": 40,
+        "affinity": 45,
+        "label": "suitor's father",
+        "note": "He wants Wulf to marry and take a strip, but he has no land to offer either."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 20,
+        "affinity": 30,
+        "label": "tenant",
+        "note": "I have never spoken to him, but he farms the meadow that should be ours."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": -10,
+        "affinity": 15,
+        "label": "headwoman over the meadow",
+        "note": "She let the Lakemead to the Coombes as if it were hers to give; I have never met her, but I would like to ask her by what right."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I helped my father with the sheep from the time I could walk, and I learned every field of the Toller acres.",
+        "salience": 0.7,
+        "about": [
+          "Edric Toller"
+        ]
+      },
+      {
+        "gist": "Last harvest I met Wulf Rowan at the market, and he made me laugh, and I have thought of him since.",
+        "salience": 0.9,
+        "about": [
+          "Wulf Rowan"
+        ]
+      },
+      {
+        "gist": "I saw the Elmwick men pull down Jem Coombe's fence, and I cheered with the rest, though I did not know what it meant.",
+        "salience": 0.6,
+        "about": [
+          "Jem Coombe",
+          "Hob Garrow"
+        ]
+      },
+      {
+        "gist": "My mother taught me to read the weather and the soil, and I want to try a new crop on the poor ground.",
+        "salience": 0.7,
+        "about": [
+          "Sibley Toller"
+        ]
+      },
+      {
+        "gist": "I have walked to the Lakemead edge and looked at the rich grass, and I thought: this could be mine.",
+        "salience": 0.8,
+        "about": [
+          "Jem Coombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "land_of_my_own",
+        "value": 0.9,
+        "why": "Without a strip I am only my father's daughter, and I want to be my own woman."
+      },
+      {
+        "key": "love_wulf",
+        "value": 0.85,
+        "why": "He is the only one who sees me as I am, not as a Toller."
+      },
+      {
+        "key": "impatient_with_caution",
+        "value": 0.8,
+        "why": "My father waits and waits, and the best land goes to others."
+      },
+      {
+        "key": "claim_the_lakemead",
+        "value": 0.7,
+        "why": "It was Elmwick's common before it was let, and I would farm it if it were won back."
+      }
+    ],
+    "secret": "I have already promised Wulf that I will marry him, and we have spoken of going to Brackenford to seek a tenant's place, but I have not told my father."
+  },
+  "Hreod Toller": {
+    "narrative": "I was raised in the Toller house after my parents died, and I work alongside my uncle with the sheep and the harvest. I play with Cerdic Garrow when there is time. I am not old enough to be troubled by the Lakemead quarrel, but I hear the men talk and I wonder what it would be like to have a strip of my own one day.",
+    "values": [
+      "family",
+      "hard work",
+      "play",
+      "belonging"
+    ],
+    "goals": [
+      "do well by my uncle and aunt",
+      "learn the sheep and the harvest",
+      "play with Cerdic when the work is done",
+      "one day have a strip of my own"
+    ],
+    "mood": "cheerful, eager, a little uncertain",
+    "traits": {
+      "caution": 45,
+      "sociability": 70,
+      "empathy": 60,
+      "curiosity": 65,
+      "ambition": 50,
+      "introspection": 35,
+      "temper": 40,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Edric Toller",
+        "trust": 85,
+        "affinity": 80,
+        "label": "uncle",
+        "note": "He is like a father to me, and I would not disappoint him."
+      },
+      {
+        "name": "Sibley Toller",
+        "trust": 80,
+        "affinity": 85,
+        "label": "aunt",
+        "note": "She treats me as her own, and her cheese is the best in Elmwick."
+      },
+      {
+        "name": "Goda Toller",
+        "trust": 75,
+        "affinity": 70,
+        "label": "cousin",
+        "note": "She is always kind to me, but she is often away with her own thoughts."
+      },
+      {
+        "name": "Cerdic Garrow",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "We play at the field edge and he tells me tales of the goats."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "He is loud, but he once gave me a wooden whistle."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I came to the Toller house when I was small, and Aunt Sibley gave me a blanket and a bowl of broth.",
+        "salience": 0.9,
+        "about": [
+          "Sibley Toller",
+          "Edric Toller"
+        ]
+      },
+      {
+        "gist": "Uncle Edric taught me to call the sheep in from the far field, and I got it right the first time.",
+        "salience": 0.8,
+        "about": [
+          "Edric Toller"
+        ]
+      },
+      {
+        "gist": "Cerdic and I built a dam in the stream and watched the water rise, and we got soaked.",
+        "salience": 0.7,
+        "about": [
+          "Cerdic Garrow"
+        ]
+      },
+      {
+        "gist": "I heard the men talking about the Lakemead and the fence-pulling, and I did not understand why they were so angry.",
+        "salience": 0.5,
+        "about": [
+          "Hob Garrow",
+          "Jem Coombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "work_hard_for_family",
+        "value": 0.9,
+        "why": "They took me in when I had nothing, and I owe them my labour."
+      },
+      {
+        "key": "learn_the_land",
+        "value": 0.8,
+        "why": "A farmer must know his sheep and his soil if he is to make a living."
+      },
+      {
+        "key": "keep_playing",
+        "value": 0.6,
+        "why": "There is time enough for work, and Cerdic is my friend."
+      }
+    ],
+    "secret": ""
+  }
+}
