@@ -1149,6 +1149,24 @@ impl Store {
         })
     }
 
+    /// The last experience whose failure weakened something in this mind (`weakened_by`
+    /// `exp:<id>`): experiences are read for failures in order, so after a restart reading
+    /// resumes past it and no failure weakens the same memories twice.
+    pub async fn weakened_upto(&self, actor: u32) -> Result<u64> {
+        let mut rows = self
+            .g
+            .execute(self.q(
+                "MATCH (c:Concept {run: $run, actor: $actor}) WHERE c.weakened_by STARTS WITH 'exp:'
+                 RETURN max(toInteger(substring(c.weakened_by, 4))) AS upto",
+                actor,
+            ))
+            .await?;
+        Ok(match rows.next().await? {
+            Some(r) => r.get::<Option<i64>>("upto").ok().flatten().unwrap_or(0).max(0) as u64,
+            None => 0,
+        })
+    }
+
     pub async fn rehearse(&self, actor: u32, exps: &[u64]) -> Result<()> {
         if exps.is_empty() {
             return Ok(());
@@ -1165,9 +1183,10 @@ impl Store {
     }
 }
 
-/// A thing's id as minds write it: `#581`, `bush:581`, `fire_581`, `id 581`, not `5810`.
+/// A thing's id as minds write it: `#581`, `bush:581`, `fire_581`, `id 581`, not `5810`, and
+/// not a kept memory's own key `exp:581` (experience ids and thing ids are separate counters).
 fn id_pattern(id: u64) -> String {
-    format!("(?s).*(#|:|_|id )\\s?{id}(?![0-9]).*")
+    format!("(?s).*(#|(?<!exp):|_|id )\\s?{id}(?![0-9]).*")
 }
 
 /// The id of a remembered thing an act or a step failed on, from the authority's feedback, when
@@ -1676,12 +1695,14 @@ mod tests {
             "edges": [{"from": "self", "rel": "FORAGES_AT", "to": "idea:bush_66219", "confidence": 0.9, "because": [1]},
                       {"from": "self", "rel": "FORAGES_AT", "to": "idea:bush_662190", "confidence": 0.9, "because": [1]},
                       {"from": "person:7", "rel": "KNOWS", "to": "idea:bush_66219", "confidence": 0.8, "because": [1]}],
-            "remember": [{"exp": 1, "gist": "Berries for days at #66219, by the gate."}, {"exp": 2, "gist": "Kael showed me #662190."}]
+            "remember": [{"exp": 1, "gist": "Berries for days at #66219, by the gate."}, {"exp": 2, "gist": "Kael showed me #662190."}, {"exp": 66219, "gist": "Rain at dawn."}]
         });
-        let (p, _) = patch_from(&v, &[1, 2], &|_| Some((now, 0.8, Vec::new())));
+        let (p, _) = patch_from(&v, &[1, 2, 66219], &|_| Some((now, 0.8, Vec::new())));
         s.apply(1, &p, "t1", now).await.unwrap();
+        assert_eq!(s.weakened_upto(1).await.unwrap(), 0, "nothing weakened yet");
         let n = s.weaken(1, 66219, 0.5, "exp:9", now).await.unwrap();
-        assert_eq!(n, 2, "the idea and the memory naming #66219");
+        assert_eq!(n, 2, "the idea and the memory naming #66219, not the memory whose key is exp:66219");
+        assert_eq!(s.weakened_upto(1).await.unwrap(), 9, "a restart resumes past experience 9");
         let mut r = s.g.execute(query(
             "MATCH (c:Concept {run: $run, actor: 1}) WHERE c.key IN ['idea:bush_66219', 'idea:bush_662190', 'exp:1', 'exp:2']
              OPTIONAL MATCH (:Concept {run: $run, key: 'self'})-[e {rel: 'FORAGES_AT'}]->(c)
@@ -1691,6 +1712,9 @@ mod tests {
         while let Some(row) = r.next().await.unwrap() {
             seen.insert(row.get::<String>("key").unwrap(), (row.get::<f64>("sal").unwrap(), row.get::<Option<String>>("by").unwrap(), row.get::<Option<f64>>("conf").unwrap(), row.get::<Option<f64>>("known").unwrap()));
         }
+        let mut r = s.g.execute(query("MATCH (c:Concept {run: $run, actor: 1, key: 'exp:66219'}) RETURN toFloat(coalesce(c.salience, 0.5)) AS sal, c.weakened_by AS by").param("run", run.clone())).await.unwrap();
+        let row = r.next().await.unwrap().unwrap();
+        assert!((row.get::<f64>("sal").unwrap() - 0.8).abs() < 1e-6 && row.get::<Option<String>>("by").unwrap().is_none(), "exp:66219 is an experience id, not the thing");
         let (bush, other, mem, mem2) = (&seen["idea:bush_66219"], &seen["idea:bush_662190"], &seen["exp:1"], &seen["exp:2"]);
         assert!((bush.2.unwrap() - 0.45).abs() < 1e-6 && bush.1.as_deref() == Some("exp:9"), "{bush:?}");
         assert!((other.2.unwrap() - 0.9).abs() < 1e-6 && other.1.is_none(), "{other:?}");

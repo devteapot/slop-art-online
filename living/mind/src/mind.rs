@@ -67,8 +67,9 @@ struct ActorMind {
     pruned: Vec<String>,
     /// Merges refused since the last reorganization, and why (fed back in the next one).
     refused_merges: Vec<String>,
-    /// The last experience read for failures at remembered things (`weaken_missed`).
-    missed_upto: u64,
+    /// The last experience read for failures at remembered things (`weaken_missed`); `None`
+    /// until read from the mind after a start.
+    missed_upto: Option<u64>,
     /// Integrations since the last reorganization ("sleep") of the mind.
     since_sleep: u32,
     last_sleep: Option<Instant>,
@@ -623,7 +624,18 @@ impl Minds {
     /// were weakened, for the feedback line.
     async fn weaken_missed(&self, actor: u32) -> Vec<u64> {
         let Some(store) = &self.store else { return Vec::new() };
-        let from = self.actors.lock().unwrap().entry(actor).or_default().missed_upto;
+        let known = self.actors.lock().unwrap().entry(actor).or_default().missed_upto;
+        let from = match known {
+            Some(upto) => upto,
+            // After a restart: past the last failure that weakened anything here.
+            None => match store.weakened_upto(actor).await {
+                Ok(upto) => upto,
+                Err(e) => {
+                    log::warn!("#{actor}: where failures were last read is unknown ({e:#}); reading from now");
+                    self.experiences(actor).last().map_or(0, |e| e.id)
+                }
+            },
+        };
         let mut ids: Vec<(u64, u64)> = Vec::new();
         let mut upto = from;
         for e in self.experiences(actor).into_iter().filter(|e| e.id > from) {
@@ -640,7 +652,7 @@ impl Minds {
                 }
             }
         }
-        self.actors.lock().unwrap().entry(actor).or_default().missed_upto = upto;
+        self.actors.lock().unwrap().entry(actor).or_default().missed_upto = Some(upto);
         let mut weakened = Vec::new();
         for (id, exp) in ids {
             match store.weaken(actor, id, MISSED_WEAKEN, &format!("exp:{exp}"), llm::now_ms()).await {
@@ -1928,7 +1940,8 @@ impl Minds {
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");
-                    messages.push(Msg { role: "assistant", content: reply.content });
+                    // Not a runaway reply in full (the person path keeps 3,000 characters too).
+                    messages.push(Msg { role: "assistant", content: reply.content.chars().take(3000).collect() });
                     messages.push(Msg { role: "user", content: format!("That reply was rejected: {last_err}. Return the complete corrected JSON object.") });
                 }
             }
