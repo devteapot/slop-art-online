@@ -579,7 +579,7 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
     match goal.kind {
         GOAL_POINT => {
             if !map.free(at.0, at.1) {
-                at = map.nearest_walkable(at.0, at.1).ok_or("destination unreachable")?;
+                at = map.nearest_reachable(p, at.0, at.1).ok_or("destination unreachable")?;
             }
             if dist(p, at) <= 0.06 {
                 return Ok(None);

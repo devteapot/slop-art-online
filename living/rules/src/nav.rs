@@ -102,11 +102,14 @@ pub struct Nav {
     blocks: OnceLock<Vec<BlockSlot>>,
     /// How far [`Map::warm_routes`] has got: chunks, then blocks.
     warmed: AtomicU32,
+    /// Each area's connected component (per block, per area), labelled by
+    /// [`Map::warm_routes`] once every block's areas are built; dropped on any change.
+    components: OnceLock<Box<[Box<[u32]>]>>,
 }
 
 impl Clone for Nav {
     fn clone(&self) -> Self {
-        Self { chunks: self.chunks.clone(), blocks: self.blocks.clone(), warmed: AtomicU32::new(self.warmed.load(AtomicOrdering::Relaxed)) }
+        Self { chunks: self.chunks.clone(), blocks: self.blocks.clone(), warmed: AtomicU32::new(self.warmed.load(AtomicOrdering::Relaxed)), components: self.components.clone() }
     }
 }
 
@@ -114,6 +117,8 @@ impl Nav {
     /// Drop chunk `(cx, cy)`'s regions and its block's areas (a tile or gate in it changed),
     /// and the neighbours' links into them.
     pub(crate) fn forget(&mut self, w: u32, cx: u32, cy: u32) {
+        // A change can join or split ground anywhere: label the components again.
+        self.components = OnceLock::new();
         let cw = w.div_ceil(CHUNK);
         let near = |x: u32, y: u32, wide: u32| {
             let (x, y, wide) = (x as i64, y as i64, wide as i64);
@@ -280,6 +285,10 @@ fn widen(cells: impl Iterator<Item = u32>, wide: u32, high: u32) -> Vec<u32> {
     out.sort_unstable();
     out.dedup();
     out
+}
+
+fn area_component(c: &[Box<[u32]>], area: u32) -> u32 {
+    c[(area >> 16) as usize][(area & 0xFFFF) as usize]
 }
 
 fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
@@ -559,6 +568,12 @@ impl Map {
         }
         let (start, goal) = (self.region_near(from)?, self.region_of(to.0.floor() as i32, to.1.floor() as i32)?);
         let (start_area, goal_area) = (self.area_of(start)?, self.area_of(goal)?);
+        // Ground not connected to the start's is refused at once, not by flooding every area.
+        if let Some(c) = self.nav.components.get() {
+            if area_component(c, start_area) != area_component(c, goal_area) {
+                return None;
+            }
+        }
         // 1. Areas, the whole way.
         let (areas, n_areas) = astar((start_area, self.area_rep(start_area)), goal_area, to, spec.road_speed, spec.max_nodes, |k| &self.area_links(k >> 16)[(k & 0xFFFF) as usize], |_| true)?;
         let ka = stretch(&areas, from, spec.area_m, |k| self.area_rep(k));
@@ -588,9 +603,59 @@ impl Map {
         (chunks.len(), chunks.iter().map(|c| c.rep.len()).sum(), areas)
     }
 
+    /// Whether `to` can be walked to from `from` as far as the connected ground says:
+    /// `Some(false)` when they are on ground not connected (water or walls between), `Some(true)`
+    /// when connected (the way may still be long), `None` before the routes are warmed or when
+    /// either end is not walkable ground. O(1) once warmed.
+    pub fn reachable(&self, from: (f32, f32), to: (f32, f32)) -> Option<bool> {
+        let a = self.component_near(from)?;
+        let b = self.component_of(to.0.floor() as i32, to.1.floor() as i32)?;
+        Some(a == b)
+    }
+
+    /// The connected component of tile `(x, y)`'s ground, once the routes are warmed.
+    pub(crate) fn component_of(&self, x: i32, y: i32) -> Option<u32> {
+        let c = self.nav.components.get()?;
+        Some(area_component(c, self.area_of(self.region_of(x, y)?)?))
+    }
+
+    /// The connected component a body at `p` walks on (see `region_near`).
+    pub(crate) fn component_near(&self, p: (f32, f32)) -> Option<u32> {
+        let c = self.nav.components.get()?;
+        Some(area_component(c, self.area_of(self.region_near(p)?)?))
+    }
+
+    /// Label every area with its connected component over the area links (built as needed).
+    fn label_components(&self) -> Box<[Box<[u32]>]> {
+        let nb = self.blocks_wide() * self.chunks_high().div_ceil(BLOCK);
+        let mut comp: Vec<Vec<u32>> = (0..nb).map(|b| vec![u32::MAX; self.block_nav(b).members.len()]).collect();
+        let (mut next, mut stack) = (0u32, Vec::new());
+        for b in 0..nb {
+            for a in 0..comp[b as usize].len() {
+                if comp[b as usize][a] != u32::MAX {
+                    continue;
+                }
+                comp[b as usize][a] = next;
+                stack.push(area_key(b, a as u16));
+                while let Some(k) = stack.pop() {
+                    for l in &self.area_links(k >> 16)[(k & 0xFFFF) as usize] {
+                        let (ob, oa) = ((l.to >> 16) as usize, (l.to & 0xFFFF) as usize);
+                        if comp[ob][oa] == u32::MAX {
+                            comp[ob][oa] = next;
+                            stack.push(l.to);
+                        }
+                    }
+                }
+                next += 1;
+            }
+        }
+        comp.into_iter().map(Vec::into_boxed_slice).collect()
+    }
+
     /// Work out up to `chunks` more chunks' regions and links (then blocks' areas, a block
-    /// counting as `BLOCK` chunks), so later routes find them ready. Returns false once
-    /// everything is built. A tile changed afterwards is worked out again when needed.
+    /// counting as `BLOCK` chunks, then the connected components), so later routes find them
+    /// ready. Returns false once everything is built. A tile changed afterwards is worked out
+    /// again when needed, and the components are labelled again at the next call.
     pub fn warm_routes(&self, chunks: usize) -> bool {
         let nc = self.chunks_wide() * self.chunks_high();
         let nb = self.blocks_wide() * self.chunks_high().div_ceil(BLOCK);
@@ -598,7 +663,11 @@ impl Map {
         while budget > 0 {
             let i = self.nav.warmed.load(AtomicOrdering::Relaxed);
             if i >= nc + nb {
-                return false;
+                if self.nav.components.get().is_some() {
+                    return false;
+                }
+                let _ = self.nav.components.set(self.label_components());
+                return true;
             }
             if i < nc {
                 self.region_links(i);
@@ -684,6 +753,45 @@ mod tests {
         assert!(m.route_leg((10.5, 10.5), (10.5, 100.5), &spec).is_none(), "gate shut");
         m.set_blocked(Default::default());
         assert!(m.route_leg((10.5, 10.5), (10.5, 100.5), &spec).is_some(), "gate open");
+    }
+
+    #[test]
+    fn ground_across_water_is_refused_at_once_once_warmed() {
+        // Two shores 3 tiles of water apart.
+        let mut m = open(256, 256);
+        for x in 0..256 {
+            for y in 127..130 {
+                m.set(x, y, Terrain::Water);
+            }
+        }
+        let (north, north2, south) = ((50.5, 40.5), (200.5, 100.5), (50.5, 200.5));
+        assert_eq!(m.reachable(north, south), None, "not known before the warm-up");
+        while m.warm_routes(64) {}
+        assert_eq!(m.reachable(north, south), Some(false));
+        assert_eq!(m.reachable(north, north2), Some(true));
+        assert!(m.route_leg(north, south, &RouteSpec::default()).is_none(), "far shore");
+        assert!(m.route_leg(north, north2, &RouteSpec::default()).is_some(), "same shore");
+        // A click in the water nearer the far shore lands on the walker's own shore.
+        assert_eq!(m.nearest_walkable(50.5, 129.4).map(|p| p.1), Some(130.5), "the far shore is nearer");
+        assert_eq!(m.nearest_reachable(north, 50.5, 129.4).map(|p| p.1), Some(126.5));
+        // A bridge joins the shores; the components are labelled again at the next warm-up.
+        for y in 127..130 {
+            m.set(60, y, Terrain::Grass);
+        }
+        assert_eq!(m.reachable(north, south), None, "dropped with the change");
+        while m.warm_routes(64) {}
+        assert_eq!(m.reachable(north, south), Some(true));
+        assert!(m.route_leg(north, south, &RouteSpec::default()).is_some(), "over the bridge");
+    }
+
+    #[test]
+    fn area_keys_spread_over_hash_buckets() {
+        // Area keys keep the block in the high bits and the area (mostly 0) in the low ones; the
+        // table picks buckets by the hash's low bits, so the hash must depend on the high ones.
+        use std::hash::BuildHasher;
+        let b = std::hash::BuildHasherDefault::<TileHasher>::default();
+        let buckets: std::collections::HashSet<u64> = (0..4096u32).map(|k| b.hash_one(area_key(k, 0)) & 4095).collect();
+        assert!(buckets.len() > 2000, "{} of 4096 buckets", buckets.len());
     }
 
     #[test]
