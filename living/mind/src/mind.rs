@@ -84,6 +84,32 @@ struct ActorMind {
     /// A pending deliberation is being held back off stage (it does not keep the character
     /// from conversation turns meanwhile).
     deferring: bool,
+    /// Deliberations in a row whose model could not be reached (their request waits).
+    model_failures: u32,
+}
+
+/// A deliberation whose model could not be reached (an outage, a refused or failed call): its
+/// request is kept, not skipped.
+#[derive(Debug)]
+struct ModelUnavailable(String);
+
+impl std::fmt::Display for ModelUnavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "model unavailable: {}", self.0)
+    }
+}
+
+impl std::error::Error for ModelUnavailable {}
+
+/// A model call's error, as a deliberation whose model could not be reached.
+pub(super) fn unavailable(e: anyhow::Error) -> anyhow::Error {
+    anyhow::Error::new(ModelUnavailable(format!("{e:#}")))
+}
+
+/// How long a request waits after its model failed `failures` times in a row: 5 s, doubling,
+/// at most 5 minutes.
+fn model_backoff(failures: u32) -> Duration {
+    Duration::from_secs((5u64 << failures.saturating_sub(1).min(6)).min(300))
 }
 
 pub struct Minds {
@@ -1237,10 +1263,43 @@ impl Minds {
                     }
                     continue;
                 }
-                if let Err(e) = self.deliberate(&d).await {
-                    log::warn!("deliberation for {} failed: {e:#}", self.name(actor));
+                match self.deliberate(&d).await {
+                    Ok(()) => {
+                        self.actors.lock().unwrap().entry(actor).or_default().model_failures = 0;
+                        self.rethink_thought(actor, d.updated_ms);
+                    }
+                    Err(e) if e.is::<ModelUnavailable>() => {
+                        // Its model could not be reached: the request and its reasons stay pending
+                        // (merging what comes next), and it is tried again after a backoff. Meanwhile
+                        // the character takes conversation turns, as while held.
+                        let failures = {
+                            let mut a = self.actors.lock().unwrap();
+                            let m = a.entry(actor).or_default();
+                            m.model_failures += 1;
+                            m.deferring = true;
+                            m.model_failures
+                        };
+                        let wait = model_backoff(failures);
+                        log::warn!("deliberation for {} could not reach its model ({failures}x); the request waits {:.0} s: {e:#}", self.name(actor), wait.as_secs_f64());
+                        if failures == 1 {
+                            let t = ThoughtIn { kind: "error".into(), summary: format!("could not reach the model; the request waits: {e:#}").chars().take(600).collect(), detail: String::new(), latency_ms: 0, tokens: 0, model: String::new(), reference: reference(actor, "deliberate") };
+                            if let Err(e) = self.update(actor, MindUpdate { persona: None, relations: Vec::new(), beliefs: None, judgments: Vec::new(), places: Vec::new(), thought: Some(t), replace: false }).await {
+                                log::warn!("{}: the failure was not recorded: {e:#}", self.name(actor));
+                            }
+                        }
+                        tokio::time::sleep(wait).await;
+                        if self.lod.on {
+                            if let Some(request) = self.pending.lock().unwrap().get_mut(&actor) {
+                                request.state = lod::PendingState::Ready;
+                            }
+                        }
+                        self.actors.lock().unwrap().entry(actor).or_default().deferring = false;
+                        // The same request (or what it has become) is due again.
+                        seen = 0;
+                        continue;
+                    }
+                    Err(e) => log::warn!("deliberation for {} failed: {e:#}", self.name(actor)),
                 }
-                self.rethink_thought(actor, d.updated_ms);
                 if self.lod.on {
                     self.actors.lock().unwrap().entry(actor).or_default().last_deliberated = Some(Instant::now());
                     if let Some(request) = self.pending.lock().unwrap().get_mut(&actor) {
@@ -1413,6 +1472,20 @@ impl Minds {
                 }
             });
         }
+    }
+
+    /// The stances and places a decision named become part of the mind, whether it changes
+    /// the graph or carries on.
+    async fn decided_stances(&self, actor: u32, v: &Value, thought_ref: &str) -> Result<()> {
+        let mut patch = memory::Patch::default();
+        memory::sugar_into(&json!({"judgments": v["judgments"], "places": v["places"]}), &mut patch, &[]);
+        if patch.nodes.is_empty() && patch.edges.is_empty() {
+            return Ok(());
+        }
+        if let Some(store) = &self.store {
+            store.apply(actor, &patch, thought_ref, llm::now_ms()).await?;
+        }
+        self.project(actor, None, None).await
     }
 
     // ---- shared context -----------------------------------------------------------
@@ -1592,10 +1665,8 @@ impl Minds {
         for attempt in 0..3 {
             let reply = match self.llm.chat_in_lane(&profile, at, "deliberate", &c.name, &messages, lane).await {
                 Ok(r) => r,
-                Err(e) => {
-                    last_err = format!("model error: {e:#}");
-                    break;
-                }
+                // The request stays pending: `schedule` tries it again after a backoff.
+                Err(e) => return Err(unavailable(e)),
             };
             total_latency += reply.latency_ms;
             total_tokens += reply.tokens;
@@ -1623,6 +1694,7 @@ impl Minds {
             // Only talking: keep the current behavior and just speak.
             if let Ok(v) = llm::parse_json(&content) {
                 if v["graph"].is_null() || v["graph"].as_str().map_or(false, |g| g.trim().eq_ignore_ascii_case("keep")) {
+                    self.decided_stances(actor, &v, &thought_ref).await?;
                     let (say, to) = match &v["say"] {
                         Value::String(s) => (s.clone(), 0),
                         Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(living_rules::normalize::reply_id).unwrap_or(0) as u32),
@@ -1677,14 +1749,7 @@ impl Minds {
                     let say = if living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
                     let plan = v["plan"].as_str().unwrap_or_default().to_string();
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
-                    let mut patch = memory::Patch::default();
-                    memory::sugar_into(&json!({"judgments": v["judgments"], "places": v["places"]}), &mut patch, &[]);
-                    if !patch.nodes.is_empty() || !patch.edges.is_empty() {
-                        if let Some(store) = &self.store {
-                            store.apply(actor, &patch, &thought_ref, llm::now_ms()).await?;
-                        }
-                        self.project(actor, None, None).await?;
-                    }
+                    self.decided_stances(actor, &v, &thought_ref).await?;
                     let acts = acts_of(&v);
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
@@ -1752,7 +1817,8 @@ impl Minds {
                 Msg { role: "system", content: prompts::animal_think_system(&c.kind, &sp.nature) },
                 Msg { role: "user", content: prompts::animal_think_user(&c.name, &c.kind, &temperament, &mind, &experiences, &d.scene, &d.reason) },
             ], lane)
-            .await?;
+            .await
+            .map_err(unavailable)?;
         let (feeling, impulse) = match llm::parse_json(&felt.content) {
             Ok(v) => (flat(&v["feeling"]), flat(&v["impulse"])),
             Err(_) => (String::new(), felt.content.chars().take(400).collect()),
@@ -1765,7 +1831,7 @@ impl Minds {
         let mut last_err = String::new();
         let (mut latency, mut tokens) = (felt.latency_ms, felt.tokens);
         for attempt in 0..3 {
-            let reply = self.llm.chat_in_lane(&compile, at, "deliberate", &c.name, &messages, lane).await?;
+            let reply = self.llm.chat_in_lane(&compile, at, "deliberate", &c.name, &messages, lane).await.map_err(unavailable)?;
             latency += reply.latency_ms;
             tokens += reply.tokens;
             // An impulse is weighed among the animal's desires, like a person's plan. Its
@@ -2153,6 +2219,13 @@ mod tests {
     /// A compile that put the decision's words in a say act (a real rules2-r2 reply's shape)
     /// speaks them when the decision said nothing; when it did, its speech stands. Either way
     /// no say act reaches the authority.
+    #[test]
+    fn a_request_whose_model_failed_waits_longer_each_time_up_to_five_minutes() {
+        let secs: Vec<u64> = (1..=9).map(|n| model_backoff(n).as_secs()).collect();
+        assert_eq!(secs, [5, 10, 20, 40, 80, 160, 300, 300, 300]);
+        assert!(unavailable(anyhow!("HTTP 500")).is::<ModelUnavailable>());
+    }
+
     #[test]
     fn the_community_line_counts_members_and_names_only_those_one_feels_about() {
         let named: Vec<String> = (1..=14).map(|i| format!("P{i} (#{i})")).collect();
