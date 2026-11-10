@@ -105,11 +105,14 @@ pub struct Nav {
     /// Each area's connected component (per block, per area), labelled by
     /// [`Map::warm_routes`] once every block's areas are built; dropped on any change.
     components: OnceLock<Box<[Box<[u32]>]>>,
+    /// Changes since the map was built: a walk's stored area route is good only for the
+    /// revision it was searched on (area numbers change with the tiles).
+    rev: u32,
 }
 
 impl Clone for Nav {
     fn clone(&self) -> Self {
-        Self { chunks: self.chunks.clone(), blocks: self.blocks.clone(), warmed: AtomicU32::new(self.warmed.load(AtomicOrdering::Relaxed)), components: self.components.clone() }
+        Self { chunks: self.chunks.clone(), blocks: self.blocks.clone(), warmed: AtomicU32::new(self.warmed.load(AtomicOrdering::Relaxed)), components: self.components.clone(), rev: self.rev }
     }
 }
 
@@ -119,6 +122,7 @@ impl Nav {
     pub(crate) fn forget(&mut self, w: u32, cx: u32, cy: u32) {
         // A change can join or split ground anywhere: label the components again.
         self.components = OnceLock::new();
+        self.rev = self.rev.wrapping_add(1);
         let cw = w.div_ceil(CHUNK);
         let near = |x: u32, y: u32, wide: u32| {
             let (x, y, wide) = (x as i64, y as i64, wide as i64);
@@ -173,6 +177,54 @@ pub struct Leg {
     pub areas: usize,
     pub regions: usize,
     pub tiles: usize,
+}
+
+/// A walk's route over areas, kept between its legs by the walker (its steering state), so
+/// each leg carries on the same route instead of searching afresh. Searched afresh only at
+/// the start, when a lower search fails on it, or after the map changed. Before, each leg
+/// searched the areas again from where it stood, and two legs could each pick the other's
+/// way: a walk on the island ended its legs at (538,297) and (535,377) by turns, forever.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Walk {
+    /// The map revision the route was searched on.
+    rev: u32,
+    /// The walker's place on the route, and the place the last leg made for.
+    at: u32,
+    aim: u32,
+    /// Fewest areas left so far, and legs since that fell.
+    best: u32,
+    stale: u32,
+    areas: Vec<u32>,
+}
+
+/// Why no leg was planned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoLeg {
+    /// The goal is not walkable, or not reachable from here.
+    NoPath,
+    /// [`NO_HEADWAY_LEGS`] legs in a row brought the walker no nearer the goal along its route.
+    NoHeadway,
+}
+
+/// Legs in a row without coming nearer the goal (areas left on the route) before a walk gives
+/// up; a leg is about `leg_m`, an area at most a 128 m block.
+pub const NO_HEADWAY_LEGS: u32 = 10;
+
+impl Walk {
+    /// Kept as one list: the five counters, then the areas.
+    pub fn from_vec(v: &[u32]) -> Self {
+        if v.len() < 5 {
+            return Self::default();
+        }
+        Self { rev: v[0], at: v[1], aim: v[2], best: v[3], stale: v[4], areas: v[5..].to_vec() }
+    }
+
+    pub fn to_vec(&self) -> Vec<u32> {
+        if self.areas.is_empty() {
+            return Vec::new();
+        }
+        [self.rev, self.at, self.aim, self.best, self.stale].into_iter().chain(self.areas.iter().copied()).collect()
+    }
 }
 
 /// How a route is searched (from the world's laws).
@@ -558,29 +610,116 @@ impl Map {
 
     /// The next leg of a walk from `from` to `to`: straight when the way is clear, otherwise
     /// planned through areas, regions and tiles (the module notes). `None` when `to` is not
-    /// walkable or cannot be reached from `from`.
+    /// walkable or cannot be reached from `from`. Each call searches the areas afresh; a walk
+    /// of many legs uses [`Map::route_leg_along`].
     pub fn route_leg(&self, from: (f32, f32), to: (f32, f32), spec: &RouteSpec) -> Option<Leg> {
+        self.route_leg_along(from, to, spec, &mut Walk::default()).ok()
+    }
+
+    /// The next leg of a walk that keeps its area route in `walk` between legs (see [`Walk`]).
+    pub fn route_leg_along(&self, from: (f32, f32), to: (f32, f32), spec: &RouteSpec, walk: &mut Walk) -> Result<Leg, NoLeg> {
         if !self.walkable(to.0.floor() as i32, to.1.floor() as i32) {
-            return None;
+            return Err(NoLeg::NoPath);
         }
         if self.line_clear(from, to) {
-            return Some(Leg { points: vec![to], last: true, areas: 0, regions: 0, tiles: 0 });
+            return Ok(Leg { points: vec![to], last: true, areas: 0, regions: 0, tiles: 0 });
         }
-        let (start, goal) = (self.region_near(from)?, self.region_of(to.0.floor() as i32, to.1.floor() as i32)?);
-        let (start_area, goal_area) = (self.area_of(start)?, self.area_of(goal)?);
+        let (start, goal) = (self.region_near(from).ok_or(NoLeg::NoPath)?, self.region_of(to.0.floor() as i32, to.1.floor() as i32).ok_or(NoLeg::NoPath)?);
+        let (start_area, goal_area) = (self.area_of(start).ok_or(NoLeg::NoPath)?, self.area_of(goal).ok_or(NoLeg::NoPath)?);
         // Ground not connected to the start's is refused at once, not by flooding every area.
         if let Some(c) = self.nav.components.get() {
             if area_component(c, start_area) != area_component(c, goal_area) {
-                return None;
+                return Err(NoLeg::NoPath);
             }
         }
-        // 1. Areas, the whole way.
-        let (areas, n_areas) = astar((start_area, self.area_rep(start_area)), goal_area, to, spec.road_speed, spec.max_nodes, |k| &self.area_links(k >> 16)[(k & 0xFFFF) as usize], |_| true)?;
-        let ka = stretch(&areas, from, spec.area_m, |k| self.area_rep(k));
+        let mut n_areas = 0;
+        let kept = walk.rev == self.nav.rev && walk.areas.last() == Some(&goal_area) && walk.areas.iter().all(|&k| self.area_exists(k));
+        if kept {
+            // The walker's place on its route: ahead of where it was, else anywhere on it; off
+            // it (a leg's corridor crossed a neighbouring block), it rejoins the route at the
+            // area the last leg made for.
+            let from_at = walk.areas[walk.at as usize..].iter().position(|&a| a == start_area).map(|i| i + walk.at as usize);
+            match from_at.or_else(|| walk.areas.iter().position(|&a| a == start_area)) {
+                Some(i) => walk.at = i as u32,
+                None => {
+                    let aim = walk.aim.min(walk.areas.len() as u32 - 1) as usize;
+                    let Some((back, n)) = self.area_route(start_area, walk.areas[aim], self.area_rep(walk.areas[aim]), spec) else {
+                        return self.leg_afresh(from, to, spec, walk, start, goal, start_area, goal_area);
+                    };
+                    n_areas = n;
+                    walk.areas = back.into_iter().chain(walk.areas[aim + 1..].iter().copied()).collect();
+                    walk.at = 0;
+                }
+            }
+        } else {
+            let first = walk.areas.is_empty();
+            let (areas, n) = self.area_route(start_area, goal_area, to, spec).ok_or(NoLeg::NoPath)?;
+            // A new route measures headway from its own length (a detour may be longer); the
+            // legs without headway so far still count, so searching again and again does not
+            // hide a walk that gets nowhere.
+            let best = if first { u32::MAX } else { areas.len() as u32 };
+            *walk = Walk { rev: self.nav.rev, at: 0, aim: 0, best, stale: walk.stale, areas };
+            n_areas = n;
+        }
+        match self.leg_on(from, to, spec, walk, start, goal, n_areas) {
+            Some(leg) => self.headway(walk, leg),
+            // The kept route no longer leads anywhere from here: search it again, once.
+            None if kept => self.leg_afresh(from, to, spec, walk, start, goal, start_area, goal_area),
+            None => Err(NoLeg::NoPath),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn leg_afresh(&self, from: (f32, f32), to: (f32, f32), spec: &RouteSpec, walk: &mut Walk, start: u32, goal: u32, start_area: u32, goal_area: u32) -> Result<Leg, NoLeg> {
+        let (areas, n) = self.area_route(start_area, goal_area, to, spec).ok_or(NoLeg::NoPath)?;
+        *walk = Walk { rev: self.nav.rev, at: 0, aim: 0, best: areas.len() as u32, stale: walk.stale, areas };
+        let leg = self.leg_on(from, to, spec, walk, start, goal, n).ok_or(NoLeg::NoPath)?;
+        self.headway(walk, leg)
+    }
+
+    /// Count the leg's headway: the areas left on the route fell, or they did not for
+    /// [`NO_HEADWAY_LEGS`] legs (the walk gets nowhere).
+    fn headway(&self, walk: &mut Walk, leg: Leg) -> Result<Leg, NoLeg> {
+        if leg.last {
+            return Ok(leg);
+        }
+        let left = walk.areas.len() as u32 - walk.at;
+        if left < walk.best {
+            (walk.best, walk.stale) = (left, 0);
+        } else {
+            walk.stale += 1;
+            if walk.stale >= NO_HEADWAY_LEGS {
+                return Err(NoLeg::NoHeadway);
+            }
+        }
+        Ok(leg)
+    }
+
+    /// Areas from `from` to `goal` (A* over the area links), and the areas expanded.
+    fn area_route(&self, from: u32, goal: u32, to: (f32, f32), spec: &RouteSpec) -> Option<(Vec<u32>, usize)> {
+        astar((from, self.area_rep(from)), goal, to, spec.road_speed, spec.max_nodes, |k| &self.area_links(k >> 16)[(k & 0xFFFF) as usize], |_| true)
+    }
+
+    /// Whether area key `k` names an area of this map as it is.
+    fn area_exists(&self, k: u32) -> bool {
+        let nb = self.blocks_wide() * self.chunks_high().div_ceil(BLOCK);
+        k >> 16 < nb && ((k & 0xFFFF) as usize) < self.block_nav(k >> 16).members.len()
+    }
+
+    /// The leg along `walk.areas[walk.at..]`: regions to the end of its first `area_m`, then
+    /// tiles to the end of the region route's first `leg_m`. Notes where it made for.
+    #[allow(clippy::too_many_arguments)]
+    fn leg_on(&self, from: (f32, f32), to: (f32, f32), spec: &RouteSpec, walk: &mut Walk, start: u32, goal: u32, n_areas: usize) -> Option<Leg> {
+        let areas = &walk.areas[walk.at as usize..];
+        // Make for the first area `area_m` away, and never for one before the area the last
+        // leg made for: measured from where the walker stands, the mark moves back and forth
+        // as it moves, and the region routes to the two marks can turn back on each other.
+        let ka = stretch(areas, from, spec.area_m, |k| self.area_rep(k)).max(walk.aim.saturating_sub(walk.at) as usize).min(areas.len() - 1);
         let areas_end = ka == areas.len() - 1;
         let mid_goal = if areas_end { goal } else { self.block_nav(areas[ka] >> 16).rep_region[(areas[ka] & 0xFFFF) as usize] };
         let bh = self.chunks_high().div_ceil(BLOCK);
         let blocks = widen(areas[..=ka].iter().map(|k| k >> 16), self.blocks_wide(), bh);
+        walk.aim = walk.at + ka as u32;
         // 2. Regions, through those blocks.
         let mid_to = if areas_end { to } else { self.region_rep(mid_goal) };
         let (regions, n_regions) = astar((start, self.region_rep(start)), mid_goal, mid_to, spec.road_speed, spec.max_nodes, |k| &self.region_links(k >> 8)[(k & 0xFF) as usize], |k| blocks.binary_search(&self.block_of(k >> 8)).is_ok())?;
@@ -782,6 +921,109 @@ mod tests {
         while m.warm_routes(64) {}
         assert_eq!(m.reachable(north, south), Some(true));
         assert!(m.route_leg(north, south, &RouteSpec::default()).is_some(), "over the bridge");
+    }
+
+    /// The island (seed 7, 2048 m, as hosted), its routes warmed; built once for the tests.
+    fn island() -> &'static Map {
+        static ISLAND: OnceLock<Map> = OnceLock::new();
+        ISLAND.get_or_init(|| {
+            let p = crate::land::LandParams::default();
+            let (m, _) = crate::host::hosted_map(&crate::land::generate(7, 2048, &p), &p);
+            while m.warm_routes(1024) {}
+            m
+        })
+    }
+
+    /// Walk as the authority's steering does: follow a leg, plan the next from where the walker
+    /// is once the leg's end is 16 m off (`motion::REPLAN_AHEAD_M`), keeping the walk's route.
+    /// Returns the legs and metres walked on arrival. Without `keep`, every leg searches afresh
+    /// (as walks did before 2026-11-10).
+    fn walk_along(m: &Map, from: (f32, f32), to: (f32, f32), spec: &RouteSpec, keep: bool) -> Result<(usize, f32), String> {
+        let (mut at, mut walk, mut walked) = (from, Walk::default(), 0.0f32);
+        for legs in 1..=200 {
+            if !keep {
+                walk = Walk::default();
+            }
+            let leg = m.route_leg_along(at, to, spec, &mut walk).map_err(|e| format!("{e:?} at {at:?} after {legs} legs"))?;
+            let end = *leg.points.last().unwrap();
+            'leg: for w in &leg.points {
+                loop {
+                    let d = dist(at, *w);
+                    if d < 0.01 {
+                        break;
+                    }
+                    let st = d.min(1.0);
+                    at = (at.0 + (w.0 - at.0) / d * st, at.1 + (w.1 - at.1) / d * st);
+                    walked += st;
+                    if !leg.last && dist(at, end) <= 16.0 {
+                        break 'leg;
+                    }
+                }
+            }
+            if leg.last {
+                return Ok((legs, walked));
+            }
+        }
+        Err(format!("no arrival in 200 legs, at {at:?}"))
+    }
+
+    #[test]
+    fn a_walk_keeps_its_route_and_does_not_turn_back_between_two_legs() {
+        // On the island, from (264,326) to (904,456): each leg searched afresh made for a mark
+        // 384 m from where it stood, and from (528,309) and (525,367) the region routes to the
+        // two marks turned back on each other, so the walk alternated between leg ends at
+        // (538,297) and (535,377) forever.
+        let m = island();
+        let spec = RouteSpec::default();
+        let (a, b) = (m.nearest_walkable(264.0, 326.0).unwrap(), m.nearest_walkable(904.0, 456.0).unwrap());
+        let (legs, walked) = walk_along(m, a, b, &spec, true).unwrap();
+        assert!(legs < 30 && walked < 1_200.0, "{legs} legs, {walked:.0} m");
+        // Searched afresh every leg, as before, it never arrives.
+        assert!(walk_along(m, a, b, &spec, false).is_err(), "the old way arrived");
+    }
+
+    #[test]
+    fn walks_between_reachable_island_points_arrive() {
+        let m = island();
+        let spec = RouteSpec::default();
+        let mut r = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = || {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            (r >> 11) as f32 / (1u64 << 53) as f32 * 2048.0
+        };
+        let (mut walks, mut failed) = (0, Vec::new());
+        while walks < 40 {
+            let (Some(a), Some(b)) = (m.nearest_walkable(next(), next()), m.nearest_walkable(next(), next())) else { continue };
+            if m.reachable(a, b) != Some(true) || dist(a, b) < 200.0 {
+                continue;
+            }
+            walks += 1;
+            if let Err(e) = walk_along(m, a, b, &spec, true) {
+                failed.push((a, b, e));
+            }
+        }
+        assert!(failed.is_empty(), "{} of {walks} walks did not arrive: {failed:?}", failed.len());
+    }
+
+    #[test]
+    fn a_walk_that_gets_no_nearer_for_ten_legs_gives_up() {
+        let m = open(64, 64);
+        let leg = || Leg { points: vec![(1.0, 1.0)], last: false, areas: 0, regions: 0, tiles: 0 };
+        let mut w = Walk { rev: 0, at: 1, aim: 1, best: 5, stale: NO_HEADWAY_LEGS - 2, areas: vec![0; 6] };
+        assert!(m.headway(&mut w, leg()).is_ok(), "nine legs");
+        assert_eq!(m.headway(&mut w, leg()), Err(NoLeg::NoHeadway), "the tenth");
+        // A leg that comes nearer (fewer areas left) starts the count again.
+        let mut w = Walk { rev: 0, at: 2, aim: 2, best: 5, stale: NO_HEADWAY_LEGS - 1, areas: vec![0; 6] };
+        assert!(m.headway(&mut w, leg()).is_ok() && w.stale == 0 && w.best == 4);
+        // So does the last leg, which reaches the goal.
+        let mut w = Walk { rev: 0, at: 1, aim: 1, best: 5, stale: NO_HEADWAY_LEGS - 1, areas: vec![0; 6] };
+        assert!(m.headway(&mut w, Leg { last: true, ..leg() }).is_ok());
+        // Kept as one list and read back.
+        let w = Walk { rev: 3, at: 1, aim: 2, best: 4, stale: 5, areas: vec![7, 8, 9] };
+        assert_eq!(Walk::from_vec(&w.to_vec()), w);
+        assert_eq!(Walk::from_vec(&[]), Walk::default());
     }
 
     #[test]
