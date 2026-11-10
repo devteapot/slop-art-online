@@ -64,6 +64,10 @@ pub struct ActorFacts {
     /// Walkable tiles in the 5x5 square around the actor (25 in the open, fewer in a narrow
     /// street or a doorway); filled for a skill whose `_shows()` steps aside.
     pub room: u32,
+    /// The actor's community as a party (`records::COMMUNITY | id`; 0: none).
+    pub community: u64,
+    /// Where the actor's household lives (`"x,y"`, whole tiles; empty: no home).
+    pub home: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -97,6 +101,12 @@ pub struct TargetFacts {
     /// (tiles/s; negative when moving away).
     pub bearing: f32,
     pub closing: f32,
+    /// A creature's community as a party (`records::COMMUNITY | id`; 0: none).
+    pub community: u64,
+    /// A structure's owner (0: none).
+    pub owner: u32,
+    /// Where a creature's household lives, or a structure's owner's (`"x,y"`; empty: none).
+    pub home: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -118,6 +128,14 @@ pub struct SkillCtx {
     pub routine: RoutineFacts,
     /// It is raining (the world's weather).
     pub raining: bool,
+    /// What a trade or terms ask in return (`offer`, `offer_terms`).
+    pub want: String,
+    pub want_qty: u32,
+    /// The records the actor is a party to, itself or through its community (filled only for a
+    /// law that reads them).
+    pub records: Vec<crate::records::RecordFacts>,
+    /// The record at hand: the one falling due (`on_expire`).
+    pub record: Option<crate::records::RecordFacts>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -270,6 +288,27 @@ pub enum Effect {
     /// The actor perceives more of the target creature for `secs` seconds: `what` names the
     /// field the `perceived_of` law then sees as revealed (e.g. `health`).
     Reveal { what: String, secs: f32 },
+    /// Make a record: its kind, status, parties by role and terms, falling due after `due_h`
+    /// world hours (none: never). The actor must be one of its parties.
+    Record { kind: String, status: String, parties: Vec<(String, u64)>, terms: serde_json::Map<String, serde_json::Value>, due_h: Option<f32> },
+    /// Change a record the actor is party to (or the one at hand): its status, some of its
+    /// terms, when it falls due.
+    Amend { id: u64, status: Option<String>, terms: serde_json::Map<String, serde_json::Value>, due_h: Option<f32> },
+    /// Close such a record with a status; it is kept `keep_h` world hours more, then dropped.
+    Close { id: u64, status: String, keep_h: f32 },
+    /// Tell a character something in the rules' words. `{actor}`, `{target}` and `{id:N}` in
+    /// the text become how the one told refers to them; `ask` has its mind think about it.
+    Tell { to: u64, text: String, salience: f32, ask: bool },
+    /// Everyone who can see the actor perceives this (`{a}`: the actor, `{b}`: the target).
+    Witness { text: String, salience: f32 },
+}
+
+impl Effect {
+    /// The effects an event hook (`on_<event>`) may return: records and what is told and seen.
+    /// A hook notices and tells; it does not move goods or bodies.
+    pub fn of_a_hook(&self) -> bool {
+        matches!(self, Effect::Record { .. } | Effect::Amend { .. } | Effect::Close { .. } | Effect::Tell { .. } | Effect::Witness { .. })
+    }
 }
 
 /// World laws that parameterize the engine. Read once per script revision (the `laws()`
@@ -449,6 +488,10 @@ pub struct Scripts {
     unary: HashSet<String>,
     shapes: crate::combat::Shapes,
     shows: crate::social::Shows,
+    /// Every skill the script declares (`<skill>_spec()`).
+    skills: std::sync::Arc<crate::catalog::Skills>,
+    /// Functions of no parameter.
+    nullary: HashSet<String>,
     /// What each function reads of its parameters.
     fields: fields::Fields,
     /// The context fields each law is called with, by law.
@@ -510,7 +553,7 @@ fn engine_with(l: Limits) -> Engine {
 
 /// Constant laws the engine looks up by a name, and the names it asks them for.
 fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
-    let skills: Vec<String> = s.shapes.names().map(String::from).chain(crate::catalog::SKILLS.iter().map(|k| k.name.to_string())).collect();
+    let skills: Vec<String> = s.shapes.names().map(String::from).chain(s.skills.names().map(String::from)).collect();
     let kinds: Vec<String> = crate::catalog::CREATURES.iter().map(|k| k.to_string()).collect();
     let items: Vec<String> = crate::catalog::ITEMS.iter().map(|i| i.name.to_string()).collect();
     let resources: Vec<String> = crate::catalog::RESOURCES.iter().map(|(k, _)| k.to_string()).collect();
@@ -551,8 +594,11 @@ impl Scripts {
         let ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
         let fns = ast.iter_functions().map(|f| f.name.to_string()).collect();
         let unary = ast.iter_functions().filter(|f| f.params.len() == 1).map(|f| f.name.to_string()).collect();
+        let nullary = ast.iter_functions().filter(|f| f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
-        let mut s = Self { engine, ast, fns, unary, shapes: Default::default(), shows: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default() };
+        // Skills in the order the source declares them (the last declaration of a name counts).
+        let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
         for f in ["rates", "move_speed"] {
             if !s.fns.contains(f) {
@@ -561,6 +607,7 @@ impl Scripts {
         }
         s.shapes = s.read_shapes()?;
         s.shows = s.read_shows()?;
+        s.skills = std::sync::Arc::new(s.read_specs(&declared)?);
         for (f, names) in name_laws(&s) {
             for n in names {
                 s.num_of(&f, &n, 0.0);
@@ -588,7 +635,7 @@ impl Scripts {
 
     /// The laws the engine calls with a context, by name.
     fn ctx_laws(&self) -> Vec<String> {
-        let mut v: Vec<String> = self.unary.iter().filter(|f| check::CTX_LAWS.contains(&f.as_str()) || check::SKILL_PARTS.iter().any(|x| f.ends_with(x))).cloned().collect();
+        let mut v: Vec<String> = self.unary.iter().filter(|f| check::CTX_LAWS.contains(&f.as_str()) || check::SKILL_PARTS.iter().any(|x| f.ends_with(x)) || f.starts_with("on_")).cloned().collect();
         v.sort();
         v
     }
@@ -656,6 +703,34 @@ impl Scripts {
             Vec::new()
         };
         crate::combat::Shapes::new(shapes, bar)
+    }
+
+    /// What each skill is (`<skill>_spec()`): its arguments, reach and description, read once
+    /// here. A script that declares no skill at all (one installed before skills were declared
+    /// in the script, 2026-11-10) is given the shipped script's, so its world keeps its skills
+    /// until the next install.
+    fn read_specs(&self, declared: &dyn Fn(&str) -> usize) -> Result<crate::catalog::Skills, String> {
+        let mut list = Vec::new();
+        for f in self.nullary.iter().filter(|f| f.ends_with("_spec")) {
+            let skill = f.trim_end_matches("_spec");
+            if skill.is_empty() {
+                continue;
+            }
+            let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+            list.push(spec_of(skill, &m)?);
+        }
+        // The shipped script's, unless it is this one or declares none either (no recursion).
+        const SHIPPED: &str = include_str!("../../scripts/skills.rhai");
+        if list.is_empty() && SHIPPED.contains("_spec() {") && !self.nullary.is_empty() {
+            return Self::new(SHIPPED).map(|s| (*s.skills).clone());
+        }
+        list.sort_by_key(|k: &crate::catalog::SkillSpec| (declared(&k.name), k.name.clone()));
+        Ok(crate::catalog::Skills::new(list))
+    }
+
+    /// Every skill the script declares.
+    pub fn skills(&self) -> &std::sync::Arc<crate::catalog::Skills> {
+        &self.skills
     }
 
     /// What others see of a skill and what it means to them (`<skill>_shows()`), read once
@@ -765,6 +840,49 @@ impl Scripts {
             return Err(format!("{skill} has no missile"));
         }
         decode_missile(&f, self.call(&f, ctx)?)
+    }
+
+    /// What the rules make of an event (`on_<event>(a)`: `on_give`, `on_store`, `on_host` after
+    /// that skill was done, `on_expire` when a record falls due, `on_death`): effects on records,
+    /// and what is told and seen. None when the script has no such hook.
+    pub fn hook(&self, event: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {
+        let f = format!("on_{event}");
+        let fx = self.effects(&f, ctx)?;
+        if let Some(e) = fx.iter().find(|e| !e.of_a_hook()) {
+            return Err(format!("{f}: a hook only makes, amends and closes records, tells and is seen ({e:?} is not one of these)"));
+        }
+        Ok(fx)
+    }
+
+    /// How a party reads one of its records (`record_text(r)`), for minds and players. None
+    /// when the script does not say.
+    pub fn record_text(&self, r: &crate::records::RecordFacts) -> Option<String> {
+        if !self.has("record_text") {
+            return None;
+        }
+        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "record_text", (context::record_map(r),)).ok()?.into_string().ok()
+    }
+
+    /// Whether the script has a hook for an event.
+    pub fn has_hook(&self, event: &str) -> bool {
+        self.unary.contains(&format!("on_{event}"))
+    }
+
+    /// Whether a function reads a top-level field of its context (`records`, `record`), so the
+    /// engine fills it only for laws that read it.
+    pub fn reads(&self, f: &str, field: &str) -> bool {
+        if !self.has(f) {
+            return false;
+        }
+        let i = context::TOP.iter().position(|t| *t == field).expect("a top-level field");
+        self.plan(f).top & (1 << i) != 0
+    }
+
+    /// Whether a skill's rules read the actor's records: on its way (`performing` false) its
+    /// check and duration; once performed, its check, effects and hook too.
+    pub fn skill_reads_records(&self, skill: &str, performing: bool) -> bool {
+        let parts: &[&str] = if performing { &["_check", "_duration", "_done"] } else { &["_check", "_duration"] };
+        parts.iter().any(|p| self.reads(&format!("{skill}{p}"), "records")) || (performing && self.reads(&format!("on_{skill}"), "records"))
     }
 
     fn effects(&self, f: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {
@@ -883,16 +1001,11 @@ impl Scripts {
         v.unwrap_or(default)
     }
 
-    /// What a skill takes and gives, as the rules describe it (`skill_io(name)`), for minds
-    /// composing routines. None when the script does not describe it.
+    /// What a skill takes and gives, as its spec says (`<skill>_spec()`), for minds composing
+    /// routines. None when it says neither.
     pub fn skill_io(&self, skill: &str) -> Option<(String, String)> {
-        if !self.has("skill_io") {
-            return None;
-        }
-        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "skill_io", (skill.to_string(),)).ok()?.try_cast::<Map>()?;
-        let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
-        let (takes, gives) = (text("takes"), text("gives"));
-        (!takes.is_empty() || !gives.is_empty()).then_some((takes, gives))
+        let s = self.skills.get(skill)?;
+        (!s.takes.is_empty() || !s.gives.is_empty()).then(|| (s.takes.clone(), s.gives.clone()))
     }
 
     /// Generic numeric query, e.g. `attack_cooldown`.
@@ -909,6 +1022,49 @@ fn number(d: &Dynamic) -> Option<f64> {
         return Some(i as f64);
     }
     d.as_float().ok()
+}
+
+/// The traits a skill's spec may have.
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items"];
+
+/// A skill's spec from what `<skill>_spec()` returned.
+fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
+    let f = format!("{skill}_spec");
+    if let Some(k) = m.keys().find(|k| !SPEC_TRAITS.contains(&k.as_str())) {
+        return Err(format!("{f}: unknown trait `{k}` (traits are {})", SPEC_TRAITS.join(", ")));
+    }
+    let flag = |k: &str, d: bool| m.get(k).map_or(Ok(d), |v| v.as_bool().map_err(|_| format!("{f}: `{k}` must be true or false")));
+    let text = |k: &str| m.get(k).map_or(Ok(String::new()), |v| v.clone().into_string().map_err(|_| format!("{f}: `{k}` must be a string")));
+    let list = |k: &str| -> Result<Vec<String>, String> {
+        let Some(v) = m.get(k) else { return Ok(Vec::new()) };
+        let a = v.clone().try_cast::<Array>().ok_or_else(|| format!("{f}: `{k}` must be a list of words"))?;
+        a.into_iter().map(|x| x.into_string().map_err(|_| format!("{f}: `{k}` must be a list of words"))).collect()
+    };
+    // `item: true`, or a word for what the item names (`"technique"`).
+    let (needs_item, item_arg) = match m.get("item") {
+        None => (false, String::new()),
+        Some(v) if v.is_bool() => (v.as_bool().unwrap_or(false), String::new()),
+        Some(v) => (true, v.clone().into_string().map_err(|_| format!("{f}: `item` is true, false or what the item names"))?),
+    };
+    let about = text("about")?;
+    if about.trim().is_empty() {
+        return Err(format!("{f}: `about` describes the skill for a mind: what it does, when it is useful, what it is not"));
+    }
+    let reach = m.get("reach").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `reach` must be a number")))?;
+    Ok(crate::catalog::SkillSpec {
+        name: skill.to_string(),
+        needs_target: flag("target", false)?,
+        needs_item,
+        item_arg,
+        args: list("args")?,
+        reach: (reach as f32).clamp(0.0, 64.0),
+        about,
+        takes: text("takes")?,
+        gives: text("gives")?,
+        listed: flag("listed", true)?,
+        talk: flag("talk", false)?,
+        items: list("items")?,
+    })
 }
 
 fn decode_missile(f: &str, d: Dynamic) -> Result<crate::combat::MissileSpec, String> {
@@ -999,6 +1155,48 @@ fn decode_regard(r: Dynamic, p: &RegardIn) -> Result<Regard, String> {
     Ok(Regard { name, health })
 }
 
+/// A record's parties: a map of role → character id (or community party).
+fn parties_of(d: Option<&Dynamic>) -> Result<Vec<(String, u64)>, String> {
+    let Some(m) = d.and_then(|d| d.clone().try_cast::<Map>()) else { return Ok(Vec::new()) };
+    let mut v = Vec::new();
+    for (role, id) in m {
+        let id = number(&id).filter(|x| *x >= 1.0).ok_or_else(|| format!("party `{role}` must be an id"))?;
+        v.push((role.to_string(), id as u64));
+    }
+    Ok(v)
+}
+
+/// A record's terms from a script map (strings, numbers, booleans).
+fn terms_of(d: Option<&Dynamic>) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    let Some(m) = d.and_then(|d| d.clone().try_cast::<Map>()) else { return Ok(Default::default()) };
+    let mut t = serde_json::Map::new();
+    for (k, v) in m {
+        let j = if let Ok(s) = v.clone().into_string() {
+            serde_json::Value::String(s)
+        } else if let Ok(b) = v.as_bool() {
+            serde_json::Value::Bool(b)
+        } else if let Ok(i) = v.as_int() {
+            serde_json::Value::from(i)
+        } else if let Ok(f) = v.as_float() {
+            serde_json::Value::from(f)
+        } else {
+            return Err(format!("term `{k}` must be a string, a number or true/false"));
+        };
+        t.insert(k.to_string(), j);
+    }
+    crate::records::check_terms(&t)?;
+    Ok(t)
+}
+
+/// World hours, within what a record may stand.
+fn hours(d: Option<&Dynamic>) -> Result<Option<f32>, String> {
+    match d {
+        None => Ok(None),
+        Some(d) if d.is_unit() => Ok(None),
+        Some(d) => number(d).map(|h| Some((h as f32).clamp(0.0, crate::records::MAX_DUE_H))).ok_or_else(|| "hours must be a number".to_string()),
+    }
+}
+
 fn effect(d: Dynamic) -> Result<Effect, String> {
     let m = d.try_cast::<Map>().ok_or("effect must be a map")?;
     let s = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
@@ -1043,6 +1241,25 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "launch" => Effect::Launch,
         "hail" => Effect::Hail,
         "reveal" => Effect::Reveal { what: s("what"), secs: (n("secs") as f32).clamp(0.0, 600.0) },
+        "record" => {
+            let parties = parties_of(m.get("parties"))?;
+            if parties.is_empty() || parties.len() > crate::records::MAX_PARTIES {
+                return Err(format!("a record has 1..{} parties", crate::records::MAX_PARTIES));
+            }
+            if s("kind").is_empty() {
+                return Err("a record needs a kind".into());
+            }
+            Effect::Record { kind: s("kind"), status: s("status"), parties, terms: terms_of(m.get("terms"))?, due_h: hours(m.get("due_h"))? }
+        },
+        "amend" => Effect::Amend { id: n("id").max(0.0) as u64, status: m.get("status").and_then(|v| v.clone().into_string().ok()), terms: terms_of(m.get("terms"))?, due_h: hours(m.get("due_h"))? },
+        "close" => Effect::Close { id: n("id").max(0.0) as u64, status: s("status"), keep_h: hours(m.get("keep_h"))?.unwrap_or(0.0) },
+        "tell" => {
+            if s("text").trim().is_empty() {
+                return Err("tell needs a text".into());
+            }
+            Effect::Tell { to: n("to").max(0.0) as u64, text: s("text"), salience: m.get("salience").and_then(number).unwrap_or(0.7).clamp(0.0, 1.0) as f32, ask: m.get("ask").and_then(|v| v.as_bool().ok()).unwrap_or(false) }
+        },
+        "witness" => Effect::Witness { text: s("text"), salience: m.get("salience").and_then(number).unwrap_or(0.4).clamp(0.0, 1.0) as f32 },
         other => return Err(format!("unknown effect op `{other}`")),
     })
 }
@@ -1102,10 +1319,10 @@ mod tests {
         let (takes, gives) = s.skill_io("eat").unwrap();
         assert!(takes.contains("food") && gives.contains("berries 12"), "{takes} / {gives}");
         assert!(s.skill_io("build").unwrap().0.contains("campfire 3 wood"));
-        for sk in crate::catalog::SKILLS {
-            if !matches!(sk.name, "open" | "close" | "found" | "join" | "welcome" | "leave" | "dodge" | "block" | "follow" | "flee" | "offer" | "accept" | "signal") {
-                assert!(s.skill_io(sk.name).is_some(), "{} undescribed", sk.name);
-            }
+        // Every skill says what it is, and what it takes or gives.
+        for sk in s.skills().iter() {
+            assert!(sk.about.len() > 20, "{} undescribed", sk.name);
+            assert!(s.skill_io(&sk.name).is_some(), "{} says neither what it takes nor what it gives", sk.name);
         }
         let mut c = ctx();
         c.item = "berries".into();
@@ -1118,7 +1335,7 @@ mod tests {
     #[ignore]
     fn print_skill_reference() {
         let s = scripts();
-        let text = crate::catalog::skills_help_io(&|n| s.skill_io(n));
+        let text = crate::catalog::skills_help_of(s.skills());
         println!("{text}\n({} chars)", text.len());
     }
 
@@ -1156,7 +1373,7 @@ mod tests {
         assert!(s.check("firebolt", &c).is_ok());
         // A heal: yourself or an ally, not someone fighting you, and only when hurt.
         c.skill = "heal".into();
-        c.actor.knows.push("mending".into());
+        c.actor.knows.push("wound_tending".into());
         c.target = TargetFacts { class: "creature".into(), id: 1, kind: "person".into(), alive: true, hp: 100.0, max_hp: 100.0, ..Default::default() };
         assert_eq!(s.check("heal", &c).unwrap_err(), "you are not hurt");
         c.target.hp = 40.0;
@@ -1205,11 +1422,11 @@ mod tests {
         assert_eq!(with(|x| x.aim == Aim::Facing), vec!["block"]);
         assert_eq!(with(|x| x.aim == Aim::SelfOrAlly), vec!["heal"]);
         // Real-time behavior and reflexes, with the walking and resting skills.
-        let real: Vec<&str> = crate::catalog::SKILLS.iter().map(|k| k.name).filter(|n| sh.real_time(n)).collect();
+        let real: Vec<&str> = s.skills().names().filter(|n| sh.real_time(n)).collect();
         let mut real = real;
         real.sort();
         assert_eq!(real, sorted(vec!["wander", "flee", "follow", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
-        let mut reflex: Vec<&str> = crate::catalog::SKILLS.iter().map(|k| k.name).filter(|n| sh.reflex(n)).collect();
+        let mut reflex: Vec<&str> = s.skills().names().filter(|n| sh.reflex(n)).collect();
         reflex.sort();
         assert_eq!(reflex, sorted(vec!["flee", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "heal", "yield"]));
         // Knacks: the starter skills share the older skills' genes.
@@ -1251,6 +1468,106 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         let refused = |extra: &str| Scripts::new(&format!("{}\n{extra}", include_str!("../../scripts/skills.rhai"))).err().unwrap_or_default();
         assert!(refused(r#"fn zap_combat() { #{ aim: "point" } }"#).contains("zap_missile"));
         assert!(refused(r#"fn zap_combat() { #{ aim: "creature", flying: true } }"#).contains("unknown trait `flying`"));
+    }
+
+    /// A skill added only in the script (its spec and rules) is one a graph, an act and a
+    /// mind's prompt take, with no Rust change; without a spec an install refuses it.
+    #[test]
+    fn a_skill_added_only_in_the_script_is_everyones() {
+        let shipped = include_str!("../../scripts/skills.rhai");
+        let whittle = r#"
+fn whittle_spec() { #{ item: true, items: ["wood"], reach: 0.0, about: "Carve a piece of wood into a peg while you sit.", takes: "1 wood", gives: "a peg (nothing yet uses it)" } }
+fn whittle_check(a) { if inv(a, "wood") < 1 { return "no wood to whittle"; } "" }
+fn whittle_duration(a) { 3000 }
+fn whittle_done(a) { [#{ op: "remove", item: "wood", qty: 1 }] }
+"#;
+        let s = Scripts::new(&format!("{shipped}
+{whittle}")).unwrap();
+        let spec = s.skills().get("whittle").expect("declared");
+        assert!(spec.needs_item && !spec.needs_target && spec.items == ["wood"]);
+        crate::catalog::scoped(s.skills().clone(), || {
+            // A graph leaf and a deliberate act.
+            let (g, _) = crate::normalize::graph(serde_json::json!({"do": "whittle", "item": "wood"})).unwrap();
+            crate::graph::from_value(g).unwrap();
+            let a = crate::acts::parse(serde_json::json!({"do": "whittle", "item": "wood"}), None, s.shapes()).unwrap();
+            assert_eq!(a.skill, "whittle");
+            // A mind's skill reference.
+            assert!(crate::catalog::skills_help().contains("- whittle(item: wood): Carve a piece of wood"), "{}", crate::catalog::skills_help());
+        });
+        // Under the shipped skills it is unknown.
+        crate::catalog::scoped(scripts().skills().clone(), || assert!(crate::normalize::graph(serde_json::json!({"do": "whittle", "item": "wood"})).is_err()));
+        // Rules without a spec are refused at install; a spec without a description too.
+        let bare = Scripts::new(&format!("{shipped}
+{}", whittle.lines().filter(|l| !l.contains("whittle_spec")).collect::<Vec<_>>().join("\n"))).unwrap();
+        assert!(bare.validate().unwrap_err().contains("`whittle` has rules but no `whittle_spec()`"));
+        let mute = Scripts::new(&format!("{shipped}
+fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
+        assert!(mute.contains("`about` describes the skill"), "{mute}");
+    }
+
+    /// Agreements and demands are content on records: made by a skill, settled by hooks and
+    /// by their falling due, each side told in its own terms.
+    #[test]
+    fn agreements_and_demands_are_rules_on_records() {
+        use crate::records::RecordFacts;
+        let s = scripts();
+        let person = |id: u64, home: &str| TargetFacts { class: "creature".into(), id, kind: "person".into(), alive: true, dist: 1.0, stage: "adult".into(), home: home.into(), ..Default::default() };
+        let me = |id: u32, home: &str| ActorFacts { id, kind: "person".into(), stage: "adult".into(), hp: 100.0, energy: 80.0, home: home.into(), ..Default::default() };
+        let tells = |fx: &[Effect]| fx.iter().filter_map(|e| if let Effect::Tell { to, text, .. } = e { Some((*to, text.clone())) } else { None }).collect::<Vec<_>>();
+        // A resident (1, home 10,10) offers 3 berries for 10 wood stacked at its store.
+        let mut c = SkillCtx { actor: me(1, "10,10"), target: person(9, "40,12"), item: "berries".into(), qty: 3, want: "wood".into(), want_qty: 10, text: "stack it at my store".into(), hour: 14.0, skill: "offer_terms".into(), ..Default::default() };
+        assert_eq!(s.check("offer_terms", &c), Ok(()));
+        let fx = s.done("offer_terms", &c).unwrap();
+        let Some(Effect::Record { kind, status, parties, terms, due_h }) = fx.first().cloned() else { panic!("{fx:?}") };
+        assert_eq!((kind.as_str(), status.as_str(), parties.clone()), ("agreement", "offered", vec![("from".to_string(), 1), ("to".to_string(), 9)]));
+        assert_eq!(terms["to_home"], "40,12");
+        assert!(due_h.is_some_and(|h| h > 0.0));
+        assert!(tells(&fx).iter().any(|(to, t)| *to == 9 && t.contains("you give 10 wood, they give 3 berries")), "{fx:?}");
+        let rec = |status: &str, me: &str, from_done: i64, to_done: i64| RecordFacts { id: 5, kind: "agreement".into(), status: status.into(), open: true, terms: { let mut t = terms.clone(); t.insert("from_done".into(), from_done.into()); t.insert("to_done".into(), to_done.into()); t }, parties: parties.clone(), me: me.into(), by: 1, ..Default::default() };
+        // The newcomer (9) accepts: the record is agreed, due at dusk.
+        c = SkillCtx { actor: me(9, "40,12"), target: person(1, "10,10"), hour: 14.0, skill: "accept".into(), records: vec![rec("offered", "to", 0, 0)], ..Default::default() };
+        let fx = s.done("accept", &c).unwrap();
+        assert!(matches!(&fx[0], Effect::Amend { id: 5, status: Some(st), due_h: Some(h), .. } if st == "agreed" && (*h - 6.0).abs() < 1e-3), "{fx:?}");
+        // Without terms standing it is an ordinary trade's accept.
+        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..c.clone() }).unwrap(), vec![Effect::Accept]);
+        // The newcomer stores 10 wood in the resident's household store: its part is done and the
+        // resident is told what it owes.
+        let store = TargetFacts { class: "structure".into(), kind: "storage".into(), id: 77, owner: 3, home: "10,10".into(), dist: 1.0, ..Default::default() };
+        c = SkillCtx { actor: me(9, "40,12"), target: store.clone(), item: "wood".into(), qty: 10, skill: "store".into(), records: vec![rec("agreed", "to", 0, 0)], ..Default::default() };
+        let fx = s.hook("store", &c).unwrap();
+        assert!(fx.iter().any(|e| matches!(e, Effect::Amend { terms, .. } if terms["to_done"] == 10)), "{fx:?}");
+        assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t.contains("You owe them 3 berries")), "{fx:?}");
+        // Wood stored somewhere else counts for nothing.
+        assert!(s.hook("store", &SkillCtx { target: TargetFacts { home: "99,99".into(), owner: 4, ..store }, ..c.clone() }).unwrap().is_empty());
+        // The resident pays: kept on both sides.
+        c = SkillCtx { actor: me(1, "10,10"), target: person(9, "40,12"), item: "berries".into(), qty: 3, skill: "give".into(), records: vec![rec("agreed", "from", 0, 10)], ..Default::default() };
+        let fx = s.hook("give", &c).unwrap();
+        assert!(fx.iter().any(|e| matches!(e, Effect::Close { status, .. } if status == "kept")), "{fx:?}");
+        // Due with the wood stacked and nothing paid: the resident broke it, and both are told.
+        c = SkillCtx { actor: me(1, "10,10"), record: Some(rec("agreed", "from", 0, 10)), ..Default::default() };
+        let fx = s.hook("expire", &c).unwrap();
+        assert!(fx.iter().any(|e| matches!(e, Effect::Close { status, .. } if status == "broken")), "{fx:?}");
+        let t = tells(&fx);
+        assert!(t.iter().any(|(to, x)| *to == 9 && x.contains("they broke your agreement")) && t.iter().any(|(to, x)| *to == 1 && x.contains("you broke your agreement")), "{t:?}");
+        // Not taken: the proposer hears it lapsed; neither delivered: lapsed for both.
+        assert!(tells(&s.hook("expire", &SkillCtx { record: Some(rec("offered", "from", 0, 0)), ..c.clone() }).unwrap()).iter().any(|(to, x)| *to == 1 && x.contains("did not take up")));
+        assert!(s.hook("expire", &SkillCtx { record: Some(rec("agreed", "from", 1, 2)), ..c.clone() }).unwrap().iter().any(|e| matches!(e, Effect::Close { status, .. } if status == "lapsed")));
+        // A demand: made, paid by a give, or unpaid when it falls due. Refusing is not an act.
+        c = SkillCtx { actor: me(1, "10,10"), target: person(9, ""), item: "berries".into(), qty: 2, text: "the gate-due".into(), skill: "demand".into(), ..Default::default() };
+        let fx = s.done("demand", &c).unwrap();
+        assert!(matches!(&fx[0], Effect::Record { kind, parties, .. } if kind == "demand" && parties.contains(&("of".to_string(), 9))), "{fx:?}");
+        assert!(tells(&fx).iter().any(|(to, t)| *to == 9 && t.contains("demands 2 berries of you (\"the gate-due\")")), "{fx:?}");
+        let demand = |me: &str| RecordFacts { id: 6, kind: "demand".into(), status: "open".into(), open: true, terms: serde_json::json!({"item": "berries", "qty": 2, "done": 0, "words": "the gate-due"}).as_object().unwrap().clone(), parties: vec![("by".into(), 1), ("of".into(), 9)], me: me.into(), by: 1, ..Default::default() };
+        assert_eq!(s.check("demand", &SkillCtx { records: vec![demand("by")], ..c.clone() }).unwrap_err(), "you already have a demand of them standing");
+        let paid = s.hook("give", &SkillCtx { actor: me(9, ""), target: person(1, "10,10"), item: "berries".into(), qty: 2, skill: "give".into(), records: vec![demand("of")], ..Default::default() }).unwrap();
+        assert!(paid.iter().any(|e| matches!(e, Effect::Close { status, .. } if status == "met")) && tells(&paid).iter().any(|(to, t)| *to == 1 && t.contains("paid the 2 berries")), "{paid:?}");
+        let unpaid = s.hook("expire", &SkillCtx { actor: me(1, "10,10"), record: Some(demand("by")), ..Default::default() }).unwrap();
+        assert!(unpaid.iter().any(|e| matches!(e, Effect::Close { status, .. } if status == "unpaid")));
+        // A hook may not move goods: an install refuses one that tries.
+        assert!(Scripts::new(&format!("{}\nfn on_give(a) {{ [#{{ op: \"add\", item: \"berries\", qty: 1 }}] }}", include_str!("../../scripts/skills.rhai").replace("fn on_give(a)", "fn on_give_old(a)"))).unwrap().validate().unwrap_err().contains("a hook only makes, amends and closes records"));
+        // How a party reads its records.
+        let regard = RecordFacts { kind: "regard".into(), parties: vec![("holder".into(), crate::records::COMMUNITY | 2), ("toward".into(), crate::records::COMMUNITY | 3)], me: "holder".into(), terms: serde_json::json!({"label": "rival town", "value": -35, "why": "the broken match"}).as_object().unwrap().clone(), ..Default::default() };
+        assert_eq!(s.record_text(&regard).unwrap(), format!("your people hold {{id:{}}} as rival town (the broken match)", crate::records::COMMUNITY | 3));
     }
 
     #[test]

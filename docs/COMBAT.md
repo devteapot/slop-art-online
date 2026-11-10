@@ -39,7 +39,7 @@ The six starter skills and the older force skills (`attack`, `shoot`, `throw`) s
 | RMB | `bowshot` | skillshot missile | a bow and an arrow | 22 m at 30 m/s, radius 0.15 | 300 ms | 250 ms | 900 ms | 1.5 + 1 arrow | 14 × strength × knack × armor on the first body in its path |
 | Q | `firebolt` | skillshot missile | `fire_bolt` (needs `fire`) | 16 m at 16 m/s, radius 0.35 | 450 ms | 350 ms | 4 s | 12 | 24 × knack × armor |
 | E | `block` | held guard | a person | ±75° in front | raised at once, held up to 8 s | — | 400 ms | 1, then 12 a minute while held | three quarters off a blow from the front; nothing from behind |
-| R | `heal` | targeted, self or ally | `mending` | 8 m, in sight | 600 ms | 300 ms | 8 s | 15 | +22 × knack, even mid-fight; not on someone fighting you |
+| R | `heal` | targeted, self or ally | `mending` (renamed `wound_tending` on 2026-11-10, [world rules](WORLD_RULES.md#mending-is-now-wound_tending)) | 8 m, in sight | 600 ms | 300 ms | 8 s | 15 | +22 × knack, even mid-fight; not on someone fighting you |
 | Shift | `dodge` | dash | energy ≥ 5 | 2.6 m at 5.2 m/s | — | 200 ms | 900 ms | 4 | blows and missiles landing during the dash miss |
 
 - **Targeted skills** resolve against a creature within reach and sight (the body's sight radius and a clear line on the map). A player's targeted move does not walk into reach: out of reach is refused ("out of reach"). A graph's does walk, as every graph leaf always has.
@@ -105,7 +105,7 @@ Proof (`verify-codes-1`, `.local/living/verify/codes-1/codes_proof.txt`): instal
 
 **Columns added to a live table.** `skill_card` gained `code`, `aim`, `radius`, `arc`, `needs` and `knows`, appended last with `#[default(..)]` so `just living-publish` migrates an existing world without `--delete-data` ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations), [default values](https://spacetimedb.com/docs/tables/default-values), docs version 2.0.0, checked against the 2.14.1 macro: a default must be constant, so `needs` and `knows` are comma-separated strings, not lists). The new values appear at the next `install_script`, which `living-publish` runs.
 
-**What a new combat skill needs.** Its functions in `skills.rhai` (`_combat`, `_check`, `_duration`, `_done`, and `_missile`/`_hit` for a skillshot), its timing in `combat_cooldown`/`combat_recover`/`combat_cost`, a place in `skill_bar()` if players use it, and its `SkillSpec` (help and reach) in `living/rules/src/catalog.rs`, which graph normalization and approach read. A player's `use_skill` of a `point` skill works without the `SkillSpec`; a graph leaf does not (it is an unknown skill until the catalog names it).
+**What a new combat skill needs.** Its functions in `skills.rhai` (`_combat`, `_check`, `_duration`, `_done`, and `_missile`/`_hit` for a skillshot), its timing in `combat_cooldown`/`combat_recover`/`combat_cost`, a place in `skill_bar()` if players use it, and its `<skill>_spec()` (target, reach and a description for minds) in the same script, which graph normalization, approach, the minds' prompts and the client's verbs read. Since `rules-2` (2026-11-10) there is no Rust catalog line: an install refuses a skill with rules but no spec ([world rules](WORLD_RULES.md#skills-declare-their-spec-in-the-script)).
 
 **Still named in Rust, deliberately:**
 - `act.rs` `report`'s list of notable successes (`attack`, `threaten`, `yield` among `build`, `give`...): which outcomes become a mind's experience, not a combat classification.

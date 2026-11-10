@@ -577,7 +577,7 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
         let reach = match (missile, shape.aim) {
             (Some(m), _) => m.range,
             (None, Aim::Dash) => sc.num_of(&format!("{skill}_dist"), "person", 0.0) as f32,
-            _ => living_rules::catalog::skill(skill).map_or(0.0, |k| k.reach) + if shape.melee { sc.num_of("lunge", "person", 0.0) as f32 } else { 0.0 },
+            _ => sc.skills().get(skill).map_or(0.0, |k| k.reach) + if shape.melee { sc.num_of("lunge", "person", 0.0) as f32 } else { 0.0 },
         };
         let card = SkillCard {
             skill: skill.to_string(),

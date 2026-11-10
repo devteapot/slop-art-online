@@ -18,7 +18,7 @@ A program loses its authority connection, waits, creates a new connection, then 
 .agents/skills/verify-client/scripts/drive.py --run "$R"
 ```
 
-The driver listens on an ephemeral loopback port and forwards to `127.0.0.1:3300`. The Rust probe writes `drop-request` only after the first subscription is live. The relay closes its client and upstream sockets exactly once. It keeps accepting the later connection.
+The driver listens on an ephemeral loopback port and forwards to the server's loopback port (`127.0.0.1:3300`, or a worker's own from `LIVING_STDB_URL`). The Rust probe writes `drop-request` only after the first subscription is live. The relay closes its client and upstream sockets exactly once. It keeps accepting the later connection.
 
 `reconnect.json` must show a disconnect in round one and `applied` in round two. Round two must receive inspector experiences, positive live `body` and `stats` update counts, and a tick count greater than round one. `results.json` must report one drop and two accepted connections. The probe uses the viewer's three-second retry delay.
 

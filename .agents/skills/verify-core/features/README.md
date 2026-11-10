@@ -10,6 +10,7 @@
 | Species restrictions, grazing and migration floor | `scenes.py wildlife` and Cargo | [wildlife.md](wildlife.md) |
 | Blows, threaten, yield and seize | Mechanics and `scenes.py seize` | [combat.md](combat.md) |
 | One-off acts, graph coexistence and feedback | Mechanics and Cargo | [acts.md](acts.md) |
+| Dealings on records: agreements kept, broken, lapsed and not taken; demands met and unpaid; regard read by a relation filter; hooks and install checks | `scenes.py dealings` on an island run, and Cargo | [dealings.md](dealings.md) |
 | Steering and `living/viewer/src/sync.rs` display-sync math | Five steering checks and three sync tests | [steering.md](steering.md) |
 | Town life: daily rhythm, places, weather, gestures, commotion, `act_card`/`doing` | `town.py` on an island run, and Cargo | [town.md](town.md) |
 | Hospitality (`host`): the skill's rules, the engine's house lookup, the `guest` row and its end in housekeeping, the theft exemption | verify-player's `host.py` on an island run | [town.md](town.md#hospitality) |

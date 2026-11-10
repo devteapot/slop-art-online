@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-10 dealings and a skill only the script declares (Mac)
+
+Branch `rules-2` (`eaee6b0`) in a worktree, own container `sao-rules2-stdb` (2.14.1, port 3342), default seed, `scoped`. `deal.py` (new): 13 of 13 (`player-rules2-deal2/`; the first attempt failed one check on the driver, which looked for "proposed to" in lowercase, `-deal1/`). `new_skill.py` (new): 6 of 6 (the first attempt assumed the player's wood count). Not run: `combat.py`, `gesture.py`, `host.py`, `appraise.py`, `wake.py`, the game client binary.
+
 ## 2026-11-10 walking far (Mac)
 
 Branch `path-1` (from `fe6ec66`) in a worktree, the worker's own container `path-stdb` (2.14.1, port 3391), island seed, `scoped`: walks planned leg by leg (docs/PATHS.md).

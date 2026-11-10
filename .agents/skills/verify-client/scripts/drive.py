@@ -61,21 +61,22 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence',
-           'woken', 'prior', 'prior_head', 'guest', 'judged', 'motion_seen',
-           'fighter_seen', 'doing_seen', 'line_seen']
+           'woken', 'prior', 'prior_head', 'guest', 'judged',
+           # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
+           'record', 'record_party', 'record_clock',
+           # A floor module's staged genesis (floor.rs), private since floors were added.
+           'floor_seed', 'genesis_timer',
+           # Frames: what each player was last shown of others (docs/PERCEPTION.md, "Frames").
+           'motion_seen', 'fighter_seen', 'doing_seen', 'line_seen']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 OWN = ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how']
-# The server the harness talks to (verify.py: the shared container on :3300, or a worker's
-# own with LIVING_STDB_CONTAINER and LIVING_STDB_URL); the drop proxy relays to its port.
-LOCAL_URL = re.compile(r'http://(127\.0\.0\.1|localhost):(\d+)')
-SERVER_PORT = int(LOCAL_URL.fullmatch(V.URL).group(2)) if LOCAL_URL.fullmatch(V.URL) else 3300
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
@@ -83,8 +84,6 @@ UNWALKABLE = {2, 4, 7}      # water, rock, wall
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block']}
 MIND = ['mind_routines', 'mind_install', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged']
-# Scheduled reducers: no client may call them (the host answers 404).
-SCHEDULED = ['tick', 'housekeeping', 'genesis_step']
 ADMIN = {
     'set_paused': [False], 'install_script': [''], 'set_profile': [False],
     'spawn_crowd': [0, False], 'grant_know_how': [0, 'gather'], 'own_habits': [],
@@ -93,7 +92,9 @@ ADMIN = {
     'place_structure': [0, 'shelter'], 'set_behavior': [0, '{"wait":30}'],
     'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
     'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
-    'spawn_newcomer': ['probe'], 'create_floor': ['{}'],
+    'spawn_newcomer': ['probe'],
+    # A floor module's runtime seed (floor.rs, admin only).
+    'create_floor': ['{}'],
 }
 
 
@@ -149,7 +150,7 @@ class DropProxy:
                 continue
             except OSError:
                 return
-            upstream = socket.create_connection(('127.0.0.1', SERVER_PORT), timeout=5)
+            upstream = socket.create_connection(('127.0.0.1', int(V.URL.rsplit(':', 1)[1])), timeout=5)
             self.pairs.append((client, upstream))
             self.accepted += 1
             threading.Thread(target=self.relay, args=(client, upstream), daemon=True).start()
@@ -323,7 +324,8 @@ class Run:
         exact = re.findall(r'"(SELECT [^"]+)"', match[1])
         if exact != BASE_QUERIES:
             raise RuntimeError('viewer query set changed; update BASE_QUERIES and the feature map')
-        tables = (ROOT / 'living/authority/src/tables.rs').read_text()
+        # Tables are declared in tables.rs and in a few modules of their own (records.rs).
+        tables = '\n'.join(p.read_text() for p in sorted((ROOT / 'living/authority/src').glob('*.rs')))
         accessor = lambda d: re.search(r'accessor\s*=\s*(\w+)', d)[1]
         definitions = re.findall(r'^#\[spacetimedb::table\((.*?)\)\]', tables, re.S | re.M)
         private = [accessor(d) for d in definitions if not re.search(r'\bpublic\b', d)]
@@ -344,7 +346,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say'} | set(SCHEDULED)
+        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
@@ -392,7 +394,7 @@ class Run:
                 for actor in [ai['id'], other]:
                     self.call(label, token, reducer, mind_args(reducer, actor, label), 'not your character')
                 self.call(label, token, reducer, mind_args(reducer, own, label))
-            for reducer in SCHEDULED:
+            for reducer in ['tick', 'housekeeping']:
                 self.call(label, token, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                           'No such procedure', expected_status=404)
             self.call(label, token, 'human_move', [1, 0, False])
@@ -406,7 +408,7 @@ class Run:
             self.call('anonymous-http-no-token', None, reducer, args, 'admin only')
         for reducer in MIND:
             self.call('anonymous-http-no-token', None, reducer, mind_args(reducer, ai['id'], 'anonymous'), 'not your character')
-        for reducer in SCHEDULED:
+        for reducer in ['tick', 'housekeeping']:
             self.call('anonymous-http-no-token', None, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                       'No such procedure', expected_status=404)
         for reducer, args in [('human_move', [0, 0, False]), ('human_act', ['{"wait":30}']), ('human_say', ['probe', 0])] + list(PLAYER.items()):
@@ -751,8 +753,9 @@ def main():
     parser.add_argument('--seconds', type=int, default=10, help='live query duration, 0 to 300 seconds')
     parser.add_argument('--save', help='fresh evidence basename for --query, without an extension')
     args = parser.parse_args()
-    if not LOCAL_URL.fullmatch(V.URL):
-        parser.error('this driver and drop proxy need a local server: http://127.0.0.1:<port> (LIVING_STDB_URL; the shared one is :3300)')
+    # The shared server on :3300, or a worker's own on another loopback port (LIVING_STDB_URL).
+    if not re.fullmatch(r'http://127\.0\.0\.1:\d+', V.URL):
+        parser.error('this driver and drop proxy require a local server at http://127.0.0.1:<port>')
     run = Run(args.run)
     if args.query is not None:
         if not 0 <= args.seconds <= 300:

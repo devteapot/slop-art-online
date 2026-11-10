@@ -1,16 +1,17 @@
 # Verbs from the game client
 
-The game client offers a player every act the rules allow, from the rules' own data (`living/game/src/verbs.rs`, docs/GAME_BRIEF.md "Verbs"): gather, eat, craft, build, write, give, offer, teach, sleep and the rest. Every act it sends is a `human_act` on the same act path minds use (`acts::submit`), or a `human_say` for asking to be taught. This feature proves that path from the real client, not from HTTP calls.
+The game client offers a player every act the rules allow, from the rules' own data (`living/game/src/verbs.rs`, docs/GAME_BRIEF.md "Verbs"; since `rules-2` every skill comes from its `<skill>_spec()` in the installed script, docs/WORLD_RULES.md): gather, eat, craft, build, write, give, offer, teach, sleep and the rest. Every act it sends is a `human_act` on the same act path minds use (`acts::submit`), or a `human_say` for asking to be taught. This feature proves that path from the real client, not from HTTP calls.
 
 ## Sub-features
 
 - **F on a thing:** a berry bush within reach is aimed at (`verbs::aim`); the hint names the likely act (`F gather`), F's list holds what the rules' checks allow there (`gather`, `face`), and the act is `{"do": "gather", "target": {"nearest": "berry_bush"}}`. The outcome is an `act` experience: "You did what you had decided: gather → berry_bush (+1 berries)."
 - **C on myself:** eat, craft, build, write, drop, experiment, sleep, rest, …, with what the character carries and knows. `eat berries` and `craft spear` (once spear is known and 2 wood and 1 stone are carried) are accepted; `craft bow` without archery is refused by the authority with the rules' reason, shown as a red-edged note.
 - **Words:** `write tablet` opens the text box (its check refuses an empty text); the act carries the words: "You did what you had decided: write tablet (wrote a tablet)."
-- **F on a person:** give, offer, accept, host, conceive, teach, tend, appraise, wave, nod, join, welcome, follow, and asking to be taught; `give berries` is accepted: "… gave 1 berries to a stranger" (the resident as the player perceives it).
+- **F on a person:** give, offer, offer_terms, demand, accept, host, conceive, teach, tend, appraise, wave, nod, join, welcome, follow, and asking to be taught (a skill whose spec reads `want` offers one choice per thing to ask for, from what the character carries and the skill's `items`, such as `lodging`); `give berries` is accepted: "… gave 1 berries to a stranger" (the resident as the player perceives it).
 - **Sleep** goes through `human_act` as before and becomes the character's behaviour (an ongoing skill is not an act).
-- **Panels:** I lists `my_inventory` with the rules' `nutrition` and `carry_limit`; K lists `my_know_how` (technique and source) and every skill with its `skill_io`.
-- **A skill the world adds:** on a scratch authority whose script and catalog define a throwaway `polish`, the unchanged client binary lists it on a boulder and in K, and the authority performs it.
+- **Panels:** I lists `my_inventory` with the rules' `nutrition` and `carry_limit`; K lists `my_know_how` (technique and source) and every skill with its spec's description, takes and gives.
+- **A skill the world adds:** on a scratch authority whose script defines a throwaway `polish` (its spec and rules; before `rules-2` also a catalog line), the unchanged client binary lists it on a boulder and in K, and the authority performs it. Cargo: `a_skill_the_rules_add_is_offered`.
+- **What the rules tell me:** experiences of kind `record` (an agreement kept or broken, a demand on me) show as notes ([dealings](dealings.md)).
 
 ## How to get to it (user POV)
 

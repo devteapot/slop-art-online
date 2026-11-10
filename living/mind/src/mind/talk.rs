@@ -766,6 +766,8 @@ impl Minds {
                 between.push(format!("You offered {other_name} {} {} for {} {}; they have not accepted yet.", o.give_qty, o.give_item, o.want_qty, o.want_item));
             }
         }
+        // Agreements and demands between the two, as the world keeps them.
+        between.extend(self.dealings_with(me, other));
         let t = prompts::TalkUser {
             name: &c.name,
             identity: &identity,

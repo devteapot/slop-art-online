@@ -1,5 +1,15 @@
 # Client protocol validation
 
+## 2026-11-10 records private, `my_records` (Mac)
+
+Branch `rules-2` (`eaee6b0`), own container `sao-rules2-stdb` (2.14.1, port 3342), `scoped`: 30 PASS, exit 0 (`client-rules2-4/`). Harness fixes in this change:
+
+- `run.py` and `drive.py` accept any loopback server from `LIVING_STDB_URL`, and the drop proxy forwards to its port.
+- The private-table inventory reads every authority source file (the records tables are in `records.rs`).
+- `PRIVATE`, `ADMIN` and the scheduled reducers gained the floor module's `floor_seed`, `genesis_timer`, `create_floor` and `genesis_step`, missing since floors merged: on main the driver stopped at its reducer inventory.
+
+`record`, `record_party` and `record_clock` are refused to anonymous clients and players; `my_records` is in the view inventory, and verify-player `deal.py` proves its rows.
+
 ## 2026-11-10 frames: per-viewer copies behind the views (dev-box)
 
 Own scratch container `scale-verify` (image `v2.14.1`, port 3427) named by `LIVING_STDB_CONTAINER` and `LIVING_STDB_URL` (no name shim: `run.py` and `drive.py` now take any local server the harness names); worktree `~/dev/slop-scale`, branch `scale-1` from `1693f3e` with the frames change (docs/PERCEPTION.md, "Frames": the private `motion_seen`, `fighter_seen`, `doing_seen` and `line_seen` tables, `projected.by_viewer_body`); bindings regenerated.

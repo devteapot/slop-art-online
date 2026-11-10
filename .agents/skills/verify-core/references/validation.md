@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-10 world rules on records (Mac)
+
+Branch `rules-2` (`eaee6b0`, from main `bbf7271`) in a worktree, the worker's own container `sao-rules2-stdb` (2.14.1, port 3342), private `CARGO_TARGET_DIR`. `scenes.py dealings` (new; island): 16 of 16 on `8bc4f14` and again on `eaee6b0` (`core-rules2-deal1/`, `core-rules2-final-dealings/`). Regression: `tick`, `needs`, `seize` 6/6 each (default seed, `core-rules2-final/`), `skirmish` 8/8 (island). `just living-check` exit 0, rules 120 passed. Not run: `town.py`, `lives.py`, `infant`, mechanics. Design and numbers: docs/WORLD_RULES.md.
+
 ## 2026-11-10 island food: berries and store places, a food round (Mac)
 
 Branch `hunger-1` (main `7e5de53` merged in) in a worktree, the worker's own container `hunger-verify` (Docker Desktop, 2.14.1, port 3382) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`: `town_life.places` gains `berries` and `store`, `town_life.spread` shares `berries` out like work, and the island's own "find food and eat" walks a round when nothing edible is in sight ([D2](../../../../docs/SOAK.md#d2-the-islands-residents-starve-in-the-first-hours)). Free tier only.

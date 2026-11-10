@@ -324,6 +324,8 @@ pub fn scripts(ctx: &ReducerContext) -> Rc<Scripts> {
         let src = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).unwrap_or_default();
         let mut sc = Scripts::new(&src).expect("installed skills script compiles");
         crate::codes::apply(ctx, &mut sc);
+        // Graph normalization and validation take the world's skills from its script.
+        living_rules::catalog::set_skills(sc.skills().clone());
         let sc = Rc::new(sc);
         *s.borrow_mut() = Some((rev, sc.clone()));
         sc
@@ -685,12 +687,15 @@ pub fn sight_for(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
     }
 }
 
+/// Techniques a character knows, by their current names (a row a world kept from before a
+/// rename reads as the new name until an install renames it, `rename_techniques`).
 pub fn knows(ctx: &ReducerContext, id: u32) -> Vec<String> {
-    ctx.db.know_how().actor().filter(id).map(|k| k.technique).collect()
+    ctx.db.know_how().actor().filter(id).map(|k| living_rules::catalog::technique_name(&k.technique).to_string()).collect()
 }
 
-/// Learn a technique; false if already known.
+/// Learn a technique (by its current name); false if already known.
 pub fn learn(ctx: &ReducerContext, id: u32, technique: &str, source: &str, now: u64) -> bool {
+    let technique = living_rules::catalog::technique_name(technique);
     if ctx.db.know_how().by_actor_technique().filter((id, technique)).next().is_some() {
         return false;
     }

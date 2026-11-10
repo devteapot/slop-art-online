@@ -16,6 +16,7 @@ mod motion;
 mod perceive;
 mod perception;
 mod presence;
+mod records;
 mod seed;
 mod tables;
 mod tick;
@@ -124,6 +125,7 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
         sc.validate()?
     };
     log::info!("install_script: {}", checked.summary());
+    rename_techniques(ctx);
     codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
@@ -138,6 +140,31 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
     Ok(())
+}
+
+/// Renamed techniques (`catalog::RENAMED`) take their new names in the world's know-how and in
+/// what tablets and signs describe. An install is rare and admin-only: this reads every
+/// know-how row and artifact once (there is no index by technique), and writes only renamed rows.
+fn rename_techniques(ctx: &ReducerContext) {
+    let renamed = |t: &str| living_rules::catalog::RENAMED.iter().find(|(old, _)| *old == t).map(|(_, new)| new.to_string());
+    let mut n = 0;
+    for k in ctx.db.know_how().iter().filter(|k| renamed(&k.technique).is_some()).collect::<Vec<_>>() {
+        let new = renamed(&k.technique).unwrap_or_default();
+        if ctx.db.know_how().by_actor_technique().filter((k.actor, new.as_str())).next().is_some() {
+            ctx.db.know_how().id().delete(k.id);
+        } else {
+            ctx.db.know_how().id().update(KnowHow { technique: new, ..k });
+        }
+        n += 1;
+    }
+    for a in ctx.db.artifact().iter().filter(|a| renamed(&a.topic).is_some()).collect::<Vec<_>>() {
+        let topic = renamed(&a.topic).unwrap_or_default();
+        ctx.db.artifact().id().update(Artifact { topic, ..a });
+        n += 1;
+    }
+    if n > 0 {
+        log::info!("install_script: {n} know-how rows and writings took a renamed technique's new name");
+    }
 }
 
 /// Scene support (admin): hold the weather for `secs` seconds (0 hands it back to the seed's
@@ -397,7 +424,7 @@ pub fn spawn_skirmish(ctx: &ReducerContext, n: u32, spacing: f32) -> Result<(), 
         let id = seed::spawn_creature(ctx, &name, "person", ctx.database_identity(), false, p, now);
         common::inv_add(ctx, id as u64, "bow", 1);
         common::inv_add(ctx, id as u64, "arrow", 40);
-        common::learn(ctx, id, "mending", "skirmish", now);
+        common::learn(ctx, id, "wound_tending", "skirmish", now);
         ctx.db.membership().insert(Membership { id: 0, community: sides[side], member: id, since_ms: now });
         let graph = format!(
             r#"{{"first":{{"label":"combat","children":[

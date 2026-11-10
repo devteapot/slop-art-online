@@ -334,6 +334,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     crate::town::guests_leave(ctx, now);
     crate::perception::expire(ctx, now);
     crate::combat::expire(ctx, now);
+    crate::records::housekeeping(ctx, now);
     let hour = common::hour(&w, now) as u8;
     if hour != k.last_hour {
         let day = living_rules::day_of(now, w.epoch_ms, w.day_ms);

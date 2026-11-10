@@ -643,7 +643,124 @@ def sight(s):
     s.expect("the fight happened (chronicle)", attacked, attacked[:1])
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight}
+
+
+# Rules with short hours for the dealings scene, composed as a floor composes its laws
+# (living_rules::floors::compose): each replaced base function keeps its body as base_NAME.
+SHORT_HOURS = {
+    "due_by_dark": "fn due_by_dark(a) { 1.0 }",
+    "proposal_h": "fn proposal_h(x) { 1.5 }",
+    "demand_h": "fn demand_h(x) { 1.0 }",
+    "kept_h": "fn kept_h(x) { 2.0 }",
+}
+
+
+def compose(base, overlay):
+    for name in overlay:
+        base = base.replace(f"fn {name}(", f"fn base_{name}(")
+    return base + "\n" + "\n".join(overlay.values()) + "\n"
+
+
+def dealings(s):
+    """Agreements, demands and regard, built in the rules on the engine's records."""
+    src = compose((ROOT / "living/scripts/skills.rhai").read_text(), SHORT_HOURS)
+    s.call("install_script", src)
+    hour_s = s.rows("SELECT day_ms FROM world")[0]["day_ms"] / 24000
+    a, b, c, d = s.people(4)
+    for x in (b, c, d):
+        s.call("place_near", x, a)
+    s.call("grant_items", a, "berries", 6)
+    s.call("grant_items", b, "wood", 8)
+    s.call("place_structure", a, "storage")
+    store = max(r["id"] for r in s.rows(f"SELECT id FROM structure WHERE owner = {a}"))
+
+    def records(label=None):
+        return s.rows("SELECT * FROM record", label)
+
+    def record_of(kind, by):
+        rs = [r for r in records() if r["kind"] == kind and r["by"] == by]
+        return max(rs, key=lambda r: r["id"]) if rs else None
+
+    # Kept: A offers 2 berries for 3 wood stacked at its store; B accepts, stores the wood and
+    # A pays. Each step is counted by the rules' hooks and each side is told.
+    s.act(a, {"do": "offer_terms", "target": {"id": b}, "item": "berries", "qty": 2, "want": "wood", "want_qty": 3, "text": "stack it in my store"})
+    offered = s.wait(lambda: record_of("agreement", a))
+    s.expect("terms make an offered agreement record", offered["status"] == "offered" and offered["open"], offered)
+    s.expect("the other side is told the terms", bool(s.wait(lambda: s.told(b, "proposes an agreement", "record"))))
+    s.act(b, {"do": "accept", "target": {"id": a}})
+    s.wait(lambda: record_of("agreement", a)["status"] == "agreed")
+    s.expect("accepting makes it agreed and tells the proposer", bool(s.wait(lambda: s.told(a, "accepted your terms", "record"))))
+    s.act(b, {"do": "store", "target": {"id": store}, "item": "wood", "qty": 3})
+    owed = s.wait(lambda: s.told(a, "You owe them 2 berries", "record"), seconds=40)
+    s.expect("work stored in the proposer's store counts and the debt is told", bool(owed),
+             json.loads(record_of("agreement", a)["terms"]))
+    s.act(a, {"do": "give", "target": {"id": b}, "item": "berries", "qty": 2})
+    kept = s.wait(lambda: record_of("agreement", a)["status"] == "kept" and record_of("agreement", a), seconds=40)
+    s.expect("paying keeps it on both sides", not kept["open"] and bool(s.told(b, "kept on both sides", "record")), kept)
+    records("kept")
+
+    # Broken: B offers 2 wood for 1 berry; A accepts; B delivers; A never pays.
+    s.act(b, {"do": "offer_terms", "target": {"id": a}, "item": "wood", "qty": 2, "want": "berries", "want_qty": 1})
+    s.wait(lambda: (record_of("agreement", b) or {}).get("status") == "offered")
+    s.act(a, {"do": "accept", "target": {"id": b}})
+    s.wait(lambda: record_of("agreement", b)["status"] == "agreed")
+    s.act(b, {"do": "give", "target": {"id": a}, "item": "wood", "qty": 2})
+    s.wait(lambda: json.loads(record_of("agreement", b)["terms"])["from_done"] == 2, seconds=30)
+    broken = s.wait(lambda: record_of("agreement", b)["status"] == "broken" and record_of("agreement", b), seconds=hour_s * 3 + 20)
+    s.expect("unpaid by the due hour, it is broken and both sides are told",
+             bool(s.told(b, "they broke your agreement", "record")) and bool(s.told(a, "you broke your agreement", "record")), broken)
+
+    # Lapsed and not taken: C and D agree and neither delivers; D's own terms are never taken up.
+    s.act(c, {"do": "offer_terms", "target": {"id": d}, "item": "berries", "qty": 1, "want": "stone", "want_qty": 1})
+    s.wait(lambda: record_of("agreement", c))
+    s.act(d, {"do": "accept", "target": {"id": c}})
+    s.wait(lambda: record_of("agreement", c)["status"] == "agreed")
+    s.act(d, {"do": "offer_terms", "target": {"id": c}, "item": "stone", "qty": 1, "want": "fiber", "want_qty": 1})
+    s.wait(lambda: s.wait(lambda: record_of("agreement", c)["status"] == "lapsed", seconds=hour_s * 3 + 20))
+    s.expect("neither side delivering, it lapses and both are told",
+             bool(s.told(c, "has lapsed", "record")) and bool(s.told(d, "has lapsed", "record")))
+    s.wait(lambda: s.told(d, "did not take up your terms", "record"), seconds=hour_s * 3 + 20)
+    s.expect("terms not accepted lapse and the proposer is told", True)
+
+    # Demands: one paid with a give, one not paid. Refusing is not an act.
+    s.call("grant_items", c, "berries", 3)
+    s.act(a, {"do": "demand", "target": {"id": c}, "item": "berries", "qty": 2, "text": "the gate-due"})
+    s.wait(lambda: s.told(c, "demands 2 berries of you", "record"))
+    s.expect("a demand is told to its target, and onlookers see it", bool(s.wait(lambda: s.told(d, "demanded 2 berries of", "record"))))
+    s.act(c, {"do": "give", "target": {"id": a}, "item": "berries", "qty": 2})
+    met = s.wait(lambda: (record_of("demand", a) or {}).get("status") == "met" and record_of("demand", a), seconds=40)
+    s.expect("a demand paid by a give is met and the demander told", bool(s.told(a, "paid the 2 berries you demanded", "record")), met)
+    s.act(b, {"do": "demand", "target": {"id": d}, "item": "stone", "qty": 1})
+    unpaid = s.wait(lambda: (record_of("demand", b) or {}).get("status") == "unpaid" and record_of("demand", b), seconds=hour_s * 2 + 20)
+    s.expect("a demand not paid falls due unpaid; both are told",
+             bool(s.told(b, "has not paid the 1 stone", "record")) and bool(s.told(d, "You did not pay", "record")), unpaid)
+    records("after")
+    s.expect("records are bounded: closed ones are dropped after their keep",
+             bool(s.wait(lambda: not [r for r in records() if r["kind"] == "agreement" and r["by"] == a], seconds=hour_s * 3 + 30)))
+
+    # Regard: the seed's stance records read by a relation filter. A resident of a community that
+    # holds another as "rival town" waves at that town's resident, not at a neighbour.
+    stances = [r for r in records("regard") if r["kind"] == "regard"]
+    s.expect("the seed's regard records exist", len(stances) >= 10, len(stances))
+    comm = {c["name"]: c["id"] for c in s.rows("SELECT id, name FROM community")}
+    members = s.rows("SELECT community, member FROM membership")
+    alive = {c["id"] for c in s.rows("SELECT id FROM character WHERE alive = true")}
+    of = lambda name: [m["member"] for m in members if m["community"] == comm.get(name) and m["member"] in alive]
+    brack, kettle = of("Brackenford"), of("Kettlebridge")
+    s.expect("both towns have residents", len(brack) >= 2 and len(kettle) >= 1, (len(brack), len(kettle)))
+    host, neighbour, rival = brack[0], brack[1], kettle[0]
+    s.call("place_near", neighbour, host)
+    s.call("place_near", rival, host)
+    s.graph(rival, {"wait": 120})
+    s.graph(neighbour, {"wait": 120})
+    s.graph(host, {"first": [{"do": {"skill": "wave", "target": {"nearest": {"kind": "person", "relation": "rival town"}}}}, {"wait": 60}]})
+    waved = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM skill_use WHERE actor = {host}") if r["skill"] == "wave"], seconds=30)
+    s.rows(f"SELECT * FROM skill_use WHERE actor = {host}", "regard-wave")
+    s.expect("a relation filter reads the community's regard", any(r.get("target") == rival for r in waved), waved)
+    s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
+
+
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings}
 
 
 def main():
