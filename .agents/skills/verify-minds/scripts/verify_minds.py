@@ -19,7 +19,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'wake', 'animals', 'night', 'jev')
+         'takeover', 'sight', 'wake', 'animals', 'night', 'jev', 'rethink', 'rethink-llm')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 
@@ -103,6 +103,8 @@ def wall_spots(run):
 def run_case(run, case):
     if case in ('animals', 'night', 'jev'):
         return {'animals': animals_case, 'night': night_case, 'jev': jev_case}[case](run)
+    if case in ('rethink', 'rethink-llm'):
+        return rethink_case(run, 'jev' if case == 'rethink' else 'llm')
     if case == 'takeover':
         return takeover_case(run)
     if case == 'sight':
@@ -567,6 +569,109 @@ def jev_case(run):
     judged = [e for e in run.exchanges() if e['purpose'] == 'judge']
     assert judged and judged[0]['judged'][0]['q'] == 'fight_risk'
     return {'status': 'pass', 'judgments': len(judged), 'value': cached[0]['value']}
+def rethink_case(run, arm):
+    """The rethink gate (mind/rethink.rs; `LIVING_RETHINK=jev|llm`) in front of non-urgent
+    deliberations. The fake judge holds by default and answers per marker in the request: a
+    held request stays pending and gathers later reasons while the character still takes
+    conversation turns; an urgent reason bypasses the judge and the deliberation sees all that
+    gathered; a yes goes through; a failing or slow judge falls back to deliberating; a request
+    held `max_hold_s` goes through. Every decision is journaled with purpose `rethink-gate`."""
+    people = prepare(run)
+    actor = people[0]['id']
+    if arm == 'jev':
+        yes = {'noul': {'plan_broken': 0.9, 'unhandled': 0.2, 'would_repeat': 0.1}}
+        hold = {'noul': 0.1}
+    else:
+        yes = {'reply': {'rethink': True, 'p': 0.9}}
+        hold = {'reply': {'rethink': False, 'p': 0.1}}
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'I answer.', 'say': 'verify rethink talk reply', 'end': True}},
+              'rules': [{'purpose': 'rethink', 'contains': 'verify yes', 'times': -1, **yes},
+                        {'purpose': 'rethink', 'contains': 'verify broken', 'status': 503, 'times': -1},
+                        {'purpose': 'rethink', 'contains': 'verify slow', 'delay_s': 6, 'times': -1, **hold},
+                        {'purpose': 'rethink', 'times': -1, **hold}]}
+    models = model(run, script)
+    port = models['profiles']['local']['base_url'].split(':')[2].split('/')[0]
+    cfg = json.loads((ROOT / 'living/configs/rethink.json').read_text())
+    cfg.update(max_hold_s=90)
+    cfg['jev']['timeout_ms'] = 2000
+    cfg['llm'].update(route='local', timeout_ms=4000)
+    (run.directory / 'rethink.json').write_text(json.dumps(cfg, indent=2))
+    run.start(models, [actor], extra_env={'LIVING_RETHINK': arm, 'LIVING_RETHINK_CONFIG': str(run.directory / 'rethink.json'),
+              'LIVING_RETHINK_URL': f'http://127.0.0.1:{port}/v1/systemone', 'TYPESAFE_API_KEY': 'fake-only'})
+    run.wait(lambda: 'rethink gate on:' in run.log(), 'the gate switched on', 30)
+    gates = lambda: [e for e in run.exchanges() if e.get('purpose') == 'rethink-gate']
+    thinks = lambda: len([e for e in run.exchanges() if e.get('purpose') == 'think'])
+    asked = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e.get('purpose') == 'rethink']
+    gate = lambda marker, verdict, s=40: run.wait(lambda: [g for g in gates() if marker in g['reason'] and g['verdict'] == verdict], f'gate {verdict} on {marker}', s)
+    thought = lambda marker, s=40: run.wait(lambda: [t for t in run.thoughts(actor, 'thoughts-' + marker.replace(' ', '-'))
+                                                    if t['kind'] == 'deliberate' and marker in json.loads(t['detail']).get('reason', '')], f'deliberation on {marker}', s)
+    out = {}
+    # A fake mind answers within a second, so the driver waits on the gate's journal, not on
+    # the pending row.
+    ask = lambda marker: run.admin('set_behavior', actor, json.dumps({'think': 'I finished my plan. verify ' + marker}))
+    # 1. The first thought since the service started is never gated.
+    ask('first')
+    gate('verify first', 'first')
+    thought('verify first')
+    assert not asked(), 'the first thought asked the judge'
+    # 2. A non-urgent trigger is held: it stays pending, no thought starts. (Re-raised triggers
+    #    with nothing new are held without asking; that rule is the unit test
+    #    `a_held_request_is_asked_again_only_when_something_changed`, since percepts arrive
+    #    on the world's schedule.)
+    time.sleep(46)
+    before = thinks()
+    run.admin('set_behavior', actor, json.dumps({'think': 'verify gated one'}))
+    held = gate('verify gated one', 'hold')[0]
+    assert held['p'] is not None and held['p'] < 0.5 and held['state']['why_it_is_asked_to_think']
+    assert set(held['state']) >= {'current_plan', 'since_last_thought', 'spoke_to_without_answer', 'body', 'recent_thoughts'}
+    # 3. While held, the character still takes a conversation turn.
+    run.harness('player', 'join', 'RethinkListener')
+    player = run.sql("SELECT id FROM character WHERE name = 'RethinkListener'", 'player')[0]['id']
+    run.admin('place_near', player, actor)
+    run.harness('player', 'say', 'Are you still there?', '--to', str(actor))
+    run.wait(lambda: [e for e in run.exchanges() if e.get('purpose') == 'talk'], 'a talk turn while held', 30)
+    time.sleep(5)
+    assert thinks() == before, 'a held request was deliberated'
+    assert run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'held-pending'), 'the held request is gone'
+    out['asked_while_held'] = len(asked())
+    # 4. A later reason merges into the held request and is judged again.
+    run.admin('set_behavior', actor, json.dumps({'think': 'verify gated two'}))
+    gate('verify gated two', 'hold')
+    assert thinks() == before
+    # 5. An urgent reason is never judged, and the deliberation sees everything that gathered.
+    n = len(asked())
+    run.admin('set_behavior', actor, json.dumps({'think': 'Wolf is attacking you! verify urgent'}))
+    gate('verify urgent', 'urgent')
+    urgent = json.loads(thought('verify urgent')[0]['detail'])['reason']
+    assert 'verify gated one' in urgent and 'verify gated two' in urgent, urgent
+    assert len(asked()) == n, 'an urgent trigger was judged'
+    # 6. A yes goes through.
+    time.sleep(46)
+    ask('yes')
+    out['yes_p'] = gate('verify yes', 'rethink')[0]['p']
+    thought('verify yes')
+    # 7. A failing judge falls back to deliberating, and so does a slow one.
+    for marker in ('broken', 'slow'):
+        time.sleep(46)
+        ask(marker)
+        out[marker] = gate('verify ' + marker, 'fallback')[0]['error']
+        thought('verify ' + marker)
+    # 8. A request held for max_hold_s goes through.
+    time.sleep(46)
+    ask('gated three')
+    gate('verify gated three', 'hold')
+    started = time.monotonic()
+    gate('verify gated three', 'max_hold', 120)
+    thought('verify gated three')
+    out['max_hold_release_s'] = round(time.monotonic() - started, 1)
+    verdicts = [g['verdict'] for g in gates()]
+    stats = run.wait(lambda: re.findall(r'rethink gate \(\w+\): Stats \{([^}]*)\}', run.log()), 'a stats line', 70)
+    (run.directory / 'rethink.json-result').write_text(json.dumps({'verdicts': verdicts, 'stats': stats[-1], **out}, indent=2))
+    return {'status': 'pass', 'arm': arm, 'verdicts': verdicts, 'stats': stats[-1], **out}
+
+
 def wake_case(run):
     """On the island (`rules.minds = false`) a resident lives on its behaviour graph until a
     player engages it: an offer and speech wake it, this service takes it up like any AI
@@ -658,7 +763,7 @@ def main():
         with (suite / name).open('w') as stream:
             subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, check=True)
     paths = ['living/mind/src/main.rs', 'living/mind/src/mind.rs', 'living/mind/src/mind/talk.rs',
-             'living/mind/src/mind/lod.rs', 'living/mind/src/prompts.rs', 'living/authority/src/mind.rs',
+             'living/mind/src/mind/lod.rs', 'living/mind/src/mind/rethink.rs', 'living/configs/rethink.json', 'living/mind/src/prompts.rs', 'living/authority/src/mind.rs',
              'living/rules/src/normalize.rs', str(shared.MIND_BIN),
              '.agents/skills/verify-llm/scripts/fake_llm.py', '.agents/skills/verify-llm/scripts/verify_llm.py',
              '.agents/skills/verify-minds/scripts/verify_minds.py']

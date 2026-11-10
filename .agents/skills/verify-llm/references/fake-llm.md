@@ -36,7 +36,7 @@ A JSON script overrides `--scenario`:
 }
 ```
 
-The first matching rule wins. Omitted `model` or `purpose` matches every value. `times` defaults to 1, 0 skips a rule, and -1 repeats forever. Selection and the counters share one lock, so concurrent requests consume each rule once. Matching is per request, not per actor. Use separate model names or ports to isolate actors. Restarting resets counters and appends to the log.
+The first matching rule wins. Omitted `model` or `purpose` matches every value. A rule's `contains` matches only requests whose JSON body contains that text (a marker in the reason, for example). `times` defaults to 1, 0 skips a rule, and -1 repeats forever. Selection and the counters share one lock, so concurrent requests consume each rule once. Matching is per request, not per actor. Use separate model names or ports to isolate actors. Restarting resets counters and appends to the log.
 
 Each rule overlays `defaults`. Available response fields:
 
@@ -75,11 +75,11 @@ A rule with `"cite": true` fills placeholders in its `reply` from the experience
 
 ## Jev (`POST /v1/systemone`)
 
-TypeSafe's judgment endpoint, shaped as its docs give it (docs.typesafe.ai, read 2026-11-09): `{"model", "state", "questions": {id: {"type": "noul"|"choice"|"score", "instructions", "criteria"}}}` → `{"model", "answers": {id: …}, "usage": {"input_tokens", "output_tokens"}}`. By default a noul's yes probability is how hurt `state.body` is (1 − health / max_health; 0.2 without a body), a choice takes its first criterion and a score is 0. A script rule with `"purpose": "judge"` may set `noul`, `status` or `delay_s`. Each request is logged with purpose `judge` and its `answers`.
+TypeSafe's judgment endpoint, shaped as its docs give it (docs.typesafe.ai, read 2026-11-09): `{"model", "state", "questions": {id: {"type": "noul"|"choice"|"score", "instructions", "criteria"}}}` → `{"model", "answers": {id: …}, "usage": {"input_tokens", "output_tokens"}}`. By default a noul's yes probability is how hurt `state.body` is (1 − health / max_health; 0.2 without a body), a choice takes its first criterion and a score is 0. A script rule with `"purpose": "judge"` may set `noul`, `status` or `delay_s`. Each request is logged with purpose `judge` and its `answers`. A rethink gate's request (its `state` has `why_it_is_asked_to_think`) is purpose `rethink` instead: its nouls default to 0.1, a rule's `noul` may be one number or a map per question id, and health is not read from its body (the gate sends needs as words).
 
 ## Purpose and valid replies
 
-An animal choosing ("pick one of the numbered", `LIVING_ANIMAL_MINDS=choose`) is `choose` and a sleep ("Tidy the person") is `reorganize` whatever the effort says, since they go out under `deliberate` and `consolidate` effort maps. Otherwise the purpose is `reasoning_effort` when its value is a purpose name (`think`, `deliberate`, `consolidate`, `talk`, `internalize`, `reorganize`, `judge`, `choose`), else the system prompt decides: "someone you cannot see" is `internalize`. The production body has no separate purpose field. The local runner sets the per-purpose effort map to these names. They are fake values, not recommended live provider effort levels.
+A rethink gate's chat question ("should stop and think again" in the system prompt) is `rethink`, default reply `{"rethink": false, "p": 0.1}`. An animal choosing ("pick one of the numbered", `LIVING_ANIMAL_MINDS=choose`) is `choose` and a sleep ("Tidy the person") is `reorganize` whatever the effort says, since they go out under `deliberate` and `consolidate` effort maps. Otherwise the purpose is `reasoning_effort` when its value is a purpose name (`think`, `deliberate`, `consolidate`, `talk`, `internalize`, `reorganize`, `judge`, `choose`, `rethink`), else the system prompt decides: "someone you cannot see" is `internalize`. The production body has no separate purpose field. The local runner sets the per-purpose effort map to these names. They are fake values, not recommended live provider effort levels.
 
 Defaults come from `prompts.rs` and the parsers in `mind.rs` and `mind/talk.rs`:
 

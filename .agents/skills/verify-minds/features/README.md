@@ -12,6 +12,7 @@
 | Cheaper animal minds: one call picks among built options (choose), the deer it sees reuse it (pack), nothing new answers by instinct (salient) | `animals` | [animals.md](animals.md) |
 | Reorganization at night, in the night's batch round | `night` (scheduling, no store); `verify-knowledge` sleep stage (the batch job) | [sleep.md](sleep.md) |
 | A cached Jev judgment drives the graph: asked in the background, cached by `mind_judged`, read by `judged` | `jev` | [judgments.md](judgments.md) |
+| The rethink gate: a fast judge (Jev or a chat model) holds non-urgent deliberations; urgent bypass, accumulation, talk while held, fallback, max hold | `rethink`, `rethink-llm` | [rethink.md](rethink.md) |
 | A woken island resident: an offer and speech wake it, this service takes it up, answers, takes talk turns, accepts the trade and teaches through its own acts, keeps its places through a replacing update | `wake` | [wake.md](wake.md) |
 | A woken resident of the seeded island knows its past and its people: relations as rows before waking, its authored persona, people and `[before all this]` memories in its first prompt, secrets kept to their owner (scratch Neo4j) | `lives_wake.py` on an island run | [lives-wake.md](lives-wake.md) |
 | Player memory: switch off, cadence (session end by presence), the takeover's wait for its past, persona inferred, reconnect from `lived_upto`, batch mode | `verify-knowledge` `player_memory.py` | [player-memory.md](player-memory.md) |

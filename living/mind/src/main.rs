@@ -52,6 +52,9 @@ async fn main() -> Result<()> {
     let root = root();
     load_env(&root.join(".env"));
     load_env(&root.join(".local/living/neo4j.env"));
+    if std::env::args().nth(1).as_deref() == Some("rethink-replay") {
+        return mind::rethink::replay_main(&root, std::env::args().skip(2).collect()).await;
+    }
     let server = std::env::var("LIVING_SERVER").unwrap_or_else(|_| "http://127.0.0.1:3300".into());
     let db = std::env::var("LIVING_DB").unwrap_or_else(|_| "living".into());
     let token = match std::env::var("LIVING_TOKEN") {
@@ -78,6 +81,8 @@ async fn main() -> Result<()> {
     let llm = llm::Llm::new(models, journal)?;
     // Who is on stage is tracked for the level of detail and for mixes that choose by it.
     let attention = mind::lod::enabled() || llm.staged();
+    // The rethink gate remembers its characters' recent percepts (rethink.rs).
+    let rethink = mind::rethink::enabled();
 
     let store = match std::env::var("LIVING_NEO4J_PASSWORD") {
         Ok(pw) if std::env::var("LIVING_NEO4J").as_deref() != Ok("off") => {
@@ -184,6 +189,9 @@ async fn main() -> Result<()> {
                 if player(e.subject) || player(e.object) {
                     let _ = tx.send(mind::Event::Contact(e.observer));
                 }
+            }
+            if rethink {
+                let _ = tx.send(mind::Event::Percept(e.clone()));
             }
             if e.kind == "speech" || e.kind == "silence" {
                 let _ = tx.send(mind::Event::Speech(e.clone()));
