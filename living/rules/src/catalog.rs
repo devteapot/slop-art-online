@@ -142,39 +142,40 @@ pub fn is_skill(name: &str) -> bool {
     skills().has(name)
 }
 
+/// An item the world knows. What it does (feeds, spoils, cuts) is the rules' to say:
+/// `nutrition(item)`, `spoil_rate(item)` and the skills in `living/scripts/skills.rhai`.
 pub struct ItemSpec {
     pub name: &'static str,
-    pub food: bool,
 }
 
 pub const ITEMS: &[ItemSpec] = &[
-    ItemSpec { name: "berries", food: true },
-    ItemSpec { name: "fish", food: true },
-    ItemSpec { name: "meat", food: true },
-    ItemSpec { name: "cooked_fish", food: true },
-    ItemSpec { name: "cooked_meat", food: true },
-    ItemSpec { name: "wood", food: false },
-    ItemSpec { name: "stone", food: false },
-    ItemSpec { name: "fiber", food: false },
-    ItemSpec { name: "spear", food: false },
-    ItemSpec { name: "hide", food: false },
-    ItemSpec { name: "cloak", food: false },
-    ItemSpec { name: "torch", food: false },
-    ItemSpec { name: "tablet", food: false },
-    ItemSpec { name: "clay", food: false },
-    ItemSpec { name: "axe", food: false },
-    ItemSpec { name: "pick", food: false },
-    ItemSpec { name: "smoked_fish", food: true },
-    ItemSpec { name: "smoked_meat", food: true },
-    ItemSpec { name: "net", food: false },
-    ItemSpec { name: "basket", food: false },
-    ItemSpec { name: "bow", food: false },
-    ItemSpec { name: "arrow", food: false },
-    ItemSpec { name: "salve", food: false },
-    ItemSpec { name: "leather", food: false },
-    ItemSpec { name: "armor", food: false },
+    ItemSpec { name: "berries" },
+    ItemSpec { name: "fish" },
+    ItemSpec { name: "meat" },
+    ItemSpec { name: "cooked_fish" },
+    ItemSpec { name: "cooked_meat" },
+    ItemSpec { name: "wood" },
+    ItemSpec { name: "stone" },
+    ItemSpec { name: "fiber" },
+    ItemSpec { name: "spear" },
+    ItemSpec { name: "hide" },
+    ItemSpec { name: "cloak" },
+    ItemSpec { name: "torch" },
+    ItemSpec { name: "tablet" },
+    ItemSpec { name: "clay" },
+    ItemSpec { name: "axe" },
+    ItemSpec { name: "pick" },
+    ItemSpec { name: "smoked_fish" },
+    ItemSpec { name: "smoked_meat" },
+    ItemSpec { name: "net" },
+    ItemSpec { name: "basket" },
+    ItemSpec { name: "bow" },
+    ItemSpec { name: "arrow" },
+    ItemSpec { name: "salve" },
+    ItemSpec { name: "leather" },
+    ItemSpec { name: "armor" },
     // Money where a settlement uses it: stamped clay tallies, worth what people agree.
-    ItemSpec { name: "mark", food: false },
+    ItemSpec { name: "mark" },
 ];
 
 /// Practical techniques: must be known (world state, not belief) before use.

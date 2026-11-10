@@ -53,7 +53,7 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
+PRIVATE = ['clock', 'steer', 'walk_route', 'wake', 'familiar', 'deliberation', 'rearing',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
            'routine', 'routine_stat', 'background', 'brain', 'mind_state', 'mind_cursor',
@@ -93,6 +93,8 @@ ADMIN = {
     'spawn_newcomer': ['probe'],
     # A floor module's runtime seed (floor.rs, admin only).
     'create_floor': ['{}'],
+    # Stop a staged creation between steps, and carry it on (floor.rs, admin only).
+    'stop_genesis': [], 'resume_genesis': [],
 }
 
 

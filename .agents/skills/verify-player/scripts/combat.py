@@ -121,12 +121,13 @@ def code_of(st, skill):
 
 
 def dummy(st, near, dx, dy, graph='{"wait":60}', name_hint=None):
-    """A resident to fight: the nearest living person other than me, set to `graph`, placed
-    (dx, dy) from `near`."""
+    """A resident to fight: a living adult other than me, set to `graph`, placed (dx, dy) from
+    `near`. Adults only (`stage` 2 or more): a child's strike is refused ("too young to fight"),
+    so an attacker scene with a child as the attacker saw no blow at all."""
     mine = me(st)
-    rows = sql(st, "SELECT id FROM character WHERE kind = 'person' AND alive = true")
+    rows = sql(st, "SELECT id, stage FROM character WHERE kind = 'person' AND alive = true")
     for r in rows:
-        if r["id"] == mine:
+        if r["id"] == mine or r["stage"] < 2:
             continue
         b = body(st, r["id"])
         h = hp(st, r["id"])
@@ -137,6 +138,76 @@ def dummy(st, near, dx, dy, graph='{"wait":60}', name_hint=None):
         call(st, "set_behavior", [r["id"], graph], "admin")
         return r["id"]
     raise RuntimeError("no resident to use as a dummy")
+
+
+OPAQUE = {4, 7}  # rock, wall (living_rules::map::Terrain); buildings are wall tiles
+
+
+def tiles(st, xs, ys):
+    """Terrain of the tiles in the box (public `terrain_chunk` rows, 16 x 16 tiles each)."""
+    out = {}
+    for cy in range(int(min(ys)) // 16, int(max(ys)) // 16 + 1):
+        for cx in range(int(min(xs)) // 16, int(max(xs)) // 16 + 1):
+            row = sql(st, f"SELECT tiles FROM terrain_chunk WHERE id = {(cy << 16) | cx}")
+            if not row:
+                continue
+            t = row[0]["tiles"]
+            t = bytes.fromhex(t) if isinstance(t, str) else bytes(t)
+            for k, v in enumerate(t):
+                out[(cx * 16 + k % 16, cy * 16 + k // 16)] = v
+    return out
+
+
+def open_line(st, a, b):
+    """No rock or wall on the straight line from a to b (sampled every 0.25 m)."""
+    t = tiles(st, (a[0], b[0]), (a[1], b[1]))
+    n = int(math.dist(a, b) * 4) + 1
+    return all(t.get((int(a[0] + (b[0] - a[0]) * i / n), int(a[1] + (b[1] - a[1]) * i / n))) not in OPAQUE for i in range(n + 1))
+
+
+def free_of_bodies(st, a, b, skip):
+    """No body but those in `skip` within 1 m of the segment a-b (where each stands now)."""
+    for r in sql(st, "SELECT id, x, y FROM body"):
+        if r["id"] in skip:
+            continue
+        q = (r["x"], r["y"])
+        ab = (b[0] - a[0], b[1] - a[1])
+        n = ab[0] ** 2 + ab[1] ** 2 or 1.0
+        k = max(0.0, min(1.0, ((q[0] - a[0]) * ab[0] + (q[1] - a[1]) * ab[1]) / n))
+        if math.dist(q, (a[0] + ab[0] * k, a[1] + ab[1] * k)) < 1.0:
+            return False
+    return True
+
+
+def shot_dummy(st, p, offsets):
+    """A dummy for a missile: placed at the first of `offsets` from p whose line from p is clear
+    of wall, rock and every other body (the arrival spot is in a town; a building and residents
+    at their posts stood in fixed lines), and the point to aim at: where it actually stands
+    (`place_at` takes the nearest walkable tile). Falls back to the first offset."""
+    cid = me(st)
+    for dx, dy in offsets:
+        if not open_line(st, p, (p[0] + dx, p[1] + dy)):
+            continue
+        d = dummy(st, p, dx, dy)
+        time.sleep(0.4)
+        at = body(st, d)
+        if at and open_line(st, p, at) and free_of_bodies(st, p, at, {cid, d}):
+            return d, at
+    d = dummy(st, p, *offsets[0])
+    time.sleep(0.4)
+    return d, body(st, d) or (p[0] + offsets[0][0], p[1] + offsets[0][1])
+
+
+def struck(st, cid, t0, d, before):
+    """The body a missile of mine struck since t0 (its impact's target; the dummy if none was
+    seen) and its health before and now (0 once it died and its vitals went)."""
+    met = [e["target"] for e in seen(st) if e["kind"] == 11 and e["actor"] == cid and e["at_ms"] >= t0]
+    hit = met[-1] if met else d
+    alive = sql(st, f"SELECT alive FROM character WHERE id = {hit}")
+    h1 = hp(st, hit)
+    if h1 is None and alive and not alive[0]["alive"]:
+        h1 = 0.0
+    return hit, before.get(hit), h1
 
 
 def wolves(st):
@@ -246,34 +317,34 @@ def scene_kill(st):
 def scene_bow(st):
     cid = me(st)
     p = body(st, cid)
-    d = dummy(st, p, 0.0, -8.0)
-    time.sleep(0.4)
-    h0 = hp(st, d)
+    d, at = shot_dummy(st, p, [(0.0, -8.0), (0.0, 8.0), (-8.0, 0.0), (8.0, 0.0)])
+    before = {r["id"]: r["hp"] for r in sql(st, "SELECT id, hp FROM vitals")}
+    t0 = int(time.time() * 1000)
     ready(st, "bowshot")
     arrows0 = sum(r["qty"] for r in sql(st, f"SELECT qty FROM inventory WHERE owner = {cid} AND item = 'arrow'"))
-    call(st, "use_skill", ["bowshot", 0, p[0], p[1] - 8.0])
+    call(st, "use_skill", ["bowshot", 0, at[0], at[1]])
     u = wait_outcome(st, "bowshot", 3)
-    h1 = hp(st, d)
+    hit, h0, h1 = struck(st, cid, t0, d, before)
     arrows1 = sum(r["qty"] for r in sql(st, f"SELECT qty FROM inventory WHERE owner = {cid} AND item = 'arrow'"))
     ev = seen(st)
     launch = [e for e in ev if e["kind"] == 10 and e["actor"] == cid]
     impact = [e for e in ev if e["kind"] == 11 and e["actor"] == cid]
-    check(st, "an arrow flies (launch and impact perceived) and strikes the first body in its path", launch and impact and impact[-1]["target"] == d and h1 < h0, f"{u and u['outcome']} hp {h0}->{h1} launch speed {launch and launch[-1]['amount']}")
+    check(st, "an arrow flies (launch and impact perceived) and strikes the first body in its path", launch and impact and h0 is not None and h1 is not None and h1 < h0, f"{u and u['outcome']} (#{hit}{', the dummy' if hit == d else ', in the path'}) hp {h0}->{h1} launch speed {launch and launch[-1]['amount']}")
     check(st, "the arrow is spent", arrows1 == arrows0 - 1, f"{arrows0}->{arrows1}")
 
 
 def scene_bolt(st):
     cid = me(st)
     p = body(st, cid)
-    # Off the lines of the earlier scenes' dummies (east and north), which a bolt would meet first.
-    d = dummy(st, p, 4.5, 4.5)
-    time.sleep(0.4)
-    h0 = hp(st, d)
+    # Diagonals, off the strike and bow scenes' lines; shot_dummy keeps the line clear.
+    d, at = shot_dummy(st, p, [(4.5, 4.5), (-4.5, 4.5), (4.5, -4.5), (-4.5, -4.5)])
+    before = {r["id"]: r["hp"] for r in sql(st, "SELECT id, hp FROM vitals")}
+    t0 = int(time.time() * 1000)
     ready(st, "firebolt")
-    call(st, "use_skill", ["firebolt", 0, p[0] + 4.5, p[1] + 4.5])
+    call(st, "use_skill", ["firebolt", 0, at[0], at[1]])
     u = wait_outcome(st, "firebolt", 3)
-    h1 = hp(st, d)
-    check(st, "a fire bolt burns the creature it meets", u and "struck" in u["outcome"] and h1 < h0, f"{u and u['outcome']} hp {h0}->{h1}")
+    hit, h0, h1 = struck(st, cid, t0, d, before)
+    check(st, "a fire bolt burns the creature it meets", u and "struck" in u["outcome"] and h0 is not None and h1 is not None and h1 < h0, f"{u and u['outcome']} (#{hit}{', the dummy' if hit == d else ', in the path'}) hp {h0}->{h1}")
 
 
 def attacker(st, cid, p, dx):
@@ -281,15 +352,28 @@ def attacker(st, cid, p, dx):
     return dummy(st, p, dx, 0.0, g)
 
 
-def scene_block(st):
-    cid = me(st)
+def guard_then_strike(st, cid, toward):
+    """An adult resident beside me (placed first, waiting), my guard raised toward it
+    (`toward` 1) or away from it (-1) by where it actually stands (`place_at` takes the
+    nearest walkable tile, which can be beside the spot asked for), then its strike. Returns
+    the attacker and the time the guard went up."""
     p = body(st, cid)
-    # Facing the attacker (east): the guard takes most of the blow.
-    call(st, "set_behavior", [cid, '{"wait":60}'], "admin")
+    a = dummy(st, p, 1.1, 0.0)
+    time.sleep(0.4)
+    q = body(st, a) or (p[0] + 1.1, p[1])
+    d = math.dist(p, q) or 1.0
     ready(st, "block")
     t0 = int(time.time() * 1000)
-    call(st, "use_skill", ["block", 0, p[0] + 3.0, p[1]])
-    a = attacker(st, cid, p, 1.1)
+    call(st, "use_skill", ["block", 0, p[0] + toward * 3.0 * (q[0] - p[0]) / d, p[1] + toward * 3.0 * (q[1] - p[1]) / d])
+    call(st, "set_behavior", [a, json.dumps({"seq": [{"do": {"skill": "strike", "target": {"id": cid}}}, {"wait": 30}]})], "admin")
+    return a, t0
+
+
+def scene_block(st):
+    cid = me(st)
+    # Facing the attacker: the guard takes most of the blow.
+    call(st, "set_behavior", [cid, '{"wait":60}'], "admin")
+    a, t0 = guard_then_strike(st, cid, 1)
     t = time.time() + 4
     ev = []
     while time.time() < t and not any(e["kind"] in (2, 4) for e in ev):
@@ -301,13 +385,9 @@ def scene_block(st):
     time.sleep(0.3)
     u = last_use(st, "block")
     check(st, "letting go ends the held guard", u and u["outcome"] != "" and u["outcome_ms"] - u["accepted_ms"] < 8000, u and u["outcome"])
-    # Facing away (west): the blow comes from behind and lands in full.
+    # Facing away: the blow comes from behind and lands in full.
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
-    ready(st, "block")
-    p = body(st, cid)
-    t0 = int(time.time() * 1000)
-    call(st, "use_skill", ["block", 0, p[0] - 3.0, p[1]])
-    a = attacker(st, cid, p, 1.1)
+    a, t0 = guard_then_strike(st, cid, -1)
     t = time.time() + 4
     ev = []
     while time.time() < t and not ev:

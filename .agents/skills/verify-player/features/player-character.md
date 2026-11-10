@@ -8,7 +8,7 @@ A person outside the simulation joins the world as one character and controls it
 - `player-join-once`: a second `join` from the same identity is refused while its character lives (`lib.rs:318`).
 - `player-move`: `human_move` steers the body at a walk or a run, stops it, and sets the plan to `moving yourself` (`lib.rs:356-375`).
 - `player-act-deliberate`: `human_act` with a skill that is not real-time (give, offer, gather, teach, conceive…) goes through `acts::submit`, the path minds use (`lib.rs:337-349`, `living/authority/src/acts.rs:27`). The act runs, or fails with feedback in the player's `experience` rows.
-- `player-act-graph`: `human_act` with a real-time skill (`wander`, `follow`, `wait`, `attack`…; `Shapes::real_time` in `living/rules/src/combat.rs`: `MOVES` and each combat skill's `real_time` trait in `living/scripts/skills.rhai`) becomes the character's behavior, with plan `your command` and source `human`.
+- `player-act-graph`: `human_act` with a real-time skill (`wander`, `follow`, `wait`, `attack`…; `Shapes::real_time` in `living/rules/src/combat.rs`: `MOVES` and each combat skill's `real_time` trait in `living/scripts/skills.rhai`) becomes the character's behavior, with plan `your command` and source `human`. It runs once: when its root ends, done or failed, the character waits for its person again (plan `waiting for you`, `command_done` in `lib.rs`, called from `brain::evaluate`). Before 2026-11-10 it was installed as `{"seq":[node,{"wait":60}]}`, and a root `seq` starts over, so `{"wait":4}` lasted 64 s and repeated. A new graph adopts the activity in progress only when skill, target, item and amount all match, so a 4 s wait does not carry on the 30 s wait of `waiting for you`.
 - `player-walk-far`: click-to-move (`human_act` with `{"do":"goto","target":{"at":[x,y]}}`, a deliberate act) reaches another settlement anywhere on the island, leg by leg, and lasts as long as the walk takes; a short click round a building row or a pond reaches it too. A click more than 12 m into water is refused ("destination unreachable"), and a place that cannot be reached at all is refused ("no path there") (`living/authority/src/motion.rs` `start`, `living/rules/src/nav.rs`, `acts::overdue`; docs/PATHS.md).
 - `player-say`: `human_say` writes a `speech` chronicle line, and people within earshot get a `speech` experience (`living/authority/src/perceive.rs`, `speak`). The player's own character perceives its words as a `said` experience ("You said to <name>: “…”", salience 0.5; since 2026-11-09, for player memory, docs/PLAYER_MEMORY.md); AI speakers get none.
 - `player-authority`: a player identity cannot call admin reducers (`admin only`), cannot use the `mind_*` reducers on someone else's character (`not your character`), and cannot join twice.
@@ -59,6 +59,9 @@ $V sql --run $R "SELECT kind, text FROM experience WHERE observer = $ME AND kind
 $V player --run $R act "{\"do\":{\"skill\":\"follow\",\"target\":{\"id\":$X}}}"; sleep 1
 $V sql --run $R "SELECT id, plan, source FROM brain WHERE id = $ME" --save plan-follow                         # your command / human
 $V sql --run $R "SELECT id, skill FROM activity WHERE id = $ME" --save activity-follow                         # follow
+
+# a command runs once (4 s here), then the character waits for you; it does not start over
+python3 .agents/skills/verify-player/scripts/command.py --run $R > .local/living/verify/$R/command.txt   # writes command.json
 
 # movement: run, walk, stop
 $V player --run $R move 1 0 --run-gait; sleep 1

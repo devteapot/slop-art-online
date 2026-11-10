@@ -150,12 +150,73 @@ fn schedule(ctx: &ReducerContext) {
     ctx.db.genesis_timer().insert(GenesisTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Time(ctx.timestamp) });
 }
 
-/// One step of a staged world creation (scheduled only).
+/// Carry on a staged creation whose chain of steps stopped. A step is a one-shot schedule:
+/// SpacetimeDB 2.14.1 deletes its row after the call whatever the outcome, and a step that
+/// failed (returned an error or trapped) rolled back its own scheduling of the next, so nothing
+/// runs again. This schedules the next step. Admin only; refused while a step is scheduled.
+#[spacetimedb::reducer]
+pub fn resume_genesis(ctx: &ReducerContext) -> Result<(), String> {
+    if ctx.sender() != common::world(ctx).admin {
+        return Err("admin only".into());
+    }
+    let g = ctx.db.genesis().id().find(0).ok_or("no staged creation here")?;
+    if g.done {
+        return Err("the world is already made".into());
+    }
+    if ctx.db.genesis_timer().iter().next().is_some() {
+        return Err("a step is already scheduled".into());
+    }
+    log::info!("genesis: resumed at step {} ({})", g.step, g.label);
+    schedule(ctx);
+    Ok(())
+}
+
+/// Stop a staged creation between steps: the next step is unscheduled, as a failed step
+/// leaves it (to free the server, or before a module update), and `resume_genesis` carries
+/// on. Admin only.
+#[spacetimedb::reducer]
+pub fn stop_genesis(ctx: &ReducerContext) -> Result<(), String> {
+    if ctx.sender() != common::world(ctx).admin {
+        return Err("admin only".into());
+    }
+    let mut g = ctx.db.genesis().id().find(0).ok_or("no staged creation here")?;
+    if g.done {
+        return Err("the world is already made".into());
+    }
+    let timers: Vec<u64> = ctx.db.genesis_timer().iter().map(|t| t.scheduled_id).collect();
+    if timers.is_empty() {
+        return Err("no step is scheduled".into());
+    }
+    for id in timers {
+        ctx.db.genesis_timer().scheduled_id().delete(id);
+    }
+    log::info!("genesis: stopped by the admin at step {}", g.step);
+    g.label = format!("stopped by the admin before: {} (resume_genesis carries on)", g.label);
+    g.updated_ms = common::now_ms(ctx);
+    ctx.db.genesis().id().update(g);
+    Ok(())
+}
+
+/// One step of a staged world creation (scheduled only). A step that fails keeps its reason
+/// in the `genesis` row's label and schedules nothing; `resume_genesis` carries on.
 #[spacetimedb::reducer]
 pub fn genesis_step(ctx: &ReducerContext, _t: GenesisTimer) -> Result<(), String> {
     if ctx.sender() != ctx.database_identity() {
         return Err("genesis_step is scheduled only".into());
     }
+    if let Err(e) = step(ctx) {
+        log::error!("genesis: step failed: {e}");
+        if let Some(mut g) = ctx.db.genesis().id().find(0) {
+            g.label = format!("stopped: {e} (resume_genesis carries on)");
+            g.updated_ms = common::now_ms(ctx);
+            ctx.db.genesis().id().update(g);
+        }
+    }
+    Ok(())
+}
+
+/// The step itself. Its errors come before it writes anything.
+fn step(ctx: &ReducerContext) -> Result<(), String> {
     let Some(mut g) = ctx.db.genesis().id().find(0) else { return Ok(()) };
     if g.done {
         return Ok(());

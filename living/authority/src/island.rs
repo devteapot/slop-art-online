@@ -85,8 +85,16 @@ fn home(k: LotKind) -> bool {
 }
 
 /// The land's side and parameters from a seed's `map`.
+/// The largest land side generation is tested at (docs/FLOORS.md, megacity-1); `Gen` itself
+/// asserts 256..=16384.
+pub const LAND_MAX_M: u32 = 8192;
+
 pub fn params_of(m: &SeedMap) -> Result<(u32, LandParams), String> {
     let size = if m.size > 0 { m.size } else { m.w.max(m.h) };
+    // Checked here, before a reducer gets as far as generating (where a bad side panics).
+    if !(256..=LAND_MAX_M).contains(&size) || size % 16 != 0 {
+        return Err(format!("map.size {size}: a land's side is a multiple of 16 from 256 to {LAND_MAX_M} m"));
+    }
     let params: LandParams = if m.params.is_null() { LandParams::default() } else { serde_json::from_value(m.params.clone()).map_err(|e| format!("map.params: {e}"))? };
     Ok((size, params))
 }

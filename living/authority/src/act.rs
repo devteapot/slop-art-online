@@ -421,8 +421,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     let item = if sc.skills().get(skill).is_some_and(|k| !k.needs_item) && living_rules::normalize::force_word(item) { "" } else { item };
     let cur = ctx.db.activity().id().find(id);
     if let Some(a) = &cur {
-        // A new graph may continue what the character was already doing.
-        if a.node == ORPHAN && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item {
+        // A new graph may continue what the character was already doing (the same amount
+        // too: a 4 s wait does not carry on a 30 s one).
+        if a.node == ORPHAN && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item && a.qty == qty {
             let mut a = a.clone();
             a.node = node;
             a.revision = revision;
@@ -525,21 +526,19 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             }
             target = Resolved::point(pick.ok_or("nowhere to wander")?);
         }
+        // The target stays the threat: steering runs from it (a creature as it moves). The
+        // ground away from it only decides whether there is anywhere to run.
         "flee" => {
             let from = target.at;
-            let d = dist(here, from).max(0.1);
+            let clear = common::laws(ctx).flee_clear;
             let map = common::map(ctx);
-            let mut pick = None;
-            for spread in [0.0f32, 0.6, -0.6, 1.2, -1.2] {
+            let open = [0.0f32, 0.6, -0.6, 1.2, -1.2].into_iter().any(|spread| {
                 let base = (here.1 - from.1).atan2(here.0 - from.0) + spread;
-                let p = (here.0 + base.cos() * 9.0, here.1 + base.sin() * 9.0);
-                if map.free(p.0, p.1) {
-                    pick = Some(p);
-                    break;
-                }
+                map.free(here.0 + base.cos() * clear, here.1 + base.sin() * clear)
+            });
+            if !open {
+                return Err("cornered".into());
             }
-            let _ = d;
-            target = Resolved { class: 4, id: target.id, at: pick.ok_or("cornered")?, kind: target.kind, name: target.name };
         }
         "eat" | "give" | "store" if item == "food" => {
             item = common::best_food(ctx, id as u64).ok_or("no food in your pack (food: gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt)")?;
@@ -656,7 +655,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 kind: motion::GOAL_FLEE,
                 target: if creature { target.id as u32 } else { 0 },
                 at: target.at,
-                keep: dist(here, target.at) + 9.0,
+                keep: dist(here, target.at) + common::laws(ctx).flee_clear,
                 speed: sp * 1.15,
                 flags: 0,
             },
@@ -823,19 +822,7 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
         st.fails = if ok { 0 } else { st.fails.saturating_add(1) };
         ctx.db.mind_state().id().update(st);
     }
-    // A failure identical to one in the last two minutes is not news.
-    let repeat = !ok && ctx.db.mind_state().id().find(a.id).map_or(false, |st| st.marks.iter().any(|m| m.node == failure_mark(&a.label, why) && (now.saturating_sub(m.at_ms) as f32) < common::laws(ctx).repeat_failure_s * 1000.0));
-    if !ok && !repeat {
-        if let Some(mut st) = ctx.db.mind_state().id().find(a.id) {
-            let key = failure_mark(&a.label, why);
-            st.marks.retain(|m| m.node != key);
-            st.marks.push(Mark { node: key, at_ms: now });
-            if st.marks.len() > 24 {
-                st.marks.remove(0);
-            }
-            ctx.db.mind_state().id().update(st);
-        }
-    }
+    let repeat = !ok && !news(ctx, a.id, &a.label, why, now);
     // A player's own move is reported to the player (`skill_use`, `my_combat`), not the graph.
     if a.node == PLAYER {
         common::wake(ctx, a.id);
@@ -861,6 +848,40 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
     common::wake(ctx, a.id);
 }
 
+/// A failure is news unless an identical one (`what` and `why`) came in the last
+/// `repeat_failure_s`; news is marked so its repeats are not.
+fn news(ctx: &ReducerContext, id: u32, what: &str, why: &str, now: u64) -> bool {
+    let Some(mut st) = ctx.db.mind_state().id().find(id) else { return false };
+    let key = failure_mark(what, why);
+    if st.marks.iter().any(|m| m.node == key && (now.saturating_sub(m.at_ms) as f32) < common::laws(ctx).repeat_failure_s * 1000.0) {
+        return false;
+    }
+    st.marks.retain(|m| m.node != key);
+    st.marks.push(Mark { node: key, at_ms: now });
+    if st.marks.len() > 24 {
+        st.marks.remove(0);
+    }
+    ctx.db.mind_state().id().update(st);
+    true
+}
+
+/// A graph's action refused as it would start (`begin` said why). It is a failure like one
+/// after starting: counted against its routine and told to the controller, once per
+/// `repeat_failure_s` for the same action and reason, as failures are told. A guard's first
+/// choice refused on every look while a fallback runs counts once a window, not every look.
+/// Returns whether it was news (the evaluator then counts it in `fails`).
+pub fn refused(ctx: &ReducerContext, id: u32, node: u16, revision: u32, what: &str, why: &str, now: u64) -> bool {
+    if !news(ctx, id, what, why, now) {
+        return false;
+    }
+    routine_outcome(ctx, id, revision, node, false, why, now);
+    if let Some(c) = ctx.db.character().id().find(id).filter(|c| c.ai) {
+        let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+        percept(ctx, &c, now, "own", id, 0, at, format!("You failed to {what}: {why}"), 0.35);
+    }
+    true
+}
+
 /// A mark slot (above behavior node ids, below the evaluator's reserved marks) per failure kind.
 fn failure_mark(label: &str, why: &str) -> u16 {
     let mut h: u32 = 2166136261;
@@ -871,9 +892,9 @@ fn failure_mark(label: &str, why: &str) -> u16 {
 }
 
 /// Record how a routine's action went (the routine owning the action's node, if any).
-fn routine_outcome(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
-    let Some(g) = common::compiled(ctx, a.id, a.revision) else { return };
-    let Some(Some(rid)) = g.routine_of.get(a.node as usize).copied() else { return };
+fn routine_outcome(ctx: &ReducerContext, id: u32, revision: u32, node: u16, ok: bool, why: &str, now: u64) {
+    let Some(g) = common::compiled(ctx, id, revision) else { return };
+    let Some(Some(rid)) = g.routine_of.get(node as usize).copied() else { return };
     let mut s = ctx.db.routine_stat().id().find(rid).unwrap_or(RoutineStat { id: rid, ok: 0, failed: 0, last_fail: String::new(), last_ms: 0 });
     if ok {
         s.ok += 1;
@@ -918,7 +939,7 @@ fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
         }
     }
     if a.node != ORPHAN && !held(a.node) {
-        routine_outcome(ctx, &a, ok, why, now);
+        routine_outcome(ctx, a.id, a.revision, a.node, ok, why, now);
     }
     ctx.db.activity().id().delete(a.id);
     if a.skill == "sleep" || a.skill == "rest" {
