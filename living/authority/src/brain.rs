@@ -109,8 +109,12 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (LATCHES.contains(&a.skill.as_str()) || sc.shows().aside(&a.skill))).map(|a| a.node);
     ev.alerts();
     let root = ev.g.clone();
+    let played = !ev.me.ai;
     let result = ev.run(&root.root, 0);
     ev.after(result, &root.root);
+    if played && result != St::Run {
+        crate::command_done(ctx, id, now);
+    }
 }
 
 /// Resolve a target for a deliberate act exactly as a graph leaf would (only what the

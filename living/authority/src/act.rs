@@ -421,8 +421,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     let item = if sc.skills().get(skill).is_some_and(|k| !k.needs_item) && living_rules::normalize::force_word(item) { "" } else { item };
     let cur = ctx.db.activity().id().find(id);
     if let Some(a) = &cur {
-        // A new graph may continue what the character was already doing.
-        if a.node == ORPHAN && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item {
+        // A new graph may continue what the character was already doing (the same amount
+        // too: a 4 s wait does not carry on a 30 s one).
+        if a.node == ORPHAN && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item && a.qty == qty {
             let mut a = a.clone();
             a.node = node;
             a.revision = revision;
