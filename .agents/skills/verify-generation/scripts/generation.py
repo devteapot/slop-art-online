@@ -284,7 +284,7 @@ def check_land(seed, rows, side, tiles):
         residents = [i for i, c in members.items() if c in folk]
         names = set(life.get("places", {})) | ({"evening"} if life.get("evening") else set())
         missing = [i for i in residents if not names <= set(places.get(i, {}))]
-        present("residents know the seed's places (square, inn, evening)", residents and len(missing) <= 0.05 * len(residents), {"residents": len(residents), "missing": missing[:20]})
+        present(f"residents know the seed's places ({', '.join(sorted(names))})", residents and len(missing) <= 0.05 * len(residents), {"residents": len(residents), "missing": missing[:20]})
         workers = [i for i in residents if bgs.get(i, {}).get("occupation") in life.get("work", {})]
         no_work = [i for i in workers if "work" not in places.get(i, {})]
         present("workers have a workplace", workers and len(no_work) <= 0.05 * len(workers), {"workers": len(workers), "without": no_work[:20]})
