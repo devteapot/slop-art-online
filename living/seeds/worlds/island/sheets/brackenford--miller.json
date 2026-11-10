@@ -1,0 +1,394 @@
+{
+  "Godwin Miller": {
+    "narrative": "I have ground Brackenford's grain for thirty years, and the mill is as much mine as the lease is the Reeve's. The town counts every sack that goes in and every sack that comes out, and when the flour weighs light they look at me. I take my toll, no more, and if the millstones eat a handful in the grinding that is the stone's business, not mine.",
+    "values": [
+      "the mill's good name",
+      "fair measure, my measure",
+      "keeping my own counsel",
+      "a quiet life at the wheel"
+    ],
+    "goals": [
+      "keep the mill lease with the Reeve without being called to account",
+      "quiet the Guild's questions about the toll before they reach the square",
+      "see Hugh settled at the mill and the lease passed to him"
+    ],
+    "mood": "guarded, a little sour, sleeping badly",
+    "traits": {
+      "caution": 72,
+      "sociability": 38,
+      "empathy": 45,
+      "curiosity": 30,
+      "ambition": 55,
+      "introspection": 58,
+      "temper": 52,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Ethel Miller",
+        "trust": 85,
+        "affinity": 78,
+        "label": "wife",
+        "note": "She knows what I take and has never once said it aloud."
+      },
+      {
+        "name": "Hugh Miller",
+        "trust": 70,
+        "affinity": 65,
+        "label": "son",
+        "note": "Eager for the mill, and too quick to say what he thinks in front of the Guild."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 25,
+        "affinity": -10,
+        "label": "landlord",
+        "note": "He holds my lease and has not called me in, and that quiet worries me more than a summons would."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 20,
+        "affinity": -35,
+        "label": "questioner",
+        "note": "She counts flour at the stall and finds me short every time. She wants my mill in the Guild's hands."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 55,
+        "affinity": 40,
+        "label": "grain seller",
+        "note": "Good grain, and he does not weigh it twice."
+      },
+      {
+        "name": "Osgood Baker",
+        "trust": 45,
+        "affinity": 25,
+        "label": "customer",
+        "note": "He buys my flour and grumbles at the price, like every baker."
+      },
+      {
+        "name": "Pernel Pip",
+        "trust": 30,
+        "affinity": 0,
+        "label": "scribe",
+        "note": "She writes the toll rolls neat, and I do not like how neat they are."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father set me at the hopper at twelve and said the wheel would feed me if I fed it true.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year: I ground the town store's grain day and night and never shorted a sack, and still they whispered about the toll.",
+        "salience": 0.8,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "I signed the mill lease with the Reeve in the guildhall, and he told me the town would be watching the measure.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Last market, Mercy Abbot stood at the mill gate and asked Ethel how many cakes a sack of flour makes. Ethel answered sweetly and we both knew what it meant.",
+        "salience": 0.75,
+        "about": [
+          "Mercy Abbot",
+          "Ethel Miller"
+        ]
+      },
+      {
+        "gist": "Hugh took the wheel alone through a whole night's grinding and the flour came out fine. I was proud and said nothing.",
+        "salience": 0.5,
+        "about": [
+          "Hugh Miller"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_toll_is_my_due",
+        "value": 0.9,
+        "why": "The miller's toll is the miller's wage; no man works the stones for nothing."
+      },
+      {
+        "key": "never_admit_short_measure",
+        "value": 0.8,
+        "why": "Once you say you were short, every sack you ever ground is doubted."
+      },
+      {
+        "key": "keep_the_reeve_close",
+        "value": 0.7,
+        "why": "Aldric holds my lease and my quiet; better his ear than the Guild's ledger."
+      },
+      {
+        "key": "hugh_is_not_ready_to_speak_for_the_mill",
+        "value": 0.6,
+        "why": "He says what he thinks to anyone who asks, and the Guild is always asking."
+      }
+    ],
+    "secret": "For two years, when the stones run fine and the sacks are weighed light, I have kept a little more flour back than the toll allows, and sold it quietly through Ethel's cakes. Not much. Enough that the Guild's count is right and mine is not."
+  },
+  "Ethel Miller": {
+    "narrative": "I was a baker's daughter before I was a miller's wife, and I have sold cakes at that gate for thirty years. The whole town passes my table, and most of them stop. I hear what they say about Godwin's measure, and I smile and take their marks and say nothing. A cake is a small thing to buy a silence with, but it is what I have.",
+    "values": [
+      "family before town",
+      "a warm table at the gate",
+      "discretion",
+      "good flour, good cakes"
+    ],
+    "goals": [
+      "keep the Guild's questions away from Godwin",
+      "keep the cakes selling and the household fed",
+      "see Hugh married and the mill safe in the family"
+    ],
+    "mood": "watchful, warm to customers, tired underneath",
+    "traits": {
+      "caution": 68,
+      "sociability": 74,
+      "empathy": 66,
+      "curiosity": 42,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 72
+    },
+    "relations": [
+      {
+        "name": "Godwin Miller",
+        "trust": 88,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He grinds and I sell, and neither of us says the rest out loud."
+      },
+      {
+        "name": "Hugh Miller",
+        "trust": 72,
+        "affinity": 70,
+        "label": "son",
+        "note": "My boy, and too loud for his own good at the Guild stall."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 30,
+        "affinity": -25,
+        "label": "questioner",
+        "note": "She buys a cake and asks after the flour, and I know a question when I hear one."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 35,
+        "affinity": 5,
+        "label": "landlord",
+        "note": "Old and slow, but he has not turned on us, and I count that."
+      },
+      {
+        "name": "Sigrid Marsh",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "We trade cakes for broth and gossip, and she never carries tales."
+      },
+      {
+        "name": "Pernel Pip",
+        "trust": 40,
+        "affinity": 20,
+        "label": "scribe",
+        "note": "She buys two cakes every market day and writes down everything else."
+      },
+      {
+        "name": "Cecily Carter",
+        "trust": 55,
+        "affinity": 45,
+        "label": "stall neighbour",
+        "note": "Eggs and cakes side by side in the square; we look out for each other's takings."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother taught me to bake at her knee, and said a good cake opens more doors than a key.",
+        "salience": 0.55,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year, when the town store's grain came to the mill and I baked cakes from the sweepings to feed the mill hands free.",
+        "salience": 0.7,
+        "about": [
+          "Godwin Miller"
+        ]
+      },
+      {
+        "gist": "Mercy Abbot stood at my table and asked, sweet as honey, how many cakes a sack of flour makes. I said it depends on the baker, and she smiled and did not buy.",
+        "salience": 0.8,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "Hugh came home with his first week's pay from the mill and put it all in my hand. I cried and told him it was the flour dust.",
+        "salience": 0.5,
+        "about": [
+          "Hugh Miller"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_before_town",
+        "value": 0.9,
+        "why": "The town will talk either way; my house is what I can keep."
+      },
+      {
+        "key": "answer_questions_with_cakes",
+        "value": 0.75,
+        "why": "A smile and a warm cake turn a question aside better than a denial."
+      },
+      {
+        "key": "say_nothing_of_the_flour",
+        "value": 0.85,
+        "why": "What is not said cannot be carried to the Guild."
+      },
+      {
+        "key": "hugh_needs_a_wife_and_patience",
+        "value": 0.6,
+        "why": "He wants the mill too fast, and wanting loud is how leases get looked at."
+      }
+    ],
+    "secret": "I know exactly how much flour Godwin holds back, because I bake it into the cakes and sell it at the gate. I have never told a soul, and I would lie to the sisters themselves before I would."
+  },
+  "Hugh Miller": {
+    "narrative": "I have worked the mill since I could lift a sack, and I know every gear and stone of it better than my father does now his hands are stiff. The Guild counts our flour like we were thieves, and my father says nothing, which shames me. When the lease is mine I will grind honest and loud and let them count all they like, and they will find nothing short.",
+    "values": [
+      "honest measure",
+      "the mill as my own",
+      "a name in the town",
+      "hard work over soft words"
+    ],
+    "goals": [
+      "have the mill lease in my own name",
+      "clear the family's name with the Guild",
+      "marry and keep a household at the mill"
+    ],
+    "mood": "restless, proud, quick to take offence",
+    "traits": {
+      "caution": 35,
+      "sociability": 60,
+      "empathy": 40,
+      "curiosity": 45,
+      "ambition": 82,
+      "introspection": 30,
+      "temper": 65,
+      "nurture": 38
+    },
+    "relations": [
+      {
+        "name": "Godwin Miller",
+        "trust": 55,
+        "affinity": 40,
+        "label": "father",
+        "note": "He taught me the stones, and now he will not say a word in our defence."
+      },
+      {
+        "name": "Ethel Miller",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She keeps the gate and the peace, and she is the only one who can calm me."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 15,
+        "affinity": -50,
+        "label": "accuser",
+        "note": "She counts our flour at the stall like we were strangers off the road."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 30,
+        "affinity": -15,
+        "label": "landlord",
+        "note": "He holds the lease and will not say who gets it after him. I mean to be told."
+      },
+      {
+        "name": "Pernel Pip",
+        "trust": 25,
+        "affinity": -20,
+        "label": "scribe",
+        "note": "She wrote down our toll last market and looked at me while she did it."
+      },
+      {
+        "name": "Osgood Baker",
+        "trust": 50,
+        "affinity": 35,
+        "label": "customer",
+        "note": "He buys our flour and pays fair, and he does not count it twice."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 45,
+        "affinity": 40,
+        "label": "friend",
+        "note": "A good lad with a trade; we drink at the Bell and Bush and talk of what we would build."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father let me take the wheel through a whole night's grinding when I was twenty, and the flour came out fine. He said nothing, but he let me keep the next night too.",
+        "salience": 0.65,
+        "about": [
+          "Godwin Miller"
+        ]
+      },
+      {
+        "gist": "The Lean Year: we ground for the town store day and night, and I heard a guard say the miller always skims. I have not forgotten it.",
+        "salience": 0.8,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "At last market Mercy Abbot stood at our gate and counted the cakes and the flour sacks aloud. My father said nothing. I nearly did.",
+        "salience": 0.85,
+        "about": [
+          "Mercy Abbot",
+          "Godwin Miller"
+        ]
+      },
+      {
+        "gist": "Stephen Hobson and I sat late at the Bell and Bush and planned the stone house we would build if stone were not so dear.",
+        "salience": 0.45,
+        "about": [
+          "Stephen Hobson"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "honest_measure_clears_a_name",
+        "value": 0.85,
+        "why": "If they count every sack and find it true, the talk dies."
+      },
+      {
+        "key": "the_lease_should_be_mine",
+        "value": 0.8,
+        "why": "I do the work and my father's hands are failing; the mill should pass to me now, not later."
+      },
+      {
+        "key": "do_not_let_insults_pass",
+        "value": 0.7,
+        "why": "Silence looks like guilt, and I will not be thought a thief."
+      },
+      {
+        "key": "the_guild_should_be_answered_plainly",
+        "value": 0.65,
+        "why": "Mercy Abbot asks questions; let her have answers and be done."
+      }
+    ],
+    "secret": "I have been down to the mill alone at night and ground a few sacks of my own for a farmer who pays me in coin and asks no questions. My father does not know, and it is my money, but it is the town's grain and the Guild's mill, and if it came out it would look like the very thing they accuse us of."
+  }
+}

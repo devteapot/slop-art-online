@@ -1,0 +1,764 @@
+{
+  "Orrum": {
+    "narrative": "I am Orrum, son of Hollbrenna, stonecutter of Highshelf. I cut the stone my mother's grandmother lies under, and I will not see her cairn dishonoured by a quarryman's carelessness. My mother is right to close the shelf to Kettlebridge, but I fear the winter will be hard if we do not find a way to trade. Still, Ezra Holt must answer for what he did, and I will see that he does.",
+    "values": [
+      "honour",
+      "family",
+      "stonework",
+      "justice"
+    ],
+    "goals": [
+      "Bring Ezra Holt before the shelf to answer for the cairn cutting",
+      "Ensure the cairn is repaired and the dead are honoured",
+      "Provide for the shelf through the winter without breaking the ban on Kettlebridge",
+      "Prepare to become elder after my mother"
+    ],
+    "mood": "Resolute and troubled",
+    "traits": {
+      "caution": 60,
+      "sociability": 50,
+      "empathy": 55,
+      "curiosity": 40,
+      "ambition": 65,
+      "introspection": 60,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Hollbrenna",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She is the elder, and my mother; I respect her judgement, though I worry about the winter."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 80,
+        "affinity": 75,
+        "label": "wife",
+        "note": "She works the plots and fears the store will fail; I listen to her."
+      },
+      {
+        "name": "Vellmund",
+        "trust": 75,
+        "affinity": 80,
+        "label": "son",
+        "note": "He learns stonework well; I am proud of him."
+      },
+      {
+        "name": "Hollvarr",
+        "trust": 70,
+        "affinity": 85,
+        "label": "son",
+        "note": "He is young yet; I hope he grows strong."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": -80,
+        "affinity": -70,
+        "label": "enemy",
+        "note": "He cut into our cairn; he must answer for it."
+      },
+      {
+        "name": "Tavvik",
+        "trust": -30,
+        "affinity": -20,
+        "label": "kin",
+        "note": "He defies my mother's ban and trades with Kettlebridge; it shames us."
+      },
+      {
+        "name": "Steinar",
+        "trust": 70,
+        "affinity": 65,
+        "label": "master builder",
+        "note": "He keeps the cairns in repair; a good man to have at your side."
+      },
+      {
+        "name": "Liv",
+        "trust": 60,
+        "affinity": 55,
+        "label": "stonecutter",
+        "note": "She wants a new storehouse; I understand, but the cairns come first."
+      },
+      {
+        "name": "Eirik",
+        "trust": 55,
+        "affinity": 50,
+        "label": "stoneworker",
+        "note": "He thinks we should trade with Kettlebridge for timber; I am not so sure."
+      },
+      {
+        "name": "Rannoch Voss",
+        "trust": 40,
+        "affinity": 30,
+        "label": "trader",
+        "note": "He trades hides with us, but since the cairn cutting I watch him closely."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 50,
+        "affinity": 40,
+        "label": "distant friend",
+        "note": "My mother remembers her mother fondly; the small folk are not like Kettlebridge men."
+      },
+      {
+        "name": "Harl",
+        "trust": 65,
+        "affinity": 60,
+        "label": "kin",
+        "note": "He hunts and keeps the meat store and never crosses his grandmother's word; I wish Tavvik had half his sense."
+      },
+      {
+        "name": "Jorunn Voss",
+        "trust": 35,
+        "affinity": 30,
+        "label": "fold trader",
+        "note": "A fair shot and quick on the high pastures, but her father's hide trade brings human boots too near the shelf for my liking."
+      },
+      {
+        "name": "Sunniva",
+        "trust": 55,
+        "affinity": 45,
+        "label": "kin by marriage",
+        "note": "She cooks for us all and speaks plain about Tavvik's folly; I hear her out, though Gaudra says the meat alone will not fill the winter."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day we found the cairn cut open, stones scattered, my mother's grandmother's bones disturbed.",
+        "salience": 0.9,
+        "about": [
+          "Hollbrenna",
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "My mother forbade all trade with Kettlebridge, and the shelf agreed, though some muttered.",
+        "salience": 0.8,
+        "about": [
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "Teaching Vellmund to cut stone, his hands steady for a boy.",
+        "salience": 0.6,
+        "about": [
+          "Vellmund"
+        ]
+      },
+      {
+        "gist": "Gaudra showing me the thin ears of grain from her plots, worry in her eyes.",
+        "salience": 0.7,
+        "about": [
+          "Gaudra"
+        ]
+      },
+      {
+        "gist": "Tavvik coming up the track with timber, saying nothing, and the look my mother gave him.",
+        "salience": 0.65,
+        "about": [
+          "Tavvik",
+          "Hollbrenna"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "cairn_must_be_answered",
+        "value": 0.95,
+        "why": "Ezra Holt cut into our dead; he must come before the shelf and answer for it."
+      },
+      {
+        "key": "respect_elders_decision",
+        "value": 0.8,
+        "why": "My mother is the elder; I will not overrule her, though I may counsel."
+      },
+      {
+        "key": "winter_store_is_precarious",
+        "value": 0.85,
+        "why": "Gaudra says the plots will not yield enough; I fear she is right."
+      },
+      {
+        "key": "trade_with_kettlebridge_must_wait",
+        "value": 0.7,
+        "why": "Until the cairn is made right, we cannot deal with them, no matter the cost."
+      },
+      {
+        "key": "stonework_is_our_heritage",
+        "value": 0.9,
+        "why": "We build in stone; it is who we are, and I will teach it to my sons."
+      }
+    ],
+    "secret": "I sometimes think my mother's ban will starve us before the cairn is answered, but I would never say so aloud."
+  },
+  "Hollbrenna": {
+    "narrative": "I am Hollbrenna, elder of Highshelf. My grandmother lies in the cairn that quarryman Ezra Holt cut into, and I have closed the shelf to Kettlebridge until the shelf has spoken and the cairn is made right. I remember the small folk fondly, Pipwort's mother was a friend, but I will not be hurried. The shelf will speak, and then we will see.",
+    "values": [
+      "tradition",
+      "respect for the dead",
+      "patience",
+      "community"
+    ],
+    "goals": [
+      "See the cairn repaired and the cutting answered for",
+      "Guide the shelf through the winter without breaking the ban",
+      "Keep the shelf united and patient until the cairn is made right",
+      "Remember and honour the old friendships with the small folk"
+    ],
+    "mood": "Grave and patient",
+    "traits": {
+      "caution": 80,
+      "sociability": 40,
+      "empathy": 65,
+      "curiosity": 30,
+      "ambition": 50,
+      "introspection": 75,
+      "temper": 40,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Orrum",
+        "trust": 90,
+        "affinity": 85,
+        "label": "son",
+        "note": "He will be elder after me; he has the weight of it already."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 70,
+        "affinity": 60,
+        "label": "daughter-in-law",
+        "note": "She works hard, but she worries overmuch about the store."
+      },
+      {
+        "name": "Vellmund",
+        "trust": 75,
+        "affinity": 70,
+        "label": "grandson",
+        "note": "He learns stonework well; I see my grandmother's steadiness in him."
+      },
+      {
+        "name": "Hollvarr",
+        "trust": 70,
+        "affinity": 75,
+        "label": "grandson",
+        "note": "Too young yet for the weight of the shelf, but he will grow."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": -90,
+        "affinity": -85,
+        "label": "enemy",
+        "note": "He cut into our dead; he must answer, but I will not be rushed."
+      },
+      {
+        "name": "Tavvik",
+        "trust": -50,
+        "affinity": -30,
+        "label": "defiant kin",
+        "note": "He trades against my word; it shames the shelf."
+      },
+      {
+        "name": "Steinar",
+        "trust": 85,
+        "affinity": 80,
+        "label": "old friend",
+        "note": "He keeps the cairns; I trust him as I trust the stone."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 60,
+        "affinity": 70,
+        "label": "old friend's daughter",
+        "note": "Her mother and I were friends before the Settling; I remember her fondly."
+      },
+      {
+        "name": "Orrum",
+        "trust": 90,
+        "affinity": 85,
+        "label": "son",
+        "note": "He will be elder after me; he has the weight of it already."
+      },
+      {
+        "name": "Liv",
+        "trust": 60,
+        "affinity": 55,
+        "label": "stonecutter",
+        "note": "She wants a storehouse; the cairns come first, but I hear her."
+      },
+      {
+        "name": "Eirik",
+        "trust": 50,
+        "affinity": 45,
+        "label": "stoneworker",
+        "note": "He thinks we should trade for timber; I am not moved."
+      },
+      {
+        "name": "Rannoch Voss",
+        "trust": 55,
+        "affinity": 50,
+        "label": "trader",
+        "note": "I remember the fold kindly, but since the cutting I weigh the hides twice."
+      },
+      {
+        "name": "Jorunn Voss",
+        "trust": 50,
+        "affinity": 55,
+        "label": "trader's daughter",
+        "note": "Rannoch's girl learns stonework from Liv and asks good questions; she is welcome on the shelf, but I watch whose hides she carries."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 55,
+        "affinity": 65,
+        "label": "small-folk friend",
+        "note": "Pipwort's daughter, and her mother's warmth in her; the hollow's ovens and ours have fed each other before the Settling, and I would keep it so."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day the quarrymen cut into the cairn; I felt the shelf's shame as if it were my own.",
+        "salience": 1.0,
+        "about": [
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "My grandmother telling me stories of the shelf before the Settling, when the small folk and giants were friends.",
+        "salience": 0.8,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "Forbidding all trade with Kettlebridge; the shelf agreed, though some were uneasy.",
+        "salience": 0.9,
+        "about": [
+          "Orrum",
+          "Tavvik"
+        ]
+      },
+      {
+        "gist": "Steinar repairing a cairn with me, our hands on the same stone.",
+        "salience": 0.7,
+        "about": [
+          "Steinar"
+        ]
+      },
+      {
+        "gist": "Tavvik coming up the track with timber, and my anger cold as stone.",
+        "salience": 0.75,
+        "about": [
+          "Tavvik"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "cairn_never_moved",
+        "value": 1.0,
+        "why": "A cairn is never moved; my grandmother lies there, and the cutting must be answered for."
+      },
+      {
+        "key": "shelf_will_speak",
+        "value": 0.95,
+        "why": "The shelf decides after everyone has spoken; I will not be hurried, not even by Orrum."
+      },
+      {
+        "key": "no_trade_with_kettlebridge",
+        "value": 0.9,
+        "why": "Until the cairn is made right, Kettlebridge is closed to us."
+      },
+      {
+        "key": "remember_old_friendships",
+        "value": 0.8,
+        "why": "The small folk were friends before the Settling; I remember Pipwort's mother fondly."
+      },
+      {
+        "key": "stone_endures",
+        "value": 0.85,
+        "why": "We build in stone; it is our heritage and our strength."
+      }
+    ],
+    "secret": "I fear the winter will be hard, but I will not break the ban for bread; the cairn is worth more than my comfort."
+  },
+  "Gaudra": {
+    "narrative": "I am Gaudra, Orrum's wife, and I tend the shelf's small plots of roots and grain. The soil is thin, and I fear it will not yield enough to see us through the winter. I want to send word to Fernhollow for grain before the passes close, but Sunniva says the smoked meat will see us through and the shelf should not beg. I am not too proud to ask for help when our children's bellies are at stake.",
+    "values": [
+      "family",
+      "prudence",
+      "honesty",
+      "cooperation"
+    ],
+    "goals": [
+      "Secure enough grain to see the shelf through the winter",
+      "Convince the shelf to trade with Fernhollow for grain",
+      "Keep my family fed and healthy",
+      "Tend the plots as best I can"
+    ],
+    "mood": "Anxious and determined",
+    "traits": {
+      "caution": 70,
+      "sociability": 60,
+      "empathy": 75,
+      "curiosity": 50,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 45,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Orrum",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He listens, but he is pulled by his mother's ban."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 60,
+        "affinity": 50,
+        "label": "mother-in-law",
+        "note": "She is the elder, but she will not see the hunger in my children's eyes."
+      },
+      {
+        "name": "Vellmund",
+        "trust": 75,
+        "affinity": 85,
+        "label": "son",
+        "note": "He is growing tall; he needs feeding."
+      },
+      {
+        "name": "Hollvarr",
+        "trust": 70,
+        "affinity": 90,
+        "label": "son",
+        "note": "My little one; I will not see him go hungry."
+      },
+      {
+        "name": "Sunniva",
+        "trust": 40,
+        "affinity": 30,
+        "label": "quarrel",
+        "note": "She thinks the shelf should not beg; I think pride does not fill bellies."
+      },
+      {
+        "name": "Harl",
+        "trust": 50,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "He hunts and keeps the meat store; he listens to Sunniva."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "The small folk trade seeds with us; they might trade grain too."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 55,
+        "affinity": 50,
+        "label": "seed-keeper",
+        "note": "She trades seeds with me when the small folk come; a good woman."
+      },
+      {
+        "name": "Tavvik",
+        "trust": -20,
+        "affinity": -10,
+        "label": "defiant kin",
+        "note": "He defies the elder, but he brings meat; I cannot hate him for it."
+      },
+      {
+        "name": "Liv",
+        "trust": 60,
+        "affinity": 55,
+        "label": "stonecutter",
+        "note": "She worries about the winter too, but her mind is on stone."
+      },
+      {
+        "name": "Elska Voss",
+        "trust": 55,
+        "affinity": 50,
+        "label": "barley trader",
+        "note": "She barters barley from the fold for our shelf's roots; she knows what thin ground costs, and I would ask her for grain before I'd beg Fernhollow."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Showing Orrum the thin ears of grain from my plots, my worry plain.",
+        "salience": 0.8,
+        "about": [
+          "Orrum"
+        ]
+      },
+      {
+        "gist": "Arguing with Sunniva over the winter store, her pride against my fear.",
+        "salience": 0.75,
+        "about": [
+          "Sunniva"
+        ]
+      },
+      {
+        "gist": "Trading seeds with a small folk woman from Fernhollow, and hearing of their gardens.",
+        "salience": 0.6,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "Watching Hollvarr play among the stone blocks, his laughter echoing.",
+        "salience": 0.5,
+        "about": [
+          "Hollvarr"
+        ]
+      },
+      {
+        "gist": "The day the cairn was cut, and the shelf's anger; I feared for the winter then.",
+        "salience": 0.7,
+        "about": [
+          "Hollbrenna"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "winter_store_will_fail",
+        "value": 0.9,
+        "why": "The thin soil cannot yield enough; we must trade for grain."
+      },
+      {
+        "key": "ask_for_help_is_not_begging",
+        "value": 0.85,
+        "why": "Pride does not fill bellies; I will ask Fernhollow for grain."
+      },
+      {
+        "key": "family_first",
+        "value": 0.95,
+        "why": "My children must eat, whatever the shelf decides."
+      },
+      {
+        "key": "respect_elder_but_speak",
+        "value": 0.7,
+        "why": "Hollbrenna is the elder, but I will speak my fear."
+      },
+      {
+        "key": "small_folk_are_friends",
+        "value": 0.8,
+        "why": "They trade seeds with us and do not cut cairns; they are not like Kettlebridge."
+      }
+    ],
+    "secret": "I have hidden a small store of grain in our house, in case the shelf's store fails entirely."
+  },
+  "Vellmund": {
+    "narrative": "I am Vellmund, son of Orrum and Gaudra, and I am learning stonework from my father and grandmother. I carry water to the stonecutters and watch them shape the stone, and I want to see the cairn on the ridge, but I am forbidden. The cairn is sacred, and I want to understand why my grandmother is so angry.",
+    "values": [
+      "learning",
+      "family",
+      "respect",
+      "curiosity"
+    ],
+    "goals": [
+      "Learn stonework well",
+      "See the cairn on the ridge",
+      "Make my father and grandmother proud"
+    ],
+    "mood": "Curious and eager",
+    "traits": {
+      "caution": 50,
+      "sociability": 60,
+      "empathy": 55,
+      "curiosity": 75,
+      "ambition": 60,
+      "introspection": 40,
+      "temper": 30,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Orrum",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He teaches me stonework; I want to be like him."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 75,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She worries about the winter; I try to help."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 70,
+        "affinity": 65,
+        "label": "grandmother",
+        "note": "She is the elder and knows the old stories; I listen."
+      },
+      {
+        "name": "Hollvarr",
+        "trust": 70,
+        "affinity": 85,
+        "label": "brother",
+        "note": "He follows me about; I look after him."
+      },
+      {
+        "name": "Steinar",
+        "trust": 60,
+        "affinity": 55,
+        "label": "master builder",
+        "note": "He knows stone better than anyone; I watch him work."
+      },
+      {
+        "name": "Liv",
+        "trust": 55,
+        "affinity": 50,
+        "label": "stonecutter",
+        "note": "She cuts stone with her father; I want to learn from her too."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father showing me how to cut a straight edge, his hands guiding mine.",
+        "salience": 0.7,
+        "about": [
+          "Orrum"
+        ]
+      },
+      {
+        "gist": "My grandmother telling me of the cairn and the grandmother she lost, her voice heavy.",
+        "salience": 0.8,
+        "about": [
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "Carrying water to the stonecutters and hearing them speak of the cutting in anger.",
+        "salience": 0.6,
+        "about": [
+          "Orrum",
+          "Steinar"
+        ]
+      },
+      {
+        "gist": "Playing with Hollvarr among the stone blocks, building little towers.",
+        "salience": 0.5,
+        "about": [
+          "Hollvarr"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "learn_stonework",
+        "value": 0.9,
+        "why": "It is our heritage, and I will be a stonecutter like my father."
+      },
+      {
+        "key": "cairn_is_sacred",
+        "value": 0.8,
+        "why": "My grandmother says a cairn is never moved; I believe her."
+      },
+      {
+        "key": "obey_elders",
+        "value": 0.7,
+        "why": "They know more than I do, and I am forbidden to go to the cairn."
+      },
+      {
+        "key": "family_comes_first",
+        "value": 0.85,
+        "why": "We are one household, and I will help where I can."
+      }
+    ],
+    "secret": "I have crept partway up the ridge to look toward the cairn, though I was forbidden."
+  },
+  "Hollvarr": {
+    "narrative": "I am Hollvarr, and I am eight. I play among the stone blocks and follow my brother Vellmund everywhere. The stones are big and cold, and sometimes I am afraid of the deep caves in the range. I do not understand why the grown-ups are so angry about the cairn, but I know my grandmother is sad.",
+    "values": [
+      "play",
+      "family",
+      "safety"
+    ],
+    "goals": [
+      "Play with my brother",
+      "See the stonecutters work",
+      "Avoid the deep caves"
+    ],
+    "mood": "Playful and a little fearful",
+    "traits": {
+      "caution": 60,
+      "sociability": 70,
+      "empathy": 60,
+      "curiosity": 65,
+      "ambition": 30,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Orrum",
+        "trust": 75,
+        "affinity": 70,
+        "label": "father",
+        "note": "He is big and strong and teaches Vellmund stonework."
+      },
+      {
+        "name": "Gaudra",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She hugs me and worries about the winter."
+      },
+      {
+        "name": "Hollbrenna",
+        "trust": 70,
+        "affinity": 65,
+        "label": "grandmother",
+        "note": "She is old and wise, and sometimes sad."
+      },
+      {
+        "name": "Vellmund",
+        "trust": 80,
+        "affinity": 90,
+        "label": "brother",
+        "note": "He lets me follow him and shows me things."
+      },
+      {
+        "name": "Grimhild",
+        "trust": 60,
+        "affinity": 70,
+        "label": "playmate",
+        "note": "She plays with me at the edge of the shelf."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Building a tower of stone chips with Vellmund until it fell down.",
+        "salience": 0.6,
+        "about": [
+          "Vellmund"
+        ]
+      },
+      {
+        "gist": "My grandmother telling me a story of the old days, her voice soft.",
+        "salience": 0.5,
+        "about": [
+          "Hollbrenna"
+        ]
+      },
+      {
+        "gist": "Looking into the dark of a cave mouth and running away scared.",
+        "salience": 0.7,
+        "about": []
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

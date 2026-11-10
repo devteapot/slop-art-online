@@ -1,0 +1,425 @@
+{
+  "Cael Tarn": {
+    "narrative": "I have burned the slow pits at Sootwood for more than thirty years, and my father before me, and I do not move them for a complaint that comes up the wood road. The smoke drifts east; that is the way the wind goes and always has. I keep my axe by the door now that the wolves have come down, and I keep a tally of every load that goes out and every debt that comes in, because a burner who forgets a debt is robbed twice.",
+    "values": [
+      "old ways kept",
+      "debts remembered",
+      "the pits before anything",
+      "family kept close"
+    ],
+    "goals": [
+      "keep the slow pits burning through the winter",
+      "see the east-road trade with Thistle Mossfoot stay sweet",
+      "keep Pell and Sena safe from the wolves",
+      "be paid what the quay stalls owe for charcoal"
+    ],
+    "mood": "steady, a little grim since the wolves came down",
+    "traits": {
+      "caution": 62,
+      "sociability": 30,
+      "empathy": 45,
+      "curiosity": 25,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Sena Tarn",
+        "trust": 90,
+        "affinity": 80,
+        "label": "partner",
+        "note": "She fells and trims beside me and keeps the tally straight; I would not burn without her."
+      },
+      {
+        "name": "Pell Tarn",
+        "trust": 85,
+        "affinity": 78,
+        "label": "son",
+        "note": "He stacks the pits well enough, but his head is full of quay boats."
+      },
+      {
+        "name": "Orvin Hollis",
+        "trust": 65,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "A good woodcutter; the wolves took two of his goats and I keep my axe near for it."
+      },
+      {
+        "name": "Maren Hollis",
+        "trust": 60,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She trades at the quay stalls and Sena thinks well of her."
+      },
+      {
+        "name": "Durrow Hollis",
+        "trust": 55,
+        "affinity": 60,
+        "label": "neighbour's boy",
+        "note": "Chased to his door by the wolves; a frightened lad, and no wonder."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 45,
+        "affinity": 40,
+        "label": "trade",
+        "note": "The small-folk pedlar brings word up the east road and buys a load now and then; his complaints about smoke I hear and let pass."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 35,
+        "affinity": 30,
+        "label": "customer",
+        "note": "Her noodle stall takes my charcoal, but she is slow to pay and quicker to talk."
+      },
+      {
+        "name": "Tace Hollis",
+        "trust": 40,
+        "affinity": 45,
+        "label": "neighbour's girl",
+        "note": "Orvin's daughter stacks kindling with Pell; a hard worker for her age."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 10,
+        "affinity": 5,
+        "label": "stranger",
+        "note": "A quay builder who took offence at talk of the seawall; that is Sena's affair, not mine."
+      },
+      {
+        "name": "Sena Tarn's mother",
+        "trust": 0,
+        "affinity": 0,
+        "label": "stranger",
+        "note": "Never met her; she's from up the coast."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father showed me how to bank a slow pit so it smoulders three days and does not flame; I have banked them the same way ever since.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Wolves took two of Orvin's goats just recently; we heard them in the night and found the blood by the plots in the morning.",
+        "salience": 0.75,
+        "about": [
+          "Orvin Hollis",
+          "Durrow Hollis",
+          "Pell Tarn"
+        ]
+      },
+      {
+        "gist": "A carter from Kettlebridge shorted me on a load of charcoal and laughed about it; I have not forgotten the sum or the man's face.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Pell was born in the hut between the pits in a wet autumn; Sena did not stop working until the day, and started again a week after.",
+        "salience": 0.7,
+        "about": [
+          "Sena Tarn",
+          "Pell Tarn"
+        ]
+      },
+      {
+        "gist": "The smoke from the pits has drifted east over the old forest every summer of my life; the small folk have complained before and will complain again.",
+        "salience": 0.5,
+        "about": [
+          "Thistle Mossfoot"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pits_before_complaints",
+        "value": 0.85,
+        "why": "The pits are old and the wood is mine to burn; I will not move them for a complaint carried up the road."
+      },
+      {
+        "key": "debts_are_remembered",
+        "value": 0.8,
+        "why": "A burner who forgets a debt is robbed twice; I keep the tally in my head and in the hut."
+      },
+      {
+        "key": "wolves_will_go_up_with_the_snow",
+        "value": 0.6,
+        "why": "I have seen wolves before; when the snow comes they go back up the hills, and the axe by the door is enough until then."
+      },
+      {
+        "key": "east_road_trade_must_stay_sweet",
+        "value": 0.55,
+        "why": "Thistle Mossfoot's road brings loads and word; a soured trade costs more than a little smoke."
+      },
+      {
+        "key": "sena_handles_the_quay_talk",
+        "value": 0.6,
+        "why": "What Sena says to the quay builders is her business; I keep to the pits and the tally."
+      }
+    ],
+    "secret": ""
+  },
+  "Sena Tarn": {
+    "narrative": "I fell and trim beside Cael and keep the tally of every load that goes down the wood road, and I have a tongue when the tally is questioned. I told the quay folk plain that the seawall will never be built and the stone price is a swindle, and I stand by it, but I do not want the wood road's loads turned back for my saying so. I have quietly offered Thistle Mossfoot a load of charcoal to smooth the smoke complaint, and I have not told Cael the whole of it.",
+    "values": [
+      "straight dealing",
+      "the wood road kept open",
+      "family fed",
+      "a fair price for hard work"
+    ],
+    "goals": [
+      "keep the quay stalls buying Sootwood charcoal and baskets",
+      "mend things with Thistle Mossfoot before the east road sours",
+      "see the seawall stone come from the ridge and not from Kettlebridge",
+      "keep Pell from the forest edge until the wolves are gone"
+    ],
+    "mood": "brisk and a little worried about the road",
+    "traits": {
+      "caution": 55,
+      "sociability": 58,
+      "empathy": 55,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 40,
+      "temper": 50,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Cael Tarn",
+        "trust": 88,
+        "affinity": 82,
+        "label": "partner",
+        "note": "He keeps the pits and I keep the road and the tally; between us it works."
+      },
+      {
+        "name": "Pell Tarn",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He says he is not afraid of the wolves, and I hear him not playing at the forest edge."
+      },
+      {
+        "name": "Maren Hollis",
+        "trust": 80,
+        "affinity": 75,
+        "label": "friend",
+        "note": "We keep our plots side by side and trade eggs and roots; she worries about the smoke drifting east as I do."
+      },
+      {
+        "name": "Orvin Hollis",
+        "trust": 65,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "His goats were taken and his boy chased; he has a right to be angry."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trade",
+        "note": "I have offered him a load of charcoal to smooth the smoke complaint; a small price for a sweet road."
+      },
+      {
+        "name": "Durrow Hollis",
+        "trust": 55,
+        "affinity": 60,
+        "label": "neighbour's boy",
+        "note": "A quiet lad who plays among the stacks with Pell; the wolves have shaken him."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 40,
+        "affinity": 35,
+        "label": "customer",
+        "note": "Her stall takes our charcoal and our baskets; she counts her marks twice and pays once."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 20,
+        "affinity": 15,
+        "label": "quarrel",
+        "note": "He took my words about the seawall as Sootwood siding with Kettlebridge; I meant only what I said."
+      },
+      {
+        "name": "Tace Hollis",
+        "trust": 45,
+        "affinity": 50,
+        "label": "neighbour's girl",
+        "note": "A good worker at the pits; she and Pell are thick as thieves."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I told the quay builders to their faces that the seawall will never be built and the stone price is a swindle; Ostrander Vane heard it and went cold on us.",
+        "salience": 0.7,
+        "about": [
+          "Ostrander Vane"
+        ]
+      },
+      {
+        "gist": "Wolves came down to the plots and took two of Orvin's goats; Durrow was chased to his door and I have kept Pell closer since.",
+        "salience": 0.8,
+        "about": [
+          "Durrow Hollis",
+          "Pell Tarn",
+          "Orvin Hollis"
+        ]
+      },
+      {
+        "gist": "I sold a stack of baskets at the morning stalls on the quay and came home with more marks than Cael expected; I keep half back in the hut for a lean week.",
+        "salience": 0.55,
+        "about": [
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "Maren Hollis and I built the goat pen together the spring before the Surge; it has stood through two hard winters.",
+        "salience": 0.6,
+        "about": [
+          "Maren Hollis"
+        ]
+      },
+      {
+        "gist": "The small folk's complaint about the smoke came up the east road with Thistle Mossfoot; I offered him a load of charcoal to smooth it and did not make a fuss about it at home.",
+        "salience": 0.65,
+        "about": [
+          "Thistle Mossfoot",
+          "Cael Tarn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "stone_should_come_from_the_ridge",
+        "value": 0.8,
+        "why": "The ridge is ours to quarry; paying Kettlebridge's price for stone is a swindle and I say so."
+      },
+      {
+        "key": "road_must_stay_open",
+        "value": 0.85,
+        "why": "The wood road carries our loads and our living; I will not have it turned back over a quarrel."
+      },
+      {
+        "key": "smoke_fine_must_be_paid_quietly",
+        "value": 0.6,
+        "why": "A load of charcoal to Thistle costs less than a soured east-road trade, and Cael need not be troubled with it."
+      },
+      {
+        "key": "children_kept_from_the_edge",
+        "value": 0.75,
+        "why": "The wolves have come down and taken goats; Pell stays by the stacks until they go up again."
+      },
+      {
+        "key": "tally_kept_true",
+        "value": 0.7,
+        "why": "A load unrecorded is a load unpaid; I keep the tally and I do not let it slip."
+      }
+    ],
+    "secret": "I have quietly promised Thistle Mossfoot a load of charcoal to smooth the smoke complaint, and I have not told Cael the whole of it."
+  },
+  "Pell Tarn": {
+    "narrative": "I stack the pits with Da and carry water and kindling, and when the work is done I watch the smoke go up and think about the quay boats. I want to see the tide lanterns at Lanternquay more than anything. I say I am not afraid of the wolves, but I do not go to the forest edge any more, and at night I listen for them.",
+    "values": [
+      "the quay and its boats",
+      "being brave",
+      "helping Da at the pits"
+    ],
+    "goals": [
+      "see the tide lanterns at Lanternquay",
+      "crew on a quay boat one day",
+      "not let anyone see he is afraid of the wolves"
+    ],
+    "mood": "restless and a little frightened underneath",
+    "traits": {
+      "caution": 45,
+      "sociability": 55,
+      "empathy": 50,
+      "curiosity": 70,
+      "ambition": 55,
+      "introspection": 35,
+      "temper": 40,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Cael Tarn",
+        "trust": 85,
+        "affinity": 75,
+        "label": "father",
+        "note": "Da teaches me the pits and keeps his axe by the door; he does not say much."
+      },
+      {
+        "name": "Sena Tarn",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "Ma keeps the tally and tells me to stay by the stacks; she worries more than she says."
+      },
+      {
+        "name": "Durrow Hollis",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "We play among the charcoal stacks; the wolves chased him to his door and he has not been the same since."
+      },
+      {
+        "name": "Tace Hollis",
+        "trust": 55,
+        "affinity": 60,
+        "label": "friend",
+        "note": "Durrow's sister; she stacks kindling and knows a quay knot she says a boy from the harbour taught her."
+      },
+      {
+        "name": "Orvin Hollis",
+        "trust": 50,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "Durrow's da; the wolves took his goats and he is angry about it."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 60,
+        "affinity": 65,
+        "label": "pedlar",
+        "note": "He tells stories of the east road and the quay."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Da let me bank my first slow pit by myself and it held three days; he said nothing but he nodded.",
+        "salience": 0.7,
+        "about": [
+          "Cael Tarn"
+        ]
+      },
+      {
+        "gist": "Durrow was chased to his door by the wolves and I heard him shouting; since then I stay by the stacks.",
+        "salience": 0.8,
+        "about": [
+          "Durrow Hollis"
+        ]
+      },
+      {
+        "gist": "A quay man came up the wood road once and told me about the tide lanterns and the boats; I have wanted to see them ever since.",
+        "salience": 0.6,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_quay_is_where_i_belong",
+        "value": 0.7,
+        "why": "Boats and lanterns and the harbour mouth; I will see them one day."
+      },
+      {
+        "key": "not_afraid_of_wolves",
+        "value": 0.5,
+        "why": "I say so, and I mean to make it true, but I keep by the stacks for now."
+      }
+    ],
+    "secret": ""
+  }
+}

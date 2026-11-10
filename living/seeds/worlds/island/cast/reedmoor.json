@@ -1,0 +1,344 @@
+{
+ "households": [
+  {
+   "key": "sedge",
+   "members": [
+    {
+     "name": "Nell Sedge",
+     "age": 50,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "headwoman of Reedmoor; let the Lakemead to the Coombes for grain",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "landlord of Jem Coombe",
+      "quarrels with Hob Garrow",
+      "trades with Thistle Mossfoot"
+     ]
+    },
+    {
+     "name": "Eadric Sedge",
+     "age": 47,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "Nell's brother; fishes the reed beds and the shallows from a flat boat",
+     "knows": [
+      "fishing",
+      "smoking",
+      "fire",
+      "mending",
+      "basketry"
+     ],
+     "parents": [
+      "Osric Dunn",
+      "Rona Dunn"
+     ],
+     "ties": [
+      "brother of Nell Sedge",
+      "fishes the reed beds with his nephew",
+      "sells smoked fish to Brannock Sedge's cart",
+      "owes Thistle Mossfoot for a packet of hooks",
+      "grudges the Lakemead Coombes for the grain they owe Nell"
+     ]
+    },
+    {
+     "name": "Hilda Sedge",
+     "age": 43,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Eadric's wife; keeps the village cook-fire and the common bake",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage",
+      "smoking",
+      "mending"
+     ],
+     "parents": [
+      "Cuthbert Stave",
+      "Merrow Stave"
+     ],
+     "ties": [
+      "wife of Eadric Sedge",
+      "cooks for the village common table",
+      "trades bread with Tansy Sedge of Fernhollow",
+      "worries about the winter store",
+      "close with Mavis Tarn"
+     ]
+    },
+    {
+     "name": "Wyn Sedge",
+     "age": 14,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Nell's son; cuts reeds and learns the boat and the tally",
+     "knows": [
+      "basketry",
+      "mending"
+     ],
+     "parents": [
+      "Nell Sedge"
+     ],
+     "ties": [
+      "son of Nell Sedge",
+      "helps his uncle Eadric with the boat",
+      "plays with Hreod Toller when the Elmwick folk come",
+      "wants to see the Lakemead"
+     ]
+    },
+    {
+     "name": "Merewyn Sedge",
+     "age": 9,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Eadric and Hilda's daughter; gathers reeds and helps at the cook-fire",
+     "knows": [
+      "mending"
+     ],
+     "parents": [
+      "Eadric Sedge",
+      "Hilda Sedge"
+     ],
+     "ties": [
+      "daughter of Eadric Sedge and Hilda Sedge",
+      "helps her mother at the common bake",
+      "plays with Wren Stave when Thornby folk visit",
+      "afraid of the wolves that come down to the reeds"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "coombe-reed",
+   "members": [
+    {
+     "name": "Morwen Coombe",
+     "age": 39,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Jem's wife; works the Lakemead strips and keeps the dairy",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire",
+      "storage",
+      "medicine"
+     ],
+     "parents": [
+      "Rook Tarn",
+      "Mavis Tarn"
+     ],
+     "ties": [
+      "wife of Jem Coombe",
+      "keeps the Lakemead dairy",
+      "trades cheese with Hilda Sedge",
+      "close with Rowan Wray of Elmwick despite the quarrel",
+      "worries the meadow will be taken from them"
+     ]
+    },
+    {
+     "name": "Cedda Coombe",
+     "age": 11,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Jem and Morwen's daughter; helps with the goats and the fence",
+     "knows": [
+      "mending"
+     ],
+     "parents": [
+      "Jem Coombe",
+      "Morwen Coombe"
+     ],
+     "ties": [
+      "daughter of Jem Coombe and Morwen Coombe",
+      "plays with Thea Wray when the Elmwick folk come",
+      "helps her father mend the fence",
+      "afraid of the Elmwick men who pulled the fence down"
+     ]
+    },
+    {
+     "name": "Osric Coombe",
+     "age": 6,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Jem and Morwen's son; plays at the meadow edge and follows the goats",
+     "knows": [],
+     "parents": [
+      "Jem Coombe",
+      "Morwen Coombe"
+     ],
+     "ties": [
+      "son of Jem Coombe and Morwen Coombe",
+      "plays with Merewyn Sedge",
+      "afraid of the deep reeds"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "wade-reed",
+   "members": [
+    {
+     "name": "Ethelred Wade",
+     "age": 55,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "fishes the shore and the reed channels; keeps the village's nets and traps",
+     "knows": [
+      "fishing",
+      "mending",
+      "fire",
+      "smoking",
+      "basketry"
+     ],
+     "parents": [
+      "Rook Tarn",
+      "Mavis Tarn"
+     ],
+     "ties": [
+      "husband of Leofrun Wade",
+      "mends nets for Nell Sedge",
+      "trades smoked fish with Brannock Sedge's cart",
+      "grudges the Kettlebridge works for the smoke that drifts east",
+      "friendly with Eadric Sedge"
+     ]
+    },
+    {
+     "name": "Leofrun Wade",
+     "age": 51,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Ethelred's wife; keeps the village's small barley and vegetable plots above the reeds",
+     "knows": [
+      "planting",
+      "storage",
+      "fire",
+      "cooking",
+      "medicine"
+     ],
+     "parents": [
+      "Cuthbert Stave",
+      "Merrow Stave"
+     ],
+     "ties": [
+      "wife of Ethelred Wade",
+      "sells barley to Brackenford's store against the debt",
+      "trades seeds with Merrow Stave",
+      "tends the village sick with Hilda Sedge",
+      "worries about the winter store"
+     ]
+    },
+    {
+     "name": "Godric Wade",
+     "age": 24,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "Ethelred and Leofrun's son; fishes the deep water off the reeds and wants his own boat",
+     "knows": [
+      "fishing",
+      "smoking",
+      "fire",
+      "mending",
+      "shelter"
+     ],
+     "parents": [
+      "Ethelred Wade",
+      "Leofrun Wade"
+     ],
+     "ties": [
+      "son of Ethelred Wade and Leofrun Wade",
+      "fishes with his father",
+      "courts Wyn Sedge",
+      "owes Brannock Sedge for a share of a net",
+      "wants to buy a boat of his own"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "lakemead-fence",
+   "kind": "feud",
+   "summary": "Elmwick folk have twice pulled down Jem Coombe's fence on the Lakemead; Nell Sedge holds the lease and insists the meadow is Reedmoor's to let, while Hob Garrow of Elmwick says it was always Elmwick's common.",
+   "secret": false,
+   "people": [
+    "Nell Sedge",
+    "Jem Coombe",
+    "Morwen Coombe"
+   ],
+   "sides": {
+    "Nell Sedge": "She let the Lakemead to the Coombes and takes their grain rent; she will not have Elmwick tell her what Reedmoor may let, and she is angry the fence was pulled down.",
+    "Jem Coombe": "He pays Nell rent in grain and works the meadow; he fears a third fence-pulling and wants Nell to stand behind him.",
+    "Morwen Coombe": "She keeps the dairy and the strips; she is close with Rowan Wray of Elmwick and hates that the quarrel has come between them."
+   }
+  },
+  {
+   "id": "lakemead-rent",
+   "kind": "debt",
+   "summary": "The Coombes owe Nell Sedge this year's grain rent for the Lakemead, and the harvest is not yet in; Nell has not pressed them but the village tally is short.",
+   "secret": false,
+   "people": [
+    "Nell Sedge",
+    "Jem Coombe",
+    "Morwen Coombe"
+   ],
+   "sides": {
+    "Nell Sedge": "She keeps the village grain tally and needs the rent to fill the common store; she is fond of the Coombes and has not pressed them yet.",
+    "Jem Coombe": "He knows the rent is due and the harvest is thin; he is ashamed to ask for time and afraid Nell will take the meadow back.",
+    "Morwen Coombe": "She counts the dairy and the grain and knows they are short; she would sell cheese to Hilda Sedge's table to make up part of it."
+   }
+  },
+  {
+   "id": "sedge-courtship",
+   "kind": "courtship",
+   "summary": "Godric Wade has been courting Wyn Sedge since the spring; both households expect a match, but Nell has not given her word and Godric has no boat of his own yet.",
+   "secret": false,
+   "people": [
+    "Godric Wade",
+    "Wyn Sedge",
+    "Nell Sedge",
+    "Ethelred Wade"
+   ],
+   "sides": {
+    "Godric Wade": "He wants Wyn and a boat of his own; he fears Nell will not give her son to a fisherman with no boat.",
+    "Wyn Sedge": "He is fond of Godric and wants the match, but he will not go against his mother's word.",
+    "Nell Sedge": "She likes Godric well enough but wants to see him with a boat and a net of his own before she gives her word.",
+    "Ethelred Wade": "He would be glad of the match and has offered Godric a share of his nets, but he cannot give him a boat."
+   }
+  },
+  {
+   "id": "winter-store",
+   "kind": "illness",
+   "summary": "A cough has gone through the reeds and the village's winter store is thinner than it should be; Hilda Sedge and Leofrun Wade are nursing the sick and counting the grain.",
+   "secret": false,
+   "people": [
+    "Hilda Sedge",
+    "Leofrun Wade",
+    "Nell Sedge"
+   ],
+   "sides": {
+    "Hilda Sedge": "She cooks for the common table and tends the cough; she fears the store will not last the winter and has cut the common bake.",
+    "Leofrun Wade": "She tends the sick with Hilda and knows the barley plots are short; she has sold barley to Brackenford's store against the debt and has little left.",
+    "Nell Sedge": "She keeps the tally and knows the store is thin; she is weighing whether to buy grain from Thistle Mossfoot's packs or ask Brackenford for time on the debt."
+   }
+  },
+  {
+   "id": "pedlar-hooks",
+   "kind": "debt",
+   "summary": "Eadric Sedge owes Thistle Mossfoot for a packet of hooks bought on the east road last season, and the pedlar is due back through Reedmoor with the fibre and salves.",
+   "secret": false,
+   "people": [
+    "Eadric Sedge",
+    "Nell Sedge"
+   ],
+   "sides": {
+    "Eadric Sedge": "He owes the pedlar for hooks and has not the marks; he would pay in smoked fish if Thistle will take it.",
+    "Nell Sedge": "She knows her brother's debt and would rather settle it from the common store than have the pedlar go away unpaid."
+   }
+  }
+ ]
+}

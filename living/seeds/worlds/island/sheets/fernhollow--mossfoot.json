@@ -1,0 +1,472 @@
+{
+  "Thistle Mossfoot": {
+    "narrative": "I was born in the hollow and learned the east road before I learned to shave. My packs carry Fernhollow fibre to Reedmoor's market and bring fish back, and I know every rut and toll between here and the reeds. I am friendly with the Coombes at the Lakemead and I trade with Nell Sedge, so when Elmwick and Reedmoor pull at the meadow I stand in the middle and wish them done with it. This year half a load was opened at the crossing and I am sure the Ferncross man did it; and my wife Clover has grown close with Tansy Hazel, which the hollow is beginning to talk of and I have not yet found words for.",
+    "values": [
+      "fair dealing on the road",
+      "family and the hollow",
+      "the old forest kept whole",
+      "honest weight in a pack"
+    ],
+    "goals": [
+      "get the hollow to back me and stop trading at the crossing until the opened pack is answered",
+      "settle the smoke complaint with Sootwood without closing the road",
+      "keep my marriage whole and my packs full"
+    ],
+    "mood": "tired, wary, caught between people he likes",
+    "traits": {
+      "caution": 55,
+      "sociability": 70,
+      "empathy": 62,
+      "curiosity": 60,
+      "ambition": 45,
+      "introspection": 55,
+      "temper": 40,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Clover Mossfoot",
+        "trust": 70,
+        "affinity": 75,
+        "label": "wife",
+        "note": "She keeps the flax that fills my packs; the hollow's talk about her and Tansy has got under my skin and I have not asked her."
+      },
+      {
+        "name": "Tansy Mossfoot",
+        "trust": 90,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "Runs the garden paths and names every flower; I bring her a shell or a reed whistle from every road."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 80,
+        "affinity": 70,
+        "label": "grandmother",
+        "note": "Eldest of the hollow and my grandmother; she hears the road's news from me before anyone."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "Keeps the common table; she feeds me before I take the packs out and asks fewer questions than Betony."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "My other mother; she makes the salves I carry and tells me which cuts to watch on the road."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 65,
+        "affinity": 55,
+        "label": "kin",
+        "note": "Seed-keeper and my grandmother's cousin; she argues with Clover over the seed rows and I hear it from both sides."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 60,
+        "affinity": 50,
+        "label": "trader",
+        "note": "Keeps the hollow's store and owes me a share of a load; he wants the hollow trading more with the giants."
+      },
+      {
+        "name": "Tansy Hazel",
+        "trust": 55,
+        "affinity": 45,
+        "label": "trader",
+        "note": "Keeps the east road stall; I owe her a fair answer about the crossing and I am not ready to give it."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 55,
+        "affinity": 50,
+        "label": "trade partner",
+        "note": "Headwoman of Reedmoor; she buys my fibre and I wish she and Hob Garrow would settle the meadow without me in the middle."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 60,
+        "affinity": 60,
+        "label": "friend",
+        "note": "Tenant of the Lakemead; I drink at his table when the road takes me past and I wish his fence would stay up."
+      },
+      {
+        "name": "Cael Tarn",
+        "trust": 50,
+        "affinity": 55,
+        "label": "customer",
+        "note": "Burns the Sootwood pits; I like his charcoal and I carry the hollow's complaint to him honestly."
+      },
+      {
+        "name": "Sena Tarn",
+        "trust": 55,
+        "affinity": 55,
+        "label": "customer",
+        "note": "Sena has offered me a load of charcoal to settle the smoke complaint, though the pits' smoke still drifts over the hollow."
+      },
+      {
+        "name": "Bracken Sedge",
+        "trust": 40,
+        "affinity": 38,
+        "label": "hollow neighbour",
+        "note": "A careful builder who will not fell a tree; careful about taking sides too."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 30,
+        "affinity": 25,
+        "label": "quarrelsome elder",
+        "note": "He says the meadow was never Reedmoor's to let, and he says it loudest to whoever carries between the two villages — which is me."
+      },
+      {
+        "name": "Nesta Ashdown",
+        "trust": 55,
+        "affinity": 50,
+        "label": "trade partner",
+        "note": "She trades bread with me at the crossing and has never cheated me, whatever I think of the woodcutters she keeps pot for."
+      },
+      {
+        "name": "Rill Fenlake",
+        "trust": 60,
+        "affinity": 58,
+        "label": "customer",
+        "note": "Her smoked fish fills half my packs coming back east, and she has a hard enough time of it without the Elmwick men trampling her nets."
+      },
+      {
+        "name": "Rowan Wray",
+        "trust": 45,
+        "affinity": 40,
+        "label": "customer",
+        "note": "I buy her smoked fish for the Elmwick run; she grumbles about the Kettlebridge smoke as much as the hollow does, so we get on."
+      },
+      {
+        "name": "Clover Hazel",
+        "trust": 45,
+        "affinity": 40,
+        "label": "hollow neighbour",
+        "note": "Builds the crates my packs ride in and will not fell a living tree; I like her work and wish her wife would give me a straight answer about the crossing."
+      },
+      {
+        "name": "Reed Fenwick",
+        "trust": 50,
+        "affinity": 45,
+        "label": "customer",
+        "note": "Young Sorrel's son, fishes the forest streams and wants to see the sea; I tell him what the quay smells like and he listens."
+      },
+      {
+        "name": "Sorrel Fenwick",
+        "trust": 55,
+        "affinity": 50,
+        "label": "customer",
+        "note": "Smokes the stream catch for the hollow's table; her fish go into my packs, and she grumbles about the Kettlebridge smoke as much as we do."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My grandmother Pipwort put the first pack on my back and told me the east road is the hollow's memory carried on foot.",
+        "salience": 0.7,
+        "about": [
+          "Pipwort Bramblecap"
+        ]
+      },
+      {
+        "gist": "The Lean Year: the hollow's gardens held, and I walked fibre to Reedmoor and came back with fish when the north was hungry.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Clover and I were wed under the old apple in the hollow, and Betony and Mallow cooked for three days.",
+        "salience": 0.9,
+        "about": [
+          "Clover Mossfoot",
+          "Betony Mossfoot",
+          "Mallow Bramblecap"
+        ]
+      },
+      {
+        "gist": "Half my fibre pack was opened and emptied at the east road crossing, and I am sure the Ferncross woodcutter I quarrelled with did it.",
+        "salience": 0.85,
+        "about": []
+      },
+      {
+        "gist": "Sena Tarn offered me a load of charcoal to smooth the smoke complaint, and I took the offer away to think on.",
+        "salience": 0.6,
+        "about": [
+          "Sena Tarn",
+          "Cael Tarn"
+        ]
+      },
+      {
+        "gist": "Elmwick men pulled down Jem Coombe's fence again, and I carried the news back to the hollow with my packs.",
+        "salience": 0.65,
+        "about": [
+          "Jem Coombe",
+          "Nell Sedge",
+          "Hob Garrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_crossing_must_answer_for_the_opened_pack",
+        "value": 0.8,
+        "why": "Half a load lost is half a season's work, and a trader who lets it pass loses every pack after it."
+      },
+      {
+        "key": "keep_the_road_open",
+        "value": 0.75,
+        "why": "The hollow lives by what I carry out and bring back; a closed road starves the gardens as surely as wolves."
+      },
+      {
+        "key": "settle_the_lakemead_without_me_in_the_middle",
+        "value": 0.6,
+        "why": "I like the Coombes and I trade with Nell Sedge, and Elmwick's quarrel is not mine to carry."
+      },
+      {
+        "key": "do_not_fell_a_living_tree",
+        "value": 0.7,
+        "why": "The old forest is the hollow's roof and its medicine; fallen wood is enough for anyone."
+      },
+      {
+        "key": "ask_clover_plainly",
+        "value": 0.55,
+        "why": "The hollow's talk will not stop by itself, and I would rather hear it from her than from the stall."
+      }
+    ],
+    "secret": "I am sure the Ferncross man opened my pack, but I did not see him do it and I have told the hollow I did."
+  },
+  "Clover Mossfoot": {
+    "narrative": "I keep the hollow's fibre patch and the flax that fills Thistle's packs, and I trade with the Reedmoor reed-cutters when the road brings them near. I want a larger garden of my own, and Sorrel Underbank and I have argued over the seed rows more than once. Thistle is often away, and Tansy Hazel and I have grown close over the fibre trade until the hollow has begun to talk. I have not told Thistle, and I do not know what I want.",
+    "values": [
+      "good flax and honest measure",
+      "the hollow's gardens",
+      "my daughter's days",
+      "keeping my own counsel"
+    ],
+    "goals": [
+      "win a larger garden of my own from the hollow's plots",
+      "settle matters with Sorrel Underbank over the seed rows",
+      "decide what I am to Tansy Hazel before the hollow decides for me"
+    ],
+    "mood": "guilty, restless, quietly happy and quietly afraid",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 65,
+      "curiosity": 55,
+      "ambition": 60,
+      "introspection": 65,
+      "temper": 35,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 65,
+        "affinity": 60,
+        "label": "husband",
+        "note": "He is on the road more than he is home, and I have not found the words to tell him what is happening."
+      },
+      {
+        "name": "Tansy Mossfoot",
+        "trust": 90,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "She knows every flower by name and follows Betony about the salve shed; I want her garden bigger than mine."
+      },
+      {
+        "name": "Tansy Hazel",
+        "trust": 70,
+        "affinity": 80,
+        "label": "close friend",
+        "note": "We talk over the fibre trade until the evening is gone, and I do not know what I would do without those talks."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother",
+        "note": "Thistle's mother; she tends the sick and I think she sees more of me than she says."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 70,
+        "affinity": 65,
+        "label": "mother",
+        "note": "Keeps the common table; she asks after the flax and never after my business."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 50,
+        "affinity": 40,
+        "label": "rival",
+        "note": "Seed-keeper; she says my rows crowd hers, and I say the hollow has room for both."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 65,
+        "affinity": 55,
+        "label": "grandmother",
+        "note": "Eldest of the hollow; she keeps the gardens' calendar and I keep to it, mostly."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trader",
+        "note": "He buys the hollow's fibre and counts every pack; I would rather sell to the reed-cutters direct."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 50,
+        "affinity": 40,
+        "label": "rival gardener",
+        "note": "She argues about the seed rows as if the garden were a court and she the judge."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother taught me to pull flax so the fibre runs long, and I still hear her voice when the patch is ready.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Thistle and I were wed under the old apple, and Tansy came the next spring.",
+        "salience": 0.85,
+        "about": [
+          "Thistle Mossfoot",
+          "Tansy Mossfoot"
+        ]
+      },
+      {
+        "gist": "Sorrel Underbank and I quarrelled over the seed rows, and the hollow heard every word of it.",
+        "salience": 0.6,
+        "about": [
+          "Sorrel Underbank"
+        ]
+      },
+      {
+        "gist": "Tansy Hazel and I sat over the fibre packs till dark, and I went home and could not sleep.",
+        "salience": 0.8,
+        "about": [
+          "Tansy Hazel"
+        ]
+      },
+      {
+        "gist": "The Lean Year: the flax held and I traded it for fish, and the hollow ate because of the gardens.",
+        "salience": 0.7,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_garden_comes_first",
+        "value": 0.8,
+        "why": "The flax and the fibre patch feed us and fill the packs, and a larger garden would do more of both."
+      },
+      {
+        "key": "keep_my_own_counsel",
+        "value": 0.7,
+        "why": "The hollow's talk is a wind that blows over; what I say aloud is mine to keep."
+      },
+      {
+        "key": "tell_thistle_before_the_hollow_does",
+        "value": 0.5,
+        "why": "He deserves it from me, and yet every time he comes home with the packs I put it off."
+      },
+      {
+        "key": "trade_with_the_reed_cutters_direct",
+        "value": 0.6,
+        "why": "They pay a fair price and do not count my packs like Alder Rush does."
+      },
+      {
+        "key": "the_old_forest_must_not_be_cut_close",
+        "value": 0.65,
+        "why": "The patch needs the shelter of the trees, and every felled margin takes a little of the flax with it."
+      }
+    ],
+    "secret": "I am drawn to Tansy Hazel and have not told Thistle, and I do not know whether I want it to go further or to stop."
+  },
+  "Tansy Mossfoot": {
+    "narrative": "I am five and I run the garden paths of the hollow. I know every flower by name, and I follow my grandmother Betony about the salve shed and hand her the little jars. When Papa comes back from the road he brings me a reed whistle or a shell, and I keep them on the shelf by my bed.",
+    "values": [
+      "flowers and garden paths",
+      "Papa's homecomings",
+      "helping Betony"
+    ],
+    "goals": [
+      "learn the names of all the salve plants",
+      "see what Papa has brought back from the road"
+    ],
+    "mood": "bright and busy",
+    "traits": {
+      "caution": 35,
+      "sociability": 70,
+      "empathy": 60,
+      "curiosity": 80,
+      "ambition": 40,
+      "introspection": 30,
+      "temper": 30,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 85,
+        "affinity": 90,
+        "label": "father",
+        "note": "He brings me shells and whistles from the road and lifts me up to see the packs."
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She lets me help in the fibre patch and calls me her little flax flower."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 80,
+        "affinity": 85,
+        "label": "grandmother",
+        "note": "I follow her about the salve shed and she lets me sniff every jar."
+      },
+      {
+        "name": "Sorrel Underbank",
+        "trust": 60,
+        "affinity": 55,
+        "label": "kin",
+        "note": "Her grandson and I play among the seed rows, and she tells us the planting songs."
+      },
+      {
+        "name": "Sorrel Underbank's grandson",
+        "trust": 70,
+        "affinity": 72,
+        "label": "playmate",
+        "note": "We play in the garden paths and he is not as fast as me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Papa came home with a reed whistle and I blew it all evening until Mama hid it.",
+        "salience": 0.7,
+        "about": [
+          "Thistle Mossfoot",
+          "Clover Mossfoot"
+        ]
+      },
+      {
+        "gist": "Betony let me stir the salve and it smelled of pine and honey.",
+        "salience": 0.6,
+        "about": [
+          "Betony Mossfoot"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

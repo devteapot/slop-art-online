@@ -1,0 +1,828 @@
+{
+ "households": [
+  {
+   "key": "bramblecap",
+   "members": [
+    {
+     "name": "Pipwort Bramblecap",
+     "age": 61,
+     "sex": "f",
+     "occupation": "scribe",
+     "role": "Eldest of the hollow; keeps its memory and its gardens' calendar",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "her mother and Hollbrenna were friends",
+      "distrusts Kettlebridge",
+      "grandmother of Thistle Mossfoot"
+     ]
+    },
+    {
+     "name": "Sorrel Underbank",
+     "age": 57,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Pipwort's cousin and the hollow's seed-keeper; tends the oldest garden plots",
+     "knows": [
+      "planting",
+      "storage",
+      "medicine",
+      "fire",
+      "cooking"
+     ],
+     "parents": [],
+     "ties": [
+      "cousin of Pipwort Bramblecap",
+      "keeps the seed store",
+      "trades seeds with Gaudra of Highshelf",
+      "teaches the hollow's children the planting songs",
+      "worries the old forest is being cut too close"
+     ]
+    },
+    {
+     "name": "Mallow Bramblecap",
+     "age": 34,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Pipwort's daughter; keeps the common table and the hollow's ovens",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage",
+      "planting",
+      "basketry"
+     ],
+     "parents": [
+      "Pipwort Bramblecap"
+     ],
+     "ties": [
+      "daughter of Pipwort Bramblecap",
+      "mother of Thistle Mossfoot",
+      "feeds the hollow at the common table",
+      "trades honey with the Ferncross woodcutters",
+      "close with Betony Mossfoot"
+     ]
+    },
+    {
+     "name": "Betony Mossfoot",
+     "age": 32,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "Mallow's wife; makes salves from the old forest's plants and tends the hollow's sick",
+     "knows": [
+      "medicine",
+      "planting",
+      "cooking",
+      "fire",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Mallow Bramblecap",
+      "mother of Thistle Mossfoot",
+      "trades salves with the Tanglewood healer",
+      "tends the hollow's children through fevers",
+      "distrusts Kettlebridge's smoke and fires"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "mossfoot",
+   "members": [
+    {
+     "name": "Thistle Mossfoot",
+     "age": 26,
+     "sex": "m",
+     "occupation": "pedlar",
+     "role": "pedlar on the east road: carries fibre to Reedmoor's market and brings fish back",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "grandson of Pipwort Bramblecap",
+      "trades with Nell Sedge",
+      "friendly with the Coombes of the Lakemead"
+     ]
+    },
+    {
+     "name": "Clover Mossfoot",
+     "age": 24,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Thistle's wife; tends the hollow's fibre patch and the flax that fills his packs",
+     "knows": [
+      "planting",
+      "basketry",
+      "storage",
+      "fire",
+      "cooking"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Thistle Mossfoot",
+      "keeps the fibre patch",
+      "trades flax with the Reedmoor reed-cutters",
+      "argues with Sorrel Underbank about the seed rows",
+      "wants a larger garden of her own"
+     ]
+    },
+    {
+     "name": "Tansy Mossfoot",
+     "age": 5,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Thistle and Clover's daughter; runs the garden paths and knows every flower by name",
+     "knows": [
+      "planting"
+     ],
+     "parents": [
+      "Thistle Mossfoot",
+      "Clover Mossfoot"
+     ],
+     "ties": [
+      "daughter of Thistle Mossfoot",
+      "follows her grandmother Betony about the salve shed",
+      "plays with Sorrel Underbank's grandson"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "underbank",
+   "members": [
+    {
+     "name": "Yarrow Underbank",
+     "age": 38,
+     "sex": "m",
+     "occupation": "carpenter",
+     "role": "works only fallen wood; builds the hollow's frames, shelves and garden gates",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "mending",
+      "planting",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "son of Sorrel Underbank",
+      "husband of Marjoram Underbank",
+      "builds the common table's benches",
+      "trades tools with the Ferncross woodcutters",
+      "refuses to fell a living tree",
+      "friendly with the giant Eirik when he comes down"
+     ]
+    },
+    {
+     "name": "Marjoram Underbank",
+     "age": 35,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Yarrow's wife; bakes the hollow's bread and keeps the herb garden by the oven",
+     "knows": [
+      "cooking",
+      "fire",
+      "planting",
+      "storage",
+      "medicine"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Yarrow Underbank",
+      "mother of Fennel Underbank",
+      "bakes for the common table",
+      "trades bread with the Reedmoor market",
+      "close with Mallow Bramblecap"
+     ]
+    },
+    {
+     "name": "Fennel Underbank",
+     "age": 9,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Yarrow and Marjoram's son; helps in the garden and follows his father about the woodpile",
+     "knows": [
+      "planting",
+      "mending"
+     ],
+     "parents": [
+      "Yarrow Underbank",
+      "Marjoram Underbank"
+     ],
+     "ties": [
+      "son of Yarrow Underbank",
+      "plays with Tansy Mossfoot",
+      "wants to learn the pedlar's road from Thistle Mossfoot"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "fenwick-hollow",
+   "members": [
+    {
+     "name": "Sorrel Fenwick",
+     "age": 44,
+     "sex": "f",
+     "occupation": "fisher",
+     "role": "fishes the forest streams and smokes the catch for the hollow's table",
+     "knows": [
+      "fishing",
+      "smoking",
+      "basketry",
+      "fire",
+      "cooking"
+     ],
+     "parents": [],
+     "ties": [
+      "widow of a Fernhollow fisher",
+      "mother of Reed Fenwick",
+      "trades smoked fish with Thistle Mossfoot's packs",
+      "knows the stream pools better than anyone",
+      "grudges the Kettlebridge works for the smoke that drifts east"
+     ]
+    },
+    {
+     "name": "Reed Fenwick",
+     "age": 16,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "Sorrel's son; fishes the streams with her and learns the weirs",
+     "knows": [
+      "fishing",
+      "basketry",
+      "mending",
+      "fire"
+     ],
+     "parents": [
+      "Sorrel Fenwick"
+     ],
+     "ties": [
+      "son of Sorrel Fenwick",
+      "fishes the forest streams",
+      "wants to see the sea at Lanternquay",
+      "friendly with Fennel Underbank"
+     ]
+    },
+    {
+     "name": "Rush Fenwick",
+     "age": 12,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Sorrel's daughter; mends nets and keeps the smoke shed tidy",
+     "knows": [
+      "basketry",
+      "mending"
+     ],
+     "parents": [
+      "Sorrel Fenwick"
+     ],
+     "ties": [
+      "daughter of Sorrel Fenwick",
+      "helps in the smoke shed",
+      "plays with Tansy Mossfoot"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "bramblecap-lower",
+   "members": [
+    {
+     "name": "Hazel Bramblecap",
+     "age": 29,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "Pipwort's niece; keeps the hollow's salve store and walks to Tanglewood for herbs",
+     "knows": [
+      "medicine",
+      "planting",
+      "cooking",
+      "fire",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "niece of Pipwort Bramblecap",
+      "trades herbs with the Tanglewood healer",
+      "tends the hollow's elders",
+      "worries about the winter cough",
+      "friendly with Betony Mossfoot"
+     ]
+    },
+    {
+     "name": "Sorrel Bramblecap",
+     "age": 31,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "Hazel's husband; works the hollow's grain patch and the berry rows",
+     "knows": [
+      "planting",
+      "storage",
+      "trapping",
+      "fire",
+      "cooking"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Hazel Bramblecap",
+      "works the grain patch",
+      "trades berries with the Ferncross woodcutters",
+      "grumbles at the giants' track for the timber it takes",
+      "wants a second strip by the stream"
+     ]
+    },
+    {
+     "name": "Tamarisk Bramblecap",
+     "age": 7,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Hazel and Sorrel's daughter; gathers berries and follows her mother to the salve shed",
+     "knows": [
+      "planting"
+     ],
+     "parents": [
+      "Hazel Bramblecap",
+      "Sorrel Bramblecap"
+     ],
+     "ties": [
+      "daughter of Hazel Bramblecap",
+      "plays with Rush Fenwick",
+      "afraid of the deep caves in the hills"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "quill-hollow",
+   "members": [
+    {
+     "name": "Bramble Quill",
+     "age": 52,
+     "sex": "m",
+     "occupation": "scribe",
+     "role": "keeps the hollow's garden rolls and writes the Eldest's letters",
+     "knows": [
+      "writing",
+      "planting",
+      "cooking",
+      "fire",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "writes for Pipwort Bramblecap",
+      "corresponds with Ostrander Sallow of Lanternquay",
+      "keeps the hollow's rolls",
+      "trades letters for fish with the Reedmoor market",
+      "distrusts Kettlebridge's contracts"
+     ]
+    },
+    {
+     "name": "Vetch Quill",
+     "age": 49,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Bramble's wife; keeps the hollow's root garden and the beehives",
+     "knows": [
+      "planting",
+      "storage",
+      "cooking",
+      "fire",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Bramble Quill",
+      "keeps the beehives",
+      "trades honey with the Ferncross woodcutters",
+      "mother of Sorrel Quill",
+      "argues with Clover Mossfoot about the seed rows"
+     ]
+    },
+    {
+     "name": "Sorrel Quill",
+     "age": 13,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Bramble and Vetch's daughter; learns her letters and helps with the hives",
+     "knows": [
+      "writing",
+      "planting"
+     ],
+     "parents": [
+      "Bramble Quill",
+      "Vetch Quill"
+     ],
+     "ties": [
+      "daughter of Bramble Quill",
+      "learns letters from her father",
+      "plays with Tamarisk Bramblecap"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "rush-hollow",
+   "members": [
+    {
+     "name": "Alder Rush",
+     "age": 41,
+     "sex": "m",
+     "occupation": "trader",
+     "role": "buys the hollow's fibre and salves and sells them on the east road; keeps the hollow's store of marks",
+     "knows": [
+      "cooking",
+      "storage",
+      "mending",
+      "fire",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Willow Rush",
+      "trades with Nell Sedge at Reedmoor",
+      "keeps the hollow's common store",
+      "owes Thistle Mossfoot a share of a load",
+      "wants the hollow to trade more with the giants"
+     ]
+    },
+    {
+     "name": "Willow Rush",
+     "age": 39,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Alder's wife; tends the hollow's flax and the garden by the stream",
+     "knows": [
+      "planting",
+      "storage",
+      "cooking",
+      "fire",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Alder Rush",
+      "mother of Bracken Rush",
+      "trades flax with the Reedmoor reed-cutters",
+      "close with Clover Mossfoot",
+      "worries the old forest is being cut too close"
+     ]
+    },
+    {
+     "name": "Bracken Rush",
+     "age": 10,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Alder and Willow's son; helps in the store and counts the packs",
+     "knows": [
+      "storage",
+      "planting"
+     ],
+     "parents": [
+      "Alder Rush",
+      "Willow Rush"
+     ],
+     "ties": [
+      "son of Alder Rush",
+      "plays with Fennel Underbank",
+      "wants to walk the east road with Thistle Mossfoot"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "sedge-hollow",
+   "members": [
+    {
+     "name": "Bracken Sedge",
+     "age": 36,
+     "sex": "m",
+     "occupation": "carpenter",
+     "role": "builds the hollow's frames and gates from fallen wood; keeps the hollow's tools",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "mending",
+      "planting",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Tansy Sedge",
+      "builds for the common table",
+      "trades tools with Yarrow Underbank",
+      "refuses to fell a living tree",
+      "friendly with the Ferncross woodcutters"
+     ]
+    },
+    {
+     "name": "Tansy Sedge",
+     "age": 33,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Bracken's wife; keeps the hollow's kitchen and feeds the elders at the root table",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage",
+      "planting",
+      "medicine"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Bracken Sedge",
+      "mother of Sorrel Sedge",
+      "cooks for the hollow's common table",
+      "trades bread with the Reedmoor market",
+      "close with Marjoram Underbank"
+     ]
+    },
+    {
+     "name": "Sorrel Sedge",
+     "age": 8,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Bracken and Tansy's daughter; follows her mother about the kitchen and the garden",
+     "knows": [
+      "planting",
+      "cooking"
+     ],
+     "parents": [
+      "Bracken Sedge",
+      "Tansy Sedge"
+     ],
+     "ties": [
+      "daughter of Tansy Sedge",
+      "plays with Tansy Mossfoot",
+      "afraid of the wolves that come down the track"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "willow-hollow",
+   "members": [
+    {
+     "name": "Osier Willow",
+     "age": 47,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "fishes the forest streams and keeps the hollow's weirs and traps",
+     "knows": [
+      "fishing",
+      "trapping",
+      "basketry",
+      "fire",
+      "cooking"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Rush Willow",
+      "father of Reed Willow",
+      "keeps the stream weirs",
+      "trades smoked fish with Alder Rush",
+      "grudges the Kettlebridge works for the smoke that drifts east"
+     ]
+    },
+    {
+     "name": "Rush Willow",
+     "age": 45,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Osier's wife; tends the hollow's berry rows and the garden by the stream",
+     "knows": [
+      "planting",
+      "storage",
+      "cooking",
+      "fire",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Osier Willow",
+      "mother of Reed Willow",
+      "trades berries with the Ferncross woodcutters",
+      "close with Vetch Quill",
+      "worries the old forest is being cut too close"
+     ]
+    },
+    {
+     "name": "Reed Willow",
+     "age": 14,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Osier and Rush's son; helps with the weirs and learns the streams",
+     "knows": [
+      "fishing",
+      "basketry",
+      "mending"
+     ],
+     "parents": [
+      "Osier Willow",
+      "Rush Willow"
+     ],
+     "ties": [
+      "son of Osier Willow",
+      "fishes with Reed Fenwick",
+      "wants to see the sea at Lanternquay"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "hazel-hollow",
+   "members": [
+    {
+     "name": "Tansy Hazel",
+     "age": 28,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "keeps the hollow's market stall and trades fibre and salves with the east road",
+     "knows": [
+      "cooking",
+      "storage",
+      "mending",
+      "fire",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Clover Hazel",
+      "trades with Nell Sedge at Reedmoor",
+      "keeps the hollow's stall at the east road crossing",
+      "owes Alder Rush for a load of fibre",
+      "friendly with the Coombes of the Lakemead"
+     ]
+    },
+    {
+     "name": "Clover Hazel",
+     "age": 30,
+     "sex": "f",
+     "occupation": "carpenter",
+     "role": "Tansy's wife; builds the hollow's shelves and crates from fallen wood",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "mending",
+      "planting",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Tansy Hazel",
+      "builds the market stall's crates",
+      "trades tools with Bracken Sedge",
+      "refuses to fell a living tree",
+      "friendly with the Ferncross woodcutters"
+     ]
+    },
+    {
+     "name": "Sorrel Hazel",
+     "age": 4,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Tansy and Clover's daughter; plays in the garden and the market stall",
+     "knows": [
+      "planting"
+     ],
+     "parents": [
+      "Tansy Hazel",
+      "Clover Hazel"
+     ],
+     "ties": [
+      "daughter of Tansy Hazel",
+      "plays with Tamarisk Bramblecap",
+      "afraid of the deep caves in the hills"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "east-road-robbery",
+   "kind": "feud",
+   "summary": "A pack of fibre bound for Reedmoor was found opened and half empty at the east road crossing; Thistle Mossfoot blames a Ferncross woodcutter he quarrelled with, and the hollow's traders are divided over whether to keep using the crossing.",
+   "secret": false,
+   "people": [
+    "Thistle Mossfoot",
+    "Alder Rush",
+    "Tansy Hazel",
+    "Bracken Sedge"
+   ],
+   "sides": {
+    "Thistle Mossfoot": "Lost half a load and is sure the Ferncross man did it; wants the hollow to back him and stop trading at the crossing.",
+    "Alder Rush": "Thinks Thistle is too quick to blame and does not want the east road trade to fail; wants the loss made good from the common store.",
+    "Tansy Hazel": "Keeps the stall at the crossing and says the woodcutter was there that night, but she did not see him open the pack.",
+    "Bracken Sedge": "Mends the packs and says the ties were cut, not broken; thinks it was someone who knew the load, and has said so to Thistle."
+   }
+  },
+  {
+   "id": "giants-timber",
+   "kind": "quarrel",
+   "summary": "The giant Eirik has asked the hollow for fallen timber for the shelf's roofs, and some of the hollow say the old forest's fallen wood should stay for the hollow's own use; Pipwort must decide what the Old Green allows.",
+   "secret": false,
+   "people": [
+    "Pipwort Bramblecap",
+    "Yarrow Underbank",
+    "Alder Rush",
+    "Osier Willow"
+   ],
+   "sides": {
+    "Pipwort Bramblecap": "Remembers her mother's friendship with Hollbrenna and wants to help the shelf, but will not let the hollow's own wood run short.",
+    "Yarrow Underbank": "Says fallen wood is the hollow's and the giants have stone enough; will not give up a beam he has been saving.",
+    "Alder Rush": "Wants to trade the timber for the shelf's meat and hides and thinks the hollow is being small-minded.",
+    "Osier Willow": "Worries that hauling timber up the track will foul the streams and the weirs, and says so plainly."
+   }
+  },
+  {
+   "id": "salve-debt",
+   "kind": "debt",
+   "summary": "Hazel Bramblecap owes the Tanglewood healer for a winter's worth of herbs and has not paid; the healer has sent word that she will not send more until the debt is settled, and the hollow's salve store is running low.",
+   "secret": false,
+   "people": [
+    "Hazel Bramblecap",
+    "Betony Mossfoot",
+    "Pipwort Bramblecap"
+   ],
+   "sides": {
+    "Hazel Bramblecap": "Owes the Tanglewood healer and is ashamed; has been paying in salves but not enough, and fears the hollow will go without medicine.",
+    "Betony Mossfoot": "Knows the debt and has offered to share her own herbs, but thinks Hazel should tell the Eldest before the store runs out.",
+    "Pipwort Bramblecap": "Has heard the store is low and suspects a debt; wants it settled openly, and would send marks from the common store if the hollow agrees."
+   }
+  },
+  {
+   "id": "stream-weirs",
+   "kind": "quarrel",
+   "summary": "Osier Willow and Sorrel Fenwick both fish the same forest streams and each says the other's weirs take the best pools; the hollow's fishers have not settled who may set traps where.",
+   "secret": false,
+   "people": [
+    "Osier Willow",
+    "Sorrel Fenwick",
+    "Reed Fenwick",
+    "Reed Willow"
+   ],
+   "sides": {
+    "Osier Willow": "Says his family has fished the upper pools for generations and Sorrel's weirs block the run.",
+    "Sorrel Fenwick": "Says Osier's traps take the breeding fish and her smoke shed feeds the hollow; she will not move her weirs.",
+    "Reed Fenwick": "Fishes beside his mother and has seen Osier's traps in the upper pool; wants the Eldest to set a boundary.",
+    "Reed Willow": "Helps his father and thinks the Fenwicks have spread too far down the stream; has said so to Reed Fenwick."
+   }
+  },
+  {
+   "id": "pedlar-courtship",
+   "kind": "courtship",
+   "summary": "Thistle Mossfoot's wife Clover and the trader Tansy Hazel have grown close over the fibre trade, and the hollow is beginning to talk; Clover has not said anything to Thistle, who is often away on the road.",
+   "secret": true,
+   "people": [
+    "Clover Mossfoot",
+    "Tansy Hazel"
+   ],
+   "sides": {
+    "Clover Mossfoot": "Knows she is drawn to Tansy and feels guilty; has not told Thistle and does not know what she wants.",
+    "Tansy Hazel": "Knows Clover's marriage is strained and is unsure whether to step back; has told no one, not even her wife."
+   }
+  },
+  {
+   "id": "eldest-heir",
+   "kind": "inheritance",
+   "summary": "Pipwort Bramblecap is old and has not named who will keep the hollow's memory after her; Mallow Bramblecap assumes it will be her as Pipwort's daughter, but Sorrel Underbank has kept the seed store and the calendar beside Pipwort for years.",
+   "secret": false,
+   "people": [
+    "Pipwort Bramblecap",
+    "Mallow Bramblecap",
+    "Sorrel Underbank",
+    "Hazel Bramblecap"
+   ],
+   "sides": {
+    "Pipwort Bramblecap": "Has not decided and will not be hurried; wants the hollow to speak before she names anyone.",
+    "Mallow Bramblecap": "Assumes the memory will pass to her and has begun sitting in at the root table; resents Sorrel's closeness to her mother.",
+    "Sorrel Underbank": "Has kept the calendar and the seed store and thinks the memory should go to whoever keeps the gardens, not to a daughter by right.",
+    "Hazel Bramblecap": "Wants the hollow to choose openly and fears a quarrel will split the root table; has urged her aunt to name someone."
+   }
+  },
+  {
+   "id": "smoke-from-kettlebridge",
+   "kind": "quarrel",
+   "summary": "The smoke from Kettlebridge's works has drifted east over the hollow's gardens for a week, and the hollow's growers say the leaves are spotting; some want to send word to the Works Council, others say it will blow over and the hollow should not provoke the town.",
+   "secret": false,
+   "people": [
+    "Sorrel Underbank",
+    "Vetch Quill",
+    "Sorrel Fenwick",
+    "Alder Rush"
+   ],
+   "sides": {
+    "Sorrel Underbank": "Says the seed rows are spotting and the hollow cannot lose a harvest; wants a letter sent to Kettlebridge's Council.",
+    "Vetch Quill": "Sees the spots on the leaves but thinks a complaint will only make the works burn more; wants to wait for rain.",
+    "Sorrel Fenwick": "Blames the works for the smoke and the dead fish in the stream and would send word at once.",
+    "Alder Rush": "Trades with the east road and does not want a quarrel with Kettlebridge; says the hollow has survived worse smoke."
+   }
+  }
+ ]
+}

@@ -1,0 +1,241 @@
+{
+ "households": [
+  {
+   "key": "saltings-brine",
+   "members": [
+    {
+     "name": "Hollis Brine",
+     "age": 47,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "keeps the fish traps along the west shore and works the salt pans with his family",
+     "knows": [
+      "fishing",
+      "fire",
+      "smoking",
+      "basketry",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Marra Brine",
+      "father of Tarn Brine and Sedge Brine",
+      "trades smoked fish with Simon Hollis of Brackenford",
+      "owes Rook Tarn of Thornby for a net he never paid for",
+      "grudges the Kettlebridge works for the smoke that drifts west and sours the pans"
+     ]
+    },
+    {
+     "name": "Marra Brine",
+     "age": 44,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "works the salt pans and keeps the small plot of roots and barley above the shore",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire",
+      "storage",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Hollis Brine",
+      "mother of Tarn Brine and Sedge Brine",
+      "trades salt and barley with Tern Gannet of Thornby",
+      "sister of Osric Dunn of Thornby, and has not spoken to him since the Lean Year",
+      "worries the winter store will not last"
+     ]
+    },
+    {
+     "name": "Tarn Brine",
+     "age": 19,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "works the traps with his father and mends the boats; wants a boat of his own",
+     "knows": [
+      "fishing",
+      "fire",
+      "mending",
+      "basketry"
+     ],
+     "parents": [
+      "Hollis Brine",
+      "Marra Brine"
+     ],
+     "ties": [
+      "son of Hollis Brine and Marra Brine",
+      "brother of Sedge Brine",
+      "friendly with Tace Hollis of Sootwood, met at the Ferncross market",
+      "courts a girl at Thornby his mother does not approve of"
+     ]
+    },
+    {
+     "name": "Sedge Brine",
+     "age": 11,
+     "sex": "f",
+     "occupation": "child",
+     "role": "helps with the traps and the salt pans, and knows every bird on the shore",
+     "knows": [
+      "fishing",
+      "fire"
+     ],
+     "parents": [
+      "Hollis Brine",
+      "Marra Brine"
+     ],
+     "ties": [
+      "daughter of Hollis Brine and Marra Brine",
+      "sister of Tarn Brine",
+      "plays with Wren Stave when the Thornby folk come down the shore",
+      "afraid of the wolves that come down to the saltings in winter"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "saltings-tarn",
+   "members": [
+    {
+     "name": "Grim Tarn",
+     "age": 52,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "fishes the west shore from a tarred boat and keeps the salt pans that have been in his family for two generations",
+     "knows": [
+      "fishing",
+      "fire",
+      "smoking",
+      "tanning",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Ebba Tarn",
+      "father of Nessa Tarn",
+      "old friend of Rook Tarn of Thornby, though they share a name and not a bloodline",
+      "sells hides to Aethelred Tanner of Brackenford",
+      "grudges the Coldwell outlaws for a stolen boat hook"
+     ]
+    },
+    {
+     "name": "Ebba Tarn",
+     "age": 49,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "works the salt pans and keeps the goats and the herb plot behind the house",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire",
+      "medicine",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Grim Tarn",
+      "mother of Nessa Tarn",
+      "trades salt and herbs with Mavis Tarn of Thornby",
+      "tends the saltings' sick, and the Brines come to her when the cough takes them",
+      "worries about the winter store and the wolves"
+     ]
+    },
+    {
+     "name": "Nessa Tarn",
+     "age": 15,
+     "sex": "f",
+     "occupation": "child",
+     "role": "helps her mother with the pans and the goats, and her father with the boat; a fair hand with a spear",
+     "knows": [
+      "fishing",
+      "fire",
+      "planting",
+      "spear"
+     ],
+     "parents": [
+      "Grim Tarn",
+      "Ebba Tarn"
+     ],
+     "ties": [
+      "daughter of Grim Tarn and Ebba Tarn",
+      "friendly with Sedge Brine",
+      "wants to see Lanternquay and the tide lanterns",
+      "afraid of the deep water beyond the shore"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "saltings-quarrel",
+   "kind": "feud",
+   "summary": "The two saltings households have quarrelled over the fish traps at the north end of the shore. Hollis Brine moved his traps into the channel Grim Tarn's family has fished for two generations, and Grim says the Brines are taking the best of the catch.",
+   "secret": false,
+   "people": [
+    "Hollis Brine",
+    "Grim Tarn",
+    "Marra Brine",
+    "Ebba Tarn"
+   ],
+   "sides": {
+    "Hollis Brine": "He says the channel is common shore and his traps are set where the fish run; he is tired of Grim acting as if he owns the whole west shore.",
+    "Grim Tarn": "He says his father set traps in that channel before Hollis came, and he will not be pushed off it by a man who cannot even pay for a net.",
+    "Marra Brine": "She wishes her husband would let it lie; she needs Grim's goodwill more than the extra fish, and she knows Ebba is caught in the middle.",
+    "Ebba Tarn": "She has no quarrel with Marra and would share the herb plot with her tomorrow, but she will not cross her husband in front of the Brines."
+   }
+  },
+  {
+   "id": "saltings-debt",
+   "kind": "debt",
+   "summary": "Hollis Brine owes Rook Tarn of Thornby for a net he took two seasons ago and never paid for. Rook has sent word by Tern Gannet that he wants the marks or the net back before the next storm season.",
+   "secret": false,
+   "people": [
+    "Hollis Brine",
+    "Rook Tarn",
+    "Marra Brine",
+    "Tern Gannet"
+   ],
+   "sides": {
+    "Hollis Brine": "He knows he owes it and means to pay, but the salt pans have not yielded enough this year and he is ashamed to say so.",
+    "Rook Tarn": "He is not a hard man, but he keeps the debt tally for Thornby and cannot let a debt to his own household go unpaid.",
+    "Marra Brine": "She has been putting aside marks from the salt trade in secret to pay Rook herself, and has not told Hollis.",
+    "Tern Gannet": "She carried the message and wishes she had not; she likes the Brines and does not want to be the one who brings the demand."
+   }
+  },
+  {
+   "id": "saltings-courtship",
+   "kind": "courtship",
+   "summary": "Tarn Brine has been courting Nessa Tarn, and both households know it. Marra Brine disapproves because of the trap quarrel, and Grim Tarn has told Tarn he is not to come to the house until the debt to Rook Tarn is settled.",
+   "secret": false,
+   "people": [
+    "Tarn Brine",
+    "Nessa Tarn",
+    "Marra Brine",
+    "Grim Tarn",
+    "Ebba Tarn"
+   ],
+   "sides": {
+    "Tarn Brine": "He is set on Nessa and thinks the trap quarrel is his father's business, not his; he is saving to buy a boat so he can ask for her properly.",
+    "Nessa Tarn": "She likes Tarn and is angry with her father for using the debt as a gate; she meets Tarn on the shore when she can.",
+    "Marra Brine": "She would not have chosen the Tarns for her son, and she thinks Nessa is too young and too bold.",
+    "Grim Tarn": "He does not dislike Tarn, but he will not have a Brine in his house while Hollis owes Thornby and takes his traps.",
+    "Ebba Tarn": "She thinks the young ones should be left alone and has told Grim so, but she will not defy him openly."
+   }
+  },
+  {
+   "id": "saltings-secret",
+   "kind": "secret",
+   "summary": "Marra Brine has been selling salt and barley to Tern Gannet of Thornby and keeping the marks in a hidden jar, meaning to pay off Hollis's debt to Rook Tarn without telling her husband. She has not told Hollis, and she has not told Tern why she asks for the marks in secret.",
+   "secret": true,
+   "people": [
+    "Marra Brine",
+    "Tern Gannet"
+   ],
+   "sides": {
+    "Marra Brine": "She is proud of her plan and afraid of what Hollis will say if he finds out she has been hiding marks from him.",
+    "Tern Gannet": "She suspects Marra is hiding something from her husband but has not asked; she keeps the secret because she likes Marra and because the trade is good."
+   }
+  }
+ ]
+}

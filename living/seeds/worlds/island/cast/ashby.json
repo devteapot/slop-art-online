@@ -1,0 +1,144 @@
+{
+ "households": [
+  {
+   "key": "tolley",
+   "members": [
+    {
+     "name": "Hal Tolley",
+     "age": 38,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "tenant of the Market Guild on the old Coldwell fields",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "tenant of Mercy Abbot",
+      "fears Marta Hale's people",
+      "thinks the Hales had their chance"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "ashby",
+   "members": [
+    {
+     "name": "Hedric Ashby",
+     "age": 31,
+     "sex": "m",
+     "occupation": "hunter",
+     "role": "Osbert's younger brother; hunts the woods edge and keeps wolves off the Ashby fields",
+     "knows": [
+      "archery",
+      "trapping",
+      "spear",
+      "fire",
+      "tanning",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "brother of Osbert Ashby",
+      "hunts for the Ashby table",
+      "friendly with Beorn Beornson",
+      "grudges the Coldwell outlaws for a stolen snare"
+     ]
+    },
+    {
+     "name": "Wren Ashby",
+     "age": 10,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Hedric's daughter, raised in the Ashby house; helps with the hens and follows her father to the wood edge",
+     "knows": [
+      "mending"
+     ],
+     "parents": [
+      "Hedric Ashby"
+     ],
+     "ties": [
+      "daughter of Hedric Ashby",
+      "cousin of Tib Tolley",
+      "plays with Nell Tolley"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "coldwell-watch",
+   "kind": "feud",
+   "summary": "The Tolleys farm the old Coldwell fields for the Market Guild, and Marta Hale's outlaws have been seen at the field edge twice this month. Hal wants a wall round the yard and has asked Mercy Abbot for stone; none has come.",
+   "secret": false,
+   "people": [
+    "Hal Tolley",
+    "Marta Tolley",
+    "Mercy Abbot",
+    "Marta Hale"
+   ],
+   "sides": {
+    "Hal Tolley": "He is certain the Hales will come for the fields and feels the Guild has left him to face them alone.",
+    "Marta Tolley": "She is frightened for the children and angry that her husband keeps going out to the far strips after dark.",
+    "Mercy Abbot": "She holds the lease and wants the fields worked, but stone is dear and she has not decided whether the Tolleys are worth defending.",
+    "Marta Hale": "She has not threatened the Tolleys directly, but she has walked the field boundary and let them see her."
+   }
+  },
+  {
+   "id": "ashby-grain-debt",
+   "kind": "debt",
+   "summary": "Osbert Ashby sold grain to the town store on Aldric Marrow's promise of payment after the harvest. The harvest is in and the store has paid half, keeping the rest against Thornby's debt.",
+   "secret": false,
+   "people": [
+    "Osbert Ashby",
+    "Edith Ashby",
+    "Aldric Marrow",
+    "Roland Ashby"
+   ],
+   "sides": {
+    "Osbert Ashby": "He counts the shortfall every night and feels the Reeve has used him to cover Thornby's failure.",
+    "Edith Ashby": "She wants Osbert to ask for the marks plainly, before the winter store is set.",
+    "Aldric Marrow": "He says the store's ledger is honest and the rest will come when Thornby pays.",
+    "Roland Ashby": "He thinks his father should sell to the Market Guild instead and stop trusting the Reeve."
+   }
+  },
+  {
+   "id": "roland-linnet",
+   "kind": "courtship",
+   "summary": "Roland Ashby has been courting Linnet Abbot since the summer market. Mercy Abbot has noticed and does not discourage it; Osbert thinks a Guild family will want more than a meadow farm.",
+   "secret": false,
+   "people": [
+    "Roland Ashby",
+    "Linnet Abbot",
+    "Mercy Abbot",
+    "Osbert Ashby"
+   ],
+   "sides": {
+    "Roland Ashby": "He is proud of the match and afraid his father will say the wrong thing to Mercy.",
+    "Linnet Abbot": "She likes Roland and is in no hurry, but she enjoys that her mother approves.",
+    "Mercy Abbot": "She sees a useful tie to a steady farm and has said nothing against it.",
+    "Osbert Ashby": "He fears the Abbots will expect a dowry in grain he does not have."
+   }
+  },
+  {
+   "id": "hedric-snare",
+   "kind": "grudge",
+   "summary": "Hedric Ashby's best snare line was cut and emptied near the Coldwell boundary. He blames the outlaws; Hob Ferrier has been seen at Ferncross selling hides that Hedric says are his.",
+   "secret": false,
+   "people": [
+    "Hedric Ashby",
+    "Hob Ferrier",
+    "Ned Hale",
+    "Osbert Ashby"
+   ],
+   "sides": {
+    "Hedric Ashby": "He wants his snares back or payment, and he has started carrying his bow on the wood edge.",
+    "Hob Ferrier": "He says the hides are from his own hunting and that Hedric cannot prove otherwise.",
+    "Ned Hale": "He knows Hob took the snares and thinks Hedric is a soft farmer who will not come into the woods after them.",
+    "Osbert Ashby": "He has told Hedric to let it go rather than bring the outlaws down on the steading."
+   }
+  }
+ ]
+}

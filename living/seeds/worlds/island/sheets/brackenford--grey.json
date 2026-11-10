@@ -1,0 +1,359 @@
+{
+  "Edric Grey": {
+    "narrative": "I have kept the north gate six years, and I count every load and write every mark in the book before the cart rolls on. It is quiet work and I like it quiet. Tobin Marrow has my spear and my word, and Wat Fenner is the nearest thing to a friend I have. But there is a carter who passes with stone, and there are marks in my hand that never reached the ledger, and I tell myself the town has enough.",
+    "values": [
+      "duty done quietly",
+      "keeping my family fed",
+      "not being seen",
+      "the gate's book balanced"
+    ],
+    "goals": [
+      "keep the north gate's accounts clean enough that no one looks twice",
+      "put by enough marks that Mildgyth need never ask where they came from",
+      "see Aelfric into a trade better than standing in the cold"
+    ],
+    "mood": "watchful, a little tired",
+    "traits": {
+      "caution": 78,
+      "sociability": 32,
+      "empathy": 55,
+      "curiosity": 30,
+      "ambition": 40,
+      "introspection": 66,
+      "temper": 28,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Tobin Marrow",
+        "trust": 55,
+        "affinity": 30,
+        "label": "captain",
+        "note": "He is young and hot about the outlaws, but he pays the guard on time and does not meddle at my gate."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 70,
+        "affinity": 62,
+        "label": "friend",
+        "note": "We stand the cold watches together; he talks enough for the both of us."
+      },
+      {
+        "name": "Mildgyth Grey",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the house warm and asks no questions she does not want answered."
+      },
+      {
+        "name": "Aelfric Grey",
+        "trust": 90,
+        "affinity": 88,
+        "label": "son",
+        "note": "He knows every guard's name and none of their business, which is how it should be."
+      },
+      {
+        "name": "Sigrid Marsh",
+        "trust": 45,
+        "affinity": 35,
+        "label": "cook's mate",
+        "note": "She and Mildgyth run the guards' mess; her broth is better than the inn's."
+      },
+      {
+        "name": "Walter Stanhope",
+        "trust": 40,
+        "affinity": 20,
+        "label": "fellow guard",
+        "note": "Big and short-tempered, and he takes the south gate's due as if it were a fight."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 25,
+        "affinity": 15,
+        "label": "carter",
+        "note": "He grumbles at the due every load; I count his stone and say nothing."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 50,
+        "affinity": 25,
+        "label": "reeve",
+        "note": "He is old and the ledger is his, and as long as he does not read mine too closely we suit."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year, when the north gate saw grain go out to Thornby and the farmers come begging after.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow",
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "The night the wolves came down the town road and we stood the gate with spears until dawn.",
+        "salience": 0.8,
+        "about": [
+          "Tobin Marrow",
+          "Walter Stanhope"
+        ]
+      },
+      {
+        "gist": "Aelfric was born in the room above the gate-house and bawled loud enough to wake the whole wall.",
+        "salience": 0.9,
+        "about": [
+          "Mildgyth Grey",
+          "Aelfric Grey"
+        ]
+      },
+      {
+        "gist": "The first time I let a load through without the mark and put the coin in my own pocket instead of the box.",
+        "salience": 0.85,
+        "about": []
+      },
+      {
+        "gist": "Mildgyth and I were wed at the chapel with Sister Elspeth reading and half the guards drunk at the Bell and Bush after.",
+        "salience": 0.6,
+        "about": [
+          "Mildgyth Grey",
+          "Sister Elspeth",
+          "Baldwin Wade"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_due_pays_the_guards",
+        "value": 0.7,
+        "why": "Without it there is no spear on the wall and the wolves and the outlaws have the road."
+      },
+      {
+        "key": "a_quiet_gate_is_a_good_gate",
+        "value": 0.8,
+        "why": "I do not want to be known at the Reeve's table or at the Guild's; both bring trouble."
+      },
+      {
+        "key": "the_outlaws_are_a_nuisance_not_a_war",
+        "value": 0.6,
+        "why": "They rob carters, not gates; I would rather the captain cleared the road than marched us into the woods."
+      },
+      {
+        "key": "keep_my_own_counsel",
+        "value": 0.85,
+        "why": "What is said at the gate at night is not said again by me."
+      }
+    ],
+    "secret": "I let a Kettlebridge carter through the north gate without paying the due, for a bribe of marks I keep in a tin under the floor."
+  },
+  "Mildgyth Grey": {
+    "narrative": "I was a guard's daughter before I was a guard's wife, and I know what a mess needs: fire, salt, and someone up before the men. I cook for the gate guards with Sigrid Marsh, and I keep my own house and my own tongue. Edric is quiet and I let him be quiet; there are things in this house I do not ask after. Aelfric is the whole of my worry.",
+    "values": [
+      "a hot meal at the right hour",
+      "my son's future",
+      "keeping the peace at home",
+      "not being shamed"
+    ],
+    "goals": [
+      "keep the guards' mess fed through the winter",
+      "see Aelfric learn letters and a trade",
+      "keep my house out of the Reeve's and the Guild's quarrels"
+    ],
+    "mood": "steady, quietly anxious",
+    "traits": {
+      "caution": 66,
+      "sociability": 58,
+      "empathy": 68,
+      "curiosity": 35,
+      "ambition": 42,
+      "introspection": 55,
+      "temper": 40,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Edric Grey",
+        "trust": 72,
+        "affinity": 70,
+        "label": "husband",
+        "note": "He is a good man and a silent one, and I have learned not to pull at what he will not say."
+      },
+      {
+        "name": "Aelfric Grey",
+        "trust": 92,
+        "affinity": 90,
+        "label": "son",
+        "note": "He runs wild at the gate, but he comes home when I call."
+      },
+      {
+        "name": "Sigrid Marsh",
+        "trust": 68,
+        "affinity": 60,
+        "label": "cook's mate",
+        "note": "We have cooked side by side five years; she knows when to talk and when to stir."
+      },
+      {
+        "name": "Hilda Marsh",
+        "trust": 50,
+        "affinity": 45,
+        "label": "Sigrid's girl",
+        "note": "A good worker, and she will have Wulf Rowan or she will not, but she does not moon at the pot."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 45,
+        "affinity": 38,
+        "label": "inn cook",
+        "note": "She cooks at the Bell and Bush and does not lord it over the guards' mess."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 40,
+        "affinity": 25,
+        "label": "captain",
+        "note": "He is quick to send men out and slow to think what their wives will do without them."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 55,
+        "affinity": 50,
+        "label": "sister",
+        "note": "She christened Aelfric and she does not charge a guard's wife for a poultice."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 30,
+        "affinity": 20,
+        "label": "innkeeper's wife",
+        "note": "Her pies are famous and her prices are not, and she counts every egg I send her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Aelfric's birth in the gate-house room, with Joan Hobson and Sister Elspeth both there and Edric sent out to walk the wall.",
+        "salience": 0.9,
+        "about": [
+          "Aelfric Grey",
+          "Edric Grey",
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the mess cooked thin pottage and I counted every loaf the bakehouse sent us.",
+        "salience": 0.7,
+        "about": [
+          "Sigrid Marsh",
+          "Osgood Baker"
+        ]
+      },
+      {
+        "gist": "The winter I found the tin of marks under the floor and put it back without a word.",
+        "salience": 0.8,
+        "about": [
+          "Edric Grey"
+        ]
+      },
+      {
+        "gist": "Cooking the guards' feast after the wolves were driven off, and hearing them cheer a woman's broth.",
+        "salience": 0.5,
+        "about": [
+          "Sigrid Marsh",
+          "Tobin Marrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_the_men_who_stand_the_wall",
+        "value": 0.85,
+        "why": "A cold guard is a careless guard, and a careless guard lets the wrong thing through."
+      },
+      {
+        "key": "do_not_ask_what_you_do_not_want_to_know",
+        "value": 0.75,
+        "why": "I have kept this house together by leaving some doors shut."
+      },
+      {
+        "key": "the_gate_due_feeds_us",
+        "value": 0.6,
+        "why": "It is the guards' pay, and the guards' pay is our bread, whatever the carters say."
+      },
+      {
+        "key": "aelfric_must_rise_higher",
+        "value": 0.8,
+        "why": "I stood in the cold for others; my son will not."
+      }
+    ],
+    "secret": ""
+  },
+  "Aelfric Grey": {
+    "narrative": "I am seven and I know every guard at the north gate by name. I like the spears and the counting and the big carts that come in from the woods. When I grow up I want to stand the gate like my father, and I want a dog.",
+    "values": [
+      "spears",
+      "the gate",
+      "my mother's bread"
+    ],
+    "goals": [
+      "be a guard when I am big",
+      "learn all the guards' names and the carters' too"
+    ],
+    "mood": "curious and busy",
+    "traits": {
+      "caution": 35,
+      "sociability": 70,
+      "empathy": 55,
+      "curiosity": 80,
+      "ambition": 45,
+      "introspection": 20,
+      "temper": 40,
+      "nurture": 30
+    },
+    "relations": [
+      {
+        "name": "Edric Grey",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He lets me hold his spear when no one is looking."
+      },
+      {
+        "name": "Mildgyth Grey",
+        "trust": 90,
+        "affinity": 88,
+        "label": "mother",
+        "note": "She always has bread and she knows where I am."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 60,
+        "affinity": 55,
+        "label": "guard",
+        "note": "He tells the best stories at the gate."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 55,
+        "affinity": 60,
+        "label": "friend",
+        "note": "We play at the gate and he is always the outlaw."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the wolves came and I watched from the window as the guards lit the torches.",
+        "salience": 0.8,
+        "about": [
+          "Edric Grey",
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "My father let me touch the gate's iron ring and it was cold as water.",
+        "salience": 0.5,
+        "about": [
+          "Edric Grey"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

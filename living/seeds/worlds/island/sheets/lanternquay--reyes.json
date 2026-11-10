@@ -1,0 +1,523 @@
+{
+  "Juno Reyes": {
+    "narrative": "I run the fish road because the quay needs stone and I know how to carry a load. The works promised us a price and a seawall, and now they say the stone is late and the tally is unpaid. I keep my mouth shut about who I see on the road, but I don't forget.",
+    "values": [
+      "the quay's survival",
+      "fair dealing",
+      "keeping my word",
+      "family"
+    ],
+    "goals": [
+      "see the seawall built before winter",
+      "get the stone price honoured",
+      "keep the fish road open"
+    ],
+    "mood": "weary but determined",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 65,
+      "curiosity": 50,
+      "ambition": 45,
+      "introspection": 55,
+      "temper": 40,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Mara Quell",
+        "trust": 80,
+        "affinity": 70,
+        "label": "employer",
+        "note": "She speaks for the quay and I run for her; she lost her brother in the Surge."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 50,
+        "affinity": 30,
+        "label": "stone-seller",
+        "note": "She set the price and holds the tally; she's sharp but fair on the road."
+      },
+      {
+        "name": "Kai Ostrander",
+        "trust": 70,
+        "affinity": 80,
+        "label": "old friend",
+        "note": "We grew up together; I heard he's alive but I don't speak of it."
+      },
+      {
+        "name": "Tamsin Vane",
+        "trust": 90,
+        "affinity": 85,
+        "label": "sister",
+        "note": "She fishes the dawn tide and worries about me on the road."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 75,
+        "affinity": 70,
+        "label": "brother-in-law",
+        "note": "He patches the lower quay and wants proper stone; we want the same thing."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 40,
+        "affinity": 20,
+        "label": "contract-holder",
+        "note": "He says the wording is plain, but plain to whom?"
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 60,
+        "affinity": 50,
+        "label": "fellow carter",
+        "note": "I offered him a place on the fish road; the stone road is a fool's road now."
+      },
+      {
+        "name": "Wick Quell",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "He fishes the harbour mouth and resents the stone price as much as I do."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 50,
+        "affinity": 40,
+        "label": "stall-keeper",
+        "note": "Her son Kai was my friend; she still hopes he'll come back."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 25,
+        "affinity": 20,
+        "label": "foundry master",
+        "note": "He promised the quay stone and cannot cut it fast enough; that is his problem to answer for."
+      },
+      {
+        "name": "Ostrander Sallow",
+        "trust": 72,
+        "affinity": 60,
+        "label": "lodging",
+        "note": "Keeps my letters and a bed between roads; he writes the tide lantern list and I am on it twice."
+      },
+      {
+        "name": "Rennick Vane",
+        "trust": 68,
+        "affinity": 55,
+        "label": "road guard",
+        "note": "Walks the fish road with me and does not believe Kai ran for cowardice. Neither do I."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 30,
+        "affinity": 25,
+        "label": "quarryman",
+        "note": "He cut the cairn and closed the ridge, and now the works cannot cut the stone the quay paid for. I have no patience for a man who says he did not know."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 45,
+        "affinity": 40,
+        "label": "crate-builder",
+        "note": "Builds the crates my stone rides in and curses the price of every load. He wants the wall built, same as me, but he counts the marks louder than the risk."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 50,
+        "affinity": 55,
+        "label": "carter's wife",
+        "note": "She begs Silas off the stone road and I do not blame her. If he takes my offer, she will have one less night of waiting, and I will have one more pair of hands."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night of the Surge, I helped pull people from the lower quay and heard the tide lanterns ring.",
+        "salience": 0.9,
+        "about": [
+          "Mara Quell",
+          "Kai Ostrander"
+        ]
+      },
+      {
+        "gist": "My first run on the fish road, carrying cooked fish to Kettlebridge and bringing back a crate of stone.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Hester Crane showed me the tally and said no more stone until the marks are paid.",
+        "salience": 0.8,
+        "about": [
+          "Hester Crane"
+        ]
+      },
+      {
+        "gist": "I heard from a Coldwell carrier that Pell is alive and with the outlaws, and that Kai is there too.",
+        "salience": 0.9,
+        "about": [
+          "Kai Ostrander"
+        ]
+      },
+      {
+        "gist": "Silas Pike told me he was robbed again on the stone road; I told him to take the fish road.",
+        "salience": 0.6,
+        "about": [
+          "Silas Pike"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "seawall_before_winter",
+        "value": 0.9,
+        "why": "The next surge will take more than the lower quay if we don't build."
+      },
+      {
+        "key": "honour_the_contract",
+        "value": 0.8,
+        "why": "The works agreed to the risk; the clause favours them, not us, and they should pay."
+      },
+      {
+        "key": "keep_kai_secret",
+        "value": 0.7,
+        "why": "He's my friend and the quay guard would hang him; I won't be the one to speak."
+      },
+      {
+        "key": "fish_road_is_safer",
+        "value": 0.6,
+        "why": "The stone road is a fool's road now, and I told Silas so."
+      }
+    ],
+    "secret": "I know Kai Ostrander is alive and with the Coldwell outlaws, and I have said nothing."
+  },
+  "Tamsin Vane": {
+    "narrative": "I fish the dawn tide and smoke what I catch for Ilse's stall. The harbour mouth is our living, and I've seen both Wick and Ostrander cut nets over it. I want a quiet life and a full smoker, and I'll not take sides in a feud that costs us the catch.",
+    "values": [
+      "family",
+      "a fair catch",
+      "keeping the peace",
+      "the quay's future"
+    ],
+    "goals": [
+      "keep the smoker full",
+      "see the harbour mouth feud settled",
+      "support Ostrander's building work"
+    ],
+    "mood": "tired but watchful",
+    "traits": {
+      "caution": 65,
+      "sociability": 50,
+      "empathy": 70,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Juno Reyes",
+        "trust": 90,
+        "affinity": 85,
+        "label": "sister",
+        "note": "She runs the fish road and I worry every time she goes."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He builds and patches and wants the quay proper; I want him safe."
+      },
+      {
+        "name": "Wick Quell",
+        "trust": 60,
+        "affinity": 55,
+        "label": "fishing partner",
+        "note": "We fish the dawn tide together, but his feud with Cormorant is bad for us all."
+      },
+      {
+        "name": "Ostrander Cormorant",
+        "trust": 40,
+        "affinity": 30,
+        "label": "rival",
+        "note": "He claims the best ground and won't back down; nets have been cut."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 70,
+        "affinity": 65,
+        "label": "stall-owner",
+        "note": "I smoke for her stall; she's fair and her knees are bad."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 70,
+        "affinity": 60,
+        "label": "warden",
+        "note": "She speaks for the quay, but she and Ostrander clash over the lower quay."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother-in-law",
+        "note": "She heals and disapproves of building before the wall; she's usually right."
+      },
+      {
+        "name": "Wick Cormorant",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "He fishes with his father and wants his own boat; the feud is not his fault."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 58,
+        "affinity": 52,
+        "label": "stall neighbour",
+        "note": "Knows the price of everything on the quay and pays for fish on time."
+      },
+      {
+        "name": "Nia Gull",
+        "trust": 50,
+        "affinity": 48,
+        "label": "night cook",
+        "note": "Feeds the night crews and buys my smoked catch when the dawn boats come in late."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The dawn after the Surge, I found the lower quay gone and my uncle's boat smashed against the steps.",
+        "salience": 0.9,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "I watched Wick Quell and Ostrander Cormorant shout over the harbour mouth while their nets tangled.",
+        "salience": 0.7,
+        "about": [
+          "Wick Quell",
+          "Ostrander Cormorant"
+        ]
+      },
+      {
+        "gist": "Ostrander patched the lower quay with salvage and I held the lamp for him till the small hours.",
+        "salience": 0.6,
+        "about": [
+          "Ostrander Vane"
+        ]
+      },
+      {
+        "gist": "I smoked a whole catch for Ilse's stall and she paid me in marks and a bowl of noodles.",
+        "salience": 0.5,
+        "about": [
+          "Ilse Ostrander"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feud_costs_us_all",
+        "value": 0.8,
+        "why": "The harbour mouth is our living, and cut nets mean an empty smoker."
+      },
+      {
+        "key": "seawall_first",
+        "value": 0.7,
+        "why": "The lower quay will be taken again if the wall isn't built."
+      },
+      {
+        "key": "family_before_quarrels",
+        "value": 0.9,
+        "why": "Juno and Ostrander are my life; I'll not see them hurt by pride."
+      },
+      {
+        "key": "pay_the_stone_debt",
+        "value": 0.6,
+        "why": "The tally is real, and no stone comes without marks."
+      }
+    ],
+    "secret": ""
+  },
+  "Ostrander Vane": {
+    "narrative": "I build and patch on the quay because the lower quay is my living and my home. Mara Quell says wait for the seawall, but the town is rotting while she argues about stone. I've patched with salvage and I'll build in stone when I can get it, and I'll not be laughed at by Sootwood or cheated by Kettlebridge.",
+    "values": [
+      "building well",
+      "the quay's dignity",
+      "fair pay for work",
+      "family"
+    ],
+    "goals": [
+      "rebuild the lower quay in stone",
+      "get proper stone at a fair price",
+      "see the seawall started"
+    ],
+    "mood": "frustrated and stubborn",
+    "traits": {
+      "caution": 50,
+      "sociability": 60,
+      "empathy": 55,
+      "curiosity": 55,
+      "ambition": 70,
+      "introspection": 45,
+      "temper": 65,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Tamsin Vane",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She fishes and smokes and keeps me steady; I build for her."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 50,
+        "affinity": 40,
+        "label": "warden",
+        "note": "She says no building until the seawall is paid, but the quay can't wait."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 70,
+        "affinity": 65,
+        "label": "mother",
+        "note": "She thinks I'm rash, but she patches me up when I fall."
+      },
+      {
+        "name": "Marrow Wrack",
+        "trust": 80,
+        "affinity": 75,
+        "label": "fellow builder",
+        "note": "He knows stone better than most and the Kettlebridge builders cheated him."
+      },
+      {
+        "name": "Dele Oyelaran",
+        "trust": 75,
+        "affinity": 70,
+        "label": "friend",
+        "note": "We drink when he's down from Kettlebridge; he works cheap and they resent him."
+      },
+      {
+        "name": "Gideon Fenwick",
+        "trust": 20,
+        "affinity": 10,
+        "label": "rival",
+        "note": "He's grasping and says Marrow cheated him; I say he cheated Marrow."
+      },
+      {
+        "name": "Orvin Hollis",
+        "trust": 30,
+        "affinity": 20,
+        "label": "sawyer",
+        "note": "He says the seawall will never be built; I want an apology before I buy his timber."
+      },
+      {
+        "name": "Sena Tarn",
+        "trust": 30,
+        "affinity": 20,
+        "label": "charcoal-burner",
+        "note": "She laughs at the drowned quay; Sootwood should keep its talk to itself."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 60,
+        "affinity": 55,
+        "label": "stall-keeper",
+        "note": "She wants to rebuild her stall in stone; she understands."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 80,
+        "affinity": 75,
+        "label": "sister-in-law",
+        "note": "She runs the stone down and knows the tally; we want the same wall."
+      },
+      {
+        "name": "Odile Wrack",
+        "trust": 65,
+        "affinity": 58,
+        "label": "healer",
+        "note": "Sets the builders' bones after a fall and grudge Kettlebridge for the cold welcome; she is right to."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 25,
+        "affinity": 20,
+        "label": "stone-seller",
+        "note": "Sells the quay stone at a drowning man's price and calls it market terms."
+      },
+      {
+        "name": "Rennick Vane",
+        "trust": 74,
+        "affinity": 68,
+        "label": "brother",
+        "note": "He walks the fish road with the runners and keeps the peace at the stalls; a steady guard, and he does not believe Kai ran for cowardice, which is more sense than most on this quay."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning after the Surge, I stood on the lower quay and saw nothing but water where the houses had been.",
+        "salience": 0.9,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "I patched the lower quay with salvage timber and Mara Quell told me I was wasting my time.",
+        "salience": 0.7,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "Gideon Fenwick accused Marrow Wrack of cheating him over a load of brick, and I told him he was a liar.",
+        "salience": 0.6,
+        "about": [
+          "Marrow Wrack",
+          "Gideon Fenwick"
+        ]
+      },
+      {
+        "gist": "Orvin Hollis said at the stalls that the seawall would never be built and the stone price was a swindle.",
+        "salience": 0.7,
+        "about": [
+          "Orvin Hollis"
+        ]
+      },
+      {
+        "gist": "Dele Oyelaran and I drank to the quay's future and cursed the Kettlebridge price.",
+        "salience": 0.5,
+        "about": [
+          "Dele Oyelaran"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "build_now",
+        "value": 0.9,
+        "why": "The lower quay is rotting and the next surge will take the rest."
+      },
+      {
+        "key": "stone_from_the_ridge",
+        "value": 0.8,
+        "why": "Kettlebridge charges a drowning man's price; the ridge is ours if we can get it."
+      },
+      {
+        "key": "no_apology_no_timber",
+        "value": 0.7,
+        "why": "Sootwood laughed at the drowned quay; I'll not buy their timber until they say sorry."
+      },
+      {
+        "key": "stand_by_marrow",
+        "value": 0.8,
+        "why": "He's a good builder and Kettlebridge cheated him; I'll not see him shamed."
+      }
+    ],
+    "secret": ""
+  }
+}

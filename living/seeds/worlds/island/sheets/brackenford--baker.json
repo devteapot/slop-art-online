@@ -1,0 +1,409 @@
+{
+  "Osgood Baker": {
+    "narrative": "I have baked Brackenford's bread for thirty years, and I am up before the crows each morning to do it. The bakehouse is the Reeve's, leased to me, and I owe him for that lease and know it every time I see him. My bread feeds the market and the gate guards, and I keep my head down between the Guild and the Reeve, because both of them can make my life hard. I am a plain man with a hot oven and a good wife's head for figures.",
+    "values": [
+      "a fair loaf for a fair mark",
+      "keep the bakehouse running",
+      "don't cross the Reeve",
+      "feed the guards who keep the road"
+    ],
+    "goals": [
+      "keep the bakehouse lease and pay the Reeve what is owed",
+      "get good grain at a steady price from Osbert Ashby",
+      "hand the bakehouse to Godfrey when the time comes"
+    ],
+    "mood": "steady, a little worn, watchful of the Reeve",
+    "traits": {
+      "caution": 62,
+      "sociability": 48,
+      "empathy": 55,
+      "curiosity": 30,
+      "ambition": 40,
+      "introspection": 45,
+      "temper": 38,
+      "nurture": 58
+    },
+    "relations": [
+      {
+        "name": "Amice Baker",
+        "trust": 92,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the books and I keep the oven; I would be lost without her sums."
+      },
+      {
+        "name": "Godfrey Baker",
+        "trust": 80,
+        "affinity": 78,
+        "label": "son",
+        "note": "He bakes the night batch well enough, and he is impatient to have it all."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 35,
+        "affinity": -10,
+        "label": "landlord",
+        "note": "The bakehouse is his and I owe him for the lease; I pay on time and say little."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 70,
+        "affinity": 60,
+        "label": "grain seller",
+        "note": "His grain is sound and he does not squeeze me, unlike some."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 45,
+        "affinity": 20,
+        "label": "customer",
+        "note": "His guards eat my bread; he pays, and I do not ask about the due."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 50,
+        "affinity": 40,
+        "label": "guild head",
+        "note": "The Guild sets the market terms and I bake to them; she has never cheated me."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 55,
+        "affinity": 45,
+        "label": "customer",
+        "note": "The inn takes bread from me and pays promptly; a good man to deal with."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning the Lean Year blight reached us, I had to halve the loaves and the guards grumbled to my face.",
+        "salience": 0.8,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Aldric Marrow signed the bakehouse lease over to me at the guildhall and I have paid him every quarter since.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Godfrey pulled his first tray of loaves out of the oven by himself at fourteen, and I was prouder than I let on.",
+        "salience": 0.6,
+        "about": [
+          "Godfrey Baker",
+          "Amice Baker"
+        ]
+      },
+      {
+        "gist": "The night the wolves came down to the south gate, I kept the oven hot till dawn and the guards ate standing.",
+        "salience": 0.5,
+        "about": [
+          "Tobin Marrow"
+        ]
+      },
+      {
+        "gist": "Osbert Ashby let me have a load of grain on trust one hard winter and I paid him back with the first batch.",
+        "salience": 0.6,
+        "about": [
+          "Osbert Ashby"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_the_reeve_on_time",
+        "value": 0.8,
+        "why": "The bakehouse is his lease; a man who pays late loses his oven."
+      },
+      {
+        "key": "bread_for_the_guards",
+        "value": 0.7,
+        "why": "They keep the road clear, and they are my steadiest customers."
+      },
+      {
+        "key": "keep_out_of_town_quarrels",
+        "value": 0.75,
+        "why": "Guild and Reeve both buy my bread; I cannot afford to lose either."
+      },
+      {
+        "key": "good_grain_good_bread",
+        "value": 0.85,
+        "why": "My name is on every loaf that leaves this bakehouse."
+      }
+    ],
+    "secret": "I have shorted the guards' loaves a little these lean quarters to keep the market loaves full weight, and I hope nobody weighs them."
+  },
+  "Amice Baker": {
+    "narrative": "I run the bakehouse beside Osgood and keep every mark of it in my head, because the books would only get wet or lost. I know what grain cost last winter and what it will cost next, and I know to the loaf how much the guards are owed. I am the one who remembers the lease and the quarter-days, and I am the one who tells Osgood when we can afford a thing. I have a sharp eye and I do not care to be cheated.",
+    "values": [
+      "keep the accounts honest and tight",
+      "the family first",
+      "know the price of everything",
+      "a clean bakehouse"
+    ],
+    "goals": [
+      "keep the bakehouse solvent through winter",
+      "see Godfrey settled with a trade and a wife",
+      "never be short of grain in the store"
+    ],
+    "mood": "brisk, calculating, quietly proud",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 50,
+      "curiosity": 35,
+      "ambition": 52,
+      "introspection": 48,
+      "temper": 45,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Osgood Baker",
+        "trust": 92,
+        "affinity": 88,
+        "label": "husband",
+        "note": "He bakes and I count; we have never needed to say which of us keeps us fed."
+      },
+      {
+        "name": "Godfrey Baker",
+        "trust": 75,
+        "affinity": 80,
+        "label": "son",
+        "note": "He wants the bakehouse and he will have it, but not before he can keep the accounts."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 30,
+        "affinity": -15,
+        "label": "landlord",
+        "note": "He holds the lease over us and he knows it; I watch the quarter-days like a hawk."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 68,
+        "affinity": 55,
+        "label": "grain seller",
+        "note": "A fair price and a full measure, most times."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 48,
+        "affinity": 35,
+        "label": "guild head",
+        "note": "The Guild's terms favour the town and I work to them, but she has a head for trade."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 60,
+        "affinity": 55,
+        "label": "customer",
+        "note": "The inn buys our bread and Petra pays without a fuss."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "She has a good head and a kind hand; we talk of children and prices."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I found the store short a sack after the Lean Year and traced it to a rat hole, and I have kept the grain in sealed crocks since.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "The quarter-day I paid the Reeve's man the lease in full with marks I had counted three times.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Godfrey brought home the innkeeper's daughter's name and I began to reckon what a wedding would cost.",
+        "salience": 0.5,
+        "about": [
+          "Godfrey Baker"
+        ]
+      },
+      {
+        "gist": "Osgood and I baked through the night of the surge storm to feed the folk who came in from the road.",
+        "salience": 0.55,
+        "about": [
+          "Osgood Baker"
+        ]
+      },
+      {
+        "gist": "I taught Godfrey his letters at the bakehouse table so he could write a bill of sale.",
+        "salience": 0.6,
+        "about": [
+          "Godfrey Baker"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "count_every_mark",
+        "value": 0.9,
+        "why": "A bakehouse lives or dies on a few marks a quarter."
+      },
+      {
+        "key": "family_before_town",
+        "value": 0.8,
+        "why": "The town will not feed us if the oven goes cold."
+      },
+      {
+        "key": "keep_the_lease_paid",
+        "value": 0.85,
+        "why": "The Reeve would let the bakehouse to another tomorrow."
+      },
+      {
+        "key": "watch_the_grain_price",
+        "value": 0.7,
+        "why": "Grain is the whole cost of a loaf and it moves with the weather."
+      }
+    ],
+    "secret": "I have been putting by a few marks in a crock behind the flour bins for Godfrey's wedding, without telling Osgood, because he would spend it on a new oven door."
+  },
+  "Godfrey Baker": {
+    "narrative": "I bake the night batch so the town wakes to warm bread, and I am the one who slides the trays in while the house sleeps. I want this bakehouse for my own, and I am courting the innkeeper's daughter, though I have not yet found the words for her father. My father thinks I am not ready to keep the accounts; my mother thinks I am not ready to keep a wife. I mean to prove them both wrong.",
+    "values": [
+      "a good night's bake",
+      "make my own way",
+      "the girl at the inn",
+      "one day the bakehouse is mine"
+    ],
+    "goals": [
+      "win the innkeeper's daughter and her father's leave",
+      "take over the bakehouse from my father",
+      "prove I can keep the books as well as the oven"
+    ],
+    "mood": "restless, hopeful, a little impatient",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 50,
+      "ambition": 72,
+      "introspection": 38,
+      "temper": 48,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Osgood Baker",
+        "trust": 70,
+        "affinity": 65,
+        "label": "father",
+        "note": "He taught me the oven, but he will not let me near the books."
+      },
+      {
+        "name": "Amice Baker",
+        "trust": 72,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She says I am not ready; I mean to show her I am."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 50,
+        "affinity": 40,
+        "label": "innkeeper",
+        "note": "His daughter is the one, and he watches me over his ale like a hawk."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 55,
+        "affinity": 50,
+        "label": "innkeeper's wife",
+        "note": "She has been kinder to me than her husband, and she knows her pies."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 55,
+        "affinity": 45,
+        "label": "customer",
+        "note": "His guards eat my night batch, and he has never once complained of it."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 60,
+        "affinity": 50,
+        "label": "grain seller",
+        "note": "I hope to deal with him myself one day, when the bakehouse is mine."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 60,
+        "affinity": 60,
+        "label": "friend",
+        "note": "We drink together and talk of building something better than what we were given."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first night I baked the whole batch alone, and not one loaf burned.",
+        "salience": 0.7,
+        "about": [
+          "Osgood Baker"
+        ]
+      },
+      {
+        "gist": "I saw the innkeeper's daughter laughing behind the counter at the Bell and Bush and have thought of little else since.",
+        "salience": 0.65,
+        "about": [
+          "Baldwin Wade"
+        ]
+      },
+      {
+        "gist": "My father found a scorched tray and made me bake the night batch twice over to learn it.",
+        "salience": 0.5,
+        "about": [
+          "Osgood Baker"
+        ]
+      },
+      {
+        "gist": "The morning the guards came off the road after the wolves, I had hot bread waiting and Tobin clapped me on the shoulder.",
+        "salience": 0.55,
+        "about": [
+          "Tobin Marrow"
+        ]
+      },
+      {
+        "gist": "Stephen Hobson and I sat on the wall and swore we would build in stone one day, whatever the Kettlebridge price.",
+        "salience": 0.5,
+        "about": [
+          "Stephen Hobson"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "earn_the_bakehouse",
+        "value": 0.85,
+        "why": "It is my father's now, and I will not have it handed to me; I will earn it."
+      },
+      {
+        "key": "court_the_innkeepers_daughter",
+        "value": 0.8,
+        "why": "She is the one I want, and I will find the words for her father."
+      },
+      {
+        "key": "learn_the_books",
+        "value": 0.7,
+        "why": "A baker who cannot count his marks is a baker who loses his oven."
+      },
+      {
+        "key": "feed_the_guards_well",
+        "value": 0.6,
+        "why": "They are the steadiest custom in the town and they remember a good loaf."
+      }
+    ],
+    "secret": "I have already asked the innkeeper's daughter to walk out with me, and she said yes, and neither of our parents knows it yet."
+  }
+}

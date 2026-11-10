@@ -1,0 +1,903 @@
+{
+  "into": "island",
+  "about": "The island's settlements, the anchor people the world tensions hang on, the roads people carry goods on, and the situations every side must agree on. author_world.py drafts the rest of each settlement's households and every sheet from this and bible.md (docs/SEEDED_LIVES.md).",
+  "occupations": [
+    "farmer",
+    "fisher",
+    "cook",
+    "innkeeper",
+    "trader",
+    "builder",
+    "carpenter",
+    "mason",
+    "guard",
+    "scribe",
+    "healer",
+    "hunter",
+    "woodcutter",
+    "quarrier",
+    "outlaw",
+    "stone carter",
+    "fish runner",
+    "meat carrier",
+    "pedlar"
+  ],
+  "settlements": [
+    {
+      "name": "Brackenford",
+      "people": 76,
+      "households": 19,
+      "brief": "The walled market town. Farmers, the Market Guild's traders, gate guards, masons and carpenters short of stone, cooks and the innkeeper, chapel sisters who heal, scribes who keep the ledger. Proud of its square and its charter. Most of its people think Kettlebridge folk are grasping and cold, and the Coldwell outlaws thieves who had their chance.",
+      "mix": {
+        "farmer": 14,
+        "trader": 7,
+        "guard": 8,
+        "mason": 3,
+        "carpenter": 4,
+        "builder": 3,
+        "cook": 4,
+        "innkeeper": 1,
+        "scribe": 2,
+        "healer": 3,
+        "hunter": 4,
+        "fisher": 2
+      },
+      "stores": {
+        "berries": 70,
+        "cooked_meat": 16,
+        "wood": 24,
+        "stone": 2,
+        "fiber": 12,
+        "clay": 2,
+        "hide": 6,
+        "mark": 20
+      },
+      "ledger": "Brackenford. The gates are kept by the town. The market is for anyone who comes in peace. Goods not grown in Brackenford's fields pay the gate-due: one mark a load, or a share. Thornby owes the town store forty baskets of grain.",
+      "anchors": [
+        {
+          "name": "Aldric Marrow",
+          "age": 63,
+          "sex": "m",
+          "occupation": "scribe",
+          "household": "marrow",
+          "role": "Reeve of Brackenford; keeps the gate-due and the town ledger; took the Coldwell fields for the town store in the Lean Year; old, and has not named who comes after him",
+          "ties": [
+            "father of Tobin Marrow",
+            "rival of Mercy Abbot over the gate-due",
+            "holds Thornby's debt against Osric Dunn",
+            "outlawed Marta Hale and her household",
+            "the broken match shamed him before Josiah Crane"
+          ]
+        },
+        {
+          "name": "Tobin Marrow",
+          "age": 27,
+          "sex": "m",
+          "occupation": "guard",
+          "household": "marrow-young",
+          "role": "captain of the gate guards and the Reeve's son; broke his promise to marry Hester Crane two years ago and married Wenna",
+          "parents": [
+            "Aldric Marrow"
+          ],
+          "ties": [
+            "husband of Wenna Marrow",
+            "once promised to Hester Crane",
+            "commands Wat Fenner at the gate",
+            "thinks the outlaws must be cleared from the stone road"
+          ]
+        },
+        {
+          "name": "Wenna Marrow",
+          "age": 25,
+          "sex": "f",
+          "occupation": "farmer",
+          "household": "marrow-young",
+          "role": "Tobin's wife, a weaver's daughter who farms the Marrow strip; expecting their first child",
+          "ties": [
+            "wife of Tobin Marrow",
+            "knows the town thinks she cost it the Kettlebridge peace"
+          ]
+        },
+        {
+          "name": "Mercy Abbot",
+          "age": 48,
+          "sex": "f",
+          "occupation": "trader",
+          "household": "abbot",
+          "role": "head of the Market Guild; wants the gate-due dropped and trade with Kettlebridge back; holds the lease of the old Coldwell fields, which the Tolleys farm for the Guild",
+          "ties": [
+            "rival of Aldric Marrow",
+            "landlord of Hal Tolley",
+            "trades with Silas Pike and wants more of his stone",
+            "would like to be Reeve"
+          ]
+        },
+        {
+          "name": "Wat Fenner",
+          "age": 35,
+          "sex": "m",
+          "occupation": "guard",
+          "household": "fenner",
+          "role": "gate guard at the south gate on the stone road; collects the gate-due from carters",
+          "ties": [
+            "husband of Agnes Fenner",
+            "serves under Tobin Marrow",
+            "brother-in-law of Marta Hale, an outlaw",
+            "takes the due from Silas Pike"
+          ]
+        },
+        {
+          "name": "Agnes Fenner",
+          "age": 33,
+          "sex": "f",
+          "occupation": "cook",
+          "household": "fenner",
+          "role": "cook at the inn; Marta Hale's younger sister; grew up at Coldwell",
+          "ties": [
+            "wife of Wat Fenner",
+            "younger sister of Marta Hale",
+            "aunt of Ned Hale's children",
+            "SECRET: carries food out to Coldwell by the south gate when Wat is not on watch; Marta knows, Wat does not"
+          ]
+        },
+        {
+          "name": "Sister Elspeth",
+          "age": 57,
+          "sex": "f",
+          "occupation": "healer",
+          "household": "chapel",
+          "role": "eldest sister of the chapel; keeps the common fire and the calendar; heals anyone who comes, outlaws included",
+          "ties": [
+            "tended Marta Hale's son through a fever at Coldwell last winter",
+            "disapproves of the gate-due"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Kettlebridge",
+      "people": 34,
+      "households": 9,
+      "brief": "The hill town of brick and iron. Masters and apprentices of the works and foundries, masons and quarriers, builders, a few farmers on the terraces, cooks, a clockkeeper-scribe, carters. Governed by the Works Council of masters. Proud, exact, short of food. Many think Brackenford folk are smug and lazy behind their walls. Lanternquay families from the Surge live on the poor terrace.",
+      "mix": {
+        "mason": 5,
+        "quarrier": 3,
+        "builder": 4,
+        "carpenter": 3,
+        "farmer": 4,
+        "cook": 3,
+        "trader": 2,
+        "scribe": 1,
+        "healer": 1,
+        "stone carter": 1
+      },
+      "stores": {
+        "stone": 36,
+        "clay": 14,
+        "wood": 20,
+        "berries": 4,
+        "cooked_meat": 2,
+        "mark": 8
+      },
+      "ledger": "Kettlebridge Works Council. Apprentices are bound by indenture until their term. Stone is sold at the Council's price. Runaway apprentices are to be returned to their masters.",
+      "anchors": [
+        {
+          "name": "Josiah Crane",
+          "age": 58,
+          "sex": "m",
+          "occupation": "mason",
+          "household": "crane",
+          "role": "foundry master and chair of the Works Council; the broken match was an insult to his house; sends stone south to Lanternquay as much as north",
+          "ties": [
+            "father of Hester Crane",
+            "despises Aldric Marrow and his son Tobin",
+            "employs Dele Oyelaran cheaply",
+            "master of the runaway apprentice Pell, and wants him back"
+          ]
+        },
+        {
+          "name": "Hester Crane",
+          "age": 24,
+          "sex": "f",
+          "occupation": "scribe",
+          "household": "crane",
+          "role": "keeps the foundry's books; once promised to Tobin Marrow",
+          "parents": [
+            "Josiah Crane"
+          ],
+          "ties": [
+            "daughter of Josiah Crane",
+            "was promised to Tobin Marrow",
+            "corresponds with Mercy Abbot about reopening trade",
+            "SECRET: was relieved when Tobin broke the match; she did not want to leave the works"
+          ]
+        },
+        {
+          "name": "Silas Pike",
+          "age": 41,
+          "sex": "m",
+          "occupation": "stone carter",
+          "household": "pike",
+          "role": "carter on the stone road: takes stone from the works to Brackenford's market and brings berries back; robbed twice by the Coldwell outlaws; pays the gate-due and hates it",
+          "ties": [
+            "husband of Ruth Pike",
+            "pays the due to Wat Fenner",
+            "sells to Mercy Abbot",
+            "knows Marta Hale by sight and fears her people"
+          ]
+        },
+        {
+          "name": "Ruth Pike",
+          "age": 39,
+          "sex": "f",
+          "occupation": "cook",
+          "household": "pike",
+          "role": "cook for the works' kitchen; wants Silas off the road",
+          "ties": [
+            "wife of Silas Pike"
+          ]
+        },
+        {
+          "name": "Ezra Holt",
+          "age": 37,
+          "sex": "m",
+          "occupation": "quarrier",
+          "household": "holt",
+          "role": "quarryman who led the cutting on the ridge that broke into a giants' cairn; says he did not know",
+          "ties": [
+            "works for Josiah Crane",
+            "afraid of the giants",
+            "owes Tavvik for meat"
+          ]
+        },
+        {
+          "name": "Dele Oyelaran",
+          "age": 45,
+          "sex": "m",
+          "occupation": "builder",
+          "household": "oyelaran",
+          "role": "a Lanternquay builder who came after the Surge; lives on the poor terrace and works for low pay",
+          "ties": [
+            "works for Josiah Crane",
+            "old friend of Mara Quell",
+            "resented by Kettlebridge builders for undercutting them"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Lanternquay",
+      "people": 36,
+      "households": 10,
+      "brief": "The harbour town of concrete, neon and stalls, busy at all hours. Fishers, cooks and stall traders, builders who want to rebuild the lower quay, a few quay guards, a scribe, healers. The Harbour Warden speaks for the quay. They light tide lanterns for the drowned. They think Kettlebridge sells stone at a drowning man's price, and Brackenford is far and full of itself.",
+      "mix": {
+        "fisher": 8,
+        "cook": 5,
+        "trader": 6,
+        "builder": 3,
+        "guard": 2,
+        "scribe": 1,
+        "healer": 2,
+        "fish runner": 1
+      },
+      "stores": {
+        "cooked_fish": 44,
+        "fish": 10,
+        "berries": 8,
+        "wood": 2,
+        "stone": 2,
+        "mark": 8
+      },
+      "ledger": "Lanternquay. The quay is for whoever works it. Lanterns for the drowned are lit at dusk; do not put them out.",
+      "anchors": [
+        {
+          "name": "Mara Quell",
+          "age": 52,
+          "sex": "f",
+          "occupation": "trader",
+          "household": "quell",
+          "role": "Harbour Warden; lost her brother in the Surge; wants stone for a seawall",
+          "ties": [
+            "blames Josiah Crane for the price of stone",
+            "old friend of Dele Oyelaran",
+            "sends Juno Reyes up the fish road"
+          ]
+        },
+        {
+          "name": "Juno Reyes",
+          "age": 29,
+          "sex": "f",
+          "occupation": "fish runner",
+          "household": "reyes",
+          "role": "runner on the fish road: carries cooked fish to Kettlebridge's market and stone back for the seawall",
+          "ties": [
+            "runs for Mara Quell",
+            "buys stone from Hester Crane",
+            "childhood friend of Kai Ostrander, who deserted"
+          ]
+        },
+        {
+          "name": "Ilse Ostrander",
+          "age": 58,
+          "sex": "f",
+          "occupation": "cook",
+          "household": "ostrander",
+          "role": "keeps a noodle stall on the quay; her son Kai deserted the quay guard last year",
+          "ties": [
+            "mother of Kai Ostrander",
+            "SECRET: Kai sent word he is alive at Coldwell; she has told no one"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Highshelf",
+      "people": 14,
+      "households": 4,
+      "brief": "The giants' settlement on its high shelf. Stone builders, masons, hunters, a few growers. Slow-spoken and patient; the elder decides after everyone has spoken. They keep cairns for their dead and never move one. Kettlebridge's quarrymen cut into a cairn last year and the elder closed the shelf to Kettlebridge. They are old friends of the small folk.",
+      "mix": {
+        "mason": 3,
+        "builder": 2,
+        "hunter": 4,
+        "farmer": 2,
+        "meat carrier": 1
+      },
+      "stores": {
+        "stone": 24,
+        "cooked_meat": 30,
+        "hide": 10,
+        "berries": 6,
+        "wood": 2
+      },
+      "ledger": "Highshelf. The cairns are not to be touched. The shelf does not trade with Kettlebridge.",
+      "anchors": [
+        {
+          "name": "Hollbrenna",
+          "age": 66,
+          "sex": "f",
+          "occupation": "mason",
+          "household": "hollbrenna",
+          "role": "elder of Highshelf; closed the shelf to Kettlebridge after the cairn cutting; her grandmother lies in that cairn",
+          "ties": [
+            "mother of Orrum",
+            "forbade trade with Kettlebridge",
+            "remembers Pipwort Bramblecap's mother fondly"
+          ]
+        },
+        {
+          "name": "Orrum",
+          "age": 44,
+          "sex": "m",
+          "occupation": "mason",
+          "household": "hollbrenna",
+          "role": "Hollbrenna's son, stonecutter; expected to be elder after her",
+          "parents": [
+            "Hollbrenna"
+          ],
+          "ties": [
+            "son of Hollbrenna",
+            "wants Ezra Holt to answer for the cairn"
+          ]
+        },
+        {
+          "name": "Tavvik",
+          "age": 31,
+          "sex": "m",
+          "occupation": "meat carrier",
+          "household": "tavvik",
+          "role": "a young hunter who carries meat down the giants' track to Kettlebridge and brings timber back up, against the elder's word",
+          "ties": [
+            "defies Hollbrenna",
+            "Ezra Holt owes him for meat",
+            "SECRET: sweet on Prudence Vane of Kettlebridge, a cook who buys his meat"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Fernhollow",
+      "people": 34,
+      "households": 10,
+      "brief": "The small folk's hollow in the old forest. Gardeners and growers above all, cooks, carpenters who work fallen wood only, healers who make salves, a few fishers on the forest streams, traders and a pedlar who walks the east road, a keeper of the hollow's memory. Quick, curious, hospitable. They keep the Old Green. Old friends of the giants; wary of Kettlebridge's smoke; they avoid Brackenford's gate-due by trading south and east.",
+      "mix": {
+        "farmer": 10,
+        "cook": 4,
+        "carpenter": 3,
+        "healer": 3,
+        "fisher": 3,
+        "trader": 2,
+        "scribe": 2,
+        "pedlar": 1
+      },
+      "stores": {
+        "fiber": 34,
+        "berries": 30,
+        "salve": 6,
+        "wood": 2,
+        "stone": 1
+      },
+      "ledger": "Fernhollow. Guests are fed before they are asked anything. No living tree of the old forest is felled.",
+      "anchors": [
+        {
+          "name": "Pipwort Bramblecap",
+          "age": 61,
+          "sex": "f",
+          "occupation": "scribe",
+          "household": "bramblecap",
+          "role": "Eldest of the hollow; keeps its memory and its gardens' calendar",
+          "ties": [
+            "her mother and Hollbrenna were friends",
+            "distrusts Kettlebridge",
+            "grandmother of Thistle Mossfoot"
+          ]
+        },
+        {
+          "name": "Thistle Mossfoot",
+          "age": 26,
+          "sex": "m",
+          "occupation": "pedlar",
+          "household": "mossfoot",
+          "role": "pedlar on the east road: carries fibre to Reedmoor's market and brings fish back",
+          "ties": [
+            "grandson of Pipwort Bramblecap",
+            "trades with Nell Sedge",
+            "friendly with the Coombes of the Lakemead"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Thornby",
+      "people": 14,
+      "households": 4,
+      "brief": "A fishing village on the north shore near Brackenford. Fishers, a few farmers and hunters, a cook. Owes Brackenford forty baskets of grain from the Lean Year and pays slowly in fish. Thinks old Edda at the north light wrecks boats.",
+      "mix": {
+        "fisher": 6,
+        "hunter": 2,
+        "farmer": 2,
+        "cook": 1
+      },
+      "stores": {
+        "cooked_fish": 24,
+        "fish": 8,
+        "berries": 4,
+        "wood": 12
+      },
+      "ledger": "Thornby. Nets are mended on the green. What the sea gives is shared with the widows first.",
+      "anchors": [
+        {
+          "name": "Osric Dunn",
+          "age": 55,
+          "sex": "m",
+          "occupation": "fisher",
+          "household": "dunn",
+          "role": "headman of Thornby; owes Brackenford's store forty baskets of grain and pays slowly in fish",
+          "ties": [
+            "owes Aldric Marrow's town store forty baskets",
+            "thinks Edda at the north light wrecked his brother's boat"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Elmwick",
+      "people": 16,
+      "households": 4,
+      "brief": "A farming village in the southern woods. Farmers, hunters, a fisher, a cook, a builder. Claims the Lakemead as Elmwick's old common. One Lanternquay family from the Surge lives here.",
+      "mix": {
+        "farmer": 6,
+        "hunter": 2,
+        "fisher": 1,
+        "cook": 1,
+        "builder": 1
+      },
+      "stores": {
+        "berries": 32,
+        "fiber": 12,
+        "wood": 14
+      },
+      "ledger": "Elmwick. The Lakemead was Elmwick's common before anyone let it.",
+      "anchors": [
+        {
+          "name": "Hob Garrow",
+          "age": 60,
+          "sex": "m",
+          "occupation": "farmer",
+          "household": "garrow",
+          "role": "elder of Elmwick; says Nell Sedge had no right to let the Lakemead",
+          "ties": [
+            "quarrels with Nell Sedge over the Lakemead",
+            "grazed the Lakemead as a boy"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Reedmoor",
+      "people": 12,
+      "households": 3,
+      "brief": "A small village at the edge of the reeds on the south-east shore. Reed-cutters, fishers, a cook. Lets the Lakemead to the Coombes. Trades with Fernhollow's pedlar.",
+      "mix": {
+        "farmer": 4,
+        "fisher": 4,
+        "cook": 1
+      },
+      "stores": {
+        "fiber": 26,
+        "berries": 14,
+        "fish": 8,
+        "cooked_fish": 8,
+        "wood": 2
+      },
+      "ledger": "Reedmoor. The reeds are cut in turn. The Lakemead is let to the Coombes for grain.",
+      "anchors": [
+        {
+          "name": "Nell Sedge",
+          "age": 50,
+          "sex": "f",
+          "occupation": "farmer",
+          "household": "sedge",
+          "role": "headwoman of Reedmoor; let the Lakemead to the Coombes for grain",
+          "ties": [
+            "landlord of Jem Coombe",
+            "quarrels with Hob Garrow",
+            "trades with Thistle Mossfoot"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Coldwell",
+      "site": "hamlet_village",
+      "near": "Brackenford",
+      "region": [
+        "forest",
+        "old_forest"
+      ],
+      "people": 9,
+      "households": 3,
+      "brief": "The old Coldwell steading in the woods by the stone road between Brackenford and Kettlebridge. Its farmers lost their fields to Brackenford's store in the Lean Year and were outlawed when they would not leave their houses. They take a share from carriers on the stone road, by asking, threats or force. Joined by a deserter from Lanternquay and a runaway apprentice from Kettlebridge. They are people with reasons, not monsters.",
+      "mix": {
+        "outlaw": 4,
+        "farmer": 1,
+        "hunter": 1
+      },
+      "stores": {
+        "berries": 10,
+        "stone": 4,
+        "wood": 8
+      },
+      "ledger": "Coldwell. These houses were built by Hales and Coldwells. The fields beyond the beck were ours.",
+      "anchors": [
+        {
+          "name": "Marta Hale",
+          "age": 44,
+          "sex": "f",
+          "occupation": "outlaw",
+          "household": "hale",
+          "role": "leads the Coldwell outlaws; a widow whose fields were taken; wants them back, or a pardon, or enough to live on",
+          "ties": [
+            "elder sister of Agnes Fenner",
+            "sister of Ned Hale",
+            "mother of Robin Hale",
+            "outlawed by Aldric Marrow",
+            "hates the Tolleys who farm her fields",
+            "Sister Elspeth nursed her son"
+          ]
+        },
+        {
+          "name": "Robin Hale",
+          "age": 11,
+          "sex": "m",
+          "occupation": "child",
+          "household": "hale",
+          "role": "Marta's son; had a fever last winter",
+          "parents": [
+            "Marta Hale"
+          ],
+          "ties": [
+            "son of Marta Hale"
+          ]
+        },
+        {
+          "name": "Ned Hale",
+          "age": 40,
+          "sex": "m",
+          "occupation": "outlaw",
+          "household": "ned-hale",
+          "role": "Marta's brother; was a farmer; does the threatening on the road",
+          "ties": [
+            "brother of Marta Hale and Agnes Fenner",
+            "robbed Silas Pike twice"
+          ]
+        },
+        {
+          "name": "Kai Ostrander",
+          "age": 34,
+          "sex": "m",
+          "occupation": "outlaw",
+          "household": "ned-hale",
+          "role": "a Lanternquay quay guard who deserted after the Surge; fights better than the others",
+          "ties": [
+            "son of Ilse Ostrander",
+            "childhood friend of Juno Reyes",
+            "SECRET: sent word to his mother that he is alive"
+          ]
+        },
+        {
+          "name": "Pell",
+          "age": 19,
+          "sex": "m",
+          "occupation": "outlaw",
+          "household": "pell",
+          "role": "a runaway apprentice from Josiah Crane's foundry",
+          "ties": [
+            "ran away from Josiah Crane before his indenture ended",
+            "looks up to Kai Ostrander"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ashby",
+      "site": "hamlet_village",
+      "near": "Brackenford",
+      "region": [
+        "meadow"
+      ],
+      "people": 9,
+      "households": 2,
+      "brief": "Farms in the meadows near Brackenford. The Tolleys farm the old Coldwell fields for the Market Guild and fear the outlaws.",
+      "mix": {
+        "farmer": 5,
+        "hunter": 1
+      },
+      "stores": {
+        "berries": 30,
+        "wood": 8
+      },
+      "ledger": "Ashby. Farmed for the Market Guild of Brackenford.",
+      "anchors": [
+        {
+          "name": "Hal Tolley",
+          "age": 38,
+          "sex": "m",
+          "occupation": "farmer",
+          "household": "tolley",
+          "role": "tenant of the Market Guild on the old Coldwell fields",
+          "ties": [
+            "tenant of Mercy Abbot",
+            "fears Marta Hale's people",
+            "thinks the Hales had their chance"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Highfold",
+      "site": "hamlet_village",
+      "region": [
+        "highland"
+      ],
+      "people": 5,
+      "households": 1,
+      "brief": "A herders' and hunters' fold in the hills between Kettlebridge and Highshelf. A human family who trade hides with the giants and are trusted on the shelf.",
+      "mix": {
+        "hunter": 2,
+        "farmer": 1
+      },
+      "stores": {
+        "berries": 8,
+        "hide": 8,
+        "cooked_meat": 8
+      },
+      "ledger": "Highfold. Welcome on the shelf.",
+      "anchors": []
+    },
+    {
+      "name": "Sootwood",
+      "site": "hamlet_village",
+      "near": "Lanternquay",
+      "region": [
+        "old_forest",
+        "forest"
+      ],
+      "people": 7,
+      "households": 2,
+      "brief": "Woodcutters and charcoal burners in the old forest above Lanternquay. They sell timber to the quay and think the seawall will never be built.",
+      "mix": {
+        "woodcutter": 3,
+        "farmer": 1
+      },
+      "stores": {
+        "wood": 36,
+        "berries": 8
+      },
+      "ledger": "Sootwood.",
+      "anchors": []
+    },
+    {
+      "name": "Lakemead",
+      "site": "hamlet_village",
+      "near": "Reedmoor",
+      "region": [
+        "meadow"
+      ],
+      "people": 7,
+      "households": 2,
+      "brief": "The disputed meadow farm by the southern lake. The Coombes pay Reedmoor rent in grain; Elmwick says the meadow is Elmwick's common.",
+      "mix": {
+        "farmer": 3,
+        "fisher": 1
+      },
+      "stores": {
+        "berries": 24,
+        "wood": 4
+      },
+      "ledger": "Lakemead. Let by Reedmoor.",
+      "anchors": [
+        {
+          "name": "Jem Coombe",
+          "age": 42,
+          "sex": "m",
+          "occupation": "farmer",
+          "household": "coombe",
+          "role": "tenant of the Lakemead; pays Nell Sedge rent in grain; Elmwick folk have pulled down his fence twice",
+          "ties": [
+            "tenant of Nell Sedge",
+            "at odds with Hob Garrow",
+            "friendly with Thistle Mossfoot"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Saltings",
+      "site": "hamlet_village",
+      "near": "Highshelf",
+      "region": [
+        "beach"
+      ],
+      "people": 6,
+      "households": 2,
+      "brief": "Salt pans and fish traps on the west shore below the hills: two households who keep to themselves.",
+      "mix": {
+        "fisher": 3,
+        "farmer": 1
+      },
+      "stores": {
+        "fish": 8,
+        "berries": 8
+      },
+      "ledger": "Saltings.",
+      "anchors": []
+    },
+    {
+      "name": "the North Light",
+      "site": "hamlet_village",
+      "near": "Thornby",
+      "region": [
+        "beach"
+      ],
+      "people": 2,
+      "households": 1,
+      "brief": "A light on the north cape above Thornby, kept by an old woman and her grandson.",
+      "mix": {
+        "fisher": 1
+      },
+      "stores": {
+        "wood": 16,
+        "berries": 4
+      },
+      "ledger": "The light is lit every night.",
+      "anchors": [
+        {
+          "name": "Edda Wray",
+          "age": 71,
+          "sex": "f",
+          "occupation": "fisher",
+          "household": "wray",
+          "role": "keeper of the north light; Thornby says she lit it wrong to wreck boats",
+          "ties": [
+            "accused by Osric Dunn of wrecking his brother's boat",
+            "grandmother of the boy who lives with her"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tanglewood",
+      "site": "hamlet_village",
+      "near": "Fernhollow",
+      "region": [
+        "old_forest",
+        "forest"
+      ],
+      "people": 3,
+      "households": 1,
+      "brief": "A healer's cottage in the old forest near Fernhollow: a woman who left Brackenford's chapel years ago, and those who come to her.",
+      "mix": {
+        "healer": 1,
+        "farmer": 1
+      },
+      "stores": {
+        "berries": 8,
+        "salve": 3
+      },
+      "ledger": "Tanglewood.",
+      "anchors": []
+    },
+    {
+      "name": "Ferncross",
+      "site": "hamlet_village",
+      "near": "Elmwick",
+      "region": [
+        "forest",
+        "old_forest"
+      ],
+      "people": 6,
+      "households": 2,
+      "brief": "Woodcutters at a crossing of tracks in the southern woods, selling timber to Elmwick and Reedmoor.",
+      "mix": {
+        "woodcutter": 3,
+        "farmer": 1
+      },
+      "stores": {
+        "wood": 34,
+        "berries": 8
+      },
+      "ledger": "Ferncross.",
+      "anchors": []
+    }
+  ],
+  "routes": [
+    {
+      "occupation": "stone carter",
+      "from": "Kettlebridge",
+      "to": "Brackenford",
+      "out": "stone",
+      "back": "berries",
+      "stages": 12,
+      "about": "the stone road",
+      "reach_m": 100
+    },
+    {
+      "occupation": "fish runner",
+      "from": "Lanternquay",
+      "to": "Kettlebridge",
+      "out": "cooked_fish",
+      "back": "stone",
+      "stages": 14,
+      "about": "the fish road",
+      "reach_m": 180
+    },
+    {
+      "occupation": "meat carrier",
+      "from": "Highshelf",
+      "to": "Kettlebridge",
+      "out": "cooked_meat",
+      "back": "wood",
+      "stages": 10,
+      "about": "the giants' track",
+      "reach_m": 115
+    },
+    {
+      "occupation": "pedlar",
+      "from": "Fernhollow",
+      "to": "Reedmoor",
+      "out": "fiber",
+      "back": "fish",
+      "stages": 10,
+      "about": "the east road",
+      "reach_m": 100
+    }
+  ],
+  "outlaws": {
+    "occupation": "outlaw",
+    "road": [
+      "Kettlebridge",
+      "Brackenford"
+    ]
+  },
+  "store_holds": 120
+}

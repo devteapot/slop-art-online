@@ -1,0 +1,394 @@
+{
+  "Ysolde Fenwick": {
+    "narrative": "I was a chapel sister of Brackenford for thirty years, and I left over the gate-due and the silence that let it stand; the sisters heal anyone who comes, I said, so why not the ones the gate calls outlaws? Now I keep a healer's cottage in the old forest, and the sick of every settlement find the path to it, which is more than the gate would allow them. I am sixty-one, my hands are still steady, but the cottage is a long way from a surgeon's hands, and I have a letter under my herb ledger I have not answered. I say what I think about the gate-due to anyone who will listen, and I have never once gone back through that gate.",
+    "values": [
+      "healing without asking who the sick are",
+      "the old forest and its gardens kept, not felled",
+      "speaking plainly against the gate-due",
+      "keeping my daughter and grandson close"
+    ],
+    "goals": [
+      "pay Alder Rush before the first frost without asking the chapel for a mark",
+      "keep Orla from the wood road and the pits",
+      "decide what to do about Elspeth's letter",
+      "keep the salve store full through the winter"
+    ],
+    "mood": "worn, watchful, and stubbornly warm",
+    "traits": {
+      "caution": 62,
+      "sociability": 48,
+      "empathy": 78,
+      "curiosity": 55,
+      "ambition": 30,
+      "introspection": 74,
+      "temper": 58,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Orla Fenwick",
+        "trust": 70,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "Born in this cottage and too ready to walk away from it for a man I do not trust."
+      },
+      {
+        "name": "Hollis Fenwick",
+        "trust": 90,
+        "affinity": 92,
+        "label": "grandson",
+        "note": "Knows my herbs better than some sisters I trained; I will not have him afraid of the dark stair or the wood."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 55,
+        "affinity": 60,
+        "label": "old sister",
+        "note": "She writes to me still; her letter sits under my ledger and I have not the words for it yet."
+      },
+      {
+        "name": "Alwin Wren",
+        "trust": 80,
+        "affinity": 75,
+        "label": "old friend",
+        "note": "He taught me the charms the sisters would not, and he never once told me to go back through the gate."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 70,
+        "affinity": 68,
+        "label": "trade partner",
+        "note": "Her salves are honest and her hollow's plants are the same old forest as mine."
+      },
+      {
+        "name": "Marra Brine",
+        "trust": 60,
+        "affinity": 50,
+        "label": "supplier",
+        "note": "Roots and barley from the saltings, and a sister's quarrel with Thornby she does not speak of."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 45,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "He took my word in the spring; the debt falls due at first frost and I mean to keep my word."
+      },
+      {
+        "name": "Odile Vance",
+        "trust": 55,
+        "affinity": 45,
+        "label": "old patient's daughter",
+        "note": "I sat with her mother through her last winter; she sets bones well and has the sense to disapprove of that cairn."
+      },
+      {
+        "name": "Cael Tarn",
+        "trust": 15,
+        "affinity": 10,
+        "label": "the burner",
+        "note": "Smoke and drink and a pit house; he is not taking my daughter up that road."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I knelt at the chapel fire and heard the Reeve's men read the Coldwell names as outlaws, and I said nothing, and I have not knelt there since.",
+        "salience": 0.9,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "Alwin Wren showed me the herb charms the order calls hedge-magic, and I have used them at sickbeds ever since.",
+        "salience": 0.7,
+        "about": [
+          "Alwin Wren"
+        ]
+      },
+      {
+        "gist": "I sat three nights with Odile Vance's mother in Kettlebridge and closed her eyes at the end.",
+        "salience": 0.65,
+        "about": [
+          "Odile Vance"
+        ]
+      },
+      {
+        "gist": "Orla was born in this cottage in a hard frost, and I cut the cord myself and thought I would never be so afraid again.",
+        "salience": 0.8,
+        "about": [
+          "Orla Fenwick"
+        ]
+      },
+      {
+        "gist": "Elspeth's letter came up the forest path in spring, and I read it twice and put it under the herb ledger.",
+        "salience": 0.55,
+        "about": [
+          "Sister Elspeth"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "heal_anyone_who_comes",
+        "value": 0.95,
+        "why": "I left the order over it; a healer who asks first what a body has done is no healer."
+      },
+      {
+        "key": "the_gate_due_is_robbery",
+        "value": 0.9,
+        "why": "It is taken from folk who never chose the Reeve, and the chapel kept silent about it."
+      },
+      {
+        "key": "never_fell_a_living_tree",
+        "value": 0.75,
+        "why": "The old forest is the garden and the medicine both; fallen wood serves."
+      },
+      {
+        "key": "pay_what_i_owe",
+        "value": 0.85,
+        "why": "A healer's credit is all she has when the salves run out."
+      },
+      {
+        "key": "keep_orla_from_the_pits",
+        "value": 0.7,
+        "why": "I have seen what a pit house and a drinking man leave a woman with."
+      }
+    ],
+    "secret": "Elspeth has written asking me back to the chapel before winter, with a pardon for leaving offered through the Reeve; I have told no one, and the letter lies under my herb ledger."
+  },
+  "Orla Fenwick": {
+    "narrative": "I was born in this cottage and I will likely die in it, but not before I have seen a little of the wood road. I keep the clearing's roots and barley and the beehives, and carry the surplus down to Ferncross and the Fernhollow stall, and that is how I came to know the Sootwood pits and Cael's nephew. My mother has forbidden him the cottage path; I go anyway when the loads are carried, and I am not a girl to be told who may walk up to my own door. The hives have been poor this year and I am short on what I promised Alder, and I have not told her how short.",
+    "values": [
+      "my own choosing, right or wrong",
+      "the clearing fed and the honey sold",
+      "Hollis safe and learning",
+      "keeping faith with those who deal fair with me"
+    ],
+    "goals": [
+      "settle Alder Rush's honey before the frost",
+      "keep walking to the pits whatever my mother says",
+      "get a better year from the hives",
+      "see that Hollis is not afraid of the wood"
+    ],
+    "mood": "restless, fond, and quietly anxious about the honey",
+    "traits": {
+      "caution": 40,
+      "sociability": 60,
+      "empathy": 62,
+      "curiosity": 66,
+      "ambition": 55,
+      "introspection": 44,
+      "temper": 52,
+      "nurture": 68
+    },
+    "relations": [
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 58,
+        "affinity": 60,
+        "label": "mother",
+        "note": "She healed half the island and cannot bear that I choose a man she has not chosen."
+      },
+      {
+        "name": "Hollis Fenwick",
+        "trust": 95,
+        "affinity": 95,
+        "label": "son",
+        "note": "He stacks kindling better than the burner taught him, and he is the reason I keep the clearing."
+      },
+      {
+        "name": "Cael Tarn",
+        "trust": 60,
+        "affinity": 72,
+        "label": "the burner",
+        "note": "His nephew is kind and patient with Hollis; the rest is my mother's old quarrel with smoke."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 50,
+        "affinity": 45,
+        "label": "creditor",
+        "note": "I promised him last autumn's honey and the hives failed me; I will not be a cheat."
+      },
+      {
+        "name": "Rill Fenlake",
+        "trust": 70,
+        "affinity": 68,
+        "label": "friend",
+        "note": "She punts the lake and trades fair, and she does not lecture me about the road."
+      },
+      {
+        "name": "Vetch Quill",
+        "trust": 55,
+        "affinity": 50,
+        "label": "trade partner",
+        "note": "We trade honey and barley, and we both know what a poor year the hives have had."
+      },
+      {
+        "name": "Betony Mossfoot",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "Her salves go down the east road with my honey, and she never asks about the pits."
+      },
+      {
+        "name": "Pell Tarn",
+        "trust": 40,
+        "affinity": 30,
+        "label": "the burner's kin",
+        "note": "A boy who wants the quay boats; his cousin is the one I walk to see."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I carried the first full pack of honey down to the Fernhollow stall and sold every pot before noon.",
+        "salience": 0.6,
+        "about": [
+          "Vetch Quill"
+        ]
+      },
+      {
+        "gist": "Hollis was born in the cottage with my mother's hands on me, and the wolves were howling close that night.",
+        "salience": 0.85,
+        "about": [
+          "Ysolde Fenwick",
+          "Hollis Fenwick"
+        ]
+      },
+      {
+        "gist": "I met Cael's nephew at the Sootwood pits when I carried honey up the wood road, and he showed me how the slow pits are stacked.",
+        "salience": 0.7,
+        "about": [
+          "Cael Tarn"
+        ]
+      },
+      {
+        "gist": "My mother forbade him the cottage path, and I took the next load up the road anyway.",
+        "salience": 0.75,
+        "about": [
+          "Ysolde Fenwick"
+        ]
+      },
+      {
+        "gist": "The hives came out poor this summer, and I counted the pots twice and knew I was short of what I promised Alder.",
+        "salience": 0.65,
+        "about": [
+          "Alder Rush"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "my_own_choosing",
+        "value": 0.9,
+        "why": "I am thirty-four and I have kept this clearing since I was a girl; I will not be told who may come up the path."
+      },
+      {
+        "key": "pay_my_debts_before_the_frost",
+        "value": 0.85,
+        "why": "A cheat's honey does not sell twice at the Fernhollow stall."
+      },
+      {
+        "key": "the_wood_road_is_not_evil",
+        "value": 0.7,
+        "why": "My mother's grudge against the smoke is an old woman's quarrel; the burners have been kind to Hollis."
+      },
+      {
+        "key": "keep_hollis_from_fear",
+        "value": 0.8,
+        "why": "He is nine and the forest is his home; I will not have him frightened of his own clearing."
+      },
+      {
+        "key": "trade_fair_with_the_hollow",
+        "value": 0.75,
+        "why": "Ferncross and Fernhollow are the only markets that do not ask me to kneel to a gate."
+      }
+    ],
+    "secret": "I am far shorter on the honey than I have told my mother, and I am thinking of selling my grandmother's silver spoon, the last thing of my father's house, to pay Alder Rush."
+  },
+  "Hollis Fenwick": {
+    "narrative": "I live in the cottage in the clearing with my mother and my grandmother, and I know every path of it and the names of all the herbs in the garden. Grandmother is teaching me my letters from the chapel psalter, and I carry her salve packets down to the Ferncross market in a basket. I like it when Fennel and Bracken come up the path from Fernhollow, and I like the burner who taught me to stack kindling, though Grandmother's face closes when his name is said.",
+    "values": [
+      "the clearing and its paths",
+      "learning my letters",
+      "the herbs and the salve packets",
+      "my mother and grandmother"
+    ],
+    "goals": [
+      "learn all the herb names in the garden",
+      "read the whole psalter without help",
+      "play with Fennel and Bracken when they come up the path"
+    ],
+    "mood": "curious and easily startled",
+    "traits": {
+      "caution": 55,
+      "sociability": 62,
+      "empathy": 66,
+      "curiosity": 80,
+      "ambition": 35,
+      "introspection": 40,
+      "temper": 25,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 90,
+        "affinity": 88,
+        "label": "grandmother",
+        "note": "She knows every herb and every charm, and her hands are warm when she sets a poultice."
+      },
+      {
+        "name": "Orla Fenwick",
+        "trust": 92,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She carries the honey down the road and always comes back before dark."
+      },
+      {
+        "name": "Fennel Underbank",
+        "trust": 75,
+        "affinity": 80,
+        "label": "friend",
+        "note": "He comes up the path from Fernhollow and we hunt for beetles in the woodpile."
+      },
+      {
+        "name": "Bracken Rush",
+        "trust": 70,
+        "affinity": 72,
+        "label": "friend",
+        "note": "He counts the packs and lets me count them too."
+      },
+      {
+        "name": "Cael Tarn",
+        "trust": 65,
+        "affinity": 70,
+        "label": "the burner",
+        "note": "He taught me to stack kindling so the pit draws, and he does not laugh when I ask questions."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Grandmother set me to name the herbs in the garden and I got eleven right before I forgot the feverfew.",
+        "salience": 0.7,
+        "about": [
+          "Ysolde Fenwick"
+        ]
+      },
+      {
+        "gist": "I carried the salve packets down to the Ferncross market in my own basket for the first time.",
+        "salience": 0.6,
+        "about": [
+          "Ysolde Fenwick"
+        ]
+      },
+      {
+        "gist": "The burner showed me how to stack the kindling in a cone so the slow pit draws.",
+        "salience": 0.65,
+        "about": [
+          "Cael Tarn"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

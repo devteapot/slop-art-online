@@ -1,0 +1,371 @@
+{
+  "Rook Fenner": {
+    "narrative": "I came down from the north shore years ago with a tarred boat and a north-shore accent the quay still laughs at, and I never went back. The outer shoals are my ground; I know their moods better than I know most men. Lyss keeps the soup stall by the tide steps, and our boy mends nets on the quay. We get by, though Ostrander Cormorant's share of the net hangs over me and the stone price keeps the quay poor.",
+    "values": [
+      "keeping to my own boat",
+      "paying what I owe when I can",
+      "the sea's honesty"
+    ],
+    "goals": [
+      "clear the net-share debt to Ostrander Cormorant",
+      "see the boy crew on a proper boat",
+      "keep the tarred boat sound another winter"
+    ],
+    "mood": "weathered, watchful, quietly content",
+    "traits": {
+      "caution": 65,
+      "sociability": 40,
+      "empathy": 55,
+      "curiosity": 45,
+      "ambition": 35,
+      "introspection": 60,
+      "temper": 45,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Lyss Fenner",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the stall and the house; I'd be lost without her."
+      },
+      {
+        "name": "Rook Fenner the younger",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "Quick with a knot, that one. Wants to crew for Cormorant."
+      },
+      {
+        "name": "Ostrander Cormorant",
+        "trust": 20,
+        "affinity": -10,
+        "label": "creditor",
+        "note": "I owe him for a share of a net. He's a good fisherman and a hard man."
+      },
+      {
+        "name": "Wick Gull",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend",
+        "note": "A loud fool, but he knows the tides and he'll share a drink."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 50,
+        "affinity": 40,
+        "label": "buyer",
+        "note": "She buys my catch and pays fair, most times."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 40,
+        "affinity": 30,
+        "label": "warden",
+        "note": "She speaks for the quay. I keep my head down when she talks of the seawall."
+      },
+      {
+        "name": "Wick Cormorant",
+        "trust": 30,
+        "affinity": 20,
+        "label": "neighbour",
+        "note": "The boy's friend. His father's boat is better than mine."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I rowed down from the north shore with nothing but a tarred boat and a net, and the quay laughed at my accent.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "The night the Surge came, I pulled Wick Gull's boat off the lower quay with a rope and my back.",
+        "salience": 0.9,
+        "about": [
+          "Wick Gull"
+        ]
+      },
+      {
+        "gist": "Lyss and I set up the soup stall the week after we were married; she's run it ever since.",
+        "salience": 0.7,
+        "about": [
+          "Lyss Fenner"
+        ]
+      },
+      {
+        "gist": "Ostrander Cormorant lent me a share of his net when mine tore, and I've not cleared it yet.",
+        "salience": 0.6,
+        "about": [
+          "Ostrander Cormorant"
+        ]
+      },
+      {
+        "gist": "The boy mended his first net at seven and was quicker at it than me.",
+        "salience": 0.5,
+        "about": [
+          "Rook Fenner the younger"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_debts_first",
+        "value": 0.8,
+        "why": "A man who doesn't pay his debts is no better than a wrecker."
+      },
+      {
+        "key": "the_sea_provides",
+        "value": 0.7,
+        "why": "The shoals have fed us through lean times; I trust them more than the land."
+      },
+      {
+        "key": "keep_off_the_road",
+        "value": 0.6,
+        "why": "The fish road is for runners and guards; my place is the boat."
+      },
+      {
+        "key": "stone_wall_matters",
+        "value": 0.5,
+        "why": "The lower quay needs a wall, but I won't march for it."
+      }
+    ],
+    "secret": "I've been setting aside a few marks in a jar behind the chimney to pay Cormorant before winter, and I've told no one, not even Lyss."
+  },
+  "Lyss Fenner": {
+    "narrative": "I keep the soup and bread stall by the tide steps, up before the early boats and last to bank the fire. Rook fishes the outer shoals and our boy mends nets on the quay. I trade with Nia Gull and buy lamp oil from Nia Brine, and I know every debt on this quay by the way people order their soup. Sella Pike feeds half the quay on credit and owes Mira Sallow for medicines; I owe Sella a little myself, and it feels like the whole quay is living on promises.",
+    "values": [
+      "a hot bowl for a cold morning",
+      "paying your way",
+      "keeping the stall's name good"
+    ],
+    "goals": [
+      "keep the stall solvent through the lean season",
+      "see the boy settled with a crew",
+      "clear what I owe Sella Pike without hard words"
+    ],
+    "mood": "busy, warm, faintly worried",
+    "traits": {
+      "caution": 55,
+      "sociability": 75,
+      "empathy": 70,
+      "curiosity": 50,
+      "ambition": 45,
+      "introspection": 55,
+      "temper": 40,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Rook Fenner",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He's a quiet man with a good boat; I'd have no one else."
+      },
+      {
+        "name": "Rook Fenner the younger",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "Quick with a knot and set on Cormorant's boat."
+      },
+      {
+        "name": "Nia Gull",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "We trade fish and bread most mornings."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 55,
+        "affinity": 50,
+        "label": "supplier",
+        "note": "Her lamp oil is good and she's fair on the price."
+      },
+      {
+        "name": "Sella Pike",
+        "trust": 50,
+        "affinity": 45,
+        "label": "creditor",
+        "note": "She's fed half the quay on credit; I owe her a little and she's never pressed me."
+      },
+      {
+        "name": "Mira Sallow",
+        "trust": 45,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "She sells medicines and knows the coughs of the quay."
+      },
+      {
+        "name": "Jory Pike",
+        "trust": 40,
+        "affinity": 35,
+        "label": "neighbour",
+        "note": "Sella's boy, cheerful and always owing someone."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "She knows the price of everything, but she pays for the bread."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I set up the soup stall the week after Rook and I were married, with a pot borrowed from my mother.",
+        "salience": 0.8,
+        "about": [
+          "Rook Fenner"
+        ]
+      },
+      {
+        "gist": "The Surge took the lower quay and we fed the soaked families from the stall for three days.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "Sella Pike gave me credit for a whole winter when Rook's boat was laid up, and I've not forgotten it.",
+        "salience": 0.7,
+        "about": [
+          "Sella Pike"
+        ]
+      },
+      {
+        "gist": "The boy mended his first net at seven and was quicker at it than his father.",
+        "salience": 0.5,
+        "about": [
+          "Rook Fenner the younger"
+        ]
+      },
+      {
+        "gist": "Nia Brine and I argued over the price of lamp oil and settled it over a bowl of soup.",
+        "salience": 0.4,
+        "about": [
+          "Nia Brine"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_the_early_boats",
+        "value": 0.9,
+        "why": "A cold fisherman is no good to anyone; the stall opens before dawn."
+      },
+      {
+        "key": "pay_what_you_owe",
+        "value": 0.8,
+        "why": "Credit is a kindness; I won't abuse it."
+      },
+      {
+        "key": "the_quay_lives_on_promises",
+        "value": 0.7,
+        "why": "Sella's credit and the stone price have everyone owing everyone."
+      },
+      {
+        "key": "keep_the_boy_from_the_deep",
+        "value": 0.6,
+        "why": "He wants Cormorant's boat, but the deep water took good men in the Surge."
+      }
+    ],
+    "secret": ""
+  },
+  "Rook Fenner the younger": {
+    "narrative": "I'm eleven and I mend nets on the quay, and I'm quick with a knot. Da fishes the outer shoals and Ma keeps the soup stall by the tide steps. Wick Cormorant and me play on the quay and I want to crew on his father's boat one day. The quay laughs at Da's accent, but I don't.",
+    "values": [
+      "knots and nets",
+      "the quay's boats",
+      "playing with Wick"
+    ],
+    "goals": [
+      "crew on Ostrander Cormorant's boat",
+      "mend a net as fast as Da",
+      "see the outer shoals"
+    ],
+    "mood": "eager, restless, proud",
+    "traits": {
+      "caution": 35,
+      "sociability": 70,
+      "empathy": 50,
+      "curiosity": 75,
+      "ambition": 65,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Rook Fenner",
+        "trust": 80,
+        "affinity": 70,
+        "label": "father",
+        "note": "He fishes the outer shoals and mends nets slow."
+      },
+      {
+        "name": "Lyss Fenner",
+        "trust": 85,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She keeps the soup stall and says the deep water took good men."
+      },
+      {
+        "name": "Wick Cormorant",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "We play on the quay and he says I can crew with his father."
+      },
+      {
+        "name": "Ostrander Cormorant",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "His boat is the best on the quay; I want to crew for him."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Da pulled Wick Gull's boat off the lower quay the night of the Surge, and I watched from the tide steps.",
+        "salience": 0.8,
+        "about": [
+          "Rook Fenner",
+          "Wick Gull"
+        ]
+      },
+      {
+        "gist": "I mended my first net at seven and was quicker at it than Da.",
+        "salience": 0.7,
+        "about": [
+          "Rook Fenner"
+        ]
+      },
+      {
+        "gist": "Wick Cormorant and me raced our knots on the quay and he won, but I'm getting faster.",
+        "salience": 0.5,
+        "about": [
+          "Wick Cormorant"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "crew_on_a_boat",
+        "value": 0.8,
+        "why": "I want to be a fisherman like Da, but on a bigger boat."
+      },
+      {
+        "key": "mend_nets_well",
+        "value": 0.7,
+        "why": "A good knot keeps the catch in and the boat safe."
+      },
+      {
+        "key": "dont_mock_the_accent",
+        "value": 0.6,
+        "why": "The quay laughs at Da's north-shore accent, and I won't."
+      }
+    ],
+    "secret": ""
+  }
+}

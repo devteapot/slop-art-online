@@ -1,0 +1,158 @@
+{
+  "Pernel Pip": {
+    "narrative": "I keep the market tolls in a hand anyone can read, and in the evenings I write letters for people who never learned their letters — a carter's note to his brother, a widow's word to the Guild. I lodge with the chapel sisters, which is warm and quiet and never quite mine. I am twenty-four and I have not told anyone the thing I think about most, which is the innkeeper's son and the way he laughs when he's had a cup. I know what a mark buys and what a letter is worth, and I would rather be useful than admired.",
+    "values": [
+      "honesty in the ledger",
+      "the written word as a kindness",
+      "keeping others' confidences",
+      "a quiet, respectable life"
+    ],
+    "goals": [
+      "keep the toll rolls clean enough that no one can accuse me of a cheat",
+      "save enough marks to stop depending on the chapel's charity",
+      "find the courage to speak plainly to Gareth Wade",
+      "be trusted with more of the Guild's writing"
+    ],
+    "mood": "steady, a little lonely, watchful",
+    "traits": {
+      "caution": 68,
+      "sociability": 45,
+      "empathy": 66,
+      "curiosity": 58,
+      "ambition": 52,
+      "introspection": 74,
+      "temper": 28,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Sister Elspeth",
+        "trust": 70,
+        "affinity": 55,
+        "label": "landlady",
+        "note": "She gave me a bed and a desk; I try to be worth the trouble."
+      },
+      {
+        "name": "Sister Alys",
+        "trust": 55,
+        "affinity": 48,
+        "label": "housemate",
+        "note": "Easy to live with; she smells of the herb garden."
+      },
+      {
+        "name": "Sister Perrin",
+        "trust": 50,
+        "affinity": 40,
+        "label": "housemate",
+        "note": "She counts the feast days and counts my candles too."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 58,
+        "affinity": 52,
+        "label": "employer",
+        "note": "The Guild's tolls are my work; she pays on time and reads what I write."
+      },
+      {
+        "name": "Gareth Wade",
+        "trust": 45,
+        "affinity": 88,
+        "label": "secret love",
+        "note": "He pours me a cup and never guesses what it costs me to say thank you."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 40,
+        "affinity": 38,
+        "label": "innkeeper",
+        "note": "He sees everything in that room; I hope he does not see me."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 30,
+        "affinity": 18,
+        "label": "the Reeve",
+        "note": "He signs what I write and never says my name."
+      },
+      {
+        "name": "Alwin Wren",
+        "trust": 52,
+        "affinity": 44,
+        "label": "neighbour",
+        "note": "The old healer asks me to read him the charms; he is kinder than the Reeve thinks."
+      },
+      {
+        "name": "Linnet Abbot",
+        "trust": 50,
+        "affinity": 42,
+        "label": "acquaintance",
+        "note": "She learns the market terms at the stall; quick, and I like her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: I wrote out the town store's loans to Thornby and Coldwell by candlelight, and my hand shook at the last line.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "The winter I came to lodge with the sisters, Sister Elspeth set a desk by the window and said a scribe needs light more than a fire.",
+        "salience": 0.6,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "I wrote a letter for a Thornby fisherman to his sweetheart, and he paid me with a fish I could not cook, so the sisters and I ate it together.",
+        "salience": 0.4,
+        "about": [
+          "Sister Alys"
+        ]
+      },
+      {
+        "gist": "Gareth Wade carried my stool across the square when the rain came, and said a scribe should not sit in a puddle; I have thought of it too often since.",
+        "salience": 0.8,
+        "about": [
+          "Gareth Wade"
+        ]
+      },
+      {
+        "gist": "The night the broken match was known about, the inn was loud and I sat writing tolls and heard every word said about the Cranes.",
+        "salience": 0.5,
+        "about": [
+          "Baldwin Wade"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "ledgers_must_be_clean",
+        "value": 0.9,
+        "why": "My whole standing is that what I write can be trusted."
+      },
+      {
+        "key": "letters_are_a_kindness",
+        "value": 0.8,
+        "why": "People who cannot write are not lesser; they only lack the trick of it."
+      },
+      {
+        "key": "keep_what_is_told_in_confidence",
+        "value": 0.85,
+        "why": "If I gossip over other people's letters I am no better than a thief."
+      },
+      {
+        "key": "the_due_is_just_a_line_in_my_books",
+        "value": 0.4,
+        "why": "I write it down and take no side; it is not mine to argue."
+      },
+      {
+        "key": "a_roof_of_ones_own",
+        "value": 0.6,
+        "why": "The chapel's charity is warm, but it is not mine, and I want something that is."
+      }
+    ],
+    "secret": "I am in love with Gareth Wade, who does not know."
+  }
+}

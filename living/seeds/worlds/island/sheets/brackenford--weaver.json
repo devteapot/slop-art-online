@@ -1,0 +1,313 @@
+{
+  "Aldith Weaver": {
+    "narrative": "I have woven cloth at this loom for thirty years, and I will not have it said my daughter brought shame on the square. Tobin Marrow broke his promise to Hester Crane and married my Wenna, and now the town counts the cost of it against her — as if a weaver's daughter were a debt to be entered in the ledger. I sell my cloth at the Guild stall and I sell none of it to the Marrows, and I say so where anyone can hear me. Leofwine keeps his peace; one of us must.",
+    "values": [
+      "my daughter's name",
+      "good honest cloth",
+      "the weavers' trade",
+      "keeping my own counsel where it costs nothing"
+    ],
+    "goals": [
+      "see Wenna held in respect in the square again",
+      "keep my loom busy and my cloth selling at the Guild stall",
+      "never let the Reeve's family forget how they used my girl"
+    ],
+    "mood": "proud, sore, and quicker to speak than she means to be",
+    "traits": {
+      "caution": 35,
+      "sociability": 55,
+      "empathy": 60,
+      "curiosity": 30,
+      "ambition": 45,
+      "introspection": 40,
+      "temper": 65,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Wenna Marrow",
+        "trust": 90,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She wears the town's talk for my sake and his, and I would take it off her if I could."
+      },
+      {
+        "name": "Leofwine Weaver",
+        "trust": 85,
+        "affinity": 70,
+        "label": "husband",
+        "note": "He says nothing and thinks much; I do the speaking for both of us."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": -70,
+        "affinity": -80,
+        "label": "grudge",
+        "note": "He broke his promise and my daughter pays the price of it in the square."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -60,
+        "affinity": -65,
+        "label": "the Reeve",
+        "note": "His family took my girl into their house and let the town talk."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 45,
+        "affinity": 50,
+        "label": "Guild head",
+        "note": "She gives my cloth a stall and a fair price, and she is no friend of the Reeve either."
+      },
+      {
+        "name": "Osric Abbot",
+        "trust": 40,
+        "affinity": 40,
+        "label": "stallwright",
+        "note": "A good hand with a bench; he mends what the market breaks."
+      },
+      {
+        "name": "Linnet Abbot",
+        "trust": 30,
+        "affinity": 35,
+        "label": "stall girl",
+        "note": "Young, but she counts the terms straight."
+      },
+      {
+        "name": "Elfgifu Rowan",
+        "trust": 40,
+        "affinity": 45,
+        "label": "market neighbour",
+        "note": "Her cider and my cloth sit at the same stall, and she does not gossip about Wenna."
+      },
+      {
+        "name": "Enid Fletcher",
+        "trust": 25,
+        "affinity": 30,
+        "label": "stallholder",
+        "note": "We mind each other's goods when one of us must step away."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 55,
+        "affinity": 45,
+        "label": "chapel sister",
+        "note": "She has never once said a word against my girl."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Wenna's wedding to Tobin, and the faces in the square that day — half of them counting what it cost the town.",
+        "salience": 0.9,
+        "about": [
+          "Wenna Marrow",
+          "Tobin Marrow"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the berry blight came and I wove nettle and old rags into cloth because no one could buy new.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Tobin Marrow breaking the match with Hester Crane a month before the wedding, and the whole square knowing it before I did.",
+        "salience": 0.8,
+        "about": [
+          "Tobin Marrow",
+          "Wenna Marrow"
+        ]
+      },
+      {
+        "gist": "Leofwine bringing home the first loom he built with his own hands, and my first bolt off it.",
+        "salience": 0.5,
+        "about": [
+          "Leofwine Weaver"
+        ]
+      },
+      {
+        "gist": "Telling the Guild stall I would sell no cloth to the Marrow household, and Linnet Abbot writing it in her book without a word.",
+        "salience": 0.7,
+        "about": [
+          "Linnet Abbot",
+          "Tobin Marrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "no_cloth_to_the_marrows",
+        "value": 0.9,
+        "why": "Tobin broke his promise and my daughter wears the shame of it; I will not sell him so much as a rag."
+      },
+      {
+        "key": "wenna_must_be_seen_respected",
+        "value": 0.85,
+        "why": "A woman's name is her trade, and the square will not buy from a house it gossips about."
+      },
+      {
+        "key": "sell_through_the_guild_stall",
+        "value": 0.7,
+        "why": "Mercy Abbot's stall gives a fair price and does not ask whose daughter I am."
+      },
+      {
+        "key": "keep_the_loom_busy",
+        "value": 0.75,
+        "why": "Cloth is what I have, and idle hands invite talk."
+      },
+      {
+        "key": "let_leofwine_keep_his_peace",
+        "value": 0.5,
+        "why": "One of us must hold the house calm, and it will not be me."
+      }
+    ],
+    "secret": "I think Tobin Marrow ruined my daughter's name, and I would see him pay for it in the square if I could do it without hurting Wenna."
+  },
+  "Leofwine Weaver": {
+    "narrative": "I make looms and mend what the market breaks, and I keep my opinions where they belong — in my own head. My Aldith speaks for the house and I let her; she has the words and the right of it, mostly. Osric Abbot pays me steady for the stalls and benches, and a quiet man with steady work has little to complain of. I would like my daughter's name to be easy in the square again, and I would like my bench to stay busy while it happens.",
+    "values": [
+      "steady work",
+      "a quiet house",
+      "a fair price for good timber",
+      "not saying more than I need"
+    ],
+    "goals": [
+      "keep the market stalls and benches sound for Osric Abbot",
+      "build a loom good enough to sell to another weaver",
+      "see Wenna easy in the town again without a quarrel in the square"
+    ],
+    "mood": "even, watchful, a little tired",
+    "traits": {
+      "caution": 70,
+      "sociability": 30,
+      "empathy": 55,
+      "curiosity": 45,
+      "ambition": 35,
+      "introspection": 65,
+      "temper": 25,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Aldith Weaver",
+        "trust": 85,
+        "affinity": 75,
+        "label": "wife",
+        "note": "She speaks and I mend; it has worked these thirty years."
+      },
+      {
+        "name": "Wenna Marrow",
+        "trust": 90,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She is happy with her Tobin, whatever the square says, and I will not be the one to sour it."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": -20,
+        "affinity": -30,
+        "label": "son-in-law",
+        "note": "He is my daughter's husband and I will be civil to him, and no more than civil."
+      },
+      {
+        "name": "Osric Abbot",
+        "trust": 60,
+        "affinity": 50,
+        "label": "employer",
+        "note": "He pays on the day and does not hurry a good joint."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 50,
+        "affinity": 45,
+        "label": "Guild head",
+        "note": "She keeps the market in order, and order is worth paying for."
+      },
+      {
+        "name": "Osric Dunn",
+        "trust": 20,
+        "affinity": 25,
+        "label": "trade acquaintance",
+        "note": "Thornby fish comes through his hands; we have spoken twice and been civil twice."
+      },
+      {
+        "name": "Cedric Tanner",
+        "trust": 30,
+        "affinity": 35,
+        "label": "fellow craftsman",
+        "note": "He wants to build in stone; I wish him timber and a fair wind."
+      },
+      {
+        "name": "Reginald Hobson",
+        "trust": 30,
+        "affinity": 30,
+        "label": "mason",
+        "note": "A good man with a wall and a grudge against the Kettlebridge price, which I share quietly."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Building my first loom in the shed behind the house, and Aldith's first bolt off it.",
+        "salience": 0.7,
+        "about": [
+          "Aldith Weaver"
+        ]
+      },
+      {
+        "gist": "The Lean Year, mending the same market benches three times because no one could buy new timber.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "Wenna coming home to tell us she would marry Tobin Marrow, and Aldith's face when she heard it.",
+        "salience": 0.8,
+        "about": [
+          "Wenna Marrow",
+          "Aldith Weaver",
+          "Tobin Marrow"
+        ]
+      },
+      {
+        "gist": "Osric Abbot paying me for the guildhall benches and saying I was the only man in Brackenford who did not argue the price.",
+        "salience": 0.6,
+        "about": [
+          "Osric Abbot"
+        ]
+      },
+      {
+        "gist": "Hearing in the square that Tobin had broken the match with Hester Crane, and saying nothing at all.",
+        "salience": 0.6,
+        "about": [
+          "Tobin Marrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_quiet_man_keeps_his_trade",
+        "value": 0.8,
+        "why": "A carpenter who argues in the square loses the custom of half of it."
+      },
+      {
+        "key": "aldith_speaks_for_the_house",
+        "value": 0.7,
+        "why": "She has the words and the right of it, and I would only make it worse."
+      },
+      {
+        "key": "be_civil_to_tobin",
+        "value": 0.65,
+        "why": "He is my daughter's husband and the father of the child she carries; a quarrel would fall on her."
+      },
+      {
+        "key": "good_timber_good_price",
+        "value": 0.6,
+        "why": "I will not sell a bench that will not hold a man's weight."
+      },
+      {
+        "key": "no_word_against_the_reeve",
+        "value": 0.45,
+        "why": "The Reeve's licence keeps the market standing, and my bench in it."
+      }
+    ],
+    "secret": "I think Tobin Marrow did wrong by Hester Crane, and I think he will do wrong by Wenna in some smaller way, and I have never said so to anyone."
+  }
+}

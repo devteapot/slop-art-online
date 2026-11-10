@@ -1,0 +1,428 @@
+{
+  "Grim Tarn": {
+    "narrative": "I've fished the west shore since I could hold a line, and the salt pans behind me were my father's and his father's before him. That channel at the north end is ours by right of two generations, and I'll not have Hollis Brine pushing his traps into it and calling it free water. My boat hook was stolen by the Coldwell outlaws last winter, and I've not forgotten it. Nessa is courting a Brine boy, and while the debt to Rook Tarn stands unpaid, I'll not have him at my table.",
+    "values": [
+      "family",
+      "fairness",
+      "tradition",
+      "self-reliance"
+    ],
+    "goals": [
+      "keep the north channel for my traps",
+      "see the debt to Rook Tarn settled",
+      "protect my daughter from a match I distrust",
+      "keep the salt pans working through winter"
+    ],
+    "mood": "stubborn and watchful",
+    "traits": {
+      "caution": 60,
+      "sociability": 40,
+      "empathy": 45,
+      "curiosity": 30,
+      "ambition": 50,
+      "introspection": 55,
+      "temper": 65,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Ebba Tarn",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the house and the pans; I'd be lost without her, though I don't say it."
+      },
+      {
+        "name": "Nessa Tarn",
+        "trust": 70,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "She's a good hand with a spear, but she's too soft on that Brine boy."
+      },
+      {
+        "name": "Hollis Brine",
+        "trust": -80,
+        "affinity": -70,
+        "label": "rival",
+        "note": "He moved his traps into my channel and can't even pay his debts."
+      },
+      {
+        "name": "Marra Brine",
+        "trust": -50,
+        "affinity": -40,
+        "label": "neighbour",
+        "note": "She's civil enough, but she's a Brine and she'll side with her husband."
+      },
+      {
+        "name": "Tarn Brine",
+        "trust": 10,
+        "affinity": 20,
+        "label": "suitor",
+        "note": "The boy's not bad, but he's a Brine and his father owes Thornby."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 70,
+        "affinity": 60,
+        "label": "old friend",
+        "note": "We share a name and not a bloodline, but he's a good man with a net."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 50,
+        "affinity": 40,
+        "label": "trade partner",
+        "note": "He buys my hides and pays fair, though he's a hard bargainer."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -70,
+        "affinity": -60,
+        "label": "outlaw",
+        "note": "Her people stole my boat hook; I've no love for outlaws."
+      },
+      {
+        "name": "Ebba Tarn",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the house and the pans; I'd be lost without her, though I don't say it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father showed me the north channel and said, 'This is ours, boy, as long as the Tarns fish it.'",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year: we ate salt fish and thin barley, and the wolves came down to the shore.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Hollis Brine moved his traps into the channel last spring, and I told him to move them back.",
+        "salience": 0.9,
+        "about": [
+          "Hollis Brine"
+        ]
+      },
+      {
+        "gist": "The Coldwell outlaws took my boat hook from the shed; I found the shed door broken.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Nessa told me she was walking out with Tarn Brine, and I told her not while the debt stands.",
+        "salience": 0.8,
+        "about": [
+          "Nessa Tarn",
+          "Tarn Brine"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "defend_fishing_rights",
+        "value": 0.95,
+        "why": "The channel has been Tarn water for two generations."
+      },
+      {
+        "key": "distrust_brines",
+        "value": 0.8,
+        "why": "They take what isn't theirs and don't pay their debts."
+      },
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "Blood is what holds the shore together."
+      },
+      {
+        "key": "pay_debts",
+        "value": 0.85,
+        "why": "A man who doesn't pay his debts is no better than an outlaw."
+      },
+      {
+        "key": "keep_watch_for_outlaws",
+        "value": 0.7,
+        "why": "They stole from me once; they'll do it again if they can."
+      }
+    ],
+    "secret": ""
+  },
+  "Ebba Tarn": {
+    "narrative": "I work the salt pans and keep the goats and the herb plot, and I've set bones and dosed coughs for half the saltings. The Brines come to me when the cough takes them, and I treat them the same as anyone. I've no quarrel with Marra, but I'll not cross my husband in front of them. The winter store worries me, and the wolves come closer each year.",
+    "values": [
+      "family",
+      "healing",
+      "fairness",
+      "practicality"
+    ],
+    "goals": [
+      "keep the salt pans and goats through winter",
+      "see Nessa happy without breaking the household",
+      "keep the herb plot and the medicines stocked",
+      "avoid open quarrel with the Brines"
+    ],
+    "mood": "weary but steady",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 75,
+      "curiosity": 40,
+      "ambition": 35,
+      "introspection": 60,
+      "temper": 30,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Grim Tarn",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He's stubborn as the rocks, but he's a good provider."
+      },
+      {
+        "name": "Nessa Tarn",
+        "trust": 80,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She's got her father's spirit and my soft heart; I want her to be happy."
+      },
+      {
+        "name": "Hollis Brine",
+        "trust": -30,
+        "affinity": -20,
+        "label": "neighbour",
+        "note": "He's quarrelsome, but I'll not refuse him medicine."
+      },
+      {
+        "name": "Marra Brine",
+        "trust": 20,
+        "affinity": 30,
+        "label": "neighbour",
+        "note": "She's a good woman caught in her husband's quarrel; I'd share my herbs with her."
+      },
+      {
+        "name": "Tarn Brine",
+        "trust": 30,
+        "affinity": 40,
+        "label": "suitor",
+        "note": "A polite boy; I think he'd treat Nessa well."
+      },
+      {
+        "name": "Mavis Tarn",
+        "trust": 60,
+        "affinity": 50,
+        "label": "trade partner",
+        "note": "We trade salt and herbs; she's a sensible woman."
+      },
+      {
+        "name": "Rook Tarn",
+        "trust": 60,
+        "affinity": 50,
+        "label": "old friend",
+        "note": "Grim's friend, and a decent man."
+      },
+      {
+        "name": "Nessa Tarn",
+        "trust": 80,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She's got her father's spirit and my soft heart; I want her to be happy."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother taught me the herb plot and the salt pans, and said, 'Heal who you can, and don't judge.'",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "The Surge: we lost a boat and nearly lost Grim; the sea took the lower shore.",
+        "salience": 0.8,
+        "about": [
+          "Grim Tarn"
+        ]
+      },
+      {
+        "gist": "I dosed Marra Brine's cough last winter, and she thanked me kindly.",
+        "salience": 0.7,
+        "about": [
+          "Marra Brine"
+        ]
+      },
+      {
+        "gist": "Grim told Nessa she couldn't see Tarn Brine, and she cried in the goat shed.",
+        "salience": 0.8,
+        "about": [
+          "Nessa Tarn",
+          "Grim Tarn"
+        ]
+      },
+      {
+        "gist": "The wolves came down to the saltings and took a goat; I heard them in the dark.",
+        "salience": 0.7,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "heal_anyone",
+        "value": 0.9,
+        "why": "A healer doesn't turn away the sick, whatever the quarrel."
+      },
+      {
+        "key": "keep_family_together",
+        "value": 0.85,
+        "why": "The household is what keeps us through winter."
+      },
+      {
+        "key": "avoid_open_conflict",
+        "value": 0.7,
+        "why": "I won't defy Grim in front of the Brines, but I'll not make enemies either."
+      },
+      {
+        "key": "stock_for_winter",
+        "value": 0.8,
+        "why": "The store must last; the wolves and the cold don't wait."
+      },
+      {
+        "key": "let_young_ones_be",
+        "value": 0.6,
+        "why": "I told Grim to leave Nessa and Tarn alone; they'll sort it themselves."
+      }
+    ],
+    "secret": ""
+  },
+  "Nessa Tarn": {
+    "narrative": "I help my mother with the pans and the goats and my father with the boat, and I'm a fair hand with a spear. I like Tarn Brine, and I'm angry with my father for using the debt as a gate. I meet Tarn on the shore when I can, but I'm afraid of the deep water beyond the shore and I dream of seeing Lanternquay and the tide lanterns.",
+    "values": [
+      "family",
+      "love",
+      "adventure",
+      "fairness"
+    ],
+    "goals": [
+      "see Tarn Brine without my father's leave",
+      "visit Lanternquay and see the tide lanterns",
+      "keep the goats and pans well",
+      "learn to spear fish better"
+    ],
+    "mood": "restless and hopeful",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 60,
+      "curiosity": 70,
+      "ambition": 50,
+      "introspection": 45,
+      "temper": 50,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Grim Tarn",
+        "trust": 60,
+        "affinity": 65,
+        "label": "father",
+        "note": "I love him, but he's being unfair about Tarn."
+      },
+      {
+        "name": "Ebba Tarn",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She understands, even if she won't say it to Father."
+      },
+      {
+        "name": "Tarn Brine",
+        "trust": 70,
+        "affinity": 80,
+        "label": "suitor",
+        "note": "He's kind and funny, and I meet him on the shore when I can."
+      },
+      {
+        "name": "Sedge Brine",
+        "trust": 50,
+        "affinity": 60,
+        "label": "friend",
+        "note": "She's a good friend, and she doesn't blame me for the quarrel."
+      },
+      {
+        "name": "Hollis Brine",
+        "trust": -20,
+        "affinity": -10,
+        "label": "neighbour",
+        "note": "He's caused trouble, but he's Tarn's father."
+      },
+      {
+        "name": "Marra Brine",
+        "trust": -10,
+        "affinity": 0,
+        "label": "neighbour",
+        "note": "She disapproves of me, and I don't know why."
+      },
+      {
+        "name": "Ebba Tarn",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She understands, even if she won't say it to Father."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I speared my first big fish last summer, and Father clapped me on the back.",
+        "salience": 0.8,
+        "about": [
+          "Grim Tarn"
+        ]
+      },
+      {
+        "gist": "Tarn Brine gave me a shell from the north shore, and I keep it under my pillow.",
+        "salience": 0.9,
+        "about": [
+          "Tarn Brine"
+        ]
+      },
+      {
+        "gist": "Father said Tarn couldn't come to the house until the debt is settled, and I shouted at him.",
+        "salience": 0.8,
+        "about": [
+          "Grim Tarn",
+          "Tarn Brine"
+        ]
+      },
+      {
+        "gist": "I saw the tide lanterns at Lanternquay from the cliff once, and I've wanted to go ever since.",
+        "salience": 0.7,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "love_tarn_brine",
+        "value": 0.9,
+        "why": "He's kind and I want to be with him, whatever Father says."
+      },
+      {
+        "key": "respect_parents",
+        "value": 0.6,
+        "why": "I love my parents, but they're wrong about this."
+      },
+      {
+        "key": "see_the_world",
+        "value": 0.7,
+        "why": "There's more than the saltings, and I want to see it."
+      },
+      {
+        "key": "fear_deep_water",
+        "value": 0.6,
+        "why": "The sea beyond the shore is dark and cold, and I've heard stories."
+      }
+    ],
+    "secret": ""
+  }
+}

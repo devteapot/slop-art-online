@@ -1,0 +1,444 @@
+{
+  "Wilfred Smith": {
+    "narrative": "I have put up half the barns and a good share of the houses in this town, and every one of them in timber, because Kettlebridge will not sell us stone at a price a man can pay. I remember what they charged us the year the chapel roof was mended, and I have not forgotten it. I build for the Market Guild and for anyone else with the marks, and I build it square and true. My son Osbert works beside me, though his eye is on the stonework, and I cannot say I blame him.",
+    "values": [
+      "honest work",
+      "family",
+      "fair payment",
+      "resentment of Kettlebridge prices"
+    ],
+    "goals": [
+      "keep the building work coming in through the Guild",
+      "see Osbert settled in a trade with a future",
+      "get good stone at a fair price one day"
+    ],
+    "mood": "steady, a little sour about stone",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 50,
+      "curiosity": 40,
+      "ambition": 50,
+      "introspection": 45,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Hilda Smith",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She mends bones and I mend roofs; between us the town keeps standing."
+      },
+      {
+        "name": "Osbert Smith",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "Good hands, but he wants the stone trade and that means Kettlebridge, and I have my doubts."
+      },
+      {
+        "name": "Reginald Hobson",
+        "trust": 70,
+        "affinity": 70,
+        "label": "friend",
+        "note": "A mason who curses the same price I do; we understand each other."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 60,
+        "affinity": 55,
+        "label": "patron",
+        "note": "The Guild pays on time, and she wants the gate-due gone, which would help my trade."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 30,
+        "affinity": 20,
+        "label": "stone seller",
+        "note": "He brings the stone and names the price, and I pay it through my teeth."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 40,
+        "affinity": 35,
+        "label": "reeve",
+        "note": "He keeps the due that makes every load dearer, and the walls are his to keep."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 55,
+        "affinity": 60,
+        "label": "friend's son",
+        "note": "A decent lad, and a good match for my Osbert's company."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 10,
+        "affinity": 15,
+        "label": "quarryman",
+        "note": "A Kettlebridge quarryman; they say he cut into the giants' cairn and brought trouble on the trade."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The year the chapel roof was mended, Kettlebridge named a price for stone that took my breath, and I built the whole thing in timber instead.",
+        "salience": 0.8,
+        "about": [
+          "Reginald Hobson",
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "I built the Guild's new barn in a fortnight with Osbert and two hired hands, and Mercy Abbot paid the full price without a word.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot",
+          "Osbert Smith"
+        ]
+      },
+      {
+        "gist": "During the Lean Year I took grain from the town store like everyone else and mended the store's roof for nothing, because it fed us.",
+        "salience": 0.7,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "A beam fell on a hired hand at the Rowan steading and Hilda set his arm while I held him; he was back at work by harvest.",
+        "salience": 0.5,
+        "about": [
+          "Hilda Smith"
+        ]
+      },
+      {
+        "gist": "Osbert came home talking of the Kettlebridge masons and their stonework, and I told him stone is dear and timber is honest, and he did not answer.",
+        "salience": 0.6,
+        "about": [
+          "Osbert Smith"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "timber_over_stone",
+        "value": 0.8,
+        "why": "Stone comes dear from Kettlebridge and timber comes from our own woods."
+      },
+      {
+        "key": "pay_the_men_fairly",
+        "value": 0.75,
+        "why": "A builder is only as good as the hands he keeps, and I have held a bad wage in my time."
+      },
+      {
+        "key": "kettlebridge_prices_are_robbery",
+        "value": 0.7,
+        "why": "I have paid them and I know what they ask."
+      },
+      {
+        "key": "the_guild_pays_on_time",
+        "value": 0.6,
+        "why": "Mercy Abbot has never made me wait for my marks."
+      },
+      {
+        "key": "a_wall_must_be_square",
+        "value": 0.85,
+        "why": "My father taught me that, and a crooked wall falls and takes a name with it."
+      }
+    ],
+    "secret": ""
+  },
+  "Hilda Smith": {
+    "narrative": "I set bones and clean wounds, and the gate guards come to my door when they have been at the outlaws or each other. I learned what I know from my mother and from the chapel sisters, and Sister Alys still sends for me when a hurt is beyond her salves. Wilfred builds and I mend, and the house is quiet enough. I worry about Osbert going among the Kettlebridge masons, but a mother keeps her worries to herself.",
+    "values": [
+      "healing",
+      "family",
+      "discretion",
+      "the Hearth's peace"
+    ],
+    "goals": [
+      "keep the guards and the town in one piece",
+      "see Osbert safe and settled",
+      "keep peace between the chapel and the old healers"
+    ],
+    "mood": "calm, watchful",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 85,
+      "curiosity": 45,
+      "ambition": 30,
+      "introspection": 65,
+      "temper": 30,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Wilfred Smith",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "A good man with a long grudge; I let him have it and mend what he breaks."
+      },
+      {
+        "name": "Osbert Smith",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He wants the stone trade; I want him to come home with all his fingers."
+      },
+      {
+        "name": "Sister Alys",
+        "trust": 80,
+        "affinity": 75,
+        "label": "fellow healer",
+        "note": "She has the salves and I have the hands; we work well together."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 75,
+        "affinity": 70,
+        "label": "elder sister",
+        "note": "She keeps the common fire and the calendar, and she does not turn anyone from the door."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 70,
+        "affinity": 70,
+        "label": "midwife",
+        "note": "Between us we have brought most of this town into the world."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "captain",
+        "note": "His guards come to me hurt, and he sends them; I will not say more."
+      },
+      {
+        "name": "Walter Stanhope",
+        "trust": 45,
+        "affinity": 30,
+        "label": "patient",
+        "note": "A big man with a short temper; I have stitched him twice and told him to keep his fists down."
+      },
+      {
+        "name": "Alwin Wren",
+        "trust": 55,
+        "affinity": 55,
+        "label": "old healer",
+        "note": "He knows the old charms and I know the bones; the sisters listen to us both."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I set a guard's arm at the gatehouse after the outlaws threw a stone at him, and he swore at me the whole time and thanked me after.",
+        "salience": 0.6,
+        "about": [
+          "Walter Stanhope"
+        ]
+      },
+      {
+        "gist": "The Lean Year brought fevers to the town and I went from house to house with Sister Alys until we had no more salve and made more.",
+        "salience": 0.8,
+        "about": [
+          "Sister Alys",
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "Osbert cut his hand to the bone on an adze and I sewed it and told him a builder needs his hands, and he laughed at me.",
+        "salience": 0.5,
+        "about": [
+          "Osbert Smith"
+        ]
+      },
+      {
+        "gist": "Wilfred came home from the chapel roof job in a fury over the stone price, and I let him talk it out and poured him cider.",
+        "salience": 0.5,
+        "about": [
+          "Wilfred Smith",
+          "Reginald Hobson"
+        ]
+      },
+      {
+        "gist": "I helped Joan Hobson with a birthing that went hard, and the child lived, and we sat down in the kitchen after and said nothing for a while.",
+        "salience": 0.7,
+        "about": [
+          "Joan Hobson"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "heal_anyone_who_asks",
+        "value": 0.85,
+        "why": "A hurt is a hurt, and the Hearth's peace is not mine to break."
+      },
+      {
+        "key": "keep_confidence",
+        "value": 0.8,
+        "why": "What I hear at a sickbed is not mine to carry to the square."
+      },
+      {
+        "key": "guards_deserve_care",
+        "value": 0.7,
+        "why": "They keep the road clear of wolves and worse, and they come to me bleeding for it."
+      },
+      {
+        "key": "family_above_grudges",
+        "value": 0.75,
+        "why": "Wilfred's quarrels are his; my son is mine."
+      },
+      {
+        "key": "the_old_ways_still_work",
+        "value": 0.5,
+        "why": "Alwin Wren's charms and my mother's herbs have mended what the sisters' salves could not."
+      }
+    ],
+    "secret": ""
+  },
+  "Osbert Smith": {
+    "narrative": "I have built with my father since I was a boy, and I am a good hand with timber, but timber is not what I want to build with. Stone lasts, and the Kettlebridge masons know how to cut and lay it, and I would learn from them if I could get among them. Stephen Hobson feels the same, and we talk about it over a pot. My father says stone is dear; I say a man should learn the trade that lasts.",
+    "values": [
+      "craft",
+      "learning",
+      "friendship",
+      "a name of his own"
+    ],
+    "goals": [
+      "learn stonework from the Kettlebridge masons",
+      "build something grander than a barn",
+      "earn enough to keep a household of his own"
+    ],
+    "mood": "restless, eager",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 75,
+      "ambition": 75,
+      "introspection": 40,
+      "temper": 40,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Wilfred Smith",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He taught me everything I know and he will not hear of the stone trade."
+      },
+      {
+        "name": "Hilda Smith",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She mends what I break and does not scold overmuch."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 75,
+        "affinity": 75,
+        "label": "friend",
+        "note": "We both want more than a wall or a barn, and we talk of going to Kettlebridge."
+      },
+      {
+        "name": "Reginald Hobson",
+        "trust": 55,
+        "affinity": 50,
+        "label": "master mason",
+        "note": "He knows stonework, and he curses the Kettlebridge price; I would rather learn than curse."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 40,
+        "affinity": 45,
+        "label": "carter",
+        "note": "He has been to Kettlebridge and back a hundred times; I have thought of asking him to carry a word for me."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 30,
+        "affinity": 35,
+        "label": "quarryman",
+        "note": "A Kettlebridge quarryman; they say he cut the cairn, but he knows the stone."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 50,
+        "affinity": 45,
+        "label": "guild head",
+        "note": "She pays for good work and she wants trade with Kettlebridge; that is where I would go."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father and I raised the frame of the Guild's barn in a day, and I looked at it and thought it would be gone in fifty years while a stone barn would stand.",
+        "salience": 0.6,
+        "about": [
+          "Wilfred Smith",
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "I watched the Kettlebridge masons unload dressed stone at the square and lay it true, and I stayed until they were done.",
+        "salience": 0.7,
+        "about": [
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "Stephen Hobson and I sat up late with a pot of ale and swore we would learn stonework, and the next morning I went back to the adze.",
+        "salience": 0.6,
+        "about": [
+          "Stephen Hobson"
+        ]
+      },
+      {
+        "gist": "I cut my hand to the bone and my mother sewed it, and I told her a builder needs his hands and she laughed.",
+        "salience": 0.5,
+        "about": [
+          "Hilda Smith"
+        ]
+      },
+      {
+        "gist": "My father came home from the chapel roof cursing the stone price, and I said nothing, because I would have paid it to learn.",
+        "salience": 0.5,
+        "about": [
+          "Wilfred Smith"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "stone_is_the_trade_worth_learning",
+        "value": 0.8,
+        "why": "Timber rots and stone stands, and the masons who lay it will always have work."
+      },
+      {
+        "key": "learn_from_anyone_who_knows",
+        "value": 0.75,
+        "why": "My father would keep me from Kettlebridge, but a trade is a trade."
+      },
+      {
+        "key": "a_name_is_built_with_the_hands",
+        "value": 0.7,
+        "why": "I want to be known for what I build, not for whose son I am."
+      },
+      {
+        "key": "friends_go_together",
+        "value": 0.65,
+        "why": "Stephen and I have talked of it long enough; a man should not go alone."
+      },
+      {
+        "key": "keep_the_peace_at_home",
+        "value": 0.55,
+        "why": "My father's temper is short on the stone question, and I have to live under his roof."
+      }
+    ],
+    "secret": ""
+  }
+}

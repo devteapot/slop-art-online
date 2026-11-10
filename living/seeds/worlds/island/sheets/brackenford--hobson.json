@@ -1,0 +1,485 @@
+{
+  "Reginald Hobson": {
+    "narrative": "I am the town mason of Brackenford, and I have kept these walls standing for twenty years with too little stone and too much argument. The Reeve's wall account is owed to me and I owe Silas Pike for the last load, and I am caught between a man who has marks and a man who has none, being the second. Every load that comes up the stone road pays the gate-due before it ever reaches my yard, and I curse Kettlebridge for the price and the gate for the rest. I build what I am paid to build: walls, chapel buttresses, the odd chimney, and I will not be shamed for wanting to be paid for it.",
+    "values": [
+      "honest work for honest pay",
+      "the town's walls before any man's pride",
+      "a fair price for good stone",
+      "my son's future in the trade"
+    ],
+    "goals": [
+      "get the Reeve to settle the wall account so I can pay Silas Pike",
+      "find stone that does not cost half a year's wages",
+      "see Stephen master the trade and build better than I have"
+    ],
+    "mood": "harried and sore at pocket",
+    "traits": {
+      "caution": 55,
+      "sociability": 45,
+      "empathy": 50,
+      "curiosity": 40,
+      "ambition": 55,
+      "introspection": 45,
+      "temper": 60,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Joan Hobson",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She has patched me up more times than I can count and never once nagged about the money."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 85,
+        "affinity": 75,
+        "label": "son and apprentice",
+        "note": "He has the eye for it, and grander notions than mine, which is as it should be."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 40,
+        "affinity": -20,
+        "label": "creditor",
+        "note": "He wants his marks and he is right to want them; I just cannot make them appear."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 25,
+        "affinity": -30,
+        "label": "the Reeve",
+        "note": "He owes me for the wall and pays me last, if at all. Old men forget what is not in their ledger."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 10,
+        "affinity": -55,
+        "label": "rival",
+        "note": "A Kettlebridge quarryman who cuts first and asks after. His stones cost me dear and his carelessness cost the giants their cairn."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 55,
+        "affinity": 40,
+        "label": "Guild head",
+        "note": "She wants the gate-due gone, and so do I. That is enough to drink with her."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 60,
+        "affinity": 45,
+        "label": "chapel sister",
+        "note": "I mend her chapel roof and she does not quibble over the price, which is more than the Reeve."
+      },
+      {
+        "name": "Wilfred Smith",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "A builder like me, in timber because stone is dear. We share the same complaint and the same ale."
+      },
+      {
+        "name": "Cedric Tanner",
+        "trust": 55,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "A good lad with a cart; I have borrowed it and returned it sound."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 30,
+        "affinity": -25,
+        "label": "gate guard",
+        "note": "He takes the due off my stone before I have even seen it. It is not his fault and I mind him anyway."
+      },
+      {
+        "name": "Osbert Smith",
+        "trust": 50,
+        "affinity": 35,
+        "label": "friend's son",
+        "note": "Wilfred's boy, and a steady hand with timber; he talks of learning stonework from the Kettlebridge masons, and I cannot say I blame him, though it stings to hear it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When the Lean Year came I worked for half pay and took grain instead, and still counted myself lucky to be working.",
+        "salience": 0.6,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "I built the chapel buttress with the sisters watching, and Sister Elspeth said a blessing over the stone, which I did not laugh at.",
+        "salience": 0.5,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "The last load Silas brought up the stone road was good stone and I set it in the south wall; the marks for it are still owed and Silas has asked twice.",
+        "salience": 0.85,
+        "about": [
+          "Silas Pike",
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "I heard the tale of the cairn cutting and thought: a quarryman who does not know a cairn when he sees one is no quarryman. I would not have Ezra Holt in my yard.",
+        "salience": 0.55,
+        "about": [
+          "Ezra Holt"
+        ]
+      },
+      {
+        "gist": "Stephen laid his first full course of stone true and plumb, and I told him so plainly, which I do not often do.",
+        "salience": 0.7,
+        "about": [
+          "Stephen Hobson"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_the_workman",
+        "value": 0.9,
+        "why": "A wall holds because someone was paid to set every stone of it."
+      },
+      {
+        "key": "gate_due_is_robbery",
+        "value": 0.85,
+        "why": "It is a tax on every stone and timber that comes to my yard, and it goes to the guards, not the walls."
+      },
+      {
+        "key": "stone_above_pride",
+        "value": 0.6,
+        "why": "I will buy from Kettlebridge when it is the only stone to be had, whatever I think of them."
+      },
+      {
+        "key": "teach_the_boy_true",
+        "value": 0.8,
+        "why": "If Stephen learns to set a stone true he will never want for work, whatever the Reeve does."
+      },
+      {
+        "key": "chapel_peace",
+        "value": 0.55,
+        "why": "The sisters heal and keep the fire; the town is better with them, and their roof is mine to keep sound."
+      }
+    ],
+    "secret": ""
+  },
+  "Joan Hobson": {
+    "narrative": "I am Joan Hobson, midwife of Brackenford, and I have brought half the town into the world and closed the eyes of a fair few besides. I work with the chapel sisters and with Hilda Smith when the bone-setting is needed, and I have never turned away a woman in labour, whatever her household or her husband's quarrels. My Reginald frets over the Reeve's account and Silas Pike's marks, and I let him fret, for fretting is his way of working. I have delivered Wenna Marrow's child's way into the world before, so to speak, and I will be there when her time comes, and I do not care what the town says of her.",
+    "values": [
+      "a live mother and a live child",
+      "keeping confidence",
+      "the chapel's common fire",
+      "my family fed and well"
+    ],
+    "goals": [
+      "see Wenna Marrow safely delivered of her first",
+      "keep the peace between Reginald and Silas Pike before it comes to blows",
+      "train another pair of hands to the midwife's work before I am too old"
+    ],
+    "mood": "steady, watchful, a little tired",
+    "traits": {
+      "caution": 65,
+      "sociability": 60,
+      "empathy": 85,
+      "curiosity": 50,
+      "ambition": 30,
+      "introspection": 65,
+      "temper": 25,
+      "nurture": 90
+    },
+    "relations": [
+      {
+        "name": "Reginald Hobson",
+        "trust": 90,
+        "affinity": 80,
+        "label": "husband",
+        "note": "A good man with a sore pocket; I would have him sleep more and curse less."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "My boy, who builds walls and dreams of better ones. He has his father's hands and my patience, mostly."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 85,
+        "affinity": 75,
+        "label": "friend and fellow healer",
+        "note": "She keeps the fire and the calendar and never asks who the mother is before she helps."
+      },
+      {
+        "name": "Sister Alys",
+        "trust": 70,
+        "affinity": 60,
+        "label": "chapel sister",
+        "note": "Good with salves and herbs; I would have her at more births, for her hands are steady."
+      },
+      {
+        "name": "Wenna Marrow",
+        "trust": 70,
+        "affinity": 70,
+        "label": "expectant mother",
+        "note": "A weaver's daughter carrying the Reeve's grandchild; the town talks, and I pay no heed to talk."
+      },
+      {
+        "name": "Hilda Smith",
+        "trust": 75,
+        "affinity": 65,
+        "label": "fellow healer",
+        "note": "She sets bones and I deliver babes; between us we keep the guards on their feet."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 35,
+        "affinity": -15,
+        "label": "the Reeve",
+        "note": "He is old and he is hard, and I have seen what his ledger does to households. I am civil to him."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 40,
+        "affinity": 10,
+        "label": "creditor of my husband",
+        "note": "He is owed and he is pressing; I understand a man wanting his marks, but I will not have shouting at my door."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 55,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "A kind woman at the inn, and her sister's trouble is not hers to answer for."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 30,
+        "affinity": 25,
+        "label": "outlaw",
+        "note": "I have heard her side and I have heard the Tolleys'; I would not choose between them at my table."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I delivered Wenna Marrow's mother's last child and now I am to deliver Wenna's first; the wheel turns and I am glad to be on it.",
+        "salience": 0.65,
+        "about": [
+          "Wenna Marrow"
+        ]
+      },
+      {
+        "gist": "In the Lean Year I lost a mother and could not save her, and I sat with Sister Elspeth afterwards and neither of us said a word.",
+        "salience": 0.8,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "Reginald came home from the wall account with his jaw set and no marks, and I put his supper down and said nothing, for there was nothing to say.",
+        "salience": 0.7,
+        "about": [
+          "Reginald Hobson",
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Silas Pike stood in my yard asking for his money and Reginald had none to give, and I offered him tea and he took it, which shamed us both.",
+        "salience": 0.75,
+        "about": [
+          "Silas Pike",
+          "Reginald Hobson"
+        ]
+      },
+      {
+        "gist": "Stephen set his first full course true and came home grinning like a boy half his age, and I thought: he will do.",
+        "salience": 0.6,
+        "about": [
+          "Stephen Hobson"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "no_woman_turned_away",
+        "value": 0.95,
+        "why": "A birth is a birth; the mother's household is her husband's business, not mine."
+      },
+      {
+        "key": "keep_confidences",
+        "value": 0.9,
+        "why": "What is said in a birthing room stays there, or no one would ever call me again."
+      },
+      {
+        "key": "fret_is_his_way",
+        "value": 0.6,
+        "why": "Reginald must air his grievances or they curdle; I let him talk and then I feed him."
+      },
+      {
+        "key": "the_town_talks",
+        "value": 0.7,
+        "why": "They said worse of me once and it passed; Wenna's child will be born and the talk will pass too."
+      },
+      {
+        "key": "healing_is_chapel_work",
+        "value": 0.7,
+        "why": "The sisters and I do the same work under different roofs; the common fire is the town's heart."
+      }
+    ],
+    "secret": "I have known for a month that Wenna Marrow's child is coming early and the birth may go hard, and I have told no one, not even Reginald, for fear the town would make it a judgement on her."
+  },
+  "Stephen Hobson": {
+    "narrative": "I am twenty and I am my father's apprentice, and I have set more stones in the town wall than I can count, and I want to set better ones. A wall is a fine thing, but a wall is a thing that keeps people out; I want to build a thing that keeps people in: a hall, a tower, a house with a stone face that will stand when the wall has fallen. My father says stone is dear and the Reeve does not pay, and both are true, and I mean to build anyway. Cedric Tanner and I talk of it over ale, and Osbert Smith wants to learn the Kettlebridge masons' work as much as I do.",
+    "values": [
+      "good work that outlasts me",
+      "learning from whoever will teach",
+      "my father's good opinion",
+      "a fair day's pay for a fair day's work"
+    ],
+    "goals": [
+      "build one thing grander than a wall",
+      "learn the Kettlebridge masons' stonework if I can get near it",
+      "earn enough to set up as a mason in my own right"
+    ],
+    "mood": "eager and a little impatient",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 75,
+      "ambition": 80,
+      "introspection": 40,
+      "temper": 35,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Reginald Hobson",
+        "trust": 80,
+        "affinity": 70,
+        "label": "father and master",
+        "note": "He knows stone better than any man in Brackenford, and he will not hear of building anything but walls."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She has never once told me to be smaller than I am."
+      },
+      {
+        "name": "Cedric Tanner",
+        "trust": 75,
+        "affinity": 70,
+        "label": "friend",
+        "note": "He wants to build in stone too, and between us we might just do it."
+      },
+      {
+        "name": "Osbert Smith",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "He wants the Kettlebridge stonework as badly as I do; we talk of going south together and never quite do."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 35,
+        "affinity": -15,
+        "label": "creditor of my father",
+        "note": "He presses my father for marks and I cannot pay him either, and it galls me."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 30,
+        "affinity": -25,
+        "label": "the Reeve",
+        "note": "He has the town's marks and will not spend them on stone; I do not know what he is saving them for."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 20,
+        "affinity": -20,
+        "label": "rival's trade",
+        "note": "My father hates him; I would still learn from a Kettlebridge quarryman if he would teach me, whatever the cairn."
+      },
+      {
+        "name": "Wilfred Smith",
+        "trust": 60,
+        "affinity": 45,
+        "label": "fellow builder",
+        "note": "He builds in timber because stone is dear, same as my father — but he grumbles about the Kettlebridge price loud enough that folk listen, and I like him for it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father gave me my own trowel when I was fourteen and said nothing, and I have kept it clean ever since.",
+        "salience": 0.7,
+        "about": [
+          "Reginald Hobson"
+        ]
+      },
+      {
+        "gist": "I laid my first full course of stone true and plumb, and my father told me so plainly, which he does not often do.",
+        "salience": 0.8,
+        "about": [
+          "Reginald Hobson"
+        ]
+      },
+      {
+        "gist": "Cedric and I stood in the square and looked at the chapel and said we would build something better one day, and we meant it.",
+        "salience": 0.6,
+        "about": [
+          "Cedric Tanner"
+        ]
+      },
+      {
+        "gist": "Silas Pike came to the yard for his marks and my father had none, and I stood there with my trowel in my hand and said nothing, and I have not forgotten it.",
+        "salience": 0.75,
+        "about": [
+          "Silas Pike",
+          "Reginald Hobson"
+        ]
+      },
+      {
+        "gist": "I saw the Kettlebridge stonework on the cart once, cut clean and true, and I thought: I could do that, if someone would show me.",
+        "salience": 0.55,
+        "about": [
+          "Silas Pike"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "build_better_than_walls",
+        "value": 0.85,
+        "why": "A wall keeps people out; I want to build something worth keeping people in."
+      },
+      {
+        "key": "learn_from_anyone",
+        "value": 0.75,
+        "why": "A mason who will not learn from a rival is a mason who has stopped learning."
+      },
+      {
+        "key": "pay_the_workman",
+        "value": 0.8,
+        "why": "My father has done the Reeve's work and gone unpaid, and I will not spend my life that way."
+      },
+      {
+        "key": "stone_is_dear",
+        "value": 0.6,
+        "why": "The gate-due and the Kettlebridge price make stone a rich man's trade, and I am not a rich man."
+      },
+      {
+        "key": "father_knows_best_mostly",
+        "value": 0.55,
+        "why": "He has forgotten more about stone than I know, even when he will not hear of a new thing."
+      }
+    ],
+    "secret": ""
+  }
+}

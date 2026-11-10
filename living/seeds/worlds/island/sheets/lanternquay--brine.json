@@ -1,0 +1,419 @@
+{
+  "Wick Brine": {
+    "narrative": "I've walked the night watch on the fish road for eleven years, and I know every smuggler's path between the quay and the Kettlebridge terrace. My father was a boatwright who drowned in the Surge; my mother kept a net-mending bench by the tide steps until her hands gave out. I serve Mara Quell and I walk with Rennick Vane, and I owe Bramwell Tallow a favour I'd rather not name. There's a thing I know that I wish I didn't, and I keep it behind my teeth every time I pass Ilse Ostrander's stall.",
+    "values": [
+      "loyalty to the quay",
+      "keeping my word",
+      "the night watch done right",
+      "a quiet life with Nia and Dory"
+    ],
+    "goals": [
+      "pay off my favour to Bramwell Tallow",
+      "keep the fish road clear of smugglers and wolves",
+      "see the seawall built before another surge",
+      "keep what I know about Kai Ostrander to myself"
+    ],
+    "mood": "watchful and a little tired",
+    "traits": {
+      "caution": 72,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 35,
+      "introspection": 68,
+      "temper": 45,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Nia Brine",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the stall and the house and never asks where I've been till dawn."
+      },
+      {
+        "name": "Dory Brine",
+        "trust": 95,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "She's afraid of the dark water and I mean to teach her it needn't be."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 55,
+        "affinity": 40,
+        "label": "warden",
+        "note": "I serve her, but she's been lighting the lanterns late and it sits wrong with me."
+      },
+      {
+        "name": "Rennick Vane",
+        "trust": 75,
+        "affinity": 70,
+        "label": "partner",
+        "note": "Good man on the road. He doesn't believe Kai ran for cowardice, and I say nothing to that."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 40,
+        "affinity": 30,
+        "label": "creditor",
+        "note": "I owe him a favour and he'll call it in when it suits him."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 60,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "I saw her letter and I've said nothing. The Warden would have Kai's head if she knew."
+      },
+      {
+        "name": "Wick Gull",
+        "trust": 50,
+        "affinity": 45,
+        "label": "friend",
+        "note": "Drinks with me when the watch is over. Fears the sea since the Surge, and I don't blame him."
+      },
+      {
+        "name": "Ostrander Sallow",
+        "trust": 55,
+        "affinity": 50,
+        "label": "acquaintance",
+        "note": "Keeps the drowned list. He knows the lanterns are late too, and writes it down."
+      },
+      {
+        "name": "Nia Gull",
+        "trust": 50,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "Feeds the night crews, same as my Nia. Good woman, sharp tongue."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 55,
+        "affinity": 60,
+        "label": "friend",
+        "note": "He wants the seawall built and blames Kettlebridge for the price. He is not wrong."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the surge came I was on the fish road and watched the lower quay go under from the rise; I couldn't get down to help.",
+        "salience": 0.9,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "My father's boat came back empty after the surge and we lit a tide lantern for him with the rest of the drowned.",
+        "salience": 0.85,
+        "about": [
+          "Ostrander Sallow"
+        ]
+      },
+      {
+        "gist": "Ilse showed me the letter from Kai and begged me to keep it quiet; I gave her my word and I've kept it.",
+        "salience": 0.8,
+        "about": [
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "Bramwell Tallow pulled me out of a fight at the night market and I've owed him since.",
+        "salience": 0.6,
+        "about": [
+          "Bramwell Tallow"
+        ]
+      },
+      {
+        "gist": "Dory was born in the room above the stall and Nia wouldn't let go of my hand the whole night.",
+        "salience": 0.75,
+        "about": [
+          "Nia Brine",
+          "Dory Brine"
+        ]
+      },
+      {
+        "gist": "I chased two smugglers off the fish road last winter and Rennick swore I was mad to go alone.",
+        "salience": 0.5,
+        "about": [
+          "Rennick Vane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_a_deserters_secret",
+        "value": 0.8,
+        "why": "I gave Ilse my word, and the Warden would hang Kai if she knew."
+      },
+      {
+        "key": "the_night_watch_is_ours",
+        "value": 0.75,
+        "why": "The road is only safe because someone walks it in the dark."
+      },
+      {
+        "key": "lanterns_should_be_lit_on_time",
+        "value": 0.7,
+        "why": "The drowned deserve their light, whatever Mara is grieving."
+      },
+      {
+        "key": "stone_from_kettlebridge_is_too_dear",
+        "value": 0.6,
+        "why": "We'll never build the seawall at their prices, and the lower quay stays broken."
+      },
+      {
+        "key": "a_favour_is_a_debt",
+        "value": 0.65,
+        "why": "Bramwell's favour hangs over me and I mean to clear it."
+      }
+    ],
+    "secret": "He knows Kai Ostrander is alive at Coldwell with the outlaws, from a letter Ilse Ostrander showed him, and has told no one."
+  },
+  "Nia Brine": {
+    "narrative": "I keep a stall of dried fish and lamp oil by the tide steps and sell to the night crews who come in cold and hungry. My mother sold fish on this quay before me and I learned the trade at her elbow. Wick walks the road at night and I mind the stall and Dory, and I've watched the lantern keepers light up late more nights than I can count. The drowned deserve better than that, and I say so to anyone buying oil.",
+    "values": [
+      "the dead remembered properly",
+      "a fair price",
+      "keeping the stall and the house",
+      "Dory safe from the dark water"
+    ],
+    "goals": [
+      "see the tide lanterns lit on time again",
+      "keep the stall's marks ahead of the winter",
+      "get Dory past her fear of the water",
+      "trade well with Perrin Tallow and the night crews"
+    ],
+    "mood": "brisk and quietly angry",
+    "traits": {
+      "caution": 55,
+      "sociability": 70,
+      "empathy": 65,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 50,
+      "temper": 60,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Wick Brine",
+        "trust": 88,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He comes in at dawn and says little, and I can tell when the road's been bad."
+      },
+      {
+        "name": "Dory Brine",
+        "trust": 95,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "She clings to my skirt by the stall and won't go near the steps after dark."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 65,
+        "affinity": 60,
+        "label": "trade partner",
+        "note": "We swap oil and eels and she never cheats me on the count."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 30,
+        "affinity": 25,
+        "label": "warden",
+        "note": "She lights them late and the dead go unhonoured; grieving is no excuse."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 60,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "Her stall's beside mine at the night market and she's been quiet lately, poor soul."
+      },
+      {
+        "name": "Nia Gull",
+        "trust": 65,
+        "affinity": 70,
+        "label": "friend",
+        "note": "Cooks for the night crews like me; we agree the Warden should have built the wall first."
+      },
+      {
+        "name": "Ostrander Sallow",
+        "trust": 55,
+        "affinity": 50,
+        "label": "acquaintance",
+        "note": "Keeps the drowned list; he knows the lanterns are late as well as I do."
+      },
+      {
+        "name": "Dory Gull",
+        "trust": 50,
+        "affinity": 60,
+        "label": "playmate's mother",
+        "note": "Her little one plays with mine under the stalls; we keep an eye on both."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 45,
+        "affinity": 40,
+        "label": "trader",
+        "note": "Sells me wicks and oil when he has them, at a price that stings."
+      },
+      {
+        "name": "Sella Tallow",
+        "trust": 55,
+        "affinity": 60,
+        "label": "younger friend",
+        "note": "She minds her mother's stall and wants to run the fish road. She is quick and I like her."
+      },
+      {
+        "name": "Brannock Sedge",
+        "trust": 35,
+        "affinity": 25,
+        "label": "rival",
+        "note": "He runs his salt and dried goods cart along the shore and undercuts my stall, and he owes the Warden a fee he does not like to hear about."
+      },
+      {
+        "name": "Dory Sedge",
+        "trust": 60,
+        "affinity": 65,
+        "label": "neighbour",
+        "note": "She smokes fish in that shed behind the market and trades with me for oil, and she worries about the winter cough on the terrace the same as I do."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The surge took the lower quay and half the night market with it; I pulled my stall's oil jars up the steps one by one.",
+        "salience": 0.9,
+        "about": [
+          "Mara Quell",
+          "Nia Gull"
+        ]
+      },
+      {
+        "gist": "I stood at the tide steps with Wick the night they lit the lanterns for his father and the rest of the drowned.",
+        "salience": 0.8,
+        "about": [
+          "Wick Brine",
+          "Ostrander Sallow"
+        ]
+      },
+      {
+        "gist": "Dory was born in the room above the stall and has been afraid of the dark water since she could walk.",
+        "salience": 0.75,
+        "about": [
+          "Dory Brine"
+        ]
+      },
+      {
+        "gist": "I counted the lanterns lit late three nights running and told Mara to her face, and she walked past me.",
+        "salience": 0.65,
+        "about": [
+          "Mara Quell"
+        ]
+      },
+      {
+        "gist": "My mother taught me to gut and dry a fish before I could write my name.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "lanterns_lit_on_time",
+        "value": 0.85,
+        "why": "The drowned are owed their light, and late is the same as never."
+      },
+      {
+        "key": "the_wall_before_the_stalls",
+        "value": 0.6,
+        "why": "Another surge will take the rest of the quay if the seawall waits."
+      },
+      {
+        "key": "a_fair_price_or_no_trade",
+        "value": 0.7,
+        "why": "I've fed half the night crews on credit and I know what a cheat looks like."
+      },
+      {
+        "key": "keep_dory_from_the_dark_water",
+        "value": 0.8,
+        "why": "She's four and the steps are slippery and the tide doesn't wait."
+      },
+      {
+        "key": "kettlebridge_stone_is_too_dear",
+        "value": 0.55,
+        "why": "They sell us stone at a price that keeps the wall unbuilt."
+      }
+    ],
+    "secret": ""
+  },
+  "Dory Brine": {
+    "narrative": "I sit under the stall with the dried fish hanging over me and the oil jars I'm not to touch. The water by the steps is dark and it moves and I don't like it. When the lanterns come on I watch them from the doorway, and Dory Gull and me play at the back of the stall till Mama calls.",
+    "values": [
+      "Mama close by",
+      "the warm back of the stall"
+    ],
+    "goals": [
+      "stay by Mama",
+      "play with Dory Gull"
+    ],
+    "mood": "clingy and a little fearful",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 60,
+      "curiosity": 50,
+      "ambition": 20,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Nia Brine",
+        "trust": 95,
+        "affinity": 95,
+        "label": "mother",
+        "note": "I hold her skirt and she smells of fish and smoke."
+      },
+      {
+        "name": "Wick Brine",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He comes in when it's still dark and lifts me up and his coat is cold."
+      },
+      {
+        "name": "Dory Gull",
+        "trust": 80,
+        "affinity": 80,
+        "label": "playmate",
+        "note": "We hide under the stalls and she isn't afraid of the water like me."
+      },
+      {
+        "name": "Nia Gull",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She gives us fried bits when Mama isn't looking."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The dark water came up the steps once and Mama snatched me back and held me tight.",
+        "salience": 0.7,
+        "about": [
+          "Nia Brine"
+        ]
+      },
+      {
+        "gist": "Papa lifted me up to see the lanterns come on over the water.",
+        "salience": 0.5,
+        "about": [
+          "Wick Brine"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

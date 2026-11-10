@@ -1,0 +1,1127 @@
+{
+ "households": [
+  {
+   "key": "quell",
+   "members": [
+    {
+     "name": "Mara Quell",
+     "age": 52,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "Harbour Warden; lost her brother in the Surge; wants stone for a seawall",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "blames Josiah Crane for the price of stone",
+      "old friend of Dele Oyelaran",
+      "sends Juno Reyes up the fish road"
+     ]
+    },
+    {
+     "name": "Wick Quell",
+     "age": 24,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "Mara's son; fishes the harbour mouth and repairs the boat his uncle drowned from",
+     "knows": [
+      "fishing",
+      "fire",
+      "mending",
+      "shelter"
+     ],
+     "parents": [
+      "Mara Quell"
+     ],
+     "ties": [
+      "son of Mara Quell",
+      "fishes with Tamsin Vane",
+      "resents the Kettlebridge stone price",
+      "SECRET: has been counting the marks in his mother's strongbox"
+     ]
+    },
+    {
+     "name": "Dory Quell",
+     "age": 9,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Mara's late brother's daughter, raised in the Warden's house; knows every gull on the quay by name",
+     "knows": [
+      "fishing"
+     ],
+     "parents": [
+      "Rennick Quell",
+      "Sella Quell"
+     ],
+     "ties": [
+      "niece of Mara Quell",
+      "plays with Wick Quell",
+      "afraid of the tide lanterns"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "reyes",
+   "members": [
+    {
+     "name": "Juno Reyes",
+     "age": 29,
+     "sex": "f",
+     "occupation": "fish runner",
+     "role": "runner on the fish road: carries cooked fish to Kettlebridge's market and stone back for the seawall",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "runs for Mara Quell",
+      "buys stone from Hester Crane",
+      "childhood friend of Kai Ostrander, who deserted"
+     ]
+    },
+    {
+     "name": "Tamsin Vane",
+     "age": 26,
+     "sex": "f",
+     "occupation": "fisher",
+     "role": "Juno's sister; fishes the dawn tide and smokes the catch for the stalls",
+     "knows": [
+      "fishing",
+      "smoking",
+      "fire",
+      "mending",
+      "cooking"
+     ],
+     "parents": [
+      "Osric Reyes",
+      "Nia Reyes"
+     ],
+     "ties": [
+      "sister of Juno Reyes",
+      "fishes with Wick Quell",
+      "wife of Ostrander Vane",
+      "smokes fish for Ilse Ostrander's stall"
+     ]
+    },
+    {
+     "name": "Ostrander Vane",
+     "age": 31,
+     "sex": "m",
+     "occupation": "builder",
+     "role": "Tamsin's husband; a quay builder who has patched the lower quay with salvage and wants proper stone",
+     "knows": [
+      "masonry",
+      "carpentry",
+      "fire",
+      "shelter",
+      "toolmaking"
+     ],
+     "parents": [
+      "Vane the elder",
+      "Maren Vane"
+     ],
+     "ties": [
+      "husband of Tamsin Vane",
+      "works for Mara Quell's seawall plan",
+      "blames Kettlebridge for the stone price",
+      "drinks with Dele Oyelaran when he is down from Kettlebridge"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "ostrander",
+   "members": [
+    {
+     "name": "Ilse Ostrander",
+     "age": 58,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "keeps a noodle stall on the quay; her son Kai deserted the quay guard last year",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "mother of Kai Ostrander",
+      "SECRET: Kai sent word he is alive at Coldwell; she has told no one"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "vane",
+   "members": [
+    {
+     "name": "Maren Vane",
+     "age": 55,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "keeps a healer's room behind the fish market; sets bones and treats the coughs of the quay",
+     "knows": [
+      "medicine",
+      "fire",
+      "mending",
+      "cooking"
+     ],
+     "parents": [
+      "Old Vane",
+      "Greta Vane"
+     ],
+     "ties": [
+      "mother of Ostrander Vane",
+      "buys salves from a Tanglewood woman",
+      "tends Ilse Ostrander's knees",
+      "disapproves of the lower quay being rebuilt before the wall"
+     ]
+    },
+    {
+     "name": "Rennick Vane",
+     "age": 30,
+     "sex": "m",
+     "occupation": "guard",
+     "role": "quay guard; walks the fish road with the runners and keeps the peace at the stalls",
+     "knows": [
+      "spear",
+      "fire",
+      "shelter",
+      "mending"
+     ],
+     "parents": [
+      "Maren Vane"
+     ],
+     "ties": [
+      "son of Maren Vane",
+      "brother of Ostrander Vane",
+      "guards Juno Reyes on the road",
+      "does not believe Kai Ostrander deserted for cowardice"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "tallow",
+   "members": [
+    {
+     "name": "Bramwell Tallow",
+     "age": 46,
+     "sex": "m",
+     "occupation": "trader",
+     "role": "runs a stall of rope, tar and boat nails on the quay; buys from Kettlebridge and sells to every fisher",
+     "knows": [
+      "cooking",
+      "fire",
+      "mending",
+      "storage",
+      "toolmaking"
+     ],
+     "parents": [
+      "Tallow the elder",
+      "Nell Tallow"
+     ],
+     "ties": [
+      "husband of Perrin Tallow",
+      "owes Josiah Crane for a load of iron nails",
+      "trades with Silas Pike when the carters come",
+      "thinks the gate-due is robbery"
+     ]
+    },
+    {
+     "name": "Perrin Tallow",
+     "age": 43,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Bramwell's wife; keeps a pie and eel stall beside his, and knows the price of everything on the quay",
+     "knows": [
+      "cooking",
+      "smoking",
+      "fire",
+      "storage"
+     ],
+     "parents": [
+      "Perrin the elder",
+      "Sella Tallow"
+     ],
+     "ties": [
+      "wife of Bramwell Tallow",
+      "mother of Sella Tallow",
+      "trades with Ilse Ostrander",
+      "keeps the stall's marks in her apron"
+     ]
+    },
+    {
+     "name": "Sella Tallow",
+     "age": 15,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Bramwell and Perrin's daughter; minds the stall when her mother is cooking and wants to run the fish road",
+     "knows": [
+      "cooking",
+      "mending"
+     ],
+     "parents": [
+      "Bramwell Tallow",
+      "Perrin Tallow"
+     ],
+     "ties": [
+      "daughter of Perrin Tallow",
+      "helps at the stall",
+      "admires Juno Reyes"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "cormorant",
+   "members": [
+    {
+     "name": "Ostrander Cormorant",
+     "age": 49,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "a boat owner who fishes the deep water beyond the harbour; a quiet man with a good boat and a bad temper",
+     "knows": [
+      "fishing",
+      "smoking",
+      "fire",
+      "shelter",
+      "mending"
+     ],
+     "parents": [
+      "Cormorant the elder",
+      "Mira Cormorant"
+     ],
+     "ties": [
+      "husband of Tamsin Cormorant",
+      "father of Wick Cormorant",
+      "rival of Wick Quell over the harbour mouth",
+      "sells his catch to Perrin Tallow"
+     ]
+    },
+    {
+     "name": "Tamsin Cormorant",
+     "age": 45,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "Ostrander's wife; sells fresh fish at the morning stalls and keeps the household's marks",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage",
+      "mending"
+     ],
+     "parents": [
+      "Tamsin the elder",
+      "Ostrander the elder"
+     ],
+     "ties": [
+      "wife of Ostrander Cormorant",
+      "mother of Wick Cormorant",
+      "trades with Ilse Ostrander",
+      "resents the Kettlebridge stone price"
+     ]
+    },
+    {
+     "name": "Wick Cormorant",
+     "age": 16,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "Ostrander and Tamsin's son; fishes with his father and wants a boat of his own",
+     "knows": [
+      "fishing",
+      "mending",
+      "fire"
+     ],
+     "parents": [
+      "Ostrander Cormorant",
+      "Tamsin Cormorant"
+     ],
+     "ties": [
+      "son of Ostrander Cormorant",
+      "fishes with his father",
+      "friendly with Sella Tallow"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "gull",
+   "members": [
+    {
+     "name": "Wick Gull",
+     "age": 38,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "fishes the harbour from a small boat; a loud man who knows every tide and every debt on the quay",
+     "knows": [
+      "fishing",
+      "fire",
+      "smoking",
+      "shelter"
+     ],
+     "parents": [
+      "Gull the elder",
+      "Mira Gull"
+     ],
+     "ties": [
+      "husband of Nia Gull",
+      "owes Bramwell Tallow for rope",
+      "drinks with Ostrander Vane",
+      "fears the sea since the Surge"
+     ]
+    },
+    {
+     "name": "Nia Gull",
+     "age": 36,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Wick's wife; cooks at a stall on the quay and feeds the night crews",
+     "knows": [
+      "cooking",
+      "fire",
+      "smoking",
+      "storage"
+     ],
+     "parents": [
+      "Nia the elder",
+      "Ostrander Gull"
+     ],
+     "ties": [
+      "wife of Wick Gull",
+      "mother of Dory Gull",
+      "works beside Ilse Ostrander",
+      "thinks the Warden should have rebuilt the lower quay first"
+     ]
+    },
+    {
+     "name": "Dory Gull",
+     "age": 6,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Wick and Nia's daughter; plays under the stalls and is afraid of the dark water",
+     "knows": [],
+     "parents": [
+      "Wick Gull",
+      "Nia Gull"
+     ],
+     "ties": [
+      "daughter of Nia Gull",
+      "plays with Dory Quell"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "sallow",
+   "members": [
+    {
+     "name": "Ostrander Sallow",
+     "age": 61,
+     "sex": "m",
+     "occupation": "scribe",
+     "role": "keeps the quay's letters and accounts; writes the tide lantern list and the Warden's correspondence",
+     "knows": [
+      "writing",
+      "fire",
+      "storage",
+      "mending"
+     ],
+     "parents": [
+      "Sallow the elder",
+      "Perrin Sallow"
+     ],
+     "ties": [
+      "writes for Mara Quell",
+      "corresponds with Barnaby Quill in Kettlebridge",
+      "lodges Juno Reyes when she is between roads",
+      "keeps the list of the drowned"
+     ]
+    },
+    {
+     "name": "Mira Sallow",
+     "age": 57,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "Ostrander's wife; keeps a room of herbs and salves and tends the stall-keepers' coughs",
+     "knows": [
+      "medicine",
+      "cooking",
+      "fire",
+      "mending"
+     ],
+     "parents": [
+      "Mira the elder",
+      "Sallow the elder"
+     ],
+     "ties": [
+      "wife of Ostrander Sallow",
+      "works with Maren Vane",
+      "trades herbs with a Tanglewood woman",
+      "worries about the winter cough on the poor terrace"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "brine",
+   "members": [
+    {
+     "name": "Wick Brine",
+     "age": 33,
+     "sex": "m",
+     "occupation": "guard",
+     "role": "quay guard; keeps the night watch on the fish road and knows the smugglers' paths",
+     "knows": [
+      "spear",
+      "fire",
+      "shelter",
+      "mending",
+      "trapping"
+     ],
+     "parents": [
+      "Brine the elder",
+      "Nia Brine"
+     ],
+     "ties": [
+      "serves under Mara Quell",
+      "walks the road with Rennick Vane",
+      "owes Bramwell Tallow a favour",
+      "SECRET: knows Kai Ostrander is alive and has kept quiet for Ilse's sake"
+     ]
+    },
+    {
+     "name": "Nia Brine",
+     "age": 30,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "Wick's wife; keeps a stall of dried fish and lamp oil and sells to the night crews",
+     "knows": [
+      "cooking",
+      "storage",
+      "fire",
+      "mending"
+     ],
+     "parents": [
+      "Nia the elder",
+      "Brine the elder"
+     ],
+     "ties": [
+      "wife of Wick Brine",
+      "trades with Perrin Tallow",
+      "mother of Dory Brine",
+      "thinks the tide lanterns are lit too late"
+     ]
+    },
+    {
+     "name": "Dory Brine",
+     "age": 4,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Wick and Nia's daughter; follows her mother round the stall and is afraid of the dark water",
+     "knows": [],
+     "parents": [
+      "Wick Brine",
+      "Nia Brine"
+     ],
+     "ties": [
+      "daughter of Nia Brine",
+      "plays with Dory Gull"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "mackerel",
+   "members": [
+    {
+     "name": "Ostrander Mackerel",
+     "age": 27,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "a young fisher who crews on Ostrander Cormorant's boat and wants to save for his own net",
+     "knows": [
+      "fishing",
+      "mending",
+      "fire",
+      "shelter"
+     ],
+     "parents": [
+      "Mackerel the elder",
+      "Sella Mackerel"
+     ],
+     "ties": [
+      "crews for Ostrander Cormorant",
+      "courts Sella Tallow",
+      "owes Ilse Ostrander for a winter's suppers",
+      "fears the Kettlebridge stone price will keep the wall unbuilt"
+     ]
+    },
+    {
+     "name": "Sella Mackerel",
+     "age": 24,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Ostrander's sister; cooks at the fish market and keeps a stall of fried fish and bread",
+     "knows": [
+      "cooking",
+      "fire",
+      "smoking",
+      "storage"
+     ],
+     "parents": [
+      "Mackerel the elder",
+      "Sella Mackerel"
+     ],
+     "ties": [
+      "sister of Ostrander Mackerel",
+      "works beside Nia Gull",
+      "trades with Bramwell Tallow",
+      "wants to rebuild her stall in stone"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "fenner-quay",
+   "members": [
+    {
+     "name": "Rook Fenner",
+     "age": 40,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "fishes the outer shoals from a tarred boat; a wiry man who came down from the north shore years ago and never went back",
+     "knows": [
+      "fishing",
+      "smoking",
+      "fire",
+      "shelter",
+      "mending"
+     ],
+     "parents": [
+      "Fenner the elder",
+      "Mira Fenner"
+     ],
+     "ties": [
+      "husband of Lyss Fenner",
+      "sells his catch to Perrin Tallow",
+      "owes Ostrander Cormorant for a share of a net",
+      "friendly with Wick Gull",
+      "keeps a north-shore accent the quay laughs at"
+     ]
+    },
+    {
+     "name": "Lyss Fenner",
+     "age": 37,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Rook's wife; keeps a soup and bread stall near the tide steps for the early boats",
+     "knows": [
+      "cooking",
+      "smoking",
+      "fire",
+      "storage"
+     ],
+     "parents": [
+      "Lyss the elder",
+      "Ostrander Fenner"
+     ],
+     "ties": [
+      "wife of Rook Fenner",
+      "mother of Rook Fenner the younger",
+      "trades with Nia Gull",
+      "buys lamp oil from Nia Brine"
+     ]
+    },
+    {
+     "name": "Rook Fenner the younger",
+     "age": 11,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Rook and Lyss's son; mends nets on the quay and is quick with a knot",
+     "knows": [
+      "mending",
+      "fishing"
+     ],
+     "parents": [
+      "Rook Fenner",
+      "Lyss Fenner"
+     ],
+     "ties": [
+      "son of Rook Fenner",
+      "plays with Wick Cormorant",
+      "wants to crew on Ostrander Cormorant's boat"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "harrow",
+   "members": [
+    {
+     "name": "Sable Harrow",
+     "age": 34,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "keeps a stall of lamp oil, wicks and salt at the night market; a sharp-eyed woman who trades with everyone and trusts no one",
+     "knows": [
+      "storage",
+      "mending",
+      "fire",
+      "cooking"
+     ],
+     "parents": [
+      "Harrow the elder",
+      "Nia Harrow"
+     ],
+     "ties": [
+      "widow of a drowned quay guard",
+      "trades with Nia Brine and Perrin Tallow",
+      "owes Bramwell Tallow for a barrel of tar",
+      "SECRET: buys smuggled stone off a Sootwood woodcutter to sell on the quay"
+     ]
+    },
+    {
+     "name": "Tam Harrow",
+     "age": 14,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Sable's son; carries loads for the stalls and listens to the night crews' talk",
+     "knows": [
+      "mending",
+      "storage"
+     ],
+     "parents": [
+      "Sable Harrow",
+      "Harrow the drowned"
+     ],
+     "ties": [
+      "son of Sable Harrow",
+      "runs errands for Bramwell Tallow",
+      "friendly with Sella Tallow"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "wrack",
+   "members": [
+    {
+     "name": "Marrow Wrack",
+     "age": 51,
+     "sex": "m",
+     "occupation": "builder",
+     "role": "a mason who came down from Kettlebridge after the Surge; builds in concrete and salvage and knows stonework better than most on the quay",
+     "knows": [
+      "masonry",
+      "carpentry",
+      "fire",
+      "shelter",
+      "toolmaking"
+     ],
+     "parents": [
+      "Wrack the elder",
+      "Odile Wrack"
+     ],
+     "ties": [
+      "works beside Ostrander Vane on the lower quay",
+      "left Kettlebridge after a quarrel with Gideon Fenwick",
+      "owes Josiah Crane for a load of brick",
+      "thinks the seawall should be built in stone from the ridge"
+     ]
+    },
+    {
+     "name": "Odile Wrack",
+     "age": 48,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "Marrow's wife; keeps a room of salves and sets the builders' bones after a fall",
+     "knows": [
+      "medicine",
+      "mending",
+      "fire",
+      "cooking"
+     ],
+     "parents": [
+      "Odile the elder",
+      "Wrack the elder"
+     ],
+     "ties": [
+      "wife of Marrow Wrack",
+      "works with Maren Vane and Mira Sallow",
+      "trades herbs with a Tanglewood woman",
+      "grudges Kettlebridge for the cold welcome it gave her family"
+     ]
+    },
+    {
+     "name": "Nia Wrack",
+     "age": 17,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Marrow and Odile's daughter; cooks at Ilse Ostrander's noodle stall and wants a stall of her own",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage",
+      "smoking"
+     ],
+     "parents": [
+      "Marrow Wrack",
+      "Odile Wrack"
+     ],
+     "ties": [
+      "daughter of Odile Wrack",
+      "works for Ilse Ostrander",
+      "courts Rook Fenner the younger's cousin Tam Harrow",
+      "friendly with Sella Mackerel"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "pike-quay",
+   "members": [
+    {
+     "name": "Jory Pike",
+     "age": 29,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "fishes the harbour from a borrowed boat; a cheerful man who owes everyone a little and pays most of it",
+     "knows": [
+      "fishing",
+      "mending",
+      "fire",
+      "shelter",
+      "smoking"
+     ],
+     "parents": [
+      "Pike the elder",
+      "Sella Pike"
+     ],
+     "ties": [
+      "owes Wick Gull for a share of a catch",
+      "crews for Wick Gull when his own boat is laid up",
+      "courts Nia Wrack",
+      "drinks with Ostrander Mackerel"
+     ]
+    },
+    {
+     "name": "Sella Pike",
+     "age": 55,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Jory's mother; keeps a fried-fish stall by the tide steps and has fed half the quay on credit",
+     "knows": [
+      "cooking",
+      "smoking",
+      "fire",
+      "storage",
+      "mending"
+     ],
+     "parents": [
+      "Sella the elder",
+      "Pike the elder"
+     ],
+     "ties": [
+      "mother of Jory Pike",
+      "trades with Lyss Fenner",
+      "owes Mira Sallow for medicines",
+      "thinks the Warden should feed the poor terrace before the seawall"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "sedge-quay",
+   "members": [
+    {
+     "name": "Brannock Sedge",
+     "age": 44,
+     "sex": "m",
+     "occupation": "trader",
+     "role": "buys and sells fish at the morning market and runs a cart of salt and dried goods along the shore",
+     "knows": [
+      "storage",
+      "mending",
+      "fire",
+      "cooking",
+      "fishing"
+     ],
+     "parents": [
+      "Sedge the elder",
+      "Mira Sedge"
+     ],
+     "ties": [
+      "husband of Dory Sedge",
+      "trades with Reedmoor reed-cutters for salt fish",
+      "owes Mara Quell a stall fee",
+      "rival of Bramwell Tallow over the rope trade"
+     ]
+    },
+    {
+     "name": "Dory Sedge",
+     "age": 41,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Brannock's wife; smokes fish in a shed behind the market and sells it at the morning stalls",
+     "knows": [
+      "smoking",
+      "cooking",
+      "fire",
+      "storage"
+     ],
+     "parents": [
+      "Dory the elder",
+      "Sedge the elder"
+     ],
+     "ties": [
+      "wife of Brannock Sedge",
+      "mother of Tam Sedge",
+      "trades with Nia Brine",
+      "worries about the winter cough on the poor terrace"
+     ]
+    },
+    {
+     "name": "Tam Sedge",
+     "age": 8,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Brannock and Dory's son; helps in the smoke shed and is afraid of the harbour at night",
+     "knows": [
+      "smoking"
+     ],
+     "parents": [
+      "Brannock Sedge",
+      "Dory Sedge"
+     ],
+     "ties": [
+      "son of Dory Sedge",
+      "plays with Dory Gull"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "gull-quay",
+   "members": [
+    {
+     "name": "Ostrander Gull",
+     "age": 63,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "an old fisher who no longer goes out but mends nets on the quay and remembers every boat the Surge took",
+     "knows": [
+      "fishing",
+      "mending",
+      "fire",
+      "shelter",
+      "smoking"
+     ],
+     "parents": [
+      "Gull the elder",
+      "Mira Gull"
+     ],
+     "ties": [
+      "uncle of Wick Gull",
+      "mends nets for Ostrander Cormorant",
+      "keeps the tide lantern list with Ostrander Sallow",
+      "grudges Kettlebridge for the seawall stone"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "seawall-stone",
+   "kind": "debt",
+   "summary": "Lanternquay owes Kettlebridge for the last load of stone, and Mara Quell has not paid because she says the price was a drowning man's price. Hester Crane holds the tally and wants the marks before another load goes down the fish road.",
+   "secret": false,
+   "people": [
+    "Mara Quell",
+    "Juno Reyes",
+    "Hester Crane",
+    "Wick Quell"
+   ],
+   "sides": {
+    "Mara Quell": "She will not pay Kettlebridge's price while the lower quay stands half broken; she feels the debt is a knife at her throat and blames Josiah Crane.",
+    "Juno Reyes": "She carries the stone and hears both sides; she knows the tally is real and fears the road will close if the marks are not found.",
+    "Hester Crane": "She keeps the foundry books and wants the debt settled; she feels Lanternquay is using the Surge as an excuse not to pay.",
+    "Wick Quell": "He knows his mother has marks in the strongbox and has been counting them; he feels the wall will never be built and the debt will fall on the quay."
+   }
+  },
+  {
+   "id": "kai-alive",
+   "kind": "secret",
+   "summary": "Ilse Ostrander has had word that her son Kai is alive at Coldwell with the outlaws. She has told no one, but Wick Brine saw the letter and has kept quiet for her sake.",
+   "secret": true,
+   "people": [
+    "Ilse Ostrander",
+    "Wick Brine"
+   ],
+   "sides": {
+    "Ilse Ostrander": "She is torn between joy that Kai lives and terror that the Warden will hear; she feels she is hiding a deserter in her own heart.",
+    "Wick Brine": "He guards the fish road and knows what the Warden would do with the news; he feels loyalty to Ilse and unease at keeping a deserter's secret."
+   }
+  },
+  {
+   "id": "tide-lanterns",
+   "kind": "quarrel",
+   "summary": "Mara Quell and Ilse Ostrander keep the tide lanterns together, but Mara has taken to lighting them late and Ilse says the drowned are being dishonoured. The quay is divided over whether the Warden is careless or grieving.",
+   "secret": false,
+   "people": [
+    "Mara Quell",
+    "Ilse Ostrander",
+    "Nia Brine",
+    "Ostrander Sallow"
+   ],
+   "sides": {
+    "Mara Quell": "She lights them when she can face it; she feels her brother's death is still unavenged and the lanterns are a duty she carries alone.",
+    "Ilse Ostrander": "She thinks the lanterns should be lit at dusk whatever else happens; she feels the Warden is letting grief become neglect.",
+    "Nia Brine": "She sells oil to the lantern keepers and has seen them late; she feels the quay's dead deserve better and says so at her stall.",
+    "Ostrander Sallow": "He keeps the list of the drowned and writes the lantern nights; he feels the quarrel is a small thing that will grow."
+   }
+  },
+  {
+   "id": "harbour-mouth",
+   "kind": "feud",
+   "summary": "Wick Quell and Ostrander Cormorant both fish the harbour mouth and both claim the best ground. Nets have been cut twice and neither will back down.",
+   "secret": false,
+   "people": [
+    "Wick Quell",
+    "Ostrander Cormorant",
+    "Tamsin Vane",
+    "Wick Cormorant"
+   ],
+   "sides": {
+    "Wick Quell": "He says his uncle fished that ground before Cormorant had a boat; he feels cheated and will not be pushed off.",
+    "Ostrander Cormorant": "He says the ground is open water and Quell's nets are set too close; he feels the Warden's family take liberties.",
+    "Tamsin Vane": "She fishes the dawn tide and has seen both men's nets; she feels the feud will cost them all the best catch.",
+    "Wick Cormorant": "He crews for his father and has cut a net himself; he feels the quarrel is his father's and wishes it would end."
+   }
+  },
+  {
+   "id": "night-stall-debt",
+   "kind": "debt",
+   "summary": "Wick Gull owes Bramwell Tallow for rope and tar and cannot pay until the next good catch. Bramwell has been patient but has begun to say so loudly at the stalls.",
+   "secret": false,
+   "people": [
+    "Wick Gull",
+    "Bramwell Tallow",
+    "Nia Gull",
+    "Perrin Tallow"
+   ],
+   "sides": {
+    "Wick Gull": "He knows the debt is real and feels the sea has not been kind; he is ashamed to be dunned in public.",
+    "Bramwell Tallow": "He has carried the debt through two tides and feels his patience is being taken for weakness.",
+    "Nia Gull": "She cooks at the night stall and knows the marks are short; she feels Bramwell could wait and fears her husband's temper.",
+    "Perrin Tallow": "She keeps the stall's marks and wants them back; she feels the Gulls eat well enough to pay something."
+   }
+  },
+  {
+   "id": "courting-sella",
+   "kind": "courtship",
+   "summary": "Ostrander Mackerel is courting Sella Tallow, and both families are watching. Bramwell Tallow wants a fisher with a boat, not a crewman with a net to buy.",
+   "secret": false,
+   "people": [
+    "Ostrander Mackerel",
+    "Sella Tallow",
+    "Bramwell Tallow",
+    "Perrin Tallow"
+   ],
+   "sides": {
+    "Ostrander Mackerel": "He is saving for a net and feels Sella is worth every tide; he fears her father will say no before he has a boat.",
+    "Sella Tallow": "She minds the stall and likes Ostrander's quiet; she feels her father is measuring the man by his marks.",
+    "Bramwell Tallow": "He wants his daughter settled with someone who can keep her; he feels a crewman is not yet a household.",
+    "Perrin Tallow": "She sees how her daughter looks at the boy; she feels Bramwell is being too hard and says so at the stall."
+   }
+  },
+  {
+   "id": "lower-quay-rebuild",
+   "kind": "rivalry",
+   "summary": "Ostrander Vane wants to rebuild the lower quay in stone and has been taking salvage timber to patch it, while Mara Quell says no building until the seawall is paid for. The quay's builders are split.",
+   "secret": false,
+   "people": [
+    "Ostrander Vane",
+    "Mara Quell",
+    "Maren Vane",
+    "Sella Mackerel"
+   ],
+   "sides": {
+    "Ostrander Vane": "He has patched the lower quay with salvage and feels the Warden is letting the town rot while she argues about stone.",
+    "Mara Quell": "She knows a wall without a quay is no use, but she feels every mark spent on timber is a mark not spent on stone.",
+    "Maren Vane": "She heals the builders' cuts and feels her son is right that the lower quay cannot wait, but she fears the Warden's anger.",
+    "Sella Mackerel": "She cooks at the fish market and wants a stone stall; she feels the rebuild would bring trade and wishes the Warden would listen."
+   }
+  },
+  {
+   "id": "smuggled-stone",
+   "kind": "secret",
+   "summary": "Sable Harrow has been buying stone off a Sootwood woodcutter who lifts it from the Kettlebridge road and selling it on the quay as salvage. Tam Sedge has carried a load for her without asking where it came from.",
+   "secret": true,
+   "people": [
+    "Sable Harrow",
+    "Tam Sedge"
+   ],
+   "sides": {
+    "Sable Harrow": "She needs the marks to keep her stall and feels the quay's stone price is robbery anyway; she fears the Warden finding out more than she fears the woodcutter.",
+    "Tam Sedge": "He carried a heavy crate for a mark and has begun to guess; he feels proud to be trusted and afraid of what it means."
+   }
+  },
+  {
+   "id": "kettlebridge-quarrel",
+   "kind": "feud",
+   "summary": "Marrow Wrack left Kettlebridge after a quarrel with Gideon Fenwick over a job and a load of brick, and the grudge has followed him down the fish road. Both men say the other cheated him.",
+   "secret": false,
+   "people": [
+    "Marrow Wrack",
+    "Odile Wrack",
+    "Ostrander Vane",
+    "Sella Mackerel"
+   ],
+   "sides": {
+    "Marrow Wrack": "He feels Fenwick took his work and slandered him; he will not set foot in Kettlebridge again while Fenwick has a yard there.",
+    "Odile Wrack": "She knows the quarrel cost them their house; she feels her husband is right but wishes he would let it go.",
+    "Ostrander Vane": "He works beside Marrow and trusts his stonework; he feels the Kettlebridge builders are grasping and says so.",
+    "Sella Mackerel": "She cooks at the fish market and hears both sides from the carters; she feels the quarrel keeps good stone out of the quay."
+   }
+  },
+  {
+   "id": "courting-nia",
+   "kind": "courtship",
+   "summary": "Jory Pike is courting Nia Wrack, and both mothers are watching. Odile Wrack wants her daughter settled with someone who does not owe half the quay, and Sella Pike wants her son to stop borrowing boats.",
+   "secret": false,
+   "people": [
+    "Jory Pike",
+    "Nia Wrack",
+    "Odile Wrack",
+    "Sella Pike"
+   ],
+   "sides": {
+    "Jory Pike": "He is cheerful and in love and feels the debts will sort themselves out; he fears Odile Wrack's cold eye more than a bad tide.",
+    "Nia Wrack": "She likes Jory's laugh and his way with the boats; she feels her mother is measuring him by his debts.",
+    "Odile Wrack": "She wants her daughter to have a roof; she feels a man who borrows boats will borrow bread.",
+    "Sella Pike": "She has fed Jory on credit all his life; she feels a wife would steady him and wishes he would ask the girl properly."
+   }
+  },
+  {
+   "id": "credit-at-the-stalls",
+   "kind": "debt",
+   "summary": "Sella Pike has fed half the quay on credit through a lean season and now owes Mira Sallow for medicines. The stall-keepers are beginning to talk about who pays and who does not.",
+   "secret": false,
+   "people": [
+    "Sella Pike",
+    "Mira Sallow",
+    "Lyss Fenner",
+    "Jory Pike"
+   ],
+   "sides": {
+    "Sella Pike": "She cannot bring herself to dun her neighbours and feels her own debt to Mira growing heavier every week.",
+    "Mira Sallow": "She has carried the Pike debt for two seasons and feels the stall-keepers take her salves for granted.",
+    "Lyss Fenner": "She trades beside Sella and owes her a little herself; she feels the whole quay is living on promises.",
+    "Jory Pike": "He knows his mother's credit is stretched and feels he should be paying it off instead of courting."
+   }
+  }
+ ]
+}

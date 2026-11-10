@@ -1,0 +1,80 @@
+{
+ "households": [
+  {
+   "key": "wray",
+   "members": [
+    {
+     "name": "Edda Wray",
+     "age": 71,
+     "sex": "f",
+     "occupation": "fisher",
+     "role": "keeper of the north light; Thornby says she lit it wrong to wreck boats",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "accused by Osric Dunn of wrecking his brother's boat",
+      "grandmother of the boy who lives with her"
+     ]
+    },
+    {
+     "name": "Colm Wray",
+     "age": 12,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Edda's grandson, raised at the light; trims the wick, hauls water and keeps the oil jars",
+     "knows": [
+      "fire",
+      "mending"
+     ],
+     "parents": [
+      "Edda Wray"
+     ],
+     "ties": [
+      "grandson of Edda Wray",
+      "plays with Wren Stave and Hob Dunn when Thornby folk come up the cape",
+      "afraid of the dark stair below the light",
+      "SECRET: saw his grandmother's light burn low one night last winter and has told no one"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "the-light-accusation",
+   "kind": "feud",
+   "summary": "Thornby holds Edda's light to blame for the wreck that drowned Osric Dunn's brother, and Cuthbert Stave's brother's boat besides; Edda says she lights it every night and will not be driven off the cape. Colm has seen the light fail once and says nothing.",
+   "secret": false,
+   "people": [
+    "Edda Wray",
+    "Osric Dunn",
+    "Cuthbert Stave",
+    "Colm Wray"
+   ],
+   "sides": {
+    "Edda Wray": "She keeps the light as her mother did, and she is tired of being called a wrecker by folk who never climbed the cape in a gale; she will not leave, and she will not beg.",
+    "Osric Dunn": "He buried his brother after that wreck and the village still owes Brackenford for the grain that followed; he wants Edda gone from the cape and says so at the cook-fire.",
+    "Cuthbert Stave": "His brother's boat came apart on the rocks below the light; he does not know if it was the light or the weather, and that not knowing has soured him.",
+    "Colm Wray": "He loves his grandmother and the light, and he is frightened by what he saw the night it burned low; he does not know who to tell or what it would mean."
+   }
+  },
+  {
+   "id": "the-oil-and-the-winter",
+   "kind": "debt",
+   "summary": "The light burns oil the cape does not make; Edda trades smoked fish to Simon Hollis for lamp oil and salt, and this winter her store is short. Thornby's fisherfolk have quietly stopped selling her oil.",
+   "secret": false,
+   "people": [
+    "Edda Wray",
+    "Simon Hollis",
+    "Tern Gannet"
+   ],
+   "sides": {
+    "Edda Wray": "She needs oil before the cold sets in and will not ask Thornby for it; she would rather trade the last of her smoked fish than owe the village a favour.",
+    "Simon Hollis": "He carries her oil up the cape road and brings her fish down; he thinks Thornby is being hard on an old woman, but he will not say so at the gate.",
+    "Tern Gannet": "She packs smoked fish for the Brackenford market and has stopped buying Edda's; she blames the light for the near wreck last winter and will not put a mark in a wrecker's hand."
+   }
+  }
+ ]
+}

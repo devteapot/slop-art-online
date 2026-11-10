@@ -1,0 +1,191 @@
+{
+ "households": [
+  {
+   "key": "ferncross-holt",
+   "members": [
+    {
+     "name": "Bramwell Ashdown",
+     "age": 44,
+     "sex": "m",
+     "occupation": "woodcutter",
+     "role": "Master woodcutter at the Ferncross; fells oak and ash for Elmwick and Reedmoor, and keeps the charcoal pits on the side.",
+     "knows": [
+      "carpentry",
+      "fire",
+      "toolmaking",
+      "trapping",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Nesta Ashdown",
+      "father of Corliss Ashdown",
+      "sells timber to Hob Garrow and Nell Sedge",
+      "owes Alder Rush of Fernhollow a share of charcoal for last winter's grain",
+      "grudges the Coldwell outlaws for stolen tools",
+      "friendly with Orvin Hollis of Sootwood"
+     ]
+    },
+    {
+     "name": "Nesta Ashdown",
+     "age": 41,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Keeps the Ferncross kitchen and the common pot for the woodcutters; trades bread and broth for fish and fibre.",
+     "knows": [
+      "cooking",
+      "fire",
+      "basketry",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Bramwell Ashdown",
+      "mother of Corliss Ashdown",
+      "trades bread with Tansy Sedge and Thistle Mossfoot",
+      "close with Maren Hollis of Sootwood",
+      "worries about the winter store"
+     ]
+    },
+    {
+     "name": "Corliss Ashdown",
+     "age": 13,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Bramwell and Nesta's daughter; stacks kindling and learns the axe and the charcoal burn.",
+     "knows": [
+      "fire",
+      "mending"
+     ],
+     "parents": [
+      "Bramwell Ashdown",
+      "Nesta Ashdown"
+     ],
+     "ties": [
+      "daughter of Bramwell Ashdown and Nesta Ashdown",
+      "plays with Fennel Underbank when Fernhollow folk come",
+      "wants to see the quay at Lanternquay",
+      "afraid of the wolves that come down the wood road"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "ferncross-harrow",
+   "members": [
+    {
+     "name": "Odelia Harrow",
+     "age": 36,
+     "sex": "f",
+     "occupation": "woodcutter",
+     "role": "A woodcutter who works the south side of the crossing, trimming and hauling; keeps the tally of loads.",
+     "knows": [
+      "carpentry",
+      "fire",
+      "trapping",
+      "basketry"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Roderick Harrow",
+      "mother of Tamsin Harrow",
+      "works alongside Bramwell Ashdown",
+      "trades timber with Elmwick builders",
+      "owes Nell Sedge a share of a load for the Lakemead fence",
+      "friendly with Rill Fenlake of the Lakemead"
+     ]
+    },
+    {
+     "name": "Roderick Harrow",
+     "age": 39,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "Farms the small clearing by the crossing: barley, roots and a few goats; sells grain to the woodcutters and the Fernhollow pedlar.",
+     "knows": [
+      "planting",
+      "fire",
+      "storage",
+      "trapping",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Odelia Harrow",
+      "father of Tamsin Harrow",
+      "sells barley to Nesta Ashdown's kitchen",
+      "trades seeds with Merrow Stave of Thornby",
+      "owes Alder Rush of Fernhollow for a loan of grain",
+      "grudges the Kettlebridge works for the smoke that drifts east"
+     ]
+    },
+    {
+     "name": "Tamsin Harrow",
+     "age": 8,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Odelia and Roderick's daughter; helps with the goats and the garden, and follows her mother into the woods.",
+     "knows": [
+      "planting"
+     ],
+     "parents": [
+      "Odelia Harrow",
+      "Roderick Harrow"
+     ],
+     "ties": [
+      "daughter of Odelia Harrow and Roderick Harrow",
+      "plays with Corliss Ashdown",
+      "afraid of the deep woods and the wolves"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "charcoal-debt",
+   "kind": "debt",
+   "summary": "Bramwell Ashdown owes Alder Rush of Fernhollow a share of charcoal from last winter's burn, and the share has not been delivered because the pits burned slow and the Elmwick order came first.",
+   "secret": false,
+   "people": [
+    "Bramwell Ashdown",
+    "Alder Rush"
+   ],
+   "sides": {
+    "Bramwell Ashdown": "Knows he owes the charcoal and means to pay, but the Elmwick timber order pays marks now and Alder can wait; feels the pinch of a bad burn and does not want to be thought a poor debtor.",
+    "Alder Rush": "Knows the charcoal is owed and has asked for it twice; needs it for the hollow's common store before winter and is starting to think Bramwell puts Elmwick first."
+   }
+  },
+  {
+   "id": "winter-store",
+   "kind": "shortage",
+   "summary": "The Ferncross households' winter store is thinner than usual: Roderick Harrow's barley came in light and Nesta Ashdown's kitchen is feeding more woodcutters than the plot can carry, so the two houses are sharing out what they have and watching the weather.",
+   "secret": false,
+   "people": [
+    "Nesta Ashdown",
+    "Roderick Harrow",
+    "Odelia Harrow"
+   ],
+   "sides": {
+    "Nesta Ashdown": "Knows the kitchen store is low and feels responsible for feeding whoever comes to the crossing; wants Roderick to sell her more barley on credit and fears he will not.",
+    "Roderick Harrow": "Knows his barley was light and feels the shame of a poor harvest; wants to keep enough seed for spring and is torn between helping Nesta and protecting his own house.",
+    "Odelia Harrow": "Knows the store is short and has offered to trade a load of timber to Elmwick for grain; feels her husband is too proud to ask for help and her neighbour too anxious to wait."
+   }
+  },
+  {
+   "id": "elmwick-fence",
+   "kind": "quarrel",
+   "summary": "Odelia Harrow sold Elmwick timber for the Lakemead fence last month, and Nell Sedge of Reedmoor has heard of it and says Ferncross is taking sides in the Lakemead quarrel; Odelia says a sale is a sale.",
+   "secret": false,
+   "people": [
+    "Odelia Harrow",
+    "Nell Sedge",
+    "Bramwell Ashdown"
+   ],
+   "sides": {
+    "Odelia Harrow": "Knows she sold the timber and feels the sale was honest work; resents being told who she may sell to and thinks Nell Sedge is making a quarrel out of a fence post.",
+    "Nell Sedge": "Knows Elmwick pulled down the Lakemead fence twice and feels Ferncross should not arm either side; wants an apology or a promise of no more timber to Elmwick's fence, and is ready to hold back Reedmoor's fish trade to get it.",
+    "Bramwell Ashdown": "Knows the sale happened and feels caught between his wife's trade and Reedmoor's custom; wants the quarrel to blow over before it costs the crossing its fish."
+   }
+  }
+ ]
+}

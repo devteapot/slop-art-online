@@ -1,0 +1,441 @@
+{
+  "Ethelred Wade": {
+    "narrative": "I have fished these reed channels since I was a boy, and I know every cut and pool of them better than the palm of my hand. My father kept the village nets before me, and I keep them now: mended, tarred and counted, so that no man of Reedmoor goes out with a hole in his mesh. The works at Kettlebridge send their smoke down the valley on an east wind and it lies on the reeds like a grey blanket; I have said so at the cook-fire more than once. Leofrun and I have raised one son, Godric, who is a better fisherman than I was at his age, and I would see him settled with a boat and a wife before I am too stiff to help him get it.",
+    "values": [
+      "the village's nets and traps kept whole",
+      "Reedmoor feeding itself from the reeds and the shore",
+      "my son settled with a boat of his own",
+      "fair dealing with the traders who come for our fish"
+    ],
+    "goals": [
+      "keep the village nets and traps in repair through the winter",
+      "see Godric's courtship of Wyn Sedge come to a match",
+      "put by enough smoked fish to trade for grain when the barley runs short",
+      "have my say about the smoke that drifts down from Kettlebridge"
+    ],
+    "mood": "steady, a little worn, quietly stubborn",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 55,
+      "curiosity": 35,
+      "ambition": 40,
+      "introspection": 50,
+      "temper": 45,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Leofrun Wade",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the plots and the tally and me; I would be lost in the reeds without her."
+      },
+      {
+        "name": "Godric Wade",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "A better hand with a net than I was at his age. He needs a boat, and I cannot give him one."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 60,
+        "affinity": 45,
+        "label": "headwoman",
+        "note": "I mend her nets and she lets the Lakemead; she has not given her word about Wyn and Godric yet."
+      },
+      {
+        "name": "Eadric Sedge",
+        "trust": 75,
+        "affinity": 70,
+        "label": "friend",
+        "note": "We have fished the reed beds side by side for twenty years and never once quarrelled over a pool."
+      },
+      {
+        "name": "Hilda Sedge",
+        "trust": 70,
+        "affinity": 65,
+        "label": "good-sister",
+        "note": "She cooks for the village and keeps Leofrun company at the bake; a steady woman."
+      },
+      {
+        "name": "Wyn Sedge",
+        "trust": 55,
+        "affinity": 60,
+        "label": "son's sweetheart",
+        "note": "A hard worker and quick with the tally; she would do well in this house."
+      },
+      {
+        "name": "Brannock Sedge",
+        "trust": 40,
+        "affinity": 35,
+        "label": "trader",
+        "note": "He takes our smoked fish down the shore and pays what he likes for it. A fair man, mostly."
+      },
+      {
+        "name": "Leofrun Wade",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She has sold barley against the debt and says little of it; I see her counting the store at night."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father put the village nets in my hands the summer I turned twenty, and told me a net is a promise to every boat in Reedmoor.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year came and the barley plots failed with the blight, and we ate reed-root bread and traded our last smoked fish for a basket of Brackenford grain.",
+        "salience": 0.9,
+        "about": [
+          "Leofrun Wade",
+          "Godric Wade"
+        ]
+      },
+      {
+        "gist": "Godric came home with his first good catch off the reeds and I pretended not to be proud, and Leofrun laughed at me for it.",
+        "salience": 0.6,
+        "about": [
+          "Godric Wade",
+          "Leofrun Wade"
+        ]
+      },
+      {
+        "gist": "The Kettlebridge smoke lay on the reeds for three days last summer and the fish tasted of it; I said at the cook-fire the works should answer for it.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "The Coombes took the Lakemead and pay Nell in grain, and I said at the common table that at least the meadow is being worked.",
+        "salience": 0.4,
+        "about": [
+          "Nell Sedge"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_village_nets",
+        "value": 0.9,
+        "why": "A net is a promise to every boat in Reedmoor, and I am the one who keeps it."
+      },
+      {
+        "key": "the_smoke_from_kettlebridge_is_a_grievance",
+        "value": 0.6,
+        "why": "It lies on the reeds and sours the fish, and they never asked us leave for it."
+      },
+      {
+        "key": "godric_must_have_a_boat",
+        "value": 0.85,
+        "why": "A fisherman with no boat is a hired hand all his life; I want better for my son."
+      },
+      {
+        "key": "trade_honestly_with_the_shore_traders",
+        "value": 0.7,
+        "why": "Brannock's cart and the Fernhollow pedlar are how our fish becomes grain; cheat them and we starve."
+      },
+      {
+        "key": "the_winter_store_must_be_counted",
+        "value": 0.75,
+        "why": "After the Lean Year I count what is in the store before I sleep, every night."
+      }
+    ],
+    "secret": ""
+  },
+  "Leofrun Wade": {
+    "narrative": "I keep the barley plots above the reeds and the vegetable rows behind the house, and I know to the basket what they will give and what they will not. Since the Lean Year I have not trusted a full store to stay full, and I count it at night when Ethelred is asleep. I have sold barley to Brackenford's store against the debt, as we all have, and there is less left than I would like with the cough going through the village. Hilda and I nurse the sick between us, and I sit with them and think about the grain.",
+    "values": [
+      "the village fed through the winter",
+      "the barley plots kept honest and counted",
+      "the sick tended, especially the children",
+      "my family's store not falling short"
+    ],
+    "goals": [
+      "bring the village through the cough with grain to spare",
+      "stretch the barley and roots to the spring without begging",
+      "see Godric matched with Wyn Sedge and settled",
+      "keep trading seeds with Merrow Stave so the plots do not fail"
+    ],
+    "mood": "worried, careful, quietly tired",
+    "traits": {
+      "caution": 80,
+      "sociability": 50,
+      "empathy": 70,
+      "curiosity": 30,
+      "ambition": 35,
+      "introspection": 60,
+      "temper": 35,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Ethelred Wade",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He grumbles about the smoke and mends his nets, and he does not see how thin the store is getting."
+      },
+      {
+        "name": "Godric Wade",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He eats like a fisherman and works like one; I would see him married before the winter is out."
+      },
+      {
+        "name": "Hilda Sedge",
+        "trust": 80,
+        "affinity": 75,
+        "label": "fellow nurse",
+        "note": "We have sat up with half the village between us; she counts the grain the same as I do."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 55,
+        "affinity": 45,
+        "label": "headwoman",
+        "note": "She has not given her word about Wyn and Godric, and I would like to know what she waits for."
+      },
+      {
+        "name": "Merrow Stave",
+        "trust": 65,
+        "affinity": 60,
+        "label": "seed-friend",
+        "note": "We trade seeds up the shore and she tells me true which strips will fail."
+      },
+      {
+        "name": "Wyn Sedge",
+        "trust": 60,
+        "affinity": 65,
+        "label": "son's sweetheart",
+        "note": "A good girl and a hard worker; she would keep a house well."
+      },
+      {
+        "name": "Morwen Coombe",
+        "trust": 50,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She works the Lakemead and trades cheese; I do not hold with the quarrel over it."
+      },
+      {
+        "name": "Eadric Sedge",
+        "trust": 70,
+        "affinity": 60,
+        "label": "good-brother",
+        "note": "He brings his catch to the cook-fire and his troubles with it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: I measured out the last of the barley in cupfuls and told no one how little was left.",
+        "salience": 0.9,
+        "about": [
+          "Ethelred Wade",
+          "Godric Wade"
+        ]
+      },
+      {
+        "gist": "I carried a basket of our barley to Brackenford's store against the debt and came home with a receipt and an empty sack.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Godric was small and I taught him the planting songs in the plot above the reeds, and he still hums them when he rows out.",
+        "salience": 0.6,
+        "about": [
+          "Godric Wade"
+        ]
+      },
+      {
+        "gist": "I sat up three nights with a reed-cutter's child through a fever with Hilda, and the child lived.",
+        "salience": 0.6,
+        "about": [
+          "Hilda Sedge"
+        ]
+      },
+      {
+        "gist": "The cough came into the reeds this autumn and I heard it in the next house before I heard it in mine.",
+        "salience": 0.5,
+        "about": [
+          "Hilda Sedge"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "count_the_store_always",
+        "value": 0.9,
+        "why": "The Lean Year taught me that a full store is a story people tell themselves."
+      },
+      {
+        "key": "nurse_the_sick_whatever_the_cost",
+        "value": 0.8,
+        "why": "Hilda and I are the ones who can, and a village that lets its sick lie is no village."
+      },
+      {
+        "key": "sell_barley_against_the_debt",
+        "value": 0.6,
+        "why": "It is owed, and a debt unpaid comes back at the gate with guards behind it."
+      },
+      {
+        "key": "godric_should_marry_wyn",
+        "value": 0.7,
+        "why": "She is steady and hard-working, and a match would settle him."
+      },
+      {
+        "key": "keep_the_lakemead_quarrel_out_of_our_house",
+        "value": 0.55,
+        "why": "Elmwick and the Coombes can argue; I need the meadow's cheese and not its quarrel."
+      }
+    ],
+    "secret": "She has quietly held back a small jar of barley in the roof thatch, against a winter she fears more than she says."
+  },
+  "Godric Wade": {
+    "narrative": "I fish the deep water off the reeds from my father's boat, and every time I row out I am thinking of the day I will row out in my own. I have courted Wyn Sedge since the spring and we suit each other, but her mother has not given her word, and I know why: a man with no boat is a poor bargain. I owe Brannock Sedge for a share of a net and I mean to pay it before I ask Nell for anything. The cough is in the village and my mother counts the grain at night; I fish harder for it.",
+    "values": [
+      "a boat of my own",
+      "Wyn Sedge for a wife",
+      "paying what I owe",
+      "the catch brought home whatever the weather"
+    ],
+    "goals": [
+      "save enough marks to buy a boat of my own",
+      "pay Brannock Sedge for the net share",
+      "win Nell Sedge's word for the match with Wyn",
+      "keep fishing through the winter so the house does not go short"
+    ],
+    "mood": "eager, anxious underneath, determined",
+    "traits": {
+      "caution": 45,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 50,
+      "ambition": 75,
+      "introspection": 40,
+      "temper": 50,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Ethelred Wade",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He taught me the channels and the nets; he would give me a boat if he had one to give."
+      },
+      {
+        "name": "Leofrun Wade",
+        "trust": 85,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She counts the store at night and thinks I do not see; I fish harder for it."
+      },
+      {
+        "name": "Wyn Sedge",
+        "trust": 80,
+        "affinity": 85,
+        "label": "sweetheart",
+        "note": "We have walked the shingle since spring and I would marry her tomorrow if her mother said the word."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 50,
+        "affinity": 40,
+        "label": "headwoman",
+        "note": "She has not given her word, and I know it is the boat she is waiting on."
+      },
+      {
+        "name": "Brannock Sedge",
+        "trust": 45,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "I owe him for a share of a net and he has not pressed me, which is its own kind of pressing."
+      },
+      {
+        "name": "Eadric Sedge",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend's father",
+        "note": "He has taken me out in the flat boat and shown me the reed pools; a good man to learn from."
+      },
+      {
+        "name": "Ethelred Wade",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He offered me a share of his nets, and I took it gladly; it is a boat I need."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father put the oars in my hands on the reed channel the summer I turned twelve and let me row the whole way home.",
+        "salience": 0.7,
+        "about": [
+          "Ethelred Wade"
+        ]
+      },
+      {
+        "gist": "The Lean Year: I was a boy and I remember the reed-root bread and my mother measuring barley in cupfuls.",
+        "salience": 0.8,
+        "about": [
+          "Leofrun Wade",
+          "Ethelred Wade"
+        ]
+      },
+      {
+        "gist": "I brought home my first good catch off the deep water and my father pretended not to be proud, and my mother laughed at him.",
+        "salience": 0.6,
+        "about": [
+          "Ethelred Wade",
+          "Leofrun Wade"
+        ]
+      },
+      {
+        "gist": "Wyn and I walked the shingle at low tide in the spring and she said she did not mind waiting for a boat, and I minded for her.",
+        "salience": 0.8,
+        "about": [
+          "Wyn Sedge"
+        ]
+      },
+      {
+        "gist": "Brannock Sedge sold me a share of a net on a handshake and I have not paid him yet; it sits on me like a stone.",
+        "salience": 0.5,
+        "about": [
+          "Brannock Sedge"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_boat_of_my_own",
+        "value": 0.9,
+        "why": "A fisherman who crews for others is never his own man, and Wyn's mother knows it."
+      },
+      {
+        "key": "pay_what_i_owe",
+        "value": 0.8,
+        "why": "Brannock gave me the net on a handshake and I will not have it said I did not pay."
+      },
+      {
+        "key": "fish_through_the_winter",
+        "value": 0.75,
+        "why": "The cough is in the village and my mother counts the grain; the catch is what stands between us and a thin spring."
+      },
+      {
+        "key": "win_nell_sedges_word",
+        "value": 0.7,
+        "why": "I will not take Wyn without her mother's blessing, however long it takes."
+      },
+      {
+        "key": "learn_the_deep_water",
+        "value": 0.6,
+        "why": "The deep water off the reeds is where the money is, and my father's channels only take me so far."
+      }
+    ],
+    "secret": ""
+  }
+}

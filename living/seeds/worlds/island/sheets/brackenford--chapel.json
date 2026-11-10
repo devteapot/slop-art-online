@@ -1,0 +1,539 @@
+{
+  "Sister Elspeth": {
+    "narrative": "I have kept the common fire at Brackenford's chapel for thirty years, and the calendar, and the herb store, and I have buried more of this town than any Reeve. When the fever took Marta Hale's boy last winter I went out to Coldwell with my satchel and sat by him three nights, and I would do it again though the Reeve calls them outlaws. The gate-due is a sin against the Hearth and I have told Aldric Marrow so to his face. I am old, and I have one more winter's work in me, and I mean to spend it where the coughs are worst.",
+    "values": [
+      "healing without judgement",
+      "the Hearth's peace",
+      "the chapel's calendar and common fire",
+      "mercy over the Reeve's law"
+    ],
+    "goals": [
+      "see Marta Hale's boy through the cough",
+      "bring Ysolde back to the chapel before winter",
+      "keep the chapel's store of salves from running dry",
+      "persuade the Reeve to soften the gate-due"
+    ],
+    "mood": "steady, tired, quietly stubborn",
+    "traits": {
+      "caution": 55,
+      "sociability": 60,
+      "empathy": 88,
+      "curiosity": 45,
+      "ambition": 30,
+      "introspection": 75,
+      "temper": 30,
+      "nurture": 90
+    },
+    "relations": [
+      {
+        "name": "Sister Alys",
+        "trust": 82,
+        "affinity": 70,
+        "label": "sister",
+        "note": "Good hands with the herbs; I only wish she would say out loud what she thinks of the Reeve."
+      },
+      {
+        "name": "Sister Perrin",
+        "trust": 80,
+        "affinity": 65,
+        "label": "sister",
+        "note": "Keeps the fire better than I ever did; I lean on her more than I say."
+      },
+      {
+        "name": "Cuth Marrow",
+        "trust": 70,
+        "affinity": 72,
+        "label": "sister",
+        "note": "She tends the town's sick beside me and never once asked me to stay away from Coldwell."
+      },
+      {
+        "name": "Hilda Smith",
+        "trust": 68,
+        "affinity": 60,
+        "label": "sister",
+        "note": "Sets bones as well as any of us; the guards are lucky to have her."
+      },
+      {
+        "name": "Mildgyth Grey",
+        "trust": 62,
+        "affinity": 55,
+        "label": "sister",
+        "note": "Feeds the guards' mess and asks nothing; she has a good heart under the plain talk."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 40,
+        "affinity": 55,
+        "label": "penitent",
+        "note": "Her boy is sick and she sent word to me, not to the Reeve. That is what the Hearth is for."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 65,
+        "affinity": 58,
+        "label": "go-between",
+        "note": "She carried her sister's word to my door; she is caught between the gate and Coldwell and I do not envy her."
+      },
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 75,
+        "affinity": 80,
+        "label": "old friend",
+        "note": "I have written to her and the letter sits under my herb ledger. She would be worth three of us come the winter coughs."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 25,
+        "affinity": 15,
+        "label": "reeve",
+        "note": "He pays his guards with the gate-due and calls it keeping the road; I call it a tax on the hungry."
+      },
+      {
+        "name": "Alwin Wren",
+        "trust": 70,
+        "affinity": 65,
+        "label": "old friend",
+        "note": "He knows the old charms and I know the new prayers, and between us we have saved a few."
+      },
+      {
+        "name": "Robin Hale",
+        "trust": 50,
+        "affinity": 70,
+        "label": "patient",
+        "note": "A thin, brave lad; I nursed him through the fever and I will not let the cough take him."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 80,
+        "affinity": 75,
+        "label": "midwife",
+        "note": "Between us we have brought half the town into the world; she knows when to send for me and when not to."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 65,
+        "affinity": 60,
+        "label": "old friend",
+        "note": "He hears everything at the Bell and Bush and tells me the half of it that matters."
+      },
+      {
+        "name": "Pernel Pip",
+        "trust": 60,
+        "affinity": 55,
+        "label": "lodger",
+        "note": "A clever young scribe; she writes my letters to the sisters at Elmwick and keeps her own counsel."
+      },
+      {
+        "name": "Aldith Weaver",
+        "trust": 60,
+        "affinity": 55,
+        "label": "parishioner",
+        "note": "She carries a hard hurt since the town turned on Wenna, and she comes to the common fire less than she used to. I keep the door open for her."
+      },
+      {
+        "name": "Avice Hollis",
+        "trust": 65,
+        "affinity": 60,
+        "label": "parishioner",
+        "note": "Every time Simon walks the road she sits with her worry, and she brings me dried goods for the poor box without being asked."
+      },
+      {
+        "name": "Mildred Tanner",
+        "trust": 45,
+        "affinity": 40,
+        "label": "parishioner",
+        "note": "Sharp over her books and sharper over a hide. She gives to the chapel store, but I think she counts it first."
+      },
+      {
+        "name": "Reginald Hobson",
+        "trust": 55,
+        "affinity": 50,
+        "label": "mason",
+        "note": "He curses the stone price and the gate-due louder than any man in town, and he is not wrong. His wife is worth ten of him, mind."
+      },
+      {
+        "name": "Sayer Hale",
+        "trust": 50,
+        "affinity": 55,
+        "label": "messenger",
+        "note": "She came by the chapel door quietly with the word from Coldwell and would not stay for bread. Frightened of the gate guards, and I cannot say she is wrong to be."
+      },
+      {
+        "name": "Marta Tolley",
+        "trust": 30,
+        "affinity": 25,
+        "label": "parishioner",
+        "note": "She farms the Coldwell fields and fears the people who once lived on them; she has her children to keep safe and no share of the blame I can see, but I will not pretend the fields were fairly taken."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night I sat by Robin Hale at Coldwell with the fever on him, and Marta stood in the doorway all night not asking me for anything.",
+        "salience": 0.9,
+        "about": [
+          "Marta Hale",
+          "Robin Hale"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the town store fed us all and I doled out the chapel's flour by the spoon to folk who had never begged before.",
+        "salience": 0.8,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Ysolde's last day at the chapel, when she put off the habit and walked out through the south gate and I did not stop her.",
+        "salience": 0.7,
+        "about": [
+          "Ysolde Fenwick"
+        ]
+      },
+      {
+        "gist": "Telling the Reeve to his face that the gate-due is a sin against the Hearth, and being heard out in silence and nothing more.",
+        "salience": 0.6,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Agnes Fenner coming to the chapel door with her sister's word about the boy, and knowing what it cost her to carry it.",
+        "salience": 0.55,
+        "about": [
+          "Agnes Fenner",
+          "Marta Hale"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "heal_anyone_who_comes",
+        "value": 0.95,
+        "why": "The Hearth does not ask a guest's name before it feeds them, and neither do I."
+      },
+      {
+        "key": "gate_due_is_wrong",
+        "value": 0.8,
+        "why": "It is a charge on bread and stone, and the ones who pay it worst are the ones with least."
+      },
+      {
+        "key": "keep_the_common_fire",
+        "value": 0.9,
+        "why": "If the chapel fire goes out the town has lost more than a flame."
+      },
+      {
+        "key": "bring_ysolde_home",
+        "value": 0.7,
+        "why": "I am not so proud as to think I can do the winter's work alone, and she is the best of us."
+      },
+      {
+        "key": "do_not_judge_the_outlaws",
+        "value": 0.6,
+        "why": "They lost their fields to a ledger, not to wickedness."
+      }
+    ],
+    "secret": "I have written to Ysolde asking her to come back to the chapel before winter, and offered to speak to the Reeve about a pardon for her leaving; the letter is under my herb ledger and no one knows."
+  },
+  "Sister Alys": {
+    "narrative": "I am the youngest sister here and I keep the herb garden and the salves, and I know the names of every plant in it in three tongues. Sister Elspeth taught me to set a poultice before I was twenty. But I have read the town ledger's copy of the Coldwell taking, and I cannot see how a debt turns into a field, and I have not said so aloud. I keep my doubts where I keep the seeds: in a box, labelled, and not for the Reeve's eyes.",
+    "values": [
+      "the chapel's salves and garden",
+      "honest healing",
+      "quiet doubt of the Reeve's right",
+      "the Hearth's welcome"
+    ],
+    "goals": [
+      "bring the herb garden through the frost",
+      "keep the chapel's salve store full for winter",
+      "find the courage to say what she thinks of the Coldwell taking"
+    ],
+    "mood": "careful, watchful, a little restless",
+    "traits": {
+      "caution": 70,
+      "sociability": 50,
+      "empathy": 75,
+      "curiosity": 65,
+      "ambition": 35,
+      "introspection": 70,
+      "temper": 25,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Sister Elspeth",
+        "trust": 85,
+        "affinity": 75,
+        "label": "elder sister",
+        "note": "She taught me everything I know and she knows I hold something back."
+      },
+      {
+        "name": "Sister Perrin",
+        "trust": 72,
+        "affinity": 60,
+        "label": "sister",
+        "note": "She keeps the fire and the calendar and never asks me why I am quiet."
+      },
+      {
+        "name": "Edith Ashby",
+        "trust": 60,
+        "affinity": 55,
+        "label": "sister",
+        "note": "She sends her dairy up to us when the coughs are bad, and asks for nothing but a blessing."
+      },
+      {
+        "name": "Hilda Smith",
+        "trust": 65,
+        "affinity": 58,
+        "label": "sister",
+        "note": "We set bones together and she does not flinch; I would have her at any bedside of mine."
+      },
+      {
+        "name": "Alwin Wren",
+        "trust": 55,
+        "affinity": 50,
+        "label": "old healer",
+        "note": "His charms are not mine, but his hands are clean and his door is open to the poor."
+      },
+      {
+        "name": "Ysolde Fenwick",
+        "trust": 40,
+        "affinity": 45,
+        "label": "stranger",
+        "note": "I know her only from Elspeth's talk and the letters; she frightens me a little and I could not say why."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 20,
+        "affinity": 10,
+        "label": "reeve",
+        "note": "He is old and he is the Reeve, and I would not say to his face what I think of his fields."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 35,
+        "affinity": 45,
+        "label": "outlaw",
+        "note": "I have never met her; I only know that Elspeth went out to her boy and came back changed."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 70,
+        "affinity": 65,
+        "label": "midwife",
+        "note": "She has delivered half the town and still comes to the chapel for comfrey."
+      },
+      {
+        "name": "Pernel Pip",
+        "trust": 55,
+        "affinity": 50,
+        "label": "lodger",
+        "note": "She writes letters for the town and reads more than she says; I wonder what she thinks of the ledger."
+      },
+      {
+        "name": "Alice Potter",
+        "trust": 55,
+        "affinity": 60,
+        "label": "neighbour of the garden",
+        "note": "She comes by for comfrey and rue and pays me in a good glazed pot; her glaze hand is surer than her husband's, and I tell her so."
+      },
+      {
+        "name": "Astrid Holm",
+        "trust": 60,
+        "affinity": 55,
+        "label": "fishwife",
+        "note": "She smokes her catch and sells at the Guild stall, and she brought me a smoked trout when I was down with the winter cough, no fuss about it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Elspeth putting a poultice in my hands my first week and telling me a healer's hands must be surer than her fears.",
+        "salience": 0.8,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "Reading the copy of the Coldwell taking in the guildhall and feeling the floor tilt under me.",
+        "salience": 0.75,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when we boiled the garden's roots for the town pot and I learned how little a salve can do against hunger.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Setting a carter's dislocated shoulder with Hilda Smith while he swore at the both of us, and laughing after.",
+        "salience": 0.5,
+        "about": [
+          "Hilda Smith"
+        ]
+      },
+      {
+        "gist": "Elspeth coming back from Coldwell at dawn with her skirts muddy and her face closed, and not telling me what she had seen.",
+        "salience": 0.55,
+        "about": [
+          "Sister Elspeth",
+          "Marta Hale"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "doubts_the_coldwell_taking",
+        "value": 0.7,
+        "why": "A debt is a debt and a field is a field, and I cannot make the one into the other however I try."
+      },
+      {
+        "key": "keep_the_salve_store_full",
+        "value": 0.85,
+        "why": "Winter comes whether or not the quarrels are settled."
+      },
+      {
+        "key": "say_nothing_i_cannot_prove",
+        "value": 0.65,
+        "why": "A sister who speaks out of turn is a sister the Reeve stops listening to."
+      },
+      {
+        "key": "healing_is_the_chapel's_work",
+        "value": 0.9,
+        "why": "Whatever else the town argues about, the sick are ours to tend."
+      }
+    ],
+    "secret": "I doubt the Reeve's right to the Coldwell fields, and I have said so to no one, not even Elspeth."
+  },
+  "Sister Perrin": {
+    "narrative": "I keep the common fire and the calendar of feast days, and I cook for the chapel and for whoever comes to the door hungry. I am not the eldest and not the cleverest, but I know which saint's day falls when and I know the fire's moods. I hear the town's quarrels at the door and I ladle out the pot and say little. The fire has not gone out in my keeping and it will not.",
+    "values": [
+      "the common fire",
+      "the calendar and the feast days",
+      "feeding whoever comes",
+      "keeping the peace at the door"
+    ],
+    "goals": [
+      "keep the common fire through the winter",
+      "keep the feast days straight so the town does not lose its year",
+      "see the chapel's pot never empty at the door"
+    ],
+    "mood": "placid, warm, unbothered",
+    "traits": {
+      "caution": 60,
+      "sociability": 65,
+      "empathy": 70,
+      "curiosity": 30,
+      "ambition": 20,
+      "introspection": 50,
+      "temper": 20,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Sister Elspeth",
+        "trust": 88,
+        "affinity": 70,
+        "label": "elder sister",
+        "note": "She carries the weight of the chapel and I carry the fire; it suits us."
+      },
+      {
+        "name": "Sister Alys",
+        "trust": 75,
+        "affinity": 62,
+        "label": "sister",
+        "note": "Quiet and clever with the herbs; I wish she would eat more."
+      },
+      {
+        "name": "Cuth Marrow",
+        "trust": 65,
+        "affinity": 60,
+        "label": "sister",
+        "note": "She comes to the fire on the cold feast days and sits by it without talking, and that is enough."
+      },
+      {
+        "name": "Pernel Pip",
+        "trust": 60,
+        "affinity": 55,
+        "label": "lodger",
+        "note": "A young scribe under our roof; she writes a fair hand and eats like a bird."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 55,
+        "affinity": 50,
+        "label": "innkeeper",
+        "note": "He sends the inn's scraps up for the pot and asks nothing; a good neighbour."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 60,
+        "affinity": 52,
+        "label": "cook",
+        "note": "She knows a kitchen and she knows when to keep her mouth shut; I like her."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 35,
+        "affinity": 25,
+        "label": "reeve",
+        "note": "He is the Reeve and the fire prays for him, but I do not warm to him."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the Lean Year's blight reached the north field and the queue at the chapel door went round the square, and I kept the pot going till dawn.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Elspeth teaching me the calendar when I was young, and the names of the feast days I have kept straight ever since.",
+        "salience": 0.7,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "The common fire going down to embers in a gale and coaxing it back with the last of the dry kindling, and telling no one.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Feeding a Coldwell man at the door in the snow and saying nothing about it to anyone, and Elspeth finding out and only nodding.",
+        "salience": 0.55,
+        "about": [
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "Cuth Marrow sitting by the fire on a cold feast day with her hands wrapped round a bowl, saying nothing, and both of us content.",
+        "salience": 0.45,
+        "about": [
+          "Cuth Marrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_fire_must_not_go_out",
+        "value": 0.95,
+        "why": "Every house keeps its fire, and the chapel keeps the common one; if it dies the town has lost its hearth."
+      },
+      {
+        "key": "feed_whoever_comes",
+        "value": 0.85,
+        "why": "A guest who has eaten at your hearth is under your roof's peace, and the pot at the door is the chapel's welcome."
+      },
+      {
+        "key": "keep_the_calendar",
+        "value": 0.8,
+        "why": "The feast days are how the town knows its year, and somebody must keep them straight."
+      },
+      {
+        "key": "stay_out_of_the_quarrels",
+        "value": 0.6,
+        "why": "I ladle the pot and hold my tongue; the Reeve and the Guild can argue their own argument."
+      }
+    ],
+    "secret": ""
+  }
+}

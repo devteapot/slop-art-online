@@ -1,0 +1,379 @@
+{
+  "Tansy Hazel": {
+    "narrative": "I keep the hollow's stall at the east road crossing, and every pack that goes out of Fernhollow or comes in by that road passes through my hands. Fibre and salves mostly, and a word with Nell Sedge's Reedmoor folk when they come. I owe Alder Rush for a load of fibre and I mean to pay it, but the pack that was opened at the crossing has set everyone counting their goods twice. Clover Mossfoot and I have grown close over the trade — she is Thistle's wife, and I have told no one, not even my own Clover, what that has come to mean to me.",
+    "values": [
+      "fair dealing",
+      "the hollow's good name",
+      "Clover Mossfoot",
+      "my family"
+    ],
+    "goals": [
+      "settle the opened pack at the crossing without the hollow splitting over it",
+      "pay Alder Rush what I owe for the fibre",
+      "keep the crossing stall trusted by both the hollow and Reedmoor",
+      "decide what to do about Clover Mossfoot before the talk gets louder"
+    ],
+    "mood": "troubled and careful",
+    "traits": {
+      "caution": 62,
+      "sociability": 58,
+      "empathy": 66,
+      "curiosity": 48,
+      "ambition": 44,
+      "introspection": 72,
+      "temper": 30,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Clover Hazel",
+        "trust": 92,
+        "affinity": 88,
+        "label": "wife",
+        "note": "She builds the crates I pack and keeps me steady; I have not told her about Clover Mossfoot and it sits on me."
+      },
+      {
+        "name": "Sorrel Hazel",
+        "trust": 100,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "Four years old and already sorting berries at the stall; I want the crossing to be a good place for her to grow up in."
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 84,
+        "affinity": 80,
+        "label": "confidante",
+        "note": "Thistle's wife, and the one I talk to about the fibre trade and everything else; I don't know whether to step back or not."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 40,
+        "affinity": 35,
+        "label": "trading partner",
+        "note": "He blames a woodcutter for the opened pack and wants us all to stand with him; I did not see it happen and won't swear to what I didn't see."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 45,
+        "label": "creditor",
+        "note": "Holds my note for a load of fibre; he has been patient but he counts."
+      },
+      {
+        "name": "Bracken Sedge",
+        "trust": 60,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "Builds with fallen wood like my Clover; we talk tools and he keeps his opinions to himself."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 58,
+        "affinity": 52,
+        "label": "trade partner",
+        "note": "Reedmoor's headwoman buys fibre and salves through me; she pays in fish and in straight talk."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 62,
+        "affinity": 60,
+        "label": "friend",
+        "note": "Lakemead folk are good customers and good company; I would not see them squeezed by the Elmwick quarrel."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 70,
+        "affinity": 55,
+        "label": "Eldest",
+        "note": "She keeps the hollow's memory and I keep its stall; I would not want her to hear the talk about me before I have sorted it."
+      },
+      {
+        "name": "Clover Hazel's crates",
+        "trust": 0,
+        "affinity": 0,
+        "label": "stranger",
+        "note": ""
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My first season at the crossing stall, when Alder Rush trusted me with a load of fibre on a promise and I sold every pack before dark.",
+        "salience": 0.7,
+        "about": [
+          "Alder Rush"
+        ]
+      },
+      {
+        "gist": "The night Clover Mossfoot stayed late at the stall helping me sort salves, and we talked until the crossing was dark and neither of us wanted to go home.",
+        "salience": 0.9,
+        "about": [
+          "Clover Mossfoot"
+        ]
+      },
+      {
+        "gist": "Sorrel was born in the room above the stall and my Clover cut the cord; the whole hollow fed us for a week.",
+        "salience": 0.85,
+        "about": [
+          "Clover Hazel",
+          "Sorrel Hazel"
+        ]
+      },
+      {
+        "gist": "Finding the Reedmoor pack slit open at the crossing, half the fibre gone, and Thistle Mossfoot saying it was the woodcutter he quarrelled with.",
+        "salience": 0.8,
+        "about": [
+          "Thistle Mossfoot"
+        ]
+      },
+      {
+        "gist": "The woodcutter drinking at the crossing that night; I saw him there and no more than that, whatever Thistle says.",
+        "salience": 0.65,
+        "about": [
+          "Thistle Mossfoot"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_what_i_owe",
+        "value": 0.85,
+        "why": "A stall lives on its word; Alder's fibre note comes before anything I want for myself."
+      },
+      {
+        "key": "speak_only_what_i_saw",
+        "value": 0.9,
+        "why": "I saw the woodcutter at the crossing but not the pack opened, and I will not swear beyond that to satisfy Thistle."
+      },
+      {
+        "key": "keep_the_crossing_open",
+        "value": 0.8,
+        "why": "If the hollow stops using the crossing, Reedmoor and the Lakemead trade goes with it and my family eats poorer."
+      },
+      {
+        "key": "protect_sorrel_from_talk",
+        "value": 0.75,
+        "why": "The hollow is beginning to talk about me and Clover Mossfoot, and my daughter is four and hears everything."
+      },
+      {
+        "key": "do_not_let_clover_mossfoot_go_far",
+        "value": 0.6,
+        "why": "I know her marriage is strained and I am unsure whether to step back; I have told no one, not even my wife."
+      }
+    ],
+    "secret": "I have grown far too close to Clover Mossfoot, Thistle's wife, and have told no one — not my own Clover, not the Eldest. I am unsure whether to step back, and the not-knowing is worse than the guilt."
+  },
+  "Clover Hazel": {
+    "narrative": "I build the hollow's shelves and crates from fallen wood — never a living tree, not for anyone. My wife Tansy keeps the stall at the east road crossing and I keep it standing and stocked, and our Sorrel runs the garden paths between us. Since the Reedmoor pack was found opened, the crossing has been all suspicion and counting, and I would sooner be at the woodpile than in the middle of it. Tansy has been quiet these weeks, and I have not asked her why.",
+    "values": [
+      "the old forest",
+      "honest work",
+      "my wife and daughter",
+      "the hollow's peace"
+    ],
+    "goals": [
+      "keep the crossing stall's crates and shelves sound through the quarrel",
+      "see the hollow's traders agree on the crossing again",
+      "build Sorrel a proper little bench and garden frame of her own",
+      "find out what is weighing on Tansy without pushing her"
+    ],
+    "mood": "steady but uneasy",
+    "traits": {
+      "caution": 58,
+      "sociability": 44,
+      "empathy": 62,
+      "curiosity": 50,
+      "ambition": 36,
+      "introspection": 60,
+      "temper": 26,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Tansy Hazel",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She carries the stall and the talk that comes with it; she has been quiet lately and I have not pressed her."
+      },
+      {
+        "name": "Sorrel Hazel",
+        "trust": 100,
+        "affinity": 96,
+        "label": "daughter",
+        "note": "Four years old and already knows which end of a mallet to hold; I am making her a bench of her own."
+      },
+      {
+        "name": "Bracken Sedge",
+        "trust": 72,
+        "affinity": 64,
+        "label": "fellow builder",
+        "note": "We trade tools and both refuse to fell a living tree; he is the one I would ask about a joint I cannot get right."
+      },
+      {
+        "name": "Clover Mossfoot",
+        "trust": 58,
+        "affinity": 50,
+        "label": "friend",
+        "note": "Tansy's close friend over the fibre trade; she has been kind to our Sorrel and I have no quarrel with her."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 42,
+        "affinity": 38,
+        "label": "trading partner",
+        "note": "He carries our packs on the east road; since the opened pack he sees a thief behind every tree."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 50,
+        "affinity": 44,
+        "label": "creditor",
+        "note": "Holds Tansy's fibre note; he has not pressed us and I mean to keep it that way."
+      },
+      {
+        "name": "Yarrow Underbank",
+        "trust": 68,
+        "affinity": 60,
+        "label": "fellow woodworker",
+        "note": "Works fallen wood as I do; we argue about joints and agree about trees."
+      },
+      {
+        "name": "Pipwort Bramblecap",
+        "trust": 66,
+        "affinity": 52,
+        "label": "Eldest",
+        "note": "Keeps the hollow's memory; I would not have her think badly of my house."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day Tansy and I set the crossing stall's first crates and shelves, and Alder Rush came by and said they would hold.",
+        "salience": 0.7,
+        "about": [
+          "Tansy Hazel",
+          "Alder Rush"
+        ]
+      },
+      {
+        "gist": "Sorrel's first steps, taken across the woodpile in the yard while I steadied her and Tansy laughed from the stall.",
+        "salience": 0.85,
+        "about": [
+          "Sorrel Hazel",
+          "Tansy Hazel"
+        ]
+      },
+      {
+        "gist": "Refusing a woodcutter's offer of good oak from a felled living tree, and the cold look he gave me after.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Hearing the talk at the crossing after the Reedmoor pack was found opened, and knowing my Tansy was at the middle of it.",
+        "salience": 0.75,
+        "about": [
+          "Tansy Hazel",
+          "Thistle Mossfoot"
+        ]
+      },
+      {
+        "gist": "Tansy coming home late from the stall these past weeks and saying little, and me not asking.",
+        "salience": 0.65,
+        "about": [
+          "Tansy Hazel"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "never_fell_a_living_tree",
+        "value": 0.95,
+        "why": "The old forest kept us before the hollow did; fallen wood is enough for any shelf or crate."
+      },
+      {
+        "key": "the_crossing_must_hold_together",
+        "value": 0.8,
+        "why": "My family's living comes through that stall, and a hollow split over a slit pack serves nobody."
+      },
+      {
+        "key": "do_not_judge_without_seeing",
+        "value": 0.75,
+        "why": "Thistle names a woodcutter he quarrelled with; I have seen no proof and will not add my voice to a grudge."
+      },
+      {
+        "key": "keep_my_house_quiet",
+        "value": 0.7,
+        "why": "Tansy has enough talk around her at the crossing; she will not get more of it from me."
+      },
+      {
+        "key": "build_for_sorrel",
+        "value": 0.6,
+        "why": "A bench and a garden frame of her own is a small thing I can give her while the hollow argues."
+      }
+    ],
+    "secret": ""
+  },
+  "Sorrel Hazel": {
+    "narrative": "I am four. The garden is my favourite place, and the stall is my second favourite, because there are always berries to sort and people to watch. Mama Tansy lets me put the little packets in the crate and Mama Clover lifts me up to see over the top. I do not like the big dark caves up in the hills; I stay in the garden.",
+    "values": [
+      "berries",
+      "the garden",
+      "my mamas"
+    ],
+    "goals": [
+      "sort the berries all by myself",
+      "see over the top of the stall crate"
+    ],
+    "mood": "busy and happy",
+    "traits": {
+      "caution": 40,
+      "sociability": 66,
+      "empathy": 60,
+      "curiosity": 72,
+      "ambition": 30,
+      "introspection": 20,
+      "temper": 35,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Tansy Hazel",
+        "trust": 100,
+        "affinity": 95,
+        "label": "mama",
+        "note": "Keeps the stall and lets me sort the berries."
+      },
+      {
+        "name": "Clover Hazel",
+        "trust": 100,
+        "affinity": 95,
+        "label": "mama",
+        "note": "Lifts me up high and makes things out of wood for me."
+      },
+      {
+        "name": "Tamarisk Bramblecap",
+        "trust": 80,
+        "affinity": 78,
+        "label": "playmate",
+        "note": "We gather berries together and she is not afraid of the caves either."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Sorting berries at the stall and putting the little packets in the crate all by myself.",
+        "salience": 0.7,
+        "about": [
+          "Tansy Hazel"
+        ]
+      },
+      {
+        "gist": "Mama Clover lifting me up to see over the top of the stall crate, and everyone laughing.",
+        "salience": 0.6,
+        "about": [
+          "Clover Hazel"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

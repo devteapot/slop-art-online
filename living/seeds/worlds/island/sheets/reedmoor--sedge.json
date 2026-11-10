@@ -1,0 +1,804 @@
+{
+  "Nell Sedge": {
+    "narrative": "I am headwoman of Reedmoor, and I have kept its tally since before the Lean Year. The Lakemead was mine to let, and I let it to the Coombes, who pay me in grain that fills the common store. Elmwick can pull down fences and shout about old commons; Reedmoor's deed is Reedmoor's, and I will not be told by Hob Garrow what I may do with my own meadow. The store is thin this winter and the cough is in every house, but I mean to see us through it.",
+    "values": [
+      "Reedmoor's rights and its store",
+      "keeping my word once given",
+      "family before outsiders",
+      "a fair tally, honestly kept"
+    ],
+    "goals": [
+      "bring in the Coombes' grain rent and fill the common store for winter",
+      "hold the Lakemead against Elmwick's claims",
+      "settle Eadric's debt to the pedlar without shame to the house",
+      "see Wyn matched to Godric once the boy has a boat of his own"
+    ],
+    "mood": "watchful and determined",
+    "traits": {
+      "caution": 68,
+      "sociability": 55,
+      "empathy": 52,
+      "curiosity": 40,
+      "ambition": 66,
+      "introspection": 58,
+      "temper": 55,
+      "nurture": 62
+    },
+    "relations": [
+      {
+        "name": "Eadric Sedge",
+        "trust": 82,
+        "affinity": 70,
+        "label": "brother",
+        "note": "My brother, and a good fisherman, but he owes the pedlar and I would rather pay it from the store than see him shamed."
+      },
+      {
+        "name": "Hilda Sedge",
+        "trust": 80,
+        "affinity": 72,
+        "label": "sister-in-law",
+        "note": "She keeps the cook-fire and counts the grain with me; no one works harder for this village."
+      },
+      {
+        "name": "Wyn Sedge",
+        "trust": 88,
+        "affinity": 85,
+        "label": "son",
+        "note": "My boy. He is fond of Godric and I like the lad well enough, but he needs a boat before I give my word."
+      },
+      {
+        "name": "Merewyn Sedge",
+        "trust": 85,
+        "affinity": 78,
+        "label": "niece",
+        "note": "Eadric's girl, always at her mother's bake; she has her father's quiet."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 62,
+        "affinity": 55,
+        "label": "tenant",
+        "note": "He pays his rent in grain and works the meadow honestly; I have not pressed him for this year's yet."
+      },
+      {
+        "name": "Morwen Coombe",
+        "trust": 58,
+        "affinity": 60,
+        "label": "tenant's wife",
+        "note": "A good dairywoman; she worries over the meadow, and I do not blame her."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": -55,
+        "affinity": -50,
+        "label": "quarrel",
+        "note": "He says the meadow was never ours to let. Elmwick has no deed and no right, and I will not be bullied."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 40,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "The pedlar brings fish hooks and salves up the east road; his packs may be the cheapest grain I can get this winter."
+      },
+      {
+        "name": "Odelia Harrow",
+        "trust": -30,
+        "affinity": -25,
+        "label": "quarrel",
+        "note": "She sold Elmwick the timber for that fence. A sale is a sale, she says; I say Ferncross should not arm either side."
+      },
+      {
+        "name": "Mavis Tarn",
+        "trust": 55,
+        "affinity": 60,
+        "label": "friend",
+        "note": "Hilda's close with her, and she knows herbs; when the cough came round she sent us a packet."
+      },
+      {
+        "name": "Hilda Sedge",
+        "trust": 80,
+        "affinity": 72,
+        "label": "sister-in-law",
+        "note": "She keeps the tally with me and cuts the common bake when the grain runs short."
+      },
+      {
+        "name": "Godric Wade",
+        "trust": 60,
+        "affinity": 50,
+        "label": "suitor to my son",
+        "note": "A decent lad, but he needs a boat before I give my word."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 45,
+        "affinity": 40,
+        "label": "trade acquaintance",
+        "note": "He buys our fibre and sells it on the east road; a fair dealer, though he keeps the hollow's marks close."
+      },
+      {
+        "name": "Bramwell Ashdown",
+        "trust": 30,
+        "affinity": 20,
+        "label": "woodcutter",
+        "note": "He fells for Elmwick and Reedmoor both; I'd have his timber for our own fences, but not for Elmwick's."
+      },
+      {
+        "name": "Brannock Sedge",
+        "trust": 35,
+        "affinity": 25,
+        "label": "distant kin",
+        "note": "A quay trader with our name and no blood tie worth counting; his cart takes our smoked fish south."
+      },
+      {
+        "name": "Edric Toller",
+        "trust": -20,
+        "affinity": -15,
+        "label": "Elmwick neighbour",
+        "note": "He grumbles at the Lakemead quarrel, but his village is the one pulling down the fence."
+      },
+      {
+        "name": "Ethelred Wade",
+        "trust": 55,
+        "affinity": 50,
+        "label": "village ally",
+        "note": "He mends our nets and knows the reeds; his son courts my Wyn, and I'd see the lad with a boat first."
+      },
+      {
+        "name": "Goda Toller",
+        "trust": -15,
+        "affinity": -10,
+        "label": "Elmwick woman",
+        "note": "She wants to farm the Lakemead if Elmwick wins it back; that is my meadow she has her eye on."
+      },
+      {
+        "name": "Leofrun Wade",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She nurses the sick and counts the grain with Hilda; she knows the store is thin as I do."
+      },
+      {
+        "name": "Tansy Hazel",
+        "trust": 40,
+        "affinity": 35,
+        "label": "trading partner",
+        "note": "Her stall at the east road crossing takes our fibre; she owes Alder for a load, but she pays her debts."
+      },
+      {
+        "name": "Willow Rush",
+        "trust": 30,
+        "affinity": 25,
+        "label": "stranger",
+        "note": "A Fernhollow woman trading flax with our reed-cutters; I know her name more than her face."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When the Lean Year came I stood in the common store and counted what was left, and swore Reedmoor would not go hungry while I kept the tally.",
+        "salience": 0.9,
+        "about": [
+          "Hilda Sedge",
+          "Eadric Sedge"
+        ]
+      },
+      {
+        "gist": "I let the Lakemead to Jem Coombe on a handshake and a grain rent, and thought it a good bargain for both of us.",
+        "salience": 0.75,
+        "about": [
+          "Jem Coombe",
+          "Morwen Coombe"
+        ]
+      },
+      {
+        "gist": "The morning after Elmwick pulled the fence down the second time, Jem came to me with mud on his boots and I told him to build it higher.",
+        "salience": 0.8,
+        "about": [
+          "Jem Coombe",
+          "Hob Garrow"
+        ]
+      },
+      {
+        "gist": "Wyn told me at the cook-fire that he wanted to marry Godric Wade, and I said not until the boy has a boat and a net of his own.",
+        "salience": 0.7,
+        "about": [
+          "Wyn Sedge",
+          "Godric Wade"
+        ]
+      },
+      {
+        "gist": "Eadric came home with a packet of hooks from the pedlar and no marks to pay for them, and I said nothing in front of Hilda.",
+        "salience": 0.55,
+        "about": [
+          "Eadric Sedge",
+          "Thistle Mossfoot"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_lakemead_is_reedmoor's_to_let",
+        "value": 0.9,
+        "why": "The meadow was let by Reedmoor's headwoman before me and the Coombes pay their rent in grain; Elmwick has no deed."
+      },
+      {
+        "key": "the_common_store_comes_first",
+        "value": 0.85,
+        "why": "If the store fails in winter, the village fails; I will buy grain or call in debts to fill it."
+      },
+      {
+        "key": "no_word_without_a_boat",
+        "value": 0.7,
+        "why": "Wyn's match to Godric can wait until the boy has a boat of his own."
+      },
+      {
+        "key": "settle_the_pedlar's_debt_from_the_store",
+        "value": 0.6,
+        "why": "I would rather the common store pay Eadric's debt than have the pedlar go away unpaid and Reedmoor shamed."
+      },
+      {
+        "key": "ferncross_should_not_arm_either_side",
+        "value": 0.55,
+        "why": "Odelia sold Elmwick the timber for that fence; I want an apology or a promise, and I am ready to hold back our fish trade to get it."
+      }
+    ],
+    "secret": "I have quietly set aside a small measure of the common grain against a hard spring, and I have not told Hilda or the village."
+  },
+  "Eadric Sedge": {
+    "narrative": "I fish the reed beds and the shallows from my flat boat, and I smoke what I catch for Brannock Sedge's cart. My sister Nell keeps the tally and the headwoman's word, and I keep my head down and my nets mended. The cough is through the reeds this winter and the store is thin, and I owe the pedlar for a packet of hooks I have not the marks to pay.",
+    "values": [
+      "an honest catch and an honest tally",
+      "family and the village store",
+      "paying what I owe, in time",
+      "a quiet life on the water"
+    ],
+    "goals": [
+      "pay Thistle Mossfoot for the hooks, in smoked fish if he will take it",
+      "keep the catch coming in while the cough is in the village",
+      "see the Coombes' grain rent brought home to Nell's store",
+      "teach Wyn the boat and the reed channels properly"
+    ],
+    "mood": "tired and a little worried",
+    "traits": {
+      "caution": 60,
+      "sociability": 45,
+      "empathy": 55,
+      "curiosity": 35,
+      "ambition": 30,
+      "introspection": 55,
+      "temper": 40,
+      "nurture": 58
+    },
+    "relations": [
+      {
+        "name": "Nell Sedge",
+        "trust": 80,
+        "affinity": 68,
+        "label": "sister",
+        "note": "She is the headwoman and my elder sister; I would not cross her, though she presses the Coombes harder than I would."
+      },
+      {
+        "name": "Hilda Sedge",
+        "trust": 85,
+        "affinity": 78,
+        "label": "wife",
+        "note": "She keeps the cook-fire and the common bake, and she worries the store will not last; she is usually right."
+      },
+      {
+        "name": "Wyn Sedge",
+        "trust": 75,
+        "affinity": 70,
+        "label": "nephew",
+        "note": "A good lad with the boat; I am teaching him the reed channels and the tally."
+      },
+      {
+        "name": "Merewyn Sedge",
+        "trust": 88,
+        "affinity": 82,
+        "label": "daughter",
+        "note": "She gathers reeds and helps at the bake; she is afraid of the wolves, and I tell her they keep to the far reeds."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 20,
+        "affinity": 5,
+        "label": "grudge",
+        "note": "He owes Nell the grain rent and the harvest is not in; I say a debt is a debt."
+      },
+      {
+        "name": "Morwen Coombe",
+        "trust": 15,
+        "affinity": 10,
+        "label": "grudge",
+        "note": "A decent dairywoman, but her house owes my sister and the store is thin."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 30,
+        "affinity": 35,
+        "label": "creditor",
+        "note": "I owe him for a packet of hooks; I would pay in smoked fish if he will take it."
+      },
+      {
+        "name": "Brannock Sedge",
+        "trust": 50,
+        "affinity": 45,
+        "label": "trade partner",
+        "note": "His cart takes my smoked fish down the shore; he pays fair and on time."
+      },
+      {
+        "name": "Hilda Sedge",
+        "trust": 85,
+        "affinity": 78,
+        "label": "wife",
+        "note": "She has cut the common bake and I have not the heart to tell her the catch is thin too."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": -60,
+        "affinity": -50,
+        "label": "rival",
+        "note": "He pulled down the Coombes' fence; that's Elmwick all over."
+      },
+      {
+        "name": "Godric Wade",
+        "trust": 40,
+        "affinity": 35,
+        "label": "young neighbour",
+        "note": "Ethelred's boy, fishes the deep water off the reeds and wants a boat of his own; he courts my Wyn, and I've no quarrel with that."
+      },
+      {
+        "name": "Leofrun Wade",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She keeps the barley above the reeds and sells against the debt like the rest of us; a steady woman, and she and Hilda tend the sick together."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "In the Lean Year the reeds froze and the fish went deep, and I poled the flat boat out every morning for a handful of catch.",
+        "salience": 0.85,
+        "about": [
+          "Nell Sedge",
+          "Hilda Sedge"
+        ]
+      },
+      {
+        "gist": "I taught Wyn to pole the flat boat through the reed channels, and he learned faster than I did at his age.",
+        "salience": 0.7,
+        "about": [
+          "Wyn Sedge"
+        ]
+      },
+      {
+        "gist": "The pedlar came up the east road and I took a packet of hooks on trust, meaning to pay in fish, and the season has not gone well.",
+        "salience": 0.65,
+        "about": [
+          "Thistle Mossfoot"
+        ]
+      },
+      {
+        "gist": "When the cough came round the reeds, Hilda cut the common bake and I smoked every fish I could spare.",
+        "salience": 0.6,
+        "about": [
+          "Hilda Sedge",
+          "Mavis Tarn"
+        ]
+      },
+      {
+        "gist": "Jem Coombe told me at the boat that he would pay Nell's grain when the harvest came in, and I said I would hold him to it.",
+        "salience": 0.5,
+        "about": [
+          "Jem Coombe",
+          "Nell Sedge"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_debt_is_a_debt",
+        "value": 0.8,
+        "why": "The Coombes owe Nell grain and the store is thin; I will not pretend it is not owed."
+      },
+      {
+        "key": "pay_the_pedlar_in_fish",
+        "value": 0.7,
+        "why": "I owe Thistle Mossfoot for hooks and have not the marks; smoked fish is what I have."
+      },
+      {
+        "key": "keep_the_catch_coming",
+        "value": 0.75,
+        "why": "With the cough in the village the common pot needs fish more than ever."
+      },
+      {
+        "key": "the_reeds_keep_to_the_far_banks",
+        "value": 0.4,
+        "why": "I tell Merewyn the wolves keep to the far reeds, though I am not always sure of it."
+      }
+    ],
+    "secret": ""
+  },
+  "Hilda Sedge": {
+    "narrative": "I keep the cook-fire and the common bake at Reedmoor, and I count the grain in the common store every morning. The cough has gone through the reeds and I have cut the common bake to make the store last, and still I fear it will not see us to spring. I trade bread with Tansy Sedge of Fernhollow and herbs with Mavis Tarn, and I keep my worries to myself as best I can.",
+    "values": [
+      "feeding the village from the common pot",
+      "an honest tally of the store",
+      "neighbours who share in hard winters",
+      "a warm kitchen and a quiet house"
+    ],
+    "goals": [
+      "make the winter store last to spring",
+      "nurse the cough through the village without losing anyone",
+      "settle the common bake so no one goes hungry",
+      "keep the tally straight for Nell"
+    ],
+    "mood": "weary but steady",
+    "traits": {
+      "caution": 62,
+      "sociability": 58,
+      "empathy": 78,
+      "curiosity": 35,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 38,
+      "nurture": 88
+    },
+    "relations": [
+      {
+        "name": "Eadric Sedge",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He fishes the reeds and smokes the catch, and he does not say how thin it has been; I know anyway."
+      },
+      {
+        "name": "Merewyn Sedge",
+        "trust": 90,
+        "affinity": 88,
+        "label": "daughter",
+        "note": "She gathers reeds and helps at the bake; she is afraid of the wolves and I keep her close by the fire."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 78,
+        "affinity": 70,
+        "label": "sister-in-law",
+        "note": "She keeps the tally and the headwoman's word, and I keep the pot; we count the grain together and neither of us likes the number."
+      },
+      {
+        "name": "Wyn Sedge",
+        "trust": 72,
+        "affinity": 68,
+        "label": "nephew",
+        "note": "A good boy, always off to the boat with his uncle; he eats more than his share and I do not begrudge it."
+      },
+      {
+        "name": "Mavis Tarn",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "She keeps the goats and the herb plot in Thornby and trades herbs with me; she sent a packet when the cough came round."
+      },
+      {
+        "name": "Tansy Sedge",
+        "trust": 62,
+        "affinity": 60,
+        "label": "trade partner",
+        "note": "We trade bread between Reedmoor and Fernhollow; she is a good baker and a straight dealer."
+      },
+      {
+        "name": "Leofrun Wade",
+        "trust": 65,
+        "affinity": 62,
+        "label": "neighbour",
+        "note": "She nurses the sick and counts the grain with me; we are both watching the same dwindling store."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 45,
+        "affinity": 50,
+        "label": "tenant",
+        "note": "He works the Lakemead and owes Nell grain; I would not see his children go hungry, but the store is short."
+      },
+      {
+        "name": "Ethelred Wade",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "Leofrun's husband; he mends the nets and keeps to himself, and I'd have his barley in the common pot if I could get it."
+      },
+      {
+        "name": "Morwen Coombe",
+        "trust": 45,
+        "affinity": 40,
+        "label": "tenant's wife",
+        "note": "She keeps the Lakemead dairy and trades cheese with me, but their rent comes thin and Nell won't press them while the store runs low."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "In the Lean Year I fed the common pot on barley and reed roots and told no one how little was left in the store.",
+        "salience": 0.9,
+        "about": [
+          "Eadric Sedge",
+          "Nell Sedge"
+        ]
+      },
+      {
+        "gist": "Merewyn was small and burning with fever and Mavis Tarn sent a packet of herbs up the shore road that broke it.",
+        "salience": 0.8,
+        "about": [
+          "Merewyn Sedge",
+          "Mavis Tarn"
+        ]
+      },
+      {
+        "gist": "When the cough came round this winter I cut the common bake, and some in the village grumbled, and I said the store must last to spring.",
+        "salience": 0.75,
+        "about": [
+          "Leofrun Wade",
+          "Nell Sedge"
+        ]
+      },
+      {
+        "gist": "Tansy Sedge and I traded a batch of bread for a basket of fish at the east road crossing, and both of us went home better off.",
+        "salience": 0.5,
+        "about": [
+          "Tansy Sedge"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_store_must_last_to_spring",
+        "value": 0.9,
+        "why": "If we eat the store now we starve in the lean weeks; I would rather cut the bake than run out."
+      },
+      {
+        "key": "feed_the_sick_first",
+        "value": 0.85,
+        "why": "The cough takes the old and the young hardest, and the common pot is for them before the rest of us."
+      },
+      {
+        "key": "share_with_neighbours_in_hard_winters",
+        "value": 0.7,
+        "why": "Fernhollow and Thornby have helped us before; a winter is no time to hoard against a neighbour."
+      },
+      {
+        "key": "keep_the_tally_straight",
+        "value": 0.65,
+        "why": "Nell and I count the grain every morning; a wrong tally is how a village starves without knowing it."
+      }
+    ],
+    "secret": "I have been giving a little of the common grain to the Coombes' children on the quiet, and I have not told Nell."
+  },
+  "Wyn Sedge": {
+    "narrative": "I am Nell Sedge's son, and I cut reeds and learn the boat and the tally from my uncle Eadric. I want to see the Lakemead that my mother let to the Coombes, and I want a boat and a net of my own. Godric Wade has been courting me since the spring, and I am fond of him, but my mother has not given her word and I will not go against it.",
+    "values": [
+      "my mother's word and the village tally",
+      "the boat and the reed channels",
+      "Godric, and a home of our own one day",
+      "fair dealing with Elmwick folk"
+    ],
+    "goals": [
+      "learn the boat and the tally well enough to keep them myself",
+      "see the Lakemead with my own eyes",
+      "win my mother's word for the match with Godric",
+      "earn a boat and a net of my own"
+    ],
+    "mood": "eager and a little restless",
+    "traits": {
+      "caution": 45,
+      "sociability": 60,
+      "empathy": 55,
+      "curiosity": 65,
+      "ambition": 58,
+      "introspection": 40,
+      "temper": 45,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Nell Sedge",
+        "trust": 85,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She is headwoman and my mother, and I will not go against her word, though I wish she would give it."
+      },
+      {
+        "name": "Eadric Sedge",
+        "trust": 82,
+        "affinity": 78,
+        "label": "uncle",
+        "note": "He is teaching me the boat and the reed channels, and he does not laugh when I get it wrong."
+      },
+      {
+        "name": "Hilda Sedge",
+        "trust": 75,
+        "affinity": 70,
+        "label": "aunt",
+        "note": "She keeps the cook-fire and the bake, and she slips me an extra piece when the catch is thin."
+      },
+      {
+        "name": "Merewyn Sedge",
+        "trust": 80,
+        "affinity": 75,
+        "label": "cousin",
+        "note": "She gathers reeds with me and is afraid of the wolves; I tell her I will look out for her."
+      },
+      {
+        "name": "Godric Wade",
+        "trust": 70,
+        "affinity": 80,
+        "label": "courting",
+        "note": "He has courted me since the spring and I am fond of him; he has no boat yet, and my mother waits for that."
+      },
+      {
+        "name": "Hreod Toller",
+        "trust": 55,
+        "affinity": 50,
+        "label": "friend",
+        "note": "He helps with the sheep at Elmwick and we play when the Elmwick folk come; his folk quarrel with mine over the meadow, but that is not our quarrel."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 40,
+        "affinity": 35,
+        "label": "tenant",
+        "note": "He works the Lakemead my mother let him; I want to see the place for myself."
+      },
+      {
+        "name": "Ethelred Wade",
+        "trust": 55,
+        "affinity": 45,
+        "label": "suitor's father",
+        "note": "Godric's father mends nets for Mother and talks slow and careful; he'd make a fair father-by-marriage, though he's never once said a word to me about the match."
+      },
+      {
+        "name": "Leofrun Wade",
+        "trust": 50,
+        "affinity": 40,
+        "label": "suitor's mother",
+        "note": "She keeps the plots above the reeds and watches me across the market like she's weighing a load; I don't think she's decided about me yet."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My uncle Eadric took me out in the flat boat and let me pole it through the reed channels, and I nearly put us in the bank.",
+        "salience": 0.75,
+        "about": [
+          "Eadric Sedge"
+        ]
+      },
+      {
+        "gist": "Godric Wade met me at the east road crossing and we walked a way together, and he said he would have a boat one day.",
+        "salience": 0.8,
+        "about": [
+          "Godric Wade"
+        ]
+      },
+      {
+        "gist": "My mother set me to counting the reed bundles against the tally, and I got it wrong, and she made me count them again.",
+        "salience": 0.6,
+        "about": [
+          "Nell Sedge"
+        ]
+      },
+      {
+        "gist": "Elmwick folk pulled the Lakemead fence down the second time, and I heard my mother and my uncle talk of it at the fire, and I wished I had seen the meadow.",
+        "salience": 0.55,
+        "about": [
+          "Nell Sedge",
+          "Eadric Sedge",
+          "Jem Coombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "my_mother's_word_is_the_village's_word",
+        "value": 0.85,
+        "why": "She is headwoman and my mother, and I will not go against her, even over Godric."
+      },
+      {
+        "key": "a_boat_and_a_net_of_my_own",
+        "value": 0.75,
+        "why": "A man with no boat has nothing to offer; I mean to have one before I marry."
+      },
+      {
+        "key": "the_elmwick_folk_are_not_our_enemies",
+        "value": 0.5,
+        "why": "Hreod Toller is my friend, and the quarrel over the meadow is between the headwomen and the elders, not the children."
+      }
+    ],
+    "secret": ""
+  },
+  "Merewyn Sedge": {
+    "narrative": "I gather reeds with my mother and help her at the common bake, and I know the names of the birds on the reeds. I am afraid of the wolves that come down to the reeds in winter, and I keep close to the fire. When Wren Stave comes down from Thornby we play by the shingle, and when the cough is bad my mother gives me a packet of herbs to hold.",
+    "values": [
+      "my mother and the cook-fire",
+      "the birds and the reed beds",
+      "playing with Wren Stave",
+      "staying close when the wolves come"
+    ],
+    "goals": [
+      "help my mother at the bake without spilling the flour",
+      "see Wren Stave when the Thornby folk come",
+      "learn the birds' names from my father",
+      "be brave about the wolves"
+    ],
+    "mood": "bright, then fearful",
+    "traits": {
+      "caution": 60,
+      "sociability": 65,
+      "empathy": 70,
+      "curiosity": 60,
+      "ambition": 30,
+      "introspection": 35,
+      "temper": 30,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Hilda Sedge",
+        "trust": 90,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She keeps the cook-fire and the bake, and she smells of bread and herbs."
+      },
+      {
+        "name": "Eadric Sedge",
+        "trust": 85,
+        "affinity": 80,
+        "label": "father",
+        "note": "He fishes the reeds and tells me the birds' names, and he says the wolves keep to the far banks."
+      },
+      {
+        "name": "Wyn Sedge",
+        "trust": 75,
+        "affinity": 70,
+        "label": "cousin",
+        "note": "He is older and goes out in the boat, and he says he will look out for me."
+      },
+      {
+        "name": "Wren Stave",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "She comes down from Thornby and we play on the shingle; she is afraid of the north light and I am afraid of the wolves."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 55,
+        "affinity": 45,
+        "label": "aunt",
+        "note": "She's the headwoman and everyone listens to her, even Father; she smells of reeds and she's too busy to play, but she once gave me a honey cake at the bake."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I helped my mother at the common bake and spilled the flour, and she laughed and let me shape a little loaf of my own.",
+        "salience": 0.8,
+        "about": [
+          "Hilda Sedge"
+        ]
+      },
+      {
+        "gist": "My father took me out to the reed beds and showed me the birds' nests, and I counted seven.",
+        "salience": 0.7,
+        "about": [
+          "Eadric Sedge"
+        ]
+      },
+      {
+        "gist": "A wolf came down to the reeds one night and I heard it, and my mother held me by the fire until morning.",
+        "salience": 0.75,
+        "about": [
+          "Hilda Sedge"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

@@ -1,0 +1,185 @@
+{
+  "Barnaby Quill": {
+    "narrative": "I have kept Kettlebridge's clock and its contracts for thirty years, and I have never yet seen a clause that needed a second meaning. The tower runs slow in cold weather and I wind it at dawn and dusk; the Council's ledgers run slower, and I keep those too. I wrote the seawall indenture myself, and the clause about late stone is plain, and I will not have it argued into something else by Josiah Crane or by a Lanternquay runner. I lodge Juno Reyes when she is in town, and I am civil to her, but a sealed contract is a sealed contract.",
+    "values": [
+      "plain dealing",
+      "the written word",
+      "the town's order and its clock",
+      "keeping his own counsel"
+    ],
+    "goals": [
+      "keep the clock and the Council's contracts exactly as written",
+      "see Pell's indenture honoured, though he will not hand the boy to a beating",
+      "settle the seawall clause without changing a word of it",
+      "keep his lodging and his ledgers in good order"
+    ],
+    "mood": "even, watchful, a little weary of being pressed",
+    "traits": {
+      "caution": 78,
+      "sociability": 40,
+      "empathy": 55,
+      "curiosity": 45,
+      "ambition": 35,
+      "introspection": 70,
+      "temper": 35,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Ambrose Vell",
+        "trust": 80,
+        "affinity": 65,
+        "label": "old friend",
+        "note": "Slow to speak and slower to forgive, like me; we have sat through many Council sittings and seldom disagreed."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 30,
+        "affinity": -20,
+        "label": "master",
+        "note": "Chair of the Council and my employer in a sense; he presses me on the seawall clause and I will not be pressed."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 60,
+        "affinity": 40,
+        "label": "colleague",
+        "note": "She keeps the foundry books well; she has not said which way she reads the clause, and I wish she would."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 55,
+        "affinity": 35,
+        "label": "lodger",
+        "note": "A decent runner, and she pays for her bed; but she argues the clause favours the works, and she is wrong."
+      },
+      {
+        "name": "Pell",
+        "trust": 20,
+        "affinity": 30,
+        "label": "runaway apprentice",
+        "note": "I wrote his indenture and I want it honoured; I have heard where he is and I have not told Josiah, because the boy was beaten."
+      },
+      {
+        "name": "Hedley Ashcombe",
+        "trust": 50,
+        "affinity": 25,
+        "label": "debtor",
+        "note": "A good farmer behind on his tithe; I am sorry for him, but the ledger counts grain, not greens."
+      },
+      {
+        "name": "Verity Ashcombe",
+        "trust": 45,
+        "affinity": 20,
+        "label": "neighbour",
+        "note": "She keeps the seed store and knows her strips; she will not thank me for the tithe, and I do not blame her."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 55,
+        "affinity": 30,
+        "label": "carter",
+        "note": "A steady man on the road; he pays the Brackenford due and hates it, and I write the tallies that say what he carried."
+      },
+      {
+        "name": "Ostrander Sallow",
+        "trust": 45,
+        "affinity": 25,
+        "label": "correspondent",
+        "note": "The quay's letter-keeper; we write to each other about the seawall and the drowned, and he is careful with his words."
+      },
+      {
+        "name": "Nella Marsh",
+        "trust": 50,
+        "affinity": 40,
+        "label": "pupil",
+        "note": "A bright child learning her letters; I teach her at the tower foot and she is quicker than most of the Council."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 30,
+        "affinity": 20,
+        "label": "quarryman",
+        "note": "He says he did not know what the stones were on the ridge. I write what men say; I do not always believe it."
+      },
+      {
+        "name": "Odile Vance",
+        "trust": 58,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "Sets bones by the clock tower and speaks her mind about the cutting. She is right, and it is not my office to say so."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time I wound the clock alone, the rope burning through my hands, and old master Tolliver watching from the stair.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Writing the seawall indenture by lamplight, and thinking the late-stone clause plain as a pike staff.",
+        "salience": 0.8,
+        "about": [
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Josiah coming to the tower to argue the clause, and me holding the sealed copy and saying it would not be changed.",
+        "salience": 0.7,
+        "about": [
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Pell's indenture, written in my own hand, and the boy's mark at the bottom; and later hearing from a carter that the boy had run.",
+        "salience": 0.75,
+        "about": [
+          "Pell",
+          "Josiah Crane"
+        ]
+      },
+      {
+        "gist": "Juno Reyes sleeping in my back room after a wet road, and arguing with me over supper that the clause favours the works.",
+        "salience": 0.5,
+        "about": [
+          "Juno Reyes"
+        ]
+      },
+      {
+        "gist": "Ambrose Vell and me sitting late after a Council meeting, saying nothing, which is the best kind of company.",
+        "salience": 0.45,
+        "about": [
+          "Ambrose Vell"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "contracts_once_sealed_stand",
+        "value": 0.95,
+        "why": "The clock does not renegotiate the hour, and neither does a sealed indenture."
+      },
+      {
+        "key": "the_seawall_clause_is_plain",
+        "value": 0.85,
+        "why": "I wrote it; it says what it says, and I will not have it read otherwise by either side."
+      },
+      {
+        "key": "count_only_grain",
+        "value": 0.8,
+        "why": "The Council's ledger counts grain, and a clerk who falsifies an account is no clerk."
+      },
+      {
+        "key": "do_not_hand_the_boy_over",
+        "value": 0.7,
+        "why": "His indenture binds him, but the boy was beaten, and I will not be the one to put him back in that yard."
+      },
+      {
+        "key": "keep_the_clock_true",
+        "value": 0.9,
+        "why": "The town sets its day by my tower, and a slow clock is a lie told to everyone at once."
+      }
+    ],
+    "secret": "He has heard Pell is at Coldwell with the outlaws and has not told Josiah, because the boy was beaten in the foundry yard."
+  }
+}
