@@ -119,6 +119,11 @@ pub struct Talks {
     spoke: HashMap<u32, u64>,
     /// Recent reply-turn lines per character (for "you have talked a lot lately").
     said: HashMap<u32, Vec<u64>>,
+    /// Lines that came while the listener's deliberation was running (its prompt already
+    /// built): listener → (speaker, when the line was heard). Taken up when it ends.
+    parked: HashMap<u32, Vec<(u32, u64)>>,
+    /// When a deliberation last spoke to someone: (speaker, listener) → at_ms.
+    deliberated_to: HashMap<(u32, u32), u64>,
 }
 
 fn pair(a: u32, b: u32) -> (u32, u32) {
@@ -402,10 +407,16 @@ impl Minds {
         if !go {
             return;
         }
+        log::debug!("{} gets a reply turn for {}", me.name, self.name(speaker));
+        self.spawn_turns(listener, speaker);
+    }
+
+    /// Run reply turns for a listener who claimed one (`busy`), then for whoever spoke to them
+    /// meanwhile.
+    fn spawn_turns(self: Arc<Self>, listener: u32, speaker: u32) {
         if self.lod.on {
             self.actors.lock().unwrap().entry(listener).or_default().last_talk = Some(std::time::Instant::now());
         }
-        log::debug!("{} gets a reply turn for {}", me.name, self.name(speaker));
         tokio::spawn(async move {
             let mut speaker = speaker;
             loop {
@@ -445,24 +456,90 @@ impl Minds {
         })
     }
 
-    /// Full deliberations take priority over conversation turns.
+    /// Full deliberations take priority over conversation turns while one is running (its
+    /// prompt is being built or the model is answering). A request that is only pending
+    /// (queued, held by the rethink gate or off stage) is not thinking: the line gets its turn
+    /// now, and the deliberation, when it comes, sees the line and the answer among recent
+    /// experiences.
     fn thinking(&self, actor: u32) -> bool {
-        // A request held back (off stage, lod.rs, or by the rethink gate) is not a
-        // deliberation under way.
-        let (deliberating, deferring) = self.actors.lock().unwrap().get(&actor).map_or((false, false), |m| (m.deliberating, m.deferring));
-        if deferring {
-            return false;
+        self.actors.lock().unwrap().get(&actor).map_or(false, |m| m.running)
+    }
+
+    /// A deliberation is about to speak (to `to`, or to nobody in particular).
+    pub(super) fn deliberation_says(&self, actor: u32, say: &str, to: u32) {
+        if say.trim().is_empty() {
+            return;
         }
-        if self.lod.on {
-            return deliberating || self.pending.lock().unwrap().contains_key(&actor);
+        let now = llm::now_ms();
+        let mut t = self.talk.lock().unwrap();
+        let named: Vec<u32> = if to != 0 {
+            vec![to]
+        } else {
+            // Unaddressed words count as speaking to a waiting speaker they name.
+            let words = memory::cue_words(say);
+            t.parked.get(&actor).map(|v| v.iter().map(|(s, _)| *s).filter(|s| memory::cue_words(&self.name(*s)).iter().any(|w| words.contains(w))).collect()).unwrap_or_default()
+        };
+        for o in named {
+            t.deliberated_to.insert((actor, o), now);
         }
-        deliberating || self.conn.db.my_deliberations().iter().any(|d| d.actor == actor)
+        t.deliberated_to.retain(|_, at| now.saturating_sub(*at) < QUIET_MS * 2);
+    }
+
+    /// A deliberation ended: lines that came while it ran get their turn, unless it spoke to
+    /// that person after hearing them.
+    pub(super) fn deliberation_ended(self: Arc<Self>, actor: u32) {
+        let now = llm::now_ms();
+        let due: Vec<u32> = {
+            let mut t = self.talk.lock().unwrap();
+            let lines = t.parked.remove(&actor).unwrap_or_default();
+            let mut due = Vec::new();
+            for (speaker, at) in lines {
+                if due.contains(&speaker) {
+                    continue;
+                }
+                if t.deliberated_to.get(&(actor, speaker)).is_some_and(|said| *said >= at) {
+                    log::info!("{} answered {} in its deliberation", self.name(actor), self.name(speaker));
+                    continue;
+                }
+                if now.saturating_sub(at) > QUIET_MS {
+                    continue;
+                }
+                due.push(speaker);
+            }
+            due
+        };
+        for speaker in due {
+            let go = {
+                let mut t = self.talk.lock().unwrap();
+                match t.busy.get_mut(&actor) {
+                    Some(waiting) => {
+                        *waiting = Some(speaker);
+                        false
+                    }
+                    None => {
+                        t.busy.insert(actor, None);
+                        true
+                    }
+                }
+            };
+            log::info!("{}'s deliberation ended: the line from {} gets its turn", self.name(actor), self.name(speaker));
+            if go {
+                self.clone().spawn_turns(actor, speaker);
+            }
+        }
     }
 
     async fn reply_turn(&self, me: u32, other: u32) -> Result<()> {
         if self.thinking(me) {
-            // The deliberation sees the line among recent experiences and may answer there.
-            log::info!("{} is deliberating; the line from {} is left to that deliberation", self.name(me), self.name(other));
+            // Its prompt may already be built: the line waits for the deliberation to end.
+            log::info!("{} is deliberating; the line from {} waits for it to end", self.name(me), self.name(other));
+            let heard = self.talk.lock().unwrap().pairs.get(&pair(me, other)).and_then(|c| c.lines.iter().rev().find(|l| l.speaker == other).map(|l| l.at_ms)).unwrap_or_else(llm::now_ms);
+            let mut t = self.talk.lock().unwrap();
+            let v = t.parked.entry(me).or_default();
+            match v.iter_mut().find(|(s, _)| *s == other) {
+                Some(x) => x.1 = x.1.max(heard),
+                None => v.push((other, heard)),
+            }
             return Ok(());
         }
         let Some(c) = self.conn.db.character().id().find(&me) else { return Ok(()) };
