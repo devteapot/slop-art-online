@@ -23,6 +23,7 @@ On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `
 - **Passes:** `minds-rethink-230515` passed both cases.
 - **Full suite `minds-full-232622`:** all 17 cases pass (roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night, jev, rethink, rethink-llm); consolidation is its known XFAIL.
 - **After merging main** (townlife-2, trials-1): `minds-merged-010653` passed rethink, rethink-llm, wake, conversation, lod, roundtrip and jev.
+- **Final, after merging main `fe6ec66`** (feedback-1, iter-6, lives-1, soak-1): `minds-final-091241` passed all 17 cases; consolidation is its known XFAIL.
 - **SELinux:** on this Fedora host the container's `/wasm` bind mount needs the `z` label, or `spacetime publish` fails with "Permission denied".
 
 ## 2026-11-09 town life layer 2, phase 1 (Mac)
