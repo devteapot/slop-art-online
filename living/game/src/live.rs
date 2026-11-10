@@ -449,12 +449,22 @@ fn bodies(
                 s.drawn = if gap.length() <= step || gap.length() > SNAP_M { p } else { s.drawn + gap / gap.length() * step };
             }
         }
-        // The gait follows the drawn motion, so a catching-up body's feet match its steps.
+        // The gait takes up the displayed segment's speed at once when it rises: the authority
+        // starts a body at full speed, and an eased speed slid the feet as it set off. It eases
+        // down as before, so a stop finishes its step (the planted foot held) rather than
+        // freezing mid-stride and blending to standing, which slid both feet (foot_slide, 2026-11-10).
+        // A body held or catching up (getting up, a startle) is drawn off its segment: its gait
+        // follows the drawn motion.
+        let on_segment = held.is_none() && s.drawn == p;
         let v = (s.drawn - before).length() / dt;
         let p = s.drawn;
         let ground = island.height(p.x, p.y);
         let v = if v.is_finite() && v < 20.0 { v } else { 0.0 };
-        s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp());
+        match scene.speeds.get(&id) {
+            Some(&seg) if on_segment && seg >= s.speed => s.speed = seg,
+            Some(&seg) if on_segment => s.speed += (seg - s.speed) * (1.0 - (-dt * 8.0).exp()),
+            _ => s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp()),
+        }
         if let Some(h) = h {
             s.yaw += living_rules::steer::wrap(h - s.yaw) * (1.0 - (-dt * YAW_RATE).exp());
             s.yaw = living_rules::steer::wrap(s.yaw);

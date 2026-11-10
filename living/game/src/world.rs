@@ -103,6 +103,8 @@ pub struct Scene {
     pub tracks: Tracks,
     /// Displayed position (sim metres) and heading of every subscribed body.
     pub shown: HashMap<u32, (Vec2, Option<f32>)>,
+    /// Each shown body's speed on its displayed segment (sim m/s, 0 standing).
+    pub speeds: HashMap<u32, f32>,
     pub now_ms: f64,
     /// The authority time my own body is drawn at, and my body's newest segment then (`t_ms`,
     /// `next_ms`, speed in m/s), for the feet log (`gait.rs`).

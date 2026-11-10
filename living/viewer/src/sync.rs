@@ -252,6 +252,14 @@ impl Tracks {
         }
     }
 
+    /// The speed of the segment shown for `id` at `now` (carried `past` ms beyond its end, as
+    /// [`Tracks::update_ahead`] draws it), 0 while it stands: what a drawn gait should step at,
+    /// since the authority starts and stops a body at full speed.
+    #[allow(dead_code)]
+    pub fn speed(&self, id: u32, now: f64, past: f64) -> f32 {
+        self.tracks.get(&id).map_or(0.0, |t| if t.cur.heading_past(now, past).is_some() { t.cur.vx.hypot(t.cur.vy) } else { 0.0 })
+    }
+
     /// Forget bodies that are gone.
     pub fn retain(&mut self, keep: impl Fn(u32) -> bool) {
         self.tracks.retain(|id, _| keep(*id));

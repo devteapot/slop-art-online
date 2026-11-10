@@ -344,6 +344,7 @@ pub fn update(
         // mid-step and read as people; they come back with the next connection's rows.
         scene.tracks.retain(|_| false);
         scene.shown.clear();
+        scene.speeds.clear();
         for (_, e) in scene.creatures.drain() {
             commands.entity(e).despawn();
         }
@@ -374,6 +375,11 @@ pub fn update(
     // renewal arrives (`Tracks::update_ahead`), rather than stopping for a frame at every one.
     let past = if input.moving || time.elapsed_secs_f64() - input.held_s < CARRY_AFTER_S { CARRY_MS } else { 0.0 };
     scene.tracks.update_ahead(bodies.values().filter(|b| Some(b.id) == me), mine_at, dt, past, &mut put);
+    scene.speeds.clear();
+    for b in bodies.values() {
+        let (t, past) = if Some(b.id) == me { (mine_at, past) } else { (now, 0.0) };
+        scene.speeds.insert(b.id, scene.tracks.speed(b.id, t, past));
+    }
     measure(&mut scene.lat, me.and_then(|id| bodies.get(&id)), input.moved_at, mine_at, shadow, now, scene.clock.delay_ms(), scene.shadow.delay_ms(), (scene.clock.resyncs, scene.shadow.resyncs));
     scene.creatures.retain(|id, e| {
         let keep = bodies.contains_key(id);
