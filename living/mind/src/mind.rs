@@ -157,6 +157,39 @@ pub(crate) fn acts_of(v: &Value) -> Vec<String> {
     list.into_iter().filter(|x| x.is_object()).take(living_rules::acts::MAX_QUEUED).map(|x| x.to_string()).collect()
 }
 
+/// Speech is not an act: the authority refuses `{"do": "say"}` ("an act is a single {"do":
+/// skill, ...} node"). A compile that expressed the decision's words as one (15 of 434
+/// compiles on rules2-r2, by this count; reviewers counted 15, when the think step put them in `intend`) would have them never
+/// spoken. The first such act becomes the reply's `say` when it has none, and every say act
+/// leaves the acts.
+fn say_acts_into_speech(v: &mut Value) {
+    let is_say = |a: &Value| a["do"].as_str().is_some_and(|d| d.trim().eq_ignore_ascii_case("say"));
+    let mut said: Vec<Value> = Vec::new();
+    if let Some(acts) = v.get_mut("acts").and_then(|a| a.as_array_mut()) {
+        said.extend(acts.iter().filter(|a| is_say(a)).cloned());
+        acts.retain(|a| !is_say(a));
+    }
+    if v.get("acts").is_some_and(|a| is_say(a)) {
+        said.push(v["acts"].take());
+    }
+    if v.get("act").is_some_and(|a| is_say(a)) {
+        said.push(v["act"].take());
+    }
+    let silent = match &v["say"] {
+        Value::String(s) => s.trim().is_empty(),
+        Value::Object(o) => o.get("text").and_then(|t| t.as_str()).is_none_or(|t| t.trim().is_empty()),
+        _ => true,
+    };
+    let words = said.iter().find_map(|a| {
+        let text = a["text"].as_str().or_else(|| a["say"].as_str()).map(str::trim).filter(|t| !t.is_empty())?;
+        let to = a.get("to").and_then(living_rules::normalize::reply_id).or_else(|| a["target"].get("id").and_then(living_rules::normalize::reply_id));
+        Some(json!({"text": text, "to": to}))
+    });
+    if let (true, Some(words)) = (silent, words) {
+        v["say"] = words;
+    }
+}
+
 /// Real-time moves a mind decided on as acts (dodge, block, attack, flee...) are its body's
 /// behavior, not one-off acts: they become what it means to do now (its intent), weighed
 /// above staying safe since it chose them in the moment, instead of being refused. In the
@@ -1516,17 +1549,20 @@ impl Minds {
         let thought_ref = reference(actor, "deliberate");
         // The decision's own words (thought, speech, stances, places) are kept whatever the compiler says.
         let keep = |raw: &str| -> String {
-            match (llm::parse_json(raw), decision.is_object()) {
-                (Ok(mut v), true) => {
-                    for k in ["thought", "say", "judgments", "places"] {
-                        v[k] = decision[k].clone();
+            match llm::parse_json(raw) {
+                Ok(mut v) => {
+                    if decision.is_object() {
+                        for k in ["thought", "say", "judgments", "places"] {
+                            v[k] = decision[k].clone();
+                        }
+                        if v["plan"].as_str().map_or(true, |p| p.is_empty()) && !intend.is_empty() {
+                            v["plan"] = json!(intend.join("; "));
+                        }
                     }
-                    if v["plan"].as_str().map_or(true, |p| p.is_empty()) && !intend.is_empty() {
-                        v["plan"] = json!(intend.join("; "));
-                    }
+                    say_acts_into_speech(&mut v);
                     v.to_string()
                 }
-                _ => raw.to_string(),
+                Err(_) => raw.to_string(),
             }
         };
         let mut profile = profile;
@@ -2090,6 +2126,28 @@ fn label_node(node: Value, label: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A compile that put the decision's words in a say act (a real rules2-r2 reply's shape)
+    /// speaks them when the decision said nothing; when it did, its speech stands. Either way
+    /// no say act reaches the authority.
+    #[test]
+    fn a_compiled_say_act_becomes_the_speech_and_leaves_the_acts() {
+        let compiled = || json!({"plan": "meet Marta", "say": null, "acts": [
+            {"do": "say", "text": "Morning, Marta — Arlen, here as promised.", "to": "312"},
+            {"do": "give", "target": {"id": 312}, "item": "berries", "qty": 2}]});
+        let mut v = compiled();
+        say_acts_into_speech(&mut v);
+        assert_eq!(v["say"], json!({"text": "Morning, Marta — Arlen, here as promised.", "to": 312}));
+        assert_eq!(acts_of(&v), vec![json!({"do": "give", "target": {"id": 312}, "item": "berries", "qty": 2}).to_string()]);
+        let mut v = compiled();
+        v["say"] = json!({"text": "Hello the house!", "to": null});
+        say_acts_into_speech(&mut v);
+        assert_eq!(v["say"]["text"], "Hello the house!", "the decision's own speech stands");
+        assert_eq!(acts_of(&v).len(), 1);
+        let mut v = json!({"act": {"do": "say", "target": {"nearest": {"kind": "person"}}, "text": "Anyone home?"}});
+        say_acts_into_speech(&mut v);
+        assert_eq!((v["say"]["text"].as_str(), v["say"]["to"].is_null(), acts_of(&v).is_empty()), (Some("Anyone home?"), true, true));
+    }
 
     #[test]
     fn patches_replace_labeled_branch_or_take_priority() {
