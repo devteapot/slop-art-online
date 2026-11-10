@@ -51,7 +51,8 @@ Each rule overlays `defaults`. Available response fields:
 | `close_port` | Close the request connection and stop the server's listener. |
 | `raw_http_body` | Exact HTTP body. Use this for malformed envelope JSON. |
 | `tokens` | `usage.total_tokens`, default 17. |
-| `usage` | Exact usage object. Default prompt 12, completion 5, total 17, cached 8. Omit individual fields to prove unknown values remain null. |
+| `usage` | Exact usage object. Default prompt 12, completion 5, total 17, cached 8, reasoning 2 (`completion_tokens_details`). Omit individual fields to prove unknown values remain null. |
+| `finish_reason` | The choice's `finish_reason`, default `stop` (direct and batch). |
 | `headers` | Response header map, including Retry-After and optional provider rate-limit headers. |
 
 ## Citing the request (`cite`)
@@ -67,7 +68,7 @@ A rule with `"cite": true` fills placeholders in its `reply` from the experience
 
 ## Batch jobs
 
-`POST /v1/batch/jobs` with inline `requests` (`[{custom_id, body}]`, Mistral's shape) answers each request through the same script and log as a direct one (the log line gets `batch_job`) and returns `{"id": "job-N", "status": "QUEUED"}`. `GET /v1/batch/jobs/job-N` reports `QUEUED` on the first poll, `RUNNING` on the second and `SUCCESS` with `output_file: job-N-out` after. `GET /v1/files/job-N-out/content` returns one JSONL line per request: `{id, custom_id, response: {status_code: 200, body: <chat completion>}, error: null}`. `POST /v1/batch/jobs/job-N/cancel` answers `CANCELLATION_REQUESTED`.
+`POST /v1/batch/jobs` with inline `requests` (`[{custom_id, body}]`, Mistral's shape) answers each request through the same script and log as a direct one (the log line gets `batch_job`) and returns `{"id": "job-N", "status": "QUEUED"}`. `GET /v1/batch/jobs/job-N` reports `QUEUED` on the first poll, `RUNNING` on the second and `SUCCESS` with `output_file: job-N-out` after. `GET /v1/files/job-N-out/content` returns one JSONL line per request: `{id, custom_id, response: {status_code: 200, body: <chat completion>}, error: null}`. `POST /v1/batch/jobs/job-N/cancel` answers `CANCELLATION_REQUESTED`. A script's `batch` section scripts the polls: `{"batch": {"poll_errors": n}}` answers each job's first n polls with HTTP 500 without moving the job on (`-1`: every poll). With a `batch` section the log also gets `{"poll": job, "status"}` per poll and `{"cancel": job}` per cancel; without one it holds request records only.
 
 ## Uploaded batch files
 

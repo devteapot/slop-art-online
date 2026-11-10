@@ -46,6 +46,8 @@ pub struct Last {
     /// Speech I heard, by experience id: `my_experience` holds only my newest lines (the
     /// authority's window, `frame::LINES_SHOWN`), so the log keeps what it has received.
     heard: BTreeMap<u64, Experience>,
+    /// The connection has been live: a later loss is shown.
+    was_live: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -67,10 +69,19 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         net.rejoin();
     }
 
+    // Once live, any other state of the connection is a loss: say so while it reconnects.
+    if net.status == crate::net::Status::Live {
+        last.was_live = true;
+    }
+    let link = (last.was_live && net.status != crate::net::Status::Live).then(|| match net.status {
+        crate::net::Status::Offline => "Connection lost · reconnecting…".to_string(),
+        _ => "Reconnecting…".to_string(),
+    });
     let Some(conn) = net.conn.as_ref() else {
-        *model = HudModel { shown: true, now, ..default() };
+        *model = HudModel { shown: true, now, link, ..default() };
         return;
     };
+    model.link = link;
     // Who I perceive, as I perceive them (name or label, health as I can tell it), and my own
     // characters (the dead one stays for the death screen).
     let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().map(|c| (c.id, c)).collect();

@@ -19,6 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from journal_io import restore
+
 ROOT = Path(__file__).resolve().parents[2]
 STDB = str(ROOT / "living/tools/stdb")
 GATHER = {"gather", "graze", "clear", "take", "store", "drop"}
@@ -42,7 +44,7 @@ def entries(run):
         with (gzip.open(f, "rt") if f.suffix == ".gz" else open(f)) as fh:
             for line in fh:
                 try:
-                    yield json.loads(line)
+                    yield restore(json.loads(line), f.parent)
                 except json.JSONDecodeError:
                     continue
 

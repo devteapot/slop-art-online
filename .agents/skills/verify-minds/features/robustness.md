@@ -3,7 +3,7 @@
 ## Sub-features
 
 - Invalid routine branches are removed before installation, `living/mind/src/mind.rs:362` and `living/rules/src/normalize.rs:47`.
-- A wholly invalid graph produces rejected attempts and `mind_skip`, preserving the current revision, `living/mind/src/mind.rs:1423`.
+- A wholly invalid graph produces rejected attempts and `mind_skip`, preserving the current revision (`deliberate` in `living/mind/src/mind.rs`). A model error is different: the request is kept and retried after a backoff (`ModelUnavailable`, proved by `verify-llm`'s `outage` case).
 - `LIVING_ONLY` restricts bootstrap and action dispatch, `living/mind/src/mind.rs:169` and `living/mind/src/mind.rs:945`.
 - A module republish disconnects the binary; the launcher restarts it and it handles a fresh request, `living/mind/src/main.rs:141` and `living/tools/run-mind.sh:6`.
 

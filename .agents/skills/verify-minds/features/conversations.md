@@ -5,6 +5,7 @@
 - Player speech creates a `speech` experience for the nearby minded character, `living/authority/src/perceive.rs:165`.
 - The real service dispatches a talk turn from the experience callback, `living/mind/src/main.rs:159`.
 - The fake reply reaches `mind_say` and the chronicle, `living/mind/src/mind/talk.rs:645`.
+- The turn offers every act the rules mark for conversation (`talk` in a skill's spec): the examples in `talk_system` show `prompts::TALK_SHOWN` (conceive, accept, give, offer, teach, host), and `talk_acts()` lists the rest, `living/mind/src/prompts.rs:118`.
 - `end: true` closes the exchange. Repeating the same question produces no further talk request, `living/mind/src/mind/talk.rs:336`.
 
 ## How to get to it (user POV)
@@ -18,7 +19,7 @@ R=minds-talk-$(date +%Y%m%d-%H%M%S)
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case conversation
 ```
 
-The driver joins `MindsSpeaker` through `verify.py player join`, moves the player with admin `place_near`, and directs a question with `player say --to`. `heard-speech.json` proves receipt while the fake delays its answer. `talk-speech.json` proves the AI's line is directed back to the player. `thoughts-after-end.json` records the ending reply. After the repeated question, the journal's talk count must stay unchanged for six seconds and `mind.log` must show `no turn`.
+The driver joins `MindsSpeaker` through `verify.py player join`, moves the player with admin `place_near`, and directs a question with `player say --to`. `heard-speech.json` proves receipt while the fake delays its answer. `talk-speech.json` proves the AI's line is directed back to the player. The recorded talk request must contain `"do": "host"` (the unit test `talk_examples_show_every_shown_act` checks every shown name). `thoughts-after-end.json` records the ending reply. After the repeated question, the journal's talk count must stay unchanged for six seconds and `mind.log` must show `no turn`.
 
 ## Gotchas
 
