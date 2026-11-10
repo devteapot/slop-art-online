@@ -7,6 +7,7 @@
 | Gestures: wave, nod and face through `human_act`, answered by residents; refusals | [gestures.md](gestures.md) |
 | Waking residents: a player's speech, wave, gift, offer and lesson wake the resident they are aimed at into a mind; an overhearing resident keeps the line in its ring; nobody else wakes; `woken` and `prior` private | [waking.md](waking.md) |
 | Hospitality: a resident takes the player in (`host`), `lodging`, the stay's end, no theft from the host's store during it; the player's own `host` refused without a house; `guest` private | [hosting.md](hosting.md) |
+| Verbs from the game client: F on a thing or person, C on oneself, words for writing, the pack and know-how panels, refusals shown with the rules' reason, a skill the world adds appearing with no client change | [verbs.md](verbs.md) |
 | What a player perceives of others: names only when known, health as a band, `appraise` revealing exact health to the appraiser only, an introduction teaching a name | [perception.md](perception.md) |
 
 Baseline: `verify-<run>` published by `$V launch` and `$V doctor` passing. One identity per run; `join` succeeds once per identity while its character lives. For a second player, use a second run name, or mint another identity with `curl -X POST http://127.0.0.1:3300/v1/identity` (`appraise.py` keeps one as `token2` in the run's state).

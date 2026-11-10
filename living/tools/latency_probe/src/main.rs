@@ -16,7 +16,13 @@
 //!
 //! `pump = "thread"` processes messages as they arrive (`run_threaded`), so arrival times are
 //! the network's. `pump = "frame"` calls `frame_tick` at `frame_hz` on one thread, as the game
-//! client's `net::pump` does once per frame, so arrival times include the wait for the next frame.
+//! client's `net::pump` did once per frame, so arrival times include the wait for the next frame.
+//! `pump = "flush"` does the same and also calls `frame_tick` right after each input, as the game
+//! client's `net::flush` does after its input systems (docs/LATENCY.md, step 1): the call leaves
+//! in the frame it was made, and only the reply waits for a frame.
+//!
+//! Body rows carry `ins` (a body entering view) and `prev` (the segment start the row replaces),
+//! so the display clock can be emulated fed only by changed segments (docs/LATENCY.md, step 3).
 //!
 //! Protocol: one request JSON line on stdin; prints `{"event":"done",…}` at the end.
 
@@ -74,7 +80,8 @@ fn main() {
     let n = |k: &str, d: u64| req[k].as_u64().unwrap_or(d);
     let (uri, db, token, name, out) = (s("uri"), s("db"), s("token"), s("name"), s("out"));
     let confirmed = req["confirmed"].as_bool().unwrap_or(true);
-    let frame = req["pump"].as_str() == Some("frame");
+    let flush = req["pump"].as_str() == Some("flush");
+    let frame = flush || req["pump"].as_str() == Some("frame");
     let frame_hz = req["frame_hz"].as_f64().unwrap_or(60.0);
     let (moves, move_ms, bolts, bolt_ms) = (n("moves", 200), n("move_ms", 300), n("bolts", 20), n("bolt_ms", 4300));
     let skill = req["skill"].as_str().unwrap_or("firebolt").to_string();
@@ -148,7 +155,7 @@ fn main() {
             }
         });
         let body = |me: Arc<Mutex<Option<u32>>>, lg: Log| {
-            move |ctx: &EventContext, b: &Motion| {
+            move |ctx: &EventContext, b: &Motion, prev: Option<u64>| {
                 let ts = unix_us();
                 let srv = match &ctx.event {
                     Event::Reducer(ev) => Some(ev.timestamp.to_micros_since_unix_epoch()),
@@ -156,13 +163,13 @@ fn main() {
                     _ => None,
                 };
                 let mine = *me.lock().unwrap() == Some(b.id);
-                lg.put(json!({"k": "b", "ts": ts, "id": b.id, "me": mine, "t": b.t_ms, "next": b.next_ms, "srv": srv, "vx": b.vx, "vy": b.vy}));
+                lg.put(json!({"k": "b", "ts": ts, "id": b.id, "me": mine, "t": b.t_ms, "next": b.next_ms, "srv": srv, "vx": b.vx, "vy": b.vy, "ins": prev.is_none(), "prev": prev}));
             }
         };
         let f = body(me.clone(), log.clone());
-        conn.db.seen_bodies().on_insert(move |ctx, b| f(ctx, b));
+        conn.db.seen_bodies().on_insert(move |ctx, b| f(ctx, b, None));
         let f = body(me.clone(), log.clone());
-        conn.db.seen_bodies().on_update(move |ctx, _, b| f(ctx, b));
+        conn.db.seen_bodies().on_update(move |ctx, old, b| f(ctx, b, Some(old.t_ms)));
         let lg = log.clone();
         conn.db.my_skill_uses().on_insert(move |ctx, u| {
             let ts = unix_us();
@@ -194,7 +201,7 @@ fn main() {
         let _ = conn.reducers.join(name.clone());
     }
     let my_id = wait("my character", Duration::from_secs(60), || *me.lock().unwrap());
-    log.put(json!({"k": "joined", "id": my_id, "ts": unix_us(), "confirmed": confirmed, "pump": if frame { "frame" } else { "thread" }, "frame_hz": frame_hz}));
+    log.put(json!({"k": "joined", "id": my_id, "ts": unix_us(), "confirmed": confirmed, "pump": if flush { "flush" } else if frame { "frame" } else { "thread" }, "frame_hz": frame_hz}));
     std::thread::sleep(Duration::from_secs(2));
 
     let mut seq = 0u64;
@@ -211,6 +218,9 @@ fn main() {
         let r = conn.reducers.human_move_then(dx, dy, false, move |ctx, res| {
             lg.put(json!({"k": "res", "n": seq, "r": "move", "ts": unix_us(), "srv": ctx.event.timestamp.to_micros_since_unix_epoch(), "st": status(&res)}));
         });
+        if flush {
+            let _ = conn.frame_tick();
+        }
         log.put(json!({"k": "in", "n": seq, "r": "move", "ts": t0, "dx": dx, "dy": dy, "sent": r.is_ok()}));
     };
     const SQUARE: [(f32, f32); 4] = [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)];
@@ -233,6 +243,9 @@ fn main() {
         let r = conn.reducers.use_skill_then(skill.clone(), 0, at.0 + 6.0 * dx, at.1 + 6.0 * dy, move |ctx, res| {
             lg.put(json!({"k": "res", "n": k, "r": "skill", "ts": unix_us(), "srv": ctx.event.timestamp.to_micros_since_unix_epoch(), "st": status(&res)}));
         });
+        if flush {
+            let _ = conn.frame_tick();
+        }
         log.put(json!({"k": "in", "n": seq, "r": "skill", "skill": skill, "ts": t0, "sent": r.is_ok()}));
         std::thread::sleep(Duration::from_millis(bolt_ms) + Duration::from_micros(rnd()));
     }

@@ -5,7 +5,8 @@
 //! - `live.rs`: fills it from the authority's rows (connected play);
 //! - `sample.rs`: fills it with sample values in look-dev (`LIVING_GAME_HUD`);
 //! - widgets: `frame.rs` (health, energy, status, skill bar, hint, target frame),
-//!   `overhead.rs` (nameplates and speech bubbles), `chat.rs`, `death.rs`, `compass.rs`;
+//!   `overhead.rs` (nameplates and speech bubbles), `chat.rs`, `death.rs`, `compass.rs`,
+//!   `verbs.rs` (the F hint's acts, the list of acts, notes of outcomes, inventory and know-how);
 //! - `theme.rs` (colours, type, panels) and `icons.rs` (procedural glyphs).
 //!
 //! Layout is designed at 1080p and scaled with the window's height (`UiScale`).
@@ -21,6 +22,7 @@ mod numbers;
 mod overhead;
 mod sample;
 mod theme;
+mod verbs;
 
 use bevy::prelude::*;
 use bevy::ui::UiSystems;
@@ -43,13 +45,13 @@ impl Plugin for UiPlugin {
             .init_resource::<model::Outbox>()
             .init_resource::<overhead::Stack>()
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
-            .add_systems(Startup, (frame::spawn, overhead::spawn, numbers::spawn, chat::spawn, compass::spawn, death::spawn))
+            .add_systems(Startup, (frame::spawn, overhead::spawn, numbers::spawn, chat::spawn, compass::spawn, death::spawn, verbs::spawn))
             .add_systems(Update, (default_camera, scale, chat::keys));
-        let widgets = (frame::vitals, frame::status, frame::skills, frame::hint, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, chat::update, compass::update, death::update, visibility);
+        let widgets = (frame::vitals, frame::status, frame::skills, frame::hint, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, chat::update, compass::update, death::update, verbs::menu, verbs::toasts, verbs::panels, visibility);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
         } else {
-            app.add_systems(PostUpdate, (live::fill, widgets).chain().before(UiSystems::Prepare));
+            app.add_systems(PostUpdate, (live::fill, verbs::fill, widgets).chain().before(UiSystems::Prepare));
         }
     }
 }

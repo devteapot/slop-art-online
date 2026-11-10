@@ -75,10 +75,31 @@ struct ChunkParts {
     entities: Vec<Entity>,
 }
 
+/// Input → drawn, in this client: each movement input paired with my next new segment, and the
+/// local ms until it is drawn with my own clock (`mine`) and until the old display time would
+/// have reached it (`old`).
+#[derive(Default)]
+pub struct Latency {
+    pub pending: Vec<(u64, std::time::Instant, bool, bool)>,
+    pub last_seg: u64,
+    pub paired: Option<std::time::Instant>,
+    pub mine: Vec<f64>,
+    pub old: Vec<f64>,
+    /// Display delay behind the newest fresh row, sampled per frame: real clock and shadow.
+    pub behind: Vec<f64>,
+    pub behind_old: Vec<f64>,
+    pub logged_s: f64,
+}
+
 /// Display-side state: the authority clock as shown, body tracks, the ground and entities.
 #[derive(Default)]
 pub struct Scene {
     pub clock: ServerClock,
+    /// The display clock fed as before 2026-11-10 (every row, entering bodies included), only
+    /// to log beside the real one.
+    pub shadow: ServerClock,
+    /// Input → my new segment first drawn, measured in this client (`bodies.rs`).
+    pub lat: Latency,
     pub tracks: Tracks,
     /// Displayed position (sim metres) and heading of every subscribed body.
     pub shown: HashMap<u32, (Vec2, Option<f32>)>,
@@ -506,6 +527,24 @@ fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
         }
         "fish" | "fishing_spot" => m.boulder(Vec3::Y * 0.02, 0.45, 0.1, 5, rgb(150, 200, 230)),
         "flint" | "stone" | "rock" => m.boulder(Vec3::Y * 0.15, 0.3, 0.7, 9, rgb(150, 150, 160)),
+        "boulder" => {
+            m.boulder(Vec3::Y * 0.35, 0.65, 0.75, 9, rgb(146, 144, 150));
+            m.boulder(Vec3::new(0.55, 0.15, 0.2), 0.3, 0.7, 4, rgb(132, 130, 138));
+        }
+        "reeds" => {
+            for k in 0..9u32 {
+                let a = k as f32 * 2.4;
+                let r = 0.12 + 0.05 * (k % 3) as f32;
+                m.cone(Vec3::new(r * a.cos(), 0.0, r * a.sin()), 0.035, 0.01, 1.1 + 0.12 * (k % 4) as f32, 4, [0.47, 0.6, 0.27, 1.0]);
+            }
+        }
+        "clay_bank" => m.boulder(Vec3::Y * 0.05, 0.7, 0.25, 6, rgb(168, 112, 82)),
+        "sign" => {
+            m.block(Vec3::new(-0.05, 0.0, -0.05), Vec3::new(0.05, 1.3, 0.05), rgb(96, 70, 44), rgb(86, 62, 40));
+            m.block(Vec3::new(-0.45, 0.9, -0.04), Vec3::new(0.45, 1.35, 0.04), rgb(176, 140, 96), rgb(160, 126, 86));
+        }
+        "remains" => m.boulder(Vec3::Y * 0.05, 0.4, 0.3, 2, rgb(96, 70, 62)),
+        "trap" => m.block(Vec3::new(-0.3, 0.0, -0.3), Vec3::new(0.3, 0.25, 0.3), rgb(120, 92, 60), rgb(104, 80, 52)),
         "campfire" | "fire" | "hearth" | "smoking_fire" => {
             for k in 0..8u32 {
                 let a = k as f32 / 8.0 * std::f32::consts::TAU;
@@ -538,17 +577,24 @@ fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
     (m.build(), glow)
 }
 
+/// On a land world the island draws these itself: buildings as lots, gates in its walls, and
+/// trees as its forest (an act names a tree by kind, the nearest one).
+const LAND_DRAWS: &[&str] = &["tree", "house", "hall", "inn", "workshop", "market", "gate"];
+
 /// Mirror subscribed resources and structures as entities (static, spawned once per row once the
-/// ground under them is known).
-pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>) {
+/// ground under them is known): on tile worlds all of them; on a land world (the island) what it
+/// does not draw itself, standing on its ground (what `verbs.rs` lets F act on).
+#[allow(clippy::too_many_arguments)]
+pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>, island: Option<Res<crate::island::Island>>) {
     let Some(conn) = &net.conn else { return };
     let mut seen: HashSet<(u8, u64)> = HashSet::new();
     let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
     let rows = resources
         .iter()
         .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.4, 1.0)))
-        .chain(structures.iter().map(|s| ((1u8, s.id), s.kind, s.x, s.y, 1.0)));
-    let ready = scene.ready();
+        .chain(structures.iter().map(|s| ((1u8, s.id), s.kind, s.x, s.y, 1.0)))
+        .filter(|r| island.is_none() || !LAND_DRAWS.contains(&r.1.as_str()));
+    let ready = scene.ready() || island.is_some();
     let scene = &mut *scene;
     for (key, kind, x, y, fill) in rows {
         seen.insert(key);
@@ -564,7 +610,7 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
                 (meshes.add(m), g.map(|(g, c)| (meshes.add(g), c)))
             })
             .clone();
-        let at = scene.at3(x, y);
+        let at = island.as_ref().map_or_else(|| scene.at3(x, y), |i| Vec3::new(x, i.height(x, y), y));
         let turn = Quat::from_rotation_y(hash(x.to_bits(), y.to_bits()) * std::f32::consts::TAU);
         let e = commands
             .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill)), crate::style::stencil()))

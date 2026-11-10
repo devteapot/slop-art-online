@@ -629,6 +629,12 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
 /// - `gesture:wave|nod|appraise[:ID]`: greet, or look someone over, through `human_act` as the
 ///   G, B and V keys do (`town.rs`), at character ID, else whom the keys would pick;
+/// - verbs (`verbs.rs`): `act:SKILL[:ITEM][@AIM]` sends an act as a list pick does (AIM is
+///   `nearest:KIND` for the nearest thing or creature of that kind, `id:N`, `self`, or nothing for
+///   what F aims at now; the log says whether the rules offered it, and it is sent either way);
+///   `menu:f[@AIM]|c|close|N` opens F's list (on AIM) or my own, closes it, or picks row N;
+///   `words:TEXT` enters words in the text box an act opened (write, found); `panel:inventory|
+///   know-how[:SKILL]|none` shows a panel (know-how with SKILL selected);
 /// - `sync:NAME`: until `<dir>/NAME.go` exists (an outside driver sets the scene: the hour, the
 ///   weather, where I stand), then delete it; a number in the file turns the view to that yaw;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
@@ -664,8 +670,7 @@ fn script(
     mut input: ResMut<Input>,
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
-    mut skills: ResMut<crate::combat::Scripted>,
-    mut gestures: ResMut<crate::town::Scripted>,
+    (mut skills, mut gestures, mut verbs): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>),
     (hud, loading): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>),
     target: Option<Res<crate::capture::Target>>,
     time: Res<Time>,
@@ -759,6 +764,27 @@ fn script(
         "gesture" => {
             let (name, whom) = arg.split_once(':').unwrap_or((arg, ""));
             gestures.press.push((name.to_string(), whom.to_string()));
+            true
+        }
+        "act" => {
+            let (what, at) = arg.split_once('@').unwrap_or((arg, ""));
+            let (skill, item) = what.split_once(':').unwrap_or((what, ""));
+            verbs.acts.push((skill.to_string(), item.to_string(), at.to_string()));
+            true
+        }
+        "menu" => {
+            verbs.menu.push(arg.to_string());
+            true
+        }
+        "words" => {
+            // The text box's words for an act that asked for them (as typed and Enter).
+            input.compose = None;
+            input.chat_open = false;
+            input.composed = Some(arg.to_string());
+            true
+        }
+        "panel" => {
+            verbs.panel.push(arg.to_string());
             true
         }
         "sync" => {
