@@ -8,7 +8,7 @@
       "overflow": "deepseek-flash",
       "reasoning_effort": {
         "think": "low",
-        "deliberate": "high",
+        "deliberate": "low",
         "talk": "high",
         "consolidate": "high",
         "internalize": "high",
@@ -62,7 +62,7 @@
     }
   },
   "woken": "people",
- "assign": {},
+  "assign": {},
   "rotate": [],
   "species": {
     "deer": {
