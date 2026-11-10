@@ -1,0 +1,13 @@
+[package]
+name = "path-budget"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Its own workspace: a measurement for docs/SOAK.md (how many A* expansions a click-to-move
+# between the island's towns needs, against the authority's 6,000), not part of living-check.
+[workspace]
+
+[dependencies]
+living-rules = { path = "../../rules" }
+serde_json = "1"
