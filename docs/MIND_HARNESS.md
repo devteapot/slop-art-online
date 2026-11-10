@@ -348,6 +348,7 @@ Dev-box worktree `~/dev/slop-rethink`, private SpacetimeDB 2.14.1 container `ret
 | Mind unit tests | `cargo test -p living-mind` | rethink: state counts, combination, urgent bypass, ages as words, unchanged re-triggers |
 | verify-minds | `minds-full-232622` (all 17 cases, the new `rethink` and `rethink-llm` included) | all pass; `consolidation` stays the known XFAIL |
 | verify-llm | `llm-rethink-230523` (all 16 cases) | all pass |
+| After merging main (`townlife-2`, `trials-1`; conflicts in `mind.rs` only, additive) | `just living-check`; mind tests; `minds-merged-010653`: rethink, rethink-llm, wake, conversation, lod, roundtrip, jev | exit 0; 69 passed; all pass |
 
 - **Failed attempts first:** the fake's Jev endpoint crashed on the gate's needs-in-words body, which exercised the fallback path; the case asserted before the mind had started; `max_hold_s` 25 released the request mid-case; a poll raced the fake mind; and the container's mount needed the `z` SELinux label on Fedora. All were fixed in the harness. The "unchanged" rule moved to a unit test, because whether a re-raised trigger finds a new percept depends on the world's timing.
 - **`maintain-verification-skill` on the minds surface, scoped to this change:**

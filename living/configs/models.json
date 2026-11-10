@@ -61,7 +61,8 @@
       "reorganize": "glm-flash"
     }
   },
-  "assign": {},
+  "woken": "people",
+ "assign": {},
   "rotate": [],
   "species": {
     "deer": {

@@ -1,5 +1,11 @@
 # Internal mind validation
 
+## 2026-11-10 woken minds (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
+
+- Full suite `minds-tl2c-*` on the final code: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night and jev pass; consolidation is its known XFAIL. Earlier runs on this branch (`minds-tl2-220630`, `minds-tl2b-*`) the same.
+
 ## 2026-11-09 the rethink gate, rethink-1 (dev-box)
 
 - **Setup:** private container `rethink-stdb` (2.14.1) on 3397, private `CARGO_TARGET_DIR`, fake model and fake Jev; no paid calls.
@@ -10,6 +16,7 @@
   - an assertion ran before the mind's start-up line (now a wait).
 - **Passes:** `minds-rethink-230515` passed both cases.
 - **Full suite `minds-full-232622`:** all 17 cases pass (roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night, jev, rethink, rethink-llm); consolidation is its known XFAIL.
+- **After merging main** (townlife-2, trials-1): `minds-merged-010653` passed rethink, rethink-llm, wake, conversation, lod, roundtrip and jev.
 - **SELinux:** on this Fedora host the container's `/wasm` bind mount needs the `z` label, or `spacetime publish` fails with "Permission denied".
 
 ## 2026-11-09 town life layer 2, phase 1 (Mac)
@@ -32,6 +39,12 @@ On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `ac
 ## 2026-11-09 minds' sight and the offline player's character (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `minds-perc2`: `sight` (new), `roundtrip`, `acts`, `conversation` pass; `consolidation` its known XFAIL. `takeover` (new) passed on `minds-perc2c` after a driver fix (the minds' plan is a desires top level with a "current plan" routine, not a graph holding the wait) and an authority fix (a second takeover asked for a deliberation after reinstalling the held graph, inside `think_min_s`; the order is now request, then reinstall).
+
+## 2026-11-09 `minds-20261109-110024` (DGX Spark, trial container) and trials
+
+The suite ran on the DGX Spark against the trial service (`VERIFY_STDB_CONTAINER=slop-trials-stdb VERIFY_STDB_PORT=3320`, since replaced by main's `LIVING_STDB_CONTAINER` and `LIVING_STDB_URL`; the Spark's `sao-living_spacetimedb_1` belongs to other work), on `trials-1` before the town-life merge. Eight cases pass; `consolidation` stays XFAIL (the Neo4j-off known issue). Evidence: `.local/living/verify/minds-20261109-110024*/` in `~/dev/slop-trials` on the Spark.
+
+Trials (`living/tools/trials.py`, [trials](../features/trials.md)) were driven by fake batches `dry1`–`dry8`: setup and timeline steps, sampling, journal copy, death stop, `resume` after the runner was killed (minds adopted by pid and start time, clocks kept), a killed mind restarted by a life run, the same model routing as the real file in fake mode (wolves: impulse `ministral-8b`, compile and consolidation `ministral-14b`; people: the variant's profile), a wolf pack as the subject, and `clean` (SQL 404, Neo4j nodes removed). `spawn_newcomer` was refused to an anonymous caller (`admin only`). Real batches `b1`–`b4` and life runs `l1`–`l3` are in `docs/TRIALS.md`.
 
 ## 2026-10-18 `minds-20261018-205441` (macOS, Docker Desktop)
 

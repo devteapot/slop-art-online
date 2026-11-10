@@ -34,6 +34,18 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 
 Player memory (on by default; the service integrates what human-played characters live) needs a scratch Neo4j, so its proof runs in `verify-knowledge`'s `player_memory.py`; [features/player-memory.md](features/player-memory.md) maps what it proves about this service (switch off, cadence, reconnect, batch mode).
 
+## Trials
+
+`living/tools/trials.py` runs the real mind for one subject in scripted worlds (and open-ended life runs) on its own SpacetimeDB service; see [trials](features/trials.md) and `docs/TRIALS.md`. Its free tier is a `--fake` batch:
+
+```bash
+python3 living/tools/trials.py up && python3 living/tools/trials.py build wolves life
+python3 living/tools/trials.py run --batch dry1 wolves life --replicates 1 --minutes 6 --fake
+python3 living/tools/trials.py life --batch dry1 && python3 living/tools/trials.py clean --batch dry1
+```
+
+On a host whose `sao-living_spacetimedb_1` belongs to other work (the DGX Spark), run this skill's suite against the trial container: `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320 .agents/skills/verify-minds/scripts/verify_minds.py --run minds-…`.
+
 ## Evidence and cleanup
 
 Each case writes `.local/living/verify/<suite>-<case>/`. Keep `actions.log`, `driver.log`, `fake-requests.jsonl`, `mind.log`, copied `journal/`, table snapshots, `result.json` and `cleanup.json`. The suite keeps build and test logs and source hashes. Full requests and replies stay in the fake log and journal. Authority snapshots prove their application.

@@ -161,7 +161,445 @@
           "flatten": 0.0
         }
       ],
-      "metro": {}
+      "metro": {
+        "rings": [
+          0.22,
+          0.42,
+          0.62,
+          0.82
+        ],
+        "arterials": 10,
+        "plaza_m": 80.0,
+        "highways": true,
+        "wall_towers": true,
+        "districts": [
+          {
+            "style": "corporate",
+            "band": [
+              0.0,
+              0.22
+            ],
+            "block_m": [
+              124.0,
+              100.0
+            ],
+            "jitter": 0.02,
+            "street_every": 1,
+            "street_m": 14.0,
+            "setback_m": 4.0,
+            "gap_m": [
+              3.0,
+              9.0
+            ],
+            "passage_m": 70.0,
+            "passage_w_m": 6.0,
+            "mix": [
+              [
+                "hall",
+                0.6
+              ],
+              [
+                "chapel",
+                0.25
+              ],
+              [
+                "inn",
+                0.08
+              ],
+              [
+                "townhouse",
+                0.07
+              ]
+            ],
+            "rich": [
+              [
+                "hall",
+                0.6
+              ],
+              [
+                "chapel",
+                0.4
+              ]
+            ],
+            "plaza_m": [
+              70.0,
+              50.0
+            ]
+          },
+          {
+            "style": "corporate",
+            "band": [
+              0.22,
+              0.42
+            ],
+            "wealth": [
+              0.55,
+              1.0
+            ],
+            "quota": 3,
+            "block_m": [
+              116.0,
+              92.0
+            ],
+            "jitter": 0.02,
+            "street_every": 1,
+            "street_m": 13.0,
+            "setback_m": 3.0,
+            "gap_m": [
+              2.5,
+              8.0
+            ],
+            "passage_m": 64.0,
+            "passage_w_m": 6.0,
+            "mix": [
+              [
+                "hall",
+                0.5
+              ],
+              [
+                "chapel",
+                0.2
+              ],
+              [
+                "townhouse",
+                0.2
+              ],
+              [
+                "inn",
+                0.1
+              ]
+            ],
+            "rich": [
+              [
+                "hall",
+                0.6
+              ],
+              [
+                "chapel",
+                0.3
+              ],
+              [
+                "inn",
+                0.1
+              ]
+            ],
+            "plaza_m": [
+              60.0,
+              44.0
+            ]
+          },
+          {
+            "style": "neon",
+            "band": [
+              0.22,
+              0.62
+            ],
+            "wealth": [
+              0.2,
+              0.9
+            ],
+            "quota": 3,
+            "block_m": [
+              66.0,
+              50.0
+            ],
+            "jitter": 0.06,
+            "street_every": 1,
+            "street_m": 10.0,
+            "gap_m": [
+              0.2,
+              1.2
+            ],
+            "passage_m": 40.0,
+            "mix": [
+              [
+                "inn",
+                0.3
+              ],
+              [
+                "townhouse",
+                0.45
+              ],
+              [
+                "chapel",
+                0.15
+              ],
+              [
+                "market_stall",
+                0.1
+              ]
+            ],
+            "plaza_m": [
+              44.0,
+              30.0
+            ]
+          },
+          {
+            "style": "market",
+            "band": [
+              0.22,
+              0.62
+            ],
+            "quota": 1,
+            "block_m": [
+              56.0,
+              44.0
+            ],
+            "jitter": 0.08,
+            "street_every": 1,
+            "street_m": 9.0,
+            "gap_m": [
+              0.2,
+              1.0
+            ],
+            "passage_m": 36.0,
+            "mix": [
+              [
+                "inn",
+                0.35
+              ],
+              [
+                "market_stall",
+                0.3
+              ],
+              [
+                "townhouse",
+                0.35
+              ]
+            ],
+            "plaza_m": [
+              56.0,
+              40.0
+            ]
+          },
+          {
+            "style": "oldtown",
+            "band": [
+              0.22,
+              0.62
+            ],
+            "wealth": [
+              0.0,
+              0.7
+            ],
+            "quota": 1,
+            "block_m": [
+              42.0,
+              34.0
+            ],
+            "jitter": 0.28,
+            "street_every": 2,
+            "street_m": 7.0,
+            "lane_m": 4.5,
+            "gap_m": [
+              0.0,
+              0.6
+            ],
+            "passage_m": 30.0,
+            "passage_w_m": 3.0,
+            "mix": [
+              [
+                "townhouse",
+                0.7
+              ],
+              [
+                "inn",
+                0.15
+              ],
+              [
+                "workshop",
+                0.15
+              ]
+            ],
+            "plaza_m": [
+              32.0,
+              24.0
+            ]
+          },
+          {
+            "style": "works",
+            "band": [
+              0.42,
+              1.0
+            ],
+            "sea": [
+              0.55,
+              1.0
+            ],
+            "block_m": [
+              96.0,
+              72.0
+            ],
+            "street_m": 12.0,
+            "gap_m": [
+              1.5,
+              5.0
+            ],
+            "mix": [
+              [
+                "workshop",
+                0.5
+              ],
+              [
+                "barn",
+                0.35
+              ],
+              [
+                "house",
+                0.15
+              ]
+            ]
+          },
+          {
+            "style": "slum",
+            "band": [
+              0.82,
+              1.0
+            ],
+            "wealth": [
+              0.0,
+              0.62
+            ],
+            "block_m": [
+              30.0,
+              26.0
+            ],
+            "jitter": 0.3,
+            "street_every": 5,
+            "street_m": 6.0,
+            "lane_m": 3.0,
+            "lane_class": "lane",
+            "setback_m": 0.3,
+            "gap_m": [
+              0.1,
+              0.7
+            ],
+            "passage_m": 24.0,
+            "passage_w_m": 2.4,
+            "level_m": 2.5,
+            "mix": [
+              [
+                "house",
+                0.45
+              ],
+              [
+                "townhouse",
+                0.4
+              ],
+              [
+                "workshop",
+                0.1
+              ],
+              [
+                "market_stall",
+                0.05
+              ]
+            ],
+            "plaza_m": [
+              24.0,
+              18.0
+            ],
+            "paved": false,
+            "fill_m": 9.0,
+            "fill_gap_m": 2.2
+          },
+          {
+            "style": "megablock",
+            "band": [
+              0.42,
+              0.82
+            ],
+            "block_m": [
+              104.0,
+              88.0
+            ],
+            "jitter": 0.03,
+            "street_every": 1,
+            "street_m": 12.0,
+            "setback_m": 2.0,
+            "gap_m": [
+              3.0,
+              8.0
+            ],
+            "passage_m": 60.0,
+            "passage_w_m": 6.0,
+            "mix": [
+              [
+                "townhouse",
+                0.72
+              ],
+              [
+                "house",
+                0.12
+              ],
+              [
+                "inn",
+                0.1
+              ],
+              [
+                "workshop",
+                0.06
+              ]
+            ],
+            "plaza_m": [
+              44.0,
+              32.0
+            ]
+          },
+          {
+            "style": "metro",
+            "block_m": [
+              64.0,
+              48.0
+            ],
+            "street_every": 3,
+            "gap_m": [
+              0.4,
+              2.5
+            ],
+            "mix": [
+              [
+                "townhouse",
+                0.55
+              ],
+              [
+                "house",
+                0.25
+              ],
+              [
+                "workshop",
+                0.1
+              ],
+              [
+                "inn",
+                0.05
+              ],
+              [
+                "chapel",
+                0.05
+              ]
+            ],
+            "rich": [
+              [
+                "townhouse",
+                0.5
+              ],
+              [
+                "hall",
+                0.35
+              ],
+              [
+                "inn",
+                0.1
+              ],
+              [
+                "house",
+                0.05
+              ]
+            ]
+          }
+        ]
+      }
     }
   },
   "setting": "A floor four kilometres across: one city of towers fills most of it, ringed by highways and a wall, with works and docks on the bay. Outside the wall lie dry plains and hills, dry riverbeds, ruins, salvage camps and a few walled outposts.",
@@ -171,7 +609,7 @@
   "towns": [
     {
       "name": "Spire Ward",
-      "site": "metro_town",
+      "site": "corporate_town",
       "walled": true,
       "character": "the core of the city: towers round the central plaza, busy at every hour",
       "occupations": {
@@ -192,7 +630,7 @@
     },
     {
       "name": "Glasshollow",
-      "site": "metro_town",
+      "site": "megablock_town",
       "walled": false,
       "character": "a ward of tall blocks between the first and second ring",
       "occupations": {
@@ -280,7 +718,24 @@
   ],
   "animals": {
     "deer": 40,
-    "wolf": 8
+    "wolf": 8,
+    "habitat": {
+      "wolf": {
+        "ground": [
+          "dirt",
+          "sand",
+          "grass"
+        ],
+        "wild": true
+      },
+      "deer": {
+        "ground": [
+          "grass",
+          "dirt"
+        ],
+        "wild": true
+      }
+    }
   },
   "newcomer": {
     "items": {

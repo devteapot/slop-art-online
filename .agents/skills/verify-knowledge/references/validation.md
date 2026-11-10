@@ -1,5 +1,13 @@
 # Knowledge validation
 
+## 2026-11-10 woken residents' minds (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
+
+- `woken_mind.py` (new): `knowledge-woken-1` (`player_session.py` read `character` as the player; fixed to `my_characters`), `-2` (the models file lacked the per-purpose effort the fake tells purposes by), `-3` (the model's lesson had an unmet prerequisite; the driver now reads `requires`), `-4` 6 of 6, `-8` (the newcomer's name reached a talk prompt: `known_as`), `-11` 7 of 7 on the final code.
+- `verify_knowledge.py run` (`knowledge-base-tl2`): 18 of 18. `player_memory.py --mode direct` (`knowledge-pmem-tl2b`): 6 of 6 after the integration path became shared with rings.
+- Paid tier `woken_real.py --allow-live`: four runs, $0.47 in all; results and the two leaks they found in docs/TOWN_LIFE.md, "The paid runs".
+
 ## 2026-11-09 player memory with presence and the takeover (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `player_memory.py run --mode direct`: all six phases pass on `knowledge-pmem-perc2e` (switch off with `LIVING_PLAYER_MEMORY=0`; switch on with ids given as strings and the identity inferred; takeover; restart; recall; death). Earlier attempts `-perc2` … `-perc2d` found an authority defect (the takeover on an island seed went to the database, not the minds; fixed), a name leak through activity labels ("wave → Walker1"; fixed) and three driver gaps (leak check, relation check order, restart relying on idle detection; fixed). Batch mode was not run.

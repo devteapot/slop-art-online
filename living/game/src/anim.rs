@@ -33,7 +33,8 @@
 //! the planted foot through the rest of its stance. Then standing fades in over [`MOVE_OUT`].
 //!
 //! **Standing loops** (idle, talk, work, sitting, …) play at their own time and crossfade over
-//! [`STAND_FADE`]. **One-shots** ([`Action`]) are timed on the caller's clock (`now_ms`): they
+//! [`STAND_FADE`]. A loop starts at an offset of its own for each body, so a herd or a crowd
+//! spawned together doesn't graze, look up or breathe in unison. **One-shots** ([`Action`]) are timed on the caller's clock (`now_ms`): they
 //! start at `start_ms` (and join part-way when seen late), fade in over [`FADE_IN`] and out over
 //! the last [`FADE_OUT`] of the clip, or hold a pose. A clip whose sidecar says `layer: "upper"`
 //! plays on the upper body in proportion to how much the body moves, and on the whole body as
@@ -361,8 +362,8 @@ fn approach(x: f32, to: f32, up: f32, down: f32) -> f32 {
 enum Play {
     /// Paused at this time (s): gaits at the shared phase, one-shots on the caller's clock.
     At(f32),
-    /// Looping at its own time.
-    Loop,
+    /// Looping at its own time; it starts at this time (s).
+    Loop(f32),
 }
 
 fn play(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &Motion, &mut Anim)>, mut players: Query<&mut AnimationPlayer>, mut cost: ResMut<Cost>) {
@@ -393,7 +394,9 @@ fn play(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &Motion, 
         for &(clip, sw) in &a.stands {
             let w = base * (1.0 - a.moving) * sw / stand_sum;
             if let (Some(&node), true) = (set.full.get(clip), w > 0.0) {
-                want.push((node, w, Play::Loop));
+                // Each body's own offset into the loop (the golden ratio spreads entity indices).
+                let offset = (e.index_u32() as f32 * 0.618_034).fract() * set.len(clip);
+                want.push((node, w, Play::Loop(offset)));
                 let t = player.animation(node).map_or(0.0, |x| x.seek_time()) / set.len(clip);
                 legs.push((clip, w, t, true));
             }
@@ -417,13 +420,17 @@ fn play(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &Motion, 
             }
         }
         for &(node, w, how) in &want {
+            let fresh = !player.is_playing_animation(node);
             let x = player.play(node);
             x.set_weight(w);
             match how {
                 Play::At(t) => {
                     x.pause().set_seek_time(t);
                 }
-                Play::Loop => {
+                Play::Loop(offset) => {
+                    if fresh {
+                        x.set_seek_time(offset);
+                    }
                     x.resume().set_speed(1.0).repeat();
                 }
             }

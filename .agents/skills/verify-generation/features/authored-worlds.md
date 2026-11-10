@@ -8,7 +8,7 @@
 - Authored parser tests cover ages, households, sites, parent order and sheet resolution.
 - Published backgrounds preserve the resolved sheet while removing its top-level secret.
 
-`living/tools/author_world.py:169-171` reads the world bible, cast and cached sheets. Lines 176 and 215 guard the drafting passes; line 244 selects the compiled output path. `resolve_sheet` at `living/authority/src/seed.rs:272` removes the secret and resolves relations and memories. `settle_authored` at line 1467 installs the sheet.
+`living/tools/author_world.py` `main` reads the world bible and cast, then the cached `sheets/<household>.json` (it exits when one is missing). Its two drafting passes are guarded by `--compile-only`, and it writes `living/seeds/<world>.json`. In `living/authority/src/seed.rs`, `resolve_sheet` removes the secret and resolves relations and memories, and `settle_authored` (called once from `populate`) links parents across settlements and installs the sheet.
 
 ## How to get to it (user POV)
 

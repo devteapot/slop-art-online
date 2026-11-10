@@ -1,0 +1,19 @@
+{
+ "extends": "hungry",
+ "title": "Hungry stranger (old valley: stage3-village)",
+ "world": {"seed": "stage3-village", "rules": {}, "start_hour": 13.0},
+ "subject": {"pick": {"kind": "person", "stage": 2, "group": 0, "fewest_know_how": true}},
+ "timeline": [
+  {"at": "prepare", "do": "graph", "who": "subject", "graph": {"wait": 120}},
+  {"at": "start", "do": "place", "who": "subject", "to": {"group": 1, "offset": [10, 0]}},
+  {"at": "start", "do": "graph", "who": "subject", "graph": "instinct:person"},
+  {"when": {"said": {"by": "subject", "to": "any", "words": ["food", "eat", "hungry", "starving", "berr", "bread", "meal", "spare", "trade", "work"]}}, "max": 2, "per_addressee": true, "steps": [
+   {"do": "items", "who": "$addressee", "items": {"berries": 2}, "after": 1},
+   {"do": "say", "who": "$addressee", "to": "$subject", "text": "You look done in, stranger. Here, take a couple of berries.", "after": 3},
+   {"do": "act", "who": "$addressee", "act": {"do": "give", "target": "$subject", "item": "berries", "qty": 2}, "after": 4}
+  ]},
+  {"when": {"said": {"by": "subject", "to": "any", "without": ["food", "eat", "hungry", "starving", "berr", "bread", "meal", "spare", "trade", "work"]}}, "max": 3, "per_addressee": true, "steps": [
+   {"do": "say", "who": "$addressee", "to": "$subject", "text": "Mm. Good day to you.", "after": 3}
+  ]}
+ ]
+}
