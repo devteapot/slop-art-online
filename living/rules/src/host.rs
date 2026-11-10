@@ -3,13 +3,14 @@
 //! - which tiles buildings block ([`hosted_map`]), since a lot's model stands on its footprint,
 //!   and which tiles the props that stand in the way block (fountains, carts, kiosks...);
 //! - where each building's door is ([`door`]), the walkable point in front of its lot;
+//! - where newcomers arrive ([`arrival`]): on the first town's square, where people are;
 //! - digests of the tiles, the ground height and the layout ([`Digests`]), so a client that
 //!   regenerates the land can prove it matches the authority's before it trusts its heights.
 
 use crate::det::{fnv1a, FNV_OFFSET};
-use crate::land::{Land, LandParams};
+use crate::land::{Land, LandParams, SiteKind};
 use crate::map::{Map, Terrain};
-use crate::settle::{Lot, LotKind, Prop};
+use crate::settle::{Lot, LotKind, Prop, Settlement};
 
 /// Lots whose model blocks movement: buildings, towers, wells and market stalls. Lamps are
 /// posts, and gardens and fields are open ground.
@@ -135,6 +136,87 @@ pub fn reach(map: &Map, from: (f32, f32)) -> Vec<bool> {
     seen
 }
 
+/// The settlement newcomers arrive at: the first plain town (a seed's `town`), else the first
+/// town of any style, else the first settlement.
+pub fn arrival_settlement(land: &Land) -> Option<&Settlement> {
+    let plain = |s: &&Settlement| land.sites.get(s.site as usize).is_some_and(|x| x.kind == SiteKind::Town && x.style.is_none());
+    land.settlements.iter().find(plain).or_else(|| land.settlements.iter().find(|s| s.kind == SiteKind::Town)).or_else(|| land.settlements.first())
+}
+
+/// How far from the square's heart, toward the first gate, a newcomer arrives (metres), at
+/// most half the way to the square's edge.
+const ARRIVAL_STEP_M: f32 = 6.0;
+/// How far beyond the square's outline (tiles) the walkable ground connected to it is searched.
+const ARRIVAL_MARGIN: i32 = 16;
+
+/// Where newcomers arrive on a hosted land (`map` from [`hosted_map`]): on the arrival
+/// settlement's square, where its people gather, a few metres from its heart on the side of
+/// the town's first gate (the way one comes in), on a walkable tile connected to the square.
+/// Without a settlement, the walkable tile nearest the land's middle. Deterministic for a seed,
+/// size and parameters; part of the layout digest.
+pub fn arrival(land: &Land, map: &Map) -> (f32, f32) {
+    let middle = (land.size as f32 / 2.0, land.size as f32 / 2.0);
+    let Some(s) = arrival_settlement(land) else { return map.nearest_walkable(middle.0, middle.1).unwrap_or(middle) };
+    let c = s.plaza.centre;
+    // Where one can stand on the square: its heart, or round a building standing in it (the
+    // megacity core's arcology) near its outline's corners and the middles of its edges.
+    let n = s.plaza.points.len();
+    let edges = (0..n).map(|i| {
+        let (a, b) = (s.plaza.points[i], s.plaza.points[(i + 1) % n]);
+        ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5)
+    });
+    let starts: Vec<(i32, i32)> = std::iter::once(c)
+        .chain(s.plaza.points.iter().copied().chain(edges).map(|q| (q.0 * 0.9 + c.0 * 0.1, q.1 * 0.9 + c.1 * 0.1)))
+        .map(|q| (q.0.floor() as i32, q.1.floor() as i32))
+        .filter(|&(x, y)| map.walkable(x, y))
+        .collect();
+    let inner = s.plaza.points.iter().map(|q| (q.0 - c.0).hypot(q.1 - c.1)).fold(f32::INFINITY, f32::min);
+    let step = if inner.is_finite() { ARRIVAL_STEP_M.min(inner * 0.5) } else { 0.0 };
+    let want = match s.wall.as_ref().and_then(|w| w.gates.first()) {
+        Some(g) => {
+            let (dx, dy) = (g.at.0 - c.0, g.at.1 - c.1);
+            let n = dx.hypot(dy).max(1e-3);
+            (c.0 + dx / n * step, c.1 + dy / n * step)
+        }
+        None => c,
+    };
+    // The tile nearest `want` among those connected to the square, within the box round the
+    // square's outline and `ARRIVAL_MARGIN` tiles beyond it (4-connected, as `reach`), ties to
+    // the first found.
+    let (mut x0, mut y0, mut x1, mut y1) = (c.0.floor() as i32, c.1.floor() as i32, c.0.floor() as i32, c.1.floor() as i32);
+    for q in &s.plaza.points {
+        (x0, y0, x1, y1) = (x0.min(q.0.floor() as i32), y0.min(q.1.floor() as i32), x1.max(q.0.floor() as i32), y1.max(q.1.floor() as i32));
+    }
+    let (x0, y0, x1, y1) = (x0 - ARRIVAL_MARGIN, y0 - ARRIVAL_MARGIN, x1 + ARRIVAL_MARGIN, y1 + ARRIVAL_MARGIN);
+    let side = x1 - x0 + 1;
+    let mut seen = vec![false; (side * (y1 - y0 + 1)) as usize];
+    let idx = |x: i32, y: i32| ((y - y0) * side + (x - x0)) as usize;
+    let inside = |x: i32, y: i32| (x0..=x1).contains(&x) && (y0..=y1).contains(&y);
+    let mut queue = std::collections::VecDeque::new();
+    for &(x, y) in &starts {
+        if inside(x, y) && !seen[idx(x, y)] {
+            seen[idx(x, y)] = true;
+            queue.push_back((x, y));
+        }
+    }
+    let mut best: Option<((f32, f32), f32)> = None;
+    while let Some((x, y)) = queue.pop_front() {
+        let p = (x as f32 + 0.5, y as f32 + 0.5);
+        let d = (p.0 - want.0).hypot(p.1 - want.1);
+        if best.map_or(true, |(_, bd)| d < bd) {
+            best = Some((p, d));
+        }
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let (nx, ny) = (x + dx, y + dy);
+            if inside(nx, ny) && !seen[idx(nx, ny)] && map.walkable(nx, ny) {
+                seen[idx(nx, ny)] = true;
+                queue.push_back((nx, ny));
+            }
+        }
+    }
+    best.map(|b| b.0).or_else(|| map.nearest_walkable(c.0, c.1)).unwrap_or(c)
+}
+
 /// Digests the authority stores with the world and a client recomputes after regenerating the
 /// land from the same seed, size and parameters.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -143,8 +225,8 @@ pub struct Digests {
     pub tiles: u64,
     /// `Land::height` and `Land::water_level` on a lattice every `HEIGHT_STEP_M` metres.
     pub heights: u64,
-    /// Settlements, lots (kind, centre, size, front, floor, model), roads (points, heights) and
-    /// props (kind, centre, size, front, floor, model).
+    /// Settlements, lots (kind, centre, size, front, floor, model), roads (points, heights),
+    /// props (kind, centre, size, front, floor, model) and the arrival point ([`arrival`]).
     pub layout: u64,
 }
 
@@ -194,6 +276,10 @@ pub fn digests(land: &Land, hosted: &Map) -> Digests {
             layout = fnv1a(layout, &v.to_bits().to_le_bytes());
         }
         layout = fnv1a(layout, pr.model_file.as_deref().unwrap_or("").as_bytes());
+    }
+    let a = arrival(land, hosted);
+    for v in [a.0, a.1] {
+        layout = fnv1a(layout, &v.to_bits().to_le_bytes());
     }
     Digests { tiles, heights, layout }
 }
@@ -262,6 +348,40 @@ mod tests {
         }
         eprintln!("megacity 2048: blocked {} tiles, cut off {}, {doors} doors, {stranded} stranded", h.blocked_tiles, h.cut_off_tiles);
         assert!(stranded * 50 <= doors, "{stranded} of {doors} doors cut off");
+    }
+
+    /// Newcomers arrive on the first town's square, in the main walkable area, on the island's
+    /// world seeds and on the megacity floor; the point is repeatable and in the layout digest.
+    #[test]
+    fn arrival_is_on_the_first_towns_square() {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../seeds/floor-megacity.json")).unwrap();
+        let mega: LandParams = serde_json::from_value(v["map"]["params"].clone()).unwrap();
+        let worlds = [7u64, 11, 13].map(|s| (s, LandParams::default())).into_iter().chain([(v["seed"].as_u64().unwrap(), mega)]);
+        for (seed, p) in worlds {
+            let l = land::generate(seed, 2048, &p);
+            let (map, h) = hosted_map(&l, &p);
+            let a = arrival(&l, &map);
+            let s = arrival_settlement(&l).expect("a settlement");
+            let c = s.plaza.centre;
+            let inner = s.plaza.points.iter().map(|q| (q.0 - c.0).hypot(q.1 - c.1)).fold(f32::INFINITY, f32::min);
+            let d = (a.0 - c.0).hypot(a.1 - c.1);
+            assert!(map.walkable(a.0 as i32, a.1 as i32) && h.reachable[(a.1 as u32 * map.w + a.0 as u32) as usize], "seed {seed}: arrival {a:?} walkable and reachable");
+            assert!(d <= ARRIVAL_STEP_M.max(inner) + 1.0, "seed {seed}: arrival {a:?} {d:.1} m from the square's heart (inner {inner:.1})");
+            if p.metro.is_none() {
+                assert!(s.kind == SiteKind::Town && l.sites[s.site as usize].style.is_none(), "seed {seed}: arrives at the plain town");
+            }
+            assert_eq!(a, arrival(&l, &map), "repeatable");
+            // Only the arrival reads the square's own centre: moving it moves the arrival, and
+            // the layout digest with it (the megacity core's heart is built on, so its arrival
+            // on the square's edge may not move).
+            if p.metro.is_none() {
+                let mut moved = l.clone();
+                moved.settlements.iter_mut().for_each(|t| t.plaza.centre.0 += 3.0);
+                assert_ne!(arrival(&moved, &map), a);
+                assert_ne!(digests(&l, &map).layout, digests(&moved, &map).layout, "the layout digest covers the arrival");
+            }
+            eprintln!("seed {seed}: arrival {a:?}, {d:.1} m from the square's heart");
+        }
     }
 
     /// Prints the digests of the first world (seed 7, 2048 m) for comparison with the WASM

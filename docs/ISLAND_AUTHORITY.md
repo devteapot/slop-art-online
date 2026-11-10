@@ -51,7 +51,7 @@ At 2048 m, generation runs in the WASM module in 1.89 s; natively on the Mac it 
 |---|---|---|---|---|---|
 | Terrain tiles, with building footprints as `Wall` | `terrain_chunk` (unchanged: 16 × 16 bytes, id `(cy << 16) \| cx`) | 16,384 | 5.37 MB + 66 kB | init; a road, clearing, bridge or wall built (one row each) | the module's map cache (once per instance), clients by chunk window |
 | Ground height, water level, roads, plazas, walls' geometry, crossings | **derived**: clients run `living_rules::land::generate` with the `land` row's seed, size and params | 0 | 0 | — | clients (presentation) |
-| The land's identity and digests | `land` (one row): seed, size, params JSON, tiles/heights/layout digests, arrival point | 1 | < 200 B | init | clients once |
+| The land's identity and digests | `land` (one row): seed, size, params JSON, tiles/heights/layout digests (the layout digest includes the arrival point), arrival point | 1 | < 200 B | init | clients once |
 | Settlements | `settlement`: kind, style, centre, radius, folk scale, community | 6 | ~600 B | init | clients once |
 | Lots | `lot`: kind, centre, size, yaw, floor, model file, door point, door structure, chunk (btree) | 375 | 69 kB | init | clients by chunk (`lot.chunk`) |
 | Buildings' function (shelter, inn, hall, workshop, storage) | `structure` at the lot's door (existing table; owner set as households move in) | 238 of 361 | 38 kB (all structures) | init; ownership | rules (shelter warmth, sleep, homes), clients by chunk |
@@ -164,8 +164,17 @@ The planner now dresses settlements with props, terraces sloping sites, and lays
 
 **Styled towns are settlements of kind `town`** whose `settlement.style` names their models (`steampunk`, `cyberpunk`).
 - Their site has its own id (`living_rules::land::Site::id`: `steampunk_town`, `cyberpunk_town`). `island::match_seed` matches seed entries by that id, so `"site": "steampunk_town"` in [`island.json`](../living/seeds/island.json) peoples Kettlebridge and `"cyberpunk_town"` peoples Lanternquay.
-- `SiteKind` gains no variant: client code matches it exhaustively. Newcomers still arrive at the first (walled) town.
+- `SiteKind` gains no variant: client code matches it exhaustively. Newcomers arrive at the first plain town ([arrival](#arrival-2026-11-10)).
 - Since 2026-11-10 a seed entry may also choose its site by `near` (a settlement placed before it) and `region` (region kinds); the island's hamlets (`hamlet_village`) are matched that way, and the authority keeps the land's roads as a graph (`living_rules::ways`) until creation ends, for the stages of residents' known ways ([seeded lives](SEEDED_LIVES.md)).
+
+### Arrival (2026-11-10)
+
+Newcomers (a player's `join`, a trial's `spawn_newcomer`) arrive at the `land` row's `arrive_x`/`arrive_y`. The generator chooses the point: `living_rules::host::arrival(land, hosted_map)`.
+- **Which settlement:** the first plain town (a seed's `town` site), else the first town of any style, else the first settlement (`host::arrival_settlement`).
+- **Where in it:** on its square, where its people gather, 6 m from the square's heart toward the town's first gate (at most half way to the square's edge). It is the walkable tile nearest that point among the tiles connected to the square, searched within the square's outline and 16 tiles round it. Where a building stands on the square's heart (the megacity core's arcology), the search starts from the walkable ground round it. A land without settlements arrives at the walkable tile nearest its middle.
+- **Deterministic and covered:** the point depends only on the seed, size and parameters, and it is folded into the layout digest. A client that regenerates the land derives the same point, and `verify-generation` compares the row with a native regeneration (`floor_preview` prints `arrival x y`).
+- **Why it moved:** from 2026-09 to 2026-11-09 the point was 4 m outside the first gate's wall. On the seeded-lives towns that put it 2–28 m outside the town's radius, and in the social trials the newcomer stayed outside on every island seed. On seed 7 over the first game day of `verify-arr-base`, the mean number of people within 20 m was 16.2 at the square's heart and 0.1–0.2 at points just inside or outside the first gate. Values per seed (2048 m): seed 7 (410.5, 258.5), 6.0 m from the square's heart; seed 11 (1795.5, 1739.5), 5.7 m; seed 13 (809.5, 298.5), 5.7 m; the megacity floor (seed 11 of `floor-megacity.json`) (980.5, 1022.5), on the core square's walkable edge, 43.5 m from its built-on heart (`host::tests::arrival_is_on_the_first_towns_square`).
+- **What reads it:** `join`, `spawn_newcomer`, the seed's packs placed `near: "arrival"`, the trial runner's `{"arrival": true}` anchor, `spawn_battle`/`spawn_skirmish` (20–30 m north of it), and `soak.py`/`gate.py`. Scripted trials anchored to the arrival now start on the square rather than on the road outside the gate. The island's bold pack moved to 370–520 m from the arrival, which keeps it as far from the town as the earlier 250–400 m from the gate-side point.
 
 ## Measurements
 
@@ -290,7 +299,7 @@ The list as written before the client was built. Items 1 to 3 and 5 are done ([c
 2. **Stop subscribing to `terrain_chunk` whole.** `net.rs` subscribes `SELECT * FROM terrain_chunk` (5.4 MB and 16,384 rows on the island). Use the chunk window, either as one range per chunk row (`SELECT * FROM terrain_chunk WHERE id >= a AND id <= b`) or as `id = c` per chunk. A window is only needed for edits; initial tiles can come from the regenerated land once the tiles digest matches.
 3. **Subscribe `lot` by chunk** alongside `body`, `resource_node` and `structure` (`SELECT * FROM lot WHERE chunk = c`). Draw `lot.model` at `(x, floor_m, y)` with `yaw`, instead of planning lots itself. `settlement` (6 rows) and `land` (1 row) can be subscribed whole.
 4. **Draw folk at size:** a character's `background` names `folk` and `body_scale`; `settlement.scale` gives the same per settlement.
-5. **Spawn and camera:** `join` places a newcomer at `land.arrive_x/arrive_y`, outside the town's first gate.
+5. **Spawn and camera:** `join` places a newcomer at `land.arrive_x/arrive_y`: since 2026-11-10 on the first town's square ([arrival](#arrival-2026-11-10)); before, outside its first gate.
 6. **Collision prediction:** `living_rules::host::footprint_tiles` gives the same blocked tiles the authority uses, if the client predicts movement.
 
 ## Connected client (2026-11-09)

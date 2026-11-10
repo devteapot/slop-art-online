@@ -154,7 +154,7 @@ pub struct LandInfo {
     pub tiles_digest: u64,
     pub heights_digest: u64,
     pub layout_digest: u64,
-    /// Where newcomers arrive (outside the town's first gate, or its plaza).
+    /// Where newcomers arrive: on the first town's square (`living_rules::host::arrival`).
     pub arrive_x: f32,
     pub arrive_y: f32,
 }

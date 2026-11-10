@@ -5,6 +5,7 @@ from collections import Counter
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -243,6 +244,13 @@ def check_land(seed, rows, side, tiles):
     if land:
         present("arrival point walkable", tile(land[0]["arrive_x"], land[0]["arrive_y"]) in WALKABLE, [land[0]["arrive_x"], land[0]["arrive_y"]])
     settlements = rows.get("settlement", [])
+    if land and settlements:
+        # Newcomers arrive on the first town's square (`living_rules::host::arrival`), inside the
+        # settlement among its people, not outside its wall.
+        a = (land[0]["arrive_x"], land[0]["arrive_y"])
+        home = min(settlements, key=lambda s: math.dist(a, (s["x"], s["y"])))
+        d = math.dist(a, (home["x"], home["y"]))
+        present("arrival point inside a settlement, near its square", d <= 0.5 * home["radius_m"], {"settlement": home["id"], "kind": home["kind"], "style": home["style"], "from_its_square_m": round(d, 1), "radius_m": round(home["radius_m"], 1)})
     communities = {r["name"]: r for r in rows["community"]}
     entries = seed.get("towns", []) + seed.get("villages", [])
     present("settlement rows", len(settlements) >= len(entries), {"rows": len(settlements), "seeded": len(entries)})
@@ -387,7 +395,12 @@ def native_digests(d, rows, target):
     land = rows.get("land", [{}])[0]
     row = [format(int(land.get(k, 0)), "016x") for k in ("tiles_digest", "heights_digest", "layout_digest")]
     native = list(found.groups()) if found else None
-    return {"check": "land digests match the native generator", "pass": code == 0 and native == row, "authority": row, "native": native}
+    # The arrival point is part of the layout digest; compared on its own too, so a mismatch
+    # names it.
+    at = re.search(r"arrival (-?[0-9.]+) (-?[0-9.]+)", text)
+    arrive = [round(float(land.get(k, 0)), 2) for k in ("arrive_x", "arrive_y")]
+    native_arrive = [float(at.group(1)), float(at.group(2))] if at else None
+    return {"check": "land digests and arrival point match the native generator", "pass": code == 0 and native == row and native_arrive == arrive, "authority": row, "native": native, "arrival": arrive, "native_arrival": native_arrive}
 
 
 def no_secrets(seed, rows):

@@ -44121,8 +44121,8 @@
       "kind": "wolf",
       "count": 4,
       "near": "arrival",
-      "from_m": 250,
-      "to_m": 400,
+      "from_m": 370,
+      "to_m": 520,
       "bold": true,
       "instinct": "wolf_bold",
       "name": "the wolves of the low hills"
