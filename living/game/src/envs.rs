@@ -600,6 +600,44 @@ pub fn cutaway(
     }
 }
 
+/// Drawn only out to this distance from me (m, on the ground): a thing fades out, dithered,
+/// over the last [`crate::island::REACH_BAND`] metres before it ([`reach`]), so the edge of
+/// the draw distance never pops, also where the mood's fog starts farther out than it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Reach(pub f32);
+
+impl Reach {
+    /// How far out of view a thing at distance `d` is (0 drawn, 1 gone).
+    pub fn out(r: f32, d: f32) -> f32 {
+        let band = crate::island::REACH_BAND;
+        let t = ((d - (r - band)) / band).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    }
+
+    /// The fade for a thing spawned at distance `d`: drawn at once well inside its reach, else
+    /// fading in from nothing (or staying out).
+    pub fn fade_at(r: f32, d: f32) -> crate::fade::Fade {
+        if Self::out(r, d) > 0.0 {
+            crate::fade::Fade::appearing()
+        } else {
+            crate::fade::Fade::shown()
+        }
+    }
+}
+
+/// Fade things toward the edge of their reach (after [`cutaway`], which sets what is in the way).
+pub fn reach(target: Res<crate::controls::Target>, mut q: Query<(&Transform, &Reach, &mut crate::fade::Fade, Has<Occluder>)>) {
+    let Some(me) = target.0 else { return };
+    for (t, r, mut fade, cut) in &mut q {
+        let out = Reach::out(r.0, t.translation.xz().distance(me.xz()));
+        // What is in the way keeps its cut-away; anything else is only as far out as its reach.
+        let to = if cut { fade.target.max(out) } else { out };
+        if fade.target != to {
+            fade.target = to;
+        }
+    }
+}
+
 /// How far a thing in the way fades (it stays faintly there, so you see what hides you), and how
 /// long it stays faded after it was last in the way (s).
 pub const SEE_THROUGH: f32 = 0.8;
@@ -653,6 +691,7 @@ pub fn switch(
     mut cams: Query<&mut DistanceFog, With<Camera3d>>,
     mut clear: ResMut<ClearColor>,
     ground_mat: Res<crate::terrain::GroundMat>,
+    mut draw: ResMut<crate::world::Draw>,
 ) {
     // The island's land arrives from its worker thread: place it and you.
     if envs.current == Some(envs.want) {
@@ -689,12 +728,14 @@ pub fn switch(
         for mut f in &mut cams {
             f.color = SKY;
         }
+        draw.fog = None;
         crate::lookdev::build_lineup(&mut commands, &mut meshes, &palette, &style, &assets, &m);
         return;
     }
     let def = envs.defs[want - 1].clone();
     info!("environment: {} — {}", def.name, def.note);
     apply_mood(&def.mood, &mut *style, &mut *look, &mut lights, &mut cams, &mut *clear);
+    draw.mood(&def.mood);
     if let Some(world) = def.world {
         // The island streams itself in (island.rs); you start at its town. Its land generates
         // on a worker thread (most of a second), placed when it arrives (above).
