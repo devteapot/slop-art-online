@@ -676,6 +676,11 @@ pub struct Deliberation {
     pub updated_ms: u64,
     pub scene: String,
     pub revision: u32,
+    /// When each line of `reason` arrived, in milliseconds separated by spaces and aligned with
+    /// its lines: a deliberation consumes the lines its prompt contained (living_rules::reasons).
+    /// A string because a column default must be a constant.
+    #[default("")]
+    pub arrived: String,
 }
 
 // ---- mind projections (observer and behavior inputs) ----------------------
