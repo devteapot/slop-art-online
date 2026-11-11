@@ -335,6 +335,8 @@ fn dump(
         "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground})).collect::<Vec<_>>()),
         "hovered": model.actors.iter().filter(|a| a.hovered).map(|a| serde_json::json!({"id": a.id, "label": a.name})).collect::<Vec<_>>(),
         "targeted": model.actors.iter().find(|a| a.targeted).map(|a| a.id),
+        // The notes on screen now (the facing-sight readout among them).
+        "toasts": model.verbs.toasts.iter().map(|(t, _, _)| t.clone()).collect::<Vec<_>>(),
         "extra": extra.json(),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
     });

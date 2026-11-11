@@ -189,6 +189,9 @@ class Scene:
         self.character = cl.get("name", "Wanderer")
         self.token_pattern = cl.get("token", "{state}/tokens/{db}.token")
         self.client_env = dict(cl.get("env") or {})
+        # Opt in: the client may switch the world's facing-sight law (`set_world_law("fov_on", …)`)
+        # through a second, admin-only connection (living/game/src/facing.rs).
+        self.law_toggle = bool(cl.get("law_toggle"))
         m = c.get("minds")
         self.minds = None
         if m:
@@ -952,6 +955,11 @@ class Session:
         for kv in self.a.client_env or []:
             k, _, v = kv.partition("=")
             env[k] = s.fill(v, db=db, session=self.dir)
+        if s.law_toggle:
+            # The world admin's token for the client's admin-only connection (set_world_law only),
+            # in a private file outside the session directory, so neither the session report nor
+            # the recording carries it; teardown deletes it, whatever ended the session.
+            env["LIVING_GAME_ADMIN_TOKEN_FILE"] = self.write_admin_token(db)
         if self.capture:
             # The client records its own frames (the session's video), state and presses.
             env["LIVING_GAME_RECORD"] = self.capture / "client"
@@ -976,6 +984,22 @@ class Session:
                 self.record_start(db)
         self.log(f"game client pid {self.client.pid}, joining {db} as {env['LIVING_GAME_NAME']} "
                  f"(log {self.dir / 'client.log'})")
+
+    def write_admin_token(self, db):
+        d = self.s.state / "private"
+        d.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(d, 0o700)
+        path = d / f"admin-{os.getpid()}.token"
+        with critical():
+            self.info["admin_token_file"] = str(path)   # recorded first: teardown deletes it
+            self.save()
+            if path.exists():
+                path.unlink()
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(self.w.token())
+        self.log(f"law toggle: the client may switch {db}'s fov_on law (admin token file {path}, mode 600)")
+        return path
 
     # -- the run
     def run(self):
@@ -1173,6 +1197,17 @@ def last_evidence_ms(info):
     return int(max(times) * 1000) if times else None
 
 
+def remove_secret(path):
+    """Delete a secret file the launcher wrote; say what happened (never its contents)."""
+    try:
+        Path(path).unlink()
+        return f"deleted {path}"
+    except FileNotFoundError:
+        return f"already gone ({path})"
+    except OSError as e:
+        return f"COULD NOT DELETE {path} ({e})"
+
+
 def teardown(scene, info, why, client=None, mind=None, report=True, ended_ms=None):
     """Pause the world, stop the mind (by PID) and the memory store (by name), stop the client and
     tool 1's recorder, release the build lock, price the session, run the report. Every external call
@@ -1202,6 +1237,10 @@ def teardown(scene, info, why, client=None, mind=None, report=True, ended_ms=Non
         note("  " + msg)
 
     note(f"session ending ({why}):")
+    # 0. The client's admin token file (a scene's "law_toggle"), first and whatever else fails.
+    if info.get("admin_token_file"):
+        done["admin_token_file"] = remove_secret(info["admin_token_file"])
+        step(f"admin token file: {done['admin_token_file']}")
     # 1. Pause the world: no takeover of the player's character, no ticks, until the next start.
     #    Safe while a client is still connected. Bounded: a failure here never delays step 2.
     try:
