@@ -314,6 +314,7 @@ What happened since (2026-11-11):
   - The crossed ankles went from 1–5 cm under the floor to 4.0–4.8 cm above it. The deepest sole point went from 11–20 cm under its standing height to 5–10.
   - It skips `stand_up_ground` on the VRoid bases. Baked before either guard runs, that take already snaps the right thigh 79° in one frame at 0.53 s while kneeling (the knee flips over; not on `own-man`), and the guard would raise that to 90°. Hands: no wrist goes under 3 cm in any clip. Fingertips are not guarded (`death` 4–4.5 cm under on all three; `stand_up_ground` 2.4 cm on `own-man`).
 - **Hair on spring bones** changes nothing for `animate.py`: the chains hang under the head and the clips do not key them.
+- **Since pass 3 generated people are baked with main's `animate.py` again** (floor-guard-4, `25c1fb92`, which replaced the second and third guards: wrists and ankles are kept above the floor on every clip and body). The board's seven presets and the control were baked with it on the 29 entries this machine holds, and `living/tools/marker_check.py` on that bake reports no errors. On each of our people the guard changed 16 clips; the largest jerk rose by 0.4° at most (`run`, 17.8° to 18.2°, 6° allowed), and one warning stands (`sneak`: the right foot slides 4.5 cm while planted, 4 allowed). The 64 residents used for pass 3's crowd measurement were baked earlier with the first guard, as pass 2's were (`ANIMATE=<a copy from 93a4f3d6>`), so the two sets compared carry the same clips.
 
 ## What was learnt from VRoid
 

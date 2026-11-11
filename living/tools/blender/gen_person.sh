@@ -16,9 +16,9 @@
 #                       same clips; `both` one file with the two on one skeleton, the far model's
 #                       meshes named Far* (for a client that switches them by distance; today's
 #                       client would draw both), as lookdev/lod/own-<name>.glb and lookdev/lod/anim/…
-#   ANIMATE=<file>      the animate.py that bakes the clips (default: this folder's). Until the
-#                       third floor guard is on main, generated people are baked with a copy from
-#                       before the second (docs/CHARACTERS.md, "Motions on generated people")
+#   ANIMATE=<file>      the animate.py that bakes the clips (default: this folder's), to bake a
+#                       set with an earlier one for a comparison (docs/CHARACTERS.md, "Motions on
+#                       generated people")
 #   KIMODO_DIR=<dir>    the library's generated NPZs (default .local/kimodo/outputs/library)
 #   ONLY=<clips>        comma-separated library entries (default: the whole library, clips.json);
 #                       `present` takes every entry whose takes are all in KIMODO_DIR, for a
