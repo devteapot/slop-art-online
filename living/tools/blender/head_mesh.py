@@ -377,19 +377,7 @@ class Face:
         self.skin_normals = hf.normal(self.skin_pos)
         # A beard is the skin itself standing off the face (its hairs are painted): thick for a
         # full beard, which also hangs below the chin.
-        style = self.look.get("beard")
-        sp = self.skin_pos
-        cover = hf.beard_cover(style, np.abs(sp[:, 0]), sp[:, 2], np.degrees(np.arctan2(-sp[:, 0], sp[:, 1])), soft=0.004)
-        if cover is not None:
-            cover = cover * (sp[:, 1] > -0.03)
-            cover[self.mouth_up + self.mouth_lo] = 0.0
-            # Over the lip it stays thin, whatever the beard.
-            thick = lerp(min(hf.BEARDS[style], 0.0022), hf.BEARDS[style], smooth((hf.mouth_z - 0.004 - sp[:, 2]) / 0.014))
-            self.skin_pos = sp + self.skin_normals * (thick * cover)[:, None]
-            if style == "full":
-                hang = cover * smooth((hf.mouth_z - 0.010 - sp[:, 2]) / 0.03) * smooth((sp[:, 1] - 0.01) / 0.05)
-                self.skin_pos[:, 2] -= 0.012 * hang
-                self.skin_pos[:, 1] += 0.004 * hang
+        self.skin_pos = beard_offset(hf, self.look.get("beard"), self.skin_pos, self.skin_normals, clear=self.mouth_up + self.mouth_lo)
         faces = [tuple(q) for q in quads] + tris
         # Outward winding, and drop what the hair covers.
         out = []
@@ -625,20 +613,7 @@ class Face:
     def _brow(self, m, side, state):
         hf, look = self.hf, self.look
         n = 14
-        x0 = hf.eye_x - hf.eye_w * 1.02 - 0.0015
-        x1 = hf.eye_x + hf.eye_w * (1.12 + 0.30 * (hf.brow_len - 1)) + 0.002
-        x0 = max(x0, 0.0085)
-        top, bot = [], []
-        peak = 0.62
-        for i in range(n):
-            t = i / (n - 1)
-            x = lerp(x0, x1, t)
-            arch = hf.brow_arch * (math.sin(math.pi * min(t / peak, 1.0) * 0.5) if t < peak else math.cos(math.pi * 0.5 * ((t - peak) / (1 - peak)) ** 1.15) ** 0.9)
-            z = hf.eye_z + hf.eye_up + hf.brow_up + arch + hf.brow_tilt * (2 * t - 1) - 0.0012 * (t > peak) * ((t - peak) / (1 - peak))
-            z += lerp(state.get("brow_in", 0.0), state.get("brow_out", 0.0), smooth(t * 1.2))
-            w = hf.brow_w * (0.55 + 0.45 * smooth(t / 0.16)) * (1 - 0.88 * smooth((t - 0.45) / 0.55) ** 1.2)
-            top.append((side * x, z + 0.55 * w))
-            bot.append((side * x, z - 0.45 * w))
+        top, bot = brow_shape(hf, side, state, n)
         c = look["brow"]
         # A soft shape under the hairs, so the brow still reads from far off.
         under = mix3(c, look["skin"], 0.12)
@@ -715,7 +690,7 @@ class Face:
         half_h = 0.0315 * size
         half_w = 0.0170 * size
         yc = -0.016
-        seg = 16
+        seg = getattr(self, "EAR_SEG", 16)  # the far head's ears are a rim and a middle
         skin, shade = look["skin"], look["skin_shade"]
         tan_out = math.tan(math.radians(hf.ear_out))
         for side in (-1, 1):
@@ -738,6 +713,8 @@ class Face:
 
             rings = [ring(0.50, 0.000, dy=0.004), ring(1.00, 0.0015), ring(0.80, 0.0045), ring(0.50, 0.0010, dy=0.002, dz=-0.001)]
             tint = [skin, mix3(skin, look["skin_warm"], 0.25), mix3(skin, shade, 0.35), mix3(skin, shade, 0.85)]
+            if hasattr(self, "EAR_RINGS"):
+                rings, tint = [rings[0]] + [rings[i] for i in self.EAR_RINGS], [tint[0]] + [tint[i] for i in self.EAR_RINGS]
             pts, cols = [], []
             for r, c in zip(rings, tint):
                 pts += r
@@ -758,6 +735,90 @@ class Face:
                     good = np.dot(nrm, q.mean(axis=0) - axis) > 0 if r == 0 else nrm[0] * side > 0
                     m.f.append(tuple(base + v for v in (f if good else reversed(f))))
                     m.fm.append("face")
+
+
+def brow_shape(hf, side, state=None, n=14):
+    """A brow's upper and lower edges in the front view, from its inner end out: two lists of
+    (x, z). `state` raises or lowers its ends (expressions)."""
+    state = state or {}
+    x0 = hf.eye_x - hf.eye_w * 1.02 - 0.0015
+    x1 = hf.eye_x + hf.eye_w * (1.12 + 0.30 * (hf.brow_len - 1)) + 0.002
+    x0 = max(x0, 0.0085)
+    top, bot = [], []
+    peak = 0.62
+    for i in range(n):
+        t = i / (n - 1)
+        x = lerp(x0, x1, t)
+        arch = hf.brow_arch * (math.sin(math.pi * min(t / peak, 1.0) * 0.5) if t < peak else math.cos(math.pi * 0.5 * ((t - peak) / (1 - peak)) ** 1.15) ** 0.9)
+        z = hf.eye_z + hf.eye_up + hf.brow_up + arch + hf.brow_tilt * (2 * t - 1) - 0.0012 * (t > peak) * ((t - peak) / (1 - peak))
+        z += lerp(state.get("brow_in", 0.0), state.get("brow_out", 0.0), smooth(t * 1.2))
+        w = hf.brow_w * (0.55 + 0.45 * smooth(t / 0.16)) * (1 - 0.88 * smooth((t - 0.45) / 0.55) ** 1.2)
+        top.append((side * x, z + 0.55 * w))
+        bot.append((side * x, z - 0.45 * w))
+    return top, bot
+
+
+def beard_offset(hf, style, sp, normals, clear=()):
+    """Skin positions with a beard standing off them (its hairs are painted): thick for a full
+    beard, which also hangs below the chin. `clear` lists vertices that stay on the skin."""
+    cover = hf.beard_cover(style, np.abs(sp[:, 0]), sp[:, 2], np.degrees(np.arctan2(-sp[:, 0], sp[:, 1])), soft=0.004)
+    if cover is None:
+        return sp
+    cover = cover * (sp[:, 1] > -0.03)
+    cover[list(clear)] = 0.0
+    # Over the lip it stays thin, whatever the beard.
+    thick = lerp(min(hf.BEARDS[style], 0.0022), hf.BEARDS[style], smooth((hf.mouth_z - 0.004 - sp[:, 2]) / 0.014))
+    out = sp + normals * (thick * cover)[:, None]
+    if style == "full":
+        hang = cover * smooth((hf.mouth_z - 0.010 - sp[:, 2]) / 0.03) * smooth((sp[:, 1] - 0.01) / 0.05)
+        out[:, 2] -= 0.012 * hang
+        out[:, 1] += 0.004 * hang
+    return out
+
+
+FAR_CUTS = 12  # the far head's grid: 12 quads along each edge of the cube
+
+
+class FarFace:
+    """The far model's head (person.py --lod far): the same form on a coarse grid, with no eye
+    openings, no mouth slit and no expressions. Its eyes, lash lines and brows are painted on
+    the skin (face_paint.paint_far). `mesh` has one material, `face`; base_pos and base_quads
+    are the whole head for hair and headwear, as Face's are."""
+
+    EAR_SEG, EAR_RINGS = 6, (1, 2)
+
+    def __init__(self, hf, look, keep=None):
+        self.hf, self.look = hf, look
+        dirs, quads, _ = cube_sphere(FAR_CUTS, WARP)
+        self.base_pos = ORIGIN + dirs * hf.radius(dirs)[:, None]
+        self.base_quads = quads
+        normals = hf.normal(self.base_pos)
+        pos = beard_offset(hf, look.get("beard"), self.base_pos.copy(), normals)
+        uvs = skin_uv(self.base_pos)
+        faces = []
+        for q in quads:
+            c = pos[list(q)].mean(axis=0)
+            if keep is not None and not keep(c):
+                continue
+            a, b, d = pos[q[0]], pos[q[1]], pos[q[2]]
+            faces.append(tuple(q) if np.dot(np.cross(b - a, d - a), c - ORIGIN) >= 0 else tuple(reversed(q)))
+        # Faces across the atlas's seam at the back of the head get their own vertices (Face).
+        extra = {}
+        for n_, f in enumerate(faces):
+            u = uvs[list(f), 0]
+            if u.max() - u.min() <= 0.5:
+                continue
+            faces[n_] = tuple(extra.setdefault(v, len(pos) + len(extra)) if uvs[v, 0] < 0.5 else v for v in f)
+        if extra:
+            src = np.array(list(extra))
+            pos = np.concatenate([pos, pos[src]])
+            uvs = np.concatenate([uvs, uvs[src] + np.array([1.0, 0.0])])
+        used = sorted({v for f in faces for v in f})
+        index = {v: i for i, v in enumerate(used)}
+        m = Mesh()
+        m.add(pos[used], (1.0, 1.0, 1.0), uvs[used], [tuple(index[v] for v in f) for f in faces], "face")
+        Face._ears(self, m)
+        self.mesh = m
 
 
 def FORWARD(centre, normal):
