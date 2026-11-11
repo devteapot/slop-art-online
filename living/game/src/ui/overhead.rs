@@ -167,7 +167,7 @@ pub fn plates(
     }
     for (pn, mut t, mut c) in &mut names {
         if let Some((_, alpha, a)) = shown(pn.0) {
-            set_text(&mut t, &a.name);
+            set_text(&mut t, &super::label(&a.name));
             let col = if a.stance == Stance::Hostile {
                 theme::HOSTILE
             } else if a.targeted {
@@ -303,7 +303,7 @@ pub fn bubbles(
     }
     for (bn, mut t, mut c) in &mut names {
         if let Some((_, _, _, alpha, b)) = slot_of[bn.0] {
-            set_text(&mut t, &b.name);
+            set_text(&mut t, &super::label(&b.name));
             let col = if b.mine { Color::srgb(0.62, 0.43, 0.12) } else { Color::srgb(0.24, 0.43, 0.62) };
             set_color(&mut c, theme::with_alpha(col, alpha));
         }
