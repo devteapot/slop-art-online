@@ -444,8 +444,9 @@ pub struct Laws {
     pub heard_near_m: f32,
     pub heard_close_m: f32,
     pub heard_linger_s: f32,
-    /// A player's look (`human_face`): a change within this many degrees is the same look; walking,
-    /// the body turns toward the look at most this many degrees off its way.
+    /// A held look (`human_face`): a change within this many degrees is the same look; walking,
+    /// the body's facing (not its travel) turns toward the look at most this many degrees off its
+    /// way (`steer::walk_face`).
     pub look_slack_deg: f32,
     pub look_walk_deg: f32,
 }
@@ -503,7 +504,7 @@ impl Default for Laws {
             heard_close_m: 15.0,
             heard_linger_s: 2.0,
             look_slack_deg: 10.0,
-            look_walk_deg: 30.0,
+            look_walk_deg: 75.0,
         }
     }
 }
@@ -2766,6 +2767,25 @@ mod tests {
         assert!(!odd.laws().fov_on && odd.law_value("no_such").is_none());
         // What a sound out of sight is told as.
         assert_eq!((on.heard_as("person"), on.heard_as("wolf"), on.heard_as("hare")), ("person".into(), "wolf".into(), "creature".into()));
+    }
+
+    /// How far a walker's facing may turn from its way toward a held look is the world's law:
+    /// 75 degrees shipped, a world's own value taken (and kept within 0..180).
+    #[test]
+    fn the_walking_look_limit_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert_eq!(shipped.laws().look_walk_deg, 75.0);
+        assert_eq!(shipped.law_value("look_walk_deg"), Some(serde_json::json!(75.0)));
+        let about = shipped.laws_about().into_iter().find(|(k, _)| k == "look_walk_deg").map(|(_, t)| t).unwrap_or_default();
+        assert!(about.contains("75 degrees"), "{about}");
+        let tuned = Scripts::new(&with_world_laws(src, &[("look_walk_deg".into(), serde_json::json!(40))])).unwrap();
+        tuned.validate().unwrap();
+        assert_eq!(tuned.laws().look_walk_deg, 40.0);
+        let wild = Scripts::new(&with_world_laws(src, &[("look_walk_deg".into(), serde_json::json!(400))])).unwrap();
+        assert_eq!(wild.laws().look_walk_deg, 180.0);
+        // Cullet's laws leave it alone: a Cullet world takes the shipped value.
+        assert!(!include_str!("../../seeds/worlds/cullet/laws.rhai").contains("look_walk_deg"));
     }
 
     /// A script from before a required law runs with the shipped one merged under it. The two

@@ -600,15 +600,24 @@ pub fn pos(b: &Body, now: u64) -> (f32, f32) {
     (x, y)
 }
 
-/// Which way a body faces at `now` (`body.heading` along its segment: a turn under way, standing
-/// or walking; `steer::pose`). Facing is this one heading: steering, the `face` act and the
-/// turns of a strike, a guard or an aim write it.
+/// Which way a body travels at `now` (`body.heading` along its segment: a turn under way,
+/// standing or walking; `steer::pose`): where its legs go. Steering, separation and the pose
+/// read it. Where the body looks is [`facing_at`].
 pub fn heading_at(b: &Body, now: u64) -> f32 {
     if b.turn == 0.0 || b.turn_s <= 0.0 {
         return b.heading;
     }
     let t = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
     living_rules::steer::wrap(b.heading + b.turn * t.min(b.turn_s))
+}
+
+/// Which way a body faces at `now`: its travel heading plus its facing offset
+/// (`body.face_*`, `steer::facing`), the one facing that facing sight (`fov_on`), what is heard
+/// from which side, "you face", a guard's default and an aim at the facing read. A held look
+/// (`human_face`) turns it; with none it is the heading. Clients evaluate it the same way.
+pub fn facing_at(b: &Body, now: u64) -> f32 {
+    let t = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
+    living_rules::steer::facing(heading_at(b, now), b.face_off, b.face_turn, b.face_turn_s, t)
 }
 
 pub fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
@@ -949,8 +958,8 @@ pub struct NearCreature {
     pub kind: Rc<str>,
     pub pos: (f32, f32),
     pub dist: f32,
-    /// Which way it faces at the instant (`heading_at`).
-    pub heading: f32,
+    /// Which way it faces at the instant (`facing_at`: where it looks, not where it goes).
+    pub facing: f32,
 }
 
 /// A body in the per-tick chunk cache: id, kind, where it is and which way it faces then.
@@ -972,7 +981,7 @@ fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<CachedBody
         if let Some(v) = c.1.get(&chunk) {
             return v.clone();
         }
-        let v: Rc<Vec<_>> = Rc::new(ctx.db.body().chunk().filter(chunk).map(|b| (b.id, Rc::from(b.kind.as_str()), pos(&b, now), heading_at(&b, now))).collect());
+        let v: Rc<Vec<_>> = Rc::new(ctx.db.body().chunk().filter(chunk).map(|b| (b.id, Rc::from(b.kind.as_str()), pos(&b, now), facing_at(&b, now))).collect());
         c.1.insert(chunk, v.clone());
         v
     })
@@ -989,7 +998,7 @@ pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) ->
         for (id, kind, p, h) in chunk_bodies(ctx, c, now).iter() {
             let d = dist(at, *p);
             if d <= r {
-                out.push(NearCreature { id: *id, kind: kind.clone(), pos: *p, dist: d, heading: *h });
+                out.push(NearCreature { id: *id, kind: kind.clone(), pos: *p, dist: d, facing: *h });
             }
         }
     }
@@ -1024,7 +1033,7 @@ pub fn smelled_near(ctx: &ReducerContext, who: u32, kind: &str, at: (f32, f32), 
         for c in chunks_around(at.0, at.1, scent.radius) {
             for (id, k, p, h) in chunk_bodies(ctx, c, now).iter() {
                 if *id != who && scent.kinds.iter().any(|x| **x == **k) && dist(at, *p) <= scent.radius + SCENT_MOVE {
-                    all.push(NearCreature { id: *id, kind: k.clone(), pos: *p, dist: 0.0, heading: *h });
+                    all.push(NearCreature { id: *id, kind: k.clone(), pos: *p, dist: 0.0, facing: *h });
                 }
             }
         }

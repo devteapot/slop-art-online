@@ -137,6 +137,7 @@ pub mod missile_type;
 pub mod motion_seen_table;
 pub mod motion_seen_type;
 pub mod motion_type;
+pub mod moving_type;
 pub mod my_body_table;
 pub mod my_characters_table;
 pub mod my_combat_table;
@@ -404,6 +405,7 @@ pub use missile_type::Missile;
 pub use motion_seen_table::*;
 pub use motion_seen_type::MotionSeen;
 pub use motion_type::Motion;
+pub use moving_type::Moving;
 pub use my_body_table::*;
 pub use my_characters_table::*;
 pub use my_combat_table::*;
@@ -1098,7 +1100,7 @@ pub struct DbUpdate {
     mind_state: __sdk::TableUpdate<MindState>,
     missile: __sdk::TableUpdate<Missile>,
     motion_seen: __sdk::TableUpdate<MotionSeen>,
-    my_body: __sdk::TableUpdate<Motion>,
+    my_body: __sdk::TableUpdate<Moving>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
@@ -1135,7 +1137,7 @@ pub struct DbUpdate {
     routine: __sdk::TableUpdate<Routine>,
     routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
-    seen_bodies: __sdk::TableUpdate<Motion>,
+    seen_bodies: __sdk::TableUpdate<Moving>,
     seen_characters: __sdk::TableUpdate<SeenCharacter>,
     seen_doing: __sdk::TableUpdate<Doing>,
     seen_fighters: __sdk::TableUpdate<Fighter>,
@@ -1787,7 +1789,7 @@ impl __sdk::DbUpdate for DbUpdate {
             .apply_diff_to_table::<HeardSound>("heard_sounds", &self.heard_sounds)
             .with_updates_by_pk(|row| &row.key);
         diff.my_body = cache
-            .apply_diff_to_table::<Motion>("my_body", &self.my_body)
+            .apply_diff_to_table::<Moving>("my_body", &self.my_body)
             .with_updates_by_pk(|row| &row.id);
         diff.my_characters = cache
             .apply_diff_to_table::<Character>("my_characters", &self.my_characters)
@@ -1828,7 +1830,7 @@ impl __sdk::DbUpdate for DbUpdate {
             .apply_diff_to_table::<Vitals>("my_vitals", &self.my_vitals)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_bodies = cache
-            .apply_diff_to_table::<Motion>("seen_bodies", &self.seen_bodies)
+            .apply_diff_to_table::<Moving>("seen_bodies", &self.seen_bodies)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_characters = cache
             .apply_diff_to_table::<SeenCharacter>("seen_characters", &self.seen_characters)
@@ -2577,7 +2579,7 @@ pub struct AppliedDiff<'r> {
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
     missile: __sdk::TableAppliedDiff<'r, Missile>,
     motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
-    my_body: __sdk::TableAppliedDiff<'r, Motion>,
+    my_body: __sdk::TableAppliedDiff<'r, Moving>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
@@ -2614,7 +2616,7 @@ pub struct AppliedDiff<'r> {
     routine: __sdk::TableAppliedDiff<'r, Routine>,
     routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
-    seen_bodies: __sdk::TableAppliedDiff<'r, Motion>,
+    seen_bodies: __sdk::TableAppliedDiff<'r, Moving>,
     seen_characters: __sdk::TableAppliedDiff<'r, SeenCharacter>,
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
@@ -2723,7 +2725,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
         callbacks.invoke_table_row_callbacks::<Missile>("missile", &self.missile, event);
         callbacks.invoke_table_row_callbacks::<MotionSeen>("motion_seen", &self.motion_seen, event);
-        callbacks.invoke_table_row_callbacks::<Motion>("my_body", &self.my_body, event);
+        callbacks.invoke_table_row_callbacks::<Moving>("my_body", &self.my_body, event);
         callbacks.invoke_table_row_callbacks::<Character>(
             "my_characters",
             &self.my_characters,
@@ -2800,7 +2802,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Script>("script", &self.script, event);
-        callbacks.invoke_table_row_callbacks::<Motion>("seen_bodies", &self.seen_bodies, event);
+        callbacks.invoke_table_row_callbacks::<Moving>("seen_bodies", &self.seen_bodies, event);
         callbacks.invoke_table_row_callbacks::<SeenCharacter>(
             "seen_characters",
             &self.seen_characters,

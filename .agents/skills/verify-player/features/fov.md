@@ -25,16 +25,18 @@ Since 2026-11-11 (`fov-1`; docs/PERCEPTION.md, "The field of view (seventh chang
 
 ## The player's look
 
-`human_face(dx, dy)` turns `body.heading`; `(0, 0)` releases it. `scripts/face.py` drives it with the player identity, with the field on and a resident 5.5 m west.
+`human_face(dx, dy)` turns the body's facing: the travel `heading` plus a facing offset with its own turn (`my_body`'s `face_off`, `face_turn`, `face_turn_s`; `living_rules::steer::facing`); `(0, 0)` releases it. Since `look-2` (2026-11-11) a held look never bends the travel. `scripts/face.py` drives it with the player identity, with the field on and a resident 5.5 m west on an open sight line.
 
-- Standing: `human_face(-1, 0)` turns the body west (`my_body` at the end of its turn), and the resident comes into view.
+- Standing: `human_face(-1, 0)` turns the body west (`my_body` at the end of its turn), with no facing offset, and the resident comes into view.
 - A look within 10° of the one held writes nothing (`my_body` row unchanged); a release while standing keeps the facing.
-- Walking east (`human_move(1, 0)`) and looking north: the heading turns 30° north of east and no further (`look_walk_deg`). Released, it returns east. Looking north and stopping: the body stands and finishes the turn north.
+- Walking east (`human_move(1, 0)`) on open ground off the road (`open_ground`, from `terrain_chunk`), with the look 45, 90, 135 and 180° north of the way: the travel heading stays 0°, the velocity is the cruise speed along the keys with no sideways part, and the facing is 45, 75, 75 and 75° north (`look_walk_deg`; the 180° look keeps the shoulder it is over). Released, the facing returns east.
+- Facing sight while walking: a second resident Q 3 m behind and 5.5 m north (118.6° off the travel) is out of view standing east, in view while walking east with the look north, and out of view again when the look is released mid-walk.
+- Looking north and stopping: the body stands and finishes the turn north, legs and facing.
 - The movement input bucket, narrowed for the check with `set_world_law` (`input_hz` 0.2, `input_burst` 3): of eight looks 90° apart three or four are taken, the rest refused ("too many movement inputs"), and a `human_move` right after is refused too. The laws are put back (30, 15).
 - Anonymous: refused ("you have no living character").
 
 ```bash
-.agents/skills/verify-player/scripts/face.py --run "$R"   # any seed, about 1 min
+.agents/skills/verify-player/scripts/face.py --run "$R"   # any seed, about 2 min
 ```
 
-Gotchas: HTTP calls are slower than the shipped refill (30 a second), so the bucket is only exhausted with the laws narrowed. `my_body`'s `heading` is the segment's start; the facing is `heading + turn × turn_s`.
+Gotchas: HTTP calls are slower than the shipped refill (30 a second), so the bucket is only exhausted with the laws narrowed, and a walker covers about 2.7 m per call-and-wait: set a scene's look before walking rather than after. `my_body`'s `heading` is the segment's start: the travel at the end of its turn is `heading + turn × turn_s`, and the facing then adds `face_off + face_turn × face_turn_s`. `place_at` takes the nearest walkable tile, which can put a wall between the player and the resident: the scene tries residents until the line is open. A walk next to a wall slides along it (steering's slide plan, a heading 0.5 or 1 rad off the keys); that is steering, not the look.

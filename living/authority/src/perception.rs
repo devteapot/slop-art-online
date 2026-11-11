@@ -72,6 +72,55 @@ impl From<&Body> for Motion {
     }
 }
 
+/// A body's motion segment as clients receive it (`seen_bodies`, `my_body`): the travel
+/// segment of [`Motion`] (where the legs go: `heading`, `turn`, `turn_s`) and the facing
+/// segment (where the head and chest look) as an offset from the travel heading: `face_off`
+/// radians at `t_ms`, turning at `face_turn` rad/s for the first `face_turn_s` seconds, then
+/// held. Facing at time t is `steer::facing(heading_at(t), face_off, face_turn, face_turn_s,
+/// t - t_ms)`, the function the authority's facing sight uses. 64 B. `Motion` itself stays as
+/// it is: it is stored in `motion_seen`, and a column's type may not change in place
+/// (automatic migrations), so the facing is appended there as its own columns.
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct Moving {
+    pub id: u32,
+    pub x: f32,
+    pub y: f32,
+    pub t_ms: u64,
+    pub vx: f32,
+    pub vy: f32,
+    pub heading: f32,
+    pub turn: f32,
+    pub turn_s: f32,
+    pub next_ms: u64,
+    pub speed: f32,
+    pub face_off: f32,
+    pub face_turn: f32,
+    pub face_turn_s: f32,
+}
+
+impl From<&Body> for Moving {
+    fn from(b: &Body) -> Self {
+        Self { id: b.id, x: b.x, y: b.y, t_ms: b.t_ms, vx: b.vx, vy: b.vy, heading: b.heading, turn: b.turn, turn_s: b.turn_s, next_ms: b.next_ms, speed: b.speed, face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s }
+    }
+}
+
+impl MotionSeen {
+    pub fn of(id: u64, viewer: Identity, b: &Body) -> Self {
+        Self { id, viewer, motion: Motion::from(b), face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s }
+    }
+    pub fn moving(&self) -> Moving {
+        let m = &self.motion;
+        Moving { id: m.id, x: m.x, y: m.y, t_ms: m.t_ms, vx: m.vx, vy: m.vy, heading: m.heading, turn: m.turn, turn_s: m.turn_s, next_ms: m.next_ms, speed: m.speed, face_off: self.face_off, face_turn: self.face_turn, face_turn_s: self.face_turn_s }
+    }
+    /// Write `m` into this row (the motion and the facing columns).
+    pub fn set(&mut self, m: &Moving) {
+        self.motion = Motion { id: m.id, x: m.x, y: m.y, t_ms: m.t_ms, vx: m.vx, vy: m.vy, heading: m.heading, turn: m.turn, turn_s: m.turn_s, next_ms: m.next_ms, speed: m.speed };
+        self.face_off = m.face_off;
+        self.face_turn = m.face_turn;
+        self.face_turn_s = m.face_turn_s;
+    }
+}
+
 /// What a player perceives of a character in its scene (the `perceived_of` law's projection
 /// of the character's record; its own character included). No controller, no home, no
 /// parents: what anyone looking would see, and what this viewer knows.
@@ -139,7 +188,7 @@ pub fn in_sight(ctx: &ReducerContext, map: &Map, observer: u32, eye: (f32, f32),
 /// Whether character `id`, its body `eye`, sees the place `at` now.
 pub fn sees(ctx: &ReducerContext, id: u32, eye: &Body, at: (f32, f32), w: &World, map: &Map, now: u64) -> bool {
     let e = pos(eye, now);
-    in_sight(ctx, map, id, e, common::heading_at(eye, now), 0, at, common::dist(e, at), w, now, false)
+    in_sight(ctx, map, id, e, common::facing_at(eye, now), 0, at, common::dist(e, at), w, now, false)
 }
 
 /// What character `id` at `at` sees now and what it hears but does not see, from one gather of
@@ -155,7 +204,7 @@ pub fn sensed(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u6
     let lit = gather > sight;
     // Facing matters only with a field (one body lookup then), and only then is anything heard.
     let field = senses.field.is_some();
-    let heading = if field { ctx.db.body().id().find(id).map_or(0.0, |b| common::heading_at(&b, now)) } else { 0.0 };
+    let heading = if field { ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now)) } else { 0.0 };
     let hearing = if field { senses.hearing } else { 0.0 };
     let (mut seen, mut heard) = (Vec::new(), Vec::new());
     for c in common::creatures_near(ctx, at, gather.max(hearing), now) {
@@ -542,7 +591,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let Some(b) = ctx.db.body().id().find(id) else { return };
     let Some(me) = ctx.db.character().id().find(id) else { return };
     let here = pos(&b, now);
-    let heading = common::heading_at(&b, now);
+    let heading = common::facing_at(&b, now);
     let senses = common::senses_of(ctx, id, w, now);
     let sight = senses.sight;
     let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(viewer).collect();
@@ -580,7 +629,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });
         // How it moves, as it is now; frames keep it current (`frame.rs`).
         if let Some(b) = ctx.db.body().id().find(*body) {
-            let row = MotionSeen { id: crate::frame::key(id, *body), viewer, motion: Motion::from(&b) };
+            let row = MotionSeen::of(crate::frame::key(id, *body), viewer, &b);
             if ctx.db.motion_seen().id().find(row.id).is_some() {
                 ctx.db.motion_seen().id().update(row);
             } else {
@@ -884,14 +933,14 @@ fn projections(ctx: &ViewContext) -> impl Iterator<Item = Projected> + '_ {
 /// them (`motion_seen`, `frame.rs`). My own body is `my_body`, so my own moves and steering
 /// re-run one row, not my whole scene.
 #[spacetimedb::view(accessor = seen_bodies, public, primary_key = id)]
-pub fn seen_bodies(ctx: &ViewContext) -> Vec<Motion> {
-    ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.motion).collect()
+pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
+    ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving()).collect()
 }
 
 /// How my own living character's body moves, as it is.
 #[spacetimedb::view(accessor = my_body, public, primary_key = id)]
-pub fn my_body(ctx: &ViewContext) -> Vec<Motion> {
-    living(ctx).and_then(|c| ctx.db.body().id().find(c.id)).map(|b| Motion::from(&b)).into_iter().collect()
+pub fn my_body(ctx: &ViewContext) -> Vec<Moving> {
+    living(ctx).and_then(|c| ctx.db.body().id().find(c.id)).map(|b| Moving::from(&b)).into_iter().collect()
 }
 
 /// What I perceive of the creatures in my scene, mine included: their records through the

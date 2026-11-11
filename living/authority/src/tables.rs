@@ -292,6 +292,16 @@ pub struct Body {
     /// How long the turn lasts from `t_ms`, seconds (then straight on).
     #[default(0.0f32)]
     pub turn_s: f32,
+    /// Facing (head and chest; what facing sight and a guard read) as an offset from the travel
+    /// heading, radians at `t_ms`, turning at `face_turn` rad/s for the first `face_turn_s`
+    /// seconds, then held (`living_rules::steer::facing`; `common::facing_at`). 0 for a body
+    /// with no held look: it faces its heading. Written with the segment, never on its own.
+    #[default(0.0f32)]
+    pub face_off: f32,
+    #[default(0.0f32)]
+    pub face_turn: f32,
+    #[default(0.0f32)]
+    pub face_turn_s: f32,
 }
 
 /// What a body is steering for (private; written when the goal changes, not per update).
@@ -318,9 +328,9 @@ pub struct Steer {
     /// Movement input bucket of a player (tokens refill at the `input_hz` law).
     pub tokens: f32,
     pub input_ms: u64,
-    /// A player's look (`human_face`): held while `look_on`, the direction (radians, the same
-    /// angle as `body.heading`) the body turns to. It is an input, like the movement direction
-    /// in `gx`/`gy`; the body's facing is still only `body.heading`.
+    /// A held look (`human_face`): held while `look_on`, the direction (radians, the same
+    /// angle as `body.heading`) the body faces. It is an input, like the movement direction in
+    /// `gx`/`gy`; what the body does with it is its facing, `body.face_*`.
     #[default(false)]
     pub look_on: bool,
     #[default(0.0f32)]
@@ -1473,6 +1483,14 @@ pub struct MotionSeen {
     #[index(btree)]
     pub viewer: Identity,
     pub motion: crate::perception::Motion,
+    /// The body's facing segment (`body.face_*`), appended beside `motion` (whose type stays
+    /// as stored); `seen_bodies` returns both as one `Moving` row.
+    #[default(0.0f32)]
+    pub face_off: f32,
+    #[default(0.0f32)]
+    pub face_turn: f32,
+    #[default(0.0f32)]
+    pub face_turn_s: f32,
 }
 
 /// An experience line of a player's character released to its client (private; frames,

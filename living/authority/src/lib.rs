@@ -617,10 +617,12 @@ pub(crate) fn command_done(ctx: &ReducerContext, id: u32, now: u64) {
 }
 
 /// Face a direction (screen axes: +x east, +y south; any length), or release the look (`0, 0`):
-/// the player's look. It turns the same facing everything else turns, `body.heading`. Standing,
-/// the body turns where it stands at its turn rate. Walking (`human_move`), it turns toward the
-/// look at most the `look_walk_deg` law off the way it walks, the walk bending with it, and when
-/// it stops it finishes the turn. Released, facing returns to the way it walks. A look within the
+/// the player's look. It turns the body's facing (`body.face_*` over `body.heading`,
+/// `common::facing_at`): what facing sight, hearing's sides and a guard read. Standing, the body
+/// turns where it stands at its turn rate. Walking (`human_move`), the travel is untouched (the
+/// keys' way at full speed) and the facing turns toward the look at most the `look_walk_deg` law
+/// off the way; when the body stops it finishes the turn. Released, facing returns to the way
+/// it walks. A look within the
 /// `look_slack_deg` law of the one held is free; any other change spends a token of the movement
 /// input bucket (the `input_hz`/`input_burst` laws, shared with `human_move`), so a client
 /// that follows the cursor sends looks freely and only changes write rows.

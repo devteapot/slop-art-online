@@ -33,7 +33,7 @@
 
 use crate::combat::Seen;
 use crate::common;
-use crate::perception::Motion;
+use crate::perception::Moving;
 use crate::tables::*;
 use spacetimedb::{Identity, ReducerContext, Table};
 use std::cell::{Cell, RefCell};
@@ -110,7 +110,7 @@ thread_local! {
 
 #[derive(Default)]
 struct Sources {
-    motion: HashMap<u32, Option<Motion>>,
+    motion: HashMap<u32, Option<Moving>>,
     fighter: HashMap<u32, Option<Fighter>>,
     health: HashMap<u32, Option<(f32, f32)>>,
     doing: HashMap<u32, Option<Doing>>,
@@ -123,8 +123,8 @@ fn cached<V: Clone>(pick: impl FnOnce(&mut Sources) -> &mut HashMap<u32, V>, id:
     })
 }
 
-fn motion_now(ctx: &ReducerContext, id: u32) -> Option<Motion> {
-    cached(|s| &mut s.motion, id, || ctx.db.body().id().find(id).map(|b| Motion::from(&b)))
+fn motion_now(ctx: &ReducerContext, id: u32) -> Option<Moving> {
+    cached(|s| &mut s.motion, id, || ctx.db.body().id().find(id).map(|b| Moving::from(&b)))
 }
 
 fn fighter_now(ctx: &ReducerContext, id: u32) -> Option<Fighter> {
@@ -311,8 +311,8 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
 fn show_motion(ctx: &ReducerContext, viewer: u32, body: u32) {
     let k = key(viewer, body);
     let (Some(mut row), Some(m)) = (ctx.db.motion_seen().id().find(k), motion_now(ctx, body)) else { return };
-    if row.motion != m {
-        row.motion = m;
+    if row.moving() != m {
+        row.set(&m);
         ctx.db.motion_seen().id().update(row);
     }
 }

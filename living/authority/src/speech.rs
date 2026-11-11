@@ -138,7 +138,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     if to != 0 && !hearers.iter().any(|(c, _, _)| c.id == to) {
         let seen = ctx.db.character().id().find(to).filter(|c| c.alive).and_then(|_| ctx.db.body().id().find(to)).is_some_and(|tb| {
             let p = pos(&tb, now);
-            crate::perception::in_sight(ctx, &common::map(ctx), speaker, at, common::heading_at(&b, now), to, p, common::dist(at, p), &world, now, false)
+            crate::perception::in_sight(ctx, &common::map(ctx), speaker, at, common::facing_at(&b, now), to, p, common::dist(at, p), &world, now, false)
         });
         let text = if seen {
             let louder = sc.ways().iter().filter(|o| o.public() && o.carry_for(1.0) > w.carry_for(1.0) && o.needs.is_empty()).max_by(|a, b| a.carry_for(1.0).total_cmp(&b.carry_for(1.0)));
@@ -161,7 +161,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     // Whether creature `id`, standing at `eye`, sees `target` at `p` (the one sight rule, with
     // its facing when the world's law gives it a field).
     let sees = |id: u32, eye: (f32, f32), target: u32, p: (f32, f32)| {
-        ctx.db.body().id().find(id).is_some_and(|ob| crate::perception::in_sight(ctx, &map, id, eye, common::heading_at(&ob, now), target, p, common::dist(eye, p), &world, now, false))
+        ctx.db.body().id().find(id).is_some_and(|ob| crate::perception::in_sight(ctx, &map, id, eye, common::facing_at(&ob, now), target, p, common::dist(eye, p), &world, now, false))
     };
     for (c, d, p) in hearers.iter().copied() {
         let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
@@ -204,7 +204,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     if let Some(line) = said_id {
         let mut seen: Vec<(f32, u32)> = hearers
             .iter()
-            .filter(|(c, d, p)| crate::perception::in_sight(ctx, &map, speaker, at, common::heading_at(&b, now), c.id, *p, *d, &world, now, false))
+            .filter(|(c, d, p)| crate::perception::in_sight(ctx, &map, speaker, at, common::facing_at(&b, now), c.id, *p, *d, &world, now, false))
             .map(|(c, d, _)| (*d, c.id))
             .collect();
         seen.sort_by(|a, b| a.0.total_cmp(&b.0));

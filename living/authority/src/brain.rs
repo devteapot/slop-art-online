@@ -1158,7 +1158,7 @@ impl<'a> Ev<'a> {
         // where the listener stands.
         let near = self.scene().heard.iter().find(|c| c.dist <= laws.heard_near_m).cloned();
         if let Some(c) = near.as_ref().filter(|_| self.st.alerts & SOUND_NEAR == 0) {
-            let heading = self.ctx.db.body().id().find(self.me.id).map_or(0.0, |b| common::heading_at(&b, now));
+            let heading = self.ctx.db.body().id().find(self.me.id).map_or(0.0, |b| common::facing_at(&b, now));
             let (what, wh, far) = living_rules::sight::heard_words(&crate::perception::heard_kind(self.ctx, &c.kind), at, heading, c.pos, 0);
             percept(self.ctx, &self.me, now, "signal", 0, 0, at, format!("You hear {what} {far}, {wh}."), 0.3);
         }
