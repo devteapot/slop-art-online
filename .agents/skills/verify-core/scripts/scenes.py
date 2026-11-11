@@ -675,7 +675,9 @@ def sight(s):
 def drop_geometry(s, cls=8):
     """On this world's own map: an `eye` tile and an `across` one on one axis with only tiles of
     class `cls` (8 a drop, 9 a low thing; 1 to 3 of them) between and walkable ground behind each
-    for 3 tiles. Returns the spots and a tile lookup."""
+    for 3 tiles, away from the obstacle's ends (it runs on across the line for 2 tiles each way, 1
+    for a low thing), so the way round is not a step past its end. Returns the spots and a tile
+    lookup."""
     w = s.rows("SELECT width, height FROM world")[0]
     W, H = w["width"], w["height"]
     tiles = bytearray([4]) * (W * H)
@@ -693,8 +695,9 @@ def drop_geometry(s, cls=8):
         for x in range(4, W - 4):
             if at(x, y) != cls:
                 continue
+            ext = 2 if cls == 8 else 1
             for dx, dy in [(1, 0), (0, 1)]:
-                if not walk(x - dx, y - dy):
+                if not walk(x - dx, y - dy) or not all(at(x + k * dy, y + k * dx) == cls for k in range(-ext, ext + 1)):
                     continue
                 for gap in (1, 2, 3):
                     bx, by = x + gap * dx, y + gap * dy
@@ -708,8 +711,9 @@ def drop(s):
     """A drop between two ground levels (tile 8, `Terrain::Drop`) blocks the foot, not the eye
     (docs/PERCEPTION.md). A fight on one side is watched from the other: the watcher's graph sees
     the attacker and waves at it, and it witnesses the fight. Then a person on the far side is
-    sent (`goto`) to the fight's spot: its body never stands on a drop tile and never jumps one
-    between samples; it goes round (by a stair or the drop's end) or is refused. On a world with
+    sent (`goto`) to the fight's spot: its body never stands on a drop tile, and the route the
+    authority keeps for it (`body.path`, from where it is) never crosses one; it goes round (by a
+    stair or the drop's end) or is refused. On a world with
     drops (`--seed plan-test` or `island`). Admin `place_at` and `set_behavior` set the scene.
     As the `low` scene the same is driven over a low thing (tile 9: a cart, below eye height,
     `LandParams.sight`) on an `island` run."""
@@ -737,17 +741,26 @@ def drop(s):
     # The walker is sent across: steering and routing keep it off the drop.
     start = body_at(s, walker)
     s.graph(walker, {"seq": [{"do": {"skill": "goto", "target": {"at": list(fight)}}}, {"wait": 300}]})
-    pts = []
+    pts, routes = [], []
     end = time.monotonic() + 12
     while time.monotonic() < end:
-        pts.append(body_at(s, walker))
+        row = s.rows(f"SELECT x, y, t_ms, vx, vy, next_ms, path FROM body WHERE id = {walker}")[0]
+        here = body_at(s, walker, row=row)
+        pts.append(here)
+        corners = [(w["x"], w["y"]) if isinstance(w, dict) else (w[0], w[1]) for w in row["path"]]
+        routes.append([here] + corners)
         time.sleep(0.25)
-    blocked = [q for q in pts if at(math.floor(q[0]), math.floor(q[1])) in (2, 4, 7, 8, 9)]
-    jumps = [(a, b) for a, b in zip(pts, pts[1:]) if math.dist(a, b) > 1.6]
+    is_blocked = lambda q: at(math.floor(q[0]), math.floor(q[1])) in (2, 4, 7, 8, 9)
+    blocked = [q for q in pts if is_blocked(q)]
+    # The route ahead, walked in 0.1 m steps: no leg crosses a blocked tile.
+    def crosses(a, b):
+        n = max(1, math.ceil(math.dist(a, b) / 0.1))
+        return any(is_blocked((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) for i in range(n + 1))
+    jumps = [(r[i], r[i + 1]) for r in routes for i in range(len(r) - 1) if crosses(r[i], r[i + 1])]
     goto = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {walker}", "walker-uses") if u["skill"] == "goto" and u["at_ms"] >= t0]
-    (s.out / f"{s.name}-walk.json").write_text(json.dumps({"start": start, "trail": pts, "uses": goto}, indent=1) + "\n")
-    s.expect(f"a walk across the {what} never stands on it or jumps it", pts and not blocked and not jumps,
-             {"start": start, "end": pts[-1] if pts else None, "walked_m": round(sum(math.dist(a, b) for a, b in zip(pts, pts[1:])), 1), "goto": [u["outcome"] for u in goto][-1:], "blocked": blocked[:5], "jumps": jumps[:3]})
+    (s.out / f"{s.name}-walk.json").write_text(json.dumps({"start": start, "trail": pts, "routes": routes, "uses": goto}, indent=1) + "\n")
+    s.expect(f"a walk across the {what} never stands on it, and its route never crosses it", pts and not blocked and not jumps,
+             {"start": start, "end": pts[-1] if pts else None, "walked_m": round(sum(math.dist(a, b) for a, b in zip(pts, pts[1:])), 1), "goto": [u["outcome"] for u in goto][-1:], "route_corners": max((len(r) - 1 for r in routes), default=0), "blocked": blocked[:5], "crossing_legs": jumps[:3]})
 
 
 def open_line(s, length=16):

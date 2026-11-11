@@ -1,5 +1,13 @@
 # Validation record (generation)
 
+
+## 2026-11-11 drop-1: drop (8) and low (9) tiles (dev-box)
+
+Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `generation-drop1b-20261111-151550` (`--feature worlds --seeds island,plan-test,floor-megacity-2k,cullet-laws`): island 977, plan-test 70, floor-megacity-2k 75 and cullet-laws 41 checks pass; original seeds unchanged. Tiles: island drop 4,116, low 61, wall 44,253; plan-test drop 198, low 3 (`a planned settlement's drops are drop tiles`); megacity drop 0, low 590. Blocking lots stand on wall or low tiles: 450, 42, 2,468 of as many. `land` digests equal `floor_preview`'s: island `1a2a9a096caa8e21 0d2f77752781845c 8ff57472b004a13f`, plan-test `00d85c20a07e8312 b668d5f2c3e777c2 089870648749a822`, megacity `a3d6f6164c07192c c06f16f3dcac1290 0c6b3f2c51f13129`.
+- The first attempt (`generation-drop1-20261111-151031`) failed the native digest comparison on the three lands with low tiles: `floor_preview` counted tiles by class in an array of 8 and panicked on class 9; fixed in the example. cullet-laws is not a land seed (no drops or low tiles there).
+
 ## 2026-11-11 rules-1: a seed's own day and laws (dev-box)
 
 Branch `rules-1`, own container `rules1-stdb` (2.14.1, port 3312). `generation-rules1-135536 --feature worlds --seeds cullet-laws,cullet-laws-floor`: `cullet-laws` (compiled, `laws_file` read in by `build.rs`) 41 of 41 and `cullet-laws-floor` (`create_floor` with the seed from `seed_text.py`; refusals of an unread laws file, broken laws and a zero day) 46 of 46; cleanups and original seeds pass. The other seeds were not rerun with the new day and script checks.

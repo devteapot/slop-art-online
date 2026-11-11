@@ -8,9 +8,11 @@ of the drop, a few metres apart:
 
 1. each perceives the other (`seen_bodies`, `seen_characters`, the players' own views);
 2. the one above walks straight at the drop (`human_move`) and stops at its edge: no sample of
-   its body is on a drop tile, and it is still on the row;
+   its body is on a drop tile or on the quay (steering may slide it along the edge, as along a
+   wall);
 3. it is told to go to the one below (`human_act` goto): its body never stands on a drop tile,
-   and between samples it never jumps across one (it goes round by a stair, or is refused);
+   and the route the authority keeps for it (`body.path`) never crosses one (it goes round by a
+   stair, or is refused);
 4. it shoots the one below with its bow (`use_skill bowshot`): the arrow flies over the drop and
    strikes.
 
@@ -77,12 +79,16 @@ class P:
             mine = [c for c in self.sql("SELECT id, alive FROM my_characters", who) if c["alive"]]
         return mine[0]["id"]
 
-    def at(self, cid):
-        """Where a body is now, from its segment (straight-line)."""
-        b = self.sql(f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {cid}")[0]
+    def at(self, cid, route=False):
+        """Where a body is now, from its segment (straight-line); with `route`, also the corners
+        of the route it keeps ahead (`body.path`)."""
+        b = self.sql(f"SELECT x, y, t_ms, vx, vy, next_ms, path FROM body WHERE id = {cid}")[0]
         now = self.sql("SELECT last_ms FROM clock")[0]["last_ms"]
         dt = max(0, min(now, b["next_ms"]) - b["t_ms"]) / 1000
-        return (b["x"] + b["vx"] * dt, b["y"] + b["vy"] * dt)
+        here = (b["x"] + b["vx"] * dt, b["y"] + b["vy"] * dt)
+        if not route:
+            return here
+        return here, [here] + [(w["x"], w["y"]) if isinstance(w, dict) else (w[0], w[1]) for w in b["path"]]
 
 
 def check(p, name, ok, detail):
@@ -149,7 +155,8 @@ def geometry(p):
                     if walk(bx, by) and inside(lo[2], (bx + .5, by + .5)) \
                             and all(at(x + i * dx, y + i * dy) == DROP for i in range(1, gap + 1)) \
                             and all(walk(x - i * dx, y - i * dy) and walk(bx + i * dx, by + i * dy) for i in range(1, 4)) \
-                            and all(walk(x + j * dy, y + j * dx) for j in (-1, 1)):
+                            and all(walk(x + j * dy, y + j * dx) for j in (-1, 1)) \
+                            and all(at(x + dx + k * dy, y + dy + k * dx) == DROP for k in range(-2, 3)):
                         return {"above": (x + .5, y + .5), "below": (bx + .5, by + .5), "dir": (dx, dy), "gap": gap,
                                 "levels": {hi[0]: hi[1], lo[0]: lo[1]}}, at, (hi, lo)
     raise RuntimeError("no drop between the plan's levels on this map")
@@ -204,19 +211,31 @@ def main():
     time.sleep(0.5)
     end = p.at(up)
     on_drop = [q for q in pts + [end] if tile(q) not in WALKABLE]
-    check(p, "walking straight at the drop, the player stops at its edge", not on_drop and inside(hi[2], end),
-          {"start": pts[0] if pts else None, "end": end, "on_blocked_tiles": on_drop[:5], "moved_m": round(math.dist(pts[0], end), 2) if pts else None})
+    # Steering slides along the drop as along any wall: the player may move along its edge, but
+    # never onto it and never down to the lower level.
+    below_at = [q for q in pts + [end] if inside(lo[2], q)]
+    check(p, "walking straight at the drop, the player stops at its edge", not on_drop and not below_at,
+          {"start": pts[0] if pts else None, "end": end, "on_level": next((l[0] for l in (hi, lo) if inside(l[2], end)), "neither (the skirt past the plan's end)"), "on_blocked_tiles": on_drop[:5], "on_the_lower_level": below_at[:3], "moved_m": round(math.dist(pts[0], end), 2) if pts else None})
 
     # 3. Told to go below: never over the drop.
     p.call("place_at", [up, *g["above"]], "admin")
     time.sleep(0.5)
     p.call("human_act", [json.dumps({"do": "goto", "target": {"at": list(b0)}})], "above")
-    pts = trail(p, up, 10.0)
-    jumps = [(a, b) for a, b in zip(pts, pts[1:]) if math.dist(a, b) > 1.5]
+    pts, routes = [], []
+    end_t = time.monotonic() + 10.0
+    while time.monotonic() < end_t:
+        here, r = p.at(up, route=True)
+        pts.append(here)
+        routes.append(r)
+        time.sleep(0.2)
+    def crosses(a, b):
+        n = max(1, math.ceil(math.dist(a, b) / 0.1))
+        return any(tile((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) not in WALKABLE for i in range(n + 1))
+    jumps = [(r[i], r[i + 1]) for r in routes for i in range(len(r) - 1) if crosses(r[i], r[i + 1])]
     on_drop = [q for q in pts if tile(q) not in WALKABLE]
     goto = [u for u in p.sql("SELECT * FROM my_skill_uses", "above") if u["skill"] == "goto"]
     check(p, "a walk to the one below never crosses the drop", not on_drop and not jumps,
-          {"outcome": goto[-1]["outcome"] if goto else None, "end": pts[-1] if pts else None, "on_level": next((l[0] for l in (hi, lo) if pts and inside(l[2], pts[-1])), None), "walked_m": round(sum(math.dist(a, b) for a, b in zip(pts, pts[1:])), 1), "on_blocked_tiles": on_drop[:5], "jumps": jumps[:3]})
+          {"outcome": goto[-1]["outcome"] if goto else None, "end": pts[-1] if pts else None, "on_level": next((l[0] for l in (hi, lo) if pts and inside(l[2], pts[-1])), None), "walked_m": round(sum(math.dist(a, b) for a, b in zip(pts, pts[1:])), 1), "on_blocked_tiles": on_drop[:5], "crossing_legs": jumps[:3], "route_corners": max((len(r) - 1 for r in routes), default=0)})
     p.call("human_move", [0.0, 0.0, False], "above")
 
     # 4. A bow shot over the drop strikes.

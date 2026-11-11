@@ -156,6 +156,28 @@ Since 2026-11-11 (branch `drop-1`). A drop between two ground levels, a terrace'
 - **What stands on a drop hides:** a building's footprint or a blocking prop over a drop tile becomes `Wall` on the hosted map (`host::hosted_map`) when it rises above the eye. On the island no footprint does (4,116 drop tiles, none under a footprint).
 - **Not modelled:** a retaining wall's face. Someone at the foot of a 4 m wall sees someone a few metres back on the level above, which the eye would not; the 2D authority sees over every drop both ways. The game client's top-down camera shows both, which is what the owner asked to agree.
 
+#### Drops and low things: measurements (2026-11-11)
+
+**Who is hidden on Brackenford's square** (the island's arrival square, seed 7 at 2048 m), from the arrival point, within 48 m, on the hosted tiles (`living/rules/examples/sight_census.rs`):
+
+| Points | Before (drops and low things as `Wall`) | After (height rule, 1.6 m) | Stalls see-through (`hides_m {"market_stall": 0}`) |
+| --- | --- | --- | --- |
+| Every walkable tile centre (5,141) | 3,853 hidden | 3,853 | 2,554 (2,163 with wells at 0.95 m too) |
+| People in a live island world (44 of 277 within 48 m, one `body` snapshot of `verify-core-bench-after`) | 29 hidden | 29 | 17 |
+
+The square has no blocking thing below eye height: its stalls (2.6 m), its well (3.4 m) and its market cross (5.4 m) rise above it by their models' heights, so the height rule alone changes nothing there. On the plan-test land the change hides 2,288 of 3,461 points round its arrival, against 2,421 before (its drops); on Cullet's seed, 1,839 of 3,377 against 1,850.
+
+**Cost.** `living/tools/bench.py` on fresh `island` databases, one at a time on a private 2.14.1 server, before (main `fd2030c3`) and after (this change), each with a profiled span `brain.scene` round a graph's scene added for the measurement: 60 s at rest after a 15 s settle, then `spawn_skirmish(200, 12)` and 60 s, two repetitions each, interleaved. The dev-box was shared (load average about 21 on 32 cores from other builds), so differences under about 15% are noise.
+
+| Window | Arm | Tick p50 / p99 (ms) | Graph evaluations/s | `brain.scene` p50 / p99 (ms), ms per s |
+| --- | --- | --- | --- | --- |
+| Rest | before | 1.51 / 3.37, 1.43 / 2.79 | 369, 371 | 0.023 / 0.092, 9.8; 0.021 / 0.086, 9.4 |
+| Rest | after | 1.60 / 3.66, 1.79 / 3.64 | 373, 374 | 0.024 / 0.088, 10.2; 0.026 / 0.091, 11.3 |
+| Skirmish (200) | before | 2.19 / 18.9, 3.04 / 24.7 | 802, 804 | 0.018 / 0.089, 16.0; 0.026 / 0.107, 22.4 |
+| Skirmish (200) | after | 2.03 / 24.4, 2.26 / 40.1 | 809, 775 | 0.020 / 0.082, 17.3; 0.025 / 0.091, 19.3 |
+
+No change shows outside the spread on the island, where only 61 tiles became low and the drops lie in terraced towns away from the arrival and the skirmish. The second after-skirmish p99 (40 ms) is a single window; the first was 24 ms. A battle on a terraced street, or at 48 m sight (Cullet), was not measured. Raw reports: `.local/drop1/bench/` in the `drop-1` worktree (git-ignored).
+
 ### Minds see what their character sees
 
 Second change. Every path by which a mind, or a behaviour graph, learns about another creature now uses the rule players have, through one function, `perception::in_sight(map, eye, at, dist, sight)`: within the observer's own `sight_for` and with `Map::sight_clear` between. No second approximation was written.

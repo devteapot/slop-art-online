@@ -5,8 +5,8 @@ Since 2026-11-11 (docs/PERCEPTION.md, "Drops: sight across ground levels"). A dr
 ## Sub-features
 
 - Two players either side of a drop, a few metres apart, each find the other in `seen_bodies` and `seen_characters` (their own views).
-- The one above walks straight at the drop with `human_move` for 4 s: no sample of its body (every 0.2 s) is on a drop or other blocked tile, and it ends on the upper level.
-- Told to go to the one below (`human_act {"do": "goto", ...}`): its body is never on a blocked tile and never moves more than 1.5 m between 0.2 s samples (no jump over the drop). It goes round by a stair, or the walk is refused; the report gives the outcome, where it ended and how far it walked.
+- The one above walks straight at the drop with `human_move` for 4 s: no sample of its body (every 0.2 s) is on a drop or other blocked tile or on the lower level. Steering slides it along the edge as along a wall (2.7 m west in the first run, past the plan's end into its skirt).
+- Told to go to the one below (`human_act {"do": "goto", ...}`): its body is never on a blocked tile, and the route the authority keeps for it (`body.path`, walked in 0.1 m steps from where it is) never crosses one. It goes round by a stair, or the walk is refused; the report gives the outcome, where it ended and how far it walked.
 - The one above shoots the one below with `use_skill bowshot` (the plan-test newcomer has a bow): the outcome is `struck …` and the target's health falls. Missiles follow the sight rule.
 
 ## How to get to it (user POV)
