@@ -27,6 +27,7 @@ pub mod normalize;
 pub mod floors;
 #[cfg(feature = "scripting")]
 pub mod cullet_check;
+mod making_check;
 mod rates_check;
 mod rules3_check;
 #[cfg(feature = "scripting")]

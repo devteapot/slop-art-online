@@ -21,6 +21,28 @@ Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d6098
 - After merging origin/main again (`core-look2-f`, `dfc8bcec`): `fov` 18, `moves` 5, `sight` 6.
 - `just living-check` passes before the first merge, after it, and after the second.
 
+## 2026-11-11 recipes-1: crafting, cooking and smoking as recipes (dev-box)
+
+Branch `recipes-1` (from main `3c73d835`, goods-2 merged), own container `recipes1-stdb` (2.14.1, port 3327, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. Runs `core-recipes1-210604-*`.
+
+| Scene | Run | Result |
+| --- | --- | --- |
+| `goods`, `stock` (goods fixture) | `-goods` | 24 of 24, 4 of 4 |
+| `making` (new: cook by an act and by an old graph naming `cook` at the seeded hearth, no fuel drawn; smoking and a spear refused in the old words until known; then made) | `-goods` | 8 of 8 |
+| `food`, `refusal`, `teach` (default seed) | `-base` | 4 of 4, 4 of 4, 6 of 6 |
+| `doing` (default seed) | `-base` | failed: a walker read `wait` where its label was `goto → person`, the scene's recorded timing failure (night, or a slow CLI); it touches no making rule |
+| mechanics (`verify_mechanics.py`: craft spear, net, bow, arrows, leather; smoke fish) | `-mechanics` | 23 of 23 |
+| `dealings` (island) | `-dealings` | 16 of 16 |
+| A Cullet (goods fixture) world made before the change, upgraded (`.local/recipes1/oldworld.sh`, not part of the skill) | `-oldworld` | 9 of 9: on the module and script of `3c73d835` a resident granted cooking cooks a fish under a stored graph naming `cook`; the new module published with the data kept (the world's script still the old one) cooks the next; the world's laws composed over the new script, installed, cook the next; the `know_how` row is the same (id 1, the same `since_ms`) throughout |
+
+The old-world drive's first two attempts are kept (`-oldworld-attempt1-stale-module`, `-oldworld-attempt2-stale-rules`): building the old source into the same target directory left its `living-authority` and then its `living-rules` artifacts under the new ones' hashed names, and cargo took them as fresh, so the "new" module was the old one (the new script's install failed on `entries_where`). Cleaning both packages for the wasm target before the new build fixed it; the new module's hash differs from the old.
+
+Rules: `cargo test -p living-rules` 218 pass, with `making_is_one_mechanism_through_four_ways`; the ignored `making_check::making_is_bit_identical` against `3c73d835` (release): island 5,682,169 states, Cullet 10,645,925, 0 differ. `just living-check` exit 0, its script gate passing.
+
+Maintained: the `making` scene; features/goods.md and README (the one table, the scene); the goods block's time.
+
+After merging main `46fa9db3` (runs `core-recipes1m-230803-*`): `goods` 24 of 24, `making` 8 of 8, `stock` 4 of 4; `food` 4 of 4, `refusal` 4 of 4, `teach` 6 of 6; mechanics 23 of 23. `just living-check` exit 0; rules 245 pass; the old-against-new comparison against that main's scripts: island 5,682,170 states, Cullet 12,580,182, 0 differ.
+
 ## 2026-11-11 fix-health-leak: another's health as perceived in fight reports and `health_of` (Spark)
 
 Branch `fix-health-leak` (from `e3f0527f`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to this change (combat.md, the README row, SKILL.md's baseline), not a source wave.

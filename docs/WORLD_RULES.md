@@ -220,7 +220,7 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 | Was | Now |
 | --- | --- |
 | `catalog::ITEMS` (26 names in Rust) | `items()`: the world's items in order, each with its traits; read once into `catalog::Skills::items` (`catalog::item`, `item_names`), so normalization, install samples, the game client's verbs and name laws take the world's items |
-| `cook_check`, `smoke_check`: only `"fish"` or `"meat"`, and `"cooked_" + item` | the items' `cooks_to` and `smokes_to` traits (`item_trait`, `items_with`); the refusal lists them ("only raw fish or meat can be cooked") |
+| `cook_check`, `smoke_check`: only `"fish"` or `"meat"`, and `"cooked_" + item` | the items' `cooks_to` and `smokes_to` traits (`item_trait`, `items_with`); the refusal lists them ("only raw fish or meat can be cooked"). Since recipes-1 they are recipes that turn items by those traits ([one table](#one-table-of-what-is-made-recipes-1)) |
 | `graze_check`: "only deer graze"; `act.rs` filled `pasture` and ate the grass for the skill named `graze` | `kinds()`: the kind's `grazes` trait ("only grazing animals graze"); the engine works out `a.actor.pasture` for any skill whose rules read it (`Scripts::skill_reads_actor`), and grass is eaten by the `graze` effect `graze_done` returns |
 | `lunge`, `max_hp`, `carcass_meat`, `carcass_hide`, `dodge_dist`, `dodge_speed` switches by species, and an attack's bare damage | traits of each kind in `kinds()` (`blow` for the bare attack); the functions read the table, so the engine's calls by name are unchanged |
 | `foods_text` listed seven foods; `source_of("food")` and `act.rs`'s food hint named berries and fish | built from the items' `nutrition` and the resources' yields; `act.rs` asks `source_of("food")` (`Scripts::text_of`) |
@@ -554,7 +554,7 @@ What the world has is data in the script, each a list of maps with a `name`, rea
 | `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `lights` (metres of lamplight, rules-1), `burns` (below), `holds` (a store: the most things it holds in all; rules-3) and `like` (the kind it counts as wherever a kind is asked by name; rules-3); other traits are the rules' data. A script with `structure_traits()` (from before, or a world's own) has its `warms`, `roof` and `lights` stand over the listed kinds' |
 | `resources()` | yes (new) | `yields`, `regrow_per_h` (units a game hour of growing time; `regrow`, a real minute, before rates-2), `regrow_by_season` (the share of that rate in each season; rules-3), `max`, `ground` and `by_water` (where a settlement's promised nodes go), `gather_ms` |
 | `know_how()` | yes (new) | `help` (what someone taught or reading is told), `requires` |
-| `recipes()` | no (none) | below |
+| `recipes()` | no (none) | below; since recipes-1 the shipped script's holds crafting, cooking and smoking ([one table](#one-table-of-what-is-made-recipes-1)) |
 
 These replace the Rust constants `catalog::RESOURCES`, `STRUCTURES` and `TECHNIQUES`, and the Rhai switches `yield_of`, `regrow` and `requires`, which now read the tables. The shipped tables hold exactly what the constants and switches held. Requirements match by trait:
 
@@ -580,7 +580,7 @@ A structure kind with a `burns` trait is a fire that eats fuel:
 
 ### Recipes
 
-`recipes()` entries, made with the `make` skill (target: the workplace; item: what is made):
+`recipes()` entries, made with the `make` skill (target: the workplace; item: what is made), or since recipes-1 by the skill their `by` names ([one table](#one-table-of-what-is-made-recipes-1)):
 
 | Trait | Meaning |
 | --- | --- |
@@ -591,8 +591,10 @@ A structure kind with a `burns` trait is a fire that eats fuel:
 | `lit` | the fire must be burning |
 | `fuel` | units the heat draws from the fire it is made at (a fire that needs no feeding gives its heat free) |
 | `knows`, `ms` | the technique it needs; how long it takes (8,000 ms) |
+| `by` (recipes-1) | the skill that makes it: `make` (the default), `craft`, `cook`, `smoke`, or a world's own way |
+| `tools` (reserved) | `#{ name or trait: qty }` held and not used up; read into the recipe's parts and words, not yet checked (goods-3) |
 
-The shipped world has no recipes and no fires that burn fuel, so `make` and `feed` are not offered to its people (`listed` is computed from the tables), and its minds' world text is unchanged. A world with them gets a "Fires that burn fuel" and "Made at workplaces" sentence in its making section (`workplaces_law`), built from the same tables.
+Before recipes-1 the shipped world had no recipes and no fires that burn fuel, so `make` and `feed` are not offered to its people (`listed` is computed from the tables), and its minds' world text is unchanged. A world with them gets a "Fires that burn fuel" and "Made at workplaces" sentence in its making section (`workplaces_law`), built from the same tables.
 
 ### What a client shows (goods-2)
 
@@ -623,7 +625,7 @@ The icon ids, for the client. Today every id is the item's name; a world's new i
 
 The label is the item's name with spaces for every item listed. Wood burns (`fuel: 1.0`) but is grouped as a material: `group` is where it is shown, not what it can do; the rules ask the traits.
 
-**A recipe's look.** What a recipe makes looks like its product item: its `icon`, `label` and `group`. A recipe may set its own `icon` or `label`, which stand over the product's for what it makes (`recipe_look(product)`); a recipe that `turns` items looks like each product it makes (smoking: smoked fish, smoked meat). `make` does not read them. A client asks `Scripts::item_look_of("recipe_look", product)` or `item_look_of("item_look", item)` (`living_rules::script::ItemLook`). `craft`, `cook` and `smoke` are not folded into `recipes()` here; that is a separate, later branch, and the rule is meant to carry over to it unchanged.
+**A recipe's look.** What a recipe makes looks like its product item: its `icon`, `label` and `group`. A recipe may set its own `icon` or `label`, which stand over the product's for what it makes (`recipe_look(product)`); a recipe that `turns` items looks like each product it makes (smoking: smoked fish, smoked meat). `make` does not read them. A client asks `Scripts::item_look_of("recipe_look", product)` or `item_look_of("item_look", item)` (`living_rules::script::ItemLook`). `craft`, `cook` and `smoke` are not folded into `recipes()` here; recipes-1 folds them, and the rule carries over unchanged (a cooked fish looks like the item `cooked_fish`).
 
 **Showing work.** `make_shows()` and `feed_shows()` are `#{ look: "work" }`, like `cook` and `craft`: while someone makes at a workplace or feeds a fire, anyone in view sees a `doing` row at it (`doing.x/y` is the workplace or fire), players and minds alike. `act_card` gains two rows (`make`, `feed`); the authority keeps the other skills' presentation codes (`codes.rs`).
 
@@ -634,6 +636,45 @@ The label is the item's name with spaces for every item listed. Wood burns (`fue
 **Make at a fuel-burning workplace (the design's §1).** The authority's check sees the fire: a player's act toward a structure runs as a one-off behaviour, and its target facts come from `act::target_facts`, which reads `lit` and `fuel` from the row's `lit_until_ms` (`fire_state`). The game client builds its own facts to choose what to offer (`living/game/src/verbs.rs` `thing_facts`) and leaves `lit` false and `fuel` 0, so `make_check` says "is out: feed it first" there and the F list never offers `make` at a hearth, oven, furnace or smokehouse. To match the authority, a client sets, for a structure target:
 - `lit`, `fuel` = `rules.structure(kind).fire_state(row.lit_until_ms, now_ms, world.day_ms)`, from the public `structure` row, the public `world` row and the server clock it already estimates. The authority computes the same through the same function.
 - (also wrong, for `cook` and `experiment`, not `make`) the actor's `near_fire`: the authority counts any burning structure within its `burns.warmth`, or a fire that needs no feeding within `fire_warmth`; the client counts only a kind named `campfire`.
+
+### One table of what is made (recipes-1)
+
+**Status:** built on branch `recipes-1`, 2026-11-11, after goods-2, approved by the general coordinator; the shape agreed with the laptop coordinator for the interface's recipe case ([interface](INTERFACE.md) §4, option A).
+
+**One table.** Everything a character makes, in every world, is an entry of `recipes()`. The shipped script's holds what `craft`, `cook` and `smoke` made, as data:
+
+| Recipe | `by` | What |
+| --- | --- | --- |
+| `cook` | `cook` | `turns: "cooks_to"`, `at: "fire"`, `lit`, knowing `cooking`, 4,000 ms |
+| `smoke` | `smoke` | `turns: "smokes_to"`, `at: "fire"`, `lit`, knowing `smoking`, 10,000 ms |
+| `spear`, `cloak`, `torch`, `axe`, `pick`, `net`, `basket`, `bow`, `arrow` (`makes: 3`), `salve`, `leather`, `armor` | `craft` | `takes` what `cost()` held for them, knowing what `made_by()` named; anywhere; 8,000 ms |
+
+`cost()` keeps only what is built (structures and the road); `made_by(item)` reads the craft recipes. A world's own recipes follow the shipped ones: Cullet's `recipes()` is `base_recipes() + [ash, glass, smoking, baking, lamp_oil]`. A world whose `recipes()` leaves `base_recipes()` out has nothing to craft, cook or smoke, and is offered none of the three (their specs' `listed` is computed from the table).
+
+**One mechanism, four ways in.** `make`, `craft`, `cook` and `smoke` keep their names, and their `_check`, `_duration` and `_done` are one mechanism's (`making_check`, `making_duration`, `making_done`) over the recipes whose `by` is the skill. A way declares `<skill>_making()`:
+
+| Trait | Meaning |
+| --- | --- |
+| `item` | what the act's item names: `"product"` (`craft spear`, `make glass`, `make smoked_fish`) or `"input"` (the raw food: `cook fish`) |
+| `who` | `"person"`: grown people (make); `"grown"`: anyone not young (craft); none: anyone (cook, smoke) |
+| `tires` | the energy one act costs (make: 1) |
+| `words` | the way's own words with `{item}`, `{n}`, `{k}`, `{source}`, `{at}`, `{products}`, `{inputs}`, `{input}`, `{takes}` filled in: `who`, `nothing`, `none`, `knows`, `at`, `at_fire`, `takes`, and `source` (how a thing it makes is come by, for `source_of`) |
+
+The check asks, in order: who may; the recipe for the item; its technique; its place, the fire burning, the fuel; what it takes. A way whose item is the input and that has one recipe (cooking, smoking) asks the recipe's technique and place before the item, as `cook_check` did. The effects are the recipe's inputs removed (an input by trait from the items carrying it, in the items' order), the fuel drawn, the product added, and the way's energy.
+
+**What a client reads** (`living_rules::script`, read once at install, no skill named in Rust):
+- `Scripts::products_of(skill)`: a way's products in the table's order (a grid's cells);
+- `Scripts::making_item(skill, product)`: what the act names (the product, or for `cook` and `smoke` the raw item: `cooked_fish` → `fish`);
+- `Scripts::recipe_parts(skill, product) -> RecipeParts`: `skill`, `product`, `look` (`recipe_look`), `makes`, `item`, `takes` and `tools` (each a `RecipePart`: `name`, `qty`, `any_of` the items that satisfy it, `look`), `at` (a kind, `"fire"`, or empty), `lit`, `fuel`, `knows`, `ms`. The script's `recipe_parts(skill, way, product)` builds it;
+- `made_how(product)`, the recipe in words, with the way's verb: "cook it at a fire from 1 fish (knowing cooking)", "craft it from 1 stone, 2 wood (knowing spear)", "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it (knowing glassmaking)"; a recipe's `tools` will read ", using a blowpipe" before the knowing.
+
+**Declarations.** `make_ui`, `craft_ui`, `cook_ui` and `smoke_ui` are `making_grid(skill, text)` (not named `_ui`: the install calls every `_ui` function with no arguments): `choose: "grid"`, `running: #{ show: "progress", text }` ("Making {item}", "Cooking {item}", "Smoking {item}") and, where the way makes something, `source: "products"` and `detail: "made_how"`. `source: "products"` is accepted when the way has products (`Scripts::products_of`), not only when its spec lists items, and `detail` is checked on each product. A cell is greyed with the check's own words when the check fails only for the missing inputs: for every product of every way, in both worlds, the check without the inputs refuses with filled words, and passes with them (`making_is_one_mechanism_through_four_ways`).
+
+**How old names, graphs and routines carry over.** The skill names, their items and their words are what they were, so nothing migrates: a behaviour graph or a mind's routine naming `craft`, `cook` or `smoke` normalizes and runs as before, and the authority's witness lines for `craft` and `cook` ("{a} cooked a cooked fish") are unchanged. A resident who knew cooking knows the technique `cooking`, which the `cook` recipe asks. A world created before recipes-1 keeps the script it installed (with the old `cook_check`) until it is installed again; installed with the new shipped script, it cooks by the table. An old world-overlay that defines `recipes()` without `base_recipes()` (only Cullet's, which recipes-1 changes) would lose crafting, cooking and smoking if composed again over the new script.
+
+**Bit-identical outcomes.** `living-rules` `making_check::making_is_bit_identical` (ignored; it needs the scripts before, see its docs) compares the script at `3c73d835` with this branch's, for the island and for Cullet composed as created (its 48-minute day): each of `craft`, `cook`, `smoke` and `make`'s check (verdict and words), duration and, where it passes, effects, over 6 actors × 15 sets of knowledge × every target (none, a place, a person, every resource kind, every structure kind lit and out with 0, 0.2, 0.5 and 6 units of fuel) × every item, three structures and six non-names × three packs, then every pack (empty, plenty, one of each item, plenty but one item) for a grown person knowing everything; `teach_check` and `source_of` on every name; every skill's spec as read; the skill reference; the minds' world text; and four old graphs naming the skills. Island: 5,682,169 states, 0 differ, 27,150 acts made. Cullet: 10,645,925 states, 0 differ, 51,976 acts made. After merging main `46fa9db3` (rules-3's stores and winter, speech-2, the body's meters, ui-1 step 4), the same comparison against that main's scripts: island 5,682,170 states, Cullet 12,580,182 (its new store kinds are more targets), 0 differ in each. Not covered: a target that is not a structure with the kind `campfire` (the authority never makes one), which `cook_check` let through to its fire test and the mechanism refuses at its place test.
+
+**Costs.** Install checks (operations, most over the samples; limit 2,000): `cook_check` and `smoke_check` 593 in both worlds (goods-1 measured `cook_check` at 189; the refusal's words now come through the way), `make_check` 686 in Cullet (goods-1: 817), `make_done` 334, `store_check` 714 shipped and 923 in Cullet (goods-1: 901; its refusal's `source_of` looks through more recipes); the heaviest stays under half the limit (`goods_are_data_matched_by_trait_and_fires_eat_fuel`). The fuel gate (`just living-check`'s `script-gate`) passes: none of the hot laws it measures makes anything. One primitive is added, `entries_where(table, trait, value, absent)`: the entries whose trait is the text `value`, an entry without it counting as `absent`; a way's recipes and the item a recipe turns into a product are one call each.
 
 ### Cullet's goods, as data
 

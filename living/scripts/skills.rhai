@@ -601,31 +601,15 @@ fn eat_done(a) {
     [#{ op: "remove", item: a.item, qty: n }, #{ op: "vitals", hunger: -nutrition(a.item) * n, hp: 1.0 * n }]
 }
 
-fn cook_check(a) {
-    if !knows(a, "cooking") { return "you don't know how to cook" + learn_how("cooking"); }
-    if a.target.kind != "campfire" && !(a.target.class == "structure" && structure_trait(a.target.kind, "burns") != ()) { return "cooking needs a campfire"; }
-    if !burning(a) { return `the ${a.target.kind} is out: feed it first`; }
-    if item_trait(a.item, "cooks_to") == () { return `only raw ${or_list(items_with("cooks_to"))} can be cooked`; }
-    if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
-    ""
-}
-fn cook_duration(a) { 4000 }
-fn cook_done(a) {
-    [#{ op: "remove", item: a.item, qty: 1 }, #{ op: "add", item: item_trait(a.item, "cooks_to"), qty: 1 }]
-}
+// Cooking and smoking are recipes (`recipes()`: `cook` and `smoke`, by trait), made by the
+// one making mechanism below (`making_check`); the item named is the raw food.
+fn cook_check(a) { making_check(a, "cook", cook_making()) }
+fn cook_duration(a) { making_duration(a, "cook", cook_making()) }
+fn cook_done(a) { making_done(a, "cook", cook_making()) }
 
-fn smoke_check(a) {
-    if !knows(a, "smoking") { return "you don't know how to smoke food" + learn_how("smoking"); }
-    if a.target.kind != "campfire" && !(a.target.class == "structure" && structure_trait(a.target.kind, "burns") != ()) { return "smoking needs a campfire"; }
-    if !burning(a) { return `the ${a.target.kind} is out: feed it first`; }
-    if item_trait(a.item, "smokes_to") == () { return `only raw ${or_list(items_with("smokes_to"))} can be smoked`; }
-    if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
-    ""
-}
-fn smoke_duration(a) { 10000 }
-fn smoke_done(a) {
-    [#{ op: "remove", item: a.item, qty: 1 }, #{ op: "add", item: item_trait(a.item, "smokes_to"), qty: 1 }]
-}
+fn smoke_check(a) { making_check(a, "smoke", smoke_making()) }
+fn smoke_duration(a) { making_duration(a, "smoke", smoke_making()) }
+fn smoke_done(a) { making_done(a, "smoke", smoke_making()) }
 
 // Clearing forest: the tile becomes open ground, and yields wood.
 fn clear_check(a) {
@@ -663,27 +647,16 @@ fn wait_duration(a) { if a.qty > 0 { if a.qty > 120 { 120000 } else { a.qty * 10
 
 // ---- building and crafting --------------------------------------------
 
+// What a structure (or a road) takes to build; what is crafted is a recipe (`recipes()`).
 fn cost(kind) {
     switch kind {
         "campfire" => #{ wood: 3 },
         "shelter" => #{ wood: 6, fiber: 3 },
         "storage" => #{ wood: 4 },
-        "spear" => #{ wood: 2, stone: 1 },
-        "cloak" => #{ hide: 2, fiber: 1 },
-        "torch" => #{ wood: 1, fiber: 1 },
         "house" => #{ wood: 6, clay: 4, stone: 2 },
         "gate" => #{ wood: 4 },
         "wall" => #{ stone: 2 },
         "road" => #{ stone: 1 },
-        "axe" => #{ wood: 2, stone: 1 },
-        "pick" => #{ wood: 2, stone: 2 },
-        "net" => #{ fiber: 3 },
-        "basket" => #{ fiber: 2, wood: 1 },
-        "bow" => #{ wood: 2, fiber: 1 },
-        "arrow" => #{ wood: 1, stone: 1 },
-        "salve" => #{ berries: 2, fiber: 1 },
-        "leather" => #{ hide: 1 },
-        "armor" => #{ leather: 3, fiber: 1 },
         "trap" => #{ wood: 2, fiber: 2 },
         "bridge" => #{ wood: 4, stone: 2 },
         _ => (),
@@ -740,32 +713,11 @@ fn build_done(a) {
     fx
 }
 
-// The technique each crafted thing needs.
-fn made_by(item) {
-    switch item {
-        "spear" => "spear", "cloak" => "cloak", "torch" => "torch",
-        "axe" => "toolmaking", "pick" => "toolmaking",
-        "net" => "fishing", "basket" => "basketry",
-        "bow" => "archery", "arrow" => "archery",
-        "salve" => "medicine",
-        "leather" => "tanning", "armor" => "tanning",
-        _ => (),
-    }
-}
-fn craft_check(a) {
-    if young(a) { return "too young to craft"; }
-    let needed = made_by(a.item);
-    if needed == () { return `cannot craft ${a.item}`; }
-    if !knows(a, needed) { return `you don't know how to make a ${a.item}` + learn_how(needed); }
-    afford(a, a.item)
-}
-fn craft_duration(a) { 8000 }
-fn craft_done(a) {
-    let fx = pay(a.item);
-    // Arrows come three at a time.
-    fx.push(#{ op: "add", item: a.item, qty: if a.item == "arrow" { 3 } else { 1 } });
-    fx
-}
+// Tools, weapons and garments are recipes (`recipes()`, by "craft"), made by the one making
+// mechanism below; the item named is what is made.
+fn craft_check(a) { making_check(a, "craft", craft_making()) }
+fn craft_duration(a) { making_duration(a, "craft", craft_making()) }
+fn craft_done(a) { making_done(a, "craft", craft_making()) }
 
 // ---- fires and recipes (docs/WORLD_RULES.md, "Goods, recipes and fuel") -----------------
 // A fire that burns fuel (a structure whose kind `burns`) is fed from the pack: each item worth
@@ -796,7 +748,11 @@ fn feed_check(a) {
 fn feed_duration(a) { 1500 }
 fn feed_done(a) { [#{ op: "fuel", item: fuel_item(a, burns_of(a.target.kind)), qty: amount(a) }] }
 
-// What a world can make at its workplaces (read once when the script compiles). Each recipe:
+// Everything a character makes, in every world, is a recipe here (read once when the script
+// compiles), and one mechanism makes them all (`making_check`, `making_duration`,
+// `making_done`). Each recipe:
+//   by             the skill that makes it: "make" (none: make), "craft", "cook", "smoke", or a
+//                  world's own way (a skill with a `<skill>_making()` below)
 //   gives, makes   the item made (the recipe's name by default) and how many (1)
 //   takes          what it uses from the pack: #{ name or trait: qty }; a name is that item,
 //                  a trait is anything carrying it (`alkali: 1` takes ash, or any other alkali)
@@ -808,10 +764,161 @@ fn feed_done(a) { [#{ op: "fuel", item: fuel_item(a, burns_of(a.target.kind)), q
 //                  feeding gives its heat for nothing)
 //   knows          the technique it needs;  ms  how long it takes (8000)
 //   icon, label    how it looks in a client, over its product item's (`recipe_look`; data only)
-// The shipped world has none: a world adds them with the goods they read.
-fn recipes() { [] }
+// A world adds its own after these (`base_recipes() + [...]`): a world's recipes() that leaves
+// them out leaves its people nothing to craft, cook or smoke.
+fn recipes() {
+    [
+        // At any fire burning beside you, raw food becomes what its `cooks_to` or `smokes_to`
+        // names.
+        #{ name: "cook", by: "cook", turns: "cooks_to", at: "fire", lit: true, knows: "cooking", ms: 4000 },
+        #{ name: "smoke", by: "smoke", turns: "smokes_to", at: "fire", lit: true, knows: "smoking", ms: 10000 },
+        // Tools, weapons and garments, crafted anywhere from the pack.
+        #{ name: "spear", by: "craft", takes: #{ wood: 2, stone: 1 }, knows: "spear" },
+        #{ name: "cloak", by: "craft", takes: #{ hide: 2, fiber: 1 }, knows: "cloak" },
+        #{ name: "torch", by: "craft", takes: #{ wood: 1, fiber: 1 }, knows: "torch" },
+        #{ name: "axe", by: "craft", takes: #{ wood: 2, stone: 1 }, knows: "toolmaking" },
+        #{ name: "pick", by: "craft", takes: #{ wood: 2, stone: 2 }, knows: "toolmaking" },
+        #{ name: "net", by: "craft", takes: #{ fiber: 3 }, knows: "fishing" },
+        #{ name: "basket", by: "craft", takes: #{ fiber: 2, wood: 1 }, knows: "basketry" },
+        #{ name: "bow", by: "craft", takes: #{ wood: 2, fiber: 1 }, knows: "archery" },
+        // Arrows come three at a time.
+        #{ name: "arrow", by: "craft", takes: #{ wood: 1, stone: 1 }, makes: 3, knows: "archery" },
+        #{ name: "salve", by: "craft", takes: #{ berries: 2, fiber: 1 }, knows: "medicine" },
+        #{ name: "leather", by: "craft", takes: #{ hide: 1 }, knows: "tanning" },
+        #{ name: "armor", by: "craft", takes: #{ leather: 3, fiber: 1 }, knows: "tanning" },
+    ]
+}
 
+// The ways into making: a skill that makes recipes declares `<skill>_making()`, and its
+// `_check`, `_duration` and `_done` are the mechanism's. A way says:
+//   item    what the act's item names: "product" (what is made) or "input" (the item a recipe
+//           that `turns` uses: `cook fish`)
+//   who     who may: "person" (grown people), "grown" (anyone not young); none: anyone
+//   tires   the energy it costs (none: nothing)
+//   words   its own words: who, nothing (it makes nothing here), none (not one of its
+//           recipes), knows, at, at_fire, takes, and source (how something it makes is come by,
+//           for `source_of`; none: the recipe's words). `{item}`, `{n}`, `{k}` and the others
+//           are filled in (`fill`).
+// A way whose item is the input and which has one recipe asks that recipe's knowing and place
+// before the item: you are told you do not know how to cook before what cannot be cooked.
+fn make_making() {
+    #{ item: "product", who: "person", tires: 1.0,
+       words: #{ who: "you cannot make things", nothing: "nothing is made here", none: "no one makes {item} here (what is made: {products})",
+                 knows: "you don't know how to make {item}", at: "{item} is made at a {at}", at_fire: "{item} is made at a fire",
+                 takes: "{item} takes {n} {k} ({k}: {source})" } }
+}
+fn craft_making() {
+    #{ item: "product", who: "grown",
+       words: #{ who: "too young to craft", none: "cannot craft {item}", knows: "you don't know how to make a {item}",
+                 at: "{item} is made at a {at}", at_fire: "{item} is made at a fire",
+                 takes: "need {n} {k} for a {item} ({k}: {source})", source: "craft it ({takes})" } }
+}
+fn cook_making() {
+    #{ item: "input",
+       words: #{ none: "only raw {inputs} can be cooked", knows: "you don't know how to cook", at: "cooking needs a campfire",
+                 takes: "no {k} in your pack ({k}: {source})", source: "cook {input} at a campfire" } }
+}
+fn smoke_making() {
+    #{ item: "input",
+       words: #{ none: "only raw {inputs} can be smoked", knows: "you don't know how to smoke food", at: "smoking needs a campfire",
+                 takes: "no {k} in your pack ({k}: {source})", source: "smoke {input} at a campfire (knowing smoking), or trade for it" } }
+}
+// A way's declaration, by its skill's name (`()`: no such way).
+fn making_of(skill) { if skill == "" { return (); } try { return call(Fn(`${skill}_making`)); } catch { } () }
+
+// Words with their `{name}` parts filled in from `v`.
+fn fill(t, v) {
+    let s = t;
+    for k in v.keys() { s.replace(`{${k}}`, `${v[k]}`); }
+    s
+}
+// The first item whose trait `t` names `product` (`turned_into("cooks_to", "cooked_fish")`:
+// fish), or `()`.
+fn turned_into(t, product) {
+    if product == "" { return (); }
+    let from = entries_where("items", t, product, "");
+    if from.len() == 0 { () } else { from[0].name }
+}
+fn by_of(r) { if r.by == () { "make" } else { r.by } }
 fn gives_of(r) { if r.gives == () { r.name } else { r.gives } }
+// A way's recipes, in the table's order.
+fn way_recipes(skill) { entries_where("recipes", "by", skill, "make") }
+// What a way makes: each recipe's product, or each product of a recipe that turns items.
+fn products_of(skill) {
+    let out = [];
+    for r in way_recipes(skill) {
+        if r.turns == () { out.push(gives_of(r)); } else { for i in having("items", r.turns) { out.push(item_trait(i, r.turns)); } }
+    }
+    out
+}
+// What a way's recipes that turn items take: the items with their traits.
+fn inputs_of(skill) {
+    let out = [];
+    for r in way_recipes(skill) { if r.turns != () { for i in having("items", r.turns) { if !out.contains(i) { out.push(i); } } } }
+    out
+}
+// What an act of a way names to make a product: the product, or the item it is made from.
+fn making_item(skill, w, product) {
+    if w.item != "input" { return product; }
+    for r in way_recipes(skill) { if r.turns != () { let i = turned_into(r.turns, product); if i != () { return i; } } }
+    ""
+}
+// What a recipe grid shows of a product as data (`Scripts::recipe_parts`): what the act names,
+// what is used up (`takes`) and held but not used up (`tools`, `#{ name or trait: qty }`; none
+// yet), where, whether the fire must burn, the fuel it draws, the technique, how long, how many.
+fn recipe_parts(skill, w, product) {
+    let item = making_item(skill, w, product);
+    let m = making_for(skill, w, item);
+    if m == () { return (); }
+    let r = m.r;
+    #{ item: item, takes: takes_of(m), tools: if r.tools == () { #{} } else { r.tools },
+       at: if r.at == () { "" } else { r.at }, lit: r.lit == true || r.fuel != (), fuel: if r.fuel == () { 0.0 } else { r.fuel },
+       knows: if r.knows == () { "" } else { r.knows }, ms: if r.ms == () { 8000 } else { r.ms }, makes: if r.makes == () { 1 } else { r.makes } }
+}
+// The recipe of a way for an act's item: #{ r, input, product } (input: the item it turns).
+fn making_for(skill, w, item) {
+    if item == () { return (); }
+    for r in way_recipes(skill) {
+        if r.turns == () {
+            if w.item != "input" && gives_of(r) == item { return #{ r: r, input: (), product: item }; }
+        } else if w.item == "input" {
+            let p = item_trait(item, r.turns);
+            if p != () { return #{ r: r, input: item, product: p }; }
+        } else {
+            let i = turned_into(r.turns, item);
+            if i != () { return #{ r: r, input: i, product: item }; }
+        }
+    }
+    ()
+}
+// The recipe a way is, when its item is the input and it has only one.
+fn making_only(skill, w) {
+    if w.item != "input" { return (); }
+    let all = way_recipes(skill);
+    if all.len() == 1 { all[0] } else { () }
+}
+fn making_none(skill, w, item) {
+    let say = w.words;
+    let made = products_of(skill);
+    if made.len() == 0 && say.nothing != () { return fill(say.nothing, #{ item: item }); }
+    let v = #{ item: item };
+    if say.none.contains("{products}") { v.products = or_list(made); }
+    if say.none.contains("{inputs}") { v.inputs = or_list(inputs_of(skill)); }
+    fill(say.none, v)
+}
+// The recipe that makes an item, by any way, and the item it turns (for a recipe that `turns`).
+fn recipe_for(product) {
+    for n in names_of("recipes") {
+        let r = entry_of("recipes", n);
+        if r.turns == () {
+            if gives_of(r) == product { return #{ r: r, input: () }; }
+        } else {
+            let i = turned_into(r.turns, product);
+            if i != () { return #{ r: r, input: i }; }
+        }
+    }
+    ()
+}
 // How an item looks in a client: its `icon`, `label` and `group` (an item without them: its name
 // as the icon and, with spaces, as the label; no group).
 fn item_look(item) {
@@ -822,7 +929,7 @@ fn item_look(item) {
     #{ icon: if i.icon == () { item } else { i.icon }, label: if i.label == () { label } else { i.label }, group: if i.group == () { "" } else { i.group } }
 }
 // How what a recipe makes looks in a recipe grid: its product item's look, with the recipe's own
-// `icon` and `label` over it where the recipe sets them (data only; `make` does not read them).
+// `icon` and `label` over it where the recipe sets them (data only; making does not read them).
 fn recipe_look(product) {
     let look = item_look(product);
     let m = recipe_for(product);
@@ -832,26 +939,6 @@ fn recipe_look(product) {
     }
     look
 }
-// The recipe that makes an item, and the item it turns (for a recipe that `turns`).
-fn recipe_for(product) {
-    for n in names_of("recipes") {
-        let r = entry_of("recipes", n);
-        if r.turns == () {
-            if gives_of(r) == product { return #{ r: r, input: () }; }
-        } else {
-            for i in having("items", r.turns) { if item_trait(i, r.turns) == product { return #{ r: r, input: i }; } }
-        }
-    }
-    ()
-}
-fn products() {
-    let out = [];
-    for n in names_of("recipes") {
-        let r = entry_of("recipes", n);
-        if r.turns == () { out.push(gives_of(r)); } else { for i in having("items", r.turns) { out.push(item_trait(i, r.turns)); } }
-    }
-    out
-}
 // What the pack holds of a recipe's input: the item of that name, or everything with that trait.
 fn holding(a, k) {
     if entry_of("items", k) != () { return inv(a, k); }
@@ -860,27 +947,36 @@ fn holding(a, k) {
     n
 }
 fn takes_of(m) { let t = m.r.takes; if m.input != () { t = #{}; t[m.input] = 1; } else if t == () { t = #{}; } t }
-fn make_check(a) {
-    if a.actor.kind != "person" || young(a) { return "you cannot make things"; }
-    let m = recipe_for(a.item);
-    if m == () { return if products().len() == 0 { "nothing is made here" } else { `no one makes ${a.item} here (what is made: ${or_list(products())})` }; }
-    let r = m.r;
-    if r.knows != () && !knows(a, r.knows) { return `you don't know how to make ${a.item}` + learn_how(r.knows); }
+
+// The one making mechanism: a way's check, duration and effects.
+fn making_check(a, skill, w) {
+    let say = w.words;
+    if w.who == "person" && (a.actor.kind != "person" || young(a)) { return say.who; }
+    if w.who == "grown" && young(a) { return say.who; }
+    let m = making_for(skill, w, a.item);
+    let r = if m != () { m.r } else { making_only(skill, w) };
+    if r == () { return making_none(skill, w, a.item); }
+    if r.knows != () && !knows(a, r.knows) { return fill(say.knows, #{ item: a.item }) + learn_how(r.knows); }
     if r.at != () {
         let here = a.target.class == "structure" && (a.target.kind == r.at || (r.at == "fire" && fire_kind(a.target.kind)));
-        if !here { return if r.at == "fire" { `${a.item} is made at a fire` } else { `${a.item} is made at a ${r.at}` }; }
+        if !here { return fill(if r.at == "fire" && say.at_fire != () { say.at_fire } else { say.at }, #{ item: a.item, at: r.at }); }
         if (r.lit == true || r.fuel != ()) && !burning(a) { return `the ${a.target.kind} is out: feed it first`; }
         if r.fuel != () && burns_of(a.target.kind) != () && a.target.fuel + 0.001 < r.fuel { return `the ${a.target.kind} has too little fuel left for it (it takes ${short(r.fuel)}, it has ${short(a.target.fuel)}): feed it first`; }
     }
+    if m == () { return making_none(skill, w, a.item); }
     let t = takes_of(m);
     for k in t.keys() {
-        if holding(a, k) < t[k] { return `${a.item} takes ${t[k]} ${k} (${k}: ${source_of(k)})`; }
+        if holding(a, k) < t[k] { return fill(say.takes, #{ item: a.item, n: t[k], k: k, source: source_of(k) }); }
     }
     ""
 }
-fn make_duration(a) { let m = recipe_for(a.item); if m == () || m.r.ms == () { 8000 } else { m.r.ms } }
-fn make_done(a) {
-    let m = recipe_for(a.item);
+fn making_duration(a, skill, w) {
+    let m = making_for(skill, w, a.item);
+    let r = if m != () { m.r } else { making_only(skill, w) };
+    if r == () || r.ms == () { 8000 } else { r.ms }
+}
+fn making_done(a, skill, w) {
+    let m = making_for(skill, w, a.item);
     let fx = [];
     let t = takes_of(m);
     for k in t.keys() {
@@ -894,10 +990,15 @@ fn make_done(a) {
         }
     }
     if m.r.fuel != () && a.target.class == "structure" && burns_of(a.target.kind) != () { fx.push(#{ op: "burn", units: m.r.fuel }); }
-    fx.push(#{ op: "add", item: a.item, qty: if m.r.makes == () { 1 } else { m.r.makes } });
-    fx.push(#{ op: "vitals", energy: -1.0 });
+    fx.push(#{ op: "add", item: m.product, qty: if m.r.makes == () { 1 } else { m.r.makes } });
+    if w.tires != () { fx.push(#{ op: "vitals", energy: -w.tires }); }
     fx
 }
+
+// Making at a workplace (goods-1): the world's own recipes, by "make".
+fn make_check(a) { making_check(a, "make", make_making()) }
+fn make_duration(a) { making_duration(a, "make", make_making()) }
+fn make_done(a) { making_done(a, "make", make_making()) }
 
 // ---- exchange -----------------------------------------------------------
 
@@ -1172,6 +1273,8 @@ fn close_done(a) { [#{ op: "gate", open: 0.0 }] }
 // seed's glassmaking), not only what experimenting with a material can reveal (`discoveries`):
 // fire_bolt and wound_tending are learned only from someone or from writing.
 fn techniques() { names_of("know_how") }
+// The technique a crafted thing needs (`()`: it is not crafted).
+fn made_by(item) { let m = making_for("craft", craft_making(), item); if m == () { () } else { m.r.knows } }
 fn teach_check(a) {
     let all = techniques();
     if !all.contains(a.item) {
@@ -1372,6 +1475,18 @@ fn jump_ui() { #{ label: "Jump", place: "jump", look: #{ icon: "jump", clip: "ju
 fn accept_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
 fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }
 fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
+// The ways of making open one recipe grid (docs/INTERFACE.md §4): its cells are what the way
+// makes (`products`, `Scripts::products_of`), each with its recipe's words (`made_how`); the act
+// names `Scripts::making_item` (the product, or the raw food for cooking and smoking).
+fn making_grid(skill, text) {
+    let u = #{ choose: "grid", running: #{ show: "progress", text: text } };
+    if products_of(skill).len() > 0 { u.source = "products"; u.detail = "made_how"; }
+    u
+}
+fn make_ui() { making_grid("make", "Making {item}") }
+fn craft_ui() { making_grid("craft", "Making {item}") }
+fn cook_ui() { making_grid("cook", "Cooking {item}") }
+fn smoke_ui() { making_grid("smoke", "Smoking {item}") }
 // A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
 // theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
 fn face_ui() { #{ on: [], tip: "You face where you look." } }
@@ -1877,18 +1992,28 @@ fn source_of(item) {
     switch item {
         "hide" => "kill game (attack), then take it from the remains",
         "meat" => "kill game (attack) and take it from the remains, take it from a trap or a storage",
-        "cooked_fish" => "cook fish at a campfire",
-        "cooked_meat" => "cook meat at a campfire",
-        "smoked_fish" => "smoke fish at a campfire (knowing smoking), or trade for it",
-        "smoked_meat" => "smoke meat at a campfire (knowing smoking), or trade for it",
         _ => {
-            if cost(item) != () { return `craft it (${cost_text(item)})`; }
+            // Made by a way with words of its own (craft, cook, smoke), built (a structure's
+            // cost), made by a recipe's words, or come by from others.
             let m = recipe_for(item);
+            if m != () {
+                let w = making_of(by_of(m.r));
+                if w != () && w.words.source != () { return fill(w.words.source, #{ input: m.input, takes: takes_text(m) }); }
+            }
+            if cost(item) != () { return `craft it (${cost_text(item)})`; }
             if m != () { recipe_words(m) } else { "someone who has it can give or trade it to you" }
         },
     }
 }
-// How a made item is made, from its recipe.
+// A recipe's goods, in words: "2 wood, 1 stone".
+fn takes_text(m) {
+    let t = takes_of(m);
+    let parts = [];
+    for k in t.keys() { parts.push(`${t[k]} ${k}`); }
+    list(parts)
+}
+// How a made item is made, from its recipe (a recipe grid's detail): "cook it at a fire from 1
+// fish (knowing cooking)".
 fn made_how(item) { recipe_words(recipe_for(item)) }
 // A recipe's words: `m` is #{ r: the recipe, input: the item it turns (or ()) }.
 fn recipe_words(m) {
@@ -1899,8 +2024,13 @@ fn recipe_words(m) {
     if r.turns != () && m.input == () { parts.push(`anything with ${r.turns}`); }
     let at = if r.at == () { "" } else if r.at == "fire" { " at a fire" } else { ` at a ${r.at}` };
     let heat = if r.fuel == () { "" } else { ` and ${short(r.fuel)} fuel from it` };
+    // What is held and not used up (a recipe's `tools`): "…, using a blowpipe".
+    let using = [];
+    if r.tools != () { for k in r.tools.keys() { using.push(if r.tools[k] == 1 { `a ${k}` } else { `${r.tools[k]} ${k}` }); } }
+    let tools = "";
+    for i in 0..using.len() { tools += if i == 0 { ", using " } else if i == using.len() - 1 { " and " } else { ", " }; tools += using[i]; }
     let how = if r.knows == () { "" } else { ` (knowing ${r.knows})` };
-    `make it${at} from ${list(parts)}${heat}${how}`
+    `${by_of(r)} it${at} from ${list(parts)}${heat}${tools}${how}`
 }
 // The items fires burn: whatever has one of their fuel traits.
 fn fuels() {
@@ -1948,8 +2078,24 @@ fn eat_spec() {
        takes: "1 food item from your own pack",
        gives: `hunger down by its worth (${foods_text()}), a little health` }
 }
-fn cook_spec() { #{ latch: true, notable: true, target: true, item: true, reach: 1.5, about: "Cook raw fish or meat at a campfire beside you: about twice as filling, and it keeps longer. Needs cooking.", takes: "1 raw fish or meat from your pack, a campfire in reach, knowing cooking", gives: "1 cooked_fish or cooked_meat" } }
-fn smoke_spec() { #{ target: true, item: true, reach: 1.5, about: "Smoke raw fish or meat at a campfire beside you so it keeps for weeks: food to store, carry far or trade. Needs smoking.", takes: "1 raw fish or meat from your pack, a campfire in reach, knowing smoking, 10 seconds", gives: "1 smoked_fish or smoked_meat: more filling than raw" } }
+// Cooking and smoking, in the words of their recipes (`recipes()`: what turns, into what, knowing
+// what, how long).
+fn way_recipe(skill) { let all = way_recipes(skill); if all.len() == 0 { #{} } else { all[0] } }
+fn cook_spec() {
+    let r = way_recipe("cook");
+    let raw = or_list(inputs_of("cook"));
+    #{ latch: true, notable: true, target: true, item: true, reach: 1.5, listed: products_of("cook").len() > 0,
+       about: `Cook raw ${raw} at a campfire beside you: about twice as filling, and it keeps longer. Needs ${r.knows}.`,
+       takes: `1 raw ${raw} from your pack, a campfire in reach, knowing ${r.knows}`, gives: `1 ${or_list(products_of("cook"))}` }
+}
+fn smoke_spec() {
+    let r = way_recipe("smoke");
+    let raw = or_list(inputs_of("smoke"));
+    let secs = if r.ms == () { 8 } else { r.ms / 1000 };
+    #{ target: true, item: true, reach: 1.5, listed: products_of("smoke").len() > 0,
+       about: `Smoke raw ${raw} at a campfire beside you so it keeps for weeks: food to store, carry far or trade. Needs ${r.knows}.`,
+       takes: `1 raw ${raw} from your pack, a campfire in reach, knowing ${r.knows}, ${secs} seconds`, gives: `1 ${or_list(products_of("smoke"))}: more filling than raw` }
+}
 fn clear_spec() { #{ about: "Turn the forest where you stand into open ground. For making room to build; gathering at a tree is the quicker way to get wood.", takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" } }
 fn graze_spec() { #{ moment: true, listed: false, about: "Eat grass where you stand (grazing animals).", takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" } }
 fn sleep_spec() { #{ latch: true, moment: true, about: "Sleep until rested. Night is the time for it; beside a shelter or house it is much faster and the night cold can't hurt you. A short break is rest.", takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" } }
@@ -1967,9 +2113,17 @@ fn pave_spec() { #{ about: "Lay road on the tile you stand on. Walking on road i
 fn open_spec() { #{ target: true, reach: 1.8, about: "Open a gate. Only members of the gate's community may; anyone else must ask one of them.", takes: "a gate in reach, belonging to your community", gives: "the gate open: anyone may pass" } }
 fn close_spec() { #{ target: true, reach: 1.8, about: "Close a gate: closed, it blocks the way like a wall. Only members of its community may.", takes: "a gate in reach, belonging to your community", gives: "the gate shut" } }
 fn craft_spec() {
-    #{ latch: true, notable: true, item: true, items: ["spear", "cloak", "torch", "axe", "pick", "net", "basket", "bow", "arrow", "salve", "leather", "armor"],
+    let made = [];
+    let parts = "";
+    for r in way_recipes("craft") {
+        let p = gives_of(r);
+        made.push(p);
+        let n = if r.makes == () { 1 } else { r.makes };
+        parts += `${if parts == "" { "" } else { "; " }}${p} ${takes_text(#{ r: r, input: () })}${if n > 1 { ` for ${n}` } else { "" }}`;
+    }
+    #{ latch: true, notable: true, item: true, items: made, listed: made.len() > 0,
        about: "Make a tool, weapon or garment from materials in your pack. Each needs its technique. Structures are built (build); nothing is repaired.",
-       takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}; net ${cost_text("net")}; basket ${cost_text("basket")}; bow ${cost_text("bow")}; arrow ${cost_text("arrow")} for 3; salve ${cost_text("salve")}; leather ${cost_text("leather")}; armor ${cost_text("armor")}) and knowing how`,
+       takes: `its materials from your pack (${parts}) and knowing how`,
        gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster, a net catches two fish at a time, a basket carries 20 more, a bow shoots arrows, a salve helps tending, armor softens blows" }
 }
 
@@ -1994,7 +2148,7 @@ fn feed_spec() {
        takes: "fuel from your pack (anything that fire burns), a fire in reach with room for it", gives: "the fire burning longer, or lit again" }
 }
 fn make_spec() {
-    #{ latch: true, notable: true, target: true, item: true, items: products(), reach: 1.5, listed: names_of("recipes").len() > 0,
+    #{ latch: true, notable: true, target: true, item: true, items: products_of("make"), reach: 1.5, listed: products_of("make").len() > 0,
        about: "Make goods from what you carry at the place they are made (target it: a furnace, an oven, a fire...), by the world's recipes: some need the fire there burning and use some of its fuel, some a technique. Tools and garments are crafted (craft); structures are built (build).",
        takes: "the recipe's goods from your pack, its workplace in reach (lit, with fuel, when it needs heat)", gives: "the goods made, in your pack" }
 }
@@ -2352,15 +2506,14 @@ fn know_how_law() {
 
 fn food_law() {
     #{ cadence: "compile", topic: "food", covers: ["nutrition", "spoil_per_h", "carried_spoil", "kept_spoil", "carry_limit", "source_of", "items"],
-       about: `${foods_text()} (hunger points). Cook raw ${or_list(items_with("cooks_to"))} at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it ${short(1.0 / kept_spoil("storage"))} times longer. A pack holds about ${short(carry_limit("person"))} things. Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (${carcass("deer").meat} meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).` }
+       about: `${foods_text()} (hunger points). Cook raw ${or_list(inputs_of("cook"))} at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it ${short(1.0 / kept_spoil("storage"))} times longer. A pack holds about ${short(carry_limit("person"))} things. Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (${carcass("deer").meat} meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).` }
 }
 
 // The world's recipes and fires in words, for the making law (empty when it has none).
 fn recipes_text() {
     let parts = [];
-    for n in names_of("recipes") {
-        let r = entry_of("recipes", n);
-        let what = if r.turns == () { gives_of(r) } else { `${n} (what has ${r.turns})` };
+    for r in way_recipes("make") {
+        let what = if r.turns == () { gives_of(r) } else { `${r.name} (what has ${r.turns})` };
         parts.push(`${what}: ${recipe_words(#{ r: r, input: () })}`);
     }
     if parts.len() == 0 { "" } else { ` Made at workplaces (make): ${list(parts)}.` }
@@ -2378,7 +2531,9 @@ fn fires_text() {
 fn making_law() {
     let parts = [];
     for k in ["campfire", "shelter", "storage", "spear", "cloak", "torch", "house", "gate", "wall", "road", "axe", "pick"] {
+        // What is built has a cost; what is crafted, a recipe.
         let c = cost(k);
+        if c == () { c = takes_of(making_for("craft", craft_making(), k)); }
         let need = "";
         for m in c.keys() { if need != "" { need += " + "; } need += `${c[m]} ${m}`; }
         parts.push(`${k} = ${need}`);
