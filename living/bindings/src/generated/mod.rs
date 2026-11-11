@@ -188,6 +188,8 @@ pub mod resource_node_type;
 pub mod resume_genesis_reducer;
 pub mod reveal_table;
 pub mod reveal_type;
+pub mod rot_table;
+pub mod rot_type;
 pub mod routine_in_type;
 pub mod routine_stat_table;
 pub mod routine_stat_type;
@@ -438,6 +440,8 @@ pub use resource_node_type::ResourceNode;
 pub use resume_genesis_reducer::resume_genesis;
 pub use reveal_table::*;
 pub use reveal_type::Reveal;
+pub use rot_table::*;
+pub use rot_type::Rot;
 pub use routine_in_type::RoutineIn;
 pub use routine_stat_table::*;
 pub use routine_stat_type::RoutineStat;
@@ -1029,6 +1033,7 @@ pub struct DbUpdate {
     relation: __sdk::TableUpdate<Relation>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     reveal: __sdk::TableUpdate<Reveal>,
+    rot: __sdk::TableUpdate<Rot>,
     routine: __sdk::TableUpdate<Routine>,
     routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
@@ -1291,6 +1296,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "reveal" => db_update
                     .reveal
                     .append(reveal_table::parse_table_update(table_update)?),
+                "rot" => db_update
+                    .rot
+                    .append(rot_table::parse_table_update(table_update)?),
                 "routine" => db_update
                     .routine
                     .append(routine_table::parse_table_update(table_update)?),
@@ -1581,6 +1589,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.reveal = cache
             .apply_diff_to_table::<Reveal>("reveal", &self.reveal)
             .with_updates_by_pk(|row| &row.id);
+        diff.rot = cache
+            .apply_diff_to_table::<Rot>("rot", &self.rot)
+            .with_updates_by_pk(|row| &row.structure);
         diff.routine = cache
             .apply_diff_to_table::<Routine>("routine", &self.routine)
             .with_updates_by_pk(|row| &row.id);
@@ -1929,6 +1940,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "reveal" => db_update
                     .reveal
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "rot" => db_update
+                    .rot
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "routine" => db_update
                     .routine
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2248,6 +2262,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "reveal" => db_update
                     .reveal
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "rot" => db_update
+                    .rot
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "routine" => db_update
                     .routine
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2417,6 +2434,7 @@ pub struct AppliedDiff<'r> {
     relation: __sdk::TableAppliedDiff<'r, Relation>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     reveal: __sdk::TableAppliedDiff<'r, Reveal>,
+    rot: __sdk::TableAppliedDiff<'r, Rot>,
     routine: __sdk::TableAppliedDiff<'r, Routine>,
     routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
@@ -2588,6 +2606,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Reveal>("reveal", &self.reveal, event);
+        callbacks.invoke_table_row_callbacks::<Rot>("rot", &self.rot, event);
         callbacks.invoke_table_row_callbacks::<Routine>("routine", &self.routine, event);
         callbacks.invoke_table_row_callbacks::<RoutineStat>(
             "routine_stat",
@@ -3366,6 +3385,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         relation_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         reveal_table::register_table(client_cache);
+        rot_table::register_table(client_cache);
         routine_table::register_table(client_cache);
         routine_stat_table::register_table(client_cache);
         script_table::register_table(client_cache);
@@ -3470,6 +3490,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "relation",
         "resource_node",
         "reveal",
+        "rot",
         "routine",
         "routine_stat",
         "script",
