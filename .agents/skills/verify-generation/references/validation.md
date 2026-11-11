@@ -1,5 +1,14 @@
 # Validation record (generation)
 
+## 2026-11-11 kit-2: Cullet's lots in the model table (dev-box)
+
+Branch `kit-2` (origin/main through layout-1, `3c73d835`, merged), own container `kit2-stdb` (2.14.1, port 3322, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private target directories, `scoped`, no minds. The change: `gen_cullet.sh` now puts Cullet's 88 lot models into `living/rules/data/buildings.json` as style `cullet`, each with `eye_solid` and `eye_cells`, so their hosted tiles hide by shape (1,384 `Low` tiles on Cullet where there were none); 18 root plots and three open lots gained a `model`; lots carry `lit` (ignored by the rules). No entry point or table changed, so no maintain pass; the SKILL names the new writer of the table.
+
+- `generation-kit2-20261111-195631` (`--feature worlds --seeds island,plan-test,cullet,floor-megacity-2k,floor-megacity-4k`, before layout-1): island 979, plan-test 78, floor-megacity-2k 77, floor-megacity-4k 92 pass. Cullet failed 4 of 317 (`the seed's laws are composed over the shipped script`, `seeded rhythms are as given`, two authored-relations checks: four elders dead of old age 6 s after creation). "Original seeds unchanged" failed because `cullet.json` was regenerated during the run.
+- `generation-kit2main-200618` (a clean detached checkout of origin/main `6a31176a`, `--seeds cullet`): the same 4 of 317 fail, so they were main's (fixed there by goods-2: the verify launch keeps a seed's laws again).
+- `generation-kit2c-20261111-204204` (the final tree, `--seeds cullet,plan-test`): cullet 317 and plan-test 78 pass; original seeds unchanged.
+- Not run: `authored` and `guards`, the other seeds after layout-1.
+
 ## 2026-11-11 layout-1: Cullet's plan redrawn (dev-box)
 
 Branch `layout-1` (origin/main `6caebe20` merged: rates-2, lives-3, ground-1), own container `layout1-stdb` (2.14.1, port 3324, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. The seed changed in its plan's geometry only ([Cullet's layout](../../../../docs/CULLET_LAYOUT.md)): 13 levels (three new), 46 streets, 19 stairs, 59 of the 93 lots moved; the lot ids, kinds, resources' kinds and structures are as they were, so no shape changed and no maintain pass was run.
