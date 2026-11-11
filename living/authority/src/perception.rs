@@ -967,6 +967,14 @@ pub fn my_vitals(ctx: &ViewContext) -> Vec<Vitals> {
     living(ctx).and_then(|c| ctx.db.vitals().id().find(c.id)).into_iter().collect()
 }
 
+/// What my living character senses now: how far it sees and hears, and how its sight narrows
+/// away from facing (the `senses` law with all its facts; `character_senses`). One point
+/// lookup; it re-runs only when a value changes (nightfall, dawn, a torch), not every tick.
+#[spacetimedb::view(accessor = my_senses, public, primary_key = id)]
+pub fn my_senses(ctx: &ViewContext) -> Vec<CharacterSenses> {
+    living(ctx).and_then(|c| ctx.db.character_senses().id().find(c.id)).into_iter().collect()
+}
+
 /// What reached my character's senses lately: the newest `frame::LINES_SHOWN` lines of my
 /// living character, released at its frames (`line_seen`, `frame.rs`), or, while none lives,
 /// of the one that died last (the death screen). Not every dead character's: a player who

@@ -734,7 +734,7 @@ Answers of 2026-11-11, collected in `.local/living/ui-designs/INTERFACE-answers.
    - The refusal wording stays in the script, not in Rust.
    - The client runs `whisper_check` before sending.
 7. **Clients keep compiling the script.** `ui_card` remains a documented fallback only.
-8. **`my_senses`.** A small private per-character row, updated only when a sense value changes, read through a point-lookup caller view; not a computed view. The Spark builds it.
+8. **`my_senses`.** A small private per-character row, updated only when a sense value changes, read through a point-lookup caller view; not a computed view. The Spark builds it. Built on branch `rules-senses-outcomes`: `character_senses`, read through `my_senses` ([perception, "My senses"](PERCEPTION.md#my-senses-eighth-change)).
 9. **`my_offers`.** A btree index on `trade_offer.to` and a caller-scoped view of offers to my character. The Spark builds it first, because of the trade-offer defect.
 
 The Spark's build order: `my_offers`, the teach fix, `my_senses`, `act_outcome`, `meters`, then the drawn state.

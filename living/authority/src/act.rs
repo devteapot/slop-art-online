@@ -1970,6 +1970,7 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
 /// (bounded per character) for the record; the mind's graph in Neo4j keeps its history.
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
+    ctx.db.character_senses().id().delete(id);
     ctx.db.experience().observer().delete(id);
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);

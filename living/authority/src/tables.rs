@@ -1192,6 +1192,45 @@ pub struct Readiness {
     pub move_run: bool,
 }
 
+/// What a player's character senses now (private; its client reads its own through the
+/// `my_senses` view): the world's `senses(a)` law for the character with all its facts, so a
+/// client draws its sight and hearing from the rules' answer instead of running the law on
+/// the few facts it has. Written at the character's frames only when a value changed
+/// (`frame::show_senses`): nightfall, dawn, a torch picked up or put away. `field` is whether
+/// sight depends on facing (the world's `fov_on` law); its five numbers are 0 while it does
+/// not. One row per character a person plays now; it goes when the character dies.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = character_senses)]
+pub struct CharacterSenses {
+    #[primary_key]
+    pub id: u32,
+    /// Metres seen and heard (one tile is one metre).
+    pub sight: f32,
+    pub hearing: f32,
+    /// Sight narrows away from facing (`living_rules::sight::Field`).
+    pub field: bool,
+    pub focal_deg: f32,
+    pub side_deg: f32,
+    pub side_share: f32,
+    pub near_m: f32,
+    pub margin_deg: f32,
+    /// When a value last changed (authority ms).
+    pub at_ms: u64,
+}
+
+impl CharacterSenses {
+    /// The row for character `id` from the law's answer (`at_ms` 0: stamped when written).
+    pub fn of(id: u32, s: &living_rules::script::Senses) -> Self {
+        let f = s.field.unwrap_or(living_rules::sight::Field { focal_deg: 0.0, side_deg: 0.0, side_share: 0.0, near_m: 0.0, margin_deg: 0.0 });
+        Self { id, sight: s.sight, hearing: s.hearing, field: s.field.is_some(), focal_deg: f.focal_deg, side_deg: f.side_deg, side_share: f.side_share, near_m: f.near_m, margin_deg: f.margin_deg, at_ms: 0 }
+    }
+
+    /// The same senses, whenever they were stamped.
+    pub fn same(&self, o: &Self) -> bool {
+        Self { at_ms: 0, ..self.clone() } == Self { at_ms: 0, ..o.clone() }
+    }
+}
+
 // ---- town life (docs/TOWN_LIFE.md) ------------------------------------------------
 
 /// The world's weather (one row, id 0): whether it is raining, since when and until when the

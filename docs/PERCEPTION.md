@@ -2,6 +2,8 @@
 
 Started 2026-11-09. This note records how the living authority limits what a human player's client receives to what the player's character perceives now, plus the character's own state ([game brief](GAME_BRIEF.md#core-work-the-game-needs-engine-independent), core work 1; [island authority](ISLAND_AUTHORITY.md), "Perception-scoped subscriptions" and "A slimmer moving-body stream"). It covers the table audit, the SpacetimeDB documentation and source the design rests on, the design, the measured cost, the per-table decisions, the client change and the verification.
 
+**Status (eighth change, 2026-11-11, branch `rules-senses-outcomes`).** A player reads what its character senses through `my_senses`: the `senses(a)` law with all the character's facts, written only when a value changes, so the client no longer runs the law on the few facts it has ([My senses](#my-senses-eighth-change)).
+
 **Status (sixth change, 2026-11-11, branch `rules-offers`).** A player reads the trade offers addressed to its character, and its own, through a new view, `my_offers`; `trade_offer` stays private and gains a `to` index and a stored end, `until_ms` ([Offers](#offers-what-a-player-is-offered)).
 
 **Status (seventh change, 2026-11-11, branch `fov-1`).** Sight may depend on facing: a world law, `fov_on` (off as shipped), gives `senses(a)` a field, and one pure function in the rules crate, `living_rules::sight::sees`, decides every look for the authority and the game client alike. What is heard but not seen reaches players (`heard_sounds`) and minds (their scene and a percept) coarsely, with no identity. `set_world_law` changes a law on a running world and records it ([The field of view](#the-field-of-view-seventh-change)).
@@ -85,6 +87,7 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `combat_seen` | own private state, through `my_combat` | private | private | game client (view) |
 | `readiness` | own private state, through `my_readiness` | private | private | game client (view) |
 | `skill_use` | own private state, through `my_skill_uses` | private | private | game client (view) |
+| `character_senses` | own private state, through `my_senses` (eighth change: what the character senses now, the `senses` law's answer) | private | private | game client (view) |
 | `deliberation` | a mind's own state, through `my_deliberations` | private | private | mind service (view) |
 | `thought` | developer audit truth (model exchanges, raw replies) | private | private | observer (owner) |
 | `persona`, `belief`, `judgment`, `relation` | developer audit truth (minds' projections) | private | private | mind service, observer (owner) |
@@ -439,6 +442,30 @@ On the dev-box, in a private SpacetimeDB 2.14.1 container (`fov1-stdb`, port 331
 | Minds | `verify_minds.py --case fov` with the fake model (the scene and the prompt: heard in words, no id, facing; the percept; the person instinct's habit turning the body) and `--case sight` | both pass (again after merging main) | `minds-fov1-h-fov/`, `minds-fov1-m-fov/result.json`, `sent-prompt.txt` |
 
 `scenes.py doing` failed twice on one world after the `fov` and `senses` scenes. On that loaded host each admin CLI call took 1 to 14 s, so the walkers had finished their walks (activity `wait`) before the observer's scene was written. It reads activity labels, and no field was on. It failed the same way on `origin/main` (`6288f599`) on the same host.
+
+### My senses (eighth change)
+
+Eighth change, 2026-11-11, branch `rules-senses-outcomes`, on the Spark. The interface design agreed it with the Spark coordinator ([interface, "What was agreed" 8](INTERFACE.md#what-was-agreed)): the game client ran `senses(a)` itself for its sight edge and earshot, with the facts it has (its kind and pack; noon or midnight from the clock), so any law that reads more (a stage, a gene, lamplight, a seed's own law) answered differently on the screen than on the authority.
+
+**The row and the view.** `character_senses` (private, `tables.rs`) holds one row per character a person plays: `id`, `sight` and `hearing` (metres), `field` (whether sight depends on facing, the `fov_on` law) with its five numbers (`focal_deg`, `side_deg`, `side_share`, `near_m`, `margin_deg`; 0 while there is no field), and `at_ms`, when a value last changed. `my_senses` (`perception.rs`, `primary_key = id`) returns the caller's living character's row: `living` and one `find` on the key. It is not a computed view: the law runs in the tick, not in the view.
+
+**When it is written.** At the player's frames (`frame::show_senses`), at most every 250 ms (`SENSES_MS`): the law's answer for the character now (`common::senses_of`, kept per moment and per state, as every look asks it) is compared with the row its frame last wrote, held in the viewer's module memory, and written only when it differs. A fresh module instance reads the row once at the first frame. The row goes when the character dies (`forget_dead`); while the minds hold the character its row is not refreshed and the view returns nothing (as every `my_*` view), and the first frame after the person takes it back compares again.
+
+| Path | Reads | Writes | Index | Recipients | Frequency | Growth |
+| --- | --- | --- | --- | --- | --- | --- |
+| `show_senses` | the `senses` law's answer (per-moment cache), once per fresh instance the row | `character_senses` insert or update on change only | PK | that player (`my_senses`) | per player every 250 ms; a write at nightfall, dawn, a torch picked up or put away, a law change | one row per played character, gone at death |
+
+#### SpacetimeDB documentation consulted (eighth change, 2026-11-11)
+
+Pinned 2.14.1 (`living/Cargo.toml`, `clockworklabs/spacetime:v2.14.1`). The pages' version selector reads 2.0.0 (and 1.12.0). The claims below that the docs leave open were verified for 2.14.1 earlier (this file's first and fourth changes); nothing here depends on a newer feature.
+
+| Page | What it says | What follows here |
+| --- | --- | --- |
+| [Views](https://spacetimedb.com/docs/functions/views/) | views are reevaluated "when SpacetimeDB detects something they read has since changed (the read set)"; `.find()` and `.filter()` on indexed columns give an exact read set, `.iter()` is not allowed; per-user views are computed and tracked per subscriber | `my_senses` reads the `player` row, the character row and one `character_senses` key, so it re-runs only when that row is written. Writing on change keeps it from re-running at every frame. |
+| [Tables](https://spacetimedb.com/docs/tables/), [performance](https://spacetimedb.com/docs/tables/performance/) | private tables are "Visible only to reducers and the database owner"; split tables by access pattern and update frequency; keep internal state private; watch growth | Its own small table rather than columns on `character` (read by `my_characters` and written for unrelated reasons) or `vitals` (re-anchored by needs): the row changes when senses change, not when anything else does. Bounded by the played characters. |
+| [Indexes](https://spacetimedb.com/docs/tables/indexes/) | indexes cost memory and slow writes; avoid redundant ones | The primary key only. |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) | adding tables (and views) is always allowed; columns may be added only at the end with a default; changing or reordering a column is refused | One new table and one view, no column changed: a running world updates in place (shown below). A later field joins at the end with a `#[default]`. |
+| [Subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) | subscribe once per connection, group by lifetime | A client subscribes `SELECT * FROM my_senses` with its other `my_*` views. |
 
 ### Compatibility: the `LIVING_PERCEPTION` build switch
 

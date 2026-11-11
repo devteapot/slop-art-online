@@ -26,6 +26,8 @@ pub mod bond_offer_table;
 pub mod bond_offer_type;
 pub mod brain_table;
 pub mod brain_type;
+pub mod character_senses_table;
+pub mod character_senses_type;
 pub mod character_table;
 pub mod character_type;
 pub mod chronicle_table;
@@ -149,6 +151,7 @@ pub mod my_places_table;
 pub mod my_readiness_table;
 pub mod my_record_type;
 pub mod my_records_table;
+pub mod my_senses_table;
 pub mod my_skill_uses_table;
 pub mod my_vitals_table;
 pub mod own_habits_reducer;
@@ -287,6 +290,8 @@ pub use bond_offer_table::*;
 pub use bond_offer_type::BondOffer;
 pub use brain_table::*;
 pub use brain_type::Brain;
+pub use character_senses_table::*;
+pub use character_senses_type::CharacterSenses;
 pub use character_table::*;
 pub use character_type::Character;
 pub use chronicle_table::*;
@@ -410,6 +415,7 @@ pub use my_places_table::*;
 pub use my_readiness_table::*;
 pub use my_record_type::MyRecord;
 pub use my_records_table::*;
+pub use my_senses_table::*;
 pub use my_skill_uses_table::*;
 pub use my_vitals_table::*;
 pub use own_habits_reducer::own_habits;
@@ -1032,6 +1038,7 @@ pub struct DbUpdate {
     bond_offer: __sdk::TableUpdate<BondOffer>,
     brain: __sdk::TableUpdate<Brain>,
     character: __sdk::TableUpdate<Character>,
+    character_senses: __sdk::TableUpdate<CharacterSenses>,
     chronicle: __sdk::TableUpdate<Chronicle>,
     clock: __sdk::TableUpdate<Clock>,
     combat_seen: __sdk::TableUpdate<CombatSeen>,
@@ -1082,6 +1089,7 @@ pub struct DbUpdate {
     my_places: __sdk::TableUpdate<Place>,
     my_readiness: __sdk::TableUpdate<Readiness>,
     my_records: __sdk::TableUpdate<MyRecord>,
+    my_senses: __sdk::TableUpdate<CharacterSenses>,
     my_skill_uses: __sdk::TableUpdate<SkillUse>,
     my_vitals: __sdk::TableUpdate<Vitals>,
     pasture: __sdk::TableUpdate<Pasture>,
@@ -1168,6 +1176,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "character" => db_update
                     .character
                     .append(character_table::parse_table_update(table_update)?),
+                "character_senses" => db_update
+                    .character_senses
+                    .append(character_senses_table::parse_table_update(table_update)?),
                 "chronicle" => db_update
                     .chronicle
                     .append(chronicle_table::parse_table_update(table_update)?),
@@ -1318,6 +1329,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_records" => db_update
                     .my_records
                     .append(my_records_table::parse_table_update(table_update)?),
+                "my_senses" => db_update
+                    .my_senses
+                    .append(my_senses_table::parse_table_update(table_update)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(my_skill_uses_table::parse_table_update(table_update)?),
@@ -1511,6 +1525,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.character = cache
             .apply_diff_to_table::<Character>("character", &self.character)
+            .with_updates_by_pk(|row| &row.id);
+        diff.character_senses = cache
+            .apply_diff_to_table::<CharacterSenses>("character_senses", &self.character_senses)
             .with_updates_by_pk(|row| &row.id);
         diff.chronicle = cache
             .apply_diff_to_table::<Chronicle>("chronicle", &self.chronicle)
@@ -1773,6 +1790,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_readiness =
             cache.apply_diff_to_table::<Readiness>("my_readiness", &self.my_readiness);
         diff.my_records = cache.apply_diff_to_table::<MyRecord>("my_records", &self.my_records);
+        diff.my_senses = cache
+            .apply_diff_to_table::<CharacterSenses>("my_senses", &self.my_senses)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_skill_uses =
             cache.apply_diff_to_table::<SkillUse>("my_skill_uses", &self.my_skill_uses);
         diff.my_vitals = cache
@@ -1829,6 +1849,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "character" => db_update
                     .character
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "character_senses" => db_update
+                    .character_senses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "chronicle" => db_update
                     .chronicle
@@ -1979,6 +2002,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_records" => db_update
                     .my_records
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_senses" => db_update
+                    .my_senses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
@@ -2161,6 +2187,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "character" => db_update
                     .character
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "character_senses" => db_update
+                    .character_senses
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "chronicle" => db_update
                     .chronicle
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2310,6 +2339,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_records" => db_update
                     .my_records
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_senses" => db_update
+                    .my_senses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
@@ -2472,6 +2504,7 @@ pub struct AppliedDiff<'r> {
     bond_offer: __sdk::TableAppliedDiff<'r, BondOffer>,
     brain: __sdk::TableAppliedDiff<'r, Brain>,
     character: __sdk::TableAppliedDiff<'r, Character>,
+    character_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
     chronicle: __sdk::TableAppliedDiff<'r, Chronicle>,
     clock: __sdk::TableAppliedDiff<'r, Clock>,
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
@@ -2522,6 +2555,7 @@ pub struct AppliedDiff<'r> {
     my_places: __sdk::TableAppliedDiff<'r, Place>,
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     my_records: __sdk::TableAppliedDiff<'r, MyRecord>,
+    my_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
     my_skill_uses: __sdk::TableAppliedDiff<'r, SkillUse>,
     my_vitals: __sdk::TableAppliedDiff<'r, Vitals>,
     pasture: __sdk::TableAppliedDiff<'r, Pasture>,
@@ -2595,6 +2629,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<BondOffer>("bond_offer", &self.bond_offer, event);
         callbacks.invoke_table_row_callbacks::<Brain>("brain", &self.brain, event);
         callbacks.invoke_table_row_callbacks::<Character>("character", &self.character, event);
+        callbacks.invoke_table_row_callbacks::<CharacterSenses>(
+            "character_senses",
+            &self.character_senses,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Chronicle>("chronicle", &self.chronicle, event);
         callbacks.invoke_table_row_callbacks::<Clock>("clock", &self.clock, event);
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
@@ -2685,6 +2724,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<MyRecord>("my_records", &self.my_records, event);
+        callbacks.invoke_table_row_callbacks::<CharacterSenses>(
+            "my_senses",
+            &self.my_senses,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SkillUse>(
             "my_skill_uses",
             &self.my_skill_uses,
@@ -3433,6 +3477,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         bond_offer_table::register_table(client_cache);
         brain_table::register_table(client_cache);
         character_table::register_table(client_cache);
+        character_senses_table::register_table(client_cache);
         chronicle_table::register_table(client_cache);
         clock_table::register_table(client_cache);
         combat_seen_table::register_table(client_cache);
@@ -3483,6 +3528,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_places_table::register_table(client_cache);
         my_readiness_table::register_table(client_cache);
         my_records_table::register_table(client_cache);
+        my_senses_table::register_table(client_cache);
         my_skill_uses_table::register_table(client_cache);
         my_vitals_table::register_table(client_cache);
         pasture_table::register_table(client_cache);
@@ -3541,6 +3587,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "bond_offer",
         "brain",
         "character",
+        "character_senses",
         "chronicle",
         "clock",
         "combat_seen",
@@ -3591,6 +3638,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_places",
         "my_readiness",
         "my_records",
+        "my_senses",
         "my_skill_uses",
         "my_vitals",
         "pasture",
