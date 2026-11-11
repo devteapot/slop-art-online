@@ -104,6 +104,9 @@ def main():
                 scene["calls"].append(call(db, "place_at", i, at[0] + float(dx), at[1] + float(dy)))
                 scene["calls"].append(call(db, "set_behavior", i, json.dumps(json.dumps({"wait": 600}))))
             time.sleep(1.0)
+            # Where each landed: `place_at` snaps to the nearest walkable tile, so two asked-for
+            # spots in a stall can share one.
+            scene["placed"] = {i: body(db, int(i)) for i, _, _ in places}
             open(os.path.join(out, "scene.go"), "w").close()
             placed = True
         for name, calls in list(syncs.items()):
@@ -113,6 +116,9 @@ def main():
                 for c in calls:
                     scene["calls"].append(call(db, c[0], *[sub(x) for x in c[1:]]))
                 time.sleep(0.5)
+                moved = sorted({c[1] for c in calls if c[0] == "place_at"})
+                if moved:
+                    scene.setdefault("placed_at", {})[name] = {i: body(db, int(i)) for i in moved}
                 open(os.path.join(out, f"{name}.go"), "w").close()
                 del syncs[name]
         time.sleep(0.4)
