@@ -31,7 +31,19 @@ thread_local! {
     /// evaluator marks are reset when a new plan is installed).
     static LEGACY: std::cell::RefCell<std::collections::HashMap<u32, (u64, u64)>> = std::cell::RefCell::new(std::collections::HashMap::new());
 }
-/// Alert bits for ongoing situations (bits 1..8 are bodily alarms).
+/// The body's alarms before the `status_of` law gave them (bits 1, 2, 4, 8 and 64): cleared.
+const OLD_BODY_ALARMS: u32 = 1 | 2 | 4 | 8 | 64;
+/// The `status_of` law's alarms, one bit each by its words (`alarm_bit`).
+const LAW_ALARMS: u32 = 0xFFFF_0000;
+
+/// An alarm's bit among `LAW_ALARMS`: by its words, so two statuses with the same alarm (badly
+/// hurt, barely alive) are one episode.
+fn alarm_bit(text: &str) -> u32 {
+    let h = text.bytes().fold(2166136261u32, |h, b| (h ^ b as u32).wrapping_mul(16777619));
+    1 << (16 + h % 16)
+}
+
+/// Alert bits for ongoing situations (bits 16..31 are the body's alarms; 16, 32 and 128 drives).
 const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
 /// Something heard near and out of sight (only while sight has a field).
@@ -145,14 +157,15 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
 fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f32), w: &World, cur: Option<&Activity>, now: u64) -> Option<Vitals> {
     let n = common::needs(&v, now);
     if n.hp <= 0.0 {
-        let cause = if n.hunger >= 100.0 {
-            "starvation"
+        use living_rules::outcome::death;
+        let (cause, code) = if n.hunger >= 100.0 {
+            ("starvation", death::STARVED)
         } else if common::night(ctx, w, now) && me.kind == "person" {
-            "cold and exposure"
+            ("cold and exposure", death::COLD)
         } else {
-            "exhaustion"
+            ("exhaustion", death::EXHAUSTED)
         };
-        act::die(ctx, me.id, cause, now, 0);
+        act::die(ctx, me.id, cause, now, 0, code);
         return None;
     }
     let night = common::night(ctx, w, now);
@@ -516,7 +529,7 @@ impl<'a> Ev<'a> {
     /// (once per repeat window for the same line and reason), not a silent skip.
     fn say_failed(&mut self, id: u16, n: &Node, why: &str) -> St {
         let desc = graph::describe(n);
-        if act::refused(self.ctx, self.me.id, id, self.st.revision, &desc, why, self.now) {
+        if act::refused(self.ctx, self.me.id, id, self.st.revision, "say", &desc, why, self.now) {
             self.st.fails = self.st.fails.saturating_add(1);
         }
         self.last_fail = format!("say: {why}");
@@ -571,7 +584,7 @@ impl<'a> Ev<'a> {
             }
             Err(why) => {
                 // Refused at the start: a failure like any other, not an unseen retry.
-                if act::refused(self.ctx, self.me.id, id, rev, &desc, &why, self.now) {
+                if act::refused(self.ctx, self.me.id, id, rev, skill, &desc, &why, self.now) {
                     self.st.fails = self.st.fails.saturating_add(1);
                 }
                 self.last_fail = format!("{skill}: {why}");
@@ -896,14 +909,17 @@ impl<'a> Ev<'a> {
             return;
         }
         let night = common::night(self.ctx, &self.w, self.now);
-        let facts_fire = self.vit.hp_rate < 0.0 && night && self.needs.hunger < 100.0;
-        let checks: [(u32, bool, &str, f32); 5] = [
-            (1, self.needs.hunger >= 80.0, "You are very hungry.", 0.5),
-            (64, self.needs.hunger >= 97.0, "You are starving: your body is wasting away.", 0.8),
-            (2, self.needs.hp < 40.0, "You are badly hurt.", 0.7),
-            (4, facts_fire, "You are freezing in the night air; you need a fire or shelter.", 0.6),
-            (8, self.needs.energy < 12.0, "You are exhausted.", 0.4),
-        ];
+        // The body's alarms are the `status_of` law's (one set of thresholds with the players'
+        // screens and the minds' body words).
+        let sc = common::scripts(self.ctx);
+        let span = common::span("brain.status");
+        let facts = living_rules::script::BodyFacts::of(&self.me.kind, crate::common::stage_name(self.me.stage), night, &self.vit.fields(), sc.meters(), self.now);
+        let statuses = sc.status_of(&facts).unwrap_or_else(|e| {
+            log::warn!("status_of for {}: {e}", self.me.id);
+            std::rc::Rc::new(Vec::new())
+        });
+        let checks: Vec<living_rules::script::Alarm> = statuses.iter().filter_map(|s| s.alarm.clone()).collect();
+        drop(span);
         // Psychological drives: an uneventful stretch makes curious people restless; time without
         // company makes sociable people lonely. They are felt, not prescribed: the mind decides.
         let traits = common::traits_of(self.ctx, self.me.id);
@@ -1004,30 +1020,36 @@ impl<'a> Ev<'a> {
                 self.st.alerts &= !bit;
             }
         }
-        for (bit, on, text, sal) in checks {
-            let was = self.st.alerts & bit != 0;
-            if on && !was {
+        self.st.alerts &= !OLD_BODY_ALARMS;
+        let mut felt_now = 0u32;
+        for al in checks {
+            let bit = alarm_bit(&al.text);
+            felt_now |= bit;
+            let text = al.text.as_str();
+            if self.st.alerts & bit == 0 {
                 self.st.alerts |= bit;
-                percept(self.ctx, &self.me, self.now, "body", self.me.id, 0, self.at, text.into(), sal);
-                let urgent = match bit {
-                    1 => common::food_count(self.ctx, self.me.id as u64) == 0,
-                    2 | 4 | 64 => true,
-                    _ => false,
+                percept(self.ctx, &self.me, self.now, "body", self.me.id, 0, self.at, text.into(), al.salience);
+                let urgent = match al.think {
+                    living_rules::script::Think::Always => true,
+                    living_rules::script::Think::NoFood => common::food_count(self.ctx, self.me.id as u64) == 0,
+                    living_rules::script::Think::Never => false,
                 };
                 if urgent {
                     let mut why = format!("Your body: {text}");
-                    // Starving: show what one's hunger actually runs, so a way of eating that
-                    // cannot feed (e.g. one that only waits) can be seen and changed.
-                    if bit == 64 {
-                        // The routine one's food desire calls (seeded as "find food and eat").
+                    // Show what the want's routine actually runs (starving: one's food desire), so
+                    // a way of eating that cannot feed (e.g. one that only waits) can be seen and
+                    // changed.
+                    if !al.routine.is_empty() {
+                        let want = al.routine.as_str();
+                        // The routine the desire for it calls (food: seeded as "find food and eat").
                         let food_routine = self.ctx.db.brain().id().find(self.me.id).and_then(|b| living_rules::graph::parse(&b.graph).ok()).and_then(|g| match g.root {
-                            Node::Desires(ds) => ds.iter().find(|d| d.want.eq_ignore_ascii_case("food")).and_then(|d| match &*d.body {
+                            Node::Desires(ds) => ds.iter().find(|d| d.want.eq_ignore_ascii_case(want)).and_then(|d| match &*d.body {
                                 Node::Routine(r) => Some(r.clone()),
                                 _ => None,
                             }),
                             _ => None,
                         });
-                        let name = food_routine.unwrap_or_else(|| "eat".to_string());
+                        let name = food_routine.unwrap_or_else(|| if want.eq_ignore_ascii_case("food") { "eat".to_string() } else { want.to_string() });
                         if let Some(r) = self.ctx.db.routine().actor().filter(self.me.id).find(|r| crate::common::same_routine(&r.name, &name)) {
                             if let Ok(g) = living_rules::graph::parse(&r.graph) {
                                 let how: String = living_rules::graph::outline(&g.root).lines().map(|l| l.trim()).collect::<Vec<_>>().join("; ");
@@ -1037,10 +1059,10 @@ impl<'a> Ev<'a> {
                     }
                     self.deliberate(&why);
                 }
-            } else if !on && was {
-                self.st.alerts &= !bit;
             }
         }
+        // An alarm no longer felt ends its episode: felt again, it is told again.
+        self.st.alerts = (self.st.alerts & !LAW_ALARMS) | felt_now;
     }
 
     /// Look up (and refresh) bodily familiarity; returns the previous record, if any.

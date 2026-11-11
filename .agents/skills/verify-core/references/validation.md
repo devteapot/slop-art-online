@@ -1,5 +1,13 @@
 # Core validation record
 
+## 2026-11-11 rules-senses-outcomes: the body's meters and statuses (Spark)
+
+Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change: `scenes.py alarms` new; needs.md and the feature map gain the body law.
+
+- `core-sso-214854` (default seed): `tick` 6, `alarms` 6, `refusal` 4, `food` 4, `senses` 7, `death-names` 8, all passing. `alarms`: an overlay's alarm told once over 6 s, the request "Your body: …", told again after the shipped script ended the episode, a `stamina` meter refused at install ("not a my_vitals field").
+- Cargo: `living-rules` 235 passed, 10 ignored (`script::body` 7, `ui::` 30 with `appraise_is_offered_toward_creatures_not_things` and `a_target_class_must_be_a_class_and_needs_a_target`, `outcome` 2); `living-mind` 93.
+- Cost: `living/tools/bench.py` on `verify-bench-status` (264 characters): `brain.status` 124 a second, p50 0.007 ms, p99 0.14 ms, 2.27 ms a second (`bench-status/rest.json`; docs/WORLD_RULES.md "The body: meters and statuses").
+- Not run: `needs` (waits for a real night), `fov`, `skirmish`, the island and Cullet scenes.
 ## 2026-11-11 layout-2: Cullet's trades at the places of the plan's open lots (dev-box)
 
 Branch `layout-2` merged with main (`e301aa9f`, kit-2 and rules-3 in), own container `layout2-stdb` (2.14.1, port 3329, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `--target-dir` the branch's private build folder, `scoped`, no minds, no model calls. Both scratch databases answered 404 after cleanup. Only the `rhythm` scene was run; the plan's walls now block (`plans[].fixtures`), so every walk in it went round walls and through gates.

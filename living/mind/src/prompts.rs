@@ -740,51 +740,56 @@ fn common(c: &Ctx, out: &mut Segments) {
 }
 
 /// A body's needs and health at one moment, with how they are changing (per minute).
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Body {
     pub hp: f32,
     pub max_hp: f32,
     pub hunger: f32,
     pub energy: f32,
     pub hp_rate: f32,
+    /// The vitals row's numeric fields by name as read (`vitals`: every column, so a vital a
+    /// world adds reaches the `status_of` law), and when; empty: the five numbers above, now.
+    pub row: Vec<(String, f64)>,
+    pub now_ms: u64,
+    pub kind: String,
+    pub stage: String,
+    pub night: bool,
 }
 
-/// The body as its owner feels it, in plain words: no numbers, the thresholds the authority's
-/// own bodily alarms and `body_state` law use (hungry above 55, very hungry from 80, starving
-/// from 97; exhausted below 12; badly wounded below 35% of full health, barely alive below 15%).
-pub fn felt_body(b: Body) -> String {
-    let mut parts: Vec<&str> = Vec::new();
-    parts.push(match b.hunger {
-        h if h >= 97.0 => "starving, your body wasting away",
-        h if h >= 80.0 => "very hungry",
-        h if h > 55.0 => "hungry",
-        h if h > 40.0 => "beginning to feel hungry",
-        h if h <= 15.0 => "well fed",
-        _ => "not hungry",
-    });
-    match b.energy {
-        e if e <= 0.0 => parts.push("utterly spent"),
-        e if e < 12.0 => parts.push("exhausted"),
-        e if e < 30.0 => parts.push("tired"),
-        e if e < 50.0 => parts.push("a little tired"),
-        e if e >= 85.0 => parts.push("well rested"),
-        _ => {}
+impl Body {
+    /// The body as the `status_of` law reads it.
+    pub fn facts(&self, sc: &living_rules::script::Scripts) -> living_rules::script::BodyFacts {
+        let row = if self.row.is_empty() {
+            vec![("hp".into(), self.hp as f64), ("max_hp".into(), self.max_hp as f64), ("hunger".into(), self.hunger as f64), ("energy".into(), self.energy as f64), ("hp_rate".into(), self.hp_rate as f64)]
+        } else {
+            self.row.clone()
+        };
+        let kind = if self.kind.is_empty() { "person" } else { &self.kind };
+        let stage = if self.stage.is_empty() { "adult" } else { &self.stage };
+        living_rules::script::BodyFacts::of(kind, stage, self.night, &row, sc.meters(), self.now_ms)
     }
-    let f = if b.max_hp > 0.0 { b.hp / b.max_hp } else { 1.0 };
-    parts.push(match f {
-        f if f < 0.15 => "barely alive",
-        f if f < 0.35 => "badly wounded",
-        f if f < 0.6 => "hurt",
-        f if f < 0.9 => "a little hurt",
-        _ => "unhurt",
-    });
-    let mut out = parts.join(", ");
-    if b.hp_rate < -0.01 {
-        out.push_str("; you are growing weaker");
-    } else if b.hp_rate > 0.01 && f < 0.99 {
-        out.push_str("; your wounds are mending");
-    }
-    out
+}
+
+/// The body as its owner feels it, in plain words and no numbers: the `felt` words of the
+/// world's `status_of` law, the thresholds the authority's bodily alarms and the players'
+/// screens use. Empty when the law gives none.
+pub fn felt_body(b: &Body) -> String {
+    let Some(sc) = compiled() else { return String::new() };
+    sc.felt(&b.facts(&sc)).unwrap_or_else(|e| {
+        log::warn!("felt_body: {e}");
+        String::new()
+    })
+}
+
+/// Each meter's felt word (`{"health": "unhurt", "hunger": "very hungry", …}`), from the same law.
+pub fn felt_by_meter(b: &Body) -> Vec<(String, String)> {
+    let Some(sc) = compiled() else { return Vec::new() };
+    sc.felt_by_meter(&b.facts(&sc)).unwrap_or_default()
+}
+
+/// Whether it is night at `hour` by the world's `daylight` law.
+pub fn is_night(hour: f32) -> bool {
+    compiled().is_some_and(|sc| sc.is_night(hour))
 }
 
 pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> Segments {
@@ -1056,8 +1061,8 @@ mod tests {
     #[test]
     fn the_body_is_felt_in_words() {
         use super::{felt_body, Body};
-        let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(Body { hp, max_hp: 100.0, hunger, energy, hp_rate });
-        assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, unhurt");
+        let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(&Body { hp, max_hp: 100.0, hunger, energy, hp_rate, ..Default::default() });
+        assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, rested, unhurt");
         assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded; you are growing weaker");
         assert_eq!(b(70.0, 10.0, 90.0, 0.4), "well fed, well rested, a little hurt; your wounds are mending");
         assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive; you are growing weaker");
