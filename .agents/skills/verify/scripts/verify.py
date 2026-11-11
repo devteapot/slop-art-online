@@ -27,6 +27,7 @@ LIVING_STDB_URL to its published port on 127.0.0.1 (bound to 127.0.0.1 or 0.0.0.
 """
 import argparse
 import glob
+import hashlib
 import json
 import os
 import signal
@@ -39,6 +40,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 LIVING = ROOT / "living"
+# The seed's script, composed as the authority composes a seed's laws at creation (one Python
+# copy of `floors::compose`, shared with living/tools/trials.py).
+sys.path.insert(0, str(LIVING / "tools"))
+from install_script import OVERLAY_MARK, installed, same_script, seed_json, seed_script, without_world_laws  # noqa: E402
 STDB = str(LIVING / "tools/stdb")
 URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
 # The shared server, or a worker's own (LIVING_STDB_CONTAINER, with LIVING_STDB_URL naming its
@@ -175,15 +180,34 @@ def launch(a):
     keep = getattr(a, "keep_data", False)
     fresh = [] if keep else ["--delete-data"]
     stdb("publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y")
+    # The working tree's script, with the seed's own laws (`laws`/`laws_file`, e.g. Cullet's)
+    # composed over it exactly as the world composed them at creation: installing the bare
+    # script would drop them while the seeded state still reflects them. `none` (a floor module)
+    # gets the bare script; `create_floor` composes the laws of the seed it is given.
+    source, overlay = seed_script(a.seed)
+    sj = seed_json(a.seed) or {}
+    st["seed_laws"] = (sj.get("laws_file") or "laws") if overlay else None
+    owner = admin_token()
+    if overlay and not keep:
+        # The world's own composition, from its creation, is the check on this one.
+        if not same_script(installed(st["db"], owner), source):
+            save(st)
+            sys.exit(f"the world created from seed {a.seed} runs a script other than its laws composed over living/scripts/skills.rhai; not installing over it (compare install_script.compose_laws with living_rules::floors::compose)")
     # Over HTTP as the admin: the script no longer fits one command-line argument (133 KB
     # against Linux's 128 KiB MAX_ARG_STRLEN, "Argument list too long" through the CLI).
-    code, body = http(f"/v1/database/{st['db']}/call/install_script", [(LIVING / "scripts/skills.rhai").read_text()], admin_token())
+    code, body = http(f"/v1/database/{st['db']}/call/install_script", [source], owner)
     if code != 200:
+        save(st)
         sys.exit(f"install_script refused ({code}): {body[:300]}")
+    if not same_script(installed(st["db"], owner), source):
+        save(st)
+        sys.exit("the installed script read back from the `script` row is not the one sent")
+    st["script_sha256"] = hashlib.sha256(source.encode()).hexdigest()
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)
-    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, perception {st['perception']}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''})")
+    laws = f"seed laws {st['seed_laws']} composed over skills.rhai" if overlay else "skills.rhai"
+    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, perception {st['perception']}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''}); installed {laws} (sha256 {st['script_sha256'][:12]})")
 
 
 def doctor(a):
@@ -211,6 +235,7 @@ def doctor(a):
         time.sleep(4)
         t1 = ticks()
         checks[f"world is ticking (paused={paused}, ticks {t0} -> {t1} in 4 s)"] = not paused and None not in (t0, t1) and t1 > t0
+        laws_check(st, owner, checks)
     wasm = wasm_mount() / st.get("wasm", "living_authority.wasm")
     src = max((p.stat().st_mtime for d in ("authority/src", "rules/src") for p in (LIVING / d).rglob("*.rs")), default=0)
     checks["published module is newer than authority and rules sources"] = wasm.exists() and wasm.stat().st_mtime >= src
@@ -219,6 +244,39 @@ def doctor(a):
     for k, v in checks.items():
         print(("ok   " if v else "FAIL ") + k)
     sys.exit(0 if all(checks.values()) else 1)
+
+
+def laws_check(st, owner, checks):
+    """Whether the world runs its seed's laws: the installed `script` row read back ends with the
+    seed's overlay (worlds/cullet/laws.rhai on Cullet), or, for a seed without laws, carries no
+    overlay; and a seed's `day_minutes` is the world's day. A scene that installed its own script
+    since launch fails this on purpose: the world no longer runs its seed's laws."""
+    seed = st.get("seed", "world")
+    if seed == "none":
+        checks["seed laws: a floor module (seed none) gets its laws from create_floor; not checked"] = True
+        return
+    sj = seed_json(seed)
+    if sj is None:
+        checks[f"seed {seed} found under living/seeds"] = False
+        return
+    _, overlay = seed_script(sj)
+    made = installed(st["db"], owner)
+    body = without_world_laws(made or "").rstrip("\n")
+    if overlay:
+        laws = sj.get("laws_file") or "laws"
+        ok = OVERLAY_MARK in body and body.endswith(overlay.rstrip("\n"))
+        checks[f"installed script carries seed {seed}'s laws ({laws}, {len(overlay)} bytes)"] = ok
+    else:
+        checks[f"installed script is the shipped one without a floor overlay (seed {seed} has no laws)"] = made is not None and OVERLAY_MARK not in body
+    if sj.get("day_minutes") is not None:
+        day = q_rows(st["db"], owner, "SELECT day_ms FROM world")
+        got = day[0][0] if day else None
+        checks[f"world day is the seed's day_minutes {sj['day_minutes']} (day_ms {got})"] = got == round(float(sj["day_minutes"]) * 60000)
+
+
+def q_rows(db, token, text):
+    code, body = http(f"/v1/database/{db}/sql", text, token, raw=True)
+    return json.loads(body)[0]["rows"] if code == 200 else []
 
 
 def player(a):

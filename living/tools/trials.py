@@ -195,26 +195,9 @@ def journal_file(name):
     return "".join(c if c.isalnum() else "_" for c in name) + ".jsonl"
 
 
-DEF = re.compile(r"^(\s*)(private\s+)?fn\s+([A-Za-z0-9_]+)(\s*\()", re.M)
-
-
-def compose_laws(base, overlay):
-    """`living_rules::floors::compose` in Python: each function the overlay defines replaces the
-    base's (`fn NAME(` at the start of a base line becomes `fn base_NAME(`), and the overlay is
-    appended. The authority composes a seed's `laws`/`laws_file` when the world is created; the
-    runner installs the skills file after publishing, so it composes the same overlay first."""
-    names = {m.group(3) for m in DEF.finditer(overlay)}
-    renamed = DEF.sub(lambda m: f"{m.group(1)}{m.group(2) or ''}fn base_{m.group(3)}{m.group(4)}" if m.group(3) in names else m.group(0), base)
-    return renamed + ("" if renamed.endswith("\n") else "\n") + "\n// ---- floor overlay ----\n" + overlay
-
-
-def seed_laws(seed):
-    """A seed's laws overlay: `laws`, or the file `laws_file` names under living/seeds."""
-    if str(seed.get("laws") or "").strip():
-        return seed["laws"]
-    if seed.get("laws_file"):
-        return (ROOT / "living/seeds" / seed["laws_file"]).read_text()
-    return ""
+# A seed's laws (`laws`/`laws_file`) composed over the shipped script as the authority composes
+# them at creation (`living_rules::floors::compose`): one Python copy, in install_script.py.
+from install_script import compose_laws, seed_laws  # noqa: E402
 
 
 def patch_skills(text, trial, variant):

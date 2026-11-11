@@ -1,5 +1,21 @@
 # Validation record (entry point and shared harness)
 
+## 2026-11-11: launch keeps a seed's own laws (`fix-verify-laws`)
+
+Regression from `exp-player-frame` (b7328bc0): `launch` installed the plain `skills.rhai` over HTTP after every publish, so each `--seed cullet` world since ran without Cullet's laws while its seeded state reflected them. `launch` now installs the seed's script, the shipped one with the seed's `laws`/`laws_file` composed over it, still over HTTP. The composition is `living/tools/install_script.py`'s `seed_script`/`compose_laws`, which `trials.py` now imports instead of keeping its own copy. `doctor` reads the `script` row back and checks the seed's laws. Driven on the Spark's trial server (`slop-trials-stdb`, `LIVING_STDB_URL=http://127.0.0.1:3320`), commit 1d71e6c2 plus this change. Evidence: `.local/living/verify/{vlaws-cullet,core-vlaws-cullet,core-vlaws-cullet-laws,core-vlaws-world}/`.
+
+| Check | Run | Result |
+| --- | --- | --- |
+| Fresh Cullet world: the world's own `script` row (composed by `floors::compose` at creation) equals `seed_script("cullet")` | `vlaws-cullet`, `core-vlaws-cullet` | equal; the composed script (152,147 bytes, sha256 `f859545e102a`) installed and read back |
+| `doctor` on Cullet | `core-vlaws-cullet` | `ok installed script carries seed cullet's laws (worlds/cullet/laws.rhai, 14564 bytes)`, `ok world day is the seed's day_minutes 48 (day_ms 2880000)`; the row holds `fn hunger_awake() { 2.4 }` and `fn base_rates(` (`vlaws-cullet/script-row.rhai`) |
+| `doctor` fails when the bare script is installed over Cullet | `vlaws-cullet` | `FAIL installed script carries seed cullet's laws` after `install_script.py verify-vlaws-cullet` (`doctor-bare.txt`); `ok` again after `install_script.py verify-vlaws-cullet --seed cullet` (`doctor-restored.txt`) |
+| `cullet-laws` seed | `core-vlaws-cullet-laws` | launch and doctor as for Cullet |
+| `--keep-data` update of the Cullet world | `core-vlaws-cullet` (`launch-keep.txt`, `doctor-keep.txt`) | composed script installed again; doctor ok |
+| Default seed | `core-vlaws-world` | plain `skills.rhai` installed (sha256 `2b06964f17f5`, the file's); `ok installed script is the shipped one without a floor overlay` |
+| verify-core `tick` on each | `core-vlaws-cullet`, `core-vlaws-world` | 4 of 4 PASS on both (`tick.txt`) |
+
+Not driven: `--seed none` (floor modules keep the bare install; `create_floor` composes), and a trial run with `trials.py` importing the shared copy (import checked only).
+
 ## 2026-10-04: harness after the surface split and the review round
 
 The harness changed after the first run, at the surface workers' and reviewers' requests. Each change was driven on a real run:
