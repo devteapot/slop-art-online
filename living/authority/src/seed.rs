@@ -1669,8 +1669,16 @@ fn walkable_near(map: &living_rules::map::Map, at: (f32, f32)) -> (f32, f32) {
 /// A household's house: the unowned house already standing at its door (a land world's lots),
 /// or a new one.
 fn house(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64) -> u64 {
+    house_at(ctx, map, home, owner, now, false)
+}
+
+/// A household's house at `home`: the unowned house standing there, else a new one. With
+/// `any_kind` (a household the seed binds to a planned lot, docs/AUTHORED_PLANS.md), the
+/// unowned building standing at that lot's door is its home whatever its kind: a family living
+/// over its inn or in its hall owns that building, with no second house beside it.
+fn house_at(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64, any_kind: bool) -> u64 {
     let at = walkable_near(map, home);
-    let standing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| s.kind == "house" && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75);
+    let standing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| (any_kind || s.kind == "house") && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75);
     match standing {
         Some(mut s) => {
             let id = s.id;
@@ -1992,7 +2000,7 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
     for (h, key) in keys.iter().enumerate() {
         let owner = spawned.iter().find(|(j, ..)| household_of(&t.residents[*j]) == *key).map(|s| s.1).unwrap_or(0);
         if homes.get(h).is_some_and(|x| x.1) {
-            house(ctx, map, home_of(h), owner, now);
+            house_at(ctx, map, home_of(h), owner, now, bound.get(h).is_some_and(|b| b.is_some()));
         }
     }
     for (i, id, occ) in &spawned {

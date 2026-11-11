@@ -9,7 +9,7 @@
 - Death removes the reader's know-how and practice, marks the character dead and creates remains.
 - The tablet moves to the remains while its ID, text, topic, author and written time stay unchanged. A living student's knowledge survives.
 
-Sources: `living/authority/src/act.rs:986`, `act.rs:1003`, `act.rs:1684`, `act.rs:1693`; `tables.rs:453`, `tables.rs:305`, `tables.rs:769`.
+Sources: `living/authority/src/act.rs:1356` (write), `act.rs:1373` (read), `act.rs:2114` (`die`: know-how deleted at `act.rs:2142`, held artifacts moved to the remains at `act.rs:2164`); `tables.rs:433` (`structure`), `tables.rs:594` (`know_how`), `tables.rs:609` (`artifact`).
 
 ## How to get to it (user POV)
 
@@ -29,3 +29,4 @@ The runner uses `write`, `give` and `read` behavior leaves and then the admin `k
 - Reading with no target selects a held tablet first. The sign scene uses `nearest: sign` explicitly.
 - A sign's artifact holder and a dead person's tablet holder encode a structure ID with `1 << 40`.
 - The scene proves a tablet moves into remains. Retrieval by a survivor and inheritance by a new identity are outside this scene.
+- `die` also keeps the dead's name for the other members of its community (`perception::remember_member`, one `acquaintance` row each, act.rs:2136). This runner does not assert it; `verify-core`'s `death-names` scene and `verify-minds`' `death-names` case do.

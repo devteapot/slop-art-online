@@ -1627,7 +1627,122 @@ def laws(s):
     s.expect("an ordinary night outside costs no health", night["hp_rate"] >= 0, night)
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws}
+THOUGHT = {"kind": "deliberate", "summary": "verify-core say scene", "detail": "", "latency_ms": 0, "tokens": 0, "model": "fake", "reference": ""}
+
+
+def say(s):
+    """A graph's `say` to a person by id speaks, in every written form and through both install
+    paths (admin `set_behavior`, and `mind_install` as a mind delivers it), like a `do` to the
+    same id. A line that cannot be said yet waits for the speaker's turn instead of being lost:
+    two installs back to back, or two lines in one sequence, are both spoken (before
+    fix-graph-say-id the 2 s speaking limit refused the second, and the node's 45 s mark, set
+    before speaking, then skipped it silently). A say that cannot be spoken (its listener out of
+    sight) tells the speaker why, as other failed leaves do. A say node repeated in a looping
+    graph is still paced to once per 45 s."""
+    a, b, far = s.people(3)
+    line = open_line(s)
+    s.call("place_at", a, *line[4])
+    s.call("place_at", b, *line[7])
+    s.call("place_at", far, line[0][0] + 80, line[0][1])
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"speaker": a, "listener": b, "far": far, "hour": world_hour(s)}, indent=2) + "\n")
+    hold = {"wait": 60}
+    n = [0]
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def lines(t0, label=None):
+        return [r for r in s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {a}", label) if r["at_ms"] >= t0]
+
+    def install(path, node):
+        if path == "set_behavior":
+            s.graph(a, node)
+        else:
+            s.call("mind_install", a, json.dumps(node), "verify say", "", 0, 0, THOUGHT)
+            s.rows(f"SELECT * FROM brain WHERE id = {a}", f"installed-graph-{a}-{time.time_ns()}")
+
+    def heard(text, t0, seconds=8):
+        try:
+            return s.wait(lambda: [r for r in lines(t0) if text in r["text"]], seconds=seconds)
+        except TimeoutError:
+            return []
+
+    forms = {
+        "canonical": lambda t, to: {"say": {"text": t, "to": to}},
+        "flat": lambda t, to: {"say": t, "to": to},
+        "do": lambda t, to: {"do": "say", "text": t, "target": to},
+        "do-object": lambda t, to: {"do": {"skill": "say", "text": t, "to": to}},
+    }
+    targets = {"id": {"id": b}, "bare-id": b, "nearest": {"nearest": {"kind": "person"}}}
+    for path in ("set_behavior", "mind_install"):
+        for form, make in forms.items():
+            for tname, to in targets.items():
+                n[0] += 1
+                text = f"Morning, line {n[0]} ({form}, {tname}, {path})."
+                t0 = now()
+                install(path, {"seq": [make(text, to), hold]})
+                got = heard(text, t0)
+                want_b = b if tname != "nearest" else None
+                s.expect(f"{path} {form} to {tname} speaks", got and (want_b is None or got[0]["b"] == want_b), got[:1], fatal=False)
+                time.sleep(2.5)
+
+    # A do to the same id (the comparison in the report): wave, and strike where the seed has it.
+    t0 = now()
+    s.graph(a, {"seq": [{"do": "wave", "target": {"id": b}}, hold]})
+    time.sleep(4)
+    uses = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "wave-uses") if u["at_ms"] >= t0]
+    s.expect("do wave to the same id acts", any(u["skill"] == "wave" and u["target"] == b for u in uses), uses[:2], fatal=False)
+
+    # Two installs back to back: the second line comes within the speaking limit.
+    first, second = "Back to back, first.", "Back to back, second."
+    t0 = now()
+    s.graph(a, {"seq": [{"say": {"text": first, "to": {"id": b}}}, hold]})
+    s.graph(a, {"seq": [{"say": {"text": second, "to": {"id": b}}}, hold]})
+    s.expect("back-to-back installs: the first line is spoken", heard(first, t0), lines(t0)[:2], fatal=False)
+    s.expect("back-to-back installs: the second line is spoken too", heard(second, t0, 10), lines(t0, "back-to-back")[:3], fatal=False)
+    time.sleep(2.5)
+
+    # Two lines in one sequence.
+    one, two = "Two lines: hello.", "Two lines: welcome to town."
+    t0 = now()
+    s.graph(a, {"seq": [{"say": {"text": one, "to": {"id": b}}}, {"say": {"text": two, "to": {"id": b}}}, hold]})
+    s.expect("a sequence of two lines speaks the first", heard(one, t0), lines(t0)[:2], fatal=False)
+    s.expect("a sequence of two lines speaks the second", heard(two, t0, 10), lines(t0, "two-lines")[:3], fatal=False)
+    time.sleep(2.5)
+
+    # Out of sight: not spoken, and the speaker is told why.
+    lost = "Can you hear me over there?"
+    t0 = now()
+    s.graph(a, {"seq": [{"say": {"text": lost, "to": {"id": far}}}, hold]})
+    time.sleep(5)
+    s.expect("a line to someone out of sight is not spoken", not [r for r in lines(t0) if lost in r["text"]], lines(t0)[:2], fatal=False)
+    told = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}", "out-of-sight-feedback") if r["kind"] == "own" and r["at_ms"] >= t0 and lost in r["text"]]
+    s.expect("the speaker is told the line could not be said", len(told) == 1, told, fatal=False)
+    time.sleep(2.5)
+
+    # Pacing: a say in a looping graph speaks once per 45 s, not every pass.
+    paced = "Still here, still here."
+    t0 = now()
+    s.graph(a, {"first": [{"seq": [{"say": {"text": paced, "to": {"id": b}}}, {"wait": 2}]}]})
+    time.sleep(12)
+    said = [r for r in lines(t0, "paced") if paced in r["text"]]
+    s.expect("a looping say is paced (spoken once in 12 s)", len(said) == 1 and " (×" not in said[0]["text"], said, fatal=False)
+
+    if any(c["skill"] == "strike" for c in s.rows("SELECT skill FROM skill_card")):
+        t0 = now()
+        s.graph(a, {"seq": [{"do": "strike", "target": {"id": b}}, hold]})
+        time.sleep(4)
+        uses = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "strike-uses") if u["at_ms"] >= t0]
+        s.expect("do strike to the same id acts", any(u["skill"] == "strike" and u["target"] == b for u in uses), uses[:2], fatal=False)
+    s.graph(a, {"wait": 120})
+    s.rows(f"SELECT * FROM experience WHERE observer = {a}", "speaker-experience")
+    s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {a}", "speech")
+    # Off the shared open line: later scenes (doing) count who stands near its west end.
+    for k, who in enumerate((a, b)):
+        s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40)
+
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws}
 
 
 def goods(s):
