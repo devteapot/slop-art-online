@@ -717,6 +717,59 @@ The trial service listens on the LAN: `http://192.168.1.103:3320` (container `sl
 - **Observer (read-only):** natively, `LIVING_TOKEN=<token> LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --manifest-path living/Cargo.toml --release -p living-viewer`. On the web, `just living-web` and then `http://127.0.0.1:8330/?server=http://192.168.1.103:3320&db=<database>#token=<token>`; the browser never sends the fragment to a server. The observer subscribes and calls no reducer.
 - **Game client:** `LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --release --manifest-path living/Cargo.toml -p living-game` connects with its own player identity and always calls `join` when that identity has no living character. That adds a player newcomer to the trial world, whom the main character perceives, so it changes the run. As a player it sees only its own perception, not the main character's. The client has no spectator or owner mode, so it cannot watch a trial without changing it. A watch mode that follows a named character with the owner's token is UI work, not built.
 
+## Resident inspector
+
+`living/tools/inspector.py` answers "why did they do that?" for one run as a single static page: pick a resident and a moment, or a line someone said. It reads evidence only and makes no model calls. The page is one self-contained HTML file with its data embedded (gzip; it needs a browser with `DecompressionStream`). Open it from disk; no server is involved.
+
+```bash
+python3 living/tools/inspector.py .local/living/trials/<batch>/<instance> -o page.html   # a trial, finished or running
+python3 living/tools/inspector.py .local/living/playtest-2 -o page.html                  # a play session's evidence folder
+python3 living/tools/inspector.py RUN --who "Agnes Fenner,Avice Hollis" --since 600 --until 1200 -o page.html   # a large run, narrowed
+```
+
+**What it reads.** It reads everything it finds under the folder.
+- Trials: `state.json` (the start `t0`), `cast.json`, `census.jsonl`, `chronicle.jsonl`, `speech.jsonl`, `experiences.jsonl`, `audience.jsonl`, `samples.jsonl`, `graphs.jsonl`, `mind_rows.jsonl`, `human.jsonl`, `events.jsonl`, `final.json`, `mind.log`, `mind-env.json`, and `journal/`. A running trial has not copied its journal yet, so the page reads the live one (`<LIVING_ROOT>/.local/living/journal/<LIVING_RUN>/`).
+- Play sessions: `journal/` (or `session/journal/`), `mind.log` (or `session/run/mind.log`), and any world-table exports below the folder. These are either the CLI's text tables (`spacetime sql … > chronicle.txt`) or `verify.py sql --save` JSON lists.
+  - Export at least `chronicle`, `character` (or `id, name, alive, died_ms, cause`) and `presence`.
+  - Export `experience` for the player too. Residents' own experience rows are evicted past a 400-row window. What a resident perceived then comes from the experience lines their own requests show.
+  - Tables are recognised by their columns; `--rows` adds files or folders kept elsewhere.
+
+**Residents.** A timeline per character, filtered by lane, for the whole run, a time window ("around hh:mm:ss ± 90 s"), or the last 90 s of their life. Each row shows wall time, time since the start, and game time.
+- *perceive*: experience rows, plus the percept lines of each request. Lines read from requests are marked ≈ and placed at the middle of their game minute (0.5 s in current worlds), on a game clock fitted from the requests' "Now" lines.
+- *recall*: the "What comes to mind" and "Memories this brings back" sections of each request.
+- *decide*: every model exchange, placed when it was queued. Click it for the timings (queued → sent → reply, queue wait, model latency), the "why now" section, the line being answered, the full request section by section, the system prompt and the reply.
+- *graph*: what each deliberation installed (plan, acts, intent graph), and `brain` revisions where recorded.
+- *body*: chronicle rows, census and sample activity, and the position, health and activity from each request's scene. It also shows what others saw the body do ("seen by …"), and the player's reducer calls.
+- *talk*: lines said and heard. *log*: the mind log's lines naming them.
+
+**Sources.** The files read, the fitted game clock, the mind's switches, and per purpose the model exchanges' queue wait (admission) against model time, as p50, p90 and max.
+
+**Lines.** Every line said, merged from the chronicle, the speaker's `said` row, listeners' speech rows and requests, and the mind log. The chronicle keeps one row for a line repeated within 2 minutes; the speaker's `said` rows keep each one.
+- Click a line for each hearer's fate: a talk turn (with its latency), an answer from a deliberation, parked behind a running deliberation (each release and re-park, and the turn that finally followed), a settled pair, or no turn.
+- For "no turn" the page lists the gate's inputs as the evidence shows them (talk.rs `on_speech`): addressed or not (the line's `to`, the hearer's salience, or who stood within the 6 m `address_m` of the speaker), whether the hearer cares (their relation from the nearest request's "People you know"), an active or closed exchange, another exchange, and whether the line asks something.
+- Below the hearers is the exchange around the line, from every side: the participants' lines, their talk turns and deliberations, and the mind log.
+
+- The mind's draws are deterministic (talk.rs `draw(listener, at_ms)`). The page recomputes the remark draw and the overheard draw from the line's exact time and the hearer's sociability, as their requests show it. So "let the remark pass" is shown as a fact, not a guess, although the mind logs it at debug level only.
+- A line said to someone who did not hear it is marked as such. The evidence is the line's audience row, the speaker's "No answer from …" percept, or the mind's "out of earshot" at the line. A player's character is never judged as a mind before the AI takes it over.
+
+**What it cannot show.**
+- Stamina and the off-stage hold are not recomputed. When a turn was due and none came, the page names them as the possible causes.
+- Without `audience` rows or salience, whether a line said to no one was addressed is shown only where distances near the line are known. Otherwise the page says it is unknown.
+- Hearers are those the evidence shows. Without `audience` rows, others in earshot may be missing.
+- The verdicts follow main's gate and log lines, plus the `exp-greet` switches' log lines (drawn in, faced, alongside). The greet modes' own curiosity draw is not recomputed. A changed gate needs the page updated.
+- Scene positions are dated at the request's queue time. A scene can be older than that, so distances from scenes more than 10 s from a line are not used for the address rule.
+
+### What it showed on the greeting batches `gr1a` and `gr1b` (2026-11-11, 18:15)
+
+Coverage: the instances with evidence at 18:15. gr1a: control ×4, nearest-concurrent ×3 (r4 still running), nearest ×1 (r1–r3 failed). gr1b: curious ×4, facing ×2, park-concurrent ×1. Six instances failed between 16:58 and 17:00 with SQL timeouts against the trial service. `greet_report.py` gives answered shares and latencies; the inspector adds the following.
+
+- **Many counted answers were not answers to the line.** A resident's line to the player within 60 s, which the table counts as an answer, was often caused by something else. Examples are a deliberation that began before the line, a delayed answer to an earlier line, or a resident repeating "your name?" because the scripted player never gives one. For lines to no one, the share not caused by the line was 6 of 8 in control, 4 of 19 in curious and 9 of 19 in facing. In control-r1, the "answer" to "Hello there!" 2.8 s later ("That's the whole of it, friend…") came from Wenna's deliberation about the earlier question on work.
+- **The trial's model queue, not the model, sets the pace.** With `LIVING_CONCURRENCY=4` for 11 minds, the median queue wait was 6–13 s for think and deliberate calls (p90 up to 41 s) and 2–7 s for talk turns (p90 15–25 s, max 78 s). Model time was a median 0.8 s for talk and 5–6 s for deliberation. A deliberation counts as running from its prompt, so lines heard during its queue wait are parked. Play-test 2 ran with 192 and had queue waits under 0.2 s. Latency and parking results from these trials therefore do not carry over to play.
+- **Parked lines are released and parked again at once.** A released line is often parked again in the same second, because the listener's next deliberation has already started. Some waited 74 s and got no turn (control-r1, Oren), and one was re-parked three times (curious-r1, Sefa). Under `LIVING_PARK=concurrent` such lines get their turn alongside instead ("parked alongside" 44 times in nearest-concurrent; addressees answered 19 of 20).
+- **The script's addressed statements meet the remark draw.** "You look like you know this place well." and "That looks like hard work." ask nothing, so a resident who passes the gate can still let them pass. The recomputed draw refused 4 of 22 addressed lines in control.
+- **The script addressed characters who are not minds.** Tobin is not in `LIVING_ONLY`: 2 of 22 addressed lines in control and 5 of 23 in curious went to him and could never be answered.
+- **Hearers do not answer each other's turns.** With curious and nearest, one hearer is drawn in and the others' verdicts read "another took it": a line to no one draws one hearer.
+
 ## Results
 
 Evidence for every row is under `.local/living/trials/<batch>/` on the Spark (`report.md` per batch, `summary.json` and `journal/` per instance). `living/tools/trial_evidence.py <batch>` prints each instance's death, what it did toward the cast and its first replies with journal references; `--table` prints the table below. Journal references below are relative to `.local/living/trials/`.
