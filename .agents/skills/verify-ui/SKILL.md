@@ -1,6 +1,6 @@
 ---
 name: verify-ui
-description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), what you stand on never fading (stairs, terraces, the quay's edge, on a Cullet world), the cursor while the view turns or zooms (a two-finger pan, a pinch, a left drag), the cluster and skill bar (the rules' places, sheathe and draw, refusals, the tooltip), offers to the player (cards, Accept, Dismiss, terms), and Settings. Use when changing living/game/src/ui/*, the camera's fade (envs.rs cutaway), camera.rs, keys.rs, looks.rs, heard.rs, talk.rs, verbs.rs, pointer.rs, pick.rs, combat.rs, weapon.rs, the skills' `_ui()` declarations or the live script, or when the screen shows something other than what the client received.
+description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), what you stand on never fading (stairs, terraces, the quay's edge, on a Cullet world), the cursor while the view turns or zooms (a two-finger pan, a pinch, a left drag), looking aside while walking (head, then chest, then the body on a curve; the look-walk presets), the cluster and skill bar (the rules' places, sheathe and draw, refusals, the tooltip), offers to the player (cards, Accept, Decline, terms, my own), and Settings. Use when changing living/game/src/ui/*, the camera's fade (envs.rs cutaway), camera.rs, keys.rs, looks.rs, heard.rs, talk.rs, verbs.rs, pointer.rs, pick.rs, combat.rs, weapon.rs, twist.rs, the skills' `_ui()` declarations, how live.rs turns a walking body's legs and upper body, or the live script, or when the screen shows something other than what the client received.
 ---
 
 # Verify the game interface
@@ -30,10 +30,11 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 
 ```bash
 S=.agents/skills/verify-ui/scripts
-$S/check.py --run $R                       # all scenarios but support: windows talk items themes pick turns bar offers (PASS/FAIL per check)
+$S/check.py --run $R                       # all scenarios but support: windows talk items themes pick turns look-walk bar offers (PASS/FAIL per check)
 LIVING_GAME_THEME=night $S/check.py --run $R windows talk items   # the same in a theme; evidence in <scenario>-night/
 $S/check.py --run $R windows               # one
 $S/check.py --run $R support               # on a Cullet world (`--seed cullet`): what you stand on never fades
+LOOK_WALK_PRESETS=chest LOOK_WALK_RECORD=1 $S/check.py --run $R look-walk   # one look-walk preset, recorded
 $S/drive.py --run $R --name try --plan 'ready;wait:2;click:@menu;wait:0.5;shot:menu;dump:menu;quit'
 ```
 
@@ -50,6 +51,7 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | `cursor:X,Y` / `cursor:@TAG` | The game's cursor there (a slot, to hover it); `cursor:` takes it away |
 | `weapon:toggle\|draw\|sheathe`, `tap` | As X; a left tap on the world (a strike, or talk to a peaceful person) |
 | `menu:f@id:N`, `sync:NAME`, `shot:NAME`, `scroll:PX`, `dodge:W` | F's list on someone; wait for a scene; a photograph; two-finger scroll; a double tap |
+| `walk:DEG:S`, `hold:DEG`, `stop`, `look:DEG`, `lookwalk:SPEC` | Walk a compass direction for S seconds, or hold it until `stop`; look a compass direction (the cursor scheme's look, until `look:`); set the look-walk preset (`twist::LookWalk::parse`: `chest`, `head,body_s=0.3`) |
 | `cursor:X,Y`, `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | The cursor at fractions of the picture; a two-finger pan, a left drag or a pinch through the pointer's paths; no framing contexts (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
 
 Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:0:give` finds `acts:0:give:3`):
@@ -60,13 +62,13 @@ Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:
 - the log: `log:tab:0|1|2` (Heard, People, Events), `log:person:<I>`;
 - the list of acts: `acts:0:<skill>:<I>` (`talk`, `window`, `introduce`, `give`, `more`, …), its sub-list `acts:1:<item>:<I>`;
 - the pack: `pack:<item>:<I>`; know-how: `skill:<I>`; the tip: `tip:ok`, `tip:all`;
-- Settings: `settings:page:play|controls`, `settings:theme:clear|night|linen|walnut`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
+- Settings: `settings:page:play|controls`, `settings:theme:clear|night|linen|walnut`, `settings:look_walk:head|chest|loose`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
 
 Scenes: `--place ID:DX:DY` puts a resident beside the player and holds them still when the plan reaches `sync:scene`; `--sync NAME='reducer|arg;…'` makes other admin calls at `sync:NAME`. Both are scene setup through admin reducers, never player acts; name them in a report.
 
 ## Evidence
 
-Each drive writes `.local/living/verify/<run>/ui/<name>/`: the photographs (`shot:`), dumps (`dump:`), `client.log`, `plan.txt`, `scene.json` (the player's id and the admin calls) and `settings.json` (the run's own settings file: `LIVING_GAME_SETTINGS`, so the owner's `~/.config/slop-art-online/game.json` is never touched). `check.py` writes `ui/checks.json`. A proof of a UI change holds:
+Each drive writes `.local/living/verify/<run>/ui/<name>/`: the photographs (`shot:`), dumps (`dump:`), `client.log`, the feet log when `LIVING_GAME_FEET` names one (`look-walk` does: every frame's feet, gaits, the legs', hips', chest's and head's yaw, the twist asked, the look, and the authority's heading and segment), `plan.txt`, `scene.json` (the player's id and the admin calls) and `settings.json` (the run's own settings file: `LIVING_GAME_SETTINGS`, so the owner's `~/.config/slop-art-online/game.json` is never touched). `check.py` writes `ui/checks.json`. A proof of a UI change holds:
 
 - **the action:** the plan (`plan.txt`) and the client log's lines for it (`ui: window Pack opened at Right`, `say: "…" to #57`, `verbs: berries let go on #57: give berries`);
 - **the state:** the dumps before and after, and for anything sent, the authority's rows (`$V sql`: `experience` `said` rows, `inventory`);
