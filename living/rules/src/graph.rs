@@ -190,6 +190,13 @@ pub struct Action {
     pub want: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub want_qty: Option<u32>,
+    /// What an answer to someone (accept, decline) is about: the trade offer (its
+    /// `trade_offer` id) or the proposal (its record id) the one answering saw. Without
+    /// either, the rules pick what stands from that person.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offer: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
