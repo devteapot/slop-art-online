@@ -42,6 +42,10 @@ use bevy::ui::UiSystems;
 
 pub struct UiPlugin;
 
+/// The live source and the widgets (timed with `LIVING_GAME_PERF=ui`).
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UiWork;
+
 /// The game UI's input this frame (pointer, Esc, window keys), before anything else reads keys
 /// and the mouse: a click on a window is not a strike, and Esc is spent once.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -89,7 +93,13 @@ impl Plugin for UiPlugin {
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
                 .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
-                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().before(UiSystems::Prepare));
+                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare));
+            if perf_on() {
+                app.init_resource::<UiPerf>()
+                    .add_systems(Update, (perf_begin::<0>.before(UiInput).in_set(crate::phase::Phase::Input), perf_end::<0>.after(UiInput).in_set(crate::phase::Phase::Input)))
+                    .add_systems(PostUpdate, (perf_begin::<1>.before(UiWork), perf_end::<1>.after(UiWork).before(UiSystems::Prepare)))
+                    .add_systems(PostUpdate, (perf_begin::<2>.after(UiSystems::Prepare).before(UiSystems::Layout), perf_end::<2>.after(UiSystems::Layout), perf_report.after(UiSystems::Layout)));
+            }
         }
     }
 }
@@ -278,3 +288,44 @@ impl DumpExtra<'_> {
     }
 }
 
+/// `LIVING_GAME_PERF=ui`: what the game UI costs a frame, timed round its own work (input; the
+/// live source and the widgets; Bevy's UI layout of every node), logged every 10 s as means
+/// and worsts in µs, with the number of UI nodes. Whole-frame time on a shared, loaded machine
+/// is too noisy to see a fraction of a millisecond.
+#[derive(Resource, Default)]
+pub struct UiPerf {
+    t0: [Option<std::time::Instant>; 3],
+    sum: [f64; 3],
+    worst: [f64; 3],
+    frames: u32,
+    next: f64,
+}
+
+pub fn perf_on() -> bool {
+    std::env::var("LIVING_GAME_PERF").is_ok_and(|v| v.split(',').any(|f| f.trim() == "ui"))
+}
+
+fn perf_begin<const K: usize>(mut p: ResMut<UiPerf>) {
+    p.t0[K] = Some(std::time::Instant::now());
+}
+
+fn perf_end<const K: usize>(mut p: ResMut<UiPerf>) {
+    if let Some(t) = p.t0[K].take() {
+        let us = t.elapsed().as_secs_f64() * 1e6;
+        p.sum[K] += us;
+        p.worst[K] = p.worst[K].max(us);
+    }
+}
+
+fn perf_report(mut p: ResMut<UiPerf>, time: Res<Time>, nodes: Query<(), With<Node>>) {
+    p.frames += 1;
+    let now = time.elapsed_secs_f64();
+    if now < p.next {
+        return;
+    }
+    if p.next > 0.0 && p.frames > 0 {
+        let n = p.frames as f64;
+        info!("ui perf: input {:.0} µs (worst {:.0}), fill+widgets {:.0} µs (worst {:.0}), layout {:.0} µs (worst {:.0}) over {} frames; {} UI nodes", p.sum[0] / n, p.worst[0], p.sum[1] / n, p.worst[1], p.sum[2] / n, p.worst[2], p.frames, nodes.iter().count());
+    }
+    *p = UiPerf { next: now + 10.0, ..default() };
+}

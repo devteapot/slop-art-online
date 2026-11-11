@@ -1020,7 +1020,15 @@ Built in steps; steps 1–3 are on main, 4–5 follow, and step 6 (the character
 - The missing glyph was "▸" (U+25B8) in the old F hint ("Mercy ▸"); neither Nunito nor Marcellus has it, nor "→" (the act feedback's "teach medicine → person"). "›" was fine in both. Text from the rules goes through `wood::readable`, which maps them to "›". ✕, ▾ and ⌥ are drawn as glyphs.
 - The target frame's label is capitalised.
 
-**Frame cost:** not established yet. A whole-frame comparison with the 90f6fac1 client on `verify-ui-b` (uncapped, headless, the same spot) was swamped by other agents' builds: load average 13–25, and repeats of one binary differed sevenfold. The UI's own work is being timed instead (`LIVING_GAME_PERF=ui`). Meanwhile its per-frame work was trimmed: controls repaint only when lit or hovered changes, labels by looks refresh four times a second, and the scripts' tag map is built only in scripted runs.
+**Frame cost** (`LIVING_GAME_PERF=ui` times the UI's own work: its input, the live source and widgets, and Bevy's UI layout of every node; 10-s windows). The 90f6fac1 client got the same timing (a worktree with only that patch). Both ran headless and uncapped on `verify-ui-b`, interleaved, on a laptop where other agents' builds kept the load average at 12–21. Whole-frame comparisons on that machine were swamped by the load: repeats of one binary differed sevenfold. Taking each run's best 10-s window, in µs per frame:
+
+| State | 90f6fac1 | ui-1 |
+| --- | --- | --- |
+| Nothing open | 984–1,981 (514 UI nodes) | 1,084–1,777 (639 nodes) |
+| Two panels or windows open | 1,123–2,070 | 1,421–2,018; one run 4,198 (992 nodes) |
+| Settings › Controls open | – | 2,935 (930 nodes) |
+
+No regression shows with nothing open. With two windows open it may cost about 0.3 ms more, within the noise; Settings is the heaviest, and only while it is open. Hit-testing on the game's cursor adds about 60–100 µs to input (10–30 before). Per-frame work was trimmed on the way: controls repaint only when lit or hovered changes, labels by looks refresh four times a second, and the scripts' tag map is built only in scripted runs. Evidence: `.local/living/verify/ui-b/ui/ab*`, `uiperf-*` and `baseperf-*` (client logs, `ui perf:` lines).
 
 **Look direction** (`controls::look`): the client's look goes through one function, toward the authority's `human_face(dx, dy)` (being built on dev-box, fov-1: rate-limited, changes under about 10° write nothing, and `human_face(0, 0)` releases the look). It is a no-op until the reducer is on main and the bindings are regenerated. Facing the cursor it is given the cursor's direction; facing where you walk, none. Settings › Play keeps a place for a read-only "facing sight" line (on or off, with the field's focal, side, side share, near and margin), not built yet.
 
