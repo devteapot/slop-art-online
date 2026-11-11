@@ -17,7 +17,7 @@ use super::icons::{item_mark, Glyph, Icons};
 use super::kit::{self, Lit};
 use super::model::HudModel;
 use super::theme::Fonts;
-use super::win::{Win, WinBody, WinFrame, Windows, Z_DRAG};
+use super::win::{Win, WinBody, WinFrame, Z_DRAG};
 use super::{label, set_text, show, wood, HudRoot};
 use bevy::prelude::*;
 use bevy::ui::{BackgroundGradient, GlobalZIndex, ScrollPosition};
@@ -61,7 +61,7 @@ pub struct Carrying {
     pub used: bool,
 }
 
-pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<WinBody>>, fonts: Res<Fonts>, icons: Res<Icons>, ghost: Query<(), With<Ghost>>) {
+pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<WinBody>>, fonts: Res<Fonts>, ghost: Query<(), With<Ghost>>) {
     let f = &*fonts;
     if ghost.is_empty() {
         commands

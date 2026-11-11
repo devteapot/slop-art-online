@@ -14,6 +14,7 @@
 //! replacing these widgets step by step. Its layout is the mock-up's, drawn at 1600×900, scaled
 //! with the window's height (`UiScale`).
 
+mod cluster;
 mod death;
 mod frame;
 pub mod hit;
@@ -83,10 +84,10 @@ impl Plugin for UiPlugin {
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
             .init_resource::<ThemeState>()
             // The UI's trees are spawned once the theme is known, and again on each new theme.
-            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
+            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
-        let widgets = (frame::vitals, frame::status, frame::skills, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
+        let widgets = (cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
         let windows = (people::update, people::hints, prompt::update, say::update, pack::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
