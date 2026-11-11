@@ -138,7 +138,18 @@ def raw(k, polys, glow=None, two=False):
         b.mats.append(mat)
     idx = b.mats.index(mat)
     for pts, c in polys:
-        for ring in ((pts, pts[::-1]) if two else (pts,)):
+        rings = (pts,)
+        if two:
+            # The other side is its own face 3 mm behind the first, so that the two never lie in
+            # one plane (two faces in one plane fight for depth: cullet_kit_check.py `coplanar`).
+            pv = [Vector(q) for q in pts]
+            nn = Vector((0, 0, 0))
+            for i, q in enumerate(pv):
+                r = pv[(i + 1) % len(pv)]
+                nn += Vector(((q.y - r.y) * (q.z + r.z), (q.z - r.z) * (q.x + r.x), (q.x - r.x) * (q.y + r.y)))
+            off = nn.normalized() * 0.003 if nn.length > 1e-12 else Vector((0, 0, 0))
+            rings = (pts, [q - off for q in pv[::-1]])
+        for ring in rings:
             try:
                 f = b.bm.faces.new([b.bm.verts.new(q) for q in ring])
             except ValueError:
@@ -483,7 +494,7 @@ def turves(k, rng, x0, x1, y0, y1, z0, courses, ch=0.13, step=None):
                 b = min(L / 2, a + rng.uniform(0.5, 0.7))
                 a = max(a, -L / 2)
                 # Most turves show their cut face; some lie grass side out.
-                c = mix(jit(P.peat, rng, 0.04), P.grass, 0.22) if rng.random() < 0.07 else jit(P.peat, rng, 0.045)
+                c = mix(jit(P.peat, rng, 0.04), P.grass, 0.22) if rng.random() < 0.07 else jit(P.peat, rng, 0.04)
                 put(k, f.box(a + 0.012, b - 0.012, za + 0.008, za + ch - 0.008, -0.12, rng.uniform(0.0, 0.025), back=False), c)
                 a = b
 
@@ -1015,6 +1026,33 @@ def gen_glasshouse(k, rng, lot):
             put(k, sphere(c, rng.uniform(0.2, 0.3), 1, squash=0.8), jit(LEAF, rng, 0.04), soft=c)
             if rng.random() < 0.5:
                 put(k, sphere(c + Vector((rng.uniform(-0.15, 0.15), -0.2, -0.05)), 0.055, 0), jit(on(P.amber, "leaves"), rng), soft=c)
+    note = lot.get("note", "")
+    pr = k.pr
+    if "fruit tree" in note:
+        # Jory Greave's fruit tree (glasshouse 9): fan-trained on the warm wall in the third and
+        # fourth bays from the west, its top against the glass; this year's few apples.
+        tx = XL + 3.5
+        bark = on(mix(P.peat, P.drift, 0.4), "bark")
+        put(k, tube([(tx, 1.45, 0.26), (tx + 0.05, 1.6, 1.2), (tx, 1.66, 2.5)], [0.07, 0.06, 0.04], 5), jit(bark, pr))
+        for j, (z, reach) in enumerate(((0.9, 1.5), (1.5, 1.3), (2.1, 1.0), (2.6, 0.6))):
+            for e in (-1, 1):
+                tip = Vector((tx + e * reach, 1.66, z + 0.25))
+                put(k, tube([(tx, 1.6, z), (tx + e * reach * 0.5, 1.66, z + 0.05), tip], [0.04, 0.03, 0.02], 4), jit(bark, pr))
+                for m in range(3):
+                    c = Vector((tx + e * reach * (0.35 + 0.3 * m), 1.52, z + 0.12 + 0.07 * m))
+                    put(k, sphere(c, 0.26 - 0.03 * m, 1, squash=0.75), jit(mix(P.grass, on(P.green, "leaves"), 0.6), pr, 0.04), soft=c)
+                    if (j + m + (e > 0)) % 3 == 0:
+                        put(k, sphere(c + Vector((0.08 * e, -0.2, -0.1)), 0.06, 0), jit(on(P.amber if m % 2 else P.oxblood, "leaves"), pr, 0.03), soft=c)
+    if "flowers" in note:
+        # Cora Stannard's flowers (glasshouse 4): the sheltered corner by the door, where greens
+        # would have gone. Three colours, the doors' own.
+        for i in range(16):
+            x, y = XR - 0.55 - 0.3 * (i % 5) - 0.1 * ((i // 5) % 2), -1.12 + 0.24 * (i // 5)
+            h = 0.35 + 0.12 * ((i * 7) % 4)
+            put(k, tube([(x, y, 0.26), (x + 0.02, y, 0.26 + h)], 0.008, 3, caps=False), jit(LEAF, pr, 0.03), closed=False)
+            tuft(k, pr, (x, y, 0.26), 0.08, 0.14, LEAF, 3)
+            c = Vector((x + 0.02, y, 0.26 + h))
+            put(k, sphere(c, 0.07, 0, squash=0.7), jit(on((P.oxblood, P.mustard, P.chalkblue, P.heather)[(i * 3) % 4], "leaves"), pr, 0.03), soft=c)
     # The lantern: one faint strip of light on the warm wall under an iron hood, below the east
     # vent, so that it shows through the vent, the door and the nearest hole.
     # A broken house is not worked, so nobody lights it.
@@ -1659,7 +1697,9 @@ def gen_plot_wall(k, rng, lot):
     W, D = lot["size"]
     hw, hd, env, w, TH = W / 2, D / 2, Env(lot), lot["wear"], 0.45
     ga = lot["gate_at"]
-    sides = [((-hw, -hd), (ga - 0.55, -hd), -Y), ((ga + 0.55, -hd), (hw, -hd), -Y), ((hw, -hd), (hw, hd), X), ((hw, hd), (-hw, hd), Y), ((-hw, hd), (-hw, -hd), -X)]
+    # Each side stops short of the corner the next one fills, so no two stones stand in one place.
+    C_ = TH + 0.012
+    sides = [((-hw, -hd), (ga - 0.55, -hd), -Y), ((ga + 0.55, -hd), (hw, -hd), -Y), ((hw, -hd + C_), (hw, hd), X), ((hw - C_, hd), (-hw, hd), Y), ((-hw, hd - C_), (-hw, -hd + C_), -X)]
     for (x0, y0), (x1, y1), n in sides:
         p0, p1 = Vector((x0, y0, 0)), Vector((x1, y1, 0))
         L = (p1 - p0).length
@@ -1787,7 +1827,11 @@ def row_sides(k, rng, f, lot, env, lime, flake=True):
             if not tops:
                 continue
             zc, z0 = max(tops) + 1.35, min(tops) - 0.6
-            x0, x1 = (xg, xg + 0.47) if sx < 0 else (xg - 0.47, xg)
+            if f.shell:
+                z0 = min(z0, f.H - 0.9)  # a shell's half of the stack still stands on its wall head
+            # The stack's face stands 3 cm proud of the party wall's: where the neighbour is lower
+            # or roofless the wall shows, and two faces in one plane flicker (the owner's walk).
+            x0, x1 = (xg - 0.03, xg + 0.47) if sx < 0 else (xg - 0.47, xg + 0.03)
             put(k, box((x0, f.YR - 0.3, z0), (x1, f.YR + 0.3, zc)), lambda co, n, c=jit(P.brick, rng, 0.02), zc=zc: mix(c, P.tar, 0.5 * max(0.0, (co.z - zc + 0.9) / 0.9)))
             put(k, box((x0, f.YR - 0.36, zc), (x1, f.YR + 0.36, zc + 0.09)), jit(P.pale, rng, 0.02))
             px = xg - sx * 0.26
@@ -2073,14 +2117,50 @@ def gen_house(k, rng, lot):
         for _ in range(7):  # fallen stone
             c = Vector((rng.uniform(-f.hw + 0.5, f.hw - 0.5), rng.uniform(f.YF + 0.5, f.YB - 0.5), 0.1))
             put(k, moved(box((-0.25, -0.18, -0.1), (0.25, 0.18, 0.12), bevel=0.03), Matrix.Translation(c) @ Matrix.Rotation(rng.uniform(0, PI), 4, "Z")), jit(P.basalt, rng, 0.04))
+        # Pass 2: what the lean years left inside. The hearth and its breast still stand against
+        # the east wall, sooted; the floor beams' sockets show in the party walls; two charred
+        # roof timbers lie where they fell (the rest went for fuel); the upper floor's last
+        # joists hang from the west wall; nettles and a bramble have the floor.
+        pr = k.pr
+        hx = f.hw - 0.2
+        put(k, box((hx - 0.55, f.YR - 0.9, 0.0), (hx, f.YR + 0.9, f.z1 + 0.6)), lambda co, n, c=jit(P.brick, pr, 0.02): mix(c, P.tar, 0.55 * max(0.0, min(1.0, (co.z - 0.9) / 2.0))))
+        raw(k, [([Vector((hx - 0.555, f.YR - 0.45, 0.25)), Vector((hx - 0.555, f.YR + 0.45, 0.25)), Vector((hx - 0.555, f.YR + 0.45, 1.05)), Vector((hx - 0.555, f.YR, 1.3)), Vector((hx - 0.555, f.YR - 0.45, 1.05))][::-1], P.tar)])
+        put(k, box((hx - 0.62, f.YR - 0.6, 1.3), (hx, f.YR + 0.6, 1.42)), jit(P.pale, pr, 0.02))
+        put(k, box((hx - 0.45, f.YR - 0.35, f.z1 + 0.6), (hx, f.YR + 0.35, f.H - 1.4)), lambda co, n, c=jit(P.brick, pr, 0.02): mix(c, P.tar, 0.4))
+        for sx in (-1, 1):  # the joists' sockets, and the limewash of two rooms, one above the other
+            xw = sx * (f.hw - (0.31 if lot["near"].get("west" if sx < 0 else "east") is None else 0.19))
+            raw(k, [(oriented([Vector((xw, f.YF + 0.5 + 0.9 * i, f.z1 - 0.1)), Vector((xw, f.YF + 0.72 + 0.9 * i, f.z1 - 0.1)), Vector((xw, f.YF + 0.72 + 0.9 * i, f.z1 + 0.12)), Vector((xw, f.YF + 0.5 + 0.9 * i, f.z1 + 0.12))], -X * sx), P.tar) for i in range(6)])
+            raw(k, [(oriented([Vector((xw - sx * 0.004, f.YF + 0.3, 0.9 + (f.z1 + 0.3) * j)), Vector((xw - sx * 0.004, f.YB - 0.4, 0.9 + (f.z1 + 0.3) * j)), Vector((xw - sx * 0.004, f.YB - 0.7, 2.3 + (f.z1 + 0.1) * j)), Vector((xw - sx * 0.004, f.YF + 0.6, 2.5 + (f.z1 + 0.1) * j))], -X * sx),
+                     jit(mix(P.oldlime, P.basalt, 0.25 + 0.2 * j), pr, 0.02)) for j in range(2)])
+        for i in range(2):  # the last joists, still in their sockets on the west wall, sagging
+            y = f.YF + 1.4 + 0.9 * i
+            put(k, beam((-f.hw + 0.2, y, f.z1), (-f.hw + 2.0 + 0.5 * i, y + 0.1, f.z1 - 0.5 - 0.3 * i), 0.09, 0.2), jit(mix(P.drift, P.tar, 0.35), pr, 0.03))
+        char = mix(P.tar, P.drift, 0.15)
+        put(k, beam((-f.hw + 0.6, f.YB - 0.6, 0.12), (f.hw - 1.4, f.YF + 1.1, 1.3), 0.14, 0.16), jit(char, pr, 0.02))  # a rafter, one end on the hearth
+        put(k, beam((-f.hw + 0.5, f.YF + 0.9, 0.1), (0.9, f.YB - 1.0, 0.14), 0.13, 0.15), jit(char, pr, 0.02))
+        for i in range(5):  # fallen slates, a drift of them in the corner
+            c = Vector((-f.hw + 0.6 + 0.25 * i, f.YB - 0.5 - 0.12 * (i % 2), 0.04 + 0.03 * i))
+            put(k, moved(box((-0.2, -0.14, 0.0), (0.2, 0.14, 0.02)), Matrix.Translation(c) @ Matrix.Rotation(0.5 * i, 4, "Z") @ Matrix.Rotation(0.12 * i, 4, "X")), jit(P.slate if i % 2 else P.newslate, pr, 0.04))
+        for i in range(4):  # a bramble arching out of the back window
+            a0_ = Vector((A(f.w * 0.5) - 0.3 + 0.2 * i, f.YB - 0.25, 1.4 + 0.2 * i))
+            put(k, tube([a0_, a0_ + Vector((0.2 * (i - 1.5), -0.6, 0.5)), a0_ + Vector((0.4 * (i - 1.5), -1.3, 0.0))], 0.02, 3, caps=False), jit(mix(P.kelp, P.grass, 0.4), pr, 0.03), closed=False)
+            c = a0_ + Vector((0.4 * (i - 1.5), -1.3, 0.05))
+            put(k, sphere(c, 0.22, 0, squash=0.7), jit(mix(P.grass, P.kelp, 0.4), pr, 0.04), soft=c)
         if "tree" in lot.get("note", ""):
-            # A thorn grown up inside the walls, leaning north-east as every tree here does.
-            lean = env.ne
-            trunk = [Vector((-0.5, -0.9, 0.0)) + lean * (0.05 * i * i) + Z * (1.05 * i) for i in range(6)]
-            put(k, tube(trunk, [0.16, 0.14, 0.12, 0.1, 0.08, 0.06], 6), jit(on(mix(P.peat, P.drift, 0.4), "bark"), rng))
-            for i, (dq, r) in enumerate(((0.0, 0.95), (0.55, 0.8), (1.0, 0.6), (-0.4, 0.65))):
-                c = trunk[-1] + lean * dq + Z * (0.5 - 0.18 * i)
-                put(k, sphere(c, r, 1, squash=0.6), jit(mix(P.grass, on(P.green, "leaves"), 0.45), rng, 0.04), soft=c)
+            # A thorn grown up inside the walls, taller than they are now, leaning north-east as
+            # every tree here does and clipped where it clears the wall heads.
+            n0 = len(k.b.bm.verts)
+            tr = bent_tree(k, pr, (-0.9 - 0.3 * env.ne.x, -0.6 - 0.3 * env.ne.y, 0.0), f.H + 1.6, env.ne, crown=0.3, r0=0.2, reach=1.5, bare=0.0)
+            for i in range(3):
+                a_ = i / 3 * TAU + 0.4
+                put(k, beam(tr[0] + Z * 0.3, tr[0] + Vector((cos(a_) * 0.5, sin(a_) * 0.5, 0.0)), 0.11, 0.11), jit(on(mix(P.peat, P.drift, 0.4), "bark"), pr))
+            # Inside its lot: the crown is drawn in about the trunk's head by as much as it needs.
+            k.b.bm.verts.ensure_lookup_table()
+            crown_v = [v for v in list(k.b.bm.verts)[n0:] if v.co.z > f.H - 1.5]
+            top = tr[-1]
+            need = max([1.0] + [abs(v.co.x - top.x) / max(1e-6, (f.hw - 0.08) - abs(top.x)) for v in crown_v] + [(v.co.y - top.y) / max(1e-6, f.YB - 0.05 - top.y) for v in crown_v])
+            for v in crown_v:
+                v.co.x, v.co.y = top.x + (v.co.x - top.x) / need, top.y + (v.co.y - top.y) / need
         found(k, 1.8)
         return dict(ridge_m=f.H, state="roofless shell", door_colour="none")
 
@@ -3059,11 +3139,11 @@ def peat_face(k, rng, ff, a0, a1, depth, z1, top_depth=None):
             b = a + rng.uniform(0.5, 0.7)
             lo, hi = max(a, a0), min(b, a1)
             a = b
-            c = mix(jit(P.peat, rng, 0.04), P.grass, 0.22) if rng.random() < 0.07 else jit(P.peat, rng, 0.045)
+            c = mix(jit(P.peat, rng, 0.04), P.grass, 0.22) if rng.random() < 0.07 else jit(P.peat, rng, 0.04)
             d = depth + rng.uniform(0.0, 0.03)
             polys.append(([ff.p(lo + 0.01, za + 0.035 + 0.006, -d), ff.p(hi - 0.01, za + 0.035 + 0.006, -d), ff.p(hi - 0.01, zb + 0.035 - 0.006, -d), ff.p(lo + 0.01, zb + 0.035 - 0.006, -d)], c))
     polys.append(([ff.p(a0, z1 + 0.035, -depth), ff.p(a1, z1 + 0.035, -depth), ff.p(a1, z1 + 0.035, -(top_depth or depth + 3.0)), ff.p(a0, z1 + 0.035, -(top_depth or depth + 3.0))], mix(P.peat, P.tar, 0.2)))
-    polys.append(([ff.p(a0, 0.035, -depth - 0.02), ff.p(a1, 0.035, -depth - 0.02), ff.p(a1, z1 + 0.035, -depth - 0.02), ff.p(a0, z1 + 0.035, -depth - 0.02)], mix(P.peat, P.tar, 0.4)))
+    polys.append(([ff.p(a0, 0.035, -depth - 0.06), ff.p(a1, 0.035, -depth - 0.06), ff.p(a1, z1 + 0.035, -depth - 0.06), ff.p(a0, z1 + 0.035, -depth - 0.06)], mix(P.peat, P.tar, 0.4)))
     raw(k, polys)
 
 
@@ -3226,14 +3306,15 @@ def gen_ash_house(k, rng, lot):
     stone = mix(jit(P.basalt, rng, 0.02), P.tar, 0.3 * w["soot"])
     lime = mix(jit(P.oldlime, rng, 0.02), P.smoke, min(0.6, w["soot"]))
     pavement(k, rng, f, w)
-    zt = 2.2
+    zt = 2.035  # the doorway of two 0.9 x 2.0 m leaves, above the sill
     bay = (-0.9, 0.9, 0.0, zt)
     vents = [(a - 0.5, a + 0.5, f.E - 0.75, f.E - 0.3) for a in (-3.4, 3.4)]
     wall(k, rng, ff, 0.0, f.E, stone, [bay] + vents, depth=0.3)
     room(k, ff, bay[0], bay[1], 0.0, zt, 3.0, mix(P.basalt, P.tar, 0.4), mix(P.pale, P.smoke, 0.5), w0=-0.3)
     lintel(k, rng, ff, bay[0], bay[1], zt, P.pale, 0.34)
-    DOORS.append(dict(at=[round(x, 3) for x in ff.p(-0.45, 1.0, -0.3)], along=[1, 0, 0], width_m=0.9, height_m=2.0, open=True))
-    DOORS.append(dict(at=[round(x, 3) for x in ff.p(0.45, 1.0, -0.3)], along=[1, 0, 0], width_m=0.9, height_m=2.0, open=True))
+    DOORS.append(dict(at=[round(x, 3) for x in ff.p(-0.45, 1.035, -0.3)], along=[1, 0, 0], width_m=0.9, height_m=2.0, open=True))
+    DOORS.append(dict(at=[round(x, 3) for x in ff.p(0.45, 1.035, -0.3)], along=[1, 0, 0], width_m=0.9, height_m=2.0, open=True))
+    raw(k, [([ff.p(0.0, 0.035, -0.3), ff.p(0.0, 0.035, -0.32), ff.p(0.0, zt, -0.32), ff.p(0.0, zt, -0.3)], P.tar)])  # where the leaves meet
     for e in (-1, 1):  # the two leaves, 0.9 x 2.0 m each, folded back against the wall
         for j in range(3):
             x0 = e * (0.95 + 0.3 * j)
@@ -3243,7 +3324,7 @@ def gen_ash_house(k, rng, lot):
     for row in range(3):  # the sacks inside, stacked to the lintel
         for m in range(3 - row):
             sack(k, rng, ff.p(-0.5 + 0.5 * m + 0.25 * row, 0.04 + 0.55 * row, -1.2 - 0.3 * (row % 2)), 0.26, 0.62, col=ash)
-    raw(k, [(oriented([ff.p(-1.2, 0.045, 0.75), ff.p(1.3, 0.045, 0.9), ff.p(0.9, 0.045, -0.4), ff.p(-0.8, 0.045, -0.4)], Z), mix(P.pale, P.smoke, 0.5))])  # ash trodden out
+    raw(k, [(oriented([ff.p(-1.2, 0.045, 0.55), ff.p(1.3, 0.045, 0.65), ff.p(0.9, 0.045, -0.4), ff.p(-0.8, 0.045, -0.4)], Z), mix(P.pale, P.smoke, 0.5))])  # ash trodden out
     for h in vents:
         for j in range(4):
             put(k, ff.box(h[0], h[1], h[2] + 0.11 * j, h[2] + 0.11 * j + 0.07, -0.25, -0.12, back=False), jit(P.drift, rng, 0.03))
@@ -3360,7 +3441,7 @@ def gen_readers_house(k, rng, lot):
     stack(k, rng, f.hw - 0.55, f.YR, f.zr - 0.7, f.zr + 1.35, w=0.8, d=0.6, pots=1)
     for sx in (-1, 1):
         gable_windows(k, rng, f, sx, [(-2.0, f.F + 0.95), (2.0, f.z1 + 0.85)], P.aqua, P.amber)
-    gable_bell(k, rng, -f.hw + 0.02, f.YF - 0.0, f.E + 0.5)
+    gable_bell(k, rng, -f.hw + 0.45, f.YF - 0.0, f.E - 0.9)
     found(k, 1.8)
     return dict(ridge_m=f.H, eave_m=round(f.E, 2), household=lot.get("household"), keepsake=lot.get("keepsake"), lit=sorted(lit))
 
@@ -3933,7 +4014,7 @@ def bent_tree(k, rng, base, h, lean, crown=1.0, r0=0.16, leaf=None, bare=0.0, re
     put(k, tube(trunk, [r0 * (1 - 0.7 * i / n) for i in range(n + 1)], 6), bark)
     leaf = leaf if leaf is not None else mix(P.grass, on(P.green, "leaves"), 0.45)
     top = trunk[-1]
-    masses = [(0.0, 0.0, 0.95), (0.45, -0.1, 0.8), (0.85, -0.22, 0.6), (-0.2, 0.12, 0.6), (0.3, 0.2, 0.55)]
+    masses = [(0.0, 0.0, 1.2), (0.45, -0.1, 1.05), (0.85, -0.22, 0.8), (-0.2, 0.12, 0.75), (0.3, 0.2, 0.75), (0.65, 0.08, 0.6)]
     for i, (dq, dz, r) in enumerate(masses):
         r_ = r * crown * h * 0.2
         c = top + lean * (dq * reach * 0.8) + Z * (h * 0.22 + dz * h) + side * (0.1 * r_ * (-1) ** i)
@@ -3979,6 +4060,416 @@ def gen_crown_bench(k, rng, lot):
 
 
 # ---------------------------------------------------------------------------------------------
+# Pass 2. Dressing: Cinder Row's yard, the Rows' backs, the Ladder's beds, the Hanger's trees,
+# and the three things the engine stands in a town (a sign, the common store, the yard's fire).
+# Each is a fixture of the plan (or a structure's model), built for the cause the plan gives it.
+
+ROPE = on(mix(P.sand, P.drift, 0.55), "cloth")
+
+
+def cart_wheel(k, rng, c, axis, r=0.42, w=0.07):
+    M = Matrix.Translation(Vector(c)) @ Vector(axis).to_track_quat("Z", "Y").to_matrix().to_4x4()
+    put(k, ring(r - 0.07, r, -w / 2, w / 2, 12, M), jit(mix(P.drift, P.tar, 0.4), rng), closed=False)
+    put(k, ring(r, r + 0.012, -w / 2 - 0.004, w / 2 + 0.004, 12, M), mix(P.iron, P.rust, 0.6), closed=False)
+    for i in range(3):
+        a = i / 3 * PI
+        put(k, beam(M @ Vector((-(r - 0.05) * cos(a), -(r - 0.05) * sin(a), 0)), M @ Vector(((r - 0.05) * cos(a), (r - 0.05) * sin(a), 0)), 0.05, 0.04, up=M.to_3x3() @ Z), jit(P.drift, rng))
+    put(k, lathe([(0.07, -w / 2 - 0.03), (0.07, w / 2 + 0.03)], 6, M), mix(P.iron, P.rust, 0.5))
+
+
+def handcart(k, rng, M, load=None):
+    """A two-wheeled handcart placed by M (its shafts towards -Y)."""
+    bed = lambda lo, hi: moved(box(lo, hi), M)  # noqa: E731
+    put(k, bed((-0.45, -0.7, 0.5), (0.45, 0.7, 0.56)), jit(P.drift, rng))
+    for sx in (-1, 1):
+        put(k, bed((sx * 0.45 - 0.02, -0.7, 0.56), (sx * 0.45 + 0.02, 0.7, 0.86)), jit(mix(P.drift, P.tar, 0.3), rng))
+        put(k, beam(M @ Vector((sx * 0.4, -0.7, 0.54)), M @ Vector((sx * 0.36, -1.75, 0.78)), 0.05, 0.06), jit(P.drift, rng))
+        cart_wheel(k, rng, M @ Vector((sx * 0.53, 0.05, 0.43)), M.to_3x3() @ X)
+        put(k, beam(M @ Vector((sx * 0.3, -0.62, 0.5)), M @ Vector((sx * 0.3, -0.66, 0.0)), 0.05, 0.05), jit(P.drift, rng))  # the rest legs
+    put(k, bed((-0.45, 0.68, 0.56), (0.45, 0.72, 0.86)), jit(mix(P.drift, P.tar, 0.3), rng))
+    put(k, beam(M @ Vector((-0.5, 0.05, 0.43)), M @ Vector((0.5, 0.05, 0.43)), 0.06, 0.06), mix(P.iron, P.rust, 0.5))
+    if load is not None:
+        load(M)
+
+
+def glass_heap(k, rng, at, rx, ry, h, col, shards=26):
+    """A heap of broken glass of one colour: a low mound, shards lying every way on it."""
+    at = Vector(at)
+    bm = sphere((0, 0, 0), 1.0, 2)
+    for v in bm.verts:
+        b = 1 + 0.16 * nz(v.co.x * 2.4 + at.x, v.co.y * 2.4 + at.y, v.co.z * 2.0)
+        v.co = Vector((at.x + v.co.x * rx * b, at.y + v.co.y * ry * b, at.z + max(-0.02, v.co.z) * h * b))
+    shade = [jit(col, rng, 0.045) for _ in range(5)]
+    put(k, bm, lambda co, n: shade[int((nz(co.x * 9, co.y * 9, co.z * 9) * 0.5 + 0.5) * 4.99)], soft=at)
+    polys = []
+    for _ in range(shards):
+        a, d = rng.uniform(0, TAU), math.sqrt(rng.random())
+        q = at + Vector((cos(a) * rx * d, sin(a) * ry * d, h * (1 - d * d) * 0.95 + 0.02))
+        t = rng.uniform(0, TAU)
+        u, v = Vector((cos(t), sin(t), rng.uniform(-0.2, 0.5))) * rng.uniform(0.08, 0.16), Vector((-sin(t), cos(t), rng.uniform(-0.2, 0.4))) * rng.uniform(0.05, 0.1)
+        polys.append(([q - u, q + v, q + u * 0.7], mix(jit(col, rng, 0.04), P.lime, rng.uniform(0.0, 0.3))))
+    raw(k, polys, two=True)
+
+
+def gen_blowpipe_rack(k, rng, lot):
+    """The blowpipe rack by the Cone's mouths: six iron pipes leaning in a notched trestle, their
+    noses in a trough of water, one with a gather of glass still on it."""
+    W, D = lot["size"]
+    hw = W / 2
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            put(k, beam((sx * (hw - 0.12), sy * 0.22, 0.0), (sx * (hw - 0.12), 0.0, 1.05), 0.06, 0.06), jit(P.drift, rng))
+    put(k, beam((-hw + 0.05, 0.0, 1.05), (hw - 0.05, 0.0, 1.05), 0.08, 0.1), jit(mix(P.drift, P.tar, 0.3), rng))
+    put(k, box((-hw + 0.1, -0.28, 0.0), (hw - 0.1, -0.02, 0.2), bevel=0.01), jit(mix(P.basalt, P.pale, 0.4), rng))
+    raw(k, [([Vector((-hw + 0.14, -0.25, 0.202)), Vector((hw - 0.14, -0.25, 0.202)), Vector((hw - 0.14, -0.05, 0.202)), Vector((-hw + 0.14, -0.05, 0.202))], on(mix(P.smoke, P.seagreen, 0.4), "glass"))])
+    for i in range(6):
+        x = -hw + 0.3 + (W - 0.6) * i / 5
+        a, b = Vector((x, -0.15, 0.2)), Vector((x + 0.03, 0.2, 1.5))
+        put(k, tube([a, b], 0.016, 5), mix(P.iron, P.rust, 0.2 + 0.4 * rng.random()))
+        put(k, lathe([(0.03, 0.0), (0.03, 0.12)], 5, Matrix.Translation(b - (b - a).normalized() * 0.3) @ (b - a).to_track_quat("Z", "Y").to_matrix().to_4x4()), jit(P.drift, rng))  # the wooden grip
+        if i == 4:
+            put(k, sphere(a + Z * 0.06, 0.07, 1), jit(P.aqua, rng, 0.02), soft=a)
+    found(k, 0.4)
+    return dict(ridge_m=1.5, pipes=6)
+
+
+def gen_crucible_stack(k, rng, lot):
+    """Fired melting pots stacked three, two and one on a board, waiting for the Cone; one is
+    cracked and set aside."""
+    put(k, box((-0.8, -0.5, 0.0), (0.8, 0.5, 0.06)), jit(P.drift, rng))
+    for lv, n in enumerate((3, 2, 1)):
+        for i in range(n):
+            crucible(k, rng, (0.47 * i - 0.235 * (n - 1) - 0.1, 0.05 * (lv % 2), 0.06 + 0.42 * lv), 0.22, 0.44)
+    c = Vector((0.45, -0.2, 0.06))
+    put(k, lathe([(0.15, 0.0), (0.22, 0.16), (0.21, 0.44), (0.18, 0.44), (0.17, 0.2)], 6, Matrix.Translation(c) @ Matrix.Rotation(1.35, 4, "X"), caps=(True, False)), on(mix(P.sand, P.brick, 0.4), "earth"), closed=False)
+    found(k, 0.4)
+    return dict(ridge_m=1.4, pots=7)
+
+
+def gen_cullet_heap(k, rng, lot):
+    """One of the yard's four heaps of cullet, each a colour (the plan's `colour`): broken glass
+    kept to be melted again, the town's name. A board keeps it from the next heap; the shovel
+    stands in it."""
+    W, D = lot["size"]
+    col = dict(CULLET)[lot["colour"]]
+    glass_heap(k, rng, (0, 0.05, 0.0), W / 2 - 0.12, D / 2 - 0.2, lot["height_m"] - 0.05, col, 34)
+    put(k, box((-W / 2 + 0.02, -D / 2 + 0.02, 0.0), (W / 2 - 0.02, -D / 2 + 0.07, 0.3)), jit(P.drift, rng))
+    if lot.get("shovel"):
+        put(k, tube([(0.5, -0.3, 0.25), (0.75, -0.55, 1.15)], 0.022, 5), jit(P.drift, rng))
+        put(k, moved(box((-0.12, -0.012, -0.3), (0.12, 0.012, 0.0)), Matrix.Translation((0.5, -0.3, 0.3)) @ Matrix.Rotation(0.5, 4, "X")), mix(P.iron, P.rust, 0.5))
+    found(k, 0.4)
+    return dict(ridge_m=lot["height_m"], colour=lot["colour"])
+
+
+def gen_ash_sacks(k, rng, lot):
+    """Sacks of kelp ash, come from the kilns on the Wrack Strand and not yet under cover: four
+    standing, one fallen, the ash it spilt."""
+    ash = on(mix(P.sand, P.smoke, 0.5), "cloth")
+    for i, (x, y) in enumerate(((-0.5, 0.15), (0.0, 0.2), (0.5, 0.12), (-0.25, -0.2))):
+        sack(k, rng, (x, y, 0.0), 0.24, 0.64, col=ash, yaw=i * 1.1)
+    sack(k, rng, (0.42, -0.3, 0.0), 0.24, 0.64, lean=1.0, col=ash, yaw=-0.5)
+    raw(k, [(oriented([Vector((0.3, -0.5, 0.012)), Vector((0.8, -0.45, 0.012)), Vector((0.78, -0.1, 0.012)), Vector((0.45, 0.0, 0.012))], Z), mix(P.pale, P.smoke, 0.5))])
+    found(k, 0.4)
+    return dict(ridge_m=0.7, sacks=5)
+
+
+def gen_handcart(k, rng, lot):
+    """The yard's handcart, its shafts down: a crate of cullet come from the Rows on it."""
+    handcart(k, rng, Matrix.Translation((0, 0.35, 0.0)), load=lambda M: crate(k, rng, M @ Vector((-0.38, -0.5, 0.56)), M @ Vector((0.38, 0.5, 0.9)), fill=lambda i: (P.green, P.aqua, P.aqua, P.smoke, P.amber)[i % 5]))
+    found(k, 0.4)
+    return dict(ridge_m=0.95)
+
+
+def gen_trough(k, rng, lot):
+    """The Cone yard's water trough, cut from one basalt block: for quenching, and for the
+    stokers' heads. A dipper hangs on it; the stone is green where it weeps."""
+    W, D = lot["size"]
+    hw, hd = W / 2, D / 2
+    put(k, box((-hw, -hd, 0.0), (hw, hd, 0.62), bevel=0.03), lambda co, n, c=jit(mix(P.basalt, P.pale, 0.3), rng): mix(c, P.kelp, 0.3) if co.z < 0.25 and n.z < 0.5 else c)
+    put(k, box((-hw + 0.12, -hd + 0.12, 0.3), (hw - 0.12, hd - 0.12, 0.625)), P.tar)
+    put(k, box((-hw + 0.13, -hd + 0.13, 0.5), (hw - 0.13, hd - 0.13, 0.63)), on(mix(P.smoke, P.seagreen, 0.4), "glass"))
+    put(k, tube([(hw - 0.3, -hd - 0.02, 0.6), (hw - 0.3, -hd - 0.04, 0.25)], 0.012, 4), mix(P.iron, P.rust, 0.5))
+    put(k, lathe([(0.05, 0.0), (0.08, 0.1)], 6, Matrix.Translation((hw - 0.3, -hd - 0.06, 0.16)), caps=(True, False)), mix(P.iron, P.rust, 0.4), closed=False)
+    found(k, 0.4)
+    return dict(ridge_m=0.63)
+
+
+def gen_cone_bench(k, rng, lot):
+    """Halvard Dunmore's bench at the Cone's mouth: a hull plank on two blocks with a plank for
+    a back, set where the heat reaches; fifty years of sitting have polished its middle."""
+    W, D = lot["size"]
+    hw, hd = W / 2, D / 2
+    for e in (-1, 1):
+        put(k, box((e * (hw - 0.3) - 0.1, -hd + 0.05, 0.0), (e * (hw - 0.3) + 0.1, hd - 0.12, 0.42)), jit(P.tar, rng))
+        put(k, beam((e * (hw - 0.3), hd - 0.08, 0.0), (e * (hw - 0.3), hd - 0.02, 0.95), 0.07, 0.07), jit(P.tar, rng))
+    put(k, box((-hw + 0.02, -hd + 0.02, 0.42), (hw - 0.02, hd - 0.12, 0.49), bevel=0.015), lambda co, n, c=jit(P.drift, rng): mix(c, P.pale, 0.45) if n.z > 0.5 and abs(co.x) < 0.45 else c)
+    put(k, box((-hw + 0.02, hd - 0.1, 0.62), (hw - 0.02, hd - 0.05, 0.92)), jit(mix(P.drift, P.tar, 0.25), rng))
+    put(k, lathe([(0.06, 0.0), (0.075, 0.11)], 6, Matrix.Translation((hw - 0.35, -0.02, 0.49)), caps=(True, False)), jit(P.green, rng, 0.02), closed=False)  # his cup
+    found(k, 0.4)
+    return dict(ridge_m=0.95, seats=3)
+
+
+def gen_sign(k, rng, lot):
+    """Cullet's sign, for the engine's `sign` at a named building's door: a painted board
+    hanging from an iron bracket on a ship's spar, set at the kerb with its back to the
+    building. The board is limewashed driftwood in a tarred frame; on it, the town's mark: a
+    small-pane grid with its odd panes, as every window here has."""
+    put(k, box((-0.16, 0.3, 0.0), (0.16, 0.62, 0.22), bevel=0.02), jit(P.basalt, rng))
+    put(k, tube([(0, 0.46, 0.2), (0, 0.46, 2.75)], [0.065, 0.05], 6), jit(mix(P.drift, P.tar, 0.2), rng))
+    put(k, beam((0, 0.5, 2.6), (0, -0.42, 2.66), 0.035, 0.045), mix(P.iron, P.rust, 0.45))
+    put(k, beam((0, 0.44, 2.1), (0, -0.2, 2.6), 0.03, 0.03), mix(P.iron, P.rust, 0.55))  # the bracket's stay
+    put(k, tube([(0, -0.4, 2.69), (0, -0.4, 2.62)], 0.03, 5), mix(P.iron, P.rust, 0.5))
+    bz0, bz1, by0, by1 = 1.92, 2.56, -0.42, 0.3
+    for z in (bz1,):
+        for y in (by0 + 0.12, by1 - 0.12):
+            put(k, tube([(0, y, 2.63), (0, y, bz1)], 0.008, 3, caps=False), P.iron, closed=False)
+    put(k, box((-0.035, by0, bz0), (0.035, by1, bz1)), jit(P.tar, rng, 0.02))
+    for sx in (-1, 1):
+        x = sx * 0.037
+        face = [Vector((x, by0 + 0.05, bz0 + 0.05)), Vector((x, by1 - 0.05, bz0 + 0.05)), Vector((x, by1 - 0.05, bz1 - 0.05)), Vector((x, by0 + 0.05, bz1 - 0.05))]
+        raw(k, [(oriented(face, X * sx), on(jit(P.oldlime, rng, 0.02), "wood"))])
+        panes = (P.aqua, P.green, P.aqua, P.amber, P.aqua, P.smoke)
+        for i in range(3):
+            for j in range(2):
+                y0, z0 = by0 + 0.13 + 0.16 * i, bz0 + 0.13 + 0.19 * j
+                raw(k, [(oriented([Vector((x + sx * 0.003, y0, z0)), Vector((x + sx * 0.003, y0 + 0.13, z0)), Vector((x + sx * 0.003, y0 + 0.13, z0 + 0.16)), Vector((x + sx * 0.003, y0, z0 + 0.16))], X * sx), jit(panes[i * 2 + j], rng, 0.02))])
+    found(k, 0.4)
+    return dict(ridge_m=2.75, board_m=[round(by1 - by0, 2), round(bz1 - bz0, 2)])
+
+
+def gen_storage(k, rng, lot):
+    """Cullet's common store in the Counting House yard, for the engine's `storage`: a handcart
+    under a tarred cloth, its shafts on a trestle, with crates and two barrels stacked by it."""
+    M = Matrix.Translation((-0.55, -0.5, 0.0)) @ Matrix.Rotation(PI, 4, "Z")
+    cloth = on(mix(P.tar, P.drift, 0.2), "cloth")
+
+    def load(M):
+        bm = lbox(Vector((-0.5, -0.74, 0.56)), Vector((0.5, 0.74, 1.25)), bevel=0.12)
+        for v in bm.verts:
+            v.co.z += 0.08 * nz(v.co.x * 3, v.co.y * 3, 1.0) * (1 if v.co.z > 1.0 else 0)
+            if v.co.z < 0.7:
+                v.co.x *= 1.06
+                v.co.y *= 1.03
+        put(k, moved(bm, M), lambda co, n, c=jit(cloth, rng, 0.02): mix(c, P.drift, 0.25) if n.z > 0.6 else c)
+        for sx in (-1, 1):  # the cloth's lashings
+            put(k, tube([M @ Vector((sx * 0.3, -0.76, 0.6)), M @ Vector((sx * 0.3, -0.5, 1.28)), M @ Vector((sx * 0.3, 0.5, 1.28)), M @ Vector((sx * 0.3, 0.76, 0.6))], 0.012, 3, caps=False), ROPE, closed=False)
+    handcart(k, rng, M, load=load)
+    crate(k, rng, (0.25, -0.5, 0.0), (1.15, 0.2, 0.5), fill=lambda i: on(mix(P.sand, P.drift, 0.4), "cloth"))
+    crate(k, rng, (0.32, -0.42, 0.5), (1.05, 0.14, 0.9), col=mix(P.drift, P.tar, 0.3))
+    crate(k, rng, (0.3, 0.3, 0.0), (1.1, 0.95, 0.45), col=mix(P.drift, P.tar, 0.3), fill=lambda i: P.peat)
+    barrel(k, rng, (1.25, -0.9, 0.0), 0.3, 0.8, wood=mix(P.drift, P.tar, 0.4))
+    barrel(k, rng, (0.6, -1.05, 0.0), 0.3, 0.8, wood=mix(P.drift, P.tar, 0.4), head=False)
+    found(k, 0.4)
+    return dict(ridge_m=1.33)
+
+
+def gen_campfire(k, rng, lot):
+    """Cullet's yard fire, for the engine's `campfire`: an iron fire basket on three stones, its
+    bars rust, peat glowing in it (the glow is on `GlowAmber`, for the client's lit rule)."""
+    for i in range(3):
+        a = i / 3 * TAU + 0.4
+        put(k, moved(box((-0.16, -0.12, 0.0), (0.16, 0.12, 0.2), bevel=0.03), Matrix.Translation((0.3 * cos(a), 0.3 * sin(a), 0.0)) @ Matrix.Rotation(a, 4, "Z")), jit(P.basalt, rng, 0.04))
+    rust = lambda: mix(P.iron, P.rust, rng.uniform(0.4, 0.8))  # noqa: E731
+    M = Matrix.Translation((0, 0, 0.2))
+    put(k, lathe([(0.24, 0.0), (0.27, 0.03)], 10, M), rust())
+    for z in (0.22, 0.45):
+        put(k, ring(0.3 + 0.12 * (z - 0.22) / 0.23, 0.33 + 0.12 * (z - 0.22) / 0.23, z - 0.015, z + 0.015, 10, M), rust(), closed=False)
+    for i in range(10):
+        a = i / 10 * TAU
+        put(k, beam(M @ Vector((0.25 * cos(a), 0.25 * sin(a), 0.02)), M @ Vector((0.44 * cos(a), 0.44 * sin(a), 0.46)), 0.022, 0.022), rust())
+    for i in range(3):
+        a = i / 3 * TAU + 1.4
+        put(k, beam(M @ Vector((0.26 * cos(a), 0.26 * sin(a), 0.03)), Vector((0.42 * cos(a), 0.42 * sin(a), 0.0)), 0.03, 0.03), rust())
+    for i in range(6):  # turves of peat in the basket, the lowest alight
+        a = i * 1.1
+        c = M @ Vector((0.12 * cos(a), 0.12 * sin(a), 0.08 + 0.06 * i))
+        put(k, moved(box((-0.15, -0.07, -0.04), (0.15, 0.07, 0.04)), Matrix.Translation(c) @ Matrix.Rotation(a, 4, "Z") @ Matrix.Rotation(0.3, 4, "Y")), jit(mix(P.peat, P.tar, 0.3), rng, 0.03))
+    raw(k, [([M @ Vector((0.2 * cos(i / 8 * TAU), 0.2 * sin(i / 8 * TAU), 0.06)) for i in range(8)], P.amber)], glow="GlowAmber", two=True)
+    for i in range(5):
+        a = i / 5 * TAU + 0.3
+        q = M @ Vector((0.17 * cos(a), 0.17 * sin(a), 0.1))
+        raw(k, [([q + Vector((-0.06, 0, 0)), q + Vector((0.06, 0, 0)), q + Vector((0.0, 0.0, 0.22 + 0.06 * (i % 2)))], P.amber)], glow="GlowAmber", two=True)
+    found(k, 0.4)
+    return dict(ridge_m=0.68, glow="GlowAmber")
+
+
+def gen_lean_to(k, rng, lot):
+    """A lean-to against a house's back wall (the plan's `use` says whose, and for what): tarred
+    boards under a slope of odd slates, or under an upturned boat's hull where a Strand house
+    had one. Its door stands ajar on what is kept in it."""
+    W, D = lot["size"]
+    hw, hd, w, env, use = W / 2, D / 2, lot["wear"], Env(lot), lot.get("use", "store")
+    ZB, ZF = lot["height_m"] - 0.06, 1.75
+    YF, YB = -hd + 0.25, hd - 0.02
+    put(k, box((-hw, YF, 0.0), (hw, YB, 0.25)), jit(P.basalt, rng, 0.02))
+    ff = Face((0, YF, 0), X, W)
+    dh = (hw - 1.0, hw - 0.2, 0.25, ZF - 0.1)
+    planked(k, rng, lambda a, z: ff.p(a, z, 0.0), -Y, -hw + 0.02, hw - 0.02, 0.25, ZF, lot, env, holes=[dh], bare=0.25)
+    for sx in (-1, 1):
+        planked(k, rng, lambda a, z, sx=sx: Vector((sx * (hw - 0.02), YF + (a if sx > 0 else YB - YF - a), z)), X * sx, 0.0, YB - YF, 0.25,
+                (lambda a, sx=sx: ZF + (ZB - ZF) * ((a if sx > 0 else YB - YF - a) / (YB - YF))), lot, env, bare=0.2)
+    dark = mix(P.tar, P.basalt, 0.3)
+    room(k, ff, dh[0], dh[1], 0.25, dh[3], 0.9, dark, dark)
+    raw(k, [([ff.p(dh[0], dh[2], 0.0), ff.p(dh[0], dh[3], 0.0), ff.p(dh[0] - 0.74, dh[3], 0.2), ff.p(dh[0] - 0.74, dh[2], 0.2)], jit(mix(P.tar, P.drift, 0.35), rng))], two=True)  # the door, ajar
+    if use == "boat":  # an upturned boat's hull for a roof
+        M = Matrix.Translation((0, (YF + YB) / 2 - 0.05, ZF - 0.1)) @ Matrix.Rotation(PI, 4, "X") @ Matrix.Translation((0, 0, -(ZB - ZF + 0.55)))
+        ship(k, rng, M, W - 0.3, D - 0.15, ZB - ZF + 0.5, 0.0, 4, 4, 2, n_st=8, post=0.0, rib=0.035)
+    else:
+        lean_roof(k, rng, lot, env, -hw + 0.0, hw - 0.0, YF - 0.2, ZF - 0.08, YB, ZB, big=1.1)
+    # What is kept in it shows at the door and beside it.
+    if use == "peat":
+        for i in range(5):
+            put(k, box((dh[0] + 0.05, YF + 0.15, 0.25 + 0.13 * i), (dh[1] - 0.05, YF + 0.75, 0.37 + 0.13 * i)), jit(P.peat, rng, 0.04))
+    elif use in ("nets", "boat"):
+        net = on(mix(P.kelp, P.drift, 0.5), "cloth")
+        raw(k, [([ff.p(dh[0] + 0.1 + 0.2 * i, dh[3] - 0.1, -0.4), ff.p(dh[0] + 0.26 + 0.2 * i, dh[3] - 0.1, -0.4), ff.p(dh[0] + 0.3 + 0.2 * i, 0.5 + 0.2 * (i % 2), -0.3), ff.p(dh[0] + 0.06 + 0.2 * i, 0.45, -0.3)], jit(net, rng, 0.03)) for i in range(3)], two=True)
+        glass_float(k, rng, ff.p(-hw + 0.5, 1.2, 0.14), P.green, r=0.11, cord=ff.p(-hw + 0.5, 1.6, 0.02))
+    else:  # potting: pots and a seed tray on a shelf under a small-paned light
+        window(k, rng, ff, -hw + 0.85, 0.95, (2, 2, 0.3, 0.3), glazing(rng, P.aqua, P.green, 1, CELLS(2, 2)), recess=-0.012, sill=None, bars=P.drift)
+        put(k, ff.box(-hw + 0.3, -hw + 1.4, 0.82, 0.86, 0.0, 0.2), jit(P.drift, rng))
+        for i in range(3):
+            put(k, lathe([(0.06, 0.0), (0.09, 0.13)], 6, Matrix.Translation(ff.p(-hw + 0.5 + 0.3 * i, 0.86, 0.1)), caps=(True, False)), on(mix(P.sand, P.newbrick, 0.4), "earth"), closed=False)
+            tuft(k, rng, ff.p(-hw + 0.5 + 0.3 * i, 0.97, 0.1), 0.07, 0.14, LEAF, 3)
+    found(k, 0.6)
+    return dict(ridge_m=lot["height_m"], use=use)
+
+
+def gen_privy(k, rng, lot):
+    """A privy at the yard's end against the retaining wall, one to a pair of houses: tarred
+    boards on a stone base, a slate slope, a heart cut in the door."""
+    W, D = lot["size"]
+    hw, hd, w, env = W / 2, D / 2, lot["wear"], Env(lot)
+    H = lot["height_m"]
+    ZF, ZB = H - 0.45, H - 0.06
+    YF, YB = -hd + 0.12, hd - 0.02
+    put(k, box((-hw, YF, 0.0), (hw, YB, 0.2)), jit(P.basalt, rng, 0.02))
+    ff = Face((0, YF, 0), X, W)
+    dh = (-0.36, 0.36, 0.2, ZF - 0.12)
+    planked(k, rng, lambda a, z: ff.p(a, z, 0.0), -Y, -hw + 0.02, hw - 0.02, 0.2, ZF, lot, env, holes=[dh], bare=0.2, pw=0.2)
+    for i in range(3):
+        put(k, ff.box(dh[0] + 0.24 * i + 0.004, dh[0] + 0.24 * (i + 1) - 0.004, dh[2], dh[3], -0.03, 0.01, back=False), jit(mix(P.tar, P.drift, 0.4), rng, 0.03))
+    raw(k, [([ff.p(-0.07, dh[3] - 0.42, 0.014), ff.p(0.0, dh[3] - 0.52, 0.014), ff.p(0.07, dh[3] - 0.42, 0.014), ff.p(0.0, dh[3] - 0.36, 0.014)], P.tar)])
+    put(k, ff.box(dh[1] - 0.12, dh[1] - 0.06, 1.0, 1.08, 0.01, 0.04, back=False), mix(P.iron, P.rust, 0.6))
+    for sx in (-1, 1):
+        planked(k, rng, lambda a, z, sx=sx: Vector((sx * (hw - 0.02), YF + (a if sx > 0 else YB - YF - a), z)), X * sx, 0.0, YB - YF, 0.2,
+                (lambda a, sx=sx: ZF + (ZB - ZF) * ((a if sx > 0 else YB - YF - a) / (YB - YF))), lot, env, bare=0.15, pw=0.2)
+    lean_roof(k, rng, lot, env, -hw, hw, YF - 0.1, ZF - 0.04, YB, ZB, big=0.9)
+    found(k, 0.5)
+    return dict(ridge_m=H)
+
+
+def gen_washing_line(k, rng, lot):
+    """A line of washing (the plan says whose, how much, and what it is slung between): from an
+    iron hook at one end to a driftwood post at the other, high enough to walk under. Smoke-grey
+    and sand-coloured linen; one piece is the colour the household paints its door."""
+    W, D = lot["size"]
+    hw, n, H = W / 2, lot.get("pieces", 5), lot["height_m"]
+    a, b = Vector((-hw + 0.05, 0, H - 0.1)), Vector((hw - 0.12, 0, H - 0.15))
+    sag = 0.035 * W
+    line = [a.lerp(b, i / 8) - Z * (sag * sin(PI * i / 8)) for i in range(9)]
+    put(k, tube(line, 0.008, 3, caps=False), ROPE, closed=False)
+    put(k, beam(a - X * 0.04, a + X * 0.06, 0.03, 0.03), P.iron)
+    if lot.get("post", True):
+        put(k, tube([(hw - 0.1, 0, 0.0), (hw - 0.1, 0.02, H)], [0.06, 0.045], 5), jit(P.drift, rng))
+    else:
+        put(k, beam(b + X * 0.04, b - X * 0.06, 0.03, 0.03), P.iron)
+    mark = DOOR.get(lot.get("door_colour"), P.oldlime)
+    cloth = [on(mix(P.oldlime, P.smoke, 0.5), "cloth"), on(mix(P.sand, P.oldlime, 0.5), "cloth"), on(P.lime, "cloth")]
+    for i in range(n):
+        t = (i + 0.7) / (n + 0.6)
+        q = a.lerp(b, t) - Z * (sag * sin(PI * t) + 0.012)
+        ww = min(0.8, (W - 0.6) / n * 0.8) * (0.6 if i % 3 == 1 else 1.0)
+        L = (0.55, 0.75, 0.42)[i % 3]
+        c = on(mix(mark, P.oldlime, 0.25), "cloth") if i == n // 2 else cloth[i % 3]
+        sway = 0.05 * sin(i * 2.1)
+        raw(k, [([q - X * ww / 2, q + X * ww / 2, q + X * (ww / 2 - 0.03) + Y * sway - Z * L, q - X * (ww / 2 - 0.03) + Y * (sway + 0.03) - Z * (L - 0.04)], jit(c, rng, 0.03))], two=True)
+    return dict(ridge_m=H, pieces=n)
+
+
+def gen_rain_butt(k, rng, lot):
+    """A rain butt at a house's back: a tarred cask on two stones under the downpipe, a board
+    over it, green where it overflows."""
+    for e in (-0.2, 0.2):
+        put(k, box((-0.3, e - 0.09, 0.0), (0.3, e + 0.09, 0.14)), jit(P.basalt, rng))
+    barrel(k, rng, (0, 0, 0.14), 0.33, 0.95, wood=mix(P.drift, P.tar, 0.55), head=False, hoops=(0.12, 0.5, 0.88))
+    put(k, lathe([(0.0, 0.0), (0.29, 0.0)], 10, Matrix.Translation((0, 0, 0.95 + 0.14 - 0.1)), caps=(False, True)), on(mix(P.smoke, P.seagreen, 0.45), "glass"), closed=False)
+    put(k, box((-0.36, -0.1, 1.1), (0.1, 0.36, 1.13)), jit(P.drift, rng))
+    put(k, tube([(0.2, 0.3, 1.75), (0.2, 0.3, 1.25), (0.1, 0.18, 1.15)], 0.04, 5), mix(P.iron, P.rust, 0.5))
+    raw(k, [([Vector((0.34 * cos(a), 0.34 * sin(a), 0.2)) for a in (-0.4, 0.4)] + [Vector((0.345 * cos(a), 0.345 * sin(a), 0.75)) for a in (0.3, -0.3)], mix(P.tar, P.kelp, 0.5))])
+    found(k, 0.4)
+    return dict(ridge_m=1.75)
+
+
+def gen_hen_coop(k, rng, lot):
+    """A hen coop in a yard: a boarded box under a tarred lid, a ramp, a run of driftwood
+    stakes, three hens."""
+    put(k, box((-0.9, 0.0, 0.25), (0.1, 0.55, 0.85)), jit(P.drift, rng))
+    for x in (-0.85, 0.05):
+        put(k, box((x - 0.04, 0.02, 0.0), (x + 0.04, 0.5, 0.25)), jit(P.tar, rng))
+    put(k, prism([(-0.06, 0.85), (0.62, 0.85), (0.62, 0.92), (-0.06, 1.08)], -0.96, 0.16, lambda a, s, z: Vector((a, s, z))), jit(P.tar, rng, 0.02))
+    raw(k, [([Vector((-0.3, -0.005, 0.3)), Vector((-0.02, -0.005, 0.3)), Vector((-0.02, -0.005, 0.62)), Vector((-0.3, -0.005, 0.62))], P.tar)])
+    put(k, beam((-0.16, 0.0, 0.28), (-0.16, -0.5, 0.0), 0.22, 0.03), jit(P.drift, rng))
+    for i in range(9):
+        x = 0.16 + 0.1 * i
+        put(k, beam((x, -0.55, 0.0), (x, -0.55, 0.62 + 0.06 * (i % 3)), 0.03, 0.03), jit(P.drift, rng, 0.05))
+    put(k, beam((0.14, -0.55, 0.5), (1.0, -0.55, 0.5), 0.03, 0.03), jit(P.drift, rng))
+    for q in ((0.4, -0.2), (0.75, 0.1), (0.55, 0.35)):
+        c = Vector((q[0], q[1], 0.16))
+        put(k, sphere(c, 0.12, 1, squash=0.8), jit(on(mix(P.oldlime, P.drift, 0.3 * (q[1] > 0)), "cloth"), rng, 0.03), soft=c)
+        put(k, sphere(c + Vector((0.1, 0, 0.1)), 0.055, 0), jit(on(P.oxblood, "cloth"), rng), soft=c)
+    found(k, 0.4)
+    return dict(ridge_m=1.08, hens=3)
+
+
+def gen_cane_wigwam(k, rng, lot):
+    """Canes tied in a wigwam over an outdoor bed, beans climbing them: what the Ladder grows
+    out of doors, where a wall breaks the wind."""
+    H = lot["height_m"]
+    top = Vector((0, 0, H - 0.1))
+    for i in range(6):
+        a = i / 6 * TAU + 0.2
+        foot = Vector((0.45 * cos(a), 0.45 * sin(a), 0.0))
+        put(k, tube([foot, top + Vector((-0.04 * cos(a), -0.04 * sin(a), 0.1))], 0.012, 3), jit(mix(P.sand, P.drift, 0.5), rng))
+        for j in range(4):
+            if rng.random() < 0.25:
+                continue
+            c = foot.lerp(top, 0.15 + 0.2 * j + rng.uniform(-0.04, 0.04))
+            put(k, sphere(c, 0.13 - 0.02 * j, 0, squash=0.8), jit(LEAF, rng, 0.04), soft=c)
+    put(k, ring(0.03, 0.05, -0.02, 0.02, 6, Matrix.Translation(top - Z * 0.02)), ROPE, closed=False)
+    return dict(ridge_m=H)
+
+
+TREES = {  # the Hanger's six forms: (height, lean reach, crown, bare limbs): one planting, one age, bent to one wind
+    1: (6.4, 2.4, 1.0, 0.0), 2: (7.2, 2.9, 0.9, 0.2), 3: (5.6, 2.6, 1.15, 0.0), 4: (6.8, 3.2, 0.8, 0.35), 5: (5.2, 2.0, 1.2, 0.0), 6: (7.6, 2.6, 0.95, 0.15),
+}
+
+
+def gen_hanger_tree(k, rng, lot):
+    """A tree of the Hanger, the island's one wood: replanted in the lean years, so all of an
+    age, and every one bent north-east by the south-westerly. Six forms (the plan's `form`)."""
+    h, reach, crown, bare = TREES[lot["form"]]
+    env = Env(lot)
+    tr = bent_tree(k, rng, -env.ne * (reach * 0.42), h, env.ne, crown=crown, r0=0.2, reach=reach, bare=bare)
+    for i in range(3):
+        a = i / 3 * TAU + lot["form"]
+        put(k, beam(tr[0] + Z * 0.3, tr[0] + Vector((cos(a) * 0.45, sin(a) * 0.45, 0.0)), 0.11, 0.11), jit(on(mix(P.peat, P.drift, 0.4), "bark"), rng))
+    top = max(v.co.z for v in k.b.bm.verts)
+    return dict(ridge_m=round(top, 2), form=lot["form"], leans="north-east")
+
+
+def gen_stump(k, rng, lot):
+    """A stump of the old wood, cut for fuel in the lean years: grey, split, moss on its north."""
+    r = lot["size"][0] / 2 - 0.08
+    r *= 0.72
+    prof = [(r * 1.25, 0.0), (r * 1.02, 0.12), (r, lot["height_m"] - 0.03), (r * 0.9, lot["height_m"])]
+    put(k, lathe(prof, 8), lambda co, n, c=jit(on(mix(P.drift, P.peat, 0.35), "bark"), rng): mix(c, LEAF, 0.45) if co.y > r * 0.3 and co.z < 0.3 else (mix(c, P.pale, 0.3) if n.z > 0.6 else c))
+    for i in range(3):
+        a = i / 3 * TAU + 0.7
+        put(k, beam(Vector((0, 0, 0.1)), Vector((cos(a) * r * 1.5, sin(a) * r * 1.5, 0.0)), 0.1, 0.1), jit(on(mix(P.drift, P.peat, 0.4), "bark"), rng))
+    return dict(ridge_m=lot["height_m"])
+
+
+# ---------------------------------------------------------------------------------------------
 # Export and report
 
 # folder -> (generator, triangle budget). SMALL_CITY §6's budgets; ground pieces and dressing
@@ -3994,6 +4485,10 @@ GEN = dict(
     smokehouse=(gen_smokehouse, 3500), cistern_house=(gen_cistern_house, 3000), peat_barn=(gen_peat_barn, 6000), batch=(gen_batch, 4000),
     wash_house=(gen_wash_house, 4000), cullet_shed=(gen_cullet_shed, 5000), boatshed=(gen_boatshed, 6000), dry_dock=(gen_dry_dock, 6000), cistern=(gen_cistern, 3000),
     thorn=(gen_thorn, 1500), crown_bench=(gen_crown_bench, 600),
+    blowpipe_rack=(gen_blowpipe_rack, 1500), crucible_stack=(gen_crucible_stack, 1500), cullet_heap=(gen_cullet_heap, 1500), ash_sacks=(gen_ash_sacks, 1500), handcart=(gen_handcart, 1500),
+    trough=(gen_trough, 1500), cone_bench=(gen_cone_bench, 1500), sign=(gen_sign, 1500), storage=(gen_storage, 2500), campfire=(gen_campfire, 1500),
+    lean_to=(gen_lean_to, 1500), privy=(gen_privy, 1500), washing_line=(gen_washing_line, 600), rain_butt=(gen_rain_butt, 1500), hen_coop=(gen_hen_coop, 1500),
+    cane_wigwam=(gen_cane_wigwam, 600), hanger_tree=(gen_hanger_tree, 1500), stump=(gen_stump, 600),
 )
 PALETTE = [tuple(v) for v in vars(P).values()]
 
@@ -4047,6 +4542,238 @@ def scale_figure(k, it, folder):
     put(k, moved(sphere((0, 0, 0), 0.115, 1), M @ Matrix.Translation((0, 0, 1.635))), on(P.oldlime, "cloth"))
 
 
+def drop_undersides(k):
+    """Remove the faces that lie on the floor facing down (the bottoms of everything that stands
+    on the ground): never seen, and where two parts stand on one spot they lie in one plane."""
+    bm = k.b.bm
+    bm.normal_update()
+    gone = [f for f in bm.faces if (f.normal.z < -0.999 and all(abs(v.co.z) <= 0.002 for v in f.verts))
+            or (f.normal.z < -0.3 and all(-0.002 <= v.co.z <= 0.035 for v in f.verts))]  # and the bevels of their bottom edges
+    bmesh.ops.delete(bm, geom=gone, context="FACES")
+
+
+def drop_hidden(k, tol=0.001):
+    """Remove faces that lie in one plane with faces looking the other way and are wholly covered
+    by them: the back of a sill against its wall, the underside of a stone on the stone below.
+    Such a face is never seen (what covers it is the solid in front of it), and two faces in one
+    plane are what the renderer's depth test cannot order (cullet_kit_check.py `coplanar`).
+    Returns how many went."""
+    bm = k.b.bm
+    bm.normal_update()
+    q = 0.004
+    cells = {}
+    info = {}
+    for f in bm.faces:
+        n = f.normal
+        if n.length < 0.5:
+            continue
+        flip = next((1.0 if c > 0 else -1.0 for c in n if abs(c) > 1e-4), 1.0)  # one of each pair of opposite normals
+        m = n * flip
+        d = m.dot(f.verts[0].co)
+        key = (round(m.x / q), round(m.y / q), round(m.z / q), math.floor(d / tol))
+        ax = max(range(3), key=lambda j: abs(m[j]))
+        u, v = [j for j in range(3) if j != ax]
+        pts = [(vt.co[u], vt.co[v]) for vt in f.verts]
+        info[f] = (m, d, flip, pts, (min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts)), (u, v))
+        cells.setdefault(key, []).append(f)
+
+    def inside(pt, poly):
+        """pt in a convex polygon (either winding), with a hair's margin."""
+        sign = 0
+        for i in range(len(poly)):
+            x0, y0 = poly[i]
+            x1, y1 = poly[(i + 1) % len(poly)]
+            c = (x1 - x0) * (pt[1] - y0) - (y1 - y0) * (pt[0] - x0)
+            l = math.hypot(x1 - x0, y1 - y0) or 1.0
+            if abs(c) <= 1.5e-3 * l:
+                continue
+            if sign == 0:
+                sign = 1 if c > 0 else -1
+            elif (c > 0) != (sign > 0):
+                return False
+        return True
+    gone = []
+    for key, faces in cells.items():
+        near = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for dd in (-1, 0, 1):
+                        near += cells.get((key[0] + dx, key[1] + dy, key[2] + dz, key[3] + dd), [])
+        if len(near) < 2:
+            continue
+        for f in faces:
+            m, d, flip, pts, box, uv = info[f]
+            over = []
+            for g in near:
+                gm, gd, gflip, gpts, gbox, guv = info[g]
+                if g is f or gflip == flip or guv != uv or abs(gd - d) > tol or gm.dot(m) < 0.99999:
+                    continue
+                if gbox[0] >= box[2] - 1e-4 or box[0] >= gbox[2] - 1e-4 or gbox[1] >= box[3] - 1e-4 or box[1] >= gbox[3] - 1e-4:
+                    continue
+                over.append(gpts)
+            if not over:
+                continue
+            # Sample the face: its corners drawn in a little, edge middles, its middle.
+            cx, cy = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+            samples = [(cx, cy)]
+            for i, p in enumerate(pts):
+                r = pts[(i + 1) % len(pts)]
+                samples.append((p[0] + (cx - p[0]) * 0.04, p[1] + (cy - p[1]) * 0.04))
+                samples.append(((p[0] + r[0]) / 2 + (cx - (p[0] + r[0]) / 2) * 0.04, (p[1] + r[1]) / 2 + (cy - (p[1] + r[1]) / 2) * 0.04))
+                samples.append(((p[0] + cx) / 2, (p[1] + cy) / 2))
+            if all(any(inside(sp, g) for g in over) for sp in samples):
+                gone.append(f)
+    bmesh.ops.delete(bm, geom=gone, context="FACES")
+    return len(gone)
+
+
+def part_coplanar(k, tol=0.001, step=0.002):
+    """Give every sheet of faces its own plane. Where two parts' faces lie in one plane and
+    overlap (flakes of lime laid one over another, a stack's face in its gable's, a door's foot
+    on its step), the later part is moved along its own normal by a real gap of `step` (more
+    for a third and a fourth layer): what was laid later lies on top, and what looks the other
+    way sinks into the solid behind it. A sheet is the faces of one plane that share corners, so
+    a wall stays whole. Returns how many sheets moved."""
+    bm = k.b.bm
+    bm.normal_update()
+    bm.faces.ensure_lookup_table()
+    q = 0.004
+    cells, info = {}, {}
+    tri_of = {}
+    for loops in bm.calc_loop_triangles():
+        tri_of.setdefault(loops[0].face, []).append([l.vert.co for l in loops])
+    for f in bm.faces:
+        n = f.normal
+        if n.length < 0.5 or f not in tri_of:
+            continue
+        flip = next((1.0 if c > 0 else -1.0 for c in n if abs(c) > 1e-4), 1.0)  # one of each pair of opposite normals
+        m = n * flip
+        d = m.dot(f.verts[0].co)
+        ax = max(range(3), key=lambda j: abs(m[j]))
+        u, v = [j for j in range(3) if j != ax]
+        tris = [[(c[u], c[v]) for c in t] for t in tri_of[f]]
+        xs, ys = [p[0] for t in tris for p in t], [p[1] for t in tris for p in t]
+        info[f] = (m, d, flip, tris, (min(xs), min(ys), max(xs), max(ys)), (u, v))
+        cells.setdefault((round(m.x / q), round(m.y / q), round(m.z / q), math.floor(d / tol)), []).append(f)
+
+    def tri_overlap(p, r, eps=2e-4):
+        for tri, other in ((p, r), (r, p)):
+            for j in range(3):
+                x0, y0 = tri[j]
+                x1, y1 = tri[(j + 1) % 3]
+                nx, ny = y1 - y0, x0 - x1
+                l = math.hypot(nx, ny) or 1.0
+                nx, ny = nx / l, ny / l
+                s_in = (tri[(j + 2) % 3][0] - x0) * nx + (tri[(j + 2) % 3][1] - y0) * ny
+                side = [((qx - x0) * nx + (qy - y0) * ny) for qx, qy in other]
+                if (s_in > 0 and max(side) < eps) or (s_in < 0 and min(side) > -eps):
+                    return False
+        return True
+    # Sheets: faces of one plane and one facing that share a corner.
+    parent = {f: f for f in info}
+
+    def find(f):
+        while parent[f] is not f:
+            parent[f] = parent[parent[f]]
+            f = parent[f]
+        return f
+    for f in info:
+        m, d, flip = info[f][:3]
+        for vt in f.verts:
+            for g in vt.link_faces:
+                if g is f or g not in info:
+                    continue
+                gm, gd, gflip = info[g][:3]
+                if gflip == flip and abs(gd - d) <= tol * 0.5 and gm.dot(m) > 0.999999:
+                    a, b = find(f), find(g)
+                    if a is not b:
+                        parent[b] = a
+    # Which sheets overlap which.
+    touch = {}
+    for key, faces in cells.items():
+        near = list(faces)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for dd in (-1, 0, 1):
+                        k2 = (key[0] + dx, key[1] + dy, key[2] + dz, key[3] + dd)
+                        if k2 > key:
+                            near += cells.get(k2, [])
+        if len(near) < 2:
+            continue
+        mine = set(faces)
+        order = sorted(near, key=lambda f: info[f][4][0])
+        for i, f in enumerate(order):
+            m, d, flip, tris, box, uv = info[f]
+            for g in order[i + 1:]:
+                gm, gd, gflip, gtris, gbox, guv = info[g]
+                if gbox[0] >= box[2] - 1e-4:
+                    break
+                if (f not in mine and g not in mine) or guv != uv or abs(gd - d) > tol or gm.dot(m) < 0.99999:
+                    continue
+                if gbox[1] >= box[3] - 1e-4 or box[1] >= gbox[3] - 1e-4:
+                    continue
+                a, b = find(f), find(g)
+                if a is b or b in touch.get(a, ()):
+                    continue
+                if any(tri_overlap(t, r) for t in tris for r in gtris):
+                    touch.setdefault(a, set()).add(b)
+                    touch.setdefault(b, set()).add(a)
+    if not touch:
+        return 0
+    # Place the sheets, oldest first: a sheet keeps its plane unless one it overlaps has it.
+    first = {}
+    for f in info:
+        r = find(f)
+        first[r] = min(first.get(r, 1 << 60), f.index)
+    place, moved_n = {}, 0
+    for sh in sorted(touch, key=lambda r: first[r]):
+        flip = info[sh][2]
+        taken = {place[o] for o in touch[sh] if o in place}
+        kk = 0
+        while round(flip * kk * step, 6) in taken:
+            kk += 1
+        place[sh] = round(flip * kk * step, 6)
+    shift = {}
+    for f in info:
+        r = find(f)
+        off = place.get(r, 0.0)
+        if off:
+            for vt in f.verts:
+                shift.setdefault(vt, {})[r] = info[r][0] * off
+    for vt, by in shift.items():
+        for vec in by.values():
+            vt.co += vec
+    return sum(1 for o in place.values() if o)
+
+
+def merge_table(path, table):
+    """Put this run's lots into the rules' footprint table as style `cullet` (file, footprint,
+    height, and `eye_solid`/`eye_cells`), in the form buildings.py `write_table` writes, so both
+    give one file: models sorted by style, kind and file, each kind's envelope recomputed."""
+    with open(path) as f:
+        old = json.load(f)
+    models = [m for m in old["models"] if m["style"] != "cullet"]
+    for folder, ms in table.items():
+        for m in ms:
+            models.append(dict(style="cullet", kind=folder, form=m["form"], file=f"cullet/{folder}/{m['file']}", width_m=m["width_m"], depth_m=m["depth_m"], height_m=m["height_m"],
+                               foundation_m=m["foundation_m"], corner=m["corner"], tris=m["tris"], eye_solid=m["eye_solid"], eye_cells=m["eye_cells"]))
+    models.sort(key=lambda m: (m["style"], m["kind"], m["file"]))
+    kinds = {}
+    for m in models:
+        e = kinds.setdefault((m["style"], m["kind"]), dict(style=m["style"], kind=m["kind"], width_m=0.0, depth_m=0.0, height_m=0.0, foundation_m=0.0))
+        for key in ("width_m", "depth_m", "height_m", "foundation_m"):
+            e[key] = max(e[key], m[key])
+    with open(path, "w") as f:
+        f.write("{\n " + json.dumps("note") + ": " + json.dumps(old["note"]) + ",\n \"kinds\": [\n")
+        f.write(",\n".join("  " + json.dumps(kinds[key]) for key in sorted(kinds)))
+        f.write("\n ],\n \"models\": [\n")
+        f.write(",\n".join("  " + json.dumps(m) for m in models))
+        f.write("\n ]\n}\n")
+    print(f"GEN table {path}: {sum(1 for m in models if m['style'] == 'cullet')} cullet models of {len(models)}")
+
+
 def neighbours(plan):
     """Who stands against whom: a terrace's houses east to west (the plan's `terraces`), and the
     rank of net lofts. Each lot learns the lot on its west (-X) and east (+X) party wall."""
@@ -4069,6 +4796,8 @@ def main():
     ap.add_argument("--lantern-reach", type=float, default=LANTERN["reach_m"], help="metres from the lantern beyond which no pane catches its light")
     ap.add_argument("--join", action="append", default=[], help="also write a terrace of the plan (`terraces`: \"Low Row east\") as one model, <out>/terrace/<name>.glb, "
                     "for the asset board; the game uses the houses' own models, never this one")
+    ap.add_argument("--table", help="the rules' footprint table (living/rules/data/buildings.json): replace its `cullet` models with this run's lots, "
+                    "each with what it hides at eye height; every other set's entries are kept as they are")
     ap.add_argument("--figure", action="store_true", help="stand a 1.75 m figure by each model: for contact sheets only, never for the kit's own folder")
     a = ap.parse_args(argv)
     plan = json.load(open(a.plan))
@@ -4076,8 +4805,9 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     only = set(a.only.split(",")) if a.only else None
     near = neighbours(plan)
-    items = [dict(l, what="lot") for l in plan["lots"] if l.get("model")] + [dict(f, what="fixture") for f in plan["fixtures"]]
+    items = [dict(l, what="lot") for l in plan["lots"] if l.get("model")] + [dict(f, what="fixture") for f in plan["fixtures"]] + [dict(f, what="structure") for f in plan.get("structure_models", [])]
     report, skipped, t_all = {}, [], time.time()
+    table = {}
     ox, oy = plan["origin"]
     placed = []
     for it in items:
@@ -4104,6 +4834,9 @@ def main():
         extra = gen(k, rng, it) or {}
         if a.figure:
             scale_figure(k, it, folder)
+        drop_undersides(k)
+        hidden = drop_hidden(k)
+        parted = sum(part_coplanar(k) for _ in range(3))
         # buildings.py centres a model on its bounds; a lot's model keeps the lot's own centre.
         xs, ys = [v.co.x for v in k.b.bm.verts], [v.co.y for v in k.b.bm.verts]
         cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
@@ -4115,9 +4848,18 @@ def main():
         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", export_vertex_color="ACTIVE", export_normals=True, export_yup=True, use_selection=False)
         rec = dict(file=f"{folder}/{it['id']}.glb", what=it["what"], kind=folder, size_m=it["size"], plan_height_m=it["height_m"], seed=it["seed"], **measure(obj))
         rec["budget_tris"] = budget
+        rec["hidden_faces_removed"] = hidden
+        rec["coplanar_sheets_parted"] = parted
         rec["doors"] = [dict(d) for d in DOORS]
         rec["sha256"] = hashlib.sha256(open(path, "rb").read()).hexdigest()
         rec.update(extra)
+        if it["what"] == "lot":
+            # What the lot hides at eye height, from its own mesh (buildings.py `eye_record`): the
+            # rules' footprint table takes it (below), so an open front, a shed's posts or a dock
+            # block sight by their real shape and not by the lot's height alone.
+            rec.update(B.eye_record(obj, it["size"][0], it["size"][1]))
+            table.setdefault(folder, []).append(dict(file=f"{it['id']}.glb", form=it["id"], width_m=it["size"][0], depth_m=it["size"][1], height_m=round(rec["height_m"], 2),
+                                                     foundation_m=round(rec["foundation_m"], 2), corner=0, tris=rec["tris"], eye_solid=rec["eye_solid"], eye_cells=rec["eye_cells"]))
         report[it["id"]] = rec
         print(f"GEN {it['id']}: tris={rec['tris']}/{budget} above={rec['above_floor_m']} h={rec['height_m']} tagged={rec['surface_tagged_share']} "
               f"palette={rec['palette_share']}+{rec['palette_wear_blend_share']} doors={len(DOORS)} {time.time() - t0:.2f}s")
@@ -4134,6 +4876,10 @@ def main():
             k = Kit(rng, dict(glow=LIGHT["Glow"][0]), pr=random.Random(f"cullet-detail-{it['seed']}-{it['id']}"))
             it["near"] = near.get(it["id"], {})
             GEN[it["model"].split("/")[1]][0](k, rng, it)
+            drop_undersides(k)
+            drop_hidden(k)
+            for _ in range(3):
+                part_coplanar(k)
             xs, ys = [v.co.x for v in k.b.bm.verts], [v.co.y for v in k.b.bm.verts]
             obj, _ = k.b.finish(it["id"])
             obj.data.transform(Matrix.Translation(((min(xs) + max(xs)) / 2 + it["at"][0] - cx, (min(ys) + max(ys)) / 2 + it["at"][1] - cy, 0.0)))
@@ -4154,6 +4900,17 @@ def main():
     if not only:
         with open(os.path.join(a.out, "fixtures.json"), "w") as f:
             json.dump(placed, f, indent=1)
+        # The plan's ground areas in land metres, later ones on top, for the game client's
+        # terrain (the `area:<surface>` keys of the environment's `ground` map).
+        with open(os.path.join(a.out, "ground.json"), "w") as f:
+            json.dump([dict(id=g["id"], surface=g["surface"], area=[[round(ox + q[0], 3), round(oy - q[1], 3)] for q in g["area"]], cause=g["cause"]) for g in plan.get("grounds", [])], f, indent=1)
+        # Each folder's footprint sidecar, as buildings.py writes for its kits, so that its table
+        # step (`buildings.py --table`, gen_buildings.sh) carries Cullet's lots with every other set.
+        for folder, models in sorted(table.items()):
+            with open(os.path.join(a.out, folder, f"gen-{folder}-cullet.json"), "w") as f:
+                json.dump(dict(style="cullet", kind=folder, models=models), f, indent=1)
+        if a.table:
+            merge_table(a.table, table)
         with open(os.path.join(a.out, "report.json"), "w") as f:
             json.dump(dict(script="living/tools/blender/cullet.py", plan="living/seeds/worlds/cullet/plan.json", blender=bpy.app.version_string, models=report, not_built=skipped, **joined), f, indent=1)
 

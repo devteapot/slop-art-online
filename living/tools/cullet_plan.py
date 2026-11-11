@@ -827,6 +827,121 @@ for id, kind, at, size, facing, height, cause in DRESS:
     fixture(id, kind, at, size, facing, STRAND_H, height, cause, age=0.6, repair=0.5, dressing=True)
 
 # ---------------------------------------------------------------------------------------------
+# Pass 2's dressing (SMALL_CITY §6 "Street dressing": Cinder Row, the Rows, the Ladder; "Nature").
+# Every place below is worked out from the lots and streets above, so it follows them if they
+# move; every thing has the cause that puts it there.
+
+
+def by_id(i):
+    return next(l for l in lots if l["id"] == i)
+
+
+def spot_at(l, name):
+    """A lot's named spot in the plan's frame (spots are along the front, then out from the middle)."""
+    sp = next(q for q in l["spots"] if q["name"] == name)["at"]
+    b = math.radians(FACING_DEG[l["facing"]] if isinstance(l["facing"], str) else l["facing"])
+    fx, fy = math.sin(b), math.cos(b)  # the front's direction; a spot's first number runs to its right hand
+    return (l["at"][0] + fx * sp[1] + fy * sp[0], l["at"][1] + fy * sp[1] - fx * sp[0])
+
+
+def dress(id, kind, at, size, facing, height, cause, floor, **extra):
+    return fixture(id, kind, at, size, facing, floor, height, cause, age=0.6, repair=0.5, dressing=True, **extra)
+
+
+# Cinder Row: the Cone yard.
+_cone, _yard, _pot, _ash = by_id("cone"), by_id("cone_yard"), by_id("pot_house"), by_id("ash_house")
+_bx, _by = spot_at(_cone, "Halvard's bench at the mouth")
+dress("cone_bench_1", "cone_bench", (_bx, _by - 0.4), (1.9, 0.7), "north", 0.95, "Halvard Dunmore's bench at the Cone's mouth, where the heat reaches (the plan's spot)", STRAND_H)
+_hx, _hy = spot_at(_yard, "the cullet heaps")
+for i, col in enumerate(("green", "amber", "aqua", "smoke")):
+    dress(f"cullet_heap_{col}", "cullet_heap", (_hx - 3.6 + 2.4 * i, _hy), (2.2, 1.9), "south", (0.75, 0.3, 0.9, 0.6)[i],
+          f"the yard's heap of {col} cullet (the plan's spot): " + ("nearly out, amber is the rarest" if col == "amber" else "the most there is, every window's glass" if col == "aqua" else "sorted, waiting for the melt"),
+          STRAND_H, colour=col, shovel=col == "aqua")
+_tx, _ty = spot_at(_yard, "the trough")
+dress("trough_1", "trough", (_tx, _ty), (2.4, 0.8), "south", 0.63, "the Cone yard's water trough (the plan's spot)", STRAND_H)
+dress("blowpipe_rack_1", "blowpipe_rack", (_cone["at"][0] + 3.1, _cone["at"][1] - _cone["size"][1] / 2 - 1.9), (2.2, 0.6), "south", 1.5,
+      "the blowpipe rack between the front and the east mouths, a pipe's length from the heat", STRAND_H)
+dress("crucible_stack_1", "crucible_stack", (_pot["at"][0] + 3.0, _pot["at"][1] - _pot["size"][1] / 2 - 0.75), (1.7, 1.1), "south", 1.4, "fired pots stacked before the pot house, waiting for the Cone", STRAND_H)
+dress("crucible_stack_2", "crucible_stack", (_cone["at"][0] - _cone["size"][0] / 2 + 1.2, _yard["at"][1] + _yard["size"][1] / 2 - 0.8), (1.7, 1.1), 150, 1.4, "pots brought to the Cone's pot room door for the next setting", STRAND_H)
+dress("ash_sacks_1", "ash_sacks", (_ash["at"][0] + 3.6, _ash["at"][1] - _ash["size"][1] / 2 - 0.7), (1.7, 1.1), "south", 0.7, "kelp ash come from the kilns, not yet carried into the ash house", STRAND_H)
+dress("ash_sacks_2", "ash_sacks", (_yard["at"][0] + 11.0, _yard["at"][1] + 4.5), (1.7, 1.1), 200, 0.7, "ash for the day's batch, set down in the yard by the mixing floor", STRAND_H)
+dress("handcart_1", "handcart", (_hx - 6.4, _hy - 1.2), (1.3, 2.6), 115, 0.95, "the yard's handcart by the heaps: cullet comes down from the Rows on it", STRAND_H)
+
+# The Rows' backs: what each household's trade puts behind its house. A lean-to against the
+# back wall (nets and floats for a Strand house, an upturned boat for a roof where the family
+# is seven; peat for a Kiln house, which burns most; a potting shed for a Ladder house), a privy
+# to each pair of houses against the retaining wall, a rain butt at the back downpipe of a kept
+# house, washing where four or more live, and hens where the keepsake is a coop.
+LEAN = {"strand": "nets", "kiln": "peat", "ladder": "potting"}
+_pair = {}
+for row, tname, numbers, east_x, extra in TERRACES:
+    b1 = BAND[row][1]
+    for n in numbers:
+        l = by_id(f"{row}_{n}")
+        x, y = l["at"]
+        w_, back = l["size"][0], l["at"][1] + l["size"][1] / 2
+        fam, hh = l.get("family"), l.get("household")
+        if hh:
+            use = "boat" if l.get("people", 0) >= 7 else LEAN[fam]
+            lw = 3.0 if use == "boat" else 2.4
+            dress(f"lean_to_{row}_{n}", "lean_to", (x - w_ / 2 + lw / 2 + 0.15, back + 1.0), (lw, 2.0), "north", 2.45 if use != "boat" else 2.6,
+                  f"{l['household_name']}'s lean-to behind {l['name']}: " + {"nets": "nets and floats", "boat": "an old boat turned over for its roof; seven live here", "peat": "the winter's peat", "potting": "pots and seed trays"}[use],
+                  H[row], use=use, house=l["id"])
+            if l["wear"]["repair"] >= 0.55:
+                dress(f"rain_butt_{row}_{n}", "rain_butt", (x + w_ / 2 - 0.55, back + 0.42), (0.8, 0.8), "north", 1.75, f"the rain butt at {l['name']}'s back downpipe: the house is kept", H[row], house=l["id"])
+            if l.get("people", 0) >= 4:
+                dress(f"washing_{row}_{n}", "washing_line", (x + 0.4, back + 3.6), (min(5.0, w_ - 0.6), 0.5), "north", 2.3,
+                      f"{l['household_name']}'s washing in the yard: {l['people']} live here", H[row], pieces=min(8, l["people"] + 1), door_colour=l.get("door_colour"), house=l["id"])
+        if n % 2 == 1 and (hh or by_id(f"{row}_{n + 1}").get("household") if f"{row}_{n + 1}" in [q["id"] for q in lots] else hh):
+            dress(f"privy_{row}_{n}", "privy", (x - w_ / 2, b1 - WALL_D - 0.75), (1.2, 1.3), "south", 2.2, f"the privy shared by {ROW_NAME[row]} {n} and {n + 1}, against the retaining wall", H[row])
+# Washing across the wynds, where a house at a terrace's end has a wynd beside it.
+_ok = by_id("low_5")
+dress("washing_tally_wynd", "washing_line", (_ok["at"][0] - _ok["size"][0] / 2 - 3.0, _ok["at"][1] + 1.0), (6.0, 0.5), "south", 3.0,
+      "the Okoros' washing across the Tally Wynd, from their gable to a post over the lane: four live here", H["low"], pieces=6, door_colour="mustard", house="low_5")
+_dm = by_id("high_5")
+for i in range(2):
+    dress(f"washing_dunmore_{i + 1}", "washing_line", (_dm["at"][0] + _dm["size"][0] / 2 + 2.6, _dm["at"][1] - 1.5 + 2.4 * i), (5.2, 0.5), "south", 2.4,
+          "Greta Dunmore takes in washing: her lines fill the gap by the wynd beside High Row 5", H["high"], pieces=7, door_colour="chalk_blue", house="high_5")
+dress("hen_coop_1", "hen_coop", (by_id("mid_2")["at"][0] + 0.6, by_id("mid_2")["at"][1] + by_id("mid_2")["size"][1] / 2 + 4.4), (2.0, 1.3), "north", 1.1, "the Fenwicks' hens in the yard behind Mid Row 2: four to feed", H["mid"])
+dress("hen_coop_2", "hen_coop", (by_id("low_4")["at"][0] - 1.2, by_id("low_4")["at"][1] + by_id("low_4")["size"][1] / 2 + 5.4), (2.0, 1.3), "north", 1.1, "the Tarns' hens behind Low Row 4: seven to feed", H["low"])
+
+# The Ladder's outdoor beds: canes over the bed before each worked glasshouse on the two lowest,
+# most sheltered terraces.
+for l in [l for l in lots if l["id"].startswith("glasshouse_") and l["level"] in ("low", "mid") and int(l["id"].split("_")[1]) not in BROKEN]:
+    n = int(l["id"].split("_")[1])
+    for j in range(2):
+        dress(f"canes_{n}_{j + 1}", "cane_wigwam", (l["at"][0] - 3.0 + 6.0 * j, l["at"][1] - 2.25 - 2.15), (1.1, 1.1), "south", 2.1,
+              f"beans on canes in the bed before glasshouse {n}: the terrace wall behind breaks the wind", H[l["level"]])
+
+# The Hanger: its trees are the plan's `tree` resources (the engine's, drawn by the client).
+# The kit builds the six wind-bent forms for them (`hanger_tree_1..6`, standing where the first
+# six trees do) and the old wood's stumps among them. A stump stands between every third tree
+# and the next: the old wood was cut to stumps in the lean years, and the replanting stands
+# among them (SMALL_CITY §1).
+for i, q in enumerate(trees[:6]):
+    fixture(f"hanger_tree_{i + 1}", "hanger_tree", q, (9.0, 9.0), "south", H["hanger"], 8.0, f"the Hanger's wind-bent tree, form {i + 1} of six, leaning north-east: it stands for the plan's tree at {q[0]:g}, {q[1]:g}",
+            age=0.4, repair=0.5, form=i + 1, natural=True, stands_for="tree")
+for i, q in enumerate(trees[1::3]):
+    fixture(f"stump_{i + 1}", "stump", (q[0] + 4.5, q[1] + 3.5), (1.1, 1.1), "south", H["hanger"], 0.5 + 0.1 * (i % 3), "a stump of the old wood, cut for fuel in the lean years",
+            age=1.0, repair=0.0, dressing=True, natural=True)
+
+# What the engine stands in a town, in Cullet's look: the client draws a structure of these kinds
+# with the model of its settlement's environment (`envs/cullet/<kind>/*.glb`), origin on the
+# ground at the structure's place, front (-Y) to the street. Not placed by the plan: the engine
+# places them (a `sign` 1.5 m east of each named building's door point, 0.5 m beyond its lot).
+structure_models = [
+    {"id": "sign", "kind": "sign", "model": "cullet/sign/sign.glb", "size": [0.5, 1.2], "height_m": 2.75, "facing": "south", "at": [0, 0], "seed": seed_of("sign"),
+     "cause": "the engine's sign at a named building's door: a painted board on an iron bracket and a spar at the kerb, its back to the building",
+     "wear": wear((0, 5), H["strand"], "south", 0.6, 0.5, 0.0)},
+    {"id": "storage", "kind": "storage", "model": "cullet/storage/storage.glb", "size": [3.2, 2.9], "height_m": 1.35, "facing": "south", "at": [0, 0], "seed": seed_of("storage"),
+     "cause": "the engine's common store in the Counting House yard: a covered handcart, crates and barrels, in tarred timber",
+     "wear": wear((30, 17), H["strand"], "south", 0.6, 0.5, 0.0)},
+    {"id": "campfire", "kind": "campfire", "model": "cullet/campfire/campfire.glb", "size": [1.0, 1.0], "height_m": 0.7, "facing": "south", "at": [0, 0], "seed": seed_of("campfire"),
+     "cause": "the engine's fire in the yard: an iron fire basket on three stones, peat in it",
+     "wear": wear((30, 17), H["strand"], "south", 0.6, 0.5, 0.0)},
+]
+
+# ---------------------------------------------------------------------------------------------
 # The land: the Wrack, about 760 x 560 m in the middle of a 1024 m map (SMALL_CITY §2).
 
 OUTLINE = [
@@ -916,7 +1031,7 @@ def ground(layer, colour, tint=None, why=""):
 
 FLAGS = ground("quay_flags", rgb("pale basalt", "basalt", 0.3), rgb("basalt"), "the ship-day quay's flags: pale basalt, wet")
 SETTS = ground("slate_setts", rgb("pale basalt"), None, "basalt setts, polished by feet")
-CINDERS = ground("cinders", rgb("tar", "sooted brick", 0.45), rgb("sooted brick"), "furnace cinders and ash, 83 years of them")
+CINDERS = ground("cinders", rgb("tar", "pale basalt", 0.3), rgb("sooted brick"), "furnace cinders and ash, 83 years of them: charcoal, rusty where brick has crumbled into it")
 WET_SAND = ground("wet_sand", rgb("sand", "pale basalt", 0.38), rgb("sand"), "sand the tide has just left")
 EARTH = ground("dirt", rgb("peat", "driftwood", 0.5), rgb("moor grass"), "trodden earth")
 ROCK = ground("rock", rgb("basalt"), None, "the island's own basalt")
@@ -1013,6 +1128,7 @@ def plan():
         "resources": resources,
         "fixtures": fixtures,
         "grounds": grounds,
+        "structure_models": structure_models,
         "features": FEATURES,
         "terraces": terrace_lots,
         "count": count(),
@@ -1044,7 +1160,7 @@ def count():
 
 
 def seed(p):
-    rough = {k: v for k, v in p.items() if k not in ("fixtures", "grounds", "features", "terraces", "count")}
+    rough = {k: v for k, v in p.items() if k not in ("fixtures", "grounds", "structure_models", "features", "terraces", "count")}
     return {
         "run": "cullet",
         "seed": SEED,
@@ -1081,7 +1197,8 @@ def env_text():
     that hold a colon are this script's, everything else in the file is kept as it is."""
     env = json.loads(ENV_OUT.read_text())
     g = {k: v for k, v in env["ground"].items() if ":" not in k}
-    g.update({k: {kk: vv for kk, vv in v.items()} for k, v in GROUND_MAP.items()})
+    # Only what the client reads (layer, colour, tint): each entry's `note` stays in this script.
+    g.update({k: {kk: vv for kk, vv in v.items() if kk != "note"} for k, v in GROUND_MAP.items()})
     env["ground"] = g
     return json.dumps(env, indent=1, ensure_ascii=False)
 

@@ -13457,6 +13457,3151 @@
     "cause": "+2 m above the sea; 133 m from the Cone at bearing 260; front faces 180"
    },
    "dressing": true
+  },
+  {
+   "id": "cone_bench_1",
+   "kind": "cone_bench",
+   "model": "cullet/cone_bench/cone_bench_1.glb",
+   "at": [
+    144.0,
+    23.4
+   ],
+   "size": [
+    1.9,
+    0.7
+   ],
+   "facing": "north",
+   "floor_m": 2.0,
+   "height_m": 0.95,
+   "seed": 89411,
+   "cause": "Halvard Dunmore's bench at the Cone's mouth, where the heat reaches (the plan's spot)",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.25,
+    "wind": 0.03,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 10 m from the Cone at bearing 197; front faces 0"
+   },
+   "dressing": true
+  },
+  {
+   "id": "cullet_heap_green",
+   "kind": "cullet_heap",
+   "model": "cullet/cullet_heap/cullet_heap_green.glb",
+   "at": [
+    140.4,
+    13.5
+   ],
+   "size": [
+    2.2,
+    1.9
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.75,
+   "seed": 99656,
+   "cause": "the yard's heap of green cullet (the plan's spot): sorted, waiting for the melt",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 21 m from the Cone at bearing 199; front faces 180"
+   },
+   "dressing": true,
+   "colour": "green",
+   "shovel": false
+  },
+  {
+   "id": "cullet_heap_amber",
+   "kind": "cullet_heap",
+   "model": "cullet/cullet_heap/cullet_heap_amber.glb",
+   "at": [
+    142.8,
+    13.5
+   ],
+   "size": [
+    2.2,
+    1.9
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.3,
+   "seed": 1643,
+   "cause": "the yard's heap of amber cullet (the plan's spot): nearly out, amber is the rarest",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 20 m from the Cone at bearing 192; front faces 180"
+   },
+   "dressing": true,
+   "colour": "amber",
+   "shovel": false
+  },
+  {
+   "id": "cullet_heap_aqua",
+   "kind": "cullet_heap",
+   "model": "cullet/cullet_heap/cullet_heap_aqua.glb",
+   "at": [
+    145.2,
+    13.5
+   ],
+   "size": [
+    2.2,
+    1.9
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.9,
+   "seed": 70490,
+   "cause": "the yard's heap of aqua cullet (the plan's spot): the most there is, every window's glass",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.01,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 20 m from the Cone at bearing 185; front faces 180"
+   },
+   "dressing": true,
+   "colour": "aqua",
+   "shovel": true
+  },
+  {
+   "id": "cullet_heap_smoke",
+   "kind": "cullet_heap",
+   "model": "cullet/cullet_heap/cullet_heap_smoke.glb",
+   "at": [
+    147.6,
+    13.5
+   ],
+   "size": [
+    2.2,
+    1.9
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.6,
+   "seed": 50995,
+   "cause": "the yard's heap of smoke cullet (the plan's spot): sorted, waiting for the melt",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.01,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 20 m from the Cone at bearing 178; front faces 180"
+   },
+   "dressing": true,
+   "colour": "smoke",
+   "shovel": false
+  },
+  {
+   "id": "trough_1",
+   "kind": "trough",
+   "model": "cullet/trough/trough_1.glb",
+   "at": [
+    158.0,
+    13.5
+   ],
+   "size": [
+    2.4,
+    0.8
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.63,
+   "seed": 56630,
+   "cause": "the Cone yard's water trough (the plan's spot)",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 22 m from the Cone at bearing 151; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "blowpipe_rack_1",
+   "kind": "blowpipe_rack",
+   "model": "cullet/blowpipe_rack/blowpipe_rack_1.glb",
+   "at": [
+    150.1,
+    24.1
+   ],
+   "size": [
+    2.2,
+    0.6
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 1.5,
+   "seed": 75212,
+   "cause": "the blowpipe rack between the front and the east mouths, a pipe's length from the heat",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.26,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 9 m from the Cone at bearing 161; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "crucible_stack_1",
+   "kind": "crucible_stack",
+   "model": "cullet/crucible_stack/crucible_stack_1.glb",
+   "at": [
+    117.0,
+    11.25
+   ],
+   "size": [
+    1.7,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 1.4,
+   "seed": 67214,
+   "cause": "fired pots stacked before the pot house, waiting for the Cone",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 37 m from the Cone at bearing 234; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "crucible_stack_2",
+   "kind": "crucible_stack",
+   "model": "cullet/crucible_stack/crucible_stack_2.glb",
+   "at": [
+    141.2,
+    21.2
+   ],
+   "size": [
+    1.7,
+    1.1
+   ],
+   "facing": 150,
+   "floor_m": 2.0,
+   "height_m": 1.4,
+   "seed": 71604,
+   "cause": "pots brought to the Cone's pot room door for the next setting",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.17,
+    "wind": 0.17,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 13 m from the Cone at bearing 206; front faces 150"
+   },
+   "dressing": true
+  },
+  {
+   "id": "ash_sacks_1",
+   "kind": "ash_sacks",
+   "model": "cullet/ash_sacks/ash_sacks_1.glb",
+   "at": [
+    92.6,
+    31.3
+   ],
+   "size": [
+    1.7,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.7,
+   "seed": 74640,
+   "cause": "kelp ash come from the kilns, not yet carried into the ash house",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 54 m from the Cone at bearing 268; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "ash_sacks_2",
+   "kind": "ash_sacks",
+   "model": "cullet/ash_sacks/ash_sacks_2.glb",
+   "at": [
+    161.0,
+    20.0
+   ],
+   "size": [
+    1.7,
+    1.1
+   ],
+   "facing": 200,
+   "floor_m": 2.0,
+   "height_m": 0.7,
+   "seed": 61898,
+   "cause": "ash for the day's batch, set down in the yard by the mixing floor",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.05,
+    "wind": 0.52,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 19 m from the Cone at bearing 133; front faces 200"
+   },
+   "dressing": true
+  },
+  {
+   "id": "handcart_1",
+   "kind": "handcart",
+   "model": "cullet/handcart/handcart_1.glb",
+   "at": [
+    137.6,
+    12.3
+   ],
+   "size": [
+    1.3,
+    2.6
+   ],
+   "facing": 115,
+   "floor_m": 2.0,
+   "height_m": 0.95,
+   "seed": 75402,
+   "cause": "the yard's handcart by the heaps: cullet comes down from the Rows on it",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.03,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 23 m from the Cone at bearing 204; front faces 115"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_low_1",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_low_1.glb",
+   "at": [
+    60.45,
+    52.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.45,
+   "seed": 59658,
+   "cause": "Dunlin's lean-to behind Low Row 1: nets and floats",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 89 m from the Cone at bearing 283; front faces 0"
+   },
+   "dressing": true,
+   "use": "nets",
+   "house": "low_1"
+  },
+  {
+   "id": "rain_butt_low_1",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_low_1.glb",
+   "at": [
+    63.45,
+    51.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 1.75,
+   "seed": 28743,
+   "cause": "the rain butt at Low Row 1's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 86 m from the Cone at bearing 283; front faces 0"
+   },
+   "dressing": true,
+   "house": "low_1"
+  },
+  {
+   "id": "privy_low_1",
+   "kind": "privy",
+   "model": "cullet/privy/privy_low_1.glb",
+   "at": [
+    59.1,
+    58.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.2,
+   "seed": 89266,
+   "cause": "the privy shared by Low Row 1 and 2, against the retaining wall",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 92 m from the Cone at bearing 286; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_low_2",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_low_2.glb",
+   "at": [
+    54.75,
+    52.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.45,
+   "seed": 91728,
+   "cause": "Calloway's lean-to behind Low Row 2: nets and floats",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 94 m from the Cone at bearing 282; front faces 0"
+   },
+   "dressing": true,
+   "use": "nets",
+   "house": "low_2"
+  },
+  {
+   "id": "rain_butt_low_2",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_low_2.glb",
+   "at": [
+    58.55,
+    51.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 1.75,
+   "seed": 19453,
+   "cause": "the rain butt at Low Row 2's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 90 m from the Cone at bearing 282; front faces 0"
+   },
+   "dressing": true,
+   "house": "low_2"
+  },
+  {
+   "id": "washing_low_2",
+   "kind": "washing_line",
+   "model": "cullet/washing_line/washing_low_2.glb",
+   "at": [
+    56.65,
+    54.9
+   ],
+   "size": [
+    5.0,
+    0.5
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.3,
+   "seed": 51783,
+   "cause": "Calloway's washing in the yard: 4 live here",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 93 m from the Cone at bearing 284; front faces 0"
+   },
+   "dressing": true,
+   "pieces": 5,
+   "door_colour": "sea_green",
+   "house": "low_2"
+  },
+  {
+   "id": "privy_low_3",
+   "kind": "privy",
+   "model": "cullet/privy/privy_low_3.glb",
+   "at": [
+    48.4,
+    58.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.2,
+   "seed": 13502,
+   "cause": "the privy shared by Low Row 3 and 4, against the retaining wall",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 102 m from the Cone at bearing 285; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_low_4",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_low_4.glb",
+   "at": [
+    43.55,
+    52.3
+   ],
+   "size": [
+    3.0,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.6,
+   "seed": 44741,
+   "cause": "Tarn's lean-to behind Low Row 4: an old boat turned over for its roof; seven live here",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 105 m from the Cone at bearing 281; front faces 0"
+   },
+   "dressing": true,
+   "use": "boat",
+   "house": "low_4"
+  },
+  {
+   "id": "rain_butt_low_4",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_low_4.glb",
+   "at": [
+    47.85,
+    51.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 1.75,
+   "seed": 82824,
+   "cause": "the rain butt at Low Row 4's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 101 m from the Cone at bearing 281; front faces 0"
+   },
+   "dressing": true,
+   "house": "low_4"
+  },
+  {
+   "id": "washing_low_4",
+   "kind": "washing_line",
+   "model": "cullet/washing_line/washing_low_4.glb",
+   "at": [
+    45.55,
+    54.9
+   ],
+   "size": [
+    5.0,
+    0.5
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.3,
+   "seed": 69618,
+   "cause": "Tarn's washing in the yard: 7 live here",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 104 m from the Cone at bearing 282; front faces 0"
+   },
+   "dressing": true,
+   "pieces": 8,
+   "door_colour": "oxblood",
+   "house": "low_4"
+  },
+  {
+   "id": "lean_to_low_5",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_low_5.glb",
+   "at": [
+    37.55,
+    52.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.45,
+   "seed": 72435,
+   "cause": "Okoro's lean-to behind Low Row 5: nets and floats",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 111 m from the Cone at bearing 280; front faces 0"
+   },
+   "dressing": true,
+   "use": "nets",
+   "house": "low_5"
+  },
+  {
+   "id": "rain_butt_low_5",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_low_5.glb",
+   "at": [
+    41.35,
+    51.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 1.75,
+   "seed": 31166,
+   "cause": "the rain butt at Low Row 5's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 107 m from the Cone at bearing 280; front faces 0"
+   },
+   "dressing": true,
+   "house": "low_5"
+  },
+  {
+   "id": "washing_low_5",
+   "kind": "washing_line",
+   "model": "cullet/washing_line/washing_low_5.glb",
+   "at": [
+    39.45,
+    54.9
+   ],
+   "size": [
+    5.0,
+    0.5
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.3,
+   "seed": 23876,
+   "cause": "Okoro's washing in the yard: 4 live here",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 110 m from the Cone at bearing 282; front faces 0"
+   },
+   "dressing": true,
+   "pieces": 5,
+   "door_colour": "mustard",
+   "house": "low_5"
+  },
+  {
+   "id": "privy_low_5",
+   "kind": "privy",
+   "model": "cullet/privy/privy_low_5.glb",
+   "at": [
+    36.2,
+    58.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.2,
+   "seed": 61867,
+   "cause": "the privy shared by Low Row 5 and 6, against the retaining wall",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 114 m from the Cone at bearing 283; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_low_6",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_low_6.glb",
+   "at": [
+    10.45,
+    52.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.45,
+   "seed": 8649,
+   "cause": "Vane's lean-to behind Low Row 6: nets and floats",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 138 m from the Cone at bearing 278; front faces 0"
+   },
+   "dressing": true,
+   "use": "nets",
+   "house": "low_6"
+  },
+  {
+   "id": "rain_butt_low_6",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_low_6.glb",
+   "at": [
+    13.45,
+    51.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 1.75,
+   "seed": 17124,
+   "cause": "the rain butt at Low Row 6's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 135 m from the Cone at bearing 278; front faces 0"
+   },
+   "dressing": true,
+   "house": "low_6"
+  },
+  {
+   "id": "lean_to_low_7",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_low_7.glb",
+   "at": [
+    5.55,
+    52.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.45,
+   "seed": 58463,
+   "cause": "Morrow's lean-to behind Low Row 7: nets and floats",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 143 m from the Cone at bearing 278; front faces 0"
+   },
+   "dressing": true,
+   "use": "nets",
+   "house": "low_7"
+  },
+  {
+   "id": "rain_butt_low_7",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_low_7.glb",
+   "at": [
+    8.55,
+    51.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 1.75,
+   "seed": 13330,
+   "cause": "the rain butt at Low Row 7's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 140 m from the Cone at bearing 278; front faces 0"
+   },
+   "dressing": true,
+   "house": "low_7"
+  },
+  {
+   "id": "privy_low_7",
+   "kind": "privy",
+   "model": "cullet/privy/privy_low_7.glb",
+   "at": [
+    4.2,
+    58.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.2,
+   "seed": 55623,
+   "cause": "the privy shared by Low Row 7 and 8, against the retaining wall",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 145 m from the Cone at bearing 280; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_low_8",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_low_8.glb",
+   "at": [
+    0.25,
+    52.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.45,
+   "seed": 3214,
+   "cause": "Sato's lean-to behind Low Row 8: nets and floats",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 148 m from the Cone at bearing 277; front faces 0"
+   },
+   "dressing": true,
+   "use": "nets",
+   "house": "low_8"
+  },
+  {
+   "id": "rain_butt_low_8",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_low_8.glb",
+   "at": [
+    3.65,
+    51.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 1.75,
+   "seed": 53283,
+   "cause": "the rain butt at Low Row 8's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 145 m from the Cone at bearing 277; front faces 0"
+   },
+   "dressing": true,
+   "house": "low_8"
+  },
+  {
+   "id": "privy_low_9",
+   "kind": "privy",
+   "model": "cullet/privy/privy_low_9.glb",
+   "at": [
+    -5.9,
+    58.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.2,
+   "seed": 41248,
+   "cause": "the privy shared by Low Row 9 and 10, against the retaining wall",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 155 m from the Cone at bearing 280; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_low_10",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_low_10.glb",
+   "at": [
+    -9.95,
+    52.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 2.45,
+   "seed": 46386,
+   "cause": "Marl's lean-to behind Low Row 10: the winter's peat",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 158 m from the Cone at bearing 277; front faces 0"
+   },
+   "dressing": true,
+   "use": "peat",
+   "house": "low_10"
+  },
+  {
+   "id": "rain_butt_low_10",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_low_10.glb",
+   "at": [
+    -6.45,
+    51.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 1.75,
+   "seed": 72120,
+   "cause": "the rain butt at Low Row 10's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 155 m from the Cone at bearing 277; front faces 0"
+   },
+   "dressing": true,
+   "house": "low_10"
+  },
+  {
+   "id": "lean_to_mid_1",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_mid_1.glb",
+   "at": [
+    47.65,
+    80.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 2.45,
+   "seed": 5295,
+   "cause": "Greave's lean-to behind Mid Row 1: pots and seed trays",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 110 m from the Cone at bearing 295; front faces 0"
+   },
+   "dressing": true,
+   "use": "potting",
+   "house": "mid_1"
+  },
+  {
+   "id": "rain_butt_mid_1",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_mid_1.glb",
+   "at": [
+    51.45,
+    79.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 1.75,
+   "seed": 16354,
+   "cause": "the rain butt at Mid Row 1's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 106 m from the Cone at bearing 296; front faces 0"
+   },
+   "dressing": true,
+   "house": "mid_1"
+  },
+  {
+   "id": "washing_mid_1",
+   "kind": "washing_line",
+   "model": "cullet/washing_line/washing_mid_1.glb",
+   "at": [
+    49.55,
+    82.9
+   ],
+   "size": [
+    5.0,
+    0.5
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 2.3,
+   "seed": 75000,
+   "cause": "Greave's washing in the yard: 4 live here",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 109 m from the Cone at bearing 297; front faces 0"
+   },
+   "dressing": true,
+   "pieces": 5,
+   "door_colour": "sea_green",
+   "house": "mid_1"
+  },
+  {
+   "id": "privy_mid_1",
+   "kind": "privy",
+   "model": "cullet/privy/privy_mid_1.glb",
+   "at": [
+    46.3,
+    88.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 9.5,
+   "height_m": 2.2,
+   "seed": 59639,
+   "cause": "the privy shared by Mid Row 1 and 2, against the retaining wall",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.51,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 115 m from the Cone at bearing 299; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_mid_2",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_mid_2.glb",
+   "at": [
+    41.95,
+    80.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 2.45,
+   "seed": 87605,
+   "cause": "Fenwick's lean-to behind Mid Row 2: pots and seed trays",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 115 m from the Cone at bearing 294; front faces 0"
+   },
+   "dressing": true,
+   "use": "potting",
+   "house": "mid_2"
+  },
+  {
+   "id": "rain_butt_mid_2",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_mid_2.glb",
+   "at": [
+    45.75,
+    79.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 1.75,
+   "seed": 56280,
+   "cause": "the rain butt at Mid Row 2's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 112 m from the Cone at bearing 295; front faces 0"
+   },
+   "dressing": true,
+   "house": "mid_2"
+  },
+  {
+   "id": "washing_mid_2",
+   "kind": "washing_line",
+   "model": "cullet/washing_line/washing_mid_2.glb",
+   "at": [
+    43.85,
+    82.9
+   ],
+   "size": [
+    5.0,
+    0.5
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 2.3,
+   "seed": 85986,
+   "cause": "Fenwick's washing in the yard: 4 live here",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 115 m from the Cone at bearing 296; front faces 0"
+   },
+   "dressing": true,
+   "pieces": 5,
+   "door_colour": "mustard",
+   "house": "mid_2"
+  },
+  {
+   "id": "privy_mid_3",
+   "kind": "privy",
+   "model": "cullet/privy/privy_mid_3.glb",
+   "at": [
+    35.8,
+    88.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 9.5,
+   "height_m": 2.2,
+   "seed": 82843,
+   "cause": "the privy shared by Mid Row 3 and 4, against the retaining wall",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.51,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 124 m from the Cone at bearing 297; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_mid_4",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_mid_4.glb",
+   "at": [
+    32.25,
+    80.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 2.45,
+   "seed": 46176,
+   "cause": "Stannard's lean-to behind Mid Row 4: pots and seed trays",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 124 m from the Cone at bearing 292; front faces 0"
+   },
+   "dressing": true,
+   "use": "potting",
+   "house": "mid_4"
+  },
+  {
+   "id": "rain_butt_mid_4",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_mid_4.glb",
+   "at": [
+    35.25,
+    79.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 1.75,
+   "seed": 50541,
+   "cause": "the rain butt at Mid Row 4's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 121 m from the Cone at bearing 293; front faces 0"
+   },
+   "dressing": true,
+   "house": "mid_4"
+  },
+  {
+   "id": "lean_to_mid_5",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_mid_5.glb",
+   "at": [
+    17.95,
+    80.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 2.45,
+   "seed": 77302,
+   "cause": "Sarro's lean-to behind Mid Row 5: the winter's peat",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 137 m from the Cone at bearing 290; front faces 0"
+   },
+   "dressing": true,
+   "use": "peat",
+   "house": "mid_5"
+  },
+  {
+   "id": "rain_butt_mid_5",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_mid_5.glb",
+   "at": [
+    21.45,
+    79.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 1.75,
+   "seed": 60283,
+   "cause": "the rain butt at Mid Row 5's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 134 m from the Cone at bearing 290; front faces 0"
+   },
+   "dressing": true,
+   "house": "mid_5"
+  },
+  {
+   "id": "privy_mid_5",
+   "kind": "privy",
+   "model": "cullet/privy/privy_mid_5.glb",
+   "at": [
+    16.6,
+    88.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 9.5,
+   "height_m": 2.2,
+   "seed": 40718,
+   "cause": "the privy shared by Mid Row 5 and 6, against the retaining wall",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.51,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 142 m from the Cone at bearing 293; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_mid_7",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_mid_7.glb",
+   "at": [
+    7.15,
+    80.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 2.45,
+   "seed": 72826,
+   "cause": "Brandt's lean-to behind Mid Row 7: the winter's peat",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 148 m from the Cone at bearing 289; front faces 0"
+   },
+   "dressing": true,
+   "use": "peat",
+   "house": "mid_7"
+  },
+  {
+   "id": "rain_butt_mid_7",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_mid_7.glb",
+   "at": [
+    11.05,
+    79.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 1.75,
+   "seed": 92951,
+   "cause": "the rain butt at Mid Row 7's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 144 m from the Cone at bearing 289; front faces 0"
+   },
+   "dressing": true,
+   "house": "mid_7"
+  },
+  {
+   "id": "privy_mid_7",
+   "kind": "privy",
+   "model": "cullet/privy/privy_mid_7.glb",
+   "at": [
+    5.8,
+    88.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 9.5,
+   "height_m": 2.2,
+   "seed": 42946,
+   "cause": "the privy shared by Mid Row 7 and 8, against the retaining wall",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.51,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 152 m from the Cone at bearing 292; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_high_1",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_high_1.glb",
+   "at": [
+    59.55,
+    110.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 13.5,
+   "height_m": 2.45,
+   "seed": 95633,
+   "cause": "Pontil's lean-to behind High Row 1: the winter's peat",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.18,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 117 m from the Cone at bearing 311; front faces 0"
+   },
+   "dressing": true,
+   "use": "peat",
+   "house": "high_1"
+  },
+  {
+   "id": "rain_butt_high_1",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_high_1.glb",
+   "at": [
+    63.45,
+    109.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 13.5,
+   "height_m": 1.75,
+   "seed": 4923,
+   "cause": "the rain butt at High Row 1's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.18,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 113 m from the Cone at bearing 313; front faces 0"
+   },
+   "dressing": true,
+   "house": "high_1"
+  },
+  {
+   "id": "privy_high_1",
+   "kind": "privy",
+   "model": "cullet/privy/privy_high_1.glb",
+   "at": [
+    58.2,
+    118.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 13.5,
+   "height_m": 2.2,
+   "seed": 81876,
+   "cause": "the privy shared by High Row 1 and 2, against the retaining wall",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 123 m from the Cone at bearing 314; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_high_2",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_high_2.glb",
+   "at": [
+    53.35,
+    110.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 13.5,
+   "height_m": 2.45,
+   "seed": 29931,
+   "cause": "Hollin's lean-to behind High Row 2: the winter's peat",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.18,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 121 m from the Cone at bearing 310; front faces 0"
+   },
+   "dressing": true,
+   "use": "peat",
+   "house": "high_2"
+  },
+  {
+   "id": "rain_butt_high_2",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_high_2.glb",
+   "at": [
+    57.65,
+    109.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 13.5,
+   "height_m": 1.75,
+   "seed": 14849,
+   "cause": "the rain butt at High Row 2's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.18,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 118 m from the Cone at bearing 311; front faces 0"
+   },
+   "dressing": true,
+   "house": "high_2"
+  },
+  {
+   "id": "washing_high_2",
+   "kind": "washing_line",
+   "model": "cullet/washing_line/washing_high_2.glb",
+   "at": [
+    55.5,
+    112.9
+   ],
+   "size": [
+    5.0,
+    0.5
+   ],
+   "facing": "north",
+   "floor_m": 13.5,
+   "height_m": 2.3,
+   "seed": 1817,
+   "cause": "Hollin's washing in the yard: 4 live here",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.18,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 121 m from the Cone at bearing 311; front faces 0"
+   },
+   "dressing": true,
+   "pieces": 5,
+   "door_colour": "sea_green",
+   "house": "high_2"
+  },
+  {
+   "id": "lean_to_high_3",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_high_3.glb",
+   "at": [
+    47.55,
+    110.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 13.5,
+   "height_m": 2.45,
+   "seed": 66557,
+   "cause": "Quill's lean-to behind High Row 3: the winter's peat",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.18,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 126 m from the Cone at bearing 308; front faces 0"
+   },
+   "dressing": true,
+   "use": "peat",
+   "house": "high_3"
+  },
+  {
+   "id": "rain_butt_high_3",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_high_3.glb",
+   "at": [
+    51.45,
+    109.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 13.5,
+   "height_m": 1.75,
+   "seed": 27095,
+   "cause": "the rain butt at High Row 3's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.18,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 123 m from the Cone at bearing 309; front faces 0"
+   },
+   "dressing": true,
+   "house": "high_3"
+  },
+  {
+   "id": "privy_high_3",
+   "kind": "privy",
+   "model": "cullet/privy/privy_high_3.glb",
+   "at": [
+    46.2,
+    118.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 13.5,
+   "height_m": 2.2,
+   "seed": 44088,
+   "cause": "the privy shared by High Row 3 and 4, against the retaining wall",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 132 m from the Cone at bearing 310; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "lean_to_high_5",
+   "kind": "lean_to",
+   "model": "cullet/lean_to/lean_to_high_5.glb",
+   "at": [
+    17.55,
+    110.3
+   ],
+   "size": [
+    2.4,
+    2.0
+   ],
+   "facing": "north",
+   "floor_m": 13.5,
+   "height_m": 2.45,
+   "seed": 75784,
+   "cause": "Dunmore's lean-to behind High Row 5: the winter's peat",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.18,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 151 m from the Cone at bearing 301; front faces 0"
+   },
+   "dressing": true,
+   "use": "peat",
+   "house": "high_5"
+  },
+  {
+   "id": "rain_butt_high_5",
+   "kind": "rain_butt",
+   "model": "cullet/rain_butt/rain_butt_high_5.glb",
+   "at": [
+    21.45,
+    109.72
+   ],
+   "size": [
+    0.8,
+    0.8
+   ],
+   "facing": "north",
+   "floor_m": 13.5,
+   "height_m": 1.75,
+   "seed": 88514,
+   "cause": "the rain butt at High Row 5's back downpipe: the house is kept",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.18,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 147 m from the Cone at bearing 301; front faces 0"
+   },
+   "dressing": true,
+   "house": "high_5"
+  },
+  {
+   "id": "privy_high_5",
+   "kind": "privy",
+   "model": "cullet/privy/privy_high_5.glb",
+   "at": [
+    16.2,
+    118.65
+   ],
+   "size": [
+    1.2,
+    1.3
+   ],
+   "facing": "south",
+   "floor_m": 13.5,
+   "height_m": 2.2,
+   "seed": 54573,
+   "cause": "the privy shared by High Row 5 and 6, against the retaining wall",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 156 m from the Cone at bearing 303; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "washing_tally_wynd",
+   "kind": "washing_line",
+   "model": "cullet/washing_line/washing_tally_wynd.glb",
+   "at": [
+    33.2,
+    48.55
+   ],
+   "size": [
+    6.0,
+    0.5
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 3.0,
+   "seed": 78656,
+   "cause": "the Okoros' washing across the Tally Wynd, from their gable to a post over the lane: four live here",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 115 m from the Cone at bearing 278; front faces 180"
+   },
+   "dressing": true,
+   "pieces": 6,
+   "door_colour": "mustard",
+   "house": "low_5"
+  },
+  {
+   "id": "washing_dunmore_1",
+   "kind": "washing_line",
+   "model": "cullet/washing_line/washing_dunmore_1.glb",
+   "at": [
+    24.6,
+    104.05
+   ],
+   "size": [
+    5.2,
+    0.5
+   ],
+   "facing": "south",
+   "floor_m": 13.5,
+   "height_m": 2.4,
+   "seed": 54574,
+   "cause": "Greta Dunmore takes in washing: her lines fill the gap by the wynd beside High Row 5",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 142 m from the Cone at bearing 300; front faces 180"
+   },
+   "dressing": true,
+   "pieces": 7,
+   "door_colour": "chalk_blue",
+   "house": "high_5"
+  },
+  {
+   "id": "washing_dunmore_2",
+   "kind": "washing_line",
+   "model": "cullet/washing_line/washing_dunmore_2.glb",
+   "at": [
+    24.6,
+    106.45
+   ],
+   "size": [
+    5.2,
+    0.5
+   ],
+   "facing": "south",
+   "floor_m": 13.5,
+   "height_m": 2.4,
+   "seed": 40308,
+   "cause": "Greta Dunmore takes in washing: her lines fill the gap by the wynd beside High Row 5",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+13.5 m above the sea; 143 m from the Cone at bearing 301; front faces 180"
+   },
+   "dressing": true,
+   "pieces": 7,
+   "door_colour": "chalk_blue",
+   "house": "high_5"
+  },
+  {
+   "id": "hen_coop_1",
+   "kind": "hen_coop",
+   "model": "cullet/hen_coop/hen_coop_1.glb",
+   "at": [
+    44.05,
+    83.7
+   ],
+   "size": [
+    2.0,
+    1.3
+   ],
+   "facing": "north",
+   "floor_m": 9.5,
+   "height_m": 1.1,
+   "seed": 17,
+   "cause": "the Fenwicks' hens in the yard behind Mid Row 2: four to feed",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.13,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 115 m from the Cone at bearing 296; front faces 0"
+   },
+   "dressing": true
+  },
+  {
+   "id": "hen_coop_2",
+   "kind": "hen_coop",
+   "model": "cullet/hen_coop/hen_coop_2.glb",
+   "at": [
+    43.95,
+    56.7
+   ],
+   "size": [
+    2.0,
+    1.3
+   ],
+   "facing": "north",
+   "floor_m": 5.5,
+   "height_m": 1.1,
+   "seed": 73931,
+   "cause": "the Tarns' hens behind Low Row 4: seven to feed",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.07,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 106 m from the Cone at bearing 283; front faces 0"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_1_1",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_1_1.glb",
+   "at": [
+    -42.0,
+    52.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.1,
+   "seed": 15718,
+   "cause": "beans on canes in the bed before glasshouse 1: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 190 m from the Cone at bearing 276; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_1_2",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_1_2.glb",
+   "at": [
+    -36.0,
+    52.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.1,
+   "seed": 64764,
+   "cause": "beans on canes in the bed before glasshouse 1: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 184 m from the Cone at bearing 276; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_2_1",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_2_1.glb",
+   "at": [
+    -56.0,
+    52.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.1,
+   "seed": 85727,
+   "cause": "beans on canes in the bed before glasshouse 2: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 204 m from the Cone at bearing 276; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_2_2",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_2_2.glb",
+   "at": [
+    -50.0,
+    52.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.1,
+   "seed": 42917,
+   "cause": "beans on canes in the bed before glasshouse 2: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 198 m from the Cone at bearing 276; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_3_1",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_3_1.glb",
+   "at": [
+    -112.0,
+    52.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.1,
+   "seed": 52296,
+   "cause": "beans on canes in the bed before glasshouse 3: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 260 m from the Cone at bearing 274; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_3_2",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_3_2.glb",
+   "at": [
+    -106.0,
+    52.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 5.5,
+   "height_m": 2.1,
+   "seed": 22258,
+   "cause": "beans on canes in the bed before glasshouse 3: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.12,
+    "soot": 0.0,
+    "wind": 0.46,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+5.5 m above the sea; 254 m from the Cone at bearing 274; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_4_1",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_4_1.glb",
+   "at": [
+    -42.0,
+    82.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 9.5,
+   "height_m": 2.1,
+   "seed": 49069,
+   "cause": "beans on canes in the bed before glasshouse 4: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.51,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 195 m from the Cone at bearing 285; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_4_2",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_4_2.glb",
+   "at": [
+    -36.0,
+    82.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 9.5,
+   "height_m": 2.1,
+   "seed": 85879,
+   "cause": "beans on canes in the bed before glasshouse 4: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.51,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 190 m from the Cone at bearing 285; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_5_1",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_5_1.glb",
+   "at": [
+    -56.0,
+    82.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 9.5,
+   "height_m": 2.1,
+   "seed": 85146,
+   "cause": "beans on canes in the bed before glasshouse 5: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.51,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 209 m from the Cone at bearing 284; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "canes_5_2",
+   "kind": "cane_wigwam",
+   "model": "cullet/cane_wigwam/canes_5_2.glb",
+   "at": [
+    -50.0,
+    82.65
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 9.5,
+   "height_m": 2.1,
+   "seed": 320,
+   "cause": "beans on canes in the bed before glasshouse 5: the terrace wall behind breaks the wind",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.51,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 203 m from the Cone at bearing 284; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "hanger_tree_1",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_1.glb",
+   "at": [
+    215.6,
+    218.6
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 13722,
+   "cause": "the Hanger's wind-bent tree, form 1 of six, leaning north-east: it stands for the plan's tree at 215.6, 218.6",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 198 m from the Cone at bearing 20; front faces 180"
+   },
+   "form": 1,
+   "natural": true,
+   "stands_for": "tree"
+  },
+  {
+   "id": "hanger_tree_2",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_2.glb",
+   "at": [
+    226.2,
+    217.0
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 70848,
+   "cause": "the Hanger's wind-bent tree, form 2 of six, leaning north-east: it stands for the plan's tree at 226.2, 217",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 200 m from the Cone at bearing 23; front faces 180"
+   },
+   "form": 2,
+   "natural": true,
+   "stands_for": "tree"
+  },
+  {
+   "id": "hanger_tree_3",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_3.glb",
+   "at": [
+    240.8,
+    215.4
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 6582,
+   "cause": "the Hanger's wind-bent tree, form 3 of six, leaning north-east: it stands for the plan's tree at 240.8, 215.4",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 205 m from the Cone at bearing 27; front faces 180"
+   },
+   "form": 3,
+   "natural": true,
+   "stands_for": "tree"
+  },
+  {
+   "id": "hanger_tree_4",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_4.glb",
+   "at": [
+    183.8,
+    229.8
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 27189,
+   "cause": "the Hanger's wind-bent tree, form 4 of six, leaning north-east: it stands for the plan's tree at 183.8, 229.8",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 200 m from the Cone at bearing 11; front faces 180"
+   },
+   "form": 4,
+   "natural": true,
+   "stands_for": "tree"
+  },
+  {
+   "id": "hanger_tree_5",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_5.glb",
+   "at": [
+    194.4,
+    228.2
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 28035,
+   "cause": "the Hanger's wind-bent tree, form 5 of six, leaning north-east: it stands for the plan's tree at 194.4, 228.2",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 201 m from the Cone at bearing 14; front faces 180"
+   },
+   "form": 5,
+   "natural": true,
+   "stands_for": "tree"
+  },
+  {
+   "id": "hanger_tree_6",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_6.glb",
+   "at": [
+    209.0,
+    230.6
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 18361,
+   "cause": "the Hanger's wind-bent tree, form 6 of six, leaning north-east: it stands for the plan's tree at 209, 230.6",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 207 m from the Cone at bearing 17; front faces 180"
+   },
+   "form": 6,
+   "natural": true,
+   "stands_for": "tree"
+  },
+  {
+   "id": "stump_1",
+   "kind": "stump",
+   "model": "cullet/stump/stump_1.glb",
+   "at": [
+    230.7,
+    220.5
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.5,
+   "seed": 84701,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 205 m from the Cone at bearing 24; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_2",
+   "kind": "stump",
+   "model": "cullet/stump/stump_2.glb",
+   "at": [
+    198.9,
+    231.7
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.6,
+   "seed": 6823,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 205 m from the Cone at bearing 15; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_3",
+   "kind": "stump",
+   "model": "cullet/stump/stump_3.glb",
+   "at": [
+    238.7,
+    230.9
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.7,
+   "seed": 83057,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 218 m from the Cone at bearing 25; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_4",
+   "kind": "stump",
+   "model": "cullet/stump/stump_4.glb",
+   "at": [
+    191.7,
+    245.3
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.5,
+   "seed": 83410,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 217 m from the Cone at bearing 12; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_5",
+   "kind": "stump",
+   "model": "cullet/stump/stump_5.glb",
+   "at": [
+    231.5,
+    244.5
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.6,
+   "seed": 54212,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 228 m from the Cone at bearing 22; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_6",
+   "kind": "stump",
+   "model": "cullet/stump/stump_6.glb",
+   "at": [
+    271.3,
+    243.7
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.7,
+   "seed": 37214,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 245 m from the Cone at bearing 31; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_7",
+   "kind": "stump",
+   "model": "cullet/stump/stump_7.glb",
+   "at": [
+    199.7,
+    255.7
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.5,
+   "seed": 52200,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 229 m from the Cone at bearing 13; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_8",
+   "kind": "stump",
+   "model": "cullet/stump/stump_8.glb",
+   "at": [
+    239.5,
+    254.9
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.6,
+   "seed": 29529,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 240 m from the Cone at bearing 23; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_9",
+   "kind": "stump",
+   "model": "cullet/stump/stump_9.glb",
+   "at": [
+    279.3,
+    258.1
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.7,
+   "seed": 8047,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 261 m from the Cone at bearing 30; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_10",
+   "kind": "stump",
+   "model": "cullet/stump/stump_10.glb",
+   "at": [
+    192.5,
+    269.3
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.5,
+   "seed": 44103,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 241 m from the Cone at bearing 11; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_11",
+   "kind": "stump",
+   "model": "cullet/stump/stump_11.glb",
+   "at": [
+    232.3,
+    268.5
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.6,
+   "seed": 77009,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 250 m from the Cone at bearing 20; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_12",
+   "kind": "stump",
+   "model": "cullet/stump/stump_12.glb",
+   "at": [
+    272.1,
+    267.7
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.7,
+   "seed": 62411,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 266 m from the Cone at bearing 28; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_13",
+   "kind": "stump",
+   "model": "cullet/stump/stump_13.glb",
+   "at": [
+    307.9,
+    266.9
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.5,
+   "seed": 74045,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 284 m from the Cone at bearing 35; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_14",
+   "kind": "stump",
+   "model": "cullet/stump/stump_14.glb",
+   "at": [
+    225.7,
+    280.5
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.6,
+   "seed": 30622,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 260 m from the Cone at bearing 18; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_15",
+   "kind": "stump",
+   "model": "cullet/stump/stump_15.glb",
+   "at": [
+    265.5,
+    279.7
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.7,
+   "seed": 55560,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 274 m from the Cone at bearing 26; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_16",
+   "kind": "stump",
+   "model": "cullet/stump/stump_16.glb",
+   "at": [
+    305.3,
+    278.9
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.5,
+   "seed": 45682,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 292 m from the Cone at bearing 33; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_17",
+   "kind": "stump",
+   "model": "cullet/stump/stump_17.glb",
+   "at": [
+    243.7,
+    290.9
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.6,
+   "seed": 18500,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 275 m from the Cone at bearing 21; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_18",
+   "kind": "stump",
+   "model": "cullet/stump/stump_18.glb",
+   "at": [
+    283.5,
+    294.1
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.7,
+   "seed": 13973,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 295 m from the Cone at bearing 28; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_19",
+   "kind": "stump",
+   "model": "cullet/stump/stump_19.glb",
+   "at": [
+    226.5,
+    304.5
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.5,
+   "seed": 6915,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 283 m from the Cone at bearing 16; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_20",
+   "kind": "stump",
+   "model": "cullet/stump/stump_20.glb",
+   "at": [
+    266.3,
+    303.7
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.6,
+   "seed": 45092,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 296 m from the Cone at bearing 24; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_21",
+   "kind": "stump",
+   "model": "cullet/stump/stump_21.glb",
+   "at": [
+    306.1,
+    302.9
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.7,
+   "seed": 53906,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 313 m from the Cone at bearing 31; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_22",
+   "kind": "stump",
+   "model": "cullet/stump/stump_22.glb",
+   "at": [
+    259.1,
+    317.3
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.5,
+   "seed": 72040,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 306 m from the Cone at bearing 22; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_23",
+   "kind": "stump",
+   "model": "cullet/stump/stump_23.glb",
+   "at": [
+    294.9,
+    316.5
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.6,
+   "seed": 76926,
+   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 320 m from the Cone at bearing 28; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
   }
  ],
  "grounds": [
@@ -15040,6 +18185,86 @@
    "cause": "a bank cut to bare peat: the Moss's fuel"
   }
  ],
+ "structure_models": [
+  {
+   "id": "sign",
+   "kind": "sign",
+   "model": "cullet/sign/sign.glb",
+   "size": [
+    0.5,
+    1.2
+   ],
+   "height_m": 2.75,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 58365,
+   "cause": "the engine's sign at a named building's door: a painted board on an iron bracket and a spar at the kerb, its back to the building",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 150 m from the Cone at bearing 259; front faces 180"
+   }
+  },
+  {
+   "id": "storage",
+   "kind": "storage",
+   "model": "cullet/storage/storage.glb",
+   "size": [
+    3.2,
+    2.9
+   ],
+   "height_m": 1.35,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 46182,
+   "cause": "the engine's common store in the Counting House yard: a covered handcart, crates and barrels, in tarred timber",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "campfire",
+   "kind": "campfire",
+   "model": "cullet/campfire/campfire.glb",
+   "size": [
+    1.0,
+    1.0
+   ],
+   "height_m": 0.7,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 27516,
+   "cause": "the engine's fire in the yard: an iron fire basket on three stones, peat in it",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  }
+ ],
  "features": {
   "kelp_kilns": {
    "note": "four round stone pits on the Wrack Strand, upwind (south-west) of Low Row; P2 props",
@@ -15137,22 +18362,37 @@
   "working": 20,
   "open_lots": 28,
   "fixtures": {
+   "ash_sacks": 2,
    "barrels": 2,
+   "blowpipe_rack": 1,
    "boat": 1,
    "bollard": 9,
+   "cane_wigwam": 10,
+   "cone_bench": 1,
    "creels": 2,
+   "crucible_stack": 2,
+   "cullet_heap": 4,
    "fish_steps": 1,
    "floats": 2,
+   "handcart": 1,
+   "hanger_tree": 6,
+   "hen_coop": 2,
    "heron_jib": 1,
+   "lean_to": 17,
    "marver_terrace": 1,
    "mole": 5,
    "net_rack": 3,
    "peat_stack": 1,
    "plot_wall": 18,
+   "privy": 12,
    "quay": 28,
    "quay_lamp": 7,
+   "rain_butt": 17,
    "retaining_wall": 116,
-   "stairs": 17
+   "stairs": 17,
+   "stump": 23,
+   "trough": 1,
+   "washing_line": 9
   },
   "by_district": {
    "the Strand": 12,

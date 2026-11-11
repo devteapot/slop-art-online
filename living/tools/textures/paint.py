@@ -71,7 +71,7 @@ TINT = {
     "flagstone": (176, 160, 128), "mud": (100, 104, 80), "spirit_moss": (52, 92, 100), "pavers": (60, 62, 72), "cliff": (86, 80, 76),
     "dry_earth": (176, 146, 104), "cracked_mud": (184, 162, 128), "gravel": (150, 138, 120),
     # Cullet's: the base colours of its `ground` map (cullet_plan.py GROUND_MAP).
-    "slate_setts": (92, 94, 99), "quay_flags": (82, 85, 91), "cinders": (62, 54, 52), "kelp_shingle": (92, 88, 62), "wet_sand": (168, 158, 130),
+    "slate_setts": (92, 94, 99), "quay_flags": (82, 85, 91), "cinders": (51, 50, 51), "kelp_shingle": (92, 88, 62), "wet_sand": (168, 158, 130),
     "peat": (62, 47, 35), "heather": (104, 92, 78), "worked_soil": (74, 58, 42), "thin_turf": (120, 118, 72),
     "bark": (110, 84, 62), "planks": (150, 112, 74), "plaster": (220, 210, 190), "stone": (150, 144, 134),
     "brick": (160, 84, 62), "shingles": (120, 70, 60), "metal": (120, 126, 130), "leaves": (90, 140, 70),
