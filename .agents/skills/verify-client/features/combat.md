@@ -12,7 +12,7 @@ What a client receives of fights (docs/COMBAT.md). The fixed suite (`drive.py`) 
 
 ## Gotchas
 
-- `my_combat` rows of the two involved stay 1.5 s, a refusal 4 s, an onlooker's 300 ms from its frame (since 2026-11-10); probe right after the reducer matrix. A join clears the player's earlier rows, its death screen included.
+- `my_combat` rows of the two involved and a refusal stay 4 s, an onlooker's 300 ms from its frame (since 2026-11-10); probe right after the reducer matrix. A join clears the player's earlier rows, its death screen included.
 - Event tables were not used for the feed: RLS is unimplemented in 2.14.1, so a public event table would broadcast to anyone (docs/COMBAT.md).
 - The game client subscribes `my_combat`, `my_readiness` and `skill_card` with its connection its own fighter through `my_fighter` and the fighters it perceives through `seen_fighters`; [game-client.md](game-client.md) measures those bytes.
 - `my_combat` tells an onlooker only within its own sight and with a clear sight line to where it happened (`combat::show`, `perception::in_sight`, the rule minds' percepts use), at its next frame (rows kept 300 ms); the two involved get theirs at once.
