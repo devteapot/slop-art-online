@@ -174,6 +174,8 @@ pub struct ClipInfo {
     pub path: Vec<(f32, f32)>,
     /// Its length (s), from the sidecar.
     pub seconds: f32,
+    /// The gait and its phase a one-shot starts from (a stop's: `start_gait` in the sidecar).
+    pub start_gait: Option<(String, f32)>,
 }
 
 impl ClipInfo {
@@ -275,19 +277,20 @@ impl Blend {
 /// "cursor", `live.rs`), by travel direction from the facing (degrees, the game's sense): a
 /// walking and a running take, the first in each list that the file has. These are the takes the
 /// clip lab's verdicts accepted (clips 2, 2026-11-11; `docs/GAME_BRIEF.md`, "Locomotion clips").
-/// Left out for a retake: `run_back` (a planted foot slides 16–19 cm), `strafe_run_left` (a 15°
-/// seam), `strafe_run_right` (1.18 m a cycle), the step-touch `strafe_walk_left`/`_right` (0.6 m a
-/// cycle) and `walk_diag_bl` (a toe 6–8 cm low at its seam), with `walk_diag_br` waiting for its
-/// mirror. A direction without a take falls back to the forward gaits along the travel with the
-/// upper body turned (`twist.rs`).
+/// Clips 3 (r2 takes, 2026-11-11) added the back diagonals' walks (`walk_diag_bl` s17 with
+/// `walk_diag_br`). Left out: `run_back` s3 (played at twice its own 1.9 m/s, its supporting foot
+/// slid 11% of the body's speed against 2% for the forward run reversed), `strafe_run_left` s17
+/// and `_right` s15 (their planted feet slide, the right one's seam closes 17°), and the
+/// step-touch `strafe_walk_left`/`_right` (0.6 m a cycle). A direction without a take falls back
+/// to the forward gaits along the travel with the upper body turned (`twist.rs`).
 pub const DIRECTIONS: [(f32, &[&str], &[&str]); 7] = [
     (180.0, &["walk_back"], &[]),
     (-90.0, &["strafe_walk_cross_left"], &[]),
     (90.0, &["strafe_walk_cross_right"], &[]),
     (-45.0, &["walk_diag_fl"], &["run_diag_fl"]),
     (45.0, &["walk_diag_fr"], &["run_diag_fr"]),
-    (-135.0, &[], &["run_diag_bl"]),
-    (135.0, &[], &["run_diag_br"]),
+    (-135.0, &["walk_diag_bl"], &["run_diag_bl"]),
+    (135.0, &["walk_diag_br"], &["run_diag_br"]),
 ];
 /// Neighbouring directions further apart than this (degrees) don't blend: the gap falls back.
 const DIR_GAP_MAX: f32 = 91.0;
@@ -320,7 +323,7 @@ impl Gaits {
 
     /// From a `clips.json` sidecar: its looping locomotion clips with a speed, and every clip's
     /// info. A character's sidecar maps clip names to clips; an animal's lists them under `clips`.
-    fn parse(json: &serde_json::Value) -> Self {
+    pub(crate) fn parse(json: &serde_json::Value) -> Self {
         let info_of = |c: &serde_json::Value, feet: &[&str]| {
             let pair = |v: &serde_json::Value| Some((v.get(0)?.as_f64()? as f32, v.get(1)?.as_f64()? as f32));
             ClipInfo {
@@ -331,6 +334,7 @@ impl Gaits {
                 hop: pair(&c["hop"]),
                 path: c["path_m"].as_array().map(|a| a.iter().filter_map(pair).collect()).unwrap_or_default(),
                 seconds: c["seconds"].as_f64().unwrap_or(0.0) as f32,
+                start_gait: c["start_gait"]["clip"].as_str().zip(c["start_gait"]["phase"].as_f64()).map(|(g, p)| (g.to_string(), p as f32)),
             }
         };
         if let Some(list) = json.get("clips").and_then(|c| c.as_array()) {

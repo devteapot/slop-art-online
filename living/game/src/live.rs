@@ -168,6 +168,12 @@ struct Shown {
     toward_since: Option<f64>,
     /// Walking last frame.
     walked: bool,
+    /// A stop take playing (`takes::stop_for`), where the body was drawn when it began, and where
+    /// a stopped body stays drawn after it, until it moves again (its track runs up to 0.26 m past
+    /// the authority's stop; catching up would slide the standing feet back).
+    stop: Option<crate::takes::Playing>,
+    stop_at: Vec2,
+    rest_at: Option<Vec2>,
     /// The drawn speed before any move under way (a jump's dash speeds the body up).
     calm_speed: f32,
 }
@@ -450,7 +456,7 @@ fn bodies(
     rules: NonSend<crate::verbs::Rules>,
     mut live: ResMut<Live>,
     mut q: Query<Drawn>,
-    mut fades: Query<&mut crate::fade::Fade>,
+    (mut fades, anims): (Query<&mut crate::fade::Fade>, Query<&crate::anim::Anim>),
     time: Res<Time>,
 ) {
     let Some(island) = island else { return };
@@ -571,7 +577,7 @@ fn bodies(
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, toward: false, toward_since: None, walked: false, calm_speed: 0.0 });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, toward: false, toward_since: None, walked: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0 });
             live.heights.insert(id, height);
             continue;
         }
@@ -624,7 +630,36 @@ fn bodies(
         s.startle = s.startle.filter(|(t, _)| scene.now_ms - t < STARTLE.1);
         let auth_v = (p - s.last).length() / dt;
         s.last = p;
-        let held = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(_, at)| at).or(s.startle.map(|(_, at)| at));
+        // Stopping from a walk along the legs: the stop take plays and the body is drawn along its
+        // track from where it was, then stays there until it moves again (`takes::stop_for`).
+        let seg = scene.speeds.get(&id).copied().unwrap_or(0.0);
+        if let (Some(g), Ok(an), true) = (gaits.as_ref(), anims.get(s.entity), s.stop.is_none() && s.walked && seg <= 0.0 && action.is_none() && !s.back && !s.toward && s.speed > MOVING) {
+            if let Some((clip, rate, from)) = crate::takes::stop_for(g, an.clip_phase(), s.speed / pace.max(0.5) / stride.max(0.05), s.speed) {
+                s.stop = Some(crate::takes::Playing { clip, start_ms: scene.now_ms, rate, from, cut: None, yaw0: s.yaw, gait: false });
+                s.stop_at = s.drawn;
+            }
+        }
+        let stop_len = s.stop.and_then(|st| gaits.as_ref().and_then(|g| g.info(st.clip)).map(|i| i.seconds)).unwrap_or(0.0);
+        let stop_at = s.stop.and_then(|st| {
+            let info = gaits.as_ref()?.info(st.clip)?;
+            let t = st.t(scene.now_ms).min(stop_len);
+            let o = info.path_at(t) - info.path_at(st.from);
+            let (fwd, left) = (Vec2::new(st.yaw0.cos(), st.yaw0.sin()), Vec2::new(st.yaw0.sin(), -st.yaw0.cos()));
+            Some(s.stop_at + fwd * o.y + left * o.x)
+        });
+        if let Some(st) = s.stop {
+            if seg > 0.0 || action.is_some() {
+                s.stop = None;
+            } else if st.t(scene.now_ms) >= stop_len {
+                s.stop = None;
+                s.rest_at = stop_at;
+            }
+        }
+        if seg > 0.0 || action.is_some() {
+            s.rest_at = None;
+        }
+        let stop_hold = if s.stop.is_some() { stop_at } else { s.rest_at };
+        let held = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(_, at)| at).or(s.startle.map(|(_, at)| at)).or(stop_hold);
         let before = s.drawn;
         match held {
             Some(seat) => s.drawn = seat,
@@ -705,7 +740,7 @@ fn bodies(
         // look, a standing body's own heading (where its segment's turn ends) or its activity.
         let standing_to = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| b.heading + if b.turn_s > 0.0 { b.turn } else { 0.0 });
         let turn_to = look_at.or(busy).or(standing_to.filter(|_| slow));
-        if let (Some(g), Some(to), None, false, None) = (gaits.as_ref(), turn_to, s.turn, walking, action) {
+        if let (Some(g), Some(to), None, false, None, None) = (gaits.as_ref(), turn_to, s.turn, walking, action, s.stop) {
             if s.speed < crate::anim::STEP_OFF {
                 if let Some(clip) = crate::takes::turn_for(g, living_rules::steer::wrap(to - s.yaw)) {
                     let tp = crate::takes::Playing { clip, start_ms: scene.now_ms, rate: crate::takes::TURN_RATE, from: 0.0, cut: None, yaw0: s.yaw, gait: false };
@@ -754,6 +789,8 @@ fn bodies(
         let reverse = s.back;
         let (speed, person, beast, yaw) = (s.speed, s.person, s.beast, s.yaw);
         let rising = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(t, _)| t);
+        // A stop take is asked for until its fade out, when standing takes over (`anim.rs`).
+        let stop_action = s.stop.filter(|st| st.t(scene.now_ms) < stop_len - crate::anim::FADE_OUT * st.rate).map(|st| st.action());
         let startle = s.startle.map(|(t, _)| crate::combat::Action { clip: STARTLE.0, rate: 1.0, start_ms: t, hold: None, face: None, ..Default::default() });
         let dir = Vec2::new(yaw.cos(), yaw.sin());
         // A rigged creature is drawn at its file's size times its life stage's (it grows up), its
@@ -800,7 +837,7 @@ fn bodies(
         motion.speed = speed;
         motion.stride = ch.map_or(size, |c| c.stride);
         motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
-        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle).or(turn_action);
+        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle).or(turn_action).or(stop_action);
         motion.now_ms = scene.now_ms;
         motion.reverse = reverse;
         motion.twist = twist;
