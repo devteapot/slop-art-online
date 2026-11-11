@@ -584,9 +584,14 @@ def compare_fov(snap, dumps, me):
     sight, f = fc["sight"], fc
     h_auth = heading_at(mine, at)
     eye = (mine["x"], mine["y"])
-    out = {"heading_client": math.degrees(fc["heading"]), "heading_authority": math.degrees(h_auth), "dump": meta["n"], "same": [], "differ": [], "margin": []}
+    out = {"heading_client": math.degrees(fc["heading"]), "heading_authority": math.degrees(h_auth), "dump": meta["n"], "same": [], "differ": [], "margin": [], "moving": []}
     for bid, b in bodies.items():
         if bid == me:
+            continue
+        # A body under way: its row is where its segment began, not where it is now, and the
+        # authority's sweep saw it somewhere between. Standing bodies only are compared.
+        if b.get("next_ms", 0) < (1 << 63):
+            out["moving"].append(bid)
             continue
         d = math.hypot(b["x"] - eye[0], b["y"] - eye[1])
         if d > 15.0:
