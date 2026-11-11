@@ -11,14 +11,16 @@ logs, the module's log (`spacetime logs`, read-only), and what the recorders lef
 
 Recording, for the launcher (docs/PLAY_REPORT.md "Recording"):
 
-  play_report.py record-start --db <database> --capture <dir> [--no-screen]
+  play_report.py record-start --db <database> --capture <dir>
   LIVING_GAME_RECORD=<dir>/client living-game ...      # the client's own stills and state
   play_report.py record-stop --capture <dir>
 
 `record-start` starts one background process that keeps the authority's rows before they are
-evicted (new experience and chronicle rows, and where everyone stood, once a second, by owner
-SQL) and, when this app may record the screen, records the game's window with `screencapture`.
-`record-stop` stops it by the PID it wrote. Standard library only.
+evicted (new experience and chronicle rows, skill presses, and where everyone stood, once a
+second, by owner SQL). The session's video comes from the game itself: the client draws a
+small copy of each recorded frame on the GPU and writes it as a JPEG (record.rs), and the
+report encodes those frames into a video. `record-stop` stops the recorder by the PID it wrote.
+Standard library only.
 """
 import argparse
 import bisect
@@ -234,7 +236,7 @@ class Session:
     # -- recorders
     def load_capture(self):
         self.cap = Path(self.a.capture) if self.a.capture else None
-        self.stills, self.client_state, self.client_events, self.video, self.positions = [], [], [], None, defaultdict(list)
+        self.stills, self.client_state, self.client_events, self.positions = [], [], [], defaultdict(list)
         self.rec_meta, self.skill_use_kept, self.captures = {}, {}, []
         if not self.cap or not self.cap.exists():
             self.notes.append("Nothing was recorded for this session (no --capture): no stills, no video, no client state, and no rows kept before eviction.")
@@ -261,9 +263,6 @@ class Session:
                         into.append(json.loads(line))
                     except ValueError:
                         pass
-        for v in ("screen.mov", "screen.mp4", "screen.mkv"):
-            if (self.cap / v).exists() and (self.cap / v).stat().st_size > 0:
-                self.video = self.cap / v
         meta = self.cap / "recorder.json"
         if meta.exists():
             try:
@@ -300,9 +299,7 @@ class Session:
         for k, v in self.skill_use_kept.items():
             self.skill_use.setdefault(k, v)   # the newest recorded copy, where the world dropped it
         self.sources.append(f"capture {self.cap}: {len(self.stills)} stills, {len(self.client_state)} client state samples, {len(self.client_events)} client events, "
-                            f"video {'yes' if self.video else 'no'}, {kept} experience rows kept that the world has since evicted, positions for {len(self.positions)} characters")
-        if self.rec_meta.get("screen_note"):
-            self.notes.append(f"Screen recording: {self.rec_meta['screen_note']}")
+                            f"{kept} experience rows kept that the world has since evicted, positions for {len(self.positions)} characters")
 
     # -- who played, and when
     def pick_player(self):
@@ -817,13 +814,18 @@ ul.find{padding-left:18px}ul.find li{margin:5px 0}.chip{display:inline-block;bac
 .tl{display:grid;grid-template-columns:96px 1fr;gap:0 10px}.tl>div{padding:6px 0;border-bottom:1px solid var(--line)}.tl .when{font-variant-numeric:tabular-nums;color:var(--mut);font-size:13px}
 .k-say{border-left:3px solid var(--acc);padding-left:8px!important}.k-reply{border-left:3px solid var(--ok);padding-left:8px!important}.k-fight{border-left:3px solid var(--warn);padding-left:8px!important}.k-err{border-left:3px dashed var(--warn);padding-left:8px!important}.k-quiet{background:var(--hl);padding-left:8px!important}.k-other{padding-left:11px!important}
 .thumb{width:150px;border-radius:6px;border:1px solid var(--line);cursor:zoom-in;display:block;margin-top:4px}.strip{display:flex;gap:6px;overflow-x:auto;padding:6px 0}.strip figure{margin:0;flex:0 0 auto}.strip img{height:96px;border-radius:5px;border:1px solid var(--line);cursor:zoom-in}.strip figcaption{font-size:11px;color:var(--mut);text-align:center}
-video{width:100%;max-height:70vh;background:#000;border-radius:8px}#big{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:9}#big img{max-width:96vw;max-height:92vh}
+video,#pimg{width:100%;max-height:70vh;background:#000;border-radius:8px;object-fit:contain;display:block}.pbar{display:flex;gap:8px;align-items:center;margin:6px 0}.pbar input{flex:1}.pbar button{font:inherit;padding:2px 10px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}#big{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:9}#big img{max-width:96vw;max-height:92vh}
 .seek{cursor:pointer;color:var(--acc);text-decoration:underline dotted}details{margin:6px 0}summary{cursor:pointer;color:var(--mut)}
 @media (max-width:640px){.tl{grid-template-columns:70px 1fr}.thumb{width:110px}}
 """
 
 JS = """
-function seek(s){var v=document.getElementById('vid');if(v){v.currentTime=Math.max(0,s);v.play();v.scrollIntoView({block:'center'})}}
+var PI=0,PT=null;
+function pshow(i){if(typeof FR==='undefined')return;PI=Math.max(0,Math.min(FR.length-1,i));document.getElementById('pimg').src=FR[PI][1];document.getElementById('prange').value=PI;var t=FR[PI][0]/1000;document.getElementById('ptime').textContent=Math.floor(t/60)+':'+('0'+Math.floor(t%60)).slice(-2)}
+function pstep(){if(PI>=FR.length-1){ptoggle();return}var d=FR[PI+1][0]-FR[PI][0];pshow(PI+1);PT=setTimeout(pstep,Math.min(d,2000))}
+function ptoggle(){var b=document.getElementById('pbtn');if(PT){clearTimeout(PT);PT=null;b.textContent='▶'}else{b.textContent='❚❚';pstep()}}
+function seek(s){var v=document.getElementById('vid');if(v){v.currentTime=Math.max(0,s);v.play();v.scrollIntoView({block:'center'});return}
+ if(typeof FR!=='undefined'){var ms=s*1000,i=0;while(i<FR.length-1&&FR[i+1][0]<=ms)i++;pshow(i);document.getElementById('pimg').scrollIntoView({block:'center'})}}
 function big(src){var b=document.getElementById('big');b.querySelector('img').src=src;b.style.display='flex'}
 document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('big').style.display='none'});
 """
@@ -847,17 +849,50 @@ class Page:
             for ms, p in s.stills:
                 dst = d / p.name
                 if not dst.exists():
-                    shutil.copy2(p, dst)
+                    try:
+                        os.link(p, dst)   # the frames stay where they are; the page links them
+                    except OSError:
+                        shutil.copy2(p, dst)
                 self.stills.append((ms, f"stills/{p.name}"))
-        if s.video:
-            dst = self.out / s.video.name
-            if not dst.exists() or dst.stat().st_size != s.video.stat().st_size:
-                try:
-                    os.link(s.video, dst)
-                except OSError:
-                    shutil.copy2(s.video, dst)
-            self.video_rel = s.video.name
-            self.video_start = s.rec_meta.get("screen_start_ms")
+        self.make_video()
+
+    def make_video(self):
+        """The session's video, from the frames the game drew (record.rs): ffmpeg encodes them
+        at their own times when it is installed; otherwise the page plays the frames itself."""
+        self.video_note, self.player = None, False
+        st = self.stills
+        if len(st) < 10:
+            return
+        gaps = sorted(b[0] - a[0] for a, b in zip(st, st[1:]))
+        if gaps[len(gaps) // 2] > 1500:
+            return   # stills, not a steady capture
+        fps = 1000 / max(gaps[len(gaps) // 2], 1)
+        w, h = jpeg_size(self.out / st[0][1]) or (0, 0)
+        made = f"{len(st)} frames the game itself drew ({w}×{h}, about {fps:.0f} a second, from {clock(st[0][0])} to {clock(st[-1][0])})"
+        ffmpeg = shutil.which("ffmpeg")
+        if ffmpeg:
+            lst = self.out / "frames.txt"
+            lines = []
+            for (ms, rel), nxt in zip(st, st[1:] + [None]):
+                lines.append(f"file '{rel}'")
+                lines.append(f"duration {((nxt[0] if nxt else ms + 1000 / fps) - ms) / 1000:.3f}")
+            lines.append(f"file '{st[-1][1]}'")
+            text = "\n".join(lines) + "\n"
+            mp4 = self.out / "screen.mp4"
+            if not (mp4.exists() and lst.exists() and lst.read_text() == text):
+                lst.write_text(text)
+                r = subprocess.run(["nice", "-n", "10", ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", "frames.txt",
+                                    "-fps_mode", "vfr", "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p",
+                                    "-movflags", "+faststart", "screen.mp4"], cwd=self.out, capture_output=True, text=True, timeout=3600)
+                if r.returncode != 0:
+                    mp4.unlink(missing_ok=True)
+                    self.s.notes.append(f"ffmpeg could not encode the frames ({r.stderr.strip()[-300:]}); the page plays the frames instead.")
+            if mp4.exists():
+                self.video_rel, self.video_start = mp4.name, st[0][0]
+                self.video_note = f"Made from {made}, encoded after the session with ffmpeg (H.264) at the frames' own times. No screen recording and no OS permission is involved."
+                return
+        self.player, self.video_start = True, st[0][0]
+        self.video_note = f"Played in the page from {made}{'' if ffmpeg else ' (ffmpeg is not installed, so no video file was encoded)'}. No screen recording and no OS permission is involved."
 
     def still_near(self, ms, before=1500, after=4000):
         if not self.stills:
@@ -869,7 +904,7 @@ class Page:
 
     def media(self, ms):
         bits = []
-        if self.video_rel and self.video_start:
+        if (self.video_rel or self.player) and self.video_start:
             off = (ms - self.video_start) / 1000
             if off >= 0:
                 bits.append(f'<span class="seek" onclick="seek({off - 2:.1f})">▶ video {span(off)}</span>')
@@ -999,7 +1034,11 @@ class Page:
         s = self.s
         P = ["<h2>On screen</h2>"]
         if self.video_rel:
-            P.append(f"<video id=vid controls preload=metadata src='{esc(self.video_rel)}'></video><p class=mut>The game's window, recorded by macOS <code>screencapture</code> from {clock(self.video_start)}. Times in the timeline below seek it.</p>")
+            P.append(f"<video id=vid controls preload=metadata src='{esc(self.video_rel)}'></video><p class=mut>{esc(self.video_note)} Times in the timeline below seek it.</p>")
+        elif self.player:
+            frames = json.dumps([[ms - self.video_start, rel] for ms, rel in self.stills])
+            P.append(f"<div class=player><img id=pimg alt='' src='{esc(self.stills[0][1])}'><div class=pbar><button id=pbtn onclick='ptoggle()'>▶</button><input id=prange type=range min=0 max={len(self.stills) - 1} value=0 oninput='pshow(+this.value)'><span id=ptime class=mut></span></div></div>"
+                     f"<script>var FR={frames};</script><p class=mut>{esc(self.video_note)} Times in the timeline below seek it.</p>")
         if self.stills:
             cap = s.captures
             cost = ""
@@ -1007,13 +1046,14 @@ class Page:
                 lag = sorted((c[1] - c[0]) / 1000 for c in cap)
                 enc = sorted(c[2] for c in cap)
                 mb = sum(c[3] for c in cap) / 1e6
-                cost = f" Readback lag p50 {lag[len(lag) // 2]:.0f} ms; scaling and JPEG on the worker thread p50 {enc[len(enc) // 2]:.0f} ms; {mb:.1f} MB in all."
+                cost = f" Readback lag p50 {lag[len(lag) // 2]:.0f} ms; JPEG on the worker thread p50 {enc[len(enc) // 2]:.1f} ms; {mb:.1f} MB in all."
             us = sorted(st["rec_main_us"] for st in s.client_state if st.get("rec_main_us") is not None)
             if us:
                 # Each state line covers 0.25 s; the recorder's own main-thread time per second.
                 cost += f" The recorder's own main-thread time: p50 {us[len(us) // 2] * 4 / 1000:.2f} ms per second, p99 {us[int(len(us) * .99) - 1 if len(us) > 1 else 0] / 1000:.2f} ms in a quarter second."
             drop = max((st.get("dropped_stills") or 0 for st in s.client_state), default=0)
-            P.append(f"<p class=mut>{len(self.stills)} stills from the client itself (<code>LIVING_GAME_RECORD</code>), on a clock and at each line, reducer call, bubble and note.{esc(cost)}{' %d dropped (writer behind).' % drop if drop else ''} Click to enlarge.</p><div class=strip>")
+            what = "frames" if (self.video_rel or self.player) else "stills, on a clock and at each line, reducer call, bubble and note"
+            P.append(f"<p class=mut>{len(self.stills)} {what}, drawn by the client itself (<code>LIVING_GAME_RECORD</code>).{esc(cost)}{' %d dropped (writer behind).' % drop if drop else ''} Click to enlarge.</p><div class=strip>")
             step = max(1, len(self.stills) // 120)
             for ms, rel in self.stills[::step]:
                 P.append(f"<figure><img loading=lazy src='{esc(rel)}' onclick='big(this.src)'><figcaption>{clock(ms, False)}</figcaption></figure>")
@@ -1216,40 +1256,12 @@ class Page:
             "approaches": [{"ms": a["ms"], "name": a["name"], "via": a["via"], "half": bool(a.get("half"))} for a in an["approaches"]],
             "errors": [{"ms": e["ms"], "src": e["src"], "msg": e["msg"][:200]} for e in an["errors"] if not e["benign"]],
             "cost_session_usd": round(c["session"].get(("all", ""), {}).get("usd", 0), 4), "cost_run_usd": round(c["run"].get(("all", ""), {}).get("usd", 0), 4),
-            "stills": len(self.stills), "video": self.video_rel,
+            "stills": len(self.stills), "video": self.video_rel, "video_note": self.video_note, "player": self.player,
         }
 
 
 # ---------------------------------------------------------------------------------------
 # Recording
-
-def screen_allowed():
-    try:
-        import ctypes
-        cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-        cg.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
-        return bool(cg.CGPreflightScreenCaptureAccess())
-    except (OSError, AttributeError):
-        return False
-
-
-GAME_WINDOW_JS = ('ObjC.import("CoreGraphics");var a=ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly|$.kCGWindowListExcludeDesktopElements,$.kCGNullWindowID));'
-                  'var o=[];for(var i=0;i<a.count;i++){var w=ObjC.deepUnwrap(a.objectAtIndex(i));if(w.kCGWindowLayer==0)o.push(w.kCGWindowNumber+"\\t"+w.kCGWindowOwnerName+"\\t"+w.kCGWindowOwnerPID)}o.join("\\n")')
-
-
-def game_window(owner="living-game", pid=None):
-    r = subprocess.run(["osascript", "-l", "JavaScript", "-e", GAME_WINDOW_JS], capture_output=True, text=True, timeout=20)
-    for line in r.stdout.splitlines():
-        parts = line.split("\t")
-        if len(parts) == 3 and ((pid and parts[2] == str(pid)) or (not pid and parts[1] == owner)):
-            return int(parts[0])
-    return None
-
-
-def disk_free_gb(path):
-    st = os.statvfs(path)
-    return st.f_bavail * st.f_frsize / 1e9
-
 
 U64_MAX = (1 << 64) - 1
 
@@ -1263,38 +1275,47 @@ def body_at(b, now):
     return round(b["x"] + (b.get("vx") or 0) * dt, 2), round(b["y"] + (b.get("vy") or 0) * dt, 2)
 
 
+def jpeg_size(path):
+    """A JPEG's width and height from its frame header (no imaging library)."""
+    try:
+        b = Path(path).read_bytes()
+    except OSError:
+        return None
+    i = 2
+    while i + 9 < len(b):
+        if b[i] != 0xFF:
+            i += 1
+            continue
+        m = b[i + 1]
+        if m in (0xC0, 0xC1, 0xC2):
+            return int.from_bytes(b[i + 7:i + 9], "big"), int.from_bytes(b[i + 5:i + 7], "big")
+        i += 2 + int.from_bytes(b[i + 2:i + 4], "big")
+    return None
+
+
 def recorder(a):
-    """The background loop record-start runs: rows before they are deleted, positions, and the
-    game's window. Whatever goes wrong, the screen recording is stopped on the way out."""
+    """The background loop record-start runs: rows before they are deleted, and positions."""
     cap = Path(a.capture)
     meta_p = cap / "recorder.json"
     meta = json.loads(meta_p.read_text()) if meta_p.exists() else {}
     stop = {"now": False}
     signal.signal(signal.SIGINT, lambda *_: stop.__setitem__("now", True))
     signal.signal(signal.SIGTERM, lambda *_: stop.__setitem__("now", True))
-    state = {"screen": None}
 
     def note(k, v):
         meta[k] = v
         meta_p.write_text(json.dumps(meta, indent=1))
 
     try:
-        record_loop(a, cap, meta, note, stop, state)
-    except Exception as e:  # noqa: BLE001 - the recorder must never leave the video running
+        record_loop(a, cap, meta, note, stop)
+    except Exception as e:  # noqa: BLE001 - say why the recorder stopped
         meta.setdefault("errors", []).append(f"{time.strftime('%H:%M:%S')} recorder stopped: {type(e).__name__}: {str(e)[:200]}")
     finally:
-        screen = state["screen"]
-        if screen is not None and screen.poll() is None:
-            screen.send_signal(signal.SIGINT)
-            try:
-                screen.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                meta["screen_note"] = meta.get("screen_note", "") + "; screencapture did not stop within 20 s"
         meta["stopped_ms"] = int(time.time() * 1000)
         meta_p.write_text(json.dumps(meta, indent=1))
 
 
-def record_loop(a, cap, meta, note, stop, state):
+def record_loop(a, cap, meta, note, stop):
     sql = None
     for _ in range(30):
         if stop["now"]:
@@ -1317,12 +1338,6 @@ def record_loop(a, cap, meta, note, stop, state):
                 out.write(json.dumps({"t": int(time.time() * 1000), "table": t, "row": flat_row(x)}) + "\n")
         except Exception:  # noqa: BLE001
             pass
-    want_screen = not a.no_screen
-    if want_screen and not screen_allowed():
-        note("screen_note", "not recorded: the app that launched the recorder may not record the screen (System Settings > Privacy & Security > Screen & System Audio Recording).")
-        want_screen = False
-    elif not want_screen:
-        note("screen_note", "not recorded (--no-screen).")
     errors, lat_ms, tick = 0, [], 0
     t_start = time.time()
     while not stop["now"]:
@@ -1358,22 +1373,6 @@ def record_loop(a, cap, meta, note, stop, state):
                 if errors in (1, 10, 100, 1000):
                     meta.setdefault("errors", []).append(f"{time.strftime('%H:%M:%S')} {type(e).__name__}: {str(e)[:200]}")
                     note("errors", meta["errors"])
-        try:
-            # The game's window appears after the client starts; record it once it does.
-            if want_screen and state["screen"] is None and time.time() - t_start < 600 and tick % 2 == 0:
-                wid = game_window(pid=a.game_pid)
-                if wid:
-                    f = cap / "screen.mov"
-                    # stdin stays open: screencapture is stopped by SIGINT, never by EOF.
-                    state["screen"] = subprocess.Popen(["screencapture", "-x", "-v", "-o", "-l", str(wid), str(f)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    meta.update({"screen_pid": state["screen"].pid, "screen_start_ms": int(time.time() * 1000), "screen_window": wid, "screen_note": f"window {wid} recorded with screencapture"})
-                    note("screen_pid", state["screen"].pid)
-            sc = state["screen"]
-            if sc is not None and sc.poll() is None and tick % 30 == 0 and disk_free_gb(cap) < 15:
-                sc.send_signal(signal.SIGINT)
-                note("screen_note", meta.get("screen_note", "") + f"; stopped at {time.strftime('%H:%M:%S')}: under 15 GB free")
-        except Exception as e:  # noqa: BLE001
-            meta.setdefault("errors", []).append(f"{time.strftime('%H:%M:%S')} screen: {type(e).__name__}: {str(e)[:200]}")
         time.sleep(max(0.05, a.every - (time.time() - t0)))
     if lat_ms:
         ls = sorted(lat_ms)
@@ -1410,10 +1409,6 @@ def record_start(a):
     (cap / "recorder.json").write_text(json.dumps({"db": a.db, "started_ms": int(time.time() * 1000), "every_s": a.every, "client_dir": str(cap / "client")}, indent=1))
     log = open(cap / "recorder.log", "a")
     args = [sys.executable, str(Path(__file__).resolve()), "_record", "--db", a.db, "--capture", str(cap), "--every", str(a.every)]
-    if a.no_screen:
-        args.append("--no-screen")
-    if a.game_pid:
-        args += ["--game-pid", str(a.game_pid)]
     p = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
     pidf.write_text(f"{p.pid} {int(time.time())}\n")
     print(f"recording {a.db} into {cap} (pid {p.pid}); the client records itself with LIVING_GAME_RECORD={cap / 'client'}")
@@ -1440,15 +1435,6 @@ def record_stop(a):
         print(f"stopped recorder pid {pid}")
     else:
         print(f"play_report: pid {pid} is no longer the recorder; not signalled")
-    # A recorder that died leaves its screencapture behind; stop that one too, by its pid.
-    try:
-        meta = json.loads((cap / "recorder.json").read_text())
-    except (OSError, ValueError):
-        meta = {}
-    sp = meta.get("screen_pid")
-    if sp and command_of(sp).startswith("screencapture") and str(cap) in command_of(sp):
-        os.kill(sp, signal.SIGINT)
-        print(f"stopped the screen recording (pid {sp}) its recorder left")
     pidf.unlink(missing_ok=True)
 
 
@@ -1478,8 +1464,9 @@ def main():
         ap.add_argument("--db", required=True)
         ap.add_argument("--capture", required=True, help="directory to record into")
         ap.add_argument("--every", type=float, default=1.0, help="seconds between the authority's samples")
-        ap.add_argument("--no-screen", action="store_true", help="do not record the game's window")
-        ap.add_argument("--game-pid", type=int, help="the client's pid, to find its window (default: by the name living-game)")
+        # Accepted and ignored: the screen is no longer recorded from outside the game.
+        ap.add_argument("--no-screen", action="store_true", help=argparse.SUPPRESS)
+        ap.add_argument("--game-pid", type=int, help=argparse.SUPPRESS)
         a = ap.parse_args(argv)
         (recorder if cmd == "_record" else record_start)(a)
     else:

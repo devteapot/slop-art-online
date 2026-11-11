@@ -41,6 +41,10 @@ pub struct Patch {
     /// mind's own consolidation) leaves it as it was.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lived_under: Option<String>,
+    /// Projects the mind ended (`LIVING_PROJECTS=1`): (key, outcome `done` or `dropped`, why).
+    /// The open `self -PURSUES->` edge is closed with its outcome; nothing is deleted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ended: Vec<(String, String, String)>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -139,7 +143,7 @@ const DURABLE: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "GROUN
 /// relationship a mind names is stored as `RELATES` with the name in `rel` (every edge carries
 /// `rel`). Neo4j never frees a type name and allows 65,535; minds invented that many in a day
 /// of runs, after which new ones could not be written.
-const TYPED: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "GROUNDS", "CHILD_OF", "PARENT_OF", "MERGED_INTO", "AGREED", "WITH"];
+const TYPED: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "GROUNDS", "CHILD_OF", "PARENT_OF", "MERGED_INTO", "AGREED", "WITH", "PURSUES"];
 
 /// The Neo4j type an edge named `rel` is stored as.
 fn stored_type(rel: &str) -> &str {
@@ -360,6 +364,22 @@ impl Store {
                      MATCH (a:Concept {run: $run, actor: $actor, key: x.from})-[r {open: true}]->(b:Concept {run: $run, actor: $actor, key: x.to})
                      WHERE coalesce(r.rel, type(r)) = x.rel
                      SET r.open = false, r.valid_to = $t, r.retracted_by = $thought",
+                    actor,
+                )
+                .param("rows", p(Value::Array(rows)))
+                .param("t", t as i64)
+                .param("thought", thought),
+            )
+            .await?;
+        }
+        if !patch.ended.is_empty() {
+            let rows: Vec<Value> = patch.ended.iter().map(|(k, outcome, why)| json!({"key": k, "outcome": outcome, "why": why})).collect();
+            txn.run(
+                self.q(
+                    "UNWIND $rows AS x
+                     MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES {open: true}]->(p:Concept {run: $run, actor: $actor, key: x.key})
+                     SET r.open = false, r.valid_to = $t, r.retracted_by = $thought, r.outcome = x.outcome, r.outcome_why = x.why
+                     SET p.outcome = x.outcome, p.ended_t = $t",
                     actor,
                 )
                 .param("rows", p(Value::Array(rows)))
@@ -608,6 +628,87 @@ impl Store {
             out.push((r.get::<i64>("exp").unwrap_or(0) as u64, r.get::<i64>("t").unwrap_or(0) as u64, r.get("gist").unwrap_or_default()));
         }
         Ok(out)
+    }
+}
+
+/// One open project (`self -PURSUES-> project`), as deliberation and consolidation see it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Project {
+    pub key: String,
+    /// The aim, in the mind's own words (the project concept's name).
+    pub aim: String,
+    pub progress: String,
+    pub next_step: String,
+    pub since: u64,
+    /// When last asserted or served (fading runs from here).
+    pub t: u64,
+    /// Effective confidence after fading, as `around` computes it.
+    pub strength: f64,
+    /// Deliberations that said they served it.
+    pub served: i64,
+}
+
+impl Store {
+    /// The open projects, strongest first (at most `limit`), and how many are open in all.
+    pub async fn projects(&self, actor: u32, limit: usize) -> Result<(Vec<Project>, usize)> {
+        let mut rows = self
+            .g
+            .execute(
+                self.q(
+                    "MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES {open: true}]->(p:Concept)
+                     WHERE NOT p:Merged
+                     WITH p, r, coalesce(r.confidence, 0.5) * exp(-toFloat($now - coalesce(r.t, $now)) / ($tau * CASE WHEN r.hearsay THEN $hearsay ELSE 1.0 END)) AS c
+                     RETURN p.key AS key, coalesce(p.name, p.key) AS aim, coalesce(toString(r.progress), '') AS progress,
+                            coalesce(toString(r.next_step), '') AS next_step, coalesce(r.since, 0) AS since, coalesce(r.t, 0) AS t,
+                            c, coalesce(r.served, 0) AS served
+                     ORDER BY c DESC, t DESC",
+                    actor,
+                )
+                .param("now", crate::llm::now_ms() as i64)
+                .param("tau", TAU_MS)
+                .param("hearsay", HEARSAY),
+            )
+            .await?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next().await? {
+            out.push(Project {
+                key: r.get("key").unwrap_or_default(),
+                aim: r.get("aim").unwrap_or_default(),
+                progress: r.get("progress").unwrap_or_default(),
+                next_step: r.get("next_step").unwrap_or_default(),
+                since: r.get::<i64>("since").unwrap_or(0) as u64,
+                t: r.get::<i64>("t").unwrap_or(0) as u64,
+                strength: r.get("c").unwrap_or(0.5),
+                served: r.get("served").unwrap_or(0),
+            });
+        }
+        let total = out.len();
+        out.truncate(limit);
+        Ok((out, total))
+    }
+
+    /// A deliberation said its plan serves this open project: acting on it reinforces it
+    /// (its fading restarts from now) and is counted on the edge. Returns whether it was open.
+    pub async fn serve_project(&self, actor: u32, key: &str, plan: &str, thought: &str, t: u64) -> Result<bool> {
+        let mut rows = self
+            .g
+            .execute(
+                self.q(
+                    "MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES {open: true}]->(:Concept {run: $run, actor: $actor, key: $key})
+                     SET r.t = $t, r.served = coalesce(r.served, 0) + 1, r.served_t = $t, r.served_by = $thought, r.last_plan = $plan
+                     RETURN count(r) AS n",
+                    actor,
+                )
+                .param("key", key)
+                .param("plan", plan.chars().take(200).collect::<String>())
+                .param("thought", thought)
+                .param("t", t as i64),
+            )
+            .await?;
+        Ok(match rows.next().await? {
+            Some(r) => r.get::<i64>("n").unwrap_or(0) > 0,
+            None => false,
+        })
     }
 }
 
@@ -1256,6 +1357,68 @@ pub fn attribute(patch: &mut Patch, actor: u32, testimony: &dyn Fn(u64) -> Optio
                 _ => {}
             }
         }
+    }
+}
+
+/// The outcome a reply gives an ended project: `done` or `dropped` (`None`: still open). In
+/// `ended` any other word ends it as dropped ("abandoned", "given up"); in `status` only the
+/// words for done or dropped do ("in progress" keeps it open).
+pub fn project_outcome(v: &Value, lenient: bool) -> Option<&'static str> {
+    let s = match v {
+        Value::Bool(true) => "done".to_string(),
+        Value::String(s) => s.trim().to_lowercase().replace(['_', '-'], " "),
+        _ => return None,
+    };
+    const DONE: &[&str] = &["done", "completed", "complete", "achieved", "finished", "succeeded", "accomplished"];
+    const DROPPED: &[&str] = &["dropped", "abandoned", "given up", "gave up", "failed", "cancelled", "canceled", "abandon", "drop"];
+    match s.as_str() {
+        x if DONE.contains(&x) => Some("done"),
+        x if DROPPED.contains(&x) => Some("dropped"),
+        "" | "no" | "false" | "open" | "ongoing" | "active" | "in progress" | "pursuing" | "null" | "none" => None,
+        _ if lenient => Some("dropped"),
+        _ => None,
+    }
+}
+
+/// A project key: the reply's `key`, else the aim, as `project:<slug>` unless it already names
+/// a kind of concept (`plan:river_camp`). Oneself, people and kept memories are not projects.
+pub fn project_key(entry: &Value) -> Option<String> {
+    let raw = entry["key"].as_str().filter(|k| !k.trim().is_empty()).or_else(|| entry["aim"].as_str())?;
+    let k = key(raw)?;
+    if matches!(identity(&k, &Known::default()), Some(Identity::Me | Identity::Person(_) | Identity::Memory(_))) {
+        return None;
+    }
+    Some(if k.contains(':') { k } else { format!("project:{}", k.chars().take(48).collect::<String>().trim_end_matches('_')) })
+}
+
+/// The `projects` array a consolidation or reorganization reply may carry (`LIVING_PROJECTS=1`):
+/// `{"key", "aim", "progress", "next_step", "because"}` adds or revises `self -PURSUES {progress,
+/// next_step}-> key` (the aim is the concept's name), and `{"key", "ended": "done|dropped",
+/// "why"}` closes it with that outcome. A project is the person's own aim, never hearsay.
+pub fn projects_into(v: &Value, patch: &mut Patch, known: &[u64], notes: &mut Vec<String>) {
+    let text = |x: &Value, n: usize| x.as_str().map(|s| s.trim().chars().take(n).collect::<String>()).filter(|s| !s.is_empty());
+    for e in v["projects"].as_array().cloned().unwrap_or_default().into_iter().take(6) {
+        let Some(k) = project_key(&e) else {
+            notes.push(format!("project skipped (no usable key): {e}"));
+            continue;
+        };
+        let ended = project_outcome(&e["ended"], true).or_else(|| project_outcome(&e["status"], false));
+        if let Some(outcome) = ended {
+            let why = text(&e["why"], 300).unwrap_or_default();
+            patch.ended.retain(|x| x.0 != k);
+            patch.ended.push((k, outcome.into(), why));
+            continue;
+        }
+        let mut props = serde_json::Map::new();
+        for (field, n) in [("progress", 240), ("next_step", 200)] {
+            if let Some(t) = text(&e[field], n) {
+                props.insert(field.into(), json!(t));
+            }
+        }
+        patch.nodes.retain(|n| n.key != k);
+        patch.nodes.push(NodeOp { key: k.clone(), labels: vec!["Project".into()], name: text(&e["aim"], 160), props: Default::default() });
+        let confidence = e["confidence"].as_f64().unwrap_or(0.9).clamp(0.3, 1.0);
+        patch.edges.push(EdgeOp { from: "self".into(), rel: "PURSUES".into(), to: k, confidence, because: cited(&e, known), props, firsthand: true, sources: Vec::new() });
     }
 }
 
@@ -2078,6 +2241,56 @@ mod tests {
         let mut held: Vec<String> = rows.next().await.unwrap().unwrap().get("held").unwrap();
         held.sort();
         assert_eq!(held, vec!["place:hill".to_string(), "place:marsh".to_string()]);
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
+    /// Projects (`LIVING_PROJECTS=1`) against a live Neo4j: taken up, revised, served, ended
+    /// with an outcome and faded, all kept as history.
+    #[tokio::test]
+    #[ignore]
+    async fn projects_are_pursued_served_ended_and_faded() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-projects-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Ines").await.unwrap();
+        let t0 = crate::llm::now_ms() - 2 * 3_600_000;
+        let now = crate::llm::now_ms();
+        let take = |v: Value| {
+            let (mut patch, mut notes) = (Patch::default(), Vec::new());
+            projects_into(&v, &mut patch, &[3], &mut notes);
+            patch
+        };
+        // Two hours ago: a raft and a hut; now: the raft moves on, the hut is done, a well begins.
+        s.apply(1, &take(json!({"projects": [{"key": "project:raft", "aim": "Build a raft", "progress": "none yet", "next_step": "cut logs", "because": [3]},
+                                            {"key": "project:hut", "aim": "Raise a hut"}, {"key": "project:fence", "aim": "Fence the goats"}]})), "consolidate-1", t0).await.unwrap();
+        s.apply(1, &take(json!({"projects": [{"key": "project:raft", "progress": "two logs cut", "next_step": "find vines"},
+                                            {"key": "project:hut", "ended": "done", "why": "it stands"},
+                                            {"key": "project:well", "aim": "Dig a well"}]})), "consolidate-2", now).await.unwrap();
+        let (open, total) = s.projects(1, 3).await.unwrap();
+        let keys: Vec<&str> = open.iter().map(|p| p.key.as_str()).collect();
+        assert_eq!(total, 3, "{keys:?}");
+        assert!(keys.contains(&"project:raft") && keys.contains(&"project:well") && !keys.contains(&"project:hut"), "{keys:?}");
+        assert_eq!(keys.last(), Some(&"project:fence"), "the unreinforced one is weakest: {open:?}");
+        let raft = open.iter().find(|p| p.key == "project:raft").unwrap();
+        assert_eq!((raft.aim.as_str(), raft.progress.as_str(), raft.next_step.as_str()), ("Build a raft", "two logs cut", "find vines"));
+        assert!(raft.since <= t0 + 1 && raft.t >= now, "since kept, t renewed: {raft:?}");
+        // A deliberation serves the fence: it is reinforced; an ended project cannot be served.
+        assert!(s.serve_project(1, "project:fence", "mend the fence", "deliberate-9", now).await.unwrap());
+        assert!(!s.serve_project(1, "project:hut", "admire the hut", "deliberate-9", now).await.unwrap());
+        let (open, _) = s.projects(1, 3).await.unwrap();
+        let fence = open.iter().find(|p| p.key == "project:fence").unwrap();
+        assert!(fence.served == 1 && fence.strength > 0.8, "{fence:?}");
+        // The hut was closed with its outcome; nothing was deleted.
+        let mut rows = s.g.execute(s.q("MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES]->(p {key: 'project:hut'}) RETURN r.open AS open, r.outcome AS outcome, r.outcome_why AS why, r.retracted_by AS by, p.outcome AS po", 1)).await.unwrap();
+        let r = rows.next().await.unwrap().unwrap();
+        assert_eq!((r.get::<bool>("open").unwrap(), r.get::<String>("outcome").unwrap(), r.get::<String>("why").unwrap(), r.get::<String>("by").unwrap(), r.get::<String>("po").unwrap()),
+                   (false, "done".into(), "it stands".into(), "consolidate-2".into(), "done".into()));
+        // An hour and a half without being taken up again: every project fades (0.9 → 0.09).
+        s.fade(1, 0.2, now + 90 * 60_000).await.unwrap();
+        let mut rows = s.g.execute(s.q("MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES]->(p) RETURN count(r) AS all, sum(CASE WHEN r.retracted_by = 'faded' THEN 1 ELSE 0 END) AS faded", 1)).await.unwrap();
+        let r = rows.next().await.unwrap().unwrap();
+        assert_eq!((r.get::<i64>("all").unwrap(), r.get::<i64>("faded").unwrap()), (4, 3));
+        assert_eq!(s.projects(1, 3).await.unwrap(), (Vec::new(), 0));
         s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
     }
 
