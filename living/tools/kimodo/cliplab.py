@@ -162,7 +162,7 @@ def turned(q, turn):
 def load(path):
     d = np.load(path)
     return {"P": d["posed_joints"].astype(np.float64), "root": d["root_positions"].astype(np.float64),
-            "fc": d["foot_contacts"].astype(bool)}
+            "fc": d["foot_contacts"].astype(bool), "R": d["local_rot_mats"].astype(np.float64)}
 
 
 def ref_pose(spec, neutral, dirs, offset=(0.0, 0.0), turn_deg=0.0):
@@ -364,6 +364,26 @@ def measure(e, take, lib, dirs, refs):
     m["hips_y_mean_m"] = round(float(root[:, 1].mean()), 3)
     m["hands_y_mean_m"] = round(float(P[:, [LHAND, RHAND], 1].mean()), 2)
 
+    # posture in the body's own frame (faced ahead): + leans forward. Standing: torso -2, head 8 degrees
+    tv_ = loc[:, 4] - loc[:, HIPS]
+    m["torso_pitch_deg"] = round(float(np.degrees(np.arctan2(tv_[:, 2], tv_[:, 1])).mean()), 1)
+    hv_ = loc[:, HEAD] - loc[:, 3]
+    m["head_pitch_deg"] = round(float(np.degrees(np.arctan2(hv_[:, 2], hv_[:, 1])).mean()), 1)
+    # hands at work in front: both 0.75-1.25 m up and 15 cm or more ahead of the hips, one moving
+    hy, hz = P[:, [LHAND, RHAND], 1], loc[:, [LHAND, RHAND], 2] - loc[:, [HIPS], 2]
+    at = ((hy > 0.75) & (hy < 1.25) & (hz > 0.15)).all(axis=1)
+    hs_ = smooth(np.linalg.norm(np.gradient(P[:, [LHAND, RHAND]] - root[:, None, :], axis=0) * FPS, axis=2).max(axis=1), FPS // 2)
+    m["bench_busy_share"] = round(float((at & (hs_ >= ACTIVE_M_S)).mean()), 2)
+    # how far the shoulders' midpoint moves about the hips (a weight shift, a lean): its largest range
+    mid = (loc[:, LSHO] + loc[:, RSHO]) / 2 - loc[:, HIPS]
+    m["shoulder_range_cm"] = round(100 * float(np.ptp(mid, axis=0).max()), 1)
+    # seated: hips below 0.55 m (standing 0.99, cross-legged 0.16). The ankles' lowest height then
+    # (standing 7 cm): lower means the foot is pressed into the floor
+    seated = root[:, 1] < 0.55
+    m["seated_share"] = round(float(seated.mean()), 2)
+    if seated.any():
+        m["seated_feet_min_cm"] = round(100 * float(P[seated][:, [LFOOT, RFOOT], 1].min()), 1)
+
     if kind == "loop":
         lv = np.gradient(loc[:, BODY], axis=0) * FPS
         if e.get("cycle") == "whole":
@@ -382,6 +402,11 @@ def measure(e, take, lib, dirs, refs):
         m["loop_frames"] = [a, b]
         m["loop_pose_cm"] = round(100 * float(np.linalg.norm(loc[a, BODY] - loc[b, BODY], axis=1).max()), 1)
         m["loop_vel_m_s"] = round(float(np.linalg.norm(lv[a] - lv[b], axis=1).max()), 2)
+        # the seam's largest joint rotation difference (local rotations, the hips' own left out: they
+        # carry the heading); what the loop's closing has to spread
+        Ra, Rb = d["R"][a, BODY[1:]], d["R"][b, BODY[1:]]
+        cos = (np.einsum("jik,jik->j", Ra, Rb) - 1) / 2
+        m["loop_seam_deg"] = round(float(np.degrees(np.arccos(np.clip(cos, -1, 1))).max()), 1)
 
     neutral = lib.get("neutral")
     if e.get("start"):
@@ -474,6 +499,12 @@ def measure(e, take, lib, dirs, refs):
             k = period((P[a:, LFOOT, [0, 2]] - P[a:, RFOOT, [0, 2]]) @ u) if dist > 0.2 else None
             ref = refs_period(fam, lib, dirs)
             m["period_s"] = round(k / FPS, 3) if k else None
+            m["cycle_m"] = round(m["speed_m_s"] * k / FPS, 3) if k else None  # metres a gait cycle
+            # against the forward gait the game plays at the rules' speed (walk 2.6, run 3.9 m/s):
+            # the client steps a directional take only while it steps at most 1.6x as often
+            fast = refs_cycle(FAST.get(fam, fam), lib, dirs)
+            if m["cycle_m"] and fast:
+                m["cycle_ratio"] = round(m["cycle_m"] / fast, 3)
             m["period_ref_s"] = ref
             if ref:
                 m["cadence_err"] = round(abs(k / FPS / ref - 1), 3) if k else 1.0
@@ -492,6 +523,24 @@ def measure(e, take, lib, dirs, refs):
 
 
 _PERIODS = {}
+FAST = {"walk": "walk_brisk", "run": "run_fast"}  # the forward gait at the rules' walk and run
+
+
+def refs_cycle(name, lib, dirs):
+    """Metres a cycle of the library's pick of a forward gait (speed after its skip x step period)."""
+    key = "cycle:" + name
+    if key not in _PERIODS:
+        e = next((c for c in lib["clips"] if c["name"] == name), None)
+        val = None
+        if e and "pick" in e:
+            d = load(find(dirs, f"{name}_s{e['pick']}.npz"))
+            a = round(e.get("skip", 1.5) * FPS)
+            tv = d["root"][-1, [0, 2]] - d["root"][a, [0, 2]]
+            dist = float(np.hypot(*tv))
+            k = period((d["P"][a:, LFOOT, [0, 2]] - d["P"][a:, RFOOT, [0, 2]]) @ (tv / max(dist, 1e-9)))
+            val = dist / ((len(d["P"]) - 1 - a) / FPS) * k / FPS if k else None
+        _PERIODS[key] = val
+    return _PERIODS[key]
 
 
 def refs_period(fam, lib, dirs):
@@ -817,7 +866,7 @@ def summary(m, checks):
 
 def lab(name, a, lib, clips_path):
     e0 = next((c for c in lib["clips"] if c["name"] == name), None)
-    if e0 is None and not a.prompt:
+    if e0 is None and not a.prompt and not os.path.exists(os.path.join(a.out, name, "variants.json")):
         raise SystemExit(f"{name} is not in {clips_path}; give --prompt and the entry fields with --set")
     e0 = dict(e0 or {"name": name, "kind": "once", "seeds": []})
     e = dict(e0)

@@ -507,8 +507,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
     }
     let laws = common::laws(ctx);
-    let (trade_ms, join_ms) = ((laws.trade_window_s * 1000.0) as u64, (laws.join_window_s * 1000.0) as u64);
-    for o in ctx.db.trade_offer().iter().filter(|o| o.to == id && now.saturating_sub(o.at_ms) <= trade_ms) {
+    let join_ms = (laws.join_window_s * 1000.0) as u64;
+    for o in ctx.db.trade_offer().to().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
         asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange)", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
@@ -523,7 +523,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     for o in ctx.db.bond_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
     }
-    for o in ctx.db.trade_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= trade_ms) {
+    for o in ctx.db.trade_offer().from().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if !mine.is_empty() {

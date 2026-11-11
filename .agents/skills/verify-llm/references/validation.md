@@ -1,6 +1,10 @@
 # Model integration validation
 
 
+## 2026-11-11 the prompt frame (exp-player-frame, DGX Spark)
+
+Branch `exp-player-frame` in a worktree, against the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake provider only, while a paid trial batch ran on the same service (its databases untouched). `llm-pf2-20261111-131444`: 16 of 16 cases and the 9 fake-contract scenarios pass. The first attempt (`llm-pf-20261111-131339`) created no database: `verify.py` accepted only a port published on `127.0.0.1`, and the trial service is published on `0.0.0.0:3320` for LAN watchers; the helper now accepts both. The change itself (`LIVING_FRAME`) does not touch `llm.rs`; this run shows routing, overflow, repair and journaling are unchanged under the new build.
+
 ## 2026-11-11 default concurrency 192 (lives-2, dev-box)
 
 Branch `lives-2`, own container `lives2-stdb` (2.14.1, port 3461), private `CARGO_TARGET_DIR`, fake provider only. The mind service's default `LIVING_CONCURRENCY` went from 64 to 192 (a full island of minds queued routine calls up to a minute at 64; docs/SEEDED_LIVES.md, "Every person a mind"), and the models file's `woken` route is gone. `llm-l2c-034535`: 16 of 16 (basic, routing by group, assignment, rotation, child, default, overflow, retry-fallback, error-overflow, outage, repair, deliberation-retry, retry-exhausted, timeout, missing-default-key, mix). `cargo test -p living-mind` 82 passed.
