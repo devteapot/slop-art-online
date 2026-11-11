@@ -2038,7 +2038,9 @@ mod tests {
         let t = Instant::now();
         assert!(llm.chat("dead", Attention::OnStage, "think", "a", &msg).await.is_err());
         assert!(t.elapsed() < Duration::from_millis(1500), "the first failure is immediate");
-        let t = Instant::now();
+        // The probe is due GATE_PAUSE_MIN after the failure, which happened inside the first
+        // call (it then still journals before returning): measured from before that call, not
+        // from its return, which under load comes a few ms later (fix-dealings, 2026-11-12).
         assert!(llm.chat("dead", Attention::OnStage, "think", "a", &msg).await.is_err());
         assert!(t.elapsed() >= GATE_PAUSE_MIN, "the next call waits for the probe: {:?}", t.elapsed());
         let _ = std::fs::remove_dir_all(dir);
