@@ -638,6 +638,10 @@ pub fn cutaway(
         let keep = held.get(&e).is_some_and(|t| now - t < CUT_HOLD_S);
         let to = if want > 0.0 { want } else if keep { fade.target } else { 0.0 };
         if fade.target != to {
+            // For captures and checks (`RUST_LOG=living_game::envs=debug`): what fades, and why.
+            if fade.target == 0.0 {
+                debug!("cutaway: {} fades to {to:.1} ({}; me at {:.1}, {:.1}, {:.1})", model.map_or("a box", |m| m.file.as_str()), if inside { "the eye is inside it" } else { "it is in the way" }, me.x, me.y, me.z);
+            }
             fade.target = to;
         }
     }
