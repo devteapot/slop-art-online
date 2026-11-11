@@ -20,7 +20,7 @@
 - Wolves and deer are their rigged files (`bodies::spawn_beast`), played by `anim.rs`; a deer taking flight from standing plays `startle` first (`live.rs`, `STARTLE`).
 - The camera frames a fight the character is in, a conversation or a gesture exchange (`camera.rs`, `Context`); turning the view dismisses it.
 - Verbs (`living/game/src/verbs.rs`, `ui/verbs.rs`, docs/GAME_BRIEF.md "Verbs"): F acts on what is under the cursor or within 3 m, C on myself, I and K toggle the pack and know-how panels. The options are the catalog's and the installed script's skills whose `<skill>_check` passes on what the character knows; every act is a `human_act` (or a `human_say` for asking to be taught), and outcomes are read from `my_experience` rows of kind `act`. The log line `rules: skill script revision N compiled (M skills)` shows what the client found; `verbs: <label> → <node>` each act sent; `live script: act … offered|not offered by the rules as this client knows them` what a scripted act would have been offered.
-- The session record (`living/game/src/record.rs`, docs/PLAY_REPORT.md, since 2026-11-11), off unless `LIVING_GAME_RECORD=<dir>`: stills of the frame as drawn (`stills/<unix ms>.jpg`, every `LIVING_GAME_RECORD_EVERY` s, default 3, and at each line, reducer answer, bubble and act note), `state.jsonl` (4 Hz: me, camera, the HUD's people, bubbles, chat, target, frame time), `events.jsonl` (presses as the game reads them, lines sent, every reducer call with the authority's answer, hooked in `Net::on_reply`) and `captures.csv` (each still's request and arrival time, worker time, size). The log says `record: writing stills, state and events to <dir> …`. It reads the client's state only.
+- The session record (`living/game/src/record.rs`, `record_frames.rs`, docs/PLAY_REPORT.md, since 2026-11-11), off unless `LIVING_GAME_RECORD=<dir>`: the session's frames as drawn, HUD included (`stills/<unix ms>.jpg`, `LIVING_GAME_RECORD_FPS` a second, default 10, `LIVING_GAME_RECORD_WIDTH` px wide, default 960; a render system after the UI pass draws a small copy of the frame and only that is read back; `LIVING_GAME_RECORD_FPS=0` takes stills every `LIVING_GAME_RECORD_EVERY` s and at events instead), `state.jsonl` (4 Hz: me, camera, the HUD's people, bubbles, chat, target, frame time, `rec_main_us`), `events.jsonl` (presses as the game reads them, lines sent, every reducer call with the authority's answer, hooked in `Net::on_reply`) and `captures.csv` (each frame's request and arrival time, worker time, size). The log says `record: writing frames, state and events to <dir> (N frames a second, W px wide)`. It reads the client's state only.
 - Town life (`living/game/src/town.rs`): `doing.code` from `seen_doing` is named through `act_card` and drawn as a clip on the standing body (work, gather, eat, play, sitting, wave, nod; appraise plays `idle_look`); a sleeping person, or one resting whose `doing` row says `indoors` (the authority decides it from the home it no longer sends), is hidden; animals asleep or resting stay drawn. A standing body's facing follows its own segment (`heading` + `turn` × elapsed, up to `turn_s`), so turns at zero speed turn in place. Rain follows the `weather` row. The keys G, B and V send `human_act` wave, nod and appraise ([verify-player gestures](../../verify-player/features/gestures.md), [perception](../../verify-player/features/perception.md)); appraise goes to any creature within 6 m, people or animals.
 
 ## How to get to it (user POV)
@@ -53,7 +53,7 @@ Script steps for input (since 2026-11-10): `key:NAME:down|up|tap` and `mouse:lef
 
 Script steps for town life: `gesture:wave|nod|appraise[:ID]` (the G, B and V keys' path) and `sync:NAME` (waits for `<dir>/NAME.go`, so an outside driver can set a scene with admin reducers first; a number in the file sets the view's yaw). Since 2026-11-09 also `hold:DEG[:run]` (walk or run toward a heading until the next step) and `stop`, used by the animation probes.
 
-To check the session record, add `LIVING_GAME_RECORD=.local/living/verify/$R/rec` to the command above: `rec/stills/` fills with JPEGs whose names are unix ms, `rec/events.jsonl` has a `call` row per reducer sent (a `refused` row with the authority's reason for a refusal), and `living/tools/play_report.py --db verify-$R --run $R --logs <dir of game.log renamed client.log> --capture .local/living/verify/$R/rec --out <dir>` draws them.
+To check the session record, add `LIVING_GAME_RECORD=.local/living/verify/$R/rec` to the command above: `rec/stills/` fills with JPEGs whose names are unix ms, ten a second (compare one with a `shot:` taken at the same moment: same picture, HUD included), `rec/events.jsonl` has a `call` row per reducer sent (a `refused` row with the authority's reason for a refusal), and `living/tools/play_report.py --db verify-$R --run $R --logs <dir of game.log renamed client.log> --capture .local/living/verify/$R/rec --out <dir>` draws them.
 
 `island perf` lines report frame times every 2 s. They are capped at 60 Hz unless `LIVING_GAME_FPS_CAP=0`. They describe the machine and its load; they are not protocol evidence.
 
@@ -104,3 +104,15 @@ Bytes per query come from the server's `spacetime_num_bytes_sent_to_clients_tota
 ## Evidence
 
 The script's photographs, `game.log`, the probe's `.jsonl` files, and a TSV of the metric samples. Name the commit and whether `living/` had uncommitted changes.
+
+### Tile classes
+
+Since drop-1 and eye-2 (2026-11-11) the hosted tiles carry two classes that block the foot and not the eye: `drop` (8, between ground levels) and `low` (9, what is low or open at eye height: a cart, an open stall, a well, a building's overhang; docs/ISLAND_AUTHORITY.md "Sight through what is open at eye height"). A client sees them as tile bytes in `terrain_chunk` and must get exactly the land the rules host. Subscribe every chunk through the probe on a land world and count the classes:
+
+```bash
+$V launch --run $R --seed island && $V doctor --run $R
+$D --run $R --save terrain-all --seconds 3 --query "SELECT * FROM terrain_chunk"
+.agents/skills/verify-client/scripts/tile_classes.py .local/living/verify/$R/terrain-all.jsonl --expect 8=DROPS --expect 9=LOWS
+```
+
+`DROPS` and `LOWS` are the rules' own counts for the build's land, the last line of `cargo run --release -p living-rules --example sight_census -- living/seeds/island.json` (`land: N low tiles, M drop tiles`; on 2026-11-11 with eye-2, 9,153 and 4,116). The script writes `terrain-all-classes.json` and exits 1 on a difference or an unknown class. The island's 16,384 chunks are about 4.3 MB in one initial update.

@@ -1,14 +1,19 @@
 //! Who is hidden from the arrival square's eye within a radius, on a land's hosted tiles, under
-//! three versions of them: `before` (drops and low things as `Wall`, as before 2026-11-11),
-//! `after` (the seed's own `sight` parameters) and `open_stalls` (the same with
-//! `hides_m {"market_stall": 0}`). Also lists the things that block walking within the radius,
-//! with their heights and whether they hide.
+//! four versions of them: `before` (drops and low things as `Wall`, as before 2026-11-11),
+//! `height` (the height rule of 2026-11-11: a thing hides throughout when its model rises above
+//! the eye), `after` (the seed's own `sight` parameters: where each model is solid at eye height,
+//! its measured `eye_cells`) and `open_stalls` (the same with `hides_m {"market_stall": 0}`).
+//! Also lists the things that block walking within the radius, with their heights, how many of
+//! their tiles hide, and their models' measured solid share at eye height.
 //!
-//!     cargo run --release -p living-rules --example sight_census -- SEED.json [POSITIONS.json] [RADIUS_M]
+//!     cargo run --release -p living-rules --example sight_census -- SEED.json [POSITIONS.json] [RADIUS_M] [MAP.ppm]
 //!
 //! POSITIONS.json is a list of `[x, y]` (people's positions from a live world, for example from
-//! `SELECT x, y FROM body`); without it every walkable tile centre within the radius counts.
-//! The eye is the arrival point (`host::arrival`, on the first town's square).
+//! `SELECT x, y FROM body`); without it (or `-`) every walkable tile centre within the radius
+//! counts. The eye is the arrival point (`host::arrival`, on the first town's square). MAP.ppm,
+//! if given, is a top-down picture of the radius, 4 pixels a tile: walkable ground seen (light)
+//! and hidden (dark), `Wall` (black), `Low` (orange), drops (blue), water, and the eye (red);
+//! the height rule's beside it (`MAP-height.ppm`).
 
 use living_rules::host;
 use living_rules::land::{self, LandParams};
@@ -26,7 +31,13 @@ fn main() {
     let radius: f32 = args.get(3).and_then(|r| r.parse().ok()).unwrap_or(48.0);
     let l = land::generate(seed["seed"].as_u64().expect("seed"), size, &p);
     let (after, _) = host::hosted_map(&l, &p);
-    let mut before = after.clone();
+    // The height rule: the same parameters with every model's eye measure left out.
+    let mut tall = p.clone();
+    for m in tall.settlements.buildings.models.iter_mut() {
+        m.eye_cells = None;
+    }
+    let (height, _) = host::hosted_map(&l, &tall);
+    let mut before = height.clone();
     for t in before.tiles.iter_mut() {
         if *t == Terrain::Drop as u8 || *t == Terrain::Low as u8 {
             *t = Terrain::Wall as u8;
@@ -40,11 +51,16 @@ fn main() {
     let set = host::arrival_settlement(&l).expect("a settlement");
     println!("eye {eye:?} on the settlement at {:?} ({}), radius {radius} m, eye height {} m", set.centre, set.style, p.sight.eye_m);
     let near = |c: (f32, f32)| ((c.0 - eye.0).powi(2) + (c.1 - eye.1).powi(2)).sqrt() <= radius;
+    let model = |f: &Option<String>| f.as_deref().and_then(|f| p.settlements.buildings.model(f));
+    let solid = |f: &Option<String>| model(f).and_then(|m| m.eye_solid).map_or("-".to_string(), |s| format!("{s:.2}"));
+    let walls = |tiles: &[(i32, i32)]| tiles.iter().filter(|&&(x, y)| after.get(x, y) == Terrain::Wall).count();
     for lot in l.lots.iter().filter(|x| host::blocks(x.kind) && near(x.centre)) {
-        println!("lot {:<14} {:>5.2} m hides {}", lot.kind.id(), lot.height_m, p.sight.hides(lot.kind.id(), lot.height_m));
+        let tiles = host::footprint_tiles(lot, host::margin_of(&l, &p, lot));
+        println!("lot {:<14} {:>5.2} m, solid at the eye {:>4}, {:>3} of {:>3} tiles hide ({})", lot.kind.id(), lot.height_m, solid(&lot.model_file), walls(&tiles), tiles.len(), lot.model_file.as_deref().unwrap_or("no model"));
     }
     for pr in l.props.iter().filter(|x| x.kind.blocks() && near(x.centre)) {
-        println!("prop {:<13} {:>5.2} m hides {}", pr.kind.id(), pr.height_m, p.sight.hides(pr.kind.id(), pr.height_m));
+        let tiles = host::prop_tiles(pr);
+        println!("prop {:<13} {:>5.2} m, solid at the eye {:>4}, {:>3} of {:>3} tiles hide ({})", pr.kind.id(), pr.height_m, solid(&pr.model_file), walls(&tiles), tiles.len(), pr.model_file.as_deref().unwrap_or("no model"));
     }
     let pts: Vec<(f32, f32)> = match args.get(2).filter(|a| !a.is_empty() && a.as_str() != "-") {
         Some(path) => {
@@ -57,10 +73,54 @@ fn main() {
             (ey - r..=ey + r).flat_map(|y| (ex - r..=ex + r).map(move |x| (x, y))).filter(|&(x, y)| after.walkable(x, y)).map(|(x, y)| (x as f32 + 0.5, y as f32 + 0.5)).filter(|&q| near(q) && q != eye).collect()
         }
     };
-    let (b, a, s) = (hidden(&before, eye, &pts), hidden(&after, eye, &pts), hidden(&stalls, eye, &pts));
+    let (b, hr, a, s) = (hidden(&before, eye, &pts), hidden(&height, eye, &pts), hidden(&after, eye, &pts), hidden(&stalls, eye, &pts));
     let nearest_hidden = |m: &Map| pts.iter().filter(|&&q| !m.sight_clear(eye, q)).map(|q| ((q.0 - eye.0).powi(2) + (q.1 - eye.1).powi(2)).sqrt()).fold(f32::INFINITY, f32::min);
     println!("points within {radius} m: {}", pts.len());
-    println!("hidden before {b} (nearest {:.1} m), after {a} (nearest {:.1} m), with open stalls {s} (nearest {:.1} m)", nearest_hidden(&before), nearest_hidden(&after), nearest_hidden(&stalls));
+    println!(
+        "hidden before {b} (nearest {:.1} m), by height {hr} (nearest {:.1} m), after {a} (nearest {:.1} m), with open stalls {s} (nearest {:.1} m)",
+        nearest_hidden(&before),
+        nearest_hidden(&height),
+        nearest_hidden(&after),
+        nearest_hidden(&stalls)
+    );
+    if let Some(path) = args.get(4) {
+        // This change's tiles at PATH, the height rule's beside it (`-height` before `.ppm`).
+        let draw = |m: &Map, path: &str| {
+            let r = radius.ceil() as i32;
+            let (ex, ey) = (eye.0.floor() as i32, eye.1.floor() as i32);
+            let side = (2 * r + 1) as usize;
+            let k = 4usize;
+            let mut img = vec![0u8; side * k * side * k * 3];
+            for j in 0..side {
+                for i in 0..side {
+                    let (x, y) = (ex - r + i as i32, ey - r + j as i32);
+                    let q = (x as f32 + 0.5, y as f32 + 0.5);
+                    let c: [u8; 3] = match m.get(x, y) {
+                        _ if (x, y) == (ex, ey) => [220, 30, 30],
+                        Terrain::Wall | Terrain::Rock => [20, 20, 20],
+                        Terrain::Low => [235, 150, 40],
+                        Terrain::Drop => [60, 110, 220],
+                        Terrain::Water => [90, 150, 200],
+                        _ if !near(q) => [120, 120, 120],
+                        _ if m.sight_clear(eye, q) => [240, 236, 220],
+                        _ => [150, 140, 125],
+                    };
+                    for dy in 0..k {
+                        for dx in 0..k {
+                            let o = ((j * k + dy) * side * k + i * k + dx) * 3;
+                            img[o..o + 3].copy_from_slice(&c);
+                        }
+                    }
+                }
+            }
+            let mut out = format!("P6 {} {} 255\n", side * k, side * k).into_bytes();
+            out.extend_from_slice(&img);
+            std::fs::write(path, out).expect("write the map");
+            println!("map written to {path}");
+        };
+        draw(&after, path);
+        draw(&height, &path.replace(".ppm", "-height.ppm"));
+    }
     // Every kind that blocks walking on the land: how many, their heights, and any without one.
     let mut kinds: std::collections::BTreeMap<String, (u32, f32, f32, u32)> = Default::default();
     let things = l.lots.iter().filter(|x| host::blocks(x.kind)).map(|x| (x.kind.id(), x.height_m)).chain(l.props.iter().filter(|x| x.kind.blocks()).map(|x| (x.kind.id(), x.height_m)));
@@ -72,7 +132,7 @@ fn main() {
         e.3 += (h <= 0.0) as u32;
     }
     for (k, (n, lo, hi, none)) in &kinds {
-        println!("kind {k:<14} {n:>5} things, {lo:.2}-{hi:.2} m, {none} without a height, hides {}", if p.sight.hides(k, *lo) == p.sight.hides(k, *hi) { p.sight.hides(k, *hi).to_string() } else { "by model".into() });
+        println!("kind {k:<14} {n:>5} things, {lo:.2}-{hi:.2} m, {none} without a height, rises above the eye {}", if p.sight.hides(k, *lo) == p.sight.hides(k, *hi) { p.sight.hides(k, *hi).to_string() } else { "by model".into() });
     }
     let low = after.tiles.iter().filter(|&&t| t == Terrain::Low as u8).count();
     let drop = after.tiles.iter().filter(|&&t| t == Terrain::Drop as u8).count();

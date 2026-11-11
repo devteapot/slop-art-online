@@ -2,6 +2,8 @@
 
 Started 2026-11-09. This note records how the living authority limits what a human player's client receives to what the player's character perceives now, plus the character's own state ([game brief](GAME_BRIEF.md#core-work-the-game-needs-engine-independent), core work 1; [island authority](ISLAND_AUTHORITY.md), "Perception-scoped subscriptions" and "A slimmer moving-body stream"). It covers the table audit, the SpacetimeDB documentation and source the design rests on, the design, the measured cost, the per-table decisions, the client change and the verification.
 
+**Status (sixth change, 2026-11-11, branch `rules-offers`).** A player reads the trade offers addressed to its character, and its own, through a new view, `my_offers`; `trade_offer` stays private and gains a `to` index and a stored end, `until_ms` ([Offers](#offers-what-a-player-is-offered)).
+
 **Status (fifth change, 2026-11-11, branch `fix-perceived-moving`).** What others perceive a creature doing is derived from its body when it moves under motion intent, so a walking player reads `walk → person`, not `wait`, as an AI character walking the same line reads `goto → person` ([Activity derived from the body](#activity-derived-from-the-body)). No table or view changed.
 
 **Status (fourth change, 2026-11-10, branch `scale-1`).** Perceived state reaches each player once per frame through per-viewer copies, and every view reads a handful of keys ([Frames](#frames-what-others-do-reaches-a-player-once-per-frame)). Measured against the 216-character gate and verified as recorded in [Fourth change: measurements and verification](#fourth-change-measurements-and-verification); the gate's verdicts are in [gate 216](GATE_216.md#scale-change-frames-2026-11-10-branch-scale-1).
@@ -87,7 +89,7 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `brain`, `mind_state`, `mind_cursor`, `routine`, `routine_stat` | developer audit truth (behaviour graphs and their runtime) | private | private | mind service, observer (owner) |
 | `genome`, `background` | developer audit truth (inborn genes, authored pasts) | private | private | mind service (owner) |
 | `chronicle`, `stats` | developer audit truth (the world's event log, speech included; load counters) | private | private | observer, tools (owner) |
-| `community`, `membership`, `join_request`, `bond_offer`, `trade_offer`, `expecting` | developer audit truth (social facts between characters; a player learns of them through its experiences) | private | private | mind service, observer (owner) |
+| `community`, `membership`, `join_request`, `bond_offer`, `trade_offer`, `expecting` | developer audit truth (social facts between characters; a player learns of them through its experiences, and since the sixth change reads the trade offers it is a party to through `my_offers`) | private | private | mind service, observer (owner) |
 | `artifact` | developer audit truth (tablets and signs; reading one is an act, and its text reaches the reader as an experience) | private | private | observer (owner) |
 | `perceived` | private engine state (new: who each player perceives) | private | private | the `seen_*` views |
 | `projected` | private engine state (second change: what each player perceives of each creature in its scene, the `perceived_of` projection) | private | private | `seen_characters`, `seen_fighters` |
@@ -155,7 +157,13 @@ Since 2026-11-11 (branch `drop-1`). A drop between two ground levels, a terrace'
 - **The eye:** `Terrain::opaque` is true only for rock and walls. A drop is open air: `Map::sight_clear` and its per-chunk fast path pass over it, so every perception path (players' perceived sets, minds' scenes, graphs' `sees`, witnessed events, the combat feed) sees across it.
 - **Missiles:** they follow the sight rule and fly over a drop (`Map::passable_missile`, which sight already shared). This is not a balance choice but the same physical rule as sight: the drop is open air, and the authority has no height (sight lines ignore height, docs/FLOORS.md "Verticality"), so it cannot tell a shot down a terrace from one up a retaining wall. Stopping missiles at a drop would make a visible target unshootable for no visible reason. If shooting up a wall should be harder, that is a height rule for the step in FLOORS.md where levels become layers, not a terrain class.
 - **Low things** (same day): a lot or blocking prop below eye height (a cart) is `Terrain::Low` (9) on the hosted map, which blocks the foot and not the eye in the same way; what rises above the eye stays `Wall`. How high a thing rises comes from its own definition (its model's `height_m` in `data/buildings.json`); the eye height and per-kind overrides are land data, `LandParams.sight` ([island authority](ISLAND_AUTHORITY.md#sight-over-low-things-2026-11-11)). **Why land data and not a law:** which tiles block is decided when the land is hosted, in the rules crate, without the world's script, and the game client rebuilds the same hosted land for its own sight test (sight-2, `living/game/src/sightfield.rs`). The authority and the client must compute blocking from the same input, and the seed's land data is the input both have. A law could differ from what the client computes, and the client would draw people the authority hides, or hide people it perceives.
-- **What stands on a drop hides:** a building's footprint or a blocking prop over a drop tile becomes `Wall` on the hosted map (`host::hosted_map`) when it rises above the eye. On the island no footprint does (4,116 drop tiles, none under a footprint).
+- **Since eye-2 (same day), a thing above the eye hides only where its model is solid at eye height.** The measure is `eye_cells` in the table, from the mesh in 1.2–1.8 m. A tile is `Wall` where a half-metre square of the model blocks at least `LandParams.sight.solid` (0.8) of the view, and `Low` elsewhere. So an open stall, a well under its roof and a fountain's basin are seen through, and a closed building is not ([island authority](ISLAND_AUTHORITY.md#sight-through-what-is-open-at-eye-height-2026-11-11)).
+- **What a mind is told** (eye-2): a mind's scene lists the nearest drop and the nearest low thing under `terrain_near`, as it lists water, rock, roads and walls, and says what they are, with how they meet the foot and the eye. That comes from the class's own `walkable` and `opaque` (`Terrain::words`, `Terrain::passage`):
+  - before: `"drop": "west 1"`, and no low thing at all;
+  - now: `"drop": "west 1, a drop to ground at another level (stairs, ramps and roads join the levels): you can see past it but not walk through it"` and `"low": "south 1, something low or open in the way, such as a cart, a low wall or an open stall: you can see past it but not walk through it"`.
+
+  It cannot say "the lower street": the authority keeps no heights, so it cannot tell up from down (verify-minds `drop`).
+- **What stands on a drop hides:** a building's footprint or a blocking prop over a drop tile becomes `Wall` on the hosted map (`host::hosted_map`) where it hides (by drop-1's rule, when it rises above the eye; since eye-2, where it is solid at eye height). On the island no footprint does (4,116 drop tiles, none under a footprint).
 - **Not modelled:** a retaining wall's face. Someone at the foot of a 4 m wall sees someone a few metres back on the level above, which the eye would not; the 2D authority sees over every drop both ways. The game client's top-down camera shows both, which is what the owner asked to agree.
 
 #### Drops and low things: measurements (2026-11-11)
@@ -228,6 +236,66 @@ Fifth change (2026-11-11, branch `fix-perceived-moving`). Human-controlled and A
 
 - **Cost.** It is computed when a scene or a first-sight line is built. It reads, per creature listed, its `activity` row as before, plus the `steer` and `body` rows by primary key, only when the activity is none or `wait`. It writes nothing and adds no table, column, view or subscription. The 60 Hz path, the frames and the views' read sets are untouched.
 - **SpacetimeDB documentation consulted (2026-11-11), against 2.14.1.** [Indexes](https://spacetimedb.com/docs/tables/indexes/): primary keys create an index for equality lookups, and `find` on one is the access pattern to use. [Performance](https://spacetimedb.com/docs/tables/performance/): prefer indexed lookups to scans, and split tables by access pattern so that updates touch fewer rows. [Views](https://spacetimedb.com/docs/functions/views/): a view re-runs when a row in its read set changes. The implications are three. Computing the label in the reducer that builds a scene, from rows read by key, costs three point lookups and changes no subscription. Putting it in a table or a column would add a write on the motion path, and a view re-run for every viewer whose read set holds it. Deriving it in a view would put `steer` and `body` in that view's read set. So the projection computes it.
+
+### Offers: what a player is offered
+
+Sixth change, 2026-11-11, branch `rules-offers`, on the Spark. In play-test 4 the owner's last line to a resident was "want to trade ?": a reply in the form of an offer would have reached the player only as one experience line, which the client did not draw, because `trade_offer` is private and no view carried it (the interface design, `docs/INTERFACE.md` on branch `design-interface`, §1 "Trade and offers" and §7 "`my_offers`").
+
+**SpacetimeDB documentation and source consulted (2026-11-11).** The docs' selector reads 2.0.0. Claims were checked in the pinned `spacetimedb-2.14.1` and `spacetimedb-bindings-macro-2.14.1` crates (cargo registry) and against the server source findings recorded above for the fourth change.
+
+| Source | What it says | What follows here |
+|---|---|---|
+| [Views](https://spacetimedb.com/docs/functions/views/) | "views can only access table data through indexed lookups (`.find()` and `.filter()` on indexed columns)"; "Full table scans create pessimistic read sets"; if any row in the read set changes, SpacetimeDB "must re-execute the entire view function"; `ViewContext` gives the caller's identity. | `my_offers` reads `trade_offer` only through two btree filters. It re-runs in full, so it stays small: one row per offer the caller is a party to. |
+| Source: `spacetimedb-2.14.1/src/table.rs` `is_point_scan` | `B::POINT && B::COLS_PROVIDED == I::NUM_COLS_INDEXED`: a `filter(value)` on a one-column btree is a point scan, recorded as that key (`record_index_scan_point_inner`, fourth change). | `trade_offer().to().filter(me)` and `.from().filter(me)` are point reads. An offer between two others does not re-run my view. Measured below. |
+| Source: `spacetimedb-2.14.1/src/lib.rs` `ViewContext` | Fields are `sender`, `db` (read-only), `from` and `env`. No timestamp. | A view cannot decide whether an offer has ended. The end is stored on the row (`until_ms`), and housekeeping deletes an ended offer. |
+| [Indexes](https://spacetimedb.com/docs/tables/indexes/) | `#[index(btree)]` on a field; B-trees serve equality and ranges; indexes "slow down inserts and updates". | One index, `trade_offer.to`. The table holds at most one offer per character and is written once per offer. |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) | "Adding indexes" is a safe change; adding columns needs a default at the end (`AddColumns`, fourth change source check). Views are not listed. | `to`'s index and `#[default(0u64)] until_ms` at the end migrate a running world in place. Checked by an in-place update below. |
+| [Table performance](https://spacetimedb.com/docs/tables/performance/), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) | Make tables public only when clients need them; cleanup reducers for growth; "keep subscriptions small". | `trade_offer` stays private; a client subscribes `SELECT * FROM my_offers` once per connection. |
+
+**The view.** `my_offers` (`perception.rs`, `primary_key = id`) returns, for the caller's living character (`living`, as the other `my_*` views), every `trade_offer` row addressed to it and the one it made (a new offer replaces the maker's earlier one, `act.rs` `Effect::Offer`). Its row, `MyOffer`:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | `u64` | the offer (primary key: the bindings give updates) |
+| `incoming` | `bool` | addressed to me (I may accept it), or mine |
+| `from`, `to` | `u32` | character ids. The client names them through `seen_characters`; the row carries no name the caller may not know. |
+| `give_item`, `give_qty` | `String`, `u32` | what `from` gives |
+| `want_item`, `want_qty` | `String`, `u32` | what `from` wants of `to` |
+| `at_ms` | `u64` | when it was made (world time, ms since the Unix epoch, as `experience.at_ms`) |
+| `until_ms` | `u64` | it can be accepted while world time ≤ `until_ms` |
+
+One view with a direction column rather than two views: the outgoing offer costs one more point read in the same refresh, and a client needs both to draw its own standing offer beside the ones made to it.
+
+**The end of an offer.** `trade_offer` gains `until_ms`, set when the offer is made to `at_ms` + the `trade_window_s` law (180 s). `accept`, the mind's scene and housekeeping read it (`TradeOffer::ends_ms`); a law changed while an offer stands no longer changes that offer's end. Housekeeping (1 Hz) now deletes a trade offer at its first pass after the end, not a minute later, so the row leaves `my_offers` about a second after `until_ms`. A row written before the column (its default 0) is read through the law's window and given its end at the next housekeeping. `perceive.rs`'s "asked of you" now reads offers through the new `to` index instead of scanning the table. Bond offers are unchanged.
+
+**Accept and decline.** Accepting is the existing `accept` act toward the maker (`from`), unchanged: refused with the rules' words when either side lacks the goods or the offer has ended, else the goods move both ways and the row goes. `accept_done` takes a proposal record of terms from the same person first, and the standing trade only when there is none. There is no decline act: an offer ends at `until_ms` or when its maker offers again.
+
+**Data paths.** Writes: one insert per offer, a delete per accept, replacement or end. Each re-runs the `my_offers` of the players who are its maker or addressee (the previous addressee too when an offer is replaced), and nobody else's. Reads: two point reads plus the `living` lookup per refresh. Retained: at most one row per character, for at most `trade_window_s` plus one second. Subscribers: the two parties.
+
+**Measured** (Spark, DGX, 20 cores, aarch64; SpacetimeDB 2.14.1 in the trial container `slop-trials-stdb`, port 3320, shared with other work: host load 15–21 during the runs, so the tick figures are noisy). Scratch database `verify-client-offers-bench-1111-190617`, default seed (`realm-4`, about 300 characters, no minds), 60 Hz tick. Tool: [`living/tools/offers_bench.py`](../living/tools/offers_bench.py). M player identities join near one another, each holding one real SDK subscription to `SELECT * FROM my_offers` (the verify-client probe). K adult residents stand beside them. A window at rest is followed by 60 s of load: residents offer to random players (`mind_act`, as a mind would) and players to one another (`human_act`), two to one. Figures come from the server's per-database view metrics.
+
+| M players | K residents | Offers made (per s) | Standing at end | Rows per player (mean, max) | `my_offers` refreshes per offer | µs per refresh, with materializing (call alone) | `my_offers` ms/s | Tick tx mean, rest → load (ms) |
+|---|---|---|---|---|---|---|---|---|
+| 20 | 60 | 552 (9.0) | 80 | 5.0, 9 | 1.97 | 46.8 (19.2) | 0.83 | 1.29 → 1.46 |
+| 50 | 150 | 1,096 (18.5) | 218 | 4.9, 8 | 1.92 | 44.0 (18.7) | 1.56 | 1.77 → 1.98 |
+
+- **The filters are point reads.** Each offer re-ran `my_offers` about twice: the addressee's, plus the maker's for a player's offer or the replaced offer's addressee. Under a full-scan read set every one of the M subscribers would re-run on every offer (20 or 50 per offer). At rest no `my_offers` refresh ran except those caused by `my_characters` changes (joins, the `living` lookup) and by the earlier run's offers ending.
+- **The cost per refresh** is about 45 µs, near the 43 µs of a `seen_bodies` refresh measured in the second change, with up to 9 rows. 18 offers a second cost 1.6 ms of view time per second. The tick's mean moved by 0.2 ms on a loaded host, inside its noise.
+- **Not measured:** wire bytes per player (one row is about 60 bytes plus item names), more than 50 subscribers, and offers to players who are far apart (an act toward a far target walks first, which does not change the view).
+
+**In-place update** (`verify-player-migrate-1111-191252`): main's module (`35c0717`, no `to` index, no `until_ms`) was published with an offer standing to a player, then this branch's module with `--keep-data`. The automatic migration accepted it (index added, `until_ms` defaulted to 0). The row kept its data, and housekeeping gave it its end within 0.5 s (`migrate-before.json`, `migrate-after.json`). For up to a second after such an update, a row in `my_offers` can carry `until_ms` 0, meaning `at_ms` plus the law's window. The offer was still there 64 ms after `until_ms` and gone 1,882 ms after (`expiry.json`; samples about 1.8 s apart on the loaded host).
+
+**Verified** on the same container, scoped build unless named, no model calls:
+
+| Surface | Run | Result |
+|---|---|---|
+| Rules (cargo) | `every_know_how_can_be_taught`, `cullet_s_glassmaking_can_be_taught` | pass; `just living-check` ok (all five steps) |
+| Player (`verify-player` `offers.py`) | `player-offers-1111-183948` | 17 of 17: a resident's offer in `my_offers` (incoming, ids, `until_ms` = `at_ms` + 180 s), told in `my_experience`; a second player's own offer outgoing; neither sees the other's, anonymous none, `trade_offer` private; `accept` refused without the goods (offer stands), then accepted (2 wood and 1 berries moved, row gone, outcome told). After the window the second player's offer was gone (`expiry-after-window.json`). |
+| Client (`verify-client` suite) | `client-offers-20261111-184207` | 34 rows, all PASS, including the new `my_offers` step over WebSocket (maker outgoing, addressee incoming, `ClientAnon` and anonymous nothing) and the own-state check with `my_offers` |
+| Client, open build | `client-offers-open-20261111-184616`, `client-offers-open2-20261111-184926` | first: `my_offers` PASS, "combat feed scoped to its viewer" FAIL (player-2's 4 s rows missed while a build ran beside it); rerun: all PASS but the known open-build XFAIL |
+| Core (`verify-core` `scenes.py teach`) | `core-teach-1111-184247` | 6 of 6 with this branch's rules. The same scene with main's `skills.rhai` installed on the same world: 2 of 6, with "there is no technique called fire_bolt (the techniques are: spear, fire, …)" (`teach-results-main-rules.json`) |
+
+Evidence is in the Spark worktree's git-ignored `.local/living/verify/<run>/`.
 
 ### Compatibility: the `LIVING_PERCEPTION` build switch
 

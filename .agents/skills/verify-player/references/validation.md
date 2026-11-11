@@ -1,6 +1,15 @@
 # Validation record (player)
 
 
+
+## 2026-11-11 rules-offers: trade offers a player receives (Spark)
+
+Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. `offers.py` (new, [offers.md](../features/offers.md)) on `player-offers-1111-183948`: 17 of 17. Shown: a resident's offer in `my_offers`, a second player's outgoing one, isolation between them, refused and then completed `accept`, `trade_offer` private. After the window the second offer was gone (`expiry-after-window.json`). Not covered: a client drawing the offer (the laptop's ui-1), and a mind deciding to offer (the resident's offer came through admin `mind_act`).
+
+## 2026-11-11 eye-2: across a drop, unchanged (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. `drop.py` on plan-test (`player-eye2v-drop`): 6 of 6 (both see each other across one drop tile, the walk stops at the edge, the route never crosses, the arrow over the drop strikes). Plan-test's lots name no measured model, so eye-2 changes none of its tiles. Maintained: drop.md (the script reads plan-test's plan whatever the seed; the search's full conditions), comments in `combat.py` and `gesture.py` (open stalls and wells no longer hide).
+
 ## 2026-11-11 drop-1: across a drop (dev-box)
 
 Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).

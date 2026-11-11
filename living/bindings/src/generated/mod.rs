@@ -134,6 +134,8 @@ pub mod my_experience_table;
 pub mod my_fighter_table;
 pub mod my_inventory_table;
 pub mod my_know_how_table;
+pub mod my_offer_type;
+pub mod my_offers_table;
 pub mod my_places_table;
 pub mod my_readiness_table;
 pub mod my_record_type;
@@ -383,6 +385,8 @@ pub use my_experience_table::*;
 pub use my_fighter_table::*;
 pub use my_inventory_table::*;
 pub use my_know_how_table::*;
+pub use my_offer_type::MyOffer;
+pub use my_offers_table::*;
 pub use my_places_table::*;
 pub use my_readiness_table::*;
 pub use my_record_type::MyRecord;
@@ -1028,6 +1032,7 @@ pub struct DbUpdate {
     my_fighter: __sdk::TableUpdate<Fighter>,
     my_inventory: __sdk::TableUpdate<Inventory>,
     my_know_how: __sdk::TableUpdate<KnowHow>,
+    my_offers: __sdk::TableUpdate<MyOffer>,
     my_places: __sdk::TableUpdate<Place>,
     my_readiness: __sdk::TableUpdate<Readiness>,
     my_records: __sdk::TableUpdate<MyRecord>,
@@ -1243,6 +1248,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_know_how" => db_update
                     .my_know_how
                     .append(my_know_how_table::parse_table_update(table_update)?),
+                "my_offers" => db_update
+                    .my_offers
+                    .append(my_offers_table::parse_table_update(table_update)?),
                 "my_places" => db_update
                     .my_places
                     .append(my_places_table::parse_table_update(table_update)?),
@@ -1686,6 +1694,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_know_how = cache
             .apply_diff_to_table::<KnowHow>("my_know_how", &self.my_know_how)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_offers = cache
+            .apply_diff_to_table::<MyOffer>("my_offers", &self.my_offers)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_places = cache
             .apply_diff_to_table::<Place>("my_places", &self.my_places)
             .with_updates_by_pk(|row| &row.id);
@@ -1874,6 +1885,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_know_how" => db_update
                     .my_know_how
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_offers" => db_update
+                    .my_offers
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_places" => db_update
                     .my_places
@@ -2191,6 +2205,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_know_how" => db_update
                     .my_know_how
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_offers" => db_update
+                    .my_offers
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_places" => db_update
                     .my_places
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2403,6 +2420,7 @@ pub struct AppliedDiff<'r> {
     my_fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     my_inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     my_know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
+    my_offers: __sdk::TableAppliedDiff<'r, MyOffer>,
     my_places: __sdk::TableAppliedDiff<'r, Place>,
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     my_records: __sdk::TableAppliedDiff<'r, MyRecord>,
@@ -2553,6 +2571,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<KnowHow>("my_know_how", &self.my_know_how, event);
+        callbacks.invoke_table_row_callbacks::<MyOffer>("my_offers", &self.my_offers, event);
         callbacks.invoke_table_row_callbacks::<Place>("my_places", &self.my_places, event);
         callbacks.invoke_table_row_callbacks::<Readiness>(
             "my_readiness",
@@ -3350,6 +3369,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_fighter_table::register_table(client_cache);
         my_inventory_table::register_table(client_cache);
         my_know_how_table::register_table(client_cache);
+        my_offers_table::register_table(client_cache);
         my_places_table::register_table(client_cache);
         my_readiness_table::register_table(client_cache);
         my_records_table::register_table(client_cache);
@@ -3453,6 +3473,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_fighter",
         "my_inventory",
         "my_know_how",
+        "my_offers",
         "my_places",
         "my_readiness",
         "my_records",

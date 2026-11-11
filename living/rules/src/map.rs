@@ -71,6 +71,28 @@ impl Terrain {
             Self::Low => "low",
         }
     }
+
+    /// What a class means to someone who sees it, in plain words, where its name does not say
+    /// (a mind's scene, `terrain_near`): a drop and a low thing block the foot and not the eye,
+    /// which "drop" and "low" alone do not tell. The rest are understood by name.
+    pub fn words(self) -> Option<&'static str> {
+        match self {
+            Self::Drop => Some("a drop to ground at another level (stairs, ramps and roads join the levels)"),
+            Self::Low => Some("something low or open in the way, such as a cart, a low wall or an open stall"),
+            _ => None,
+        }
+    }
+
+    /// How the class meets the foot and the eye, from [`Self::walkable`] and [`Self::opaque`],
+    /// for a class described by [`Self::words`].
+    pub fn passage(self) -> &'static str {
+        match (self.walkable(), self.opaque()) {
+            (false, false) => "you can see past it but not walk through it",
+            (false, true) => "it blocks the way and the view",
+            (true, true) => "you can walk through it but not see past it",
+            (true, false) => "you can walk and see through it",
+        }
+    }
 }
 
 /// Chunk ids pack chunk coordinates, so they do not depend on the map's width.
@@ -649,6 +671,21 @@ mod tests {
         c.set(3, 4, Terrain::Wall);
         c.set(4, 3, Terrain::Wall);
         assert!(!c.sight_clear((2.5, 5.5), (5.5, 2.5)), "two walls meeting at a corner hide");
+    }
+
+    /// A mind's scene tells a drop and a low thing in words, with how they meet the foot and the
+    /// eye from the class's own rules; other classes go by name.
+    #[test]
+    fn drops_and_low_things_are_told_in_words() {
+        for t in [Terrain::Drop, Terrain::Low] {
+            assert!(t.words().is_some(), "{t:?}");
+            assert_eq!(t.passage(), "you can see past it but not walk through it");
+        }
+        assert_eq!(Terrain::Wall.passage(), "it blocks the way and the view");
+        for k in 0..=9 {
+            let t = Terrain::from_u8(k);
+            assert_eq!(t.words().is_some(), matches!(t, Terrain::Drop | Terrain::Low), "{t:?}");
+        }
     }
 
     /// A drop between two levels: one sees and shoots across it, and no one walks, steers or

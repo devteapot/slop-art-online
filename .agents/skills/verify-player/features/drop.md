@@ -22,10 +22,10 @@ python3 .agents/skills/verify-player/scripts/drop.py --run "$R"
 python3 "$V" cleanup --run "$R"
 ```
 
-It mints the run's player identity and a second one (`token2`) if the state lacks them, and joins both. It finds the geometry on the hosted tiles (`terrain_chunk`, public) and the plan's two levels from `living/seeds/plan-test.json` (the plan's frame: east-north metres from `origin`, turned by `rotation_deg`): a row tile and a quay tile on one axis with only drop tiles (1 to 3) between and walkable ground behind each. Admin `place_at` sets the scene; admin SQL reads `body` and `vitals`. Evidence: `drop.json`, `drop-geometry.json`, `actions.log`.
+It mints the run's player identity and a second one (`token2`) if the state lacks them, and joins both. It finds the geometry on the hosted tiles (`terrain_chunk`, public) and the plan's two levels from `living/seeds/plan-test.json` (the plan's frame: east-north metres from `origin`, turned by `rotation_deg`): a row tile and a quay tile on one axis with only drop tiles (1 to 3) between, walkable ground behind each and on both sides, and a run of 5 drop tiles alongside. Admin `place_at` sets the scene; admin SQL reads `body` and `vitals`. Evidence: `drop.json`, `drop-geometry.json`, `actions.log`.
 
 ## Gotchas
 
-- The authority has no heights; the script finds which side is above from the plan's level polygons. On a seed without a plan it fails with "no drop between the plan's levels".
+- The authority has no heights; the script finds which side is above from the plan's level polygons. It reads `living/seeds/plan-test.json`'s plan whatever the run's seed, so run it on plan-test only; on a map where that plan's levels have no drop between them it fails with "no drop between the plan's levels on this map".
 - Sight at night is shorter (6 m on the shipped law); the two stand at most 6 m apart, so the scene holds by day or night.
 - The arrow strikes the first body on its line; another resident walking between can take it. Rerun, and say so.

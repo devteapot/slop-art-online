@@ -104,7 +104,7 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 12] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight"];
+pub const ENGINE_LAWS: [&str; 13] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.
@@ -135,6 +135,18 @@ fn described(s: &Scripts) -> Result<(), String> {
     Ok(())
 }
 
+/// The interface declarations (`<name>_ui()`) read without a problem: an install refuses what a
+/// client would only log and play on without (docs/INTERFACE.md §3).
+fn interface(s: &Scripts) -> Result<(), String> {
+    const SHOWN: usize = 12;
+    let e = s.ui_errors();
+    if e.is_empty() {
+        return Ok(());
+    }
+    let more = if e.len() > SHOWN { format!("; and {} more", e.len() - SHOWN) } else { String::new() };
+    Err(format!("install refused: {}{more}", e.iter().take(SHOWN).cloned().collect::<Vec<_>>().join("; ")))
+}
+
 fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     // Every law reads only fields the engine provides.
     for f in s.ctx_laws() {
@@ -155,9 +167,11 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     hooks(&mut p)?;
     yes_or_no(&mut p)?;
     described(s)?;
+    interface(s)?;
     record_texts(&mut p)?;
     regard(&mut p)?;
     daylight(&mut p)?;
+    life_years(s)?;
     Ok(p.report)
 }
 
@@ -435,6 +449,16 @@ fn daylight(p: &mut Probe) -> Result<(), String> {
             Some(v) if (0.0..=1.0).contains(&v) => {},
             _ => return Err(format!("install refused: `daylight({h})` must return a number from 0 (night) to 1 (day), got {d}")),
         }
+    }
+    Ok(())
+}
+
+/// A world's life table: the `life_years` law over a person's table (the shipped one's
+/// numbers; the engine gives it each species' own) gives ages in order within the lifespan.
+fn life_years(s: &Scripts) -> Result<(), String> {
+    let person = crate::life::Life { years: 70.0, infant: 0.03, child: 0.23, elder: 0.85, old_age: 0.87, gestation: 0.011, litter: 1, interbirth: 0.03, breeding_radius: 0.0 };
+    for (kind, base) in [("person", person), ("wolf", crate::life::Life::default())] {
+        s.life_law(kind, base).map_err(|e| format!("install refused: {e}"))?;
     }
     Ok(())
 }

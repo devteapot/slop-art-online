@@ -79,7 +79,7 @@ impl Talks {
 }
 
 /// Take in the experience rows that arrived (Present phase).
-pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res<Looks>, mut t: ResMut<Talks>) {
+pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res<Looks>, mut t: ResMut<Talks>, mut hints: ResMut<Hints>) {
     let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else { return };
     if t.me != Some(me) {
         *t = Talks { me: Some(me), ..default() };
@@ -100,6 +100,9 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
             m.first_ms = m.first_ms.min(e.at_ms);
         }
         if let Some(to) = heard::said(&e) {
+            if e.at_ms as f64 + 10_000.0 >= scene.now_ms {
+                hints.said = true;
+            }
             t.lines.insert(e.id, Line { at_ms: e.at_ms, speaker: me, to, text: heard::words(&e.text).to_string(), mine: true, heard_by: heard::heard_by(&e), unheard: false });
         } else if let Some((who, to)) = heard::heard(&e) {
             let text = heard::words(&e.text).to_string();
@@ -167,6 +170,15 @@ pub struct ToChip(Win);
 pub struct InputText(Win);
 #[derive(Component)]
 pub struct Empty(Win);
+/// A help line shown until it has been used (`Hints`).
+#[derive(Component)]
+pub struct Hint;
+
+/// One-time help: the box's line goes once a line has been said.
+#[derive(Resource, Default)]
+pub struct Hints {
+    pub said: bool,
+}
 /// The log's tabs' bodies.
 #[derive(Component)]
 pub struct LogTab(u8);
@@ -184,35 +196,38 @@ pub struct EventRow(usize);
 pub struct LogPage(pub u8);
 
 fn bubble(p: &mut ChildSpawnerCommands, f: &Fonts, w: Win, i: usize) {
-    p.spawn((Msg(w, i), Node { flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(9.0), Val::Px(9.0), Val::Px(5.0), Val::Px(6.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(10.0)), max_width: Val::Px(330.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::CREAM), BorderColor::all(wood::INK), Pickable::IGNORE)).with_children(|m| {
-        m.spawn((MsgName(w, i), Text::new(""), f.body(12.0, 900), TextColor(wood::TALK_INK), Pickable::IGNORE));
-        m.spawn((MsgText(w, i), Text::new(""), f.body(14.0, 600), TextColor(wood::INK), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
-        m.spawn((MsgHeard(w, i), Text::new(""), f.body(11.5, 700), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { display: Display::None, margin: UiRect::top(Val::Px(2.0)), ..default() }, Pickable::IGNORE));
+    p.spawn((Msg(w, i), Node { flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(9.0), Val::Px(9.0), Val::Px(5.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(10.0), max_width: Val::Px(330.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::field()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|m| {
+        m.spawn((MsgName(w, i), Text::new(""), f.body(12.0, 900), TextColor(wood::talk_ink()), Pickable::IGNORE));
+        m.spawn((MsgText(w, i), Text::new(""), f.body(14.0, 600), TextColor(wood::text()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+        m.spawn((MsgHeard(w, i), Text::new(""), f.body(11.5, 700), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { display: Display::None, margin: UiRect::top(Val::Px(2.0)), ..default() }, Pickable::IGNORE));
     });
 }
 
 fn input_row(p: &mut ChildSpawnerCommands, f: &Fonts, icons: &Icons, w: Win, hint: &str) {
-    p.spawn((InputRow(w), Hot, Tag(format!("input:{}", w.name())), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::CREAM), BorderColor::all(wood::INK), bevy::ui::Outline { width: Val::Px(0.0), offset: Val::Px(0.0), color: wood::alpha(wood::TALK, 0.5) }))
+    p.spawn((InputRow(w), Hot, Tag(format!("input:{}", w.name())), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(8.0), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::field()), BorderColor::all(wood::edge()), bevy::ui::Outline { width: Val::Px(0.0), offset: Val::Px(0.0), color: wood::alpha(wood::talk(), 0.5) }))
         .with_children(|r| {
-            r.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(3.0), padding: UiRect::axes(Val::Px(7.0), Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(6.0)), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::TALK), Pickable::IGNORE)).with_children(|c| {
+            r.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(3.0), padding: UiRect::axes(Val::Px(7.0), Val::Px(2.0)), border_radius: wood::r(6.0), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::talk()), Pickable::IGNORE)).with_children(|c| {
                 c.spawn((ToChip(w), Text::new(""), f.body(12.0, 900), TextColor(Color::WHITE), Pickable::IGNORE));
                 c.spawn(wood::icon(icons, Glyph::Ui(Mark::Caret), 9.0, Color::WHITE));
             });
-            r.spawn((InputText(w), Text::new(""), f.body(14.0, 650), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { flex_grow: 1.0, flex_shrink: 1.0, ..default() }, Pickable::IGNORE));
+            r.spawn((InputText(w), Text::new(""), f.body(14.0, 650), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { flex_grow: 1.0, flex_shrink: 1.0, min_width: Val::Px(90.0), ..default() }, Pickable::IGNORE));
             // The box's other ways of speaking (`talk::MODES`): whisper keeps its place, greyed,
             // until the rules have it (docs/COMMUNICATION.md, the Spark coordinator's).
             for m in crate::talk::MODES.iter().filter(|m| !m.available) {
-                r.spawn((Node { padding: UiRect::axes(Val::Px(6.0), Val::Px(1.0)), border: UiRect::all(Val::Px(1.5)), border_radius: BorderRadius::all(Val::Px(6.0)), flex_shrink: 0.0, ..default() }, BorderColor::all(wood::alpha(wood::MUTED, 0.6)), Pickable::IGNORE))
-                    .with_child((Text::new(m.key), f.body(11.0, 800), TextColor(wood::alpha(wood::MUTED, 0.8)), Pickable::IGNORE));
+                r.spawn((Node { padding: UiRect::axes(Val::Px(6.0), Val::Px(1.0)), border: wood::b(1.5), border_radius: wood::r(6.0), flex_shrink: 0.0, ..default() }, BorderColor::all(wood::alpha(wood::muted(), 0.6)), Pickable::IGNORE))
+                    .with_child((Text::new(m.key), f.body(11.0, 800), TextColor(wood::alpha(wood::muted(), 0.8)), Pickable::IGNORE));
             }
-            wood::chip(r, f, "Enter", ());
+            if wood::t().chips {
+                wood::chip(r, f, "Enter", ());
+            }
         });
-    p.spawn((Text::new(hint), f.body(12.0, 600), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+    // How the box works: shown until the first line is said (always in a dense theme).
+    p.spawn((Hint, Text::new(hint), f.body(12.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
 }
 
 fn thread(p: &mut ChildSpawnerCommands, f: &Fonts, w: Win, n: usize, empty: &str) {
-    p.spawn((Thread(w), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(7.0), padding: UiRect::top(Val::Px(8.0)), border: UiRect::top(Val::Px(1.5)), overflow: Overflow::scroll_y(), flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() }, BorderColor::all(wood::DASH), ScrollPosition::default(), Block)).with_children(|t| {
-        t.spawn((Empty(w), Text::new(empty), f.body(13.0, 600), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+    p.spawn((Thread(w), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(7.0), padding: UiRect::top(Val::Px(8.0)), border: UiRect::top(Val::Px(1.5)), overflow: Overflow::scroll_y(), flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() }, BorderColor::all(wood::line()), ScrollPosition::default(), Block)).with_children(|t| {
+        t.spawn((Empty(w), Text::new(empty), f.body(13.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
         for i in 0..n {
             bubble(t, f, w, i);
         }
@@ -227,35 +242,38 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 let w = b.0;
                 commands.entity(e).with_children(|body| {
                     body.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(12.0), align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|h| {
-                        h.spawn((PortraitRing(id), Node { width: Val::Px(58.0), height: Val::Px(58.0), border: UiRect::all(Val::Px(3.0)), border_radius: BorderRadius::all(Val::Percent(50.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::PARCH2), BorderColor::all(wood::INK), Pickable::IGNORE))
-                            .with_child((Portrait(id), Node { width: Val::Px(40.0), height: Val::Px(40.0), ..default() }, ImageNode::new(icons.get(Glyph::Ui(Mark::Person))).with_color(wood::SUB), Pickable::IGNORE));
+                        h.spawn((PortraitRing(id), Node { width: Val::Px(58.0), height: Val::Px(58.0), border: wood::b(3.0), border_radius: BorderRadius::all(Val::Percent(50.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::surface_lo()), BorderColor::all(wood::edge()), Pickable::IGNORE))
+                            .with_child((Portrait(id), Node { width: Val::Px(40.0), height: Val::Px(40.0), ..default() }, ImageNode::new(icons.get(Glyph::Ui(Mark::Person))).with_color(wood::heading()), Pickable::IGNORE));
                         h.spawn((Node { flex_direction: FlexDirection::Column, flex_shrink: 1.0, ..default() }, Pickable::IGNORE)).with_children(|c| {
                             c.spawn((WhoText(id), Text::new(""), wood::ink(f, 15.0, 900), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
-                            c.spawn((MetText(id), Text::new(""), f.body(12.5, 600), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                            c.spawn((MetText(id), Text::new(""), f.body(12.5, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
                         });
                     });
+                    // The acts wanted in the moment; the rest (Trade…, Introduce yourself, every act
+                    // the rules allow) behind More….
                     body.spawn((Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(6.0), row_gap: Val::Px(6.0), flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|a| {
                         kit::button(a, f, "Give ›", &format!("person:give:{id}"), false);
-                        kit::button(a, f, "Trade…", &format!("person:trade:{id}"), true);
                         let wave = kit::button(a, f, "Wave", &format!("person:wave:{id}"), true);
-                        a.commands().entity(wave).with_children(|b| {
-                            wood::chip(b, f, &binds.first(crate::keys::Act::Wave), ());
-                        });
                         let look = kit::button(a, f, "Look over", &format!("person:appraise:{id}"), true);
-                        a.commands().entity(look).with_children(|b| {
-                            wood::chip(b, f, &binds.first(crate::keys::Act::LookOver), ());
-                        });
-                        kit::button(a, f, "Introduce yourself", &format!("person:intro:{id}"), true);
+                        if wood::t().chips {
+                            a.commands().entity(wave).with_children(|b| {
+                                wood::chip(b, f, &binds.first(crate::keys::Act::Wave), ());
+                            });
+                            a.commands().entity(look).with_children(|b| {
+                                wood::chip(b, f, &binds.first(crate::keys::Act::LookOver), ());
+                            });
+                        }
+                        kit::button(a, f, "More…", &format!("person:more:{id}"), true);
                     });
                     // What I can give them, from my pack and the rules (opened by Give ›).
-                    body.spawn((GiveList(id), Node { flex_direction: FlexDirection::Column, border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), overflow: Overflow::clip(), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::PARCH_HI), BorderColor::all(wood::INK), Pickable::IGNORE)).with_children(|g| {
+                    body.spawn((GiveList(id), Node { flex_direction: FlexDirection::Column, border: wood::b(2.0), border_radius: wood::r(8.0), overflow: Overflow::clip(), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::surface_hi()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|g| {
                         for i in 0..GIVE_ROWS {
                             g.spawn((GiveRow(id, i), Hot, Tag(format!("person:gift:{id}:{i}")), kit::Paint::Row, Lit(false), Node { padding: UiRect::axes(Val::Px(10.0), Val::Px(5.0)), display: Display::None, ..default() }, BackgroundGradient::default()))
                                 .with_child((GiveText(id, i), Text::new(""), wood::ink(f, 14.0, 800), Pickable::IGNORE));
                         }
                     });
                     thread(body, f, w, THREAD, "Nothing said between you yet.");
-                    input_row(body, f, &icons, w, "Everyone in earshot hears it; it is addressed to them. Tab: someone else in earshot, or the room.");
+                    input_row(body, f, &icons, w, "Everyone in earshot hears it. Tab: someone else, or the room.");
                 });
             }
             Win::Log => {
@@ -263,26 +281,26 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 commands.entity(e).with_children(|body| {
                     body.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(6.0), flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|tabs| {
                         for (label, i) in [("Heard", 0), ("People", 1), ("Events", 2)] {
-                            tabs.spawn((Hot, Tag(format!("log:tab:{i}")), kit::Paint::Choice, Lit(false), Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(4.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), ..default() }, BackgroundGradient::default(), BorderColor::all(wood::INK), wood::hard_shadow(2.0, 0.4)))
+                            tabs.spawn((Hot, Tag(format!("log:tab:{i}")), kit::Paint::Choice, Lit(false), Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(4.0)), border: wood::b(2.0), border_radius: wood::r(8.0), ..default() }, BackgroundGradient::default(), BorderColor::all(wood::edge()), wood::hard_shadow(2.0, 0.4)))
                                 .with_child((Text::new(label), wood::ink(f, 13.5, 800), Pickable::IGNORE));
                         }
                     });
                     body.spawn((LogTab(0), Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() }, Pickable::IGNORE)).with_children(|t| thread(t, f, w, HEARD_ROWS, "Nothing heard yet. Lines you hear and say gather here."));
                     body.spawn((LogTab(1), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), overflow: Overflow::scroll_y(), display: Display::None, ..default() }, ScrollPosition::default(), Block)).with_children(|t| {
-                        t.spawn((Empty(Win::Settings), Text::new("No one met yet."), f.body(13.0, 600), TextColor(wood::MUTED), Pickable::IGNORE));
+                        t.spawn((Empty(Win::Settings), Text::new("No one met yet."), f.body(13.0, 600), TextColor(wood::muted()), Pickable::IGNORE));
                         for i in 0..PEOPLE_ROWS {
-                            t.spawn((PersonRow(i), Hot, Tag(format!("log:person:{i}")), kit::Paint::Row, Lit(false), Node { flex_direction: FlexDirection::Column, padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)), border_radius: BorderRadius::all(Val::Px(6.0)), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundGradient::default())).with_children(|r| {
+                            t.spawn((PersonRow(i), Hot, Tag(format!("log:person:{i}")), kit::Paint::Row, Lit(false), Node { flex_direction: FlexDirection::Column, padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)), border_radius: wood::r(6.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundGradient::default())).with_children(|r| {
                                 r.spawn((PersonRowText(i), Text::new(""), wood::ink(f, 14.0, 800), Pickable::IGNORE));
-                                r.spawn((PersonRowNote(i), Text::new(""), f.body(12.0, 600), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                                r.spawn((PersonRowNote(i), Text::new(""), f.body(12.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
                             });
                         }
                     });
                     body.spawn((LogTab(2), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), overflow: Overflow::scroll_y(), display: Display::None, ..default() }, ScrollPosition::default(), Block)).with_children(|t| {
                         for i in 0..EVENT_ROWS {
-                            t.spawn((EventRow(i), Text::new(""), f.body(13.0, 600), TextColor(wood::INK), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { display: Display::None, flex_shrink: 0.0, ..default() }, Pickable::IGNORE));
+                            t.spawn((EventRow(i), Text::new(""), f.body(13.0, 600), TextColor(wood::text()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { display: Display::None, flex_shrink: 0.0, ..default() }, Pickable::IGNORE));
                         }
                     });
-                    input_row(body, f, &icons, w, "To the room: everyone in earshot hears it. Point at someone and press Enter to speak to them; Tab: someone in earshot.");
+                    input_row(body, f, &icons, w, "Everyone in earshot hears it. Point at someone first to speak to them.");
                 });
             }
             _ => {}
@@ -310,7 +328,7 @@ fn ago(now_ms: f64, at_ms: u64) -> String {
 
 /// Clicks in the people windows: acts toward a person, Give rows, the log's tabs and people.
 #[allow(clippy::too_many_arguments)]
-pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut ws: ResMut<Windows>, mut page: ResMut<LogPage>, (talks, looks): (Res<Talks>, Res<Looks>), net: NonSend<Net>, mut verbs: ResMut<crate::verbs::Verbs>, mut gestures: ResMut<crate::town::Scripted>, mut talk: ResMut<crate::talk::Talk>, mut input: ResMut<crate::controls::Input>, mut open_give: Local<Option<u32>>, mut give: Query<(&GiveList, &mut Node)>) {
+pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut ws: ResMut<Windows>, mut page: ResMut<LogPage>, (talks, looks, time): (Res<Talks>, Res<Looks>, Res<Time>), net: NonSend<Net>, mut verbs: ResMut<crate::verbs::Verbs>, mut gestures: ResMut<crate::town::Scripted>, mut talk: ResMut<crate::talk::Talk>, mut input: ResMut<crate::controls::Input>, mut open_give: Local<Option<u32>>, mut give: Query<(&GiveList, &mut Node)>) {
     if let Some(t) = kit::clicked(&ui, &tags) {
         let parts: Vec<&str> = t.split(':').collect();
         match parts.as_slice() {
@@ -336,6 +354,14 @@ pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut ws: ResMut<Windows>, mu
                         verbs.want_toward = Some(id);
                     }
                     "trade" => verbs.open_group = Some((id, "offer".into())),
+                    "more" if net.conn.as_ref().is_some_and(|c| c.db.seen_characters().id().find(&id).is_none()) => {
+                        verbs.toasts.push(crate::verbs::Toast { text: format!("{} is not in sight", looks.cap(id)), ok: None, at: time.elapsed_secs_f64() });
+                    }
+                    "more" => {
+                        // Beside the window.
+                        let at = ws.anchor_of(Win::Person(id)).map(|a| if a == super::win::Anchor::Left { Vec2::new(462.0, 60.0) } else { Vec2::new(880.0, 280.0) });
+                        verbs.open_list = Some((id, at));
+                    }
                     "wave" => gestures.press.push(("wave".into(), id.to_string())),
                     "appraise" => gestures.press.push(("appraise".into(), id.to_string())),
                     "intro" => {
@@ -357,6 +383,13 @@ pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut ws: ResMut<Windows>, mu
             }
             _ => {}
         }
+    }
+    // Introduce yourself from the list of acts (`verbs.rs`).
+    if let Some(id) = verbs.want_intro.take() {
+        let name = net.conn.as_ref().zip(net.my_id).and_then(|(c, me)| c.db.my_characters().id().find(&me)).map(|c| c.name).unwrap_or_else(|| net.name.clone());
+        talk.want = Some(Some(id));
+        input.chat = format!("I'm {name}.");
+        input.keep_words = true;
     }
     for (g, mut n) in &mut give {
         show(&mut n, *open_give == Some(g.0) && ws.is_open(Win::Person(g.0)));
@@ -419,7 +452,7 @@ pub fn update(
         let l = line_of(&m.0, m.1);
         show(&mut n, l.is_some());
         if let Some(l) = l {
-            let (col, align) = if l.mine { (wood::ME_TINT, AlignSelf::FlexEnd) } else { (wood::CREAM, AlignSelf::FlexStart) };
+            let (col, align) = if l.mine { (wood::mine(), AlignSelf::FlexEnd) } else { (wood::field(), AlignSelf::FlexStart) };
             if bg.0 != col {
                 bg.0 = col;
             }
@@ -447,7 +480,7 @@ pub fn update(
                     (_, _) => format!("{} › {}", name(l.speaker), if l.to == 0 { "the room".to_string() } else { lower(l.to) }),
                 };
                 set_text(&mut t, &s);
-                super::set_color(&mut c, if l.mine { wood::NAME_ME } else { wood::TALK_INK });
+                super::set_color(&mut c, if l.mine { wood::name_mine() } else { wood::talk_ink() });
             }
         }
     }
@@ -479,26 +512,29 @@ pub fn update(
     for (w, mut t) in &mut texts.p0() {
         let named = net.conn.as_ref().and_then(|c| c.db.seen_characters().id().find(&w.0)).is_some_and(|c| !c.name.is_empty());
         let colour = looks.colours.get(&w.0).and_then(|(t, _)| t.as_deref()).and_then(crate::looks::colour_name);
+        // The title names them; this line adds only what the title lacks (a named person's
+        // clothes), and is empty otherwise.
         let s = match (named, colour) {
             (true, Some(c)) => format!("{} · in {c}", looks.cap(w.0)),
-            _ => looks.cap(w.0),
+            _ => String::new(),
         };
         set_text(&mut t, &s);
     }
     for (w, mut t) in &mut texts.p1() {
         let m = talks.met.get(&w.0);
-        let mut s = m.map_or_else(|| "You have not met yet.".to_string(), |m| format!("First seen {}.", ago(now, m.first_ms)));
+        // Kept short: when we met, and whether they are in sight.
+        let mut s = m.map_or_else(String::new, |m| format!("First seen {}", ago(now, m.first_ms)));
         if m.and_then(|m| m.introduced_ms).is_some() {
-            s.push_str(" They told you their name.");
+            s.push_str(" · told you their name");
         }
         if !perceived(w.0) {
-            s.push_str(" Not in sight now.");
+            s.push_str(" · not in sight");
         }
         set_text(&mut t, &s);
     }
     for (w, mut t) in &mut texts.p7().p0() {
         if let Win::Person(id) = w.0 {
-            set_text(&mut t, &looks.cap(id));
+            set_text(&mut t, &wood::fit(&looks.cap(id), 34));
         }
     }
     // The box: whom it speaks to, the words, a caret.
@@ -508,18 +544,18 @@ pub fn update(
         _ => "to the room".into(),
     };
     for (c, mut t) in &mut texts.p5() {
-        let s = if typing_in == Some(c.0) { talk.to.map_or_else(|| "to the room".into(), |id| format!("to {}", lower(id))) } else { to_label(c.0) };
+        // Short, so the box keeps its room: "to a stranger in gr…".
+        let s = wood::fit(&if typing_in == Some(c.0) { talk.to.map_or_else(|| "to the room".into(), |id| format!("to {}", lower(id))) } else { to_label(c.0) }, 22);
         set_text(&mut t, &s);
     }
     let caret = if crate::capture::scripted() || (time.elapsed_secs() * 1.8).fract() < 0.6 { "|" } else { " " };
     for (c, mut t, mut col) in &mut texts.p6() {
         if typing_in == Some(c.0) {
             set_text(&mut t, &format!("{}{caret}", input.chat));
-            super::set_color(&mut col, wood::INK);
+            super::set_color(&mut col, wood::text());
         } else {
-            let k = "Enter";
-            set_text(&mut t, &format!("{k} or click here to talk"));
-            super::set_color(&mut col, wood::MUTED);
+            set_text(&mut t, "Enter to talk");
+            super::set_color(&mut col, wood::muted());
         }
     }
     for (r, mut o) in &mut inputs {
@@ -529,7 +565,7 @@ pub fn update(
         }
     }
     for (p, mut img) in &mut portraits {
-        let col = looks.colours.get(&p.0).and_then(|(t, _)| t.as_deref()).and_then(|h| Srgba::hex(h).ok()).map_or(wood::SUB, Color::from);
+        let col = looks.colours.get(&p.0).and_then(|(t, _)| t.as_deref()).and_then(|h| Srgba::hex(h).ok()).map_or(wood::heading(), Color::from);
         if img.color != col {
             img.color = col;
         }
@@ -584,5 +620,16 @@ pub fn update(
         if over && pointer.scroll_px != 0.0 {
             sp.0.y = (sp.0.y.min(node.content_size().y) - pointer.scroll_px).max(0.0);
         }
+    }
+}
+
+/// One-time help lines, and the person window's second line only when it says something.
+pub fn hints(hints: Res<Hints>, mut lines: Query<&mut Node, (With<Hint>, Without<WhoText>)>, mut who: Query<(&Text, &mut Node), (With<WhoText>, Without<Hint>)>) {
+    let on = wood::t().help || !hints.said;
+    for mut n in &mut lines {
+        show(&mut n, on);
+    }
+    for (t, mut n) in &mut who {
+        show(&mut n, !t.0.is_empty());
     }
 }

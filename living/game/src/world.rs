@@ -613,7 +613,7 @@ const LAND_DRAWS: &[&str] = &["tree", "house", "hall", "inn", "workshop", "marke
 /// ground under them is known): on tile worlds all of them; on a land world (the island) what it
 /// does not draw itself, standing on its ground (what `verbs.rs` lets F act on).
 #[allow(clippy::too_many_arguments)]
-pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>, island: Option<Res<crate::island::Island>>) {
+pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>, island: Option<Res<crate::island::Island>>, assets: Res<AssetServer>) {
     let Some(conn) = &net.conn else { return };
     let mut seen: HashSet<(u8, u64)> = HashSet::new();
     let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
@@ -639,6 +639,23 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
             })
             .clone();
         let at = island.as_ref().map_or_else(|| scene.at3(x, y), |i| Vec3::new(x, i.height(x, y), y));
+        // A planned settlement's kit may model the structure (`island::structure_model`): drawn
+        // at its real size, fitted and converted like a lot's model. A fire keeps its flame
+        // unless the model glows itself.
+        if let Some((file, yaw)) = island.as_ref().filter(|_| key.0 == 1).and_then(|i| crate::island::structure_model(&i.land, &kind, Vec2::new(x, y))) {
+            let model = crate::lookdev::Model { vrm: false, file: file.clone(), height: 0.0, ground_y: at.y, glow: None };
+            let root = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
+            let e = commands.spawn((Thing(Vec2::new(x, y)), model, bevy::world_serialization::WorldAssetRoot(root), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)), Visibility::Hidden)).id();
+            if let (Some((g, color)), false) = (glow, crate::lookdev::has_glow(&file)) {
+                let mat = palette.color(&mut mats, &style, color, true);
+                commands.entity(e).with_children(|c| {
+                    c.spawn((Mesh3d(g), MeshMaterial3d(mat), Transform::default()));
+                });
+            }
+            debug!("things: {kind} #{} drawn as {file}", key.1);
+            scene.things.insert(key, e);
+            continue;
+        }
         let turn = Quat::from_rotation_y(hash(x.to_bits(), y.to_bits()) * std::f32::consts::TAU);
         let e = commands
             .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill)), crate::style::stencil()))

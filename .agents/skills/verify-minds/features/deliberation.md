@@ -12,6 +12,7 @@
 - `consumed-reasons`: `clear_deliberation` (`living/authority/src/mind.rs`) removes the lines the prompt contained, by their arrival times in `deliberation.arrived` (`living_rules::reasons::{add, consume}`, unit tests in `living/rules/src/reasons.rs`); lines that arrived after `seen_ms` stay, without the old plan's reasons when a new plan is installed. Each deliberate thought's `detail.reasons` records `{text, arrived_ms, carried_before}` (`carry` in `living/mind/src/mind.rs`; the count is per service process).
 - `id-target`: an act aimed at `{"id": n}` resolves a structure or resource in sight as well as a creature (`brain.rs` `visible_thing`), so a thing the scene listed by id is not reported "no #n in sight".
 - `missed-things`: a failure at a thing named by id ("no #n in sight", "depleted") weakens what the mind remembers of `#n` before its next deliberation (`Minds::weaken_missed`, `Store::weaken`) and the reason says so. Proved against Neo4j in `verify-knowledge`, not here (this suite runs with `LIVING_NEO4J=off`).
+- `projects` (`LIVING_PROJECTS=1`, off by default): the think step's `# Your projects` section and `serves` field, recorded in the thought's `detail.projects`. Needs a store, so it is driven by a fake trial batch, not these cases: [projects.md](projects.md).
 
 ## How to get to it (user POV)
 

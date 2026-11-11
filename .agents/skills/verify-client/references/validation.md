@@ -1,5 +1,20 @@
 # Client protocol validation
 
+## 2026-11-11 lives-3: four `rhythm` columns (dev-box)
+
+Branch `lives-3` (four columns appended with defaults to the private `rhythm` table; bindings regenerated), own container `lives3-stdb` (2.14.1, port 3321), scoped build. `client-l3-180756`: private table visibility passes (70 tables; `rhythm` refused to an anonymous subscription and to SQL), the reducer matrix 214 calls with no mismatch; "combat feed scoped to its viewer" failed (player-2 received no row) while two other island scenes and builds loaded the machine. `client-l3b-182752` on a quiet machine: that check passed, and "presence counts each open connection of the person" failed (`1 → 2 → 0`); 30 checks pass. Neither failing check touches this change (combat feed and presence timing); each passed in the other run. Not rerun further.
+
+
+## 2026-11-11 rules-offers: `my_offers` (Spark)
+
+Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. The driver's view inventory and own-state set gained `my_offers`, and the probe reads it. A new offers step runs after `in-sight` ([perception.md](../features/perception.md)). `client-offers-20261111-184207` (scoped): 34 rows, all PASS. `client-offers-open-20261111-184616` (open): `my_offers` PASS, but "combat feed scoped to its viewer" FAILED: player-2's `my_combat` rows (kept 4 s) were gone before its probe, while a cargo build ran beside the suite. `client-offers-open2-20261111-184926` (open, rerun alone): all PASS but the known open-build `experience` XFAIL.
+
+## 2026-11-11 eye-2: tile classes a client receives; presence timing (dev-box)
+
+Branch `eye-2` (from main `eead7a29`), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+- Tile classes (new, [game-client.md](../features/game-client.md#tile-classes), `scripts/tile_classes.py`): every `terrain_chunk` of an island world through the probe (16,384 chunks). `client-eye2-tiles1` (drop-1's hosting): 4,116 drop and 61 low tiles, the rules' counts. `client-eye2v-tiles` (eye-2): 4,116 drop, 9,153 low and 35,161 wall tiles, the rules' counts.
+- Fixed suite: `client-eye2v` and `client-eye2v2` each failed one check, "presence counts each open connection" (1 → 1 → 0, then 1 → 2 → 0; the dev-box was at load 45). The probe's holds counted from its own start, so the first connection closed before or right after the second opened. Presence is unchanged on this branch. The driver now waits up to 15 s for each expected count and holds the connections 30 s and 6 s (features/presence.md). `client-eye2v3`: 30 PASS, presence 1 → 2 → 1.
+
 ## 2026-11-11 goods-1 (dev-box)
 
 Own container `goods1-stdb` (port 3313), `scoped`. `client-g1-11111438` (before merging rules-1) and `client-g3-11111529` (merged): 31 of 31 pass, including the new "fire and shared-stock signals public to anonymous SQL" (`fire-signal.json`: `structure.lit_until_ms` and `resource_node.pool` reach anonymous SQL) and the permission matrix with `place_resource` (admin only; 214 calls, no mismatch).

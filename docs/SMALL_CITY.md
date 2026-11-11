@@ -213,6 +213,8 @@ The owner's rule: resources come from the world, and nothing spawns by magic. So
 - **Fire that eats fuel.** A furnace or hearth is lit only while it is fed.
 
   *Built 2026-11-11 on `goods-1`:* goods, fires that eat fuel, recipes and shared fishing stocks, with Cullet's goods as data in its laws file, `living/seeds/worlds/cullet/laws.rhai` ([world rules](WORLD_RULES.md#goods-recipes-and-fuel)). Placing Cullet's nodes and fires is the authored plan's.
+
+  *Placed 2026-11-11 on `rates-2`:* Cullet's resources, fires, lamps and the Store's food, with amounts and regrowth computed from the sustainability targets above as starting values for the soak ([Cullet's goods, placed](CULLET_RULES.md#cullets-goods-placed-rates-2)).
 - **Decay and upkeep.** Panes break and need glass. The owner has asked for this, as Rhai laws.
 - **Fish as a stock.** Today a fishing spot regrows. The owner wants fish to be animals eventually. For this test, regrowing spots with a shared limit are enough.
 - **Tide** (optional, recommended). A law that gives the water's state from the clock, shifting about 50 minutes later each day. It gates the Weirs and the wrack. It changes no terrain.
@@ -355,6 +357,8 @@ At the play-test everyone ran for shelter together at dusk. There were three cau
 
 **How this is seeded.** Each resident's sheet carries a small `rhythm`: usual waking hour, hours of sleep needed, working hours, and one or two evening places. The starting routines read those values instead of fixed hours. Sleep follows tiredness more than the clock. These are per-person starting values of the same routines everyone has, not per-role scripts. This needs a small seed and graph change, listed in the build plan.
 
+*Built 2026-11-11 on `lives-3`:* rising and going to bed at any hour, working hours and a second sleep in the seed's rhythm, read by graphs as `bedtime`, `evening` and `work_hours`; Cullet's trades' workplaces and starting habits as seed data (`worlds/cullet/ways.json`); and Cullet's life law (a child until 15, old age from 75) ([seeded lives](SEEDED_LIVES.md#rhythms-at-any-hour-and-cullets-trades), [Cullet's rules](CULLET_RULES.md#peoples-lives-the-life-table-as-a-law)). Pieter's hours are read as 13:00–19:00 plus 22:00–02:30. The wrack gatherers keep fixed early hours until the tide law exists.
+
 **Places need spots.** Today everyone at a place stands on one point. A place needs several named spots, such as a bench's seats, a stall's two sides, or the steps of the Fish Steps, so that six people at the Marver sit at six seats. This is a general rule gap.
 
 ### Tensions
@@ -437,7 +441,7 @@ Law values for a 48-minute day. They are Rhai numbers in `rates(a)` and `cold(a)
 
 Other points:
 
-- **Rates should be written per game hour.** Today every rate is per real minute, so changing the day length silently changes every balance. The engine should convert. This is a rules change, flagged for the rules worker.
+- **Rates should be written per game hour.** Today every rate is per real minute, so changing the day length silently changes every balance. The engine should convert. This is a rules change, flagged for the rules worker. *Built:* need rates on `rules-1`; spoiling, regrowth, traps and remains on `rates-2` ([Cullet's rules](CULLET_RULES.md#the-other-rates-in-game-time-rates-2)).
 - **The day length is not in the seed.** `World.day_ms` exists, but the seed cannot set it. It needs one seed field.
 - **Night is fixed in Rust** as 20:00 to 06:00 (`is_night`). It should become a law, eased over a game hour at dusk and dawn, so that light, sight and sleepiness do not all flip in one tick.
 - **Warm places.** Warmth today is a campfire within 3.5 m or a roof within 2.5 m. A lit furnace, hearth or oven should warm like a fire, with its own radius as a property.
@@ -713,6 +717,8 @@ Each phase ends with something the owner can look at. "Touches" names what chang
 **Phase 2, engine part (2026-11-11, branch `plan-1`).** A land seed can now carry hand-authored plans (`map.params.plans`): levels at exact heights, streets, stairs, a square, a harbour and lots with explicit models and heights, drawn as grey boxes until the kit exists. Households bind to lots (`homes`). See [authored plans](AUTHORED_PLANS.md). The full plan followed in phase 2's second part (below).
 
 **Phase 2, the grey city (2026-11-11, branch `plan-2`).** The plan of all 65 buildings (93 lots), the Wrack's land and the grey boxes, walkable in the real client: [Cullet's plan](AUTHORED_PLANS.md#cullets-plan). The generator could not make this island from its parameters (its coast follows a random range, its sand is a strip at the water's edge, and resources could not be put at named points), so three general seed fields were added: an authored coastline and relief stamps (height, region kind, ground) in `map.params.relief`, and `resources` in a plan. Measured: the quay end to end in 58 s, the Fish Steps to the Crown in about 80 s (not the 2 minutes of §2), the Lintel in about 4 minutes. From the game camera's height the five landmarks are seen from 75 to 99% of the town's streets; the rules' own sight, blocked by the terrace drops, sees them from 2 to 19%.
+
+**Phase 3, the kit, pass 1 (2026-11-11, branch `kit-1`, Fable 5.2 per decision 12).** [Cullet's kit](CULLET_KIT.md): `living/tools/blender/cullet.py` builds a model for each lot and fixture of the plan (261 models, about 338,000 triangles): the Cone, the Counting House, the Watchglass and the mole; the 24 row houses as six terraces, the Marver and its terrace; the 14 glasshouses in their three states; the six net lofts; the quay's wall, the Fish Steps, every retaining wall and flight, the plot walls and the Strand's dressing. The 22 lots without a model yet (the Heron and the P1 buildings) stay grey boxes. Glow strengths were set in the game at 21:30 against 13:00. Ground textures, nature, the characters and the P1 and P2 lists are not in this pass.
 
 **Phase 5, the bible and the cast (2026-11-11, branch `bible-1`).** [`bible.md`](../living/seeds/worlds/cullet/bible.md) and [`cast.json`](../living/seeds/worlds/cullet/cast.json): the 64 residents of §3 in 22 households, each household on its plan lot, each person with §3's want and what is going on as anchors, kin both ways, ties, a starting rhythm, and the secrets on their knowers' entries only; 20 situations with every side's view, and the 11 tensions. `author_world.py cullet --check` checks them without a model, and `--dry-run` builds the 22 prompts and estimates the paid run (53 calls with DeepSeek V4.1 Flash, about €0.16 to €0.39); no sheets are drafted yet ([authored worlds](AUTHORED_WORLDS.md#cullet-cullet-cast-by-hand-with-anchors)). To fill kin, the bible adds the fever winter six years ago and a few family links that §3 does not give; the owner reviews them before the run.
 

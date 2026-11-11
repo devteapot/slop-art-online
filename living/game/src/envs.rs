@@ -48,9 +48,35 @@ pub struct Occluder {
     pub height: f32,
 }
 
+/// A landmark (Cullet's Cone, Watchglass, Counting House…): it is never faded for standing
+/// between the camera and you ([`cutaway`]), so it holds its place in the view.
+#[derive(Component)]
+pub struct Landmark;
+
 /// A building the camera may not enter (`camera::follow` pulls the eye in front of it).
 #[derive(Component)]
 pub struct Solid;
+
+/// Becomes [`Solid`] once fitted if it is large: at least [`SOLID_TALL`] from its foot (or its
+/// foundation) to its top and [`SOLID_LONG`] along its longer side. A kit's fixtures (quay walls,
+/// retaining walls, a mole) carry it; their bollards, lamps and racks stay out of the rule, so
+/// the camera doesn't jump in front of every post.
+#[derive(Component)]
+pub struct SolidIfLarge;
+
+const SOLID_TALL: f32 = 2.0;
+const SOLID_LONG: f32 = 4.0;
+
+/// Make large fitted things [`Solid`] (after `lookdev::fit`).
+pub fn solid_if_large(mut commands: Commands, q: Query<(Entity, &Fitted), With<SolidIfLarge>>) {
+    for (e, f) in &q {
+        let mut ec = commands.entity(e);
+        ec.remove::<SolidIfLarge>();
+        if f.size.y >= SOLID_TALL && f.size.x.max(f.size.z) >= SOLID_LONG {
+            ec.insert(Solid);
+        }
+    }
+}
 
 /// A fitted thing's box: its centre, half extents and rotation (world).
 pub fn fitted_box(t: &Transform, f: &Fitted) -> (Vec3, Vec3, Quat) {
@@ -126,6 +152,10 @@ pub struct GroundDef {
     pub color: [u8; 3],
     pub radius: f32,
     pub relief: f32,
+    /// Every other key: those with a colon are the environment's ground map (`ground.rs`,
+    /// `street:setts`, `class:Road`, …); the rest are ignored, as they always were.
+    #[serde(flatten)]
+    pub keys: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -335,6 +365,52 @@ fn list_assets(env: &str, kind: &str) -> Vec<String> {
     out
 }
 
+/// A fixture of a hand-authored settlement's kit: a model that stands at a point of the land
+/// and is not a lot (a length of quay wall, a retaining wall, a flight of stairs, a bollard).
+#[derive(Deserialize, Clone, Debug)]
+pub(crate) struct Fixture {
+    /// Under `assets/`, as a lot's model file is.
+    pub file: String,
+    /// The kit's folder (`quay`, `retaining_wall`, `stairs`, `bollard`).
+    pub kind: String,
+    /// Land metres (x east, y south).
+    pub at: [f32; 2],
+    /// The way its front (glTF +Z) looks, on the land.
+    pub front: [f32; 2],
+    /// The ground its origin stands on.
+    pub floor: f32,
+    pub height: f32,
+    /// A light it carries: [`local_light`]'s kind (`lamp`) and colour.
+    #[serde(default)]
+    pub light: Option<String>,
+    #[serde(default)]
+    pub glow: Option<[f32; 3]>,
+}
+
+/// The fixtures an environment's kit lists (`envs/<env>/fixtures.json`), those whose models are
+/// on disk; none when the kit has no list. Read once per session.
+pub(crate) fn fixtures(env: &str) -> Vec<Fixture> {
+    static CACHE: std::sync::OnceLock<Mutex<HashMap<String, Vec<Fixture>>>> = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(env) {
+        return v.clone();
+    }
+    let root = std::path::Path::new(&crate::lookdev::asset_root()).to_path_buf();
+    let path = root.join(format!("envs/{env}/fixtures.json"));
+    let out = match std::fs::read_to_string(&path) {
+        Err(_) => Vec::new(),
+        Ok(text) => match serde_json::from_str::<Vec<Fixture>>(&text) {
+            Ok(list) => list.into_iter().filter(|f| root.join(&f.file).is_file()).collect(),
+            Err(e) => {
+                error!("{}: {e}", path.display());
+                Vec::new()
+            }
+        },
+    };
+    cache.lock().unwrap().insert(env.to_string(), out.clone());
+    out
+}
+
 /// One placed thing.
 pub(crate) struct Place {
     pub at: Vec2,
@@ -500,13 +576,20 @@ pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: us
 /// A thing's box is its fitted bounds turned with it (else a guess from its height). It fades to
 /// [`SEE_THROUGH`] while the sight lines from the eye to my head, chest and feet pass through it,
 /// and fully while the eye is inside it; it comes back [`CUT_HOLD_S`] after the last frame it
-/// was in the way, so a line grazing a corner doesn't flicker.
+/// was in the way, so a line grazing a corner doesn't flicker. Landmarks ([`Landmark`]) and
+/// anything farther than [`CUT_NEAR`] from the eye never fade for being in the way (the
+/// Watchglass seen from the mole stays solid); only the eye inside a thing fades it.
+///
+/// What I stand on or am stepping onto never fades, whatever the eye does ([`supports`]): a
+/// flight of stairs under my feet (the owner's Cullet walk: the line to my feet ended inside the
+/// flight's box, so the whole flight dithered away while I climbed it), a terrace, a wall's top.
 pub fn cutaway(
     target: Res<crate::controls::Target>,
     time: Res<Time>,
     cam: Query<&Transform, (With<Camera3d>, Without<Occluder>)>,
-    mut q: Query<(Entity, &Transform, &Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>)>,
+    mut q: Query<(Entity, &Transform, &Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>, Has<Landmark>)>,
     mut held: Local<std::collections::HashMap<Entity, f32>>,
+    mut under: Local<std::collections::HashSet<Entity>>,
 ) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
     if crate::perf::has("nocutaway") {
@@ -515,7 +598,8 @@ pub fn cutaway(
     let now = time.elapsed_secs();
     let eye = cam.translation;
     let points = [me + Vec3::Y * 1.6, me + Vec3::Y * 1.05, me + Vec3::Y * 0.25];
-    for (e, t, o, mut fade, model, fitted) in &mut q {
+    let feet = support_probes(me);
+    for (e, t, o, mut fade, model, fitted, landmark) in &mut q {
         // Models stay hidden until fitted (look-dev fit shows them).
         if model.is_some() && fitted.is_none() {
             continue;
@@ -530,9 +614,23 @@ pub fn cutaway(
         // Into the box's own frame.
         let inv = t.rotation.inverse();
         let local = |p: Vec3| inv * (p - centre);
+        if supports(&feet.map(local), half) {
+            if fade.target != 0.0 {
+                fade.target = 0.0;
+            }
+            held.remove(&e);
+            // For checks (`RUST_LOG=living_game::envs=debug`): once each time I come onto it.
+            if under.insert(e) {
+                debug!("cutaway: {} holds me up; not faded (me at {:.1}, {:.1}, {:.1})", model.map_or("a box", |m| m.file.as_str()), me.x, me.y, me.z);
+            }
+            continue;
+        }
+        under.remove(&e);
         let inside = { let l = local(eye).abs(); l.x < half.x + 0.6 && l.y < half.y + 0.6 && l.z < half.z + 0.6 };
         let pad = Vec3::splat(0.25);
-        let blocks = points.iter().any(|p| segment_hits_box(local(eye), local(*p), half + pad, 0.35));
+        // How far the eye is from the box's nearest point.
+        let near = (local(eye).abs() - half).max(Vec3::ZERO).length();
+        let blocks = !landmark && near <= CUT_NEAR && points.iter().any(|p| segment_hits_box(local(eye), local(*p), half + pad, 0.35));
         let want = if inside {
             1.0
         } else if blocks {
@@ -546,6 +644,10 @@ pub fn cutaway(
         let keep = held.get(&e).is_some_and(|t| now - t < CUT_HOLD_S);
         let to = if want > 0.0 { want } else if keep { fade.target } else { 0.0 };
         if fade.target != to {
+            // For captures and checks (`RUST_LOG=living_game::envs=debug`): what fades, and why.
+            if fade.target == 0.0 {
+                debug!("cutaway: {} fades to {to:.1} ({}; me at {:.1}, {:.1}, {:.1})", model.map_or("a box", |m| m.file.as_str()), if inside { "the eye is inside it" } else { "it is in the way" }, me.x, me.y, me.z);
+            }
             fade.target = to;
         }
     }
@@ -596,6 +698,29 @@ pub fn reach(target: Res<crate::controls::Target>, mut q: Query<(&Transform, &Re
 /// long it stays faded after it was last in the way (s).
 pub const SEE_THROUGH: f32 = 0.8;
 const CUT_HOLD_S: f32 = 0.35;
+/// Things in the way fade only within this distance of the eye (m, to their box).
+const CUT_NEAR: f32 = 30.0;
+
+/// Points round my feet that find what holds me up or what I am stepping onto: at my feet, a
+/// little under them, and a short step out on every side at ankle height.
+pub fn support_probes(feet: Vec3) -> [Vec3; 7] {
+    const OUT: f32 = 0.5;
+    [
+        feet + Vec3::Y * 0.15,
+        feet - Vec3::Y * 0.4,
+        feet + Vec3::new(OUT, 0.15, 0.0),
+        feet + Vec3::new(-OUT, 0.15, 0.0),
+        feet + Vec3::new(0.0, 0.15, OUT),
+        feet + Vec3::new(0.0, 0.15, -OUT),
+        feet - Vec3::Y * 0.8,
+    ]
+}
+
+/// Whether a box of half extents `h` round the origin (box space) holds any of the probes (also
+/// in box space): it is under me, or I am stepping onto it.
+pub fn supports(probes: &[Vec3], h: Vec3) -> bool {
+    probes.iter().any(|p| p.x.abs() <= h.x + 0.05 && p.y.abs() <= h.y + 0.05 && p.z.abs() <= h.z + 0.05)
+}
 
 /// Whether the segment from `a` to `b` (box space) passes through the box of half extents `h`
 /// round the origin, leaving out its last `tail` metres at `b` (what stands right behind me
@@ -652,7 +777,8 @@ pub fn switch(
         let done = envs.land.as_ref().and_then(|slot| slot.lock().unwrap().take());
         if let Some(generated) = done {
             envs.land = None;
-            let island = crate::island::Island::new(generated, &envs.defs);
+            let env = envs.current.and_then(|i| i.checked_sub(1)).and_then(|i| envs.defs.get(i));
+            let island = crate::island::Island::new(generated, &envs.defs, env);
             roam.pos = island.start;
             commands.insert_resource(island);
             spawn_player(&mut commands, &mut meshes, &palette, &style, &look, &assets);
@@ -1034,4 +1160,29 @@ pub fn tour(mut commands: Commands, mut envs: ResMut<Envs>, mut cam: ResMut<Cam>
         _ => return,
     };
     envs.tour = Some(t);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn what_i_stand_on_or_step_onto_supports_me() {
+        // A flight 3 m wide, 4 m high and 6.4 m long, its box centred 2 m up.
+        let h = Vec3::new(1.5, 2.0, 3.2);
+        let c = Vec3::new(0.0, 2.0, 0.0);
+        let at = |feet: Vec3| supports(&support_probes(feet).map(|p| p - c), h);
+        // On its lowest tread, half way up (inside its box), on its top.
+        assert!(at(Vec3::new(0.0, 0.2, -3.0)));
+        assert!(at(Vec3::new(0.3, 2.0, 0.0)));
+        assert!(at(Vec3::new(0.0, 4.1, 2.9)));
+        // About to step onto it, and just off its side.
+        assert!(at(Vec3::new(0.0, 0.0, -3.6)));
+        assert!(at(Vec3::new(1.9, 0.0, 0.0)));
+        // A step farther away, or well above or below it: not mine.
+        assert!(!at(Vec3::new(0.0, 0.0, -4.0)));
+        assert!(!at(Vec3::new(2.3, 0.0, 0.0)));
+        assert!(!at(Vec3::new(0.0, 5.3, 0.0)));
+        assert!(!at(Vec3::new(0.0, -1.0, 0.0)));
+    }
 }

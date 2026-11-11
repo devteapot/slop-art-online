@@ -173,7 +173,7 @@ fn surface_layers() -> [Vec4; SURFACES] {
 pub struct DetailLayers(pub Handle<Image>);
 
 fn load_detail(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    commands.insert_resource(DetailLayers(images.add(crate::terrain::load_array("textures/material", &Surface::ALL.map(Surface::name)))));
+    commands.insert_resource(DetailLayers(images.add(crate::terrain::load_array("textures/material", &Surface::ALL.map(Surface::name), |_| None))));
 }
 
 /// Give a scenery material the painted surfaces its vertex colours name.

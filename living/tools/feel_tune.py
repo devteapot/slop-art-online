@@ -6,12 +6,43 @@
   feel_tune.py judge --ratings R [--key K] [--excerpts E] [--out DIR] [--dry-run | --run]
                      [--base-url URL] [--model M] [--key-env NAME] [--env-file PATH] [--max-calls N]
   feel_tune.py synth --key K --out ratings.synthetic.json [--seed 0]
+  feel_tune.py compare --owner R --proxy P [--key K] [--excerpts E] [--out DIR]
+  feel_tune.py score BATCH_DIR... [--model tune_result*.json] [--baseline ARM] [--windows 6] [--residents 12]
+
+score. The fit's in-sample window ridge applied to every thinking character's windows in each batch,
+per arm, ALWAYS beside three guards over the same lives: false replies per minute (greet_report.py's
+false_replies, loaded from the batch's own checkout when it has one; n/a otherwise), the share of
+own lines that repeat an own line of the last 10 minutes, and the share of addressed lines that led
+to something within 180 s (an outcome it is part of: trade, lesson, gift, help, hosting, agreement;
+or a new plan of its own or of the addressee naming the other), beside a placebo (the same test with
+every line moved 6 minutes earlier). Runs without final.json are left out unless --include-running. Against a baseline
+arm (a "control" arm, else "default", else the first), an arm whose score rises while any guard gets
+worse is reported "LOST". The score is never printed alone. A proxy-fitted model prints the PROXY
+banner and CIRCULARITY: the proxy said being answered mattered most, so a proxy-tuned score resting
+on heard/answered shows the rubric applied consistently, not the owner's judgement.
+
+fit --probe COL[,COL] keeps those columns out of every model and reports their rho with the rating
+and with the window ridge's leave-one-out residual, per excerpt: a check on a new measure that
+claims no agreement. judge refuses proxy ratings outright (no prompts, no call): it waits for the
+owner's own ratings.
+
+Proxy ratings. A document whose rater starts with "proxy:" (or that names `proxy_for`) is someone
+rating on the owner's behalf. Without --proxy, fit and judge refuse such documents (counted by id)
+and use only the owner's; with --proxy they use only proxy documents, every output carries "PROXY
+RATINGS (general coordinator, rating for the owner); not the owner's judgement", reports say
+"proxy" where they would say "owner", and files get a _proxy suffix (tune_report_proxy.md, ...).
+Nothing in proxy mode reports agreement with the owner. The rating page (feel_page.py) writes the
+owner's ratings to the collection `owner_ratings` and never touches `ratings`, where proxy ratings
+are kept; dump both with an ArtifactData list (out_dir) and run `compare --owner <owner_ratings dump>
+--proxy <ratings dump, or the saved copy>`:
+Spearman, exact, within-one and mean difference on the excerpts both rated, and every excerpt with
+both scores and both reasons.
 
 Inputs (written by feel_excerpts.py): the KEY (default .local/living/feel/excerpts_key.json; private:
 source, run, window and life_feel columns per excerpt id), the EXCERPTS (default
 .local/living/feel/excerpts.json; the blind text the rating page shows) and the RATINGS: a file
 {"synthetic"?, "rater", "ratings": {eid: {"score": 1..5, "reason", "at"}}} or a dump of the rating
-page's "ratings" collection (a list, or {"documents"|"docs"|"items": [...]}, of {"id", "data"},
+page's "owner_ratings" collection, or of "ratings" for proxy ratings (a list, or {"documents"|"docs"|"items": [...]}, of {"id", "data"},
 {"path": "ratings/<eid>", "data"} or flat {"id", "score", "reason"} documents), or the directory an
 ArtifactData list with out_dir writes (one <eid>.json per document, searched recursively). Documents whose id is
 not an excerpt of the key (a "meta" document) are counted and printed, never joined; a score that is
@@ -79,6 +110,11 @@ import trials  # noqa: E402  (trials.PRICES, trials.cost)
 
 ROOT = Path(__file__).resolve().parents[2]
 FEEL = ROOT / ".local/living/feel"
+PROXY_BANNER = "PROXY RATINGS (general coordinator, rating for the owner); not the owner's judgement."
+# The proxy's rubric said being answered mattered most, so a fit that finds heard/answered is the rubric
+# applied consistently, not the owner's taste: said wherever a proxy-tuned score appears.
+CIRCULAR = ("CIRCULARITY: the proxy rater stated that being answered mattered most, so a proxy-tuned score that "
+            "rests on heard/answered shows the rubric was applied consistently, not that it is the owner's judgement.")
 SYNTH_BANNER = "SYNTHETIC RATINGS — this proves the plumbing only; nothing here measures agreement with the owner."
 FAKE_BANNER = "FAKE JUDGE — plumbing only"
 REFUSE = "no ratings: no agreement claim"
@@ -239,8 +275,15 @@ def parse_score(v, integer=True):
     return None if integer else float(v)
 
 
-def load_ratings(path):
-    """Normalise a ratings file or a collection dump. None when missing, empty or not JSON."""
+def is_proxy(rater, body=None):
+    """A proxy rating: its rater names a proxy ("proxy:<who>") or it says whom it stands in for."""
+    return str(rater or "").startswith("proxy:") or bool((body or {}).get("proxy_for"))
+
+
+def load_ratings(path, proxy=False):
+    """Normalise a ratings file or a collection dump. None when missing, empty or not JSON.
+    proxy=False keeps only ratings that are not proxies (the owner's); proxy=True keeps only proxy
+    ratings. The other kind is counted, by id, and never joined."""
     p = Path(path)
     if p.is_dir():  # an ArtifactData read with out_dir: <dir>[/ratings]/<excerpt id>.json, one document each
         files = sorted(p.rglob("*.json"))
@@ -259,11 +302,13 @@ def load_ratings(path):
             data = json.loads(p.read_text())
         except json.JSONDecodeError:
             return None
-    out = {"synthetic": "synthetic" in p.name.lower(), "rater": None, "ratings": {}, "skipped": [], "docs": 0}
+    out = {"synthetic": "synthetic" in p.name.lower(), "rater": None, "ratings": {}, "skipped": [], "docs": 0,
+           "proxy": proxy, "other_kind": [], "raters": Counter()}
+    file_rater = None
     entries, docs = [], []
     if isinstance(data, dict):
         out["synthetic"] |= data.get("synthetic") is True
-        out["rater"] = data.get("rater")
+        out["rater"] = file_rater = data.get("rater")
         r = data.get("ratings")
         if isinstance(r, dict):
             entries = list(r.items())
@@ -290,6 +335,11 @@ def load_ratings(path):
         if body.get("synthetic") is True:
             out["synthetic"] = True
         out["rater"] = out["rater"] or (body.get("rater") if "score" not in body else None)
+        if "score" in body and is_proxy(body.get("rater") or file_rater, body) != proxy:
+            out["other_kind"].append(eid)  # a proxy rating in an owner fit, or the owner's in a proxy fit
+            continue
+        if "score" in body:
+            out["raters"][str(body.get("rater") or file_rater or "unnamed")] += 1
         s = parse_score(body.get("score"))
         if s is None:
             out["skipped"].append(eid)
@@ -308,7 +358,7 @@ def load_inputs(a, need_excerpts=False):
     excerpts = {e["id"]: e for e in json.loads(ex_path.read_text()).get("excerpts", [])} if ex_path.is_file() else {}
     if need_excerpts and not excerpts:
         sys.exit(f"judge needs the excerpts file ({ex_path})")
-    R = load_ratings(a.ratings)
+    R = load_ratings(a.ratings, proxy=getattr(a, "proxy", False))
     return key, excerpts, R
 
 
@@ -327,19 +377,42 @@ def accounting(R, n, foreign):
              f"{len(R['skipped_in_key'])} skipped (null, not a whole number, or outside 1..5)"
              + (f": {', '.join(R['skipped_in_key'])}" if R["skipped_in_key"] else ""),
              f"{len(foreign)} documents not in the key ignored" + (f": {', '.join(foreign)}" if foreign else "")]
+    if R.get("other_kind"):
+        parts.append(f"{len(R['other_kind'])} " + ("of the owner's own ratings left out of this proxy fit" if R.get("proxy")
+                                                   else "proxy ratings refused (not the owner's; use --proxy)"))
     if R.get("no_excerpt"):
         parts.append(f"{len(R['no_excerpt'])} in the key but not in the excerpts file, left out: {', '.join(R['no_excerpt'])}")
     return "; ".join(parts) + "."
 
 
+def who(R):
+    """How reports name the rater: "proxy" for proxy ratings, never "owner"."""
+    return "proxy" if R and R.get("proxy") else "owner"
+
+
+def raters(R):
+    return ", ".join(f"{r} {k}" for r, k in R["raters"].most_common()) or (R["rater"] or "unnamed")
+
+
 def banner(R, n, fake=False):
-    lines = [SYNTH_BANNER if R["synthetic"] else f"Owner ratings: {n} excerpts rated (rater {R['rater'] or 'unnamed'})."]
+    if R.get("proxy"):
+        lines = ([SYNTH_BANNER] if R["synthetic"] else []) + [PROXY_BANNER, CIRCULAR, f"Proxy ratings: {n} excerpts rated (rater {raters(R)})."]
+    else:
+        lines = [SYNTH_BANNER if R["synthetic"] else f"Owner ratings: {n} excerpts rated (rater {raters(R)})."]
     return lines + ([FAKE_BANNER] if fake else [])
+
+
+def suffix(R):
+    return "_proxy" if R and R.get("proxy") else ""
 
 
 def refuse(R, why):
     if R and R["synthetic"]:
         print(SYNTH_BANNER)
+    if R and R.get("proxy"):
+        print(PROXY_BANNER)
+    if R and R.get("other_kind") and not R.get("proxy"):
+        why += f"; {len(R['other_kind'])} proxy ratings refused: they are not the owner's (fit them with --proxy)"
     print(f"{REFUSE} ({why})", file=sys.stderr)
     sys.exit(2)
 
@@ -493,12 +566,15 @@ def cmd_fit(a):
     ke, n = key["excerpts"], len(eids)
     ys = [R["ratings"][e]["score"] for e in eids]
     cols = key.get("columns") or sorted({c for e in ke.values() for c in (e.get("feel_window") or {})})
+    probes = [c for c in (a.probe or "").split(",") if c]
+    cols = [c for c in cols if c not in probes]  # a probe column is in no model: reported beside them only
     out = banner(R, n) + [""] + small_n(n)
-    out += ["# Owner-rating fit (leave-one-out)", ""]
+    W = who(R)
+    out += [f"# {'Proxy' if R.get('proxy') else 'Owner'}-rating fit (leave-one-out)", ""]
     out += [line for line in banner(R, n)] + [""]
     out.append(accounting(R, n, foreign))
     out.append(f"Ratings: " + ", ".join(f"{s}: {c}" for s, c in sorted(Counter(ys).items())) + ".")
-    result = {"banner": banner(R, n), "synthetic": R["synthetic"], "n": n, "ignored": foreign, "skipped": R["skipped_in_key"],
+    result = {"banner": banner(R, n), "synthetic": R["synthetic"], "proxy": bool(R.get("proxy")), "rated_by": W, "n": n, "ignored": foreign, "skipped": R["skipped_in_key"],
               "columns": {}, "metrics": {}, "coefficients": {}, "predictions": {e: {"score": y} for e, y in zip(eids, ys)}}
 
     # Per column.
@@ -591,6 +667,8 @@ def cmd_fit(a):
                 sse[l] += (ridge_predict(mdl, zrow(X[fs][j], sp)) - ys[j]) ** 2
         lam = min(LAMBDAS, key=lambda l: (sse[l], -l))
         ybar, beta = ridge([zrow(X[fs][i], spec) for i in range(n)], ys, [lam])[lam]
+        result.setdefault("model", {})[fs] = {"lambda": lam, "intercept": ybar, "terms": [
+            {"column": cols[j], "median": med, "mean": m, "sd": sd, "beta": b} for (j, med, m, sd), b in zip(spec, beta)]}
         co = sorted(((cols[j], b) for (j, *_), b in zip(spec, beta)), key=lambda cb: (-abs(cb[1]), cb[0]))
         result["coefficients"][fs] = {"lambda": lam, "intercept": ybar, "beta": dict(co)}
         out += ["", f"## Ridge on all {n} ({fs}, lambda {lam:g}): in-sample, for interpretation only", "",
@@ -611,15 +689,16 @@ def cmd_fit(a):
             "", f"Ridge (window) leave-one-out off by 1.5 or more, or {best_col[0] if best_col else 'the best column'}'s "
             "rank-implied score off by 2 or more.", ""]
     dis = [i for i in range(n) if (rp[i] is not None and abs(rp[i] - ys[i]) >= 1.5) or (implied[i] is not None and abs(implied[i] - ys[i]) >= 2)]
+    dis_set = set(dis)
     result["disagreements"] = [eids[i] for i in dis]
     for i in dis:
         e, k = eids[i], ke[eids[i]]
-        out.append(f"### {e}: owner {ys[i]}")
+        out.append(f"### {e}: {W} {ys[i]}")
         out.append(f"- {k.get('source')} {k.get('kind')} {k.get('run')} ({k.get('variant')}) {k.get('character')}, "
                    f"minutes {k.get('window_min')}; {k.get('batch_dir')}")
         out.append("- predictions: " + ", ".join(f"{nm} {f2(preds[nm][i])}" for nm in sorted(preds) if nm != "mean")
                    + (f", {best_col[0]} rank-implied {f2(implied[i])}" if best_col else "") + f", feel0 {f2(f0[i])}")
-        out.append(f"- owner's reason: {R['ratings'][e]['reason'] or '(none given)'}")
+        out.append(f"- {W}'s reason: {R['ratings'][e]['reason'] or '(none given)'}")
         ex = excerpts.get(e)
         if ex:
             out.append(f"- excerpt \"{ex.get('title', '')}\":")
@@ -629,7 +708,7 @@ def cmd_fit(a):
         out.append("None.")
 
     # Per source.
-    out += ["", "## Per source", "", "| source | variant | n | mean owner | mean ridge (window) LOO |", "| --- | --- | ---: | ---: | ---: |"]
+    out += ["", "## Per source", "", f"| source | variant | n | mean {W} | mean ridge (window) LOO |", "| --- | --- | ---: | ---: | ---: |"]
     result["per_source"] = []
     for group in (lambda k: (k.get("source"), "all"), lambda k: (k.get("source"), k.get("variant"))):
         g = defaultdict(list)
@@ -638,15 +717,332 @@ def cmd_fit(a):
         for (s, v), idx in sorted(g.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))):
             rr = [rp[i] for i in idx if rp[i] is not None]
             out.append(f"| {s} | {v} | {len(idx)} | {mean([ys[i] for i in idx]):.2f} | {f2(mean(rr) if rr else None)} |")
-            result["per_source"].append({"source": s, "variant": v, "n": len(idx), "owner": mean([ys[i] for i in idx]),
+            result["per_source"].append({"source": s, "variant": v, "n": len(idx), W: mean([ys[i] for i in idx]),
                                          "ridge_window": mean(rr) if rr else None})
+    if probes:
+        out += probe_section(key, eids, ys, preds, probes, dis_set, W, result)
+    out += kind_section(key, eids, ys, X, cols, W, result)
+    out += ["", *banner(R, n)]
     report = "\n".join(out) + "\n"
     od = Path(a.out)
     od.mkdir(parents=True, exist_ok=True)
-    (od / "tune_report.md").write_text(report)
-    (od / "tune_result.json").write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
+    rp_, rj_ = od / f"tune_report{suffix(R)}.md", od / f"tune_result{suffix(R)}.json"
+    rp_.write_text(report)
+    rj_.write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
     print(report)
-    print(f"wrote {od / 'tune_report.md'} and {od / 'tune_result.json'}")
+    print(f"wrote {rp_} and {rj_}")
+
+
+def probe_section(key, eids, ys, preds, probes, dis, W, result):
+    """Columns kept out of every model: do they track the rating, or what the window ridge missed?"""
+    ke = key["excerpts"]
+    rp = preds.get("ridge (window)")
+    resid = [y - p for y, p in zip(ys, rp)] if rp else None
+    out = ["", "## Probe columns (in no model; nothing here is refitted)", "",
+           f"Residual = {W} rating minus the window ridge's leave-one-out prediction: a probe that tracks the residual "
+           "explains what the fitted columns missed. Values per excerpt, then the disagreements.", "",
+           "| probe | n | rho with rating | p | rho with residual | p |", "| --- | ---: | ---: | ---: | ---: | ---: |"]
+    result["probes"] = {}
+    for c in probes:
+        v = [num((ke[e].get("feel_window") or {}).get(c)) for e in eids]
+        idx = [i for i in range(len(eids)) if v[i] is not None]
+        xs = [v[i] for i in idx]
+        ok = len(idx) >= 5 and len(set(xs)) > 1
+        r1 = spearman(xs, [ys[i] for i in idx]) if ok else None
+        p1 = perm_p(xs, [ys[i] for i in idx]) if ok else None
+        r2 = spearman(xs, [resid[i] for i in idx]) if ok and resid else None
+        p2 = perm_p(xs, [resid[i] for i in idx]) if ok and resid else None
+        result["probes"][c] = {"rho": r1, "p": p1, "rho_residual": r2, "p_residual": p2, "values": {eids[i]: v[i] for i in idx}}
+        out.append(f"| {c} | {len(idx)} | {f2(r1)} | {fp(p1)} | {f2(r2)} | {fp(p2)} |")
+    out += ["", f"| excerpt | {W} | ridge (window) LOO | " + " | ".join(probes) + " | disagreement |",
+            "| --- | ---: | ---: |" + " ---: |" * len(probes) + " --- |"]
+    for i in sorted(range(len(eids)), key=lambda i: (-ys[i], eids[i])):
+        e = eids[i]
+        out.append(f"| {e} ({ke[e].get('source')}, {ke[e].get('kind')}) | {ys[i]} | {f2(rp[i]) if rp else '–'} | "
+                   + " | ".join(f2(num((ke[e].get('feel_window') or {}).get(c))) for c in probes) + f" | {'yes' if i in dis else ''} |")
+    return out
+
+
+def auc(pos, neg):
+    """P(a value from pos exceeds one from neg), ties half: 0.5 is no separation."""
+    if not pos or not neg:
+        return None
+    return sum((x > y) + 0.5 * (x == y) for x in pos for y in neg) / (len(pos) * len(neg))
+
+
+def auc_p(vals, labels, n_perm=N_PERM):
+    """Two-sided permutation p of |AUC - 0.5| for labels shuffled over vals."""
+    pos = [v for v, l in zip(vals, labels) if l]
+    neg = [v for v, l in zip(vals, labels) if not l]
+    obs = auc(pos, neg)
+    if obs is None:
+        return None, None
+    rng, hits, lab = random.Random(0), 0, list(labels)
+    for _ in range(n_perm):
+        rng.shuffle(lab)
+        a_ = auc([v for v, l in zip(vals, lab) if l], [v for v, l in zip(vals, lab) if not l])
+        hits += abs(a_ - 0.5) >= abs(obs - 0.5) - 1e-12
+    return obs, (hits + 1) / (n_perm + 1)
+
+
+def kind_section(key, eids, ys, X, cols, W, result):
+    """Do the ratings, and the columns, tell excerpts where everyone thinks from single-thinker lives?"""
+    ke = key["excerpts"]
+    lab = [ke[e].get("kind") == "all-minds" for e in eids]
+    if all(lab) or not any(lab):
+        return []
+    out = ["", "## Single-thinker lives against worlds where everyone thinks", "",
+           "AUC = P(an all-minds excerpt's value exceeds a single-thinker one's), ties half; 0.5 = no separation, "
+           f"1 = every all-minds excerpt higher. p: two-sided, {N_PERM} label shuffles. Within-kind rho: the column's "
+           "Spearman with the rating inside each kind, which says whether it tracks the rating beyond telling the kinds apart.", ""]
+    a_, p_ = auc_p(ys, lab)
+    m1 = mean([y for y, l in zip(ys, lab) if l])
+    m0 = mean([y for y, l in zip(ys, lab) if not l])
+    out.append(f"{W} rating: all-minds {sum(lab)} excerpts, mean {m1:.2f}; single-thinker {len(lab) - sum(lab)}, mean {m0:.2f}; "
+               f"AUC {a_:.2f} (p {fp(p_)}).")
+    result["kinds"] = {"rating": {"all_minds_mean": m1, "single_mean": m0, "auc": a_, "p": p_}, "columns": {}}
+    for fs in SETS:
+        rows = []
+        for j, c in enumerate(cols):
+            idx = [i for i in range(len(eids)) if X[fs][i][j] is not None]
+            vals = [X[fs][i][j] for i in idx]
+            if len(set(vals)) < 2 or not any(lab[i] for i in idx) or all(lab[i] for i in idx):
+                continue
+            ac, pc = auc_p(vals, [lab[i] for i in idx], n_perm=2000)
+            within = []
+            for k in (True, False):
+                ii = [i for i in idx if lab[i] == k]
+                xv, yv = [X[fs][i][j] for i in ii], [ys[i] for i in ii]
+                within.append(spearman(xv, yv) if len(ii) >= 5 and len(set(xv)) > 1 and len(set(yv)) > 1 else None)
+            rows.append((c, ac, pc, within))
+            result["kinds"]["columns"].setdefault(fs, {})[c] = {"auc": ac, "p": pc, "rho_all_minds": within[0], "rho_single": within[1]}
+        rows.sort(key=lambda r: (-abs(r[1] - 0.5), r[0]))
+        out += ["", f"### {fs}", "", "| column | AUC (all-minds higher) | p | rho with rating, all-minds | rho, single-thinker |",
+                "| --- | ---: | ---: | ---: | ---: |"]
+        out += [f"| {c} | {ac:.2f} | {fp(pc)} | {f2(w[0])} | {f2(w[1])} |" for c, ac, pc, w in rows]
+    return out
+
+
+# ---- score -----------------------------------------------------------------------------
+
+# Outcomes the character is part of ("you"); third parties' agreements do not count.
+OUTCOME = re.compile(r"taught you|^You taught|gave you|^You gave|\bgave .* to you|your terms|accepted your|agreed with you|^You agreed|"
+                     r"takes you in|took you in|tended your|^You tended|hosts? you|^You host", re.I)
+LED_S, REPEAT_S, PLACEBO_S = 180, 600, 360
+
+
+def greet_report_for(bd):
+    """greet_report.py from the batch's own checkout (read-only), when it has one; else None."""
+    parents = Path(bd).resolve().parents
+    if len(parents) < 4:
+        return None
+    p = parents[3] / "living/tools/greet_report.py"
+    if not p.is_file():
+        return None
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(f"greet_report_{abs(hash(str(p)))}", p)
+    mod = importlib.util.module_from_spec(spec)
+    path0 = list(sys.path)
+    try:  # it imports trials (prices only; this checkout's copy is the one already loaded)
+        spec.loader.exec_module(mod)
+    except Exception as e:  # its imports may not resolve here; then false replies are n/a
+        print(f"greet_report.py at {p} did not load ({type(e).__name__}); false replies n/a", file=sys.stderr)
+        return None
+    finally:
+        sys.path[:] = path0
+    return mod
+
+
+def guards(life, by_name, shift_s=0):
+    """Over the given life: its own lines, the share that repeat an own line of the last 10 minutes
+    (word Jaccard 0.6+), and of lines addressed to someone, the share that led to something within
+    LED_S after the line (moved shift_s earlier for the placebo): an outcome it is part of (a trade,
+    lesson, gift, help, hosting or agreement, OUTCOME) in its own percepts, or a NEW plan (installed in
+    that span, different from the plan held before it) of its own or of the addressee (when the
+    addressee thinks) that names the other."""
+    said = []
+    for ms, kind, raw in life.percepts:
+        if kind == "said" or raw.startswith("You said"):
+            m = re.match(r"You said(?: to ([^:“]+))?: “(.*)”?", raw, re.S)
+            said.append((ms, (m[1] or "").strip() if m else "", set(re.findall(r"[a-z']+", (m[2] if m else raw).lower()))))
+    rep = 0
+    for i, (ms, _, ws) in enumerate(said):
+        if any(ms - REPEAT_S * 1000 <= o <= ms and ws | ow and len(ws & ow) / len(ws | ow) >= 0.6 for o, _, ow in said[:i]):
+            rep += 1
+    events = [ms for ms, _, raw in life.percepts if OUTCOME.search(raw) and not raw.startswith("You said") and "said to" not in raw]
+
+    def new_plans(plans, a_, b_):
+        out, prev = [], None
+        for t, p in plans:
+            if a_ <= t <= b_ and p != prev:
+                out.append(p)
+            prev = p
+        return out
+    me = life.name.split()[0]
+    addressed = [(ms, to) for ms, to, _ in said if to]
+    led = 0
+    for ms, to in addressed:
+        a_, b_ = ms - shift_s * 1000, ms - shift_s * 1000 + LED_S * 1000
+        first = None if to.startswith(("a ", "an ", "someone")) else to.split()[0]
+        if any(a_ <= t <= b_ for t in events) \
+                or (first and any(re.search(rf"\b{re.escape(first)}\b", p) for p in new_plans(life.plans, a_, b_))) \
+                or (to in by_name and any(re.search(rf"\b{re.escape(me)}\b", p) for p in new_plans(by_name[to].plans, a_, b_))):
+            led += 1
+    return {"lines": len(said), "repeated": rep, "addressed": len(addressed), "led": led}
+
+
+def cmd_score(a):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import feel_excerpts as FE
+    model = json.loads(Path(a.model).read_text())
+    m = (model.get("model") or {}).get("feel_window")
+    if not m:
+        sys.exit(f"score: {a.model} has no window model (rerun fit to write one)")
+    proxy = bool(model.get("proxy"))
+    head = ([PROXY_BANNER, CIRCULAR, "PROXY-TUNED SCORE: the window ridge fitted on the proxy ratings (in-sample, "
+             f"lambda {m['lambda']:g}); a score the proxy's rubric would give, not the owner's."] if proxy else
+            [f"Owner-tuned score: the window ridge fitted on the owner's ratings (in-sample, lambda {m['lambda']:g})."])
+    head += ["Never read the score alone: an arm that raises it while false replies or repeated lines rise, or the share "
+             "of talk that led to something falls, LOST: the score can be raised by chatter."]
+    FE.RESIDENTS_PER_RUN = a.residents
+    w_ms = int(a.window * 60000)
+    tmp = Path(__import__("tempfile").mkdtemp(prefix="feel-score-"))
+    arms = defaultdict(lambda: {"scores": [], "lives": 0, "runs": set(), "lines": 0, "repeated": 0, "addressed": 0, "led": 0,
+                                "false": [], "minutes": 0.0})
+    try:
+        for bd in a.batches:
+            bd = Path(bd).expanduser()
+            label = bd.name
+            lives = FE.lives_of(label, [bd], random.Random(0))
+            if not a.include_running:  # a run still going, or one that failed before writing its rows, is left out
+                skipped = sorted({l.run for l in lives if not (l.d / "final.json").exists()})
+                if skipped:
+                    print(f"{label}: {len(skipped)} runs without final.json left out (running or failed): {', '.join(skipped)}", file=sys.stderr)
+                lives = [l for l in lives if (l.d / "final.json").exists()]
+            gr = greet_report_for(bd)
+            runs_seen = set()
+            for life in lives:
+                arm = arms[(label, life.variant)]
+                by_name = {l.name: l for l in lives if l.run == life.run}
+                starts = FE.windows(life, w_ms, a.windows)
+                if not starts:
+                    continue  # the guards cover exactly the lives the score covers
+                for start in starts:
+                    f = FE.feel(FE.feel_dir(life, start, start + w_ms, tmp / "x" / "y"))
+                    sc = m["intercept"] + sum(t["beta"] * (((num(f.get(t["column"])) if num(f.get(t["column"])) is not None else t["median"])
+                                                             - t["mean"]) / t["sd"]) for t in m["terms"])
+                    arm["scores"].append(min(5.0, max(1.0, sc)))
+                g = guards(life, by_name)
+                for k2 in ("lines", "repeated", "addressed", "led"):
+                    arm[k2] += g[k2]
+                arm["placebo"] = arm.get("placebo", 0) + guards(life, by_name, shift_s=PLACEBO_S)["led"]
+                arm["lives"] += 1
+                if life.run not in runs_seen:
+                    runs_seen.add(life.run)
+                    arm["runs"].add(life.run)
+                    if gr is not None:
+                        try:
+                            r = gr.run(life.d)
+                            arm["false"].append(r.get("false_replies") or 0)
+                            arm["minutes"] += r.get("minutes") or 0
+                        except Exception as e:
+                            print(f"greet_report on {life.d.name}: {type(e).__name__}; false replies n/a for it", file=sys.stderr)
+    finally:
+        __import__("shutil").rmtree(tmp, ignore_errors=True)
+    rows = {}
+    for (b, v), x in arms.items():
+        rows[(b, v)] = {"score": mean(x["scores"]) if x["scores"] else None, "windows": len(x["scores"]), "lives": x["lives"],
+                        "runs": len(x["runs"]), "false_min": (sum(x["false"]) / x["minutes"]) if x["false"] and x["minutes"] else None,
+                        "repeated": x["repeated"] / x["lines"] if x["lines"] else None, "led": x["led"] / x["addressed"] if x["addressed"] else None,
+                        "lines": x["lines"], "addressed": x["addressed"],
+                        "placebo": x.get("placebo", 0) / x["addressed"] if x["addressed"] else None}
+    out = head + ["", "| batch | arm | score (mean over windows) | windows | lives | false replies / min | repeated lines | talk that led to something | same, 6 min earlier (placebo) | vs baseline |",
+                  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
+    for b in sorted({b for b, _ in rows}):
+        vs = sorted(v for bb, v in rows if bb == b)
+        base = a.baseline if a.baseline in vs else next((v for v in vs if "control" in v), next((v for v in vs if v == "default"), vs[0]))
+        B = rows[(b, base)]
+        for v in vs:
+            R_ = rows[(b, v)]
+            if v == base:
+                verdict = "baseline"
+            elif R_["score"] is None or B["score"] is None or R_["score"] <= B["score"]:
+                verdict = "no score gain"
+            else:
+                G = (("false replies", "false_min", 1), ("repeated lines", "repeated", 1), ("talk that led to something", "led", -1))
+                worse = [n for n, k2, bad in G if R_[k2] is not None and B[k2] is not None and (R_[k2] - B[k2]) * bad > 1e-9]
+                unmeasured = [n for n, k2, _ in G if R_[k2] is None or B[k2] is None]
+                verdict = (f"LOST: score up but {', '.join(worse)} worse" if worse else "score up; the measured guards held") + \
+                          (f" ({', '.join(unmeasured)} unmeasured)" if unmeasured else "")
+            out.append(f"| {b} | {v} | {f2(R_['score'])} | {R_['windows']} | {R_['lives']} | {f2(R_['false_min'], 3) if R_['false_min'] is not None else 'n/a'} | "
+                       f"{f2(R_['repeated'])} of {R_['lines']} | {f2(R_['led'])} of {R_['addressed']} | {f2(R_['placebo'])} | {verdict} |")
+    out += ["", f"Score: {a.windows} windows of {a.window:g} real minutes per thinking character (residents: up to {a.residents} per run), "
+            "columns as life_feel defines them, clipped to 1..5. False replies: greet_report.py's false_replies over the runs' minutes "
+            "(n/a without it). Repeated lines: own lines that repeat one of its own from the last 10 minutes. Talk that led to "
+            f"something: addressed lines followed within {LED_S} s by a trade, lesson, gift, help, hosting or agreement it is part of, "
+            "or by a new plan of its own or of the addressee that names the other. The placebo column runs the same test with every "
+            f"line moved {PLACEBO_S // 60} minutes earlier: what it still finds is not caused by the line, so read the difference. "
+            "Runs without final.json (running, or failed before writing rows) are left out unless --include-running. The fit was "
+            "trained on windows of 5 or more rendered lines; quieter windows are extrapolations.", "", *head[:2]]
+    report = "\n".join(out) + "\n"
+    od = Path(a.out)
+    od.mkdir(parents=True, exist_ok=True)
+    rp_ = od / f"score_report{'_proxy' if proxy else ''}.md"
+    rp_.write_text(report)
+    print(report)
+    print(f"wrote {rp_}")
+
+
+# ---- compare ---------------------------------------------------------------------------
+
+def cmd_compare(a):
+    """The owner's ratings against the proxy's, on the excerpts both rated."""
+    key = json.loads(Path(a.key).read_text())
+    ex_path = Path(a.excerpts)
+    excerpts = {e["id"]: e for e in json.loads(ex_path.read_text()).get("excerpts", [])} if ex_path.is_file() else {}
+    O = load_ratings(a.owner, proxy=False)
+    P = load_ratings(a.proxy, proxy=True)
+    if P is None or not P["ratings"]:
+        sys.exit("compare: no proxy ratings in " + a.proxy)
+    if O is None or not O["ratings"]:
+        print(PROXY_BANNER)
+        print(f"compare: no owner ratings yet in {a.owner}" + (f" ({len(O['other_kind'])} proxy ratings there are not the owner's)"
+                                                              if O and O["other_kind"] else "") + "; nothing to compare.", file=sys.stderr)
+        sys.exit(2)
+    ke = key.get("excerpts", {})
+    both = sorted(e for e in O["ratings"] if e in P["ratings"] and e in ke)
+    out = ([SYNTH_BANNER] if O["synthetic"] or P["synthetic"] else []) + ["# The owner's ratings against the proxy's", "",
+           f"Owner ratings: {len(O['ratings'])} (rater {raters(O)}). {PROXY_BANNER} Proxy ratings: {len(P['ratings'])} (rater {raters(P)}).",
+           f"Both rated: {len(both)}. Owner-only: {len([e for e in O['ratings'] if e not in P['ratings']])}; "
+           f"proxy-only: {len([e for e in P['ratings'] if e not in O['ratings']])}.", ""]
+    res = {"both": len(both), "rows": []}
+    if both:
+        po, pp = [O["ratings"][e]["score"] for e in both], [P["ratings"][e]["score"] for e in both]
+        d = [x - y for x, y in zip(po, pp)]
+        rho = spearman(po, pp) if len(both) >= 3 and len(set(po)) > 1 and len(set(pp)) > 1 else None
+        p = perm_p(pp, po, greater=True) if rho is not None else None
+        out += ["| n | Spearman (owner, proxy) | one-sided p | exact | within one | mean owner - proxy | MAE |",
+                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                f"| {len(both)} | {f2(rho)} | {fp(p)} | {f2(mean([x == 0 for x in d]))} | {f2(mean([abs(x) <= 1 for x in d]))} | "
+                f"{mean(d):+.2f} | {f2(mean([abs(x) for x in d]))} |", ""]
+        res.update(rho=rho, p=p, exact=mean([x == 0 for x in d]), within1=mean([abs(x) <= 1 for x in d]), mean_diff=mean(d))
+        if len(both) < 10:
+            out += small_n(len(both))
+        out += ["## Every excerpt both rated, largest difference first", ""]
+        for e in sorted(both, key=lambda e: (-abs(O["ratings"][e]["score"] - P["ratings"][e]["score"]), e)):
+            k = ke[e]
+            o, q = O["ratings"][e], P["ratings"][e]
+            out += [f"### {e}: owner {o['score']}, proxy {q['score']}",
+                    f"- {k.get('source')} {k.get('run')} ({k.get('variant')}) {k.get('character')}, minutes {k.get('window_min')}",
+                    f"- owner's reason: {o['reason'] or '(none given)'}", f"- proxy's reason: {q['reason'] or '(none given)'}", ""]
+            res["rows"].append({"id": e, "owner": o["score"], "proxy": q["score"]})
+    report = "\n".join(out) + "\n"
+    od = Path(a.out)
+    od.mkdir(parents=True, exist_ok=True)
+    (od / "compare_report.md").write_text(report)
+    (od / "compare_result.json").write_text(json.dumps(res, indent=1) + "\n")
+    print(report)
+    print(f"wrote {od / 'compare_report.md'}")
 
 
 # ---- judge -----------------------------------------------------------------------------
@@ -657,6 +1053,10 @@ character's side: what they noticed, said and did over about ten minutes.
 The question, as the owner was asked it: does this feel like a player living their own life?
 1 = an NPC getting by, 3 = could go either way, 5 = clearly a player living their own life.
 The owner of the game rated other excerpts; what made them feel one way or the other, in the owner's own words:"""
+PROXY_PREAMBLE = PREAMBLE.replace(
+    "The owner of the game rated other excerpts; what made them feel one way or the other, in the owner's own words:",
+    "Another rater, rating on the owner's behalf (not the owner), rated other excerpts; what made them feel one way or "
+    "the other, in that rater's words:")
 CAP_REASON, CAP_LIST, ANCHOR_LINES = 240, 15, 30
 ASK = 'Reply with JSON {"score": 1-5, "why": "one line"}'
 
@@ -681,8 +1081,9 @@ def rubric(R, others):
                 seen.add(t.lower())
                 out.append(f"- ({r['score']}) {t}")
         return out[:CAP_LIST] or ["- (no reasons given)"]
-    return "\n".join([PREAMBLE, "", "What made it feel like a player (owner scores 4-5):", *bucket(lambda s: s >= 4), "",
-                      "What made it feel like an NPC (owner scores 1-2):", *bucket(lambda s: s <= 2)])
+    W = "rater" if R.get("proxy") else "owner"
+    return "\n".join([PROXY_PREAMBLE if R.get("proxy") else PREAMBLE, "", f"What made it feel like a player ({W} scores 4-5):",
+                      *bucket(lambda s: s >= 4), "", f"What made it feel like an NPC ({W} scores 1-2):", *bucket(lambda s: s <= 2)])
 
 
 def anchors(R, others):
@@ -703,7 +1104,7 @@ def prompt_for(e, R, rated, excerpts):
     for o in anchors(R, others):
         r = R["ratings"][o]
         msgs.append({"role": "user", "content": render(excerpts[o], ANCHOR_LINES) + "\n\n" + ASK})
-        msgs.append({"role": "assistant", "content": json.dumps({"score": r["score"], "why": r["reason"][:CAP_REASON] or "the owner's rating"})})
+        msgs.append({"role": "assistant", "content": json.dumps({"score": r["score"], "why": r["reason"][:CAP_REASON] or ("the rater's rating" if R.get("proxy") else "the owner's rating")})})
     msgs.append({"role": "user", "content": render(excerpts[e]) + "\n\n" + ASK})
     return msgs
 
@@ -785,6 +1186,10 @@ def call(base, model, key, msgs, fake):
 
 
 def cmd_judge(a):
+    if a.proxy:
+        print(PROXY_BANNER)
+        print("judge refused on proxy ratings: the LLM judge waits for the owner's own ratings (no prompts built, no call made)", file=sys.stderr)
+        sys.exit(2)
     key_data, excerpts, R = load_inputs(a, need_excerpts=True)
     host = urllib.parse.urlparse(a.base_url).hostname if a.base_url else None
     fake = host in ("127.0.0.1", "localhost", "::1")
@@ -795,13 +1200,15 @@ def cmd_judge(a):
     od = Path(a.out)
     od.mkdir(parents=True, exist_ok=True)
     head = banner(R, n, fake=a.run and fake)
+    W, sx = who(R), suffix(R)
     if not a.run:
         if not rated:
             refuse(R, "no rated excerpt is in both the key and the excerpts")
-        rows = [{"id": e, "owner": R["ratings"][e]["score"], "synthetic": R["synthetic"],
+        rows = [{"id": e, W: R["ratings"][e]["score"], "synthetic": R["synthetic"], "proxy": bool(R.get("proxy")),
                  "messages": prompt_for(e, R, rated, excerpts)} for e in rated]
-        with open(od / "judge_prompts.jsonl", "w") as f:
-            f.write(json.dumps({"meta": {"banner": head, "synthetic": R["synthetic"], "prompts": len(rows)}}, ensure_ascii=False) + "\n")
+        with open(od / f"judge_prompts{sx}.jsonl", "w") as f:
+            f.write(json.dumps({"meta": {"banner": head, "synthetic": R["synthetic"], "proxy": bool(R.get("proxy")), "prompts": len(rows)}},
+                               ensure_ascii=False) + "\n")
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         chars = sum(len(m["content"]) for r in rows for m in r["messages"])
@@ -810,7 +1217,7 @@ def cmd_judge(a):
         print("\n".join(head + small_n(n)))
         print(accounting(R, n, foreign))
         print(f"judge dry run: {len(rows)} prompts, one per rated excerpt (first line of the file is a meta row) "
-              f"-> {od / 'judge_prompts.jsonl'}")
+              f"-> {od / f'judge_prompts{sx}.jsonl'}")
         print(f"estimated {tin} input tokens (chars / 4), about {tout} output tokens; "
               f"estimated ${c:.4f} on {JUDGE_MODEL} (trials.PRICES, an estimate, not an invoice). No network call was made.")
         return
@@ -858,11 +1265,11 @@ def cmd_judge(a):
                 used[k] += (usage or {}).get(k) or 0
             jf.write(json.dumps({"run": run_id, "id": e, "fake": fake, "synthetic": R["synthetic"], "base_url": base, "model": a.model,
                                  "messages": msgs, "status": status, "raw": raw, "score": score, "why": why, "latency_ms": ms,
-                                 "usage": usage, "owner": R["ratings"][e]["score"]}, ensure_ascii=False) + "\n")
-            print(f"{e}: judge {score if score is not None else 'FAILED'} owner {R['ratings'][e]['score']} ({ms} ms)", file=sys.stderr)
+                                 "usage": usage, W: R["ratings"][e]["score"], "proxy": bool(R.get("proxy"))}, ensure_ascii=False) + "\n")
+            print(f"{e}: judge {score if score is not None else 'FAILED'} {W} {R['ratings'][e]['score']} ({ms} ms)", file=sys.stderr)
     ok = [e for e in todo if results[e][0] is not None]
     fails = [e for e in todo if results[e][0] is None]
-    out = head + [""] + (small_n(len(ok)) if len(ok) >= 5 else []) + [f"# LLM judge against the owner (leave-one-out rubric and anchors)", ""] + head + [""]
+    out = head + [""] + (small_n(len(ok)) if len(ok) >= 5 else []) + [f"# LLM judge against the {'proxy ratings' if R.get('proxy') else 'owner'} (leave-one-out rubric and anchors)", ""] + head + [""]
     out.append(accounting(R, n, foreign))
     out.append(f"Run {run_id}: {a.model} at {base}; {len(todo)} calls, {len(ok)} scored, {len(fails)} failed "
                f"(unparsable or score outside 1..5; journal {od / 'judge_journal.jsonl'}).")
@@ -875,23 +1282,23 @@ def cmd_judge(a):
                 "| n | Spearman | perm p | within one | exact | MAE |", "| ---: | ---: | ---: | ---: | ---: | ---: |",
                 f"| {mt['n']} | {f2(mt['rho'])} | {fp(mt['p'])} | {f2(mt['within1'])} | {f2(mt['exact'])} | {f2(mt['mae'])} |"]
         if mt["rho"] is not None and mt["rho"] <= 0:
-            out.append("\nThe judge does not agree positively with the owner at this n.")
+            out.append(f"\nThe judge does not agree positively with the {'proxy ratings' if R.get('proxy') else 'owner'} at this n.")
         elif mt["p"] is None or mt["p"] >= 0.05:
             out.append("\nNot distinguishable from chance at this n.")
     else:
         out.append(f"\nFewer than five scored replies: {REFUSE}.")
-    out += ["", "## Disagreements (|judge - owner| >= 2)", ""]
+    out += ["", f"## Disagreements (|judge - {W}| >= 2)", ""]
     dis = [e for e in ok if abs(results[e][0] - R["ratings"][e]["score"]) >= 2]
     for e in dis:
         k = key_data["excerpts"][e]
-        out += [f"### {e}: owner {R['ratings'][e]['score']}, judge {results[e][0]}",
+        out += [f"### {e}: {W} {R['ratings'][e]['score']}, judge {results[e][0]}",
                 f"- {k.get('source')} {k.get('run')} {k.get('character')}, minutes {k.get('window_min')}",
-                f"- owner's reason: {R['ratings'][e]['reason'] or '(none given)'}", f"- judge's why: {results[e][1]}", ""]
+                f"- {W}'s reason: {R['ratings'][e]['reason'] or '(none given)'}", f"- judge's why: {results[e][1]}", ""]
     out += ["None." if not dis else ""] + ([f"Failed: " + ", ".join(f"{e} ({results[e][1]})" for e in fails)] if fails else [])
     report = "\n".join(out) + "\n"
-    (od / "judge_report.md").write_text(report)
+    (od / f"judge_report{sx}.md").write_text(report)
     print(report)
-    print(f"wrote {od / 'judge_report.md'}")
+    print(f"wrote {od / f'judge_report{sx}.md'}")
 
 
 # ---- synth -----------------------------------------------------------------------------
@@ -926,6 +1333,10 @@ def main():
         p.add_argument("--key", default=str(FEEL / "excerpts_key.json"))
         p.add_argument("--excerpts", default=str(FEEL / "excerpts.json"))
         p.add_argument("--out", default=str(FEEL))
+        p.add_argument("--proxy", action="store_true", help="use ratings whose rater starts with 'proxy:' (and only those); "
+                       "every output says PROXY RATINGS and none calls them the owner's")
+    sub.choices["fit"].add_argument("--probe", metavar="COL[,COL]", help="columns kept out of every model and reported "
+                                    "beside it: their rho with the rating and with the window ridge's residual")
     sub.choices["fit"].add_argument("--pipeline-perms", type=int, default=0, metavar="N",
                                     help="rerun the whole leave-one-out fit on N rating shuffles for a p that includes "
                                          "fitting and selection (about 1 s per shuffle at n = 20)")
@@ -938,12 +1349,27 @@ def main():
     j.add_argument("--key-env", default="MISTRAL_API_KEY")
     j.add_argument("--env-file")
     j.add_argument("--max-calls", type=int)
+    sc = sub.add_parser("score", help="the tuned score per arm of batches, always beside false replies, repeats and outcomes")
+    sc.add_argument("batches", nargs="+", help="batch directories (read-only)")
+    sc.add_argument("--model", default=str(FEEL / "proxy-fit/tune_result_proxy.json"), help="a fit's tune_result*.json")
+    sc.add_argument("--baseline", help="the arm others are judged against (default: a 'control' arm, else 'default', else the first)")
+    sc.add_argument("--window", type=float, default=10.0)
+    sc.add_argument("--windows", type=int, default=6, help="windows per character")
+    sc.add_argument("--residents", type=int, default=12, help="thinking residents per run")
+    sc.add_argument("--include-running", action="store_true", help="also score runs without final.json")
+    sc.add_argument("--out", default=str(FEEL))
+    c = sub.add_parser("compare", help="the owner's ratings against the proxy's, on the excerpts both rated")
+    c.add_argument("--owner", required=True, help="ratings (file or dump directory); proxy documents in it are ignored")
+    c.add_argument("--proxy", required=True, help="proxy ratings (file or dump directory, e.g. the copy saved before the owner rated)")
+    c.add_argument("--key", default=str(FEEL / "excerpts_key.json"))
+    c.add_argument("--excerpts", default=str(FEEL / "excerpts.json"))
+    c.add_argument("--out", default=str(FEEL))
     s = sub.add_parser("synth")
     s.add_argument("--key", default=str(FEEL / "excerpts_key.json"))
     s.add_argument("--out", required=True)
     s.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
-    {"fit": cmd_fit, "judge": cmd_judge, "synth": cmd_synth}[a.cmd](a)
+    {"fit": cmd_fit, "judge": cmd_judge, "synth": cmd_synth, "compare": cmd_compare, "score": cmd_score}[a.cmd](a)
 
 
 if __name__ == "__main__":

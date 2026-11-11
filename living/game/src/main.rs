@@ -22,6 +22,7 @@ mod daylight;
 mod demo;
 mod envs;
 mod gait;
+mod ground;
 mod ik;
 mod twist;
 mod fade;
@@ -45,6 +46,7 @@ mod sight;
 mod sightedge;
 mod sightfield;
 mod sky;
+mod takes;
 mod talk;
 mod style;
 mod terrain;
@@ -109,6 +111,7 @@ fn main() {
         .init_non_send::<world::Scene>()
         .init_resource::<world::Palette>()
         .init_resource::<world::Draw>()
+        .init_resource::<lookdev::NightGlows>()
         .init_resource::<sight::Sight>()
         .init_resource::<bodies::MySize>()
         .init_resource::<camera::Cam>()
@@ -145,6 +148,10 @@ fn main() {
         // Look-dev: a fixed scene of models from assets/lookdev, no server.
         app.add_plugins(probe::ProbePlugin);
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
+            .add_systems(
+                Update,
+                (lookdev::night_glow, envs::solid_if_large).after(lookdev::fit),
+            )
             .add_systems(
                 Update,
                 (envs::hdr, envs::keys, envs::switch, island::stream, island::grey_boxes, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway, envs::reach).chain(),
