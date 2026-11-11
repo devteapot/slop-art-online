@@ -2055,7 +2055,121 @@ def alarms(s):
     finally:
         s.call("install_script", shipped)
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "alarms": alarms}
+
+def world_tiles(s):
+    """This world's tiles (`terrain_chunk`) and a walkable test by tile code (water, rock,
+    wall, drop and low tiles are not walkable; off the map is rock)."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray(W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
+    return W, H, at, lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
+
+
+def old_snap(walk, x, y):
+    """The tile the pre-fix `place_at` chose (`Map::nearest_walkable`: rings outward, first
+    walkable tile in row order), for the evidence."""
+    tx, ty = math.floor(x), math.floor(y)
+    for r in range(12):
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if (abs(dx) == r or abs(dy) == r) and walk(tx + dx, ty + dy):
+                    return (tx + dx, ty + dy)
+    return None
+
+
+PLACE_RADIUS = 6.0
+
+
+def placement(s):
+    """Admin placement (`place_near`, `place_at`) puts a body on the nearest free walkable tile:
+    walkable, and no other body on it, within 6 m (`PLACE_RADIUS` in living/authority/src/lib.rs),
+    and refuses when there is none. `place_near` beside a target whose east tile is an obstacle
+    lands on a walkable tile of the target's ground and the body then walks (`goto`) away; two
+    `place_at` requests 1.9 m apart that the old nearest-walkable snapping put on one tile land
+    on two; a request with no free walkable tile within the radius is refused."""
+    W, H, at, walk = world_tiles(s)
+    tile = lambda p: (math.floor(p[0]), math.floor(p[1]))
+    # A target tile with an obstacle (rock, wall or water) east and open ground west of it,
+    # more than 10 m from every body (the world's people, an earlier attempt's actors).
+    now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    others = [body_at(s, None, now, row=b) for b in s.rows("SELECT x, y, t_ms, vx, vy, next_ms FROM body")]
+    spot = next(((x, y) for y in range(8, H - 8) for x in range(12, W - 8)
+                 if walk(x, y) and at(x + 1, y) in (2, 4, 7)
+                 and all(math.dist((x + .5, y + .5), o) > 10 for o in others)
+                 and all(walk(x - i, y + d) for i in range(1, 7) for d in (-1, 0, 1))), None)
+    if spot is None:
+        raise RuntimeError("no walkable tile with an obstacle east of it on this map")
+    # Two requests 1.9 m apart that the old snapping put on one tile, a few metres off.
+    pair = None
+    for y in range(4, H - 4):
+        for x in range(4, W - 4):
+            if walk(x, y):
+                continue
+            p = (x + .5, y + .5)
+            for q in ((p[0] + 1.9, p[1]), (p[0], p[1] + 1.9)):
+                o = old_snap(walk, *p)
+                if not walk(*tile(q)) and o is not None and o == old_snap(walk, *q) \
+                        and max(math.dist(r, (o[0] + .5, o[1] + .5)) for r in (p, q)) <= 2.5:
+                    pair = (p, q)
+                    break
+            if pair:
+                break
+        if pair:
+            break
+    # A point with no walkable tile within the radius: deep water or rock if the map has it,
+    # else off the map's edge (off the map is rock).
+    deep = next(((x + .5, y + .5) for y in range(0, H, 2) for x in range(0, W, 2)
+                 if not any(walk(x + dx, y + dy) for dy in range(-7, 8) for dx in range(-7, 8))), (-20.0, -20.0))
+    (s.out / f"{s.name}-spots.json").write_text(json.dumps({"target": spot, "pair": pair, "deep": deep,
+        "old_pair_tiles": [old_snap(walk, *p) for p in pair] if pair else None}, indent=2) + "\n")
+    target, near, c, d, e = s.people(5)
+    s.call("place_at", target, spot[0] + .5, spot[1] + .5)
+    s.expect("place_at on a free walkable tile puts the body on that tile's centre",
+             body_at(s, target) == (spot[0] + .5, spot[1] + .5), body_at(s, target))
+    s.call("place_near", near, target)
+    p = body_at(s, near)
+    s.expect("place_near beside an obstacle lands on a walkable tile, not the target's own",
+             walk(*tile(p)) and tile(p) != spot and tile(p) != (spot[0] + 1, spot[1]) and math.dist(p, (spot[0] + .5, spot[1] + .5)) <= PLACE_RADIUS + .5,
+             {"placed": p, "tile_code": at(*tile(p)), "obstacle": (spot[0] + 1, spot[1]), "obstacle_code": at(spot[0] + 1, spot[1])})
+    goal = (spot[0] - 5 + .5, spot[1] + .5)
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(near, {"seq": [{"do": {"skill": "goto", "target": {"at": list(goal)}}}, {"wait": 300}]})
+    s.wait(lambda: math.dist(body_at(s, near), goal) < 1.0, seconds=20)
+    uses = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {near}", "near-uses") if u["skill"] == "goto" and u["at_ms"] >= t0]
+    s.expect("the placed body can then goto (it walks 5 m away)", math.dist(body_at(s, near), goal) < 1.0
+             and not any("could not get there" in (u["outcome"] or "") or "blocked" in (u["outcome"] or "") for u in uses),
+             {"at": body_at(s, near), "goal": goal, "goto": [u["outcome"] for u in uses]})
+    s.call("place_near", e, target)
+    pe = body_at(s, e)
+    s.expect("a second place_near beside the same target takes another free tile",
+             walk(*tile(pe)) and tile(pe) not in (spot, tile(body_at(s, near))), {"placed": pe})
+    if pair:
+        s.call("place_at", c, *pair[0])
+        s.call("place_at", d, *pair[1])
+        pc, pd = body_at(s, c), body_at(s, d)
+        s.expect("two place_at requests 1.9 m apart land on different free walkable tiles",
+                 tile(pc) != tile(pd) and walk(*tile(pc)) and walk(*tile(pd)),
+                 {"requests": pair, "placed": [pc, pd], "old_snap": [old_snap(walk, *q) for q in pair]})
+    else:
+        s.expect("this map has two requests 1.9 m apart the old snapping joined", False, "none found", fatal=False)
+    before = body_at(s, c)
+    r = s.call("place_at", c, *deep, check=False)
+    out = (r.stdout or "") + (r.stderr or "")
+    s.expect("a request with no free walkable tile within 6 m is refused, and the body stays",
+             r.returncode != 0 and "no free walkable tile within 6 m" in out and body_at(s, c) == before,
+             {"request": deep, "exit": r.returncode, "error": out[-300:]})
+
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms}
 
 
 def goods(s):

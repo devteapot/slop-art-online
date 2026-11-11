@@ -18,6 +18,7 @@
 | Answers by id: accept/decline naming a trade offer or a proposal, the refusals, decline told to the maker and witnessed, the unnamed order unchanged | `scenes.py answers` (any seed), and Cargo | [dealings.md](dealings.md) |
 | Steering and `living/viewer/src/sync.rs` display-sync math | Five steering checks and three sync tests | [steering.md](steering.md) |
 | Moving as a per-creature law (`motion(a)`): flight share of the walk, turning on the spot; an installed law changes both | `scenes.py moves` | [steering.md](steering.md#moving-as-a-law) |
+| Admin placement (`place_near`, `place_at`): the nearest free walkable tile within 6 m, a refusal when there is none | `scenes.py placement`, and Cargo (`nearest_free`) | [steering.md](steering.md#admin-placement) |
 | Flight from a creature: steering runs from the threat until `flee_clear` farther | `scenes.py flee` on a `stage1-acts` run | [steering.md](steering.md#flight) |
 | Town life: daily rhythm, places, weather, gestures, commotion, `act_card`/`doing` | `town.py` on an island run, and Cargo | [town.md](town.md) |
 | Rhythms at any hour (working hours, a second sleep, `work_hours`) and Cullet's trades at their workplaces with their starting habits; Cullet's life law | `rhythm.py` on its derived Cullet seed, and Cargo | [town.md](town.md), [laws.md](laws.md) |

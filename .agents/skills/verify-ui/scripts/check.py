@@ -211,29 +211,33 @@ def themes(run, c):
 
 # Where the support scenario stands the player on Cullet (land metres; the plan's x + 510 and
 # 784 - y, as of layout pass 1: the Ladder Wynd at plan x -52, the Marver's terrace at x 68..80)
-# and what holds it up there:
-# a kit fixture's file (part of its path) and whether it is tall enough to be an occluder, so the
-# camera's fade (`envs::cutaway`) considers it at all.
+# and what holds it up there: a kit fixture's file (part of its path); whether it is tall enough to
+# be an occluder, so the camera's fade (`envs::cutaway`) considers it at all; and whether it is what
+# I walk on there (a flight, a terrace, the quay: never faded), or only beside me (a retaining wall
+# below the edge I stand on, which may fade when it stands between the camera and me).
 SUPPORTS = [
-    ("stairs", 458.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True),
-    ("terrace", 584.0, 720.8, "marver_terrace/", False),
-    ("quay", 450.0, 782.6, "quay/", False),
+    ("stairs", 458.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True, True),
+    ("terrace", 584.0, 720.8, "marver_terrace/", False, True),
+    ("quay", 450.0, 782.6, "quay/", False, True),
     # At the upper level's edge above a retaining wall: the drop's tiles keep you 1-1.5 m from
     # it, so it is beside you, never under you; it may fade when it stands between the camera
     # and you, as anything that hides you does.
-    ("wall", 440.0, 751.6, "retaining_wall/wall_002", False),
+    ("wall", 440.0, 751.6, "retaining_wall/wall_002", False, False),
 ]
+# Where the player stands first, away from every spot: the cutaway names what holds me up once,
+# as I come onto it, and the character keeps its place between drives.
+AWAY = (540.5, 766.5)
 
 
 def support(run, c):
     """What I stand on or step onto never fades (the owner's Cullet walk: the flight dithered away
     while climbing it). Needs a Cullet world (`--seed cullet`) and the cutaway's debug log."""
     s = "support"
-    plan = "ready;wait:3"
+    plan = "ready;sync:away;wait:3"
     for name, *_ in SUPPORTS:
         plan += f";sync:{name};wait:6;shot:{name};dump:{name}"
     plan += ";quit"
-    syncs = [f"{name}=place_at|{{me}}|{x}|{y}" for name, x, y, *_ in SUPPORTS]
+    syncs = [f"away=place_at|{{me}}|{AWAY[0]}|{AWAY[1]}"] + [f"{name}=place_at|{{me}}|{x}|{y}" for name, x, y, *_ in SUPPORTS]
     old = os.environ.get("RUST_LOG")
     os.environ["RUST_LOG"] = "info,wgpu=warn,naga=warn,living_game::envs=debug"
     try:
@@ -248,15 +252,20 @@ def support(run, c):
     # The log in stretches, one per spot: from its sync step to the next.
     parts = re.split(r"live script: sync:(\w+)", L)
     seg = {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
-    for name, x, y, part, occluder in SUPPORTS:
+    for name, x, y, part, occluder, walked in SUPPORTS:
         t = seg.get(name, "")
         held = set(re.findall(r"cutaway: (\S+) holds me up", t))
         faded = re.findall(r"cutaway: (\S+) fades to", t)
         mine = [f for f in held if part in f]
         if occluder:
             c.check(s, f"{name}: the cutaway finds what holds me up ({part})", bool(mine), f"held {sorted(held)}")
-        # What held me up there, and the spot's own support, never fades there.
-        bad = [f for f in faded if f in held or (not occluder and part in f)]
+            # Only the plan's own flight is there: no other kit file of its kind drawn on it
+            # (stairs-place: a Store Wynd flight stood at the Ladder Wynd's foot).
+            folder = part.split("/")[0] + "/"
+            others = sorted(f for f in held if folder in f and part not in f)
+            c.check(s, f"{name}: no other {folder[:-1]} model stands there", not others, f"also held {others}")
+        # What held me up there, and what I walk on there, never fades there.
+        bad = [f for f in faded if f in held or (walked and part in f)]
         c.check(s, f"{name}: nothing under or beside my feet fades", t != "" and not bad, f"faded {bad}" if t else "no log for this spot")
     c.check(s, "photographs of each spot", all(os.path.exists(os.path.join(out, f"{n}.png")) for n, *_ in SUPPORTS))
 
