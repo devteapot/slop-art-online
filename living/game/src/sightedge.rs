@@ -1,27 +1,32 @@
 //! How the edge of my character's sight is shown (docs/GAME_BRIEF.md, "Edge of sight").
 //! Presentation only: the authority decides whom I perceive; this only draws where that ends.
 //!
-//! - **Fade** (the default): people fade in and out at the edge of sight (`fade.rs`); nothing
-//!   else changes.
-//! - **Not seen now:** as Fade, and ground, buildings and scenery beyond my sight are drawn
-//!   dimmer and flatter (less saturation and contrast), with a soft band of a few metres. They
-//!   are public and stay drawn; this marks them as outside sight.
-//! - **Limited view:** as Fade, and the view fogs from my sight radius to 1.3 × of it, in the
-//!   fog's (sky) colour, and stops drawing past that (the camera's far plane), so the screen
-//!   shows about what my character sees. The camera's angle and distance are unchanged.
+//! - **Not seen now** (the default since sight-2): ground, buildings and scenery my character
+//!   does not see now are drawn dimmer and flatter (less saturation and contrast): beyond my
+//!   sight, with a soft band of a few metres, and behind what blocks my sight lines (walls,
+//!   buildings, stalls, rock, shut gates), with a soft edge of about half a tile (`sightfield.rs`).
+//!   They are public and stay drawn; this marks them as outside sight. People whose sight line
+//!   breaks fade out as it breaks.
+//! - **Fade:** people fade in and out at the edge of sight (`fade.rs`); nothing else changes.
+//! - **Limited view:** as "not seen now" for people, and the view fogs from my sight radius to
+//!   1.3 × of it, in the fog's (sky) colour, and stops drawing past that (the camera's far
+//!   plane); what lies behind something within it fogs most of the way. So the screen shows
+//!   about what my character sees. The camera's angle and distance are unchanged.
 //!
-//! Both marks are a radius round my character, measured on the ground plane, in the finishing
-//! pass (`edges.wesl`: the world position of each pixel from depth). Sight lines (walls) are not
-//! drawn. The fog is round my character rather than the camera's distance fog, because the eye
-//! sits about 22 m from me: a camera fog at a 14 m night sight would hide my own character.
+//! The marks are worked out per pixel in the finishing pass (`edges.wesl`: the world position of
+//! each pixel from depth): the radius on the ground plane, and the sight field sampled there.
+//! The fog is round my character rather than the camera's distance fog, because the eye sits
+//! about 22 m from me: a camera fog at a 14 m night sight would hide my own character.
 //!
 //! The radius comes from the world's rules: the installed skill script (`verbs.rs` compiles it)
-//! answers `senses(a)` for my character, with night from the displayed clock and my torch from
-//! my inventory, the same law the authority's sweep asks. It eases over about a second when day
+//! answers `senses(a)` for my character, with night and how dark it is from the world's
+//! `daylight` law at the displayed hour and my torch from my inventory, the same law the
+//! authority's sweep asks (all in [`my_sight`]). It eases over about a second when day
 //! turns to night or a torch is lit.
 //!
-//! F2 cycles the modes, with a note naming the new one. `LIVING_SIGHT_EDGE=fade|unseen|limited`
-//! sets the starting mode (headless captures).
+//! F2 cycles the modes, with a note naming the new one and the key. The same note shows once on
+//! arrival, so the key can be found. `LIVING_SIGHT_EDGE=fade|unseen|limited` sets the starting
+//! mode (headless captures).
 
 use crate::net::Net;
 use bevy::prelude::*;
@@ -31,8 +36,8 @@ use spacetimedb_sdk::Table;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Mode {
-    #[default]
     Fade,
+    #[default]
     Unseen,
     Limited,
 }
@@ -49,9 +54,9 @@ impl Mode {
 
     fn next(self) -> Self {
         match self {
-            Mode::Fade => Mode::Unseen,
             Mode::Unseen => Mode::Limited,
             Mode::Limited => Mode::Fade,
+            Mode::Fade => Mode::Unseen,
         }
     }
 
@@ -61,6 +66,11 @@ impl Mode {
             Mode::Unseen => "Edge of sight: not seen now",
             Mode::Limited => "Edge of sight: limited view",
         }
+    }
+
+    /// The note naming the mode and the key that changes it.
+    pub fn note(self) -> String {
+        format!("{}  ·  F2 changes how it is shown", self.label())
     }
 
     /// The finishing pass's code for it.
@@ -89,6 +99,10 @@ const EASE: f32 = 3.0;
 const ASK_S: f32 = 0.25;
 /// Beyond the fully fogged radius, drawing stops this much further on (m).
 const FAR_MARGIN: f32 = 10.0;
+/// Limited view: how far toward the fog what lies behind something within sight goes.
+const SHADOW_FOG: f32 = 0.8;
+/// The arrival note stays this much longer than other notes (s).
+const NOTE_EXTRA_S: f64 = 3.0;
 
 #[derive(Resource)]
 pub struct SightEdge {
@@ -101,12 +115,14 @@ pub struct SightEdge {
     next_report: f32,
     /// The camera's far plane before Limited view brought it in.
     far: Option<f32>,
+    /// The arrival note has been shown.
+    noted: bool,
 }
 
 impl Default for SightEdge {
     fn default() -> Self {
         let mode = std::env::var("LIVING_SIGHT_EDGE").ok().and_then(|v| Mode::parse(&v)).unwrap_or_default();
-        Self { mode, radius: 11.0, want: None, next_ask: 0.0, next_report: 0.0, far: None }
+        Self { mode, radius: 11.0, want: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
     }
 }
 
@@ -159,22 +175,26 @@ fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<f32> {
 
 /// F2 cycles the mode; the radius follows the rules.
 #[allow(clippy::too_many_arguments)]
-fn update(
+pub fn update(
     mut edge: ResMut<SightEdge>,
     keys: Res<ButtonInput<KeyCode>>,
+    hud: Option<Res<crate::ui::model::HudModel>>,
     net: NonSend<Net>,
     scene: NonSend<crate::world::Scene>,
     rules: NonSend<crate::verbs::Rules>,
     clock: Res<crate::daylight::Clock>,
-    verbs: Option<ResMut<crate::verbs::Verbs>>,
+    loading: Option<Res<crate::loading::Loading>>,
+    mut verbs: Option<ResMut<crate::verbs::Verbs>>,
     time: Res<Time>,
 ) {
     if keys.just_pressed(KeyCode::F2) {
         edge.mode = edge.mode.next();
         info!("sight edge: {:?} (radius {:.1} m)", edge.mode, edge.radius);
-        if let Some(mut v) = verbs {
-            v.toasts.push(crate::verbs::Toast { text: edge.mode.label().into(), ok: None, at: time.elapsed_secs_f64() });
+        if let Some(v) = verbs.as_deref_mut() {
+            v.toasts.retain(|t| !t.text.starts_with("Edge of sight:"));
+            v.toasts.push(crate::verbs::Toast { text: edge.mode.note(), ok: None, at: time.elapsed_secs_f64() });
         }
+        edge.noted = true;
     }
     let dt = time.delta_secs();
     edge.next_ask -= dt;
@@ -192,6 +212,16 @@ fn update(
     }
     if let Some(w) = edge.want {
         edge.radius += (w - edge.radius) * (1.0 - (-dt * EASE).exp());
+    }
+    // Once I have arrived (my sight known, the first-load cover gone): the note, a little longer
+    // than other notes.
+    let arrived = edge.want.is_some() && hud.as_deref().is_some_and(|h| h.death.is_none()) && crate::loading::Loading::clear(loading.as_deref());
+    if !edge.noted && arrived {
+        if let Some(v) = verbs.as_deref_mut() {
+            v.toasts.push(crate::verbs::Toast { text: edge.mode.note(), ok: None, at: time.elapsed_secs_f64() + NOTE_EXTRA_S });
+            edge.noted = true;
+            info!("sight edge: arrival note: {}", edge.mode.note());
+        }
     }
     // For captures (`RUST_LOG=living_game::sightedge=debug`): how far the people drawn are.
     edge.next_report -= dt;
@@ -228,7 +258,7 @@ fn far(mut edge: ResMut<SightEdge>, target: Res<crate::controls::Target>, mut ca
 }
 
 /// Feed the finishing pass (after `post::update` writes the rest of its settings).
-fn shade(edge: Res<SightEdge>, target: Res<crate::controls::Target>, atmo: Option<Res<crate::daylight::Atmo>>, mut cams: Query<&mut crate::post::Edges>) {
+fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>, target: Res<crate::controls::Target>, atmo: Option<Res<crate::daylight::Atmo>>, mut cams: Query<&mut crate::post::Edges>) {
     let Ok(mut e) = cams.single_mut() else { return };
     let me = target.0.filter(|_| edge.want.is_some());
     let mode = if me.is_some() { edge.mode.code() } else { 0.0 };
@@ -238,7 +268,11 @@ fn shade(edge: Res<SightEdge>, target: Res<crate::controls::Target>, atmo: Optio
     let sky = crate::camera::SKY.to_linear();
     let fog = atmo.filter(|a| a.active).map_or(Vec3::new(sky.red, sky.green, sky.blue), |a| a.fog);
     e.sight_fog = Vec4::new(fog.x, fog.y, fog.z, FLATTEN);
-    e.sight_far = Vec4::new(LIMIT, 0.0, 0.0, 0.0);
+    e.sight_far = Vec4::new(LIMIT, SHADOW_FOG, 0.0, 0.0);
+    e.sight_field = match field.as_deref().filter(|f| f.valid) {
+        Some(f) => Vec4::new(f.origin.x as f32, f.origin.y as f32, 1.0 / crate::sightfield::EXTENT, 1.0),
+        None => Vec4::ZERO,
+    };
 }
 
 #[cfg(test)]
@@ -249,6 +283,8 @@ mod tests {
     #[test]
     fn modes_cycle_and_parse() {
         assert_eq!(Mode::Fade.next().next().next(), Mode::Fade);
+        assert_eq!(Mode::default(), Mode::Unseen, "not seen now is the starting mode");
+        assert!(Mode::Unseen.note().contains("F2"));
         assert_eq!(Mode::parse("unseen"), Some(Mode::Unseen));
         assert_eq!(Mode::parse(" Limited "), Some(Mode::Limited));
         assert_eq!(Mode::parse("other"), None);

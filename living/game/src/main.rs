@@ -40,6 +40,7 @@ mod probe;
 mod route;
 mod sight;
 mod sightedge;
+mod sightfield;
 mod sky;
 mod style;
 mod terrain;
@@ -159,6 +160,7 @@ fn main() {
         app.add_plugins(verbs::VerbsPlugin);
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
+        app.add_plugins(sightfield::SightFieldPlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }
