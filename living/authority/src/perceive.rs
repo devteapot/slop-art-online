@@ -255,6 +255,14 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     Ok("made a baby crying".into())
 }
 
+/// The shortest gap between two lines one speaker says (ms).
+pub const SPEAK_GAP_MS: u64 = 2_000;
+
+/// Whether `speaker` must still wait before its next line (the speaking limit in `speak`).
+pub fn too_soon_to_speak(ctx: &ReducerContext, speaker: u32, now: u64) -> bool {
+    ctx.db.mind_state().id().find(speaker).is_some_and(|st| now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS)
+}
+
 pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) -> Result<(), String> {
     let text = text.trim();
     if text.is_empty() {
@@ -264,7 +272,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
     let Some(me) = ctx.db.character().id().find(speaker) else { return Err("no speaker".into()) };
     let Some(b) = ctx.db.body().id().find(speaker) else { return Err("no body".into()) };
     if let Some(mut st) = ctx.db.mind_state().id().find(speaker) {
-        if now.saturating_sub(st.spoke_ms) < 2_000 {
+        if now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS {
             return Err("speaking too fast".into());
         }
         st.spoke_ms = now;
