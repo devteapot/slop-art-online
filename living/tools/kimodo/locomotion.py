@@ -103,17 +103,37 @@ PICKS = {
 # Clip lab retakes (`living/tools/kimodo/cliplab.py --write`): the fields of an entry the lab
 # changed (prompt, seeds, pick, note, ...), applied over what entries() builds, so --write here
 # keeps them. Each retake's scores are in its checks.json in the handoff tarball.
+# Retakes after the laptop's in-game verdicts (2026-11-11, clips-2): faster paths, so a directional
+# loop covers at least 0.63 of the forward gait's metres a cycle (the client plays it only while it
+# steps at most 1.6x as often), and new seeds. Fields override loop()'s arguments; PICKS is skipped
+# for these names (the clip lab picks them, kept in RETAKES).
+S10, S30 = list(range(10, 18)), list(range(30, 38))
+REDO = {
+    "strafe_run_left": dict(speed=2.8, seeds=S10, prompt="a person runs sideways to the left with long crossover strides, chest facing forward"),
+    "strafe_run_right": dict(speed=2.8, seeds=S10, prompt="a person runs sideways to the right with long crossover strides, chest facing forward"),
+    "strafe_walk_cross_right": dict(speed=1.5, seeds=S10),
+    "walk_diag_bl": dict(speed=1.5, seeds=S10),
+    "jump_forward": dict(seeds=list(range(20, 36))), "jump_forward_run": {}, "walk_stop": dict(seeds=list(range(10, 16))),
+    "run_stop": dict(seeds=list(range(10, 16))),
+}
 RETAKES = {
     "turn_left_180": {"prompt": "a person turns around to the left on the spot, stepping left, right, left", "seeds": [20, 21, 22, 23, 24, 25, 26, 27], "pick": 25, "note": "three steps (left, right, left); the hips' heading is pinned to a steady turn from 0.3 s to 1.7 s. Clip lab 2026-11-11: the old s4 slid (planted feet 6.3 cm/s p90) and s3 took four steps; s25 (the prompt names the steps) passes every check: LRL, toes 0.4 cm under the floor at most, slide 4.7 cm/s"},
+    "walk_stop": {"pick": 14, "note": "starts in walk#1's frame 83 at walk#1's speed. Laptop verdict 2026-11-11 (the authority stops a body where it is): stops within 0.27 m, one braking step, then the neutral pose. Fails one check: planted feet slide 8.4 cm/s p90 while braking (limit 6)"},
+    "run_stop": {"pick": 13, "note": "starts in run#1's frame 91 at run#1's speed. Laptop verdict 2026-11-11: stops within 0.42 m (0.3 s of braking), then the neutral pose; passes every check"},
     "jump_stand": {"prompt": "a person jumps high straight up on the spot and lands", "seeds": [20, 21, 22, 23, 24, 25, 26, 27], "pick": 25, "note": "Clip lab 2026-11-11: the hips rise 46 cm and both feet are off the ground 0.57 s (asked: 0.45 m, about 0.6 s); the old s4: 38 cm, 0.47 s. A tuck jump (knees pulled up, feet clear 91 cm) with the arms up, not a small hop. Fails slide only: planted feet 8.0 cm/s p90 at the landing (limit 6)"},
+    "jump_forward": {"pick": 26, "note": "Laptop verdict 2026-11-11: a run-up at run#1's speed, the rules' hop path, landing into the rules' walk (2.6 m/s game, 2.72 SOMA). s26 leaps but early and long: in the air 0.63-1.27 s against the hop window 0.95-1.394 s (overlap 0.42); feet planted after it (slide 3.9 cm/s). A walking run-up never left the ground (16 takes)"},
+    "jump_forward_run": {"pick": 2, "note": "Laptop verdict 2026-11-11: a leap that lands into the rules' run (3.9 m/s game, 4.08 SOMA): in the air 0.40 s, hop window overlap 0.90; fails one check: the chest swings 16 degrees off ahead in the air (limit 15)"},
     "run_back": {"pick": 3, "note": "a backward jog: cycle 0.73 s (x1.05 of run#1) at 2.0 m/s, 1.47 m a cycle against run#1's 2.30 m; almost no flight Clip lab 2026-11-11: re-picked s2 -> s3: s2's planted feet slide 10.1 cm/s p90 (gait limit 10), s3's 9.2; s3's chest drifts 6.0 degrees (s2: 2.9)"},
     "strafe_walk_left": {"note": "a step touch: the only seed of 8 whose feet never cross (heels 9.5 to 77 cm apart). Slower than the walk: cycle 1.40 s (x1.31 of walk#1) at 0.46 m/s, 0.64 m a cycle. The relaxed-arm side-step prompts all crossed the trailing foot behind Laptop verdict 2026-11-11: a fallback only; strafe_walk_cross_left is the default sideways walk (the client adjusts the cadence). The clip lab found no take at the walk's cadence whose feet do not cross (48 more takes)."},
     "strafe_walk_right": {"note": "a step touch, feet never cross (heels 4 to 76 cm apart); cycle 1.53 s (x1.44 of walk#1) at 0.44 m/s, 0.69 m a cycle. Seed 0 has the walk's cadence (1.13 s) and no crossing, but its chest turns up to 16 degrees and the arms lift Laptop verdict 2026-11-11: a fallback only; strafe_walk_cross_right is the default sideways walk (the client adjusts the cadence)."},
+    "strafe_run_left": {"pick": 17, "note": "Laptop verdict 2026-11-11 (seam pop, twice the steps): retaken at 2.8 m/s with long crossover strides: cycle 0.87 of run_fast's (raw; the old s3: 0.68), seam 8.3 degrees at the best cut; fails slide (11.9 cm/s p90, gait limit 10) and loop velocity (0.63 m/s, limit 0.6)"},
+    "strafe_run_right": {"pick": 15, "note": "Laptop verdict 2026-11-11 (1.15-1.22 m a cycle): retaken at 2.8 m/s with long crossover strides: cycle 0.92 of run_fast's (raw; the old s6: 0.62), seam 7.5 degrees; fails slide (13.0 cm/s p90, gait limit 10)"},
     "strafe_walk_cross_left": {"note": "not asked for: a sideways walk with the feet crossing, close to the forward walk: cycle 1.00 s (x0.94 of walk#1) at 1.3 m/s, 1.31 m a cycle; arms down Laptop verdict 2026-11-11: the default sideways walk (the client adjusts the cadence); strafe_walk_left is the fallback."},
-    "strafe_walk_cross_right": {"note": "not asked for: a sideways walk with the feet crossing: cycle 0.90 s (x0.84 of walk#1) at 1.3 m/s, 1.18 m a cycle; arms down. Seeds 0 and 5 match the walk's cadence but hold the hands at chest height Laptop verdict 2026-11-11: the default sideways walk (the client adjusts the cadence; cadence x0.86 of walk#1, 14 % off); strafe_walk_right is the fallback."},
+    "strafe_walk_cross_right": {"pick": 13, "note": "the default sideways walk (laptop verdict); retaken at 1.5 m/s: cycle 0.67 of walk_brisk's (raw; the old s3: 0.61), seam 7.3 degrees; fails cadence (period 0.84 s against walk#1's 1.05: 20 percent faster)"},
     "jump_back": {"prompt": "a person hops backward with both feet together and lands softly on the balls of the feet", "seeds": [40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55], "pick": 49, "note": "from and to the neutral pose, not from a walk. Clip lab 2026-11-11: in the air 0.40 s (hop window overlap 0.81; the old s3: 0.33 s); still fails the floor: toe tips up to 5.9 cm under it for 16 frames at the landing, as every one of 40 takes does (least: s42, 2.4 cm, 0.33 s in the air)"},
     "jump_left": {"prompt": "a person hops sideways to the left with both feet together and lands softly", "seeds": [10, 11, 12, 13, 14, 15, 16, 17], "pick": 17, "note": "from and to the neutral pose. Clip lab 2026-11-11, laptop verdict (timing over the floor): s17, in the air 0.40 s against the rules' hop window (overlap 0.90; the old s3: 0.33 s); toe tips 2.1 cm under the floor at the landing (limit 2.0)"},
     "jump_right": {"seeds": [20, 21, 22, 23, 24, 25, 26, 27], "pick": 25, "note": "from and to the neutral pose. Clip lab 2026-11-11: in the air 0.43 s, matching the rules' hop window (overlap 0.98; the old s1: 0.33 s); still fails the floor: toe tips up to 3.9 cm under it at the landing (the old s1: 2.2 cm)"},
+    "walk_diag_bl": {"pick": 17, "note": "Laptop verdict 2026-11-11 (toe under standing height at the seam, 1.16 m a cycle): retaken at 1.5 m/s: cycle 0.76 of walk_brisk's (raw; the old s1: 0.62), seam 5.2 degrees, toes at most 0.9 cm under the floor; passes every check"},
     "run_diag_fr": {"pick": 4, "note": "cycle 0.70 s (x1.00 of run#1) at 2.6 m/s, 1.84 m a cycle; chest up to 13 degrees to the left of ahead Clip lab 2026-11-11: re-picked s5 -> s4: s5's planted feet slide 10.4 cm/s p90 (gait limit 10), s4's 8.2"},
 }
 
@@ -122,7 +142,7 @@ def entries():
     out = []
 
     def add(name, **e):
-        pick, note = PICKS.get(name, (None, None))
+        pick, note = PICKS.get(name, (None, None)) if name not in REDO else (None, None)
         if pick is not None:
             e["pick"] = pick
         if note:
@@ -144,14 +164,15 @@ def entries():
     p = profile([[0, 0], [0.15, 0], [0.95, W], [1.5, W]], 1.5)
     add("walk_start", prompt="a person standing still starts walking forward, stepping off with the right foot", seconds=1.5, seeds=s8,
         start="neutral", end=WALK_L, end_offset=end_of(p), path=p, kind="once", travel="path")
-    p = profile([[0, W], [0.15, W], [1.0, 0], [1.5, 0]], 1.5)
-    add("walk_stop", prompt="a person walking forward slows down and stops, standing still", seconds=1.5, seeds=s6,
+    # stops within one braking step: the authority stops a body where it is (0.27 m, 0.42 m)
+    p = profile([[0, W], [0.35, 0], [1.5, 0]], 1.5)
+    add("walk_stop", prompt="a person walking forward stops abruptly in one step and stands still", seconds=1.5, seeds=REDO["walk_stop"]["seeds"],
         start=WALK_R, end="neutral", end_offset=end_of(p), path=p, kind="once", travel="path")
     p = profile([[0, 0], [0.1, 0], [1.1, R], [1.4, R]], 1.4)
     add("run_start", prompt="a person standing still starts running forward, pushing off with the right foot first", seconds=1.4, seeds=s8,
         start="neutral", end=RUN_R, end_offset=end_of(p), path=p, kind="once", travel="path")
-    p = profile([[0, R], [0.1, R], [1.1, 0], [1.6, 0]], 1.6)
-    add("run_stop", prompt="a person running forward slows down quickly and stops, standing still", seconds=1.6, seeds=s6,
+    p = profile([[0, R], [0.3, 0], [1.6, 0]], 1.6)
+    add("run_stop", prompt="a person running forward stops abruptly, braking hard in one step, and stands still", seconds=1.6, seeds=REDO["run_stop"]["seeds"],
         start=RUN_R, end="neutral", end_offset=end_of(p), path=p, kind="once", travel="path")
     add("jump_stand", prompt="a person jumps straight up on the spot and lands", seconds=1.7, seeds=s8,
         start="neutral", end="neutral", path=still(1.7), kind="once")
@@ -162,13 +183,21 @@ def entries():
         note="the first jump_stand, kept for the laptop to judge against jump_stand's tuck jump: in the air 0.63-1.10 s (0.47 s); "
              "the hips rise 0.38 m and the feet clear 0.27 m, less than the 0.45 m asked")
     t0, total = 0.95, 2.2
-    p = profile([[0, R], [t0 - 0.25, R], [t0, JV], [t0 + JT, JV], [t0 + JT + 0.35, 1.9], [total, 1.9]], total)
-    add("jump_forward", prompt="a person running forward leaps forward over a gap, lands and keeps walking", seconds=total, seeds=s8,
+    # leaps that land at the rules' speeds: walking 2.6, running 3.9 m/s (game), in SOMA metres
+    WG, RG = round(2.6 / K, 3), round(3.9 / K, 3)
+    # a walking run-up never leaves the ground (16 takes): the run-up is a run, the landing the rules' walk
+    p = profile([[0, R], [t0 - 0.25, R], [t0, JV], [t0 + JT, JV], [t0 + JT + 0.35, WG], [total, WG]], total)
+    add("jump_forward", prompt="a person running forward leaps forward over a gap, lands and keeps walking", seconds=total,
+        seeds=REDO["jump_forward"]["seeds"], path=p, kind="once", travel="path", hop=[t0, round(t0 + JT, 3)])
+    p = profile([[0, RG], [t0 - 0.25, RG], [t0, JV], [t0 + JT, JV], [t0 + JT + 0.35, RG], [total, RG]], total)
+    add("jump_forward_run", prompt="a person running forward leaps over a gap, lands and keeps running", seconds=total, seeds=s8,
         path=p, kind="once", travel="path", hop=[t0, round(t0 + JT, 3)])
     # Group B: loops for the "face the cursor" scheme. The hips are pinned to a straight line at a
     # steady speed and to face ahead (heading 0). Each has its own speed key, so animate.py keeps
     # its natural speed unless a target is given for that key.
     def loop(name, prompt, seconds, speed, direction, gait, cycle, travel_deg, key, seeds=s8):
+        o = REDO.get(name, {})
+        prompt, speed, seeds, cycle = o.get("prompt", prompt), o.get("speed", speed), o.get("seeds", seeds), o.get("cycle", cycle)
         add(name, prompt=prompt, seconds=seconds, seeds=seeds, path=line(seconds, speed, direction), heading=0, kind="loop",
             locomotion=gait, cycle=cycle, skip=1.5, speed=key, travel_deg=travel_deg)
 
