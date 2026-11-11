@@ -548,6 +548,7 @@ pub fn clips(
                 start_ms: start as f64 * 1000.0,
                 hold: None,
                 face: None,
+                ..Default::default()
             });
         } else {
             match look.act {
