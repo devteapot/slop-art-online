@@ -69,7 +69,8 @@ pub struct ActorFacts {
     /// Where the actor's household lives (`"x,y"`, whole tiles; empty: no home).
     pub home: String,
     /// The actor stands in lamplight: within the `lights` radius of a structure that gives
-    /// light (`structure_traits()`).
+    /// light (its traits in `structures()`), or within the light of a fire that burns fuel while
+    /// it is lit.
     pub lit: bool,
 }
 
@@ -112,6 +113,10 @@ pub struct TargetFacts {
     pub hosts: bool,
     /// Where a creature's household lives, or a structure's owner's (`"x,y"`; empty: none).
     pub home: String,
+    /// A structure that is a fire: whether it burns now (one that needs no feeding always
+    /// does), and the fuel a fire that burns fuel still holds (units of its kind's fuel).
+    pub lit: bool,
+    pub fuel: f32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -263,6 +268,11 @@ pub enum Effect {
     Store { item: String, qty: u32 },
     /// Move items from the target structure to the actor.
     Take { item: String, qty: u32 },
+    /// Put items from the actor's pack on the target fire as fuel (each worth its `burns.fuel`
+    /// trait in units): an out fire is lit, a lit one burns longer.
+    Fuel { item: String, qty: u32 },
+    /// Draw `units` of fuel from the target fire (the heat a recipe takes): it burns down sooner.
+    Burn { units: f32 },
     /// Replace (or retire) one of the actor's routines, or its top level, with the reworked
     /// version the act carries.
     Rework,
@@ -562,7 +572,63 @@ pub const LAW_TRAITS: &[&str] = &["about", "cadence", "topic", "reach", "covers"
 /// Laws the engine asks for that a script installed before they existed may lack: such a script
 /// runs with the shipped script's functions underneath its own until its next install, and an
 /// install without them is refused.
-pub const REQUIRED_LAWS: &[&str] = &["senses", "motion", "items", "structure_traits"];
+pub const REQUIRED_LAWS: &[&str] = &["senses", "motion", "items", "structures", "resources", "know_how"];
+
+/// The world's data tables (read once when the script compiles): each a list of maps with a
+/// `name`, in the script's order. `items`, `structures`, `resources` and `know_how` are
+/// required; `recipes` is the world's own (none when the script has no `recipes()`).
+pub const TABLES: &[&str] = &["items", "structures", "resources", "know_how", "recipes"];
+
+/// The data tables as the rules read them through the engine's primitives: `entry_of(table,
+/// name)` (the entry's map, or `()`), `names_of(table)` (its names, in order) and
+/// `having(table, trait)` (the names whose entry has the trait, neither `()` nor false). The
+/// rules match by traits (food is what has nutrition, fuel what has the fire's fuel trait), and
+/// these lookups cost one operation each instead of rebuilding a list per question.
+#[derive(Clone, Debug, Default)]
+pub struct Tables {
+    by: HashMap<String, (Vec<String>, HashMap<String, Map>)>,
+}
+
+impl Tables {
+    pub fn entry(&self, table: &str, name: &str) -> Option<&Map> {
+        self.by.get(table).and_then(|(_, m)| m.get(name))
+    }
+
+    pub fn names(&self, table: &str) -> &[String] {
+        self.by.get(table).map_or(&[], |(n, _)| n.as_slice())
+    }
+
+    /// A trait of an entry that is a number.
+    pub fn number(&self, table: &str, name: &str, t: &str) -> Option<f64> {
+        self.entry(table, name).and_then(|m| m.get(t)).and_then(number)
+    }
+
+    /// A trait of an entry that is a list of words (`ground: ["sand"]`).
+    pub fn words(&self, table: &str, name: &str, t: &str) -> Vec<String> {
+        let Some(v) = self.entry(table, name).and_then(|m| m.get(t)) else { return Vec::new() };
+        v.clone().try_cast::<Array>().unwrap_or_default().into_iter().filter_map(|w| w.into_string().ok()).collect()
+    }
+
+    /// A trait of an entry that is true.
+    pub fn flag(&self, table: &str, name: &str, t: &str) -> bool {
+        self.entry(table, name).and_then(|m| m.get(t)).is_some_and(|v| v.as_bool() == Ok(true))
+    }
+
+    pub fn having(&self, table: &str, t: &str) -> Vec<String> {
+        let Some((names, m)) = self.by.get(table) else { return Vec::new() };
+        names.iter().filter(|n| m.get(n.as_str()).and_then(|e| e.get(t)).is_some_and(|v| !v.is_unit() && v.as_bool() != Ok(false))).cloned().collect()
+    }
+}
+
+/// The engine's primitives over the data tables (see [`Tables`]).
+fn register_tables(e: &mut Engine, t: &Rc<RefCell<Tables>>) {
+    let t1 = t.clone();
+    e.register_fn("entry_of", move |table: &str, name: &str| -> Dynamic { t1.borrow().entry(table, name).map_or(Dynamic::UNIT, |m| m.clone().into()) });
+    let t2 = t.clone();
+    e.register_fn("names_of", move |table: &str| -> Array { t2.borrow().names(table).iter().map(|n| Dynamic::from(n.clone())).collect() });
+    let t3 = t.clone();
+    e.register_fn("having", move |table: &str, tr: &str| -> Array { t3.borrow().having(table, tr).into_iter().map(Dynamic::from).collect() });
+}
 
 /// Distinct states whose senses or moves are kept before the memo starts over.
 const CREATURE_MEMO: usize = 1_024;
@@ -704,19 +770,53 @@ pub struct Scripts {
     source: String,
     /// Law declarations that failed when read (an install refuses them).
     law_errors: RefCell<Vec<String>>,
-    /// What each kind of structure does for those near it (`structure_traits()`).
+    /// What each kind of structure does for those near it (its traits in `structures()`).
     structures: HashMap<String, StructureTraits>,
+    /// The data tables, shared with the engine's primitives.
+    tables: Rc<RefCell<Tables>>,
 }
 
-/// What a kind of structure does for those near it (`structure_traits()`).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+/// What a kind of structure does for those near it (its traits in `structures()`).
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct StructureTraits {
-    /// A hearth: near it counts as near a fire.
+    /// A fire that needs no feeding (a campfire): near it counts as near a fire, within the
+    /// `fire_warmth` law (a building that warms: within `shelter_warmth`).
     pub warms: bool,
     /// A roof: near it counts as sheltered.
     pub roof: bool,
     /// It gives light: those within this many metres stand in lamplight (`a.actor.lit`; 0: none).
+    /// A kind that `burns` gives it only while lit.
     pub lights: f32,
+    /// A fire that burns fuel (a hearth, an oven, a furnace, a lamp): it warms and lights only
+    /// while lit.
+    pub burns: Option<Burns>,
+}
+
+/// A fire that eats fuel (`burns: #{ fuel, rate, warmth, light, holds }`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Burns {
+    /// The item trait that makes something its fuel; the trait's number is the units one item
+    /// gives (`fuel: 1.0` on peat).
+    pub fuel: String,
+    /// Units burnt per game hour while lit.
+    pub rate: f32,
+    /// How far it warms and lights while lit (metres; the kind's `lights` counts too).
+    pub warmth: f32,
+    pub light: f32,
+    /// The most fuel it holds (units; none: no limit).
+    pub holds: Option<f32>,
+}
+
+impl StructureTraits {
+    /// Whether this kind is a fire at all (one that needs no feeding, or one that burns fuel).
+    pub fn fire(&self) -> bool {
+        self.burns.is_some() || (self.warms && !self.roof)
+    }
+
+    /// How far it lights the dark when it burns (its `lights`, or its fire's `burns.light`).
+    pub fn light(&self) -> f32 {
+        self.lights.max(self.burns.as_ref().map_or(0.0, |b| b.light))
+    }
 }
 
 /// Largest script source accepted. `skills.rhai` is about 56 KB; compile time and memory grow
@@ -745,17 +845,22 @@ pub struct Limits {
 }
 
 /// About 2–4× what the rules use on the install samples (`measure_limits`, 2026-11-09): call
-/// depth 3, expression depth 19 in and out of functions, strings 570 characters, arrays 26
-/// entries, maps 30 entries (`laws()` has 29). The string limit bounds what a script builds,
-/// not the text it is handed (a reworked routine arrives as up to 32,000 characters).
-pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 2_048, array: 64, map: 64 };
+/// depth 3, expression depth 19 in and out of functions, strings 570 characters. The string
+/// limit bounds what a script builds, not the text it is handed (a reworked routine arrives as
+/// up to 32,000 characters). Rhai counts the entries of arrays and maps nested in a value
+/// together, so the world's data tables (`items()`, `resources()`, each a list of maps) set the
+/// array and map limits: Cullet's goods over the shipped ones hold about 110 map entries in
+/// `resources()` and 60 array entries (2026-11-11); the limits leave room for a world about
+/// four times that.
+pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 2_048, array: 256, map: 512 };
 
-fn engine() -> Engine {
-    engine_with(LIMITS)
+fn engine(t: &Rc<RefCell<Tables>>) -> Engine {
+    engine_with(LIMITS, t)
 }
 
-fn engine_with(l: Limits) -> Engine {
+fn engine_with(l: Limits, t: &Rc<RefCell<Tables>>) -> Engine {
     let mut e = Engine::new_raw();
+    register_tables(&mut e, t);
     rhai::packages::StandardPackage::new().register_into_engine(&mut e);
     e.set_max_operations(l.operations);
     e.set_max_call_levels(l.call_levels);
@@ -781,8 +886,8 @@ fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
     let skills: Vec<String> = s.shapes.names().map(String::from).chain(s.skills.names().map(String::from)).collect();
     let kinds: Vec<String> = crate::catalog::CREATURES.iter().map(|k| k.to_string()).collect();
     let items: Vec<String> = s.skills.items.iter().map(|i| i.name.clone()).collect();
-    let structures: Vec<String> = crate::catalog::STRUCTURES.iter().map(|k| k.to_string()).collect();
-    let resources: Vec<String> = crate::catalog::RESOURCES.iter().map(|(k, _)| k.to_string()).collect();
+    let structures: Vec<String> = s.skills.structures.iter().map(|k| k.name.clone()).collect();
+    let resources: Vec<String> = s.skills.resources.iter().map(|k| k.name.clone()).collect();
     let mut out = Vec::new();
     let mut add = |f: &str, d: &[String]| {
         if s.has(f) {
@@ -829,7 +934,8 @@ impl Scripts {
         }
         let day_ms = day_ms.max(24);
         let hour_ms = day_ms as f64 / 24.0;
-        let mut engine = engine();
+        let tables: Rc<RefCell<Tables>> = Default::default();
+        let mut engine = engine(&tables);
         register_day(&mut engine, hour_ms);
         let mut ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
         // A script from before a required law existed runs on the shipped script's functions,
@@ -849,7 +955,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), source: source.to_string(), law_errors: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -858,10 +964,15 @@ impl Scripts {
                 return Err(format!("script must define `{f}(a)`"));
             }
         }
+        // The data tables first: specs and laws may read them (`names_of("recipes")`).
+        s.read_tables()?;
         s.shapes = s.read_shapes()?;
         s.shows = s.read_shows()?;
         let mut skills = s.read_specs(&declared)?;
         skills.items = s.read_items()?;
+        skills.resources = s.kinds_of("resources");
+        skills.structures = s.kinds_of("structures");
+        skills.techniques = s.read_know_how()?;
         s.skills = std::sync::Arc::new(skills);
         s.structures = s.read_structures()?;
         s.laws = s.read_laws()?;
@@ -993,49 +1104,123 @@ impl Scripts {
         &self.skills
     }
 
-    /// The world's items and their traits (`items()`: a list of maps with a `name`), read once.
-    fn read_items(&self) -> Result<Vec<crate::catalog::ItemSpec>, String> {
-        let a = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "items", ()).map_err(|e| format!("items: {e}"))?.try_cast::<Array>().ok_or("items must return a list of maps")?;
-        let mut out: Vec<crate::catalog::ItemSpec> = Vec::new();
-        for d in a {
-            let m = d.try_cast::<Map>().ok_or("items: each item is a map with a name")?;
-            let name = m.get("name").and_then(|v| v.clone().into_string().ok()).filter(|n| !n.is_empty()).ok_or("items: each item has a name")?;
-            if out.iter().any(|i| i.name == name) {
-                return Err(format!("items: `{name}` twice"));
+    /// The data tables (`items()`, `structures()`, `resources()`, `know_how()`, `recipes()`):
+    /// each a list of maps with a distinct `name`, read once.
+    fn read_tables(&self) -> Result<(), String> {
+        let mut t = Tables::default();
+        for f in TABLES {
+            if !self.has(f) {
+                if REQUIRED_LAWS.contains(f) {
+                    return Err(format!("script must define `{f}()`"));
+                }
+                continue;
             }
-            let traits = m.iter().filter(|(k, _)| k.as_str() != "name").map(|(k, v)| (k.to_string(), v.to_string())).collect();
-            out.push(crate::catalog::ItemSpec { name, traits });
+            let a = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Array>().ok_or_else(|| format!("{f} must return a list of maps"))?;
+            let (mut names, mut by) = (Vec::new(), HashMap::new());
+            for d in a {
+                let m = d.try_cast::<Map>().ok_or_else(|| format!("{f}: each entry is a map with a name"))?;
+                let name = m.get("name").and_then(|v| v.clone().into_string().ok()).filter(|n| !n.is_empty()).ok_or_else(|| format!("{f}: each entry has a name"))?;
+                if by.contains_key(&name) {
+                    return Err(format!("{f}: `{name}` twice"));
+                }
+                names.push(name.clone());
+                by.insert(name, m);
+            }
+            t.by.insert(f.to_string(), (names, by));
+        }
+        *self.tables.borrow_mut() = t;
+        Ok(())
+    }
+
+    /// The data tables, as the rules read them.
+    pub fn tables(&self) -> std::cell::Ref<'_, Tables> {
+        self.tables.borrow()
+    }
+
+    /// The entries of a table with their traits as words (a trait that is true reads "true").
+    fn kinds_of(&self, table: &str) -> Vec<crate::catalog::KindSpec> {
+        let t = self.tables.borrow();
+        t.names(table)
+            .iter()
+            .map(|n| {
+                let traits = t.entry(table, n).map(|m| m.iter().filter(|(k, _)| k.as_str() != "name").map(|(k, v)| (k.to_string(), v.to_string())).collect()).unwrap_or_default();
+                crate::catalog::KindSpec { name: n.clone(), traits }
+            })
+            .collect()
+    }
+
+    /// The world's items and their traits (`items()`), read once.
+    fn read_items(&self) -> Result<Vec<crate::catalog::ItemSpec>, String> {
+        Ok(self.kinds_of("items").into_iter().map(|k| crate::catalog::ItemSpec { name: k.name, traits: k.traits }).collect())
+    }
+
+    /// The world's techniques (`know_how()`: a `name` and a `help`, what one is told it is).
+    fn read_know_how(&self) -> Result<Vec<crate::catalog::TechniqueSpec>, String> {
+        let t = self.tables.borrow();
+        let mut out = Vec::new();
+        for n in t.names("know_how") {
+            let m = t.entry("know_how", n).expect("listed");
+            let help = match m.get("help") {
+                None => String::new(),
+                Some(v) => v.clone().into_string().map_err(|_| format!("know_how: the help of `{n}` must be a text"))?,
+            };
+            out.push(crate::catalog::TechniqueSpec { name: n.clone(), help });
         }
         Ok(out)
     }
 
-    /// What each kind of structure does for those near it (`structure_traits()`), read once.
+    /// What each kind of structure does for those near it (its traits in `structures()`), read
+    /// once. A script from before structures were listed (2026-11-11) also has
+    /// `structure_traits()`: its `warms` and `roof` stand over the listed kinds'.
     fn read_structures(&self) -> Result<HashMap<String, StructureTraits>, String> {
-        let m = self.law_map("structure_traits")?;
+        let t = self.tables.borrow();
         let mut out = HashMap::new();
-        for (k, v) in m {
-            let t = v.try_cast::<Map>().ok_or_else(|| format!("structure_traits: `{k}` must be a map of traits"))?;
-            if let Some(x) = t.keys().find(|x| !["warms", "roof", "lights"].contains(&x.as_str())) {
-                return Err(format!("structure_traits: unknown trait `{x}` of `{k}` (traits are warms, roof, lights)"));
-            }
-            let flag = |x: &str| t.get(x).is_some_and(|v| v.as_bool().unwrap_or(false));
-            let lights = match t.get("lights") {
+        for k in t.names("structures") {
+            let m = t.entry("structures", k).expect("listed");
+            let flag = |x: &str| -> Result<bool, String> { m.get(x).map_or(Ok(false), |v| v.as_bool().map_err(|_| format!("structures: `{x}` of `{k}` must be true or false"))) };
+            let lights = match m.get("lights") {
                 None => 0.0,
-                Some(v) => number(v).ok_or_else(|| format!("structure_traits: `{k}.lights` must be a number of metres"))?.clamp(0.0, 64.0) as f32,
+                Some(v) => number(v).ok_or_else(|| format!("structures: `lights` of `{k}` must be a number of metres"))?.clamp(0.0, 64.0) as f32,
             };
-            out.insert(k.to_string(), StructureTraits { warms: flag("warms"), roof: flag("roof"), lights });
+            let burns = match m.get("burns") {
+                None => None,
+                Some(v) => Some(burns_of(k, v)?),
+            };
+            out.insert(k.clone(), StructureTraits { warms: flag("warms")?, roof: flag("roof")?, lights, burns });
+        }
+        if self.has("structure_traits") {
+            let legacy = self.law_map("structure_traits")?;
+            for (k, v) in legacy {
+                let m = v.try_cast::<Map>().ok_or_else(|| format!("structure_traits: `{k}` must be a map of traits"))?;
+                if let Some(x) = m.keys().find(|x| !["warms", "roof", "lights"].contains(&x.as_str())) {
+                    return Err(format!("structure_traits: unknown trait `{x}` of `{k}` (traits are warms, roof, lights)"));
+                }
+                let flag = |x: &str| m.get(x).is_some_and(|v| v.as_bool().unwrap_or(false));
+                let e = out.entry(k.to_string()).or_default();
+                (e.warms, e.roof) = (flag("warms"), flag("roof"));
+                if let Some(v) = m.get("lights") {
+                    e.lights = number(v).ok_or_else(|| format!("structure_traits: `{k}.lights` must be a number of metres"))?.clamp(0.0, 64.0) as f32;
+                }
+            }
         }
         Ok(out)
     }
 
     /// What a kind of structure does for those near it.
-    pub fn structure(&self, kind: &str) -> StructureTraits {
-        self.structures.get(kind).copied().unwrap_or_default()
+    pub fn structure(&self, kind: &str) -> &StructureTraits {
+        static NONE: StructureTraits = StructureTraits { warms: false, roof: false, lights: 0.0, burns: None };
+        self.structures.get(kind).unwrap_or(&NONE)
     }
 
-    /// The farthest any kind of structure gives light (0: none does).
+    /// How far any structure warms or shelters (the farthest the engine looks for one).
+    pub fn warmth_reach(&self, laws: &Laws) -> f32 {
+        self.structures.values().fold(laws.fire_warmth.max(laws.shelter_warmth), |r, t| r.max(t.burns.as_ref().map_or(0.0, |b| b.warmth)))
+    }
+
+    /// The farthest any kind of structure gives light (0: none does): its `lights`, or a fire's
+    /// `burns.light`.
     pub fn widest_light(&self) -> f32 {
-        self.structures.values().map(|t| t.lights).fold(0.0, f32::max)
+        self.structures.values().map(|t| t.light()).fold(0.0, f32::max)
     }
 
     /// A list of words a law of one name gives (`occupation_knows("fisher")`); empty when the
@@ -1672,6 +1857,23 @@ fn number(d: &Dynamic) -> Option<f64> {
 pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
+/// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
+/// light: <m>, holds: <units> }` (warmth, light and holds optional).
+fn burns_of(kind: &str, v: &Dynamic) -> Result<Burns, String> {
+    let m = v.clone().try_cast::<Map>().ok_or_else(|| format!("structures: `burns` of `{kind}` is a map (fuel, rate, warmth, light, holds)"))?;
+    if let Some(x) = m.keys().find(|x| !["fuel", "rate", "warmth", "light", "holds"].contains(&x.as_str())) {
+        return Err(format!("structures: unknown `burns` trait `{x}` of `{kind}` (they are fuel, rate, warmth, light, holds)"));
+    }
+    let fuel = m.get("fuel").and_then(|v| v.clone().into_string().ok()).filter(|f| !f.is_empty()).ok_or_else(|| format!("structures: `burns.fuel` of `{kind}` names the item trait it burns"))?;
+    let rate = m.get("rate").and_then(number).filter(|r| *r > 0.0 && r.is_finite()).ok_or_else(|| format!("structures: `burns.rate` of `{kind}` is the fuel units it burns a game hour (> 0)"))? as f32;
+    let metres = |x: &str| -> Result<f32, String> { m.get(x).map_or(Ok(0.0), |v| number(v).filter(|n| *n >= 0.0 && *n <= 64.0).map(|n| n as f32).ok_or_else(|| format!("structures: `burns.{x}` of `{kind}` is metres (0..64)"))) };
+    let holds = match m.get("holds") {
+        None => None,
+        Some(v) => Some(number(v).filter(|n| *n > 0.0).ok_or_else(|| format!("structures: `burns.holds` of `{kind}` is the most units it holds (> 0)"))? as f32),
+    };
+    Ok(Burns { fuel, rate, warmth: metres("warmth")?, light: metres("light")?, holds })
+}
+
 fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
     let f = format!("{skill}_spec");
     if let Some(k) = m.keys().find(|k| !SPEC_TRAITS.contains(&k.as_str())) {
@@ -1882,6 +2084,14 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "seize" => Effect::Seize { item: s("item"), qty: qty()? },
         "store" => Effect::Store { item: s("item"), qty: qty()? },
         "take" => Effect::Take { item: s("item"), qty: qty()? },
+        "fuel" => Effect::Fuel { item: s("item"), qty: qty()? },
+        "burn" => {
+            let u = n("units");
+            if !(u > 0.0 && u.is_finite()) {
+                return Err("burn needs units > 0".into());
+            }
+            Effect::Burn { units: u as f32 }
+        },
         "build" => Effect::Build { kind: s("kind") },
         "bond" => Effect::Bond,
         "signal" => Effect::Signal,
@@ -1981,12 +2191,13 @@ mod tests {
         let names: Vec<String> = s.skills().items.iter().map(|i| i.name.clone()).collect();
         assert_eq!(names.join(" "), "berries fish meat cooked_fish cooked_meat wood stone fiber spear hide cloak torch tablet clay axe pick smoked_fish smoked_meat net basket bow arrow salve leather armor mark");
         let with = |f: fn(&crate::catalog::SkillSpec) -> bool| s.skills().iter().filter(|k| f(k)).map(|k| k.name.clone()).collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>().join(" ");
-        assert_eq!(with(|k| k.latch), "build cook craft eat experiment gather give plant read rest sleep store take teach write");
-        assert_eq!(with(|k| k.notable), "attack build conceive cook craft give store take threaten yield");
+        // `feed` and `make` (2026-11-11) are there for a world with fires that burn fuel and recipes.
+        assert_eq!(with(|k| k.latch), "build cook craft eat experiment feed gather give make plant read rest sleep store take teach write");
+        assert_eq!(with(|k| k.notable), "attack build conceive cook craft feed give make store take threaten yield");
         assert_eq!(with(|k| k.moving), "eat signal wait");
         assert_eq!(with(|k| k.moment), "flee follow graze rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
-        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (StructureTraits { warms: true, roof: true, lights: 0.0 }, StructureTraits { warms: true, roof: false, lights: 0.0 }, StructureTraits { warms: false, roof: true, lights: 0.0 }, StructureTraits::default()));
+        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits::default()));
         assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
         assert_eq!((s.num_of("kept_spoil", "storage", 0.0), s.num_of("planted_max", "berry_bush", 0.0)), (1.0 / 3.0, 5.0));
         assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.num_of("remains_s", "deer", 0.0), s.num_of("dodge_speed", "person", 0.0)), (55.0, 1.8, 1800.0, 5.2));
@@ -2300,6 +2511,97 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         let refused = |extra: &str| Scripts::new(&format!("{}\n{extra}", include_str!("../../scripts/skills.rhai"))).err().unwrap_or_default();
         assert!(refused(r#"fn zap_combat() { #{ aim: "point" } }"#).contains("zap_missile"));
         assert!(refused(r#"fn zap_combat() { #{ aim: "creature", flying: true } }"#).contains("unknown trait `flying`"));
+    }
+
+    /// Cullet's laws, goods among them (`seeds/worlds/cullet/laws.rhai`), over the shipped rules.
+    fn cullet() -> Scripts {
+        let src = crate::floors::compose(include_str!("../../scripts/skills.rhai"), include_str!("../../seeds/worlds/cullet/laws.rhai")).unwrap();
+        Scripts::new(&src).expect("cullet laws compile")
+    }
+
+    /// A person at a structure, carrying `inv` and knowing `knows`; the structure lit with
+    /// `fuel` units left (a campfire's facts say nothing of fuel).
+    fn at_fire(kind: &str, lit: bool, fuel: f32, inv: &[(&str, u32)], knows: &[&str], skill: &str, item: &str, qty: u32) -> SkillCtx {
+        SkillCtx {
+            actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), hunger: 40.0, energy: 80.0, inv: inv.iter().map(|(k, n)| (k.to_string(), *n)).collect(), knows: knows.iter().map(|k| k.to_string()).collect(), ..Default::default() },
+            target: TargetFacts { class: "structure".into(), id: 7, kind: kind.into(), dist: 1.0, lit, fuel, ..Default::default() },
+            item: item.into(),
+            qty,
+            skill: skill.into(),
+            ..Default::default()
+        }
+    }
+
+    /// Goods are data with traits, and the rules match by trait: a fire burns whatever has its
+    /// fuel trait, glass takes any alkali, food is what has nutrition. A fire is lit only while
+    /// it holds fuel; feeding an out one takes knowing fire; recipes needing heat need it burning
+    /// and draw their fuel from it. The shipped world offers neither feeding nor making (it has
+    /// no such fires or recipes), and installs with Cullet's goods pass the install checks.
+    #[test]
+    fn goods_are_data_matched_by_trait_and_fires_eat_fuel() {
+        let shipped = scripts();
+        let s = cullet();
+        let r = s.validate().unwrap();
+        let (f, n) = r.heaviest().unwrap();
+        assert!(n * 2 <= LIMITS.operations, "{f} takes {n} operations; the limit is {}", LIMITS.operations);
+        // `--nocapture` prints what the goods' laws cost (docs/WORLD_RULES.md, "Goods, recipes and fuel").
+        let base = shipped.validate().unwrap();
+        for k in ["feed_check", "feed_done", "make_check", "make_done", "make_duration", "cook_check", "smoke_check", "gather_duration", "store_check", "eat_check", "source_of"] {
+            eprintln!("ops {k:16} shipped {:>5} cullet {:>5}", base.ops.get(k).copied().unwrap_or(0), r.ops.get(k).copied().unwrap_or(0));
+        }
+        eprintln!("heaviest: shipped {:?}, cullet {:?}; calls {} / {}", base.heaviest(), r.heaviest(), base.calls, r.calls);
+        let listed = |s: &Scripts, k: &str| s.skills().get(k).unwrap().listed;
+        assert!(!listed(&shipped, "feed") && !listed(&shipped, "make") && listed(&s, "feed") && listed(&s, "make"));
+        assert_eq!(s.skills().get("make").unwrap().items, ["ash", "glass", "smoked_fish", "smoked_meat", "baked_roots", "lamp_oil"]);
+        assert!(s.skills().resources.iter().any(|k| k.name == "peat_bank" && k.traits["yields"] == "peat"));
+        assert_eq!(s.structure("furnace").burns.as_ref().map(|b| (b.fuel.as_str(), b.rate, b.holds)), Some(("fuel", 3.0, Some(40.0))));
+        assert!(s.structure("hearth").fire() && s.structure("campfire").fire() && !s.structure("house").fire() && !s.structure("storage").fire());
+        let go = |c: &SkillCtx| s.check(&c.skill, c).and_then(|_| s.done(&c.skill, c));
+        // Feeding: peat and wood both burn in a hearth (each has the `fuel` trait); oil does not.
+        assert_eq!(go(&at_fire("hearth", false, 0.0, &[("peat", 3)], &["fire"], "feed", "peat", 3)).unwrap(), vec![Effect::Fuel { item: "peat".into(), qty: 3 }]);
+        assert_eq!(go(&at_fire("hearth", true, 2.0, &[("wood", 2), ("kelp", 1)], &[], "feed", "fuel", 1)).unwrap(), vec![Effect::Fuel { item: "wood".into(), qty: 1 }]);
+        assert!(go(&at_fire("hearth", true, 2.0, &[("lamp_oil", 1)], &[], "feed", "lamp_oil", 1)).unwrap_err().contains("not fuel for the hearth (it burns wood or peat)"));
+        assert_eq!(go(&at_fire("lamp", false, 0.0, &[("lamp_oil", 1)], &["fire"], "feed", "fuel", 1)).unwrap(), vec![Effect::Fuel { item: "lamp_oil".into(), qty: 1 }]);
+        // An out fire is lit again only by someone who knows fire; a lit one by anyone; a fire
+        // holds what it holds; a campfire burns no fuel.
+        assert!(go(&at_fire("hearth", false, 0.0, &[("peat", 3)], &[], "feed", "peat", 1)).unwrap_err().contains("is out, and you don't know how to light a fire"));
+        assert!(go(&at_fire("hearth", true, 1.0, &[("peat", 3)], &[], "feed", "peat", 1)).is_ok());
+        assert!(go(&at_fire("hearth", true, 11.0, &[("peat", 3)], &["fire"], "feed", "peat", 2)).unwrap_err().contains("holds at most 12 units"));
+        assert_eq!(go(&at_fire("campfire", true, 0.0, &[("wood", 3)], &["fire"], "feed", "wood", 1)).unwrap_err(), "the campfire burns no fuel");
+        // Kelp burnt to ash at any burning fire, a campfire too, not at an out hearth.
+        let ash = vec![Effect::Remove { item: "kelp".into(), qty: 4 }, Effect::Add { item: "ash".into(), qty: 1 }, Effect::Vitals { hp: 0.0, hunger: 0.0, energy: -1.0 }];
+        assert_eq!(go(&at_fire("hearth", true, 3.0, &[("kelp", 5)], &[], "make", "ash", 0)).unwrap(), ash);
+        assert_eq!(go(&at_fire("campfire", false, 0.0, &[("kelp", 4)], &[], "make", "ash", 0)).unwrap(), ash);
+        assert!(go(&at_fire("hearth", false, 0.0, &[("kelp", 4)], &[], "make", "ash", 0)).unwrap_err().contains("is out: feed it first"));
+        assert!(go(&at_fire("hearth", true, 3.0, &[("kelp", 3)], &[], "make", "ash", 0)).unwrap_err().starts_with("ash takes 4 kelp (kelp: gather it at a kelp_bed"));
+        // Glass: an alkali and sand at a burning furnace, with a unit of its fuel, by those who
+        // know glassmaking.
+        let glass = at_fire("furnace", true, 3.0, &[("ash", 1), ("sand", 3)], &["glassmaking"], "make", "glass", 0);
+        assert_eq!(go(&glass).unwrap(), vec![Effect::Remove { item: "ash".into(), qty: 1 }, Effect::Remove { item: "sand".into(), qty: 2 }, Effect::Burn { units: 1.0 }, Effect::Add { item: "glass".into(), qty: 1 }, Effect::Vitals { hp: 0.0, hunger: 0.0, energy: -1.0 }]);
+        assert!(go(&SkillCtx { target: TargetFacts { fuel: 0.5, ..glass.target.clone() }, ..glass.clone() }).unwrap_err().contains("too little fuel left"));
+        assert!(go(&SkillCtx { target: TargetFacts { lit: false, fuel: 0.0, ..glass.target.clone() }, ..glass.clone() }).unwrap_err().contains("is out"));
+        assert_eq!(go(&SkillCtx { target: TargetFacts { kind: "hearth".into(), ..glass.target.clone() }, ..glass.clone() }).unwrap_err(), "glass is made at a furnace");
+        assert!(go(&SkillCtx { actor: ActorFacts { knows: vec![], ..glass.actor.clone() }, ..glass.clone() }).unwrap_err().starts_with("you don't know how to make glass"));
+        assert_eq!(s.text_of("source_of", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it (knowing glassmaking)");
+        // Any alkali serves: a world's soda is used like ash, by the trait alone.
+        let overlay = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"glass\" },", "#{ name: \"glass\" }, #{ name: \"soda\", alkali: true },");
+        let soda = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), &overlay).unwrap()).unwrap();
+        let c = at_fire("furnace", true, 3.0, &[("soda", 2), ("sand", 2)], &["glassmaking"], "make", "glass", 0);
+        assert_eq!(soda.check("make", &c).and_then(|_| soda.done("make", &c)).unwrap()[0], Effect::Remove { item: "soda".into(), qty: 1 });
+        // Turning an item by its trait: fish smoked over peat at a smokehouse, roots baked.
+        assert_eq!(go(&at_fire("smokehouse", true, 4.0, &[("fish", 2)], &["smoking"], "make", "smoked_fish", 0)).unwrap()[..3], [Effect::Remove { item: "fish".into(), qty: 1 }, Effect::Burn { units: 0.5 }, Effect::Add { item: "smoked_fish".into(), qty: 1 }]);
+        assert_eq!(go(&at_fire("oven", true, 4.0, &[("roots", 1)], &[], "make", "baked_roots", 0)).unwrap()[..3], [Effect::Remove { item: "roots".into(), qty: 1 }, Effect::Burn { units: 0.25 }, Effect::Add { item: "baked_roots".into(), qty: 1 }]);
+        assert!(go(&at_fire("oven", true, 4.0, &[("roots", 1)], &[], "make", "glass_beads", 0)).unwrap_err().starts_with("no one makes glass_beads here"));
+        // Cooking works at a burning hearth as at a campfire, not at an out one.
+        assert!(go(&at_fire("hearth", true, 1.0, &[("fish", 1)], &["cooking"], "cook", "fish", 1)).is_ok());
+        assert!(go(&at_fire("hearth", false, 0.0, &[("fish", 1)], &["cooking"], "cook", "fish", 1)).unwrap_err().contains("is out"));
+        // Food is what has nutrition: roots feed, peat does not.
+        assert!(go(&at_fire("hearth", true, 1.0, &[("roots", 1)], &[], "eat", "roots", 1)).is_ok());
+        assert_eq!(go(&at_fire("hearth", true, 1.0, &[("peat", 1)], &[], "eat", "peat", 1)).unwrap_err(), "peat is not food");
+        // The minds' world text names the fires and the recipes; the shipped world's does not.
+        let text = s.world_text(&[]);
+        assert!(text.contains("a furnace burns 3 fuel a game hour (wood or peat)") && text.contains("glass: make it at a furnace"), "{text}");
+        assert!(!shipped.world_text(&[]).contains("Fires that burn fuel"));
     }
 
     /// A skill added only in the script (its spec and rules) is one a graph, an act and a
