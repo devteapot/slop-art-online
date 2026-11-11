@@ -328,7 +328,7 @@ class Batches(unittest.TestCase):
                 with open(os.path.join(out, n), "rb") as f:
                     b = f.read()
                 blob += gzip.decompress(b) if n.endswith(".gz") else b
-            for secret in (MISTRAL, NEO_PW, "/home/adaq", "Quillfeather", "dummy-local-only", HOST):
+            for secret in (MISTRAL, NEO_PW, "/home/adaq", "Quillfeather", "dummy-local-only", HOST, "/home/a…"):
                 self.assertNotIn(secret.encode(), blob, secret)
             be = store.LocalBackend(os.path.join(t, "remote"))
             be.publish("runs", out, store.unit_path("batch", "l9", "test"), "batch l9")

@@ -1484,12 +1484,16 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
     man = {"format": FORMAT, "unit": "batch", "name": name, "machine": machine,
            "source": scrubber.scrub_text(tilde(src), Findings()),
            "packed": _dt.datetime.now().isoformat(timespec="seconds"), "tool_commit": _git("rev-parse", "--short", "HEAD"),
-           "decisions": scrubber.decisions, "redactions": totals.as_dict(),
+           "decisions": scrubber.decisions,
+           # counts only: even masked examples ("/home/g…") are not for publication
+           "redactions": {c: v["count"] for c, v in totals.as_dict().items()},
            "files": [{k: r[k] for k in ("path", "bytes", "status", "reason")} |
                      {"path": scrubber.scrub_text(r["path"], Findings()),
                       "redactions": {c: v["count"] for c, v in r["findings"].items()}} for r in rows],
            "models": _model_counts(calls),
-           "dropped": scrubber.dropped,
+           "dropped": [{"file": scrubber.scrub_text(d["file"], Findings()), "where": d["where"],
+                        "why": "quotes an owner line" if d["why"].startswith("quotes") else "repeats an owner line"}
+                       for d in scrubber.dropped],
            "counts": {"instances": len(instances), "calls": len(calls), "rows": len(streams),
                       "prompts": len(prompts)}}
     with open(os.path.join(out_dir, "MANIFEST.json"), "w", encoding="utf-8") as f:
@@ -1571,7 +1575,7 @@ def pack_motion(src, out_dir, scrubber, machine=None):
         files.append({"path": f"motion/raw/{base}", "sha256": _sha(data[rel]), "bytes": len(data[rel])})
     man = {"format": FORMAT, "unit": "motion-library", "machine": machine, "files": files,
            "refused": [r["path"] for r in rows if r["status"] == "refused"],
-           "redactions": totals.as_dict(), "packed": _dt.datetime.now().isoformat(timespec="seconds")}
+           "redactions": {c: v["count"] for c, v in totals.as_dict().items()}, "packed": _dt.datetime.now().isoformat(timespec="seconds")}
     with open(os.path.join(out_dir, "motion", "MANIFEST.json"), "w") as f:
         json.dump(man, f, indent=1)
     return man
