@@ -899,7 +899,10 @@ pub struct JoinRequest {
     pub at_ms: u64,
 }
 
-/// A standing trade proposal (expires after three minutes).
+/// A standing trade proposal: `from` gives `give_qty` `give_item` to `to` for `want_qty`
+/// `want_item`. It can be accepted until `until_ms` (`at_ms` plus the `trade_window_s` law
+/// when it was made); 0 on rows made before the column, which use the law's window.
+/// Indexed by `to` for `my_offers` (a point read per player) and the addressee's mind.
 #[spacetimedb::table(accessor = trade_offer)]
 pub struct TradeOffer {
     #[primary_key]
@@ -907,12 +910,27 @@ pub struct TradeOffer {
     pub id: u64,
     #[index(btree)]
     pub from: u32,
+    #[index(btree)]
     pub to: u32,
     pub give_item: String,
     pub give_qty: u32,
     pub want_item: String,
     pub want_qty: u32,
     pub at_ms: u64,
+    #[default(0u64)]
+    pub until_ms: u64,
+}
+
+impl TradeOffer {
+    /// When the offer can no longer be accepted (the stored end, or for an older row the
+    /// law's window from when it was made).
+    pub fn ends_ms(&self, window_s: f32) -> u64 {
+        if self.until_ms != 0 {
+            self.until_ms
+        } else {
+            self.at_ms + (window_s * 1000.0) as u64
+        }
+    }
 }
 
 /// A couple expecting a child, born at `due_ms`.

@@ -1,6 +1,6 @@
 # What a player perceives by facing
 
-Since 2026-11-11 (`fov-1`; docs/PERCEPTION.md, "The field of view (sixth change)", "Heard, not seen"). While the world's `fov_on` law is on, the player's perceived set follows its body's facing, and what it hears but does not see comes through `heard_sounds` (`key`, `kind`, `bearing` 0 north clockwise, `band` 0 near / 1 close / 2 far), with no id. `scripts/fov.py` drives it with the player identity; admin `place_at`, `set_behavior` and `set_world_law` set the scene.
+Since 2026-11-11 (`fov-1`; docs/PERCEPTION.md, "The field of view (seventh change)", "Heard, not seen"). While the world's `fov_on` law is on, the player's perceived set follows its body's facing, and what it hears but does not see comes through `heard_sounds` (`key`, `kind`, `bearing` 0 north clockwise, `band` 0 near / 1 close / 2 far), with no id. `scripts/fov.py` drives it with the player identity; admin `place_at`, `set_behavior` and `set_world_law` set the scene.
 
 ## Sub-features
 

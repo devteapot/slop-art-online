@@ -89,7 +89,7 @@ No new whole-World scan was added to a routine action. The band refresh scans `f
 
 ### Backstabs when sight depends on facing
 
-Since 2026-11-11 (`fov-1`, [perception](PERCEPTION.md#the-field-of-view-sixth-change)). With the world's `fov_on` law on, a blow from behind can land unseen. This is part of the switch, accepted with it. A guard already covers only the front (±75°). What changes is whether the one struck sees the windup coming.
+Since 2026-11-11 (`fov-1`, [perception](PERCEPTION.md#the-field-of-view-seventh-change)). With the world's `fov_on` law on, a blow from behind can land unseen. This is part of the switch, accepted with it. A guard already covers only the front (±75°). What changes is whether the one struck sees the windup coming.
 
 - **The rule.** A graph's `{"threatened": true}` holds, while the field is on, only when the one winding up is seen by the sight rule (`living_rules::sight::sees`). A player sees a windup only through its perceived set: the attacker's `fighter` row reaches it in `seen_fighters` only when the attacker is in its scene. With the field off, `threatened` is as before: any hostile windup aimed at me, seen or not.
 - **When a blow from behind lands unseen, with the shipped values** (near ring `fov_near_m` 3 m, `fov_near_dark_m` 2 m in the dark; side vision out to 110° at a third of sight; full sight within 70°). The one winding up is unseen when it is more than 110° off the target's facing and outside the near ring. With sight 11 m by day it is also unseen between 70° and 110° when farther than a third of sight (3.7 m by day; 2 m at night, where the near ring decides). A player already perceiving the attacker keeps it 10° and 1 m longer.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes (default: all)
+  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes support (default: all but support)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -196,7 +196,57 @@ def themes(run, c):
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
 
 
-SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes}
+# Where the support scenario stands the player on Cullet (land metres) and what holds it up there:
+# a kit fixture's file (part of its path) and whether it is tall enough to be an occluder, so the
+# camera's fade (`envs::cutaway`) considers it at all.
+SUPPORTS = [
+    ("stairs", 410.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True),
+    ("terrace", 568.0, 720.8, "marver_terrace/", False),
+    ("quay", 450.0, 782.6, "quay/", False),
+    # At the upper level's edge above a retaining wall: the drop's tiles keep you 1-1.5 m from
+    # it, so it is beside you, never under you; it may fade when it stands between the camera
+    # and you, as anything that hides you does.
+    ("wall", 440.0, 751.6, "retaining_wall/wall_005", False),
+]
+
+
+def support(run, c):
+    """What I stand on or step onto never fades (the owner's Cullet walk: the flight dithered away
+    while climbing it). Needs a Cullet world (`--seed cullet`) and the cutaway's debug log."""
+    s = "support"
+    plan = "ready;wait:3"
+    for name, *_ in SUPPORTS:
+        plan += f";sync:{name};wait:6;shot:{name};dump:{name}"
+    plan += ";quit"
+    syncs = [f"{name}=place_at|{{me}}|{x}|{y}" for name, x, y, *_ in SUPPORTS]
+    old = os.environ.get("RUST_LOG")
+    os.environ["RUST_LOG"] = "info,wgpu=warn,naga=warn,living_game::envs=debug"
+    try:
+        out, code, text = drive(run, s, plan, syncs=syncs)
+    finally:
+        if old is None:
+            os.environ.pop("RUST_LOG")
+        else:
+            os.environ["RUST_LOG"] = old
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    L = log(out)
+    # The log in stretches, one per spot: from its sync step to the next.
+    parts = re.split(r"live script: sync:(\w+)", L)
+    seg = {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
+    for name, x, y, part, occluder in SUPPORTS:
+        t = seg.get(name, "")
+        held = set(re.findall(r"cutaway: (\S+) holds me up", t))
+        faded = re.findall(r"cutaway: (\S+) fades to", t)
+        mine = [f for f in held if part in f]
+        if occluder:
+            c.check(s, f"{name}: the cutaway finds what holds me up ({part})", bool(mine), f"held {sorted(held)}")
+        # What held me up there, and the spot's own support, never fades there.
+        bad = [f for f in faded if f in held or (not occluder and part in f)]
+        c.check(s, f"{name}: nothing under or beside my feet fades", t != "" and not bad, f"faded {bad}" if t else "no log for this spot")
+    c.check(s, "photographs of each spot", all(os.path.exists(os.path.join(out, f"{n}.png")) for n, *_ in SUPPORTS))
+
+
+SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "support": support}
 
 
 def main():
@@ -207,7 +257,8 @@ def main():
     if not f"verify-{a.run}".startswith("verify-ui-"):
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
-    for name in a.scenarios or list(SCENARIOS):
+    # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
+    for name in a.scenarios or [k for k in SCENARIOS if k != "support"]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)

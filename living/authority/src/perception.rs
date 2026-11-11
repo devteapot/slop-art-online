@@ -98,6 +98,26 @@ pub struct SeenCharacter {
     pub max_hp: f32,
 }
 
+/// A standing trade offer my living character is a party to (`my_offers`). `from` gives
+/// `give_qty` `give_item` to `to` for `want_qty` `want_item`; both are character ids, which
+/// the client names through `seen_characters` (no name here: the caller may not know it).
+/// `incoming` is true when it is addressed to me (I may `accept` it toward `from`), false
+/// when it is mine. It can be accepted until `until_ms` (world time, ms since the Unix epoch,
+/// the clock of `experience.at_ms`); the row goes within a second after.
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct MyOffer {
+    pub id: u64,
+    pub incoming: bool,
+    pub from: u32,
+    pub to: u32,
+    pub give_item: String,
+    pub give_qty: u32,
+    pub want_item: String,
+    pub want_qty: u32,
+    pub at_ms: u64,
+    pub until_ms: u64,
+}
+
 // ---- the one sight rule ------------------------------------------------------------------
 
 /// The one sight rule: whether `observer`, its eye at `eye` and its body facing `heading`, sees
@@ -972,4 +992,27 @@ pub fn my_inventory(ctx: &ViewContext) -> Vec<Inventory> {
 #[spacetimedb::view(accessor = my_know_how, public, primary_key = id)]
 pub fn my_know_how(ctx: &ViewContext) -> Vec<KnowHow> {
     living(ctx).map(|c| ctx.db.know_how().actor().filter(c.id).collect()).unwrap_or_default()
+}
+
+/// The trade offers addressed to my living character, and the one it has made (a character
+/// has at most one standing offer). Two point reads on `trade_offer` (`to`, `from`), so it
+/// re-runs only when an offer to or from me is written or goes.
+#[spacetimedb::view(accessor = my_offers, public, primary_key = id)]
+pub fn my_offers(ctx: &ViewContext) -> Vec<MyOffer> {
+    let Some(c) = living(ctx) else { return Vec::new() };
+    let row = |o: TradeOffer, incoming: bool| MyOffer {
+        id: o.id,
+        incoming,
+        from: o.from,
+        to: o.to,
+        give_item: o.give_item,
+        give_qty: o.give_qty,
+        want_item: o.want_item,
+        want_qty: o.want_qty,
+        at_ms: o.at_ms,
+        until_ms: o.until_ms,
+    };
+    let to_me = ctx.db.trade_offer().to().filter(c.id).map(|o| row(o, true));
+    let mine = ctx.db.trade_offer().from().filter(c.id).filter(|o| o.to != c.id).map(|o| row(o, false));
+    to_me.chain(mine).collect()
 }

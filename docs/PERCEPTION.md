@@ -2,7 +2,9 @@
 
 Started 2026-11-09. This note records how the living authority limits what a human player's client receives to what the player's character perceives now, plus the character's own state ([game brief](GAME_BRIEF.md#core-work-the-game-needs-engine-independent), core work 1; [island authority](ISLAND_AUTHORITY.md), "Perception-scoped subscriptions" and "A slimmer moving-body stream"). It covers the table audit, the SpacetimeDB documentation and source the design rests on, the design, the measured cost, the per-table decisions, the client change and the verification.
 
-**Status (sixth change, 2026-11-11, branch `fov-1`).** Sight may depend on facing: a world law, `fov_on` (off as shipped), gives `senses(a)` a field, and one pure function in the rules crate, `living_rules::sight::sees`, decides every look for the authority and the game client alike. What is heard but not seen reaches players (`heard_sounds`) and minds (their scene and a percept) coarsely, with no identity. `set_world_law` changes a law on a running world and records it ([The field of view](#the-field-of-view-sixth-change)).
+**Status (sixth change, 2026-11-11, branch `rules-offers`).** A player reads the trade offers addressed to its character, and its own, through a new view, `my_offers`; `trade_offer` stays private and gains a `to` index and a stored end, `until_ms` ([Offers](#offers-what-a-player-is-offered)).
+
+**Status (seventh change, 2026-11-11, branch `fov-1`).** Sight may depend on facing: a world law, `fov_on` (off as shipped), gives `senses(a)` a field, and one pure function in the rules crate, `living_rules::sight::sees`, decides every look for the authority and the game client alike. What is heard but not seen reaches players (`heard_sounds`) and minds (their scene and a percept) coarsely, with no identity. `set_world_law` changes a law on a running world and records it ([The field of view](#the-field-of-view-seventh-change)).
 
 **Status (fifth change, 2026-11-11, branch `fix-perceived-moving`).** What others perceive a creature doing is derived from its body when it moves under motion intent, so a walking player reads `walk → person`, not `wait`, as an AI character walking the same line reads `goto → person` ([Activity derived from the body](#activity-derived-from-the-body)). No table or view changed.
 
@@ -18,7 +20,7 @@ Started 2026-11-09. This note records how the living authority limits what a hum
 
 - **Perception is enforced on the authority** (AGENTS.md: "Spatial subscriptions are not permission boundaries by themselves"). A chunk window is a client's choice of what to subscribe to, so it bounds bandwidth, not knowledge. The perceived set is worked out by the authority with the rules' own sight.
 - **Current perception, remembered knowledge and developer audit truth are separate paths.** Current perception is the `seen_*` views, recomputed from the world as it is. What a player remembers is its own `experience` window, places and know-how (`my_*`). Audit truth (minds' state, thoughts, beliefs, personas, the chronicle) is private, read by the database owner: the mind service and the lab observer.
-- **One sight for every character.** The radius is `common::sight_for` (day 11 tiles, night 6, a torch at night 9), and a clear sight line (`perception::in_sight`). Since the second change it holds for players and minds alike: "we should only observe what the actual NPC can see" (the user, 2026-11-09). Since the sixth change it is one function in the rules crate, `living_rules::sight::sees`, which also reads the field of view when the world's law turns it on, and which the game client calls too.
+- **One sight for every character.** The radius is `common::sight_for` (day 11 tiles, night 6, a torch at night 9), and a clear sight line (`perception::in_sight`). Since the second change it holds for players and minds alike: "we should only observe what the actual NPC can see" (the user, 2026-11-09). Since the seventh change it is one function in the rules crate, `living_rules::sight::sees`, which also reads the field of view when the world's law turns it on, and which the game client calls too.
 - **What one perceives of another is decided by the rules, per observer.** Not a fixed public column set: the full record through `perceived_of(p)` in the script, a function of the observer, the target, what the observer knows and can do, and what a skill use revealed (the user, 2026-11-09).
 
 ## SpacetimeDB documentation consulted (2026-11-09)
@@ -89,7 +91,7 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `brain`, `mind_state`, `mind_cursor`, `routine`, `routine_stat` | developer audit truth (behaviour graphs and their runtime) | private | private | mind service, observer (owner) |
 | `genome`, `background` | developer audit truth (inborn genes, authored pasts) | private | private | mind service (owner) |
 | `chronicle`, `stats` | developer audit truth (the world's event log, speech included; load counters) | private | private | observer, tools (owner) |
-| `community`, `membership`, `join_request`, `bond_offer`, `trade_offer`, `expecting` | developer audit truth (social facts between characters; a player learns of them through its experiences) | private | private | mind service, observer (owner) |
+| `community`, `membership`, `join_request`, `bond_offer`, `trade_offer`, `expecting` | developer audit truth (social facts between characters; a player learns of them through its experiences, and since the sixth change reads the trade offers it is a party to through `my_offers`) | private | private | mind service, observer (owner) |
 | `artifact` | developer audit truth (tablets and signs; reading one is an act, and its text reaches the reader as an experience) | private | private | observer (owner) |
 | `perceived` | private engine state (new: who each player perceives) | private | private | the `seen_*` views |
 | `projected` | private engine state (second change: what each player perceives of each creature in its scene, the `perceived_of` projection) | private | private | `seen_characters`, `seen_fighters` |
@@ -195,8 +197,8 @@ Second change. Every path by which a mind, or a behaviour graph, learns about an
 | Path | Before | Now |
 |---|---|---|
 | Witnessed events (`perceive::witnessed`: fights, deaths, gifts, building, births…) | anyone within the base sight of the place (no torch, no sight line) | each onlooker within its own sight (a torch at night) and a clear line from where it stands to the place |
-| A mind's scene (`perceive::scene_json`, the deliberation request) | creatures within sight | creatures within sight with a clear line (`perception::visible`; `perception::sensed` since the sixth change), each described by its projection |
-| Behaviour graphs (`brain.rs` scene: `nearest`, `sees`, `visible_creature`, a resident noticing someone) | creatures within sight | the same `perception::visible` (`sensed` since the sixth change) |
+| A mind's scene (`perceive::scene_json`, the deliberation request) | creatures within sight | creatures within sight with a clear line (`perception::visible`; `perception::sensed` since the seventh change), each described by its projection |
+| Behaviour graphs (`brain.rs` scene: `nearest`, `sees`, `visible_creature`, a resident noticing someone) | creatures within sight | the same `perception::visible` (`sensed` since the seventh change) |
 | What an animal senses before attacking a person (`act.rs`, `sensed`) | creatures within sight, or smelled | seen with a clear line, or smelled (smell is unchanged) |
 | A player's aimed act ("you cannot see them", `act.rs`) | `Map::line_clear` (a walking line: water blocked it) | `in_sight` (water does not block sight; the line the player's perceived set uses) |
 | The combat feed (`combat::show`, `combat::died`: `my_combat` / `combat_seen`) | onlookers within their sight, no sight line | within their sight and a clear line |
@@ -224,7 +226,7 @@ Fifth change (2026-11-11, branch `fix-perceived-moving`). Human-controlled and A
 
 - **The rule** (`perception::doing_of`). What a creature is perceived doing is its activity's label, as before, except when its body is moving under motion intent and its activity is none or `wait`. Then the motion is what is seen (`perception::moving_label`): `walk` or `run` (the run input, `motion::FLAG_RUN`), then `→ <kind>` for the nearest creature its heading points at (within about 18°, among what the observer sees, the observer included), else the compass way it goes (`walk east`). The form is the one an activity's label has (`goto → person`): a kind, never a name. The rule reads the body and its steering, never the controller, so an AI body under motion intent would read the same. No AI body steers that way today; `verify-core` `scenes.py doing` checks that none does.
 - **Where it is seen.** A mind's scene (`perceive::scene_json`, each creature's `doing`) and the first sight of someone (`brain.rs` `noticed`: "For the first time you see a stranger, 8 tiles east, walk → person."). These were the two places that put another creature's activity label into what a character perceives. A player's own `you.doing`, its `my_*` views and its graph and plan ("moving yourself") are unchanged. A player's client already received the same thing for both controllers: the body's motion in `seen_bodies`, and no `seen_doing` row for a walk (`doing` rows exist only for skills with an act card). No view's rows changed.
-- **Facing.** Not added in this change. Since the sixth change a mind's scene carries `you.facing` while sight depends on facing ([The field of view](#the-field-of-view-sixth-change)); others' facing is still not listed.
+- **Facing.** Not added in this change. Since the seventh change a mind's scene carries `you.facing` while sight depends on facing ([The field of view](#the-field-of-view-seventh-change)); others' facing is still not listed.
 - **Before and after** (`verify-player` `approach.py`; R is the resident, the walkers start 8 m out on the same line):
 
   | Walker | R's scene `doing`, before | after |
@@ -237,9 +239,44 @@ Fifth change (2026-11-11, branch `fix-perceived-moving`). Human-controlled and A
 - **Cost.** It is computed when a scene or a first-sight line is built. It reads, per creature listed, its `activity` row as before, plus the `steer` and `body` rows by primary key, only when the activity is none or `wait`. It writes nothing and adds no table, column, view or subscription. The 60 Hz path, the frames and the views' read sets are untouched.
 - **SpacetimeDB documentation consulted (2026-11-11), against 2.14.1.** [Indexes](https://spacetimedb.com/docs/tables/indexes/): primary keys create an index for equality lookups, and `find` on one is the access pattern to use. [Performance](https://spacetimedb.com/docs/tables/performance/): prefer indexed lookups to scans, and split tables by access pattern so that updates touch fewer rows. [Views](https://spacetimedb.com/docs/functions/views/): a view re-runs when a row in its read set changes. The implications are three. Computing the label in the reducer that builds a scene, from rows read by key, costs three point lookups and changes no subscription. Putting it in a table or a column would add a write on the motion path, and a view re-run for every viewer whose read set holds it. Deriving it in a view would put `steer` and `body` in that view's read set. So the projection computes it.
 
-### The field of view (sixth change)
+### Offers: what a player is offered
 
-Sixth change (2026-11-11, branch `fov-1`). In two play-tests the owner said that what they see does not change with the way their character faces; in the third they switched to the cursor-facing control scheme after 90 seconds and stayed in it. Sight was a radius and a clear line, the same in every direction.
+Sixth change, 2026-11-11, branch `rules-offers`, on the Spark. In play-test 4 the owner's last line to a resident was "want to trade ?": a reply in the form of an offer would have reached the player only as one experience line, which the client did not draw, because `trade_offer` is private and no view carried it (the interface design, `docs/INTERFACE.md` on branch `design-interface`, §1 "Trade and offers" and §7 "`my_offers`").
+
+**SpacetimeDB documentation and source consulted (2026-11-11).** The docs' selector reads 2.0.0. Claims were checked in the pinned `spacetimedb-2.14.1` and `spacetimedb-bindings-macro-2.14.1` crates (cargo registry) and against the server source findings recorded above for the fourth change.
+
+| Source | What it says | What follows here |
+|---|---|---|
+| [Views](https://spacetimedb.com/docs/functions/views/) | "views can only access table data through indexed lookups (`.find()` and `.filter()` on indexed columns)"; "Full table scans create pessimistic read sets"; if any row in the read set changes, SpacetimeDB "must re-execute the entire view function"; `ViewContext` gives the caller's identity. | `my_offers` reads `trade_offer` only through two btree filters. It re-runs in full, so it stays small: one row per offer the caller is a party to. |
+| Source: `spacetimedb-2.14.1/src/table.rs` `is_point_scan` | `B::POINT && B::COLS_PROVIDED == I::NUM_COLS_INDEXED`: a `filter(value)` on a one-column btree is a point scan, recorded as that key (`record_index_scan_point_inner`, fourth change). | `trade_offer().to().filter(me)` and `.from().filter(me)` are point reads. An offer between two others does not re-run my view. Measured below. |
+| Source: `spacetimedb-2.14.1/src/lib.rs` `ViewContext` | Fields are `sender`, `db` (read-only), `from` and `env`. No timestamp. | A view cannot decide whether an offer has ended. The end is stored on the row (`until_ms`), and housekeeping deletes an ended offer. |
+| [Indexes](https://spacetimedb.com/docs/tables/indexes/) | `#[index(btree)]` on a field; B-trees serve equality and ranges; indexes "slow down inserts and updates". | One index, `trade_offer.to`. The table holds at most one offer per character and is written once per offer. |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) | "Adding indexes" is a safe change; adding columns needs a default at the end (`AddColumns`, fourth change source check). Views are not listed. | `to`'s index and `#[default(0u64)] until_ms` at the end migrate a running world in place. Checked by an in-place update below. |
+| [Table performance](https://spacetimedb.com/docs/tables/performance/), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) | Make tables public only when clients need them; cleanup reducers for growth; "keep subscriptions small". | `trade_offer` stays private; a client subscribes `SELECT * FROM my_offers` once per connection. |
+
+**The view.** `my_offers` (`perception.rs`, `primary_key = id`) returns, for the caller's living character (`living`, as the other `my_*` views), every `trade_offer` row addressed to it and the one it made (a new offer replaces the maker's earlier one, `act.rs` `Effect::Offer`). Its row, `MyOffer`:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | `u64` | the offer (primary key: the bindings give updates) |
+| `incoming` | `bool` | addressed to me (I may accept it), or mine |
+| `from`, `to` | `u32` | character ids. The client names them through `seen_characters`; the row carries no name the caller may not know. |
+| `give_item`, `give_qty` | `String`, `u32` | what `from` gives |
+| `want_item`, `want_qty` | `String`, `u32` | what `from` wants of `to` |
+| `at_ms` | `u64` | when it was made (world time, ms since the Unix epoch, as `experience.at_ms`) |
+| `until_ms` | `u64` | it can be accepted while world time ≤ `until_ms` |
+
+One view with a direction column rather than two views: the outgoing offer costs one more point read in the same refresh, and a client needs both to draw its own standing offer beside the ones made to it.
+
+**The end of an offer.** `trade_offer` gains `until_ms`, set when the offer is made to `at_ms` + the `trade_window_s` law (180 s). `accept`, the mind's scene and housekeeping read it (`TradeOffer::ends_ms`); a law changed while an offer stands no longer changes that offer's end. Housekeeping (1 Hz) now deletes a trade offer as soon as it ends, not a minute later, so the row leaves `my_offers` within a second. A row written before the column (its default 0) is read through the law's window and given its end at the next housekeeping. `perceive.rs`'s "asked of you" now reads offers through the new `to` index instead of scanning the table. Bond offers are unchanged.
+
+**Accept and decline.** Accepting is the existing `accept` act toward the maker (`from`), unchanged: refused with the rules' words when either side lacks the goods or the offer has ended, else the goods move both ways and the row goes. `accept_done` takes a proposal record of terms from the same person first, and the standing trade only when there is none. There is no decline act: an offer ends at `until_ms` or when its maker offers again.
+
+**Data paths.** Writes: one insert per offer, a delete per accept, replacement or end. Each re-runs the `my_offers` of the players who are its maker or addressee (the previous addressee too when an offer is replaced), and nobody else's. Reads: two point reads plus the `living` lookup per refresh. Retained: at most one row per character, for at most `trade_window_s` plus one second. Subscribers: the two parties.
+
+### The field of view (seventh change)
+
+Seventh change (2026-11-11, branch `fov-1`). In two play-tests the owner said that what they see does not change with the way their character faces; in the third they switched to the cursor-facing control scheme after 90 seconds and stayed in it. Sight was a radius and a clear line, the same in every direction.
 
 **The rule** (`living/rules/src/sight.rs`, pure; no `scripting` feature needed):
 
@@ -331,7 +368,7 @@ Pinned 2.14.1 (`living/Cargo.toml`, `clockworklabs/spacetime:v2.14.1`). The live
 | Heard (minds) | creatures within hearing | a percept when a near sound begins | — | that mind | per scene, per graph evaluation, only while the field is on | experience rows as before |
 | `set_world_law` | `world_law`, the script row | `world_law`, `script` (a new revision), `law_change`, `chronicle` | PK | every client of `script` | per admin call | one `law_change` row per call |
 
-#### Cost: off against on (sixth change)
+#### Cost: off against on (seventh change)
 
 Tool: `living/tools/bench.py` with two additions for this change, `--law NAME=VALUE` (`set_world_law` before the window) and `graph_scenes` (behaviour graphs' scenes a second, and the creatures each one saw, from a line the module logs once a second while profiling, `common::note_scene`). There are no players and no minds in these worlds, so the costs are the graphs', the witnesses' and the feed's. Arms ran A B B A: off, on, on, off, each a fresh world, one at a time on the private server, with the dev-box's 1-minute load average recorded before each window.
 
@@ -364,7 +401,7 @@ Tool: `living/tools/bench.py` with two additions for this change, `--law NAME=VA
 - **Fewer people in view.** At rest a graph's scene saw fewer creatures with the field on: 2.1 against 3.0 on the island, 2.0–2.4 against 3.4–3.9 on Cullet. On Cullet's 48 m sight the skirmish's scenes saw a quarter fewer (22–23 against 30). On the island the skirmish's counts (17–18 on, 16–23 off) are within the spread between its two "off" worlds.
 - **No cost or saving shows outside the noise.** Cullet's scenes cost three to four times the island's (0.07–0.10 ms against 0.02–0.03 at p50), because 48 m of sight gathers more chunks. Within each world the "on" arms are within the spread of the "off" arms, and the one "on" window that stands out (Cullet's first skirmish, tick p50 3.3 ms) is matched by a higher `housekeeping` in the same window. On the island, at rest every phase of the tick was 25–40% slower in the two "on" windows, including phases the field does not touch (`housekeeping` 0.73–0.78 ms against 0.55–0.62, the need rates, motion). The load was higher during them (38–41 against 29–34), and `brain.scene` rose by the same ratio as `housekeeping`. A scene that sees a third fewer creatures did not get measurably cheaper: most of its cost is the gather of the creatures round it, which is unchanged (the field only skips the sight line for those out of reach). In the skirmish no difference shows outside the spread between arms.
 
-#### Verification (sixth change)
+#### Verification (seventh change)
 
 On the dev-box, in a private SpacetimeDB 2.14.1 container (`fov1-stdb`, port 3318), scratch databases only. The host was shared with seven other workers (load average 17–60 on 32 cores throughout).
 

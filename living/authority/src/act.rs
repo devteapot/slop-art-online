@@ -1440,7 +1440,8 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 for o in ctx.db.trade_offer().from().filter(me).map(|o| o.id).collect::<Vec<_>>() {
                     ctx.db.trade_offer().id().delete(o);
                 }
-                ctx.db.trade_offer().insert(TradeOffer { id: 0, from: me, to, give_item: a.item.clone(), give_qty, want_item: a.want.clone(), want_qty: a.want_qty.max(1), at_ms: now });
+                let until_ms = now + (common::laws(ctx).trade_window_s * 1000.0) as u64;
+                ctx.db.trade_offer().insert(TradeOffer { id: 0, from: me, to, give_item: a.item.clone(), give_qty, want_item: a.want.clone(), want_qty: a.want_qty.max(1), at_ms: now, until_ms });
                 if let Some(c) = ctx.db.character().id().find(to) {
                     let text = format!("{} offers you {give_qty} {} for {} {}.", common::label_cap(ctx, &c, me), a.item, a.want_qty.max(1), a.want);
                     percept(ctx, &c, now, "offer", me, to, at, text.clone(), 0.85);
@@ -1452,13 +1453,8 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
             }
             Effect::Accept => {
                 let from = a.target.id as u32;
-                let offer = ctx
-                    .db
-                    .trade_offer()
-                    .from()
-                    .filter(from)
-                    .find(|o| o.to == me && now.saturating_sub(o.at_ms) as f32 <= common::laws(ctx).trade_window_s * 1000.0)
-                    .ok_or("they have no standing offer for you")?;
+                let window_s = common::laws(ctx).trade_window_s;
+                let offer = ctx.db.trade_offer().from().filter(from).find(|o| o.to == me && now <= o.ends_ms(window_s)).ok_or("they have no standing offer for you")?;
                 if common::inv_count(ctx, from as u64, &offer.give_item) < offer.give_qty {
                     return Err(format!("they no longer have {} {}", offer.give_qty, offer.give_item));
                 }

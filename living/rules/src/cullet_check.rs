@@ -148,6 +148,25 @@ mod tests {
         (a - b).abs() <= tol
     }
 
+    /// A seed's own know-how is taught like the base ones (glassmaking was refused as "no
+    /// technique": teaching checked what experimenting can reveal).
+    #[test]
+    fn cullet_s_glassmaking_can_be_taught() {
+        use crate::script::{ActorFacts, SkillCtx, TargetFacts};
+        let s = cullet();
+        let c = SkillCtx {
+            actor: ActorFacts { kind: "person".into(), stage: "adult".into(), knows: vec!["fire".into(), "glassmaking".into()], ..Default::default() },
+            target: TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "adult".into(), knows: vec!["fire".into()], ..Default::default() },
+            item: "glassmaking".into(),
+            skill: "teach".into(),
+            ..Default::default()
+        };
+        assert_eq!(s.check("teach", &c), Ok(()));
+        let mut c = c;
+        c.target.knows.clear();
+        assert!(s.check("teach", &c).unwrap_err().contains("must first learn fire"));
+    }
+
     #[test]
     fn cullet_s_laws_pass_their_install_checks() {
         let s = cullet();

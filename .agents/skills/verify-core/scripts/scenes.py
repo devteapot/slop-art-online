@@ -1305,6 +1305,32 @@ def food(s):
              and after.get("berries", 0) == held.get("berries", 0), {"before": held, "after": after})
 
 
+def teach(s):
+    """Every know-how can be taught, not only what experimenting can reveal: a person who
+    knows fire_bolt and wound_tending teaches each to a learner (before 2026-11-11
+    `teach_check` checked `techniques()`, the materials' discoveries, and refused both as "no
+    technique called …"). A thing is still refused, with what makes it."""
+    a, b = s.people(2)
+    s.call("place_near", b, a)
+    for t in ("fire_bolt", "wound_tending"):
+        s.call("grant_know_how", a, t)
+    for t in ("fire_bolt", "wound_tending"):
+        s.act(a, {"do": "teach", "item": t, "target": {"id": b}})
+        known = lambda: [k for k in s.rows(f"SELECT * FROM know_how WHERE actor = {b}") if k["technique"] == t]
+        try:
+            row = s.wait(known, seconds=40)
+        except TimeoutError:
+            row = []
+        s.expect(f"a knower teaches {t}", row and "taught by" in row[0]["source"], {"learner": s.rows(f"SELECT * FROM know_how WHERE actor = {b}", f"learner-{t}"), "teacher told": [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {a}") if t in r["text"]]}, fatal=False)
+        s.expect(f"the learner is told it was taught {t}", s.told(b, f"taught you {t}", "learned"), [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {b}") if t in r["text"]], fatal=False)
+    s.act(a, {"do": "teach", "item": "leather", "target": {"id": b}})
+    try:
+        why = s.wait(lambda: [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {a}") if "leather is a thing, not a technique" in r["text"]], seconds=15)
+    except TimeoutError:
+        why = []
+    s.expect("a thing is refused with what makes it", why, why, fatal=False)
+
+
 def refusal(s):
     """A routine whose action is refused as it would start is counted and told like any
     failure: its `routine_stat` counts it with the reason, the character is told once (not
@@ -1887,7 +1913,7 @@ def say(s):
         s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40)
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov}
 
 
 def goods(s):

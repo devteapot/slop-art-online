@@ -40,7 +40,7 @@ macro_rules! primary_tables {
             routine, routine_stat, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, doing, weather,
             seen_bodies, seen_characters, seen_fighters, seen_doing, my_body, my_fighter, my_doing, my_characters, my_vitals,
-            my_experience, my_places, my_inventory, my_know_how);
+            my_experience, my_places, my_inventory, my_know_how, my_offers);
     };
 }
 
@@ -169,6 +169,7 @@ fn snapshot(c: &DbConnection) -> Value {
         my_places,
         my_inventory,
         my_know_how,
+        my_offers,
         heard_sounds
     );
     // What the perception views returned to this identity (docs/PERCEPTION.md).
@@ -187,6 +188,7 @@ fn snapshot(c: &DbConnection) -> Value {
         "my_places": ids(c.db.my_places().iter().map(|r| r.actor).collect()),
         "my_inventory": c.db.my_inventory().iter().map(|r| r.owner).collect::<Vec<_>>(),
         "my_know_how": ids(c.db.my_know_how().iter().map(|r| r.actor).collect()),
+        "my_offers": c.db.my_offers().iter().map(|r| json!({"id":r.id,"incoming":r.incoming,"from":r.from,"to":r.to,"give_item":r.give_item,"want_item":r.want_item,"until_ms":r.until_ms})).collect::<Vec<_>>(),
         // What I hear and do not see (only while the world's `fov_on` law is on): no id.
         "heard_sounds": c.db.heard_sounds().iter().map(|r| json!({"key":r.key.to_string(),"kind":r.kind,"bearing":r.bearing,"band":r.band})).collect::<Vec<_>>(),
     });
