@@ -10,6 +10,8 @@ pub mod acquaintance_table;
 pub mod acquaintance_type;
 pub mod act_card_table;
 pub mod act_card_type;
+pub mod act_outcome_table;
+pub mod act_outcome_type;
 pub mod act_queue_table;
 pub mod activity_table;
 pub mod activity_type;
@@ -136,6 +138,7 @@ pub mod missile_type;
 pub mod motion_seen_table;
 pub mod motion_seen_type;
 pub mod motion_type;
+pub mod my_act_outcomes_table;
 pub mod my_body_table;
 pub mod my_characters_table;
 pub mod my_combat_table;
@@ -274,6 +277,8 @@ pub use acquaintance_table::*;
 pub use acquaintance_type::Acquaintance;
 pub use act_card_table::*;
 pub use act_card_type::ActCard;
+pub use act_outcome_table::*;
+pub use act_outcome_type::ActOutcome;
 pub use act_queue_table::*;
 pub use activity_table::*;
 pub use activity_type::Activity;
@@ -400,6 +405,7 @@ pub use missile_type::Missile;
 pub use motion_seen_table::*;
 pub use motion_seen_type::MotionSeen;
 pub use motion_type::Motion;
+pub use my_act_outcomes_table::*;
 pub use my_body_table::*;
 pub use my_characters_table::*;
 pub use my_combat_table::*;
@@ -1029,6 +1035,7 @@ impl __sdk::Reducer for Reducer {
 pub struct DbUpdate {
     acquaintance: __sdk::TableUpdate<Acquaintance>,
     act_card: __sdk::TableUpdate<ActCard>,
+    act_outcome: __sdk::TableUpdate<ActOutcome>,
     act_queue: __sdk::TableUpdate<PlannedAct>,
     activity: __sdk::TableUpdate<Activity>,
     artifact: __sdk::TableUpdate<Artifact>,
@@ -1076,6 +1083,7 @@ pub struct DbUpdate {
     mind_state: __sdk::TableUpdate<MindState>,
     missile: __sdk::TableUpdate<Missile>,
     motion_seen: __sdk::TableUpdate<MotionSeen>,
+    my_act_outcomes: __sdk::TableUpdate<ActOutcome>,
     my_body: __sdk::TableUpdate<Motion>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
@@ -1149,6 +1157,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "act_card" => db_update
                     .act_card
                     .append(act_card_table::parse_table_update(table_update)?),
+                "act_outcome" => db_update
+                    .act_outcome
+                    .append(act_outcome_table::parse_table_update(table_update)?),
                 "act_queue" => db_update
                     .act_queue
                     .append(act_queue_table::parse_table_update(table_update)?),
@@ -1290,6 +1301,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "motion_seen" => db_update
                     .motion_seen
                     .append(motion_seen_table::parse_table_update(table_update)?),
+                "my_act_outcomes" => db_update
+                    .my_act_outcomes
+                    .append(my_act_outcomes_table::parse_table_update(table_update)?),
                 "my_body" => db_update
                     .my_body
                     .append(my_body_table::parse_table_update(table_update)?),
@@ -1499,6 +1513,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.act_card = cache
             .apply_diff_to_table::<ActCard>("act_card", &self.act_card)
             .with_updates_by_pk(|row| &row.skill);
+        diff.act_outcome = cache
+            .apply_diff_to_table::<ActOutcome>("act_outcome", &self.act_outcome)
+            .with_updates_by_pk(|row| &row.id);
         diff.act_queue = cache
             .apply_diff_to_table::<PlannedAct>("act_queue", &self.act_queue)
             .with_updates_by_pk(|row| &row.id);
@@ -1757,6 +1774,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.heard_sounds = cache
             .apply_diff_to_table::<HeardSound>("heard_sounds", &self.heard_sounds)
             .with_updates_by_pk(|row| &row.key);
+        diff.my_act_outcomes = cache
+            .apply_diff_to_table::<ActOutcome>("my_act_outcomes", &self.my_act_outcomes)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_body = cache
             .apply_diff_to_table::<Motion>("my_body", &self.my_body)
             .with_updates_by_pk(|row| &row.id);
@@ -1822,6 +1842,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "act_card" => db_update
                     .act_card
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "act_outcome" => db_update
+                    .act_outcome
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "act_queue" => db_update
                     .act_queue
@@ -1963,6 +1986,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "motion_seen" => db_update
                     .motion_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_act_outcomes" => db_update
+                    .my_act_outcomes
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_body" => db_update
                     .my_body
@@ -2160,6 +2186,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "act_card" => db_update
                     .act_card
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "act_outcome" => db_update
+                    .act_outcome
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "act_queue" => db_update
                     .act_queue
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2300,6 +2329,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "motion_seen" => db_update
                     .motion_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_act_outcomes" => db_update
+                    .my_act_outcomes
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_body" => db_update
                     .my_body
@@ -2495,6 +2527,7 @@ impl __sdk::DbUpdate for DbUpdate {
 pub struct AppliedDiff<'r> {
     acquaintance: __sdk::TableAppliedDiff<'r, Acquaintance>,
     act_card: __sdk::TableAppliedDiff<'r, ActCard>,
+    act_outcome: __sdk::TableAppliedDiff<'r, ActOutcome>,
     act_queue: __sdk::TableAppliedDiff<'r, PlannedAct>,
     activity: __sdk::TableAppliedDiff<'r, Activity>,
     artifact: __sdk::TableAppliedDiff<'r, Artifact>,
@@ -2542,6 +2575,7 @@ pub struct AppliedDiff<'r> {
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
     missile: __sdk::TableAppliedDiff<'r, Missile>,
     motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
+    my_act_outcomes: __sdk::TableAppliedDiff<'r, ActOutcome>,
     my_body: __sdk::TableAppliedDiff<'r, Motion>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
@@ -2620,6 +2654,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<ActCard>("act_card", &self.act_card, event);
+        callbacks.invoke_table_row_callbacks::<ActOutcome>("act_outcome", &self.act_outcome, event);
         callbacks.invoke_table_row_callbacks::<PlannedAct>("act_queue", &self.act_queue, event);
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
         callbacks.invoke_table_row_callbacks::<Artifact>("artifact", &self.artifact, event);
@@ -2691,6 +2726,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
         callbacks.invoke_table_row_callbacks::<Missile>("missile", &self.missile, event);
         callbacks.invoke_table_row_callbacks::<MotionSeen>("motion_seen", &self.motion_seen, event);
+        callbacks.invoke_table_row_callbacks::<ActOutcome>(
+            "my_act_outcomes",
+            &self.my_act_outcomes,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Motion>("my_body", &self.my_body, event);
         callbacks.invoke_table_row_callbacks::<Character>(
             "my_characters",
@@ -3468,6 +3508,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         acquaintance_table::register_table(client_cache);
         act_card_table::register_table(client_cache);
+        act_outcome_table::register_table(client_cache);
         act_queue_table::register_table(client_cache);
         activity_table::register_table(client_cache);
         artifact_table::register_table(client_cache);
@@ -3515,6 +3556,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         mind_state_table::register_table(client_cache);
         missile_table::register_table(client_cache);
         motion_seen_table::register_table(client_cache);
+        my_act_outcomes_table::register_table(client_cache);
         my_body_table::register_table(client_cache);
         my_characters_table::register_table(client_cache);
         my_combat_table::register_table(client_cache);
@@ -3578,6 +3620,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "acquaintance",
         "act_card",
+        "act_outcome",
         "act_queue",
         "activity",
         "artifact",
@@ -3625,6 +3668,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "mind_state",
         "missile",
         "motion_seen",
+        "my_act_outcomes",
         "my_body",
         "my_characters",
         "my_combat",

@@ -10,11 +10,12 @@ use spacetimedb::{ReducerContext, Table};
 /// Experiences kept per character (older ones leave the hot window).
 const WINDOW: usize = 400;
 
-pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) {
+/// The line's id, when one was written.
+pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
     // Only minds and human players consume percepts. Infants have no mind yet to form
     // memories; a benchmark crowd's bodies (`common::instinct_only`) have no reader.
     if !observer.alive || observer.stage == 0 || common::instinct_only(ctx, observer) {
-        return;
+        return None;
     }
     let row = ctx.db.experience().insert(Experience {
         id: 0,
@@ -47,6 +48,7 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
     if salience >= 0.6 {
         common::wake(ctx, observer.id);
     }
+    Some(row.id)
 }
 
 /// People within `r` of `at` (excluding `exclude`).

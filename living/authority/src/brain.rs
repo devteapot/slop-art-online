@@ -145,14 +145,15 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
 fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f32), w: &World, cur: Option<&Activity>, now: u64) -> Option<Vitals> {
     let n = common::needs(&v, now);
     if n.hp <= 0.0 {
-        let cause = if n.hunger >= 100.0 {
-            "starvation"
+        use living_rules::outcome::death;
+        let (cause, code) = if n.hunger >= 100.0 {
+            ("starvation", death::STARVED)
         } else if common::night(ctx, w, now) && me.kind == "person" {
-            "cold and exposure"
+            ("cold and exposure", death::COLD)
         } else {
-            "exhaustion"
+            ("exhaustion", death::EXHAUSTED)
         };
-        act::die(ctx, me.id, cause, now, 0);
+        act::die(ctx, me.id, cause, now, 0, code);
         return None;
     }
     let night = common::night(ctx, w, now);
@@ -515,7 +516,7 @@ impl<'a> Ev<'a> {
     /// (once per repeat window for the same line and reason), not a silent skip.
     fn say_failed(&mut self, id: u16, n: &Node, why: &str) -> St {
         let desc = graph::describe(n);
-        if act::refused(self.ctx, self.me.id, id, self.st.revision, &desc, why, self.now) {
+        if act::refused(self.ctx, self.me.id, id, self.st.revision, "say", &desc, why, self.now) {
             self.st.fails = self.st.fails.saturating_add(1);
         }
         self.last_fail = format!("say: {why}");
@@ -570,7 +571,7 @@ impl<'a> Ev<'a> {
             }
             Err(why) => {
                 // Refused at the start: a failure like any other, not an unseen retry.
-                if act::refused(self.ctx, self.me.id, id, rev, &desc, &why, self.now) {
+                if act::refused(self.ctx, self.me.id, id, rev, skill, &desc, &why, self.now) {
                     self.st.fails = self.st.fails.saturating_add(1);
                 }
                 self.last_fail = format!("{skill}: {why}");

@@ -437,6 +437,7 @@ fn release_lines(ctx: &ReducerContext, id: u32) {
         shown.sort_unstable();
         for old in &shown[..shown.len() - LINES_SHOWN] {
             ctx.db.line_seen().id().delete(*old);
+            crate::outcomes::dropped(ctx, *old);
         }
     }
 }

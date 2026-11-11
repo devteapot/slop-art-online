@@ -729,6 +729,7 @@ Answers of 2026-11-11, collected in `.local/living/ui-designs/INTERFACE-answers.
 4. **Structured outcomes.** Not as `experience` columns: `line_seen` embeds the type, so migration refuses them.
    - Instead, a private `act_outcome` table keyed by experience id (ok or refused, skill, reason code), written in the same transaction and read through `my_act_outcomes`.
    - The death cause takes the same approach. The Spark builds both.
+   - Built on branch `rules-senses-outcomes`: `act_outcome`, read through `my_act_outcomes`, with act codes and death codes (`living_rules::outcome`) ([perception, "Act outcomes"](PERCEPTION.md#act-outcomes-eighth-change)).
 5. **`meters()` and `status_of`.** One script law with one set of thresholds, feeding the minds' body words and alarms as well as the client. The Spark builds it.
 6. **Whisper.** speech-1 builds `whisper_speech()` and `whisper_check` in the script.
    - The refusal wording stays in the script, not in Rust.

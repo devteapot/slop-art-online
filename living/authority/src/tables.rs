@@ -1231,6 +1231,33 @@ impl CharacterSenses {
     }
 }
 
+/// How an act or a death came out, for a person's client (private; read through
+/// `my_act_outcomes`): one row per experience line that tells it, keyed by that line's id and
+/// written in the same transaction (`outcomes::write`). `kind` picks the vocabulary of `code`
+/// (`living_rules::outcome`): `act` (a deliberate act: a player's command or a mind's decision)
+/// and `own` (a graph's action, told when it failed) take an act code; `death` (the
+/// character's own) a death code, with the killer in `other`. `what` is the act as described,
+/// `why` the rules' words for a refusal or a failure (empty when done). Written only for a
+/// character a person plays now, and kept as long as its line is in `my_experience` (the newest
+/// `frame::LINES_SHOWN`); a person's rows go when they play another character.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = act_outcome)]
+pub struct ActOutcome {
+    /// The experience line's id.
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub at_ms: u64,
+    pub kind: String,
+    pub ok: bool,
+    pub skill: String,
+    pub code: String,
+    pub what: String,
+    pub why: String,
+    pub other: u32,
+}
+
 // ---- town life (docs/TOWN_LIFE.md) ------------------------------------------------
 
 /// The world's weather (one row, id 0): whether it is raining, since when and until when the

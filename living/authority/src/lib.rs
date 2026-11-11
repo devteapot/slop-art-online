@@ -13,6 +13,7 @@ mod frame;
 mod island;
 mod mind;
 mod motion;
+mod outcomes;
 mod perceive;
 mod perception;
 mod presence;
@@ -336,7 +337,7 @@ pub fn purge_dead(ctx: &ReducerContext) -> Result<(), String> {
 #[spacetimedb::reducer]
 pub fn kill(ctx: &ReducerContext, id: u32, cause: String) -> Result<(), String> {
     require_admin(ctx)?;
-    act::die(ctx, id, &cause, common::now_ms(ctx), 0);
+    act::die(ctx, id, &cause, common::now_ms(ctx), 0, living_rules::outcome::death::OTHER);
     Ok(())
 }
 

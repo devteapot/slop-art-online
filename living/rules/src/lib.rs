@@ -11,6 +11,7 @@ pub mod height;
 pub mod host;
 pub mod land;
 pub mod settle;
+pub mod outcome;
 pub mod sight;
 pub mod map;
 pub mod nav;

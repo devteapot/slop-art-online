@@ -2,7 +2,7 @@
 
 Started 2026-11-09. This note records how the living authority limits what a human player's client receives to what the player's character perceives now, plus the character's own state ([game brief](GAME_BRIEF.md#core-work-the-game-needs-engine-independent), core work 1; [island authority](ISLAND_AUTHORITY.md), "Perception-scoped subscriptions" and "A slimmer moving-body stream"). It covers the table audit, the SpacetimeDB documentation and source the design rests on, the design, the measured cost, the per-table decisions, the client change and the verification.
 
-**Status (eighth change, 2026-11-11, branch `rules-senses-outcomes`).** A player reads what its character senses through `my_senses`: the `senses(a)` law with all the character's facts, written only when a value changes, so the client no longer runs the law on the few facts it has ([My senses](#my-senses-eighth-change)).
+**Status (eighth change, 2026-11-11, branch `rules-senses-outcomes`).** A player reads what its character senses through `my_senses`: the `senses(a)` law with all the character's facts, written only when a value changes, so the client no longer runs the law on the few facts it has ([My senses](#my-senses-eighth-change)). How its acts and its death came out reach it in codes through `my_act_outcomes`, one row per experience line that tells one, so the client does not parse the line's English ([Act outcomes](#act-outcomes-eighth-change)).
 
 **Status (sixth change, 2026-11-11, branch `rules-offers`).** A player reads the trade offers addressed to its character, and its own, through a new view, `my_offers`; `trade_offer` stays private and gains a `to` index and a stored end, `until_ms` ([Offers](#offers-what-a-player-is-offered)).
 
@@ -88,6 +88,7 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `readiness` | own private state, through `my_readiness` | private | private | game client (view) |
 | `skill_use` | own private state, through `my_skill_uses` | private | private | game client (view) |
 | `character_senses` | own private state, through `my_senses` (eighth change: what the character senses now, the `senses` law's answer) | private | private | game client (view) |
+| `act_outcome` | own private state, through `my_act_outcomes` (eighth change: how an act or the character's death came out, in codes, keyed by its experience line) | private | private | game client (view) |
 | `deliberation` | a mind's own state, through `my_deliberations` | private | private | mind service (view) |
 | `thought` | developer audit truth (model exchanges, raw replies) | private | private | observer (owner) |
 | `persona`, `belief`, `judgment`, `relation` | developer audit truth (minds' projections) | private | private | mind service, observer (owner) |
@@ -466,6 +467,38 @@ Pinned 2.14.1 (`living/Cargo.toml`, `clockworklabs/spacetime:v2.14.1`). The page
 | [Indexes](https://spacetimedb.com/docs/tables/indexes/) | indexes cost memory and slow writes; avoid redundant ones | The primary key only. |
 | [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) | adding tables (and views) is always allowed; columns may be added only at the end with a default; changing or reordering a column is refused | One new table and one view, no column changed: a running world updates in place (shown below). A later field joins at the end with a `#[default]`. |
 | [Subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) | subscribe once per connection, group by lifetime | A client subscribes `SELECT * FROM my_senses` with its other `my_*` views. |
+
+### Act outcomes (eighth change)
+
+Same change ([interface, "What was agreed" 4](INTERFACE.md#what-was-agreed)). The client told a refused act from a done one by matching the start of an `act` line ("What you had decided did not work out: …", `game/src/verbs.rs` `outcome_text`), and read a death from `character.cause`, whose text carries the killer's real name. Columns on `experience` were ruled out: `line_seen` embeds the `Experience` type, so a column added there changes `line_seen`'s column type, which automatic migration refuses.
+
+**The row and the view.** `act_outcome` (private, `tables.rs`) is keyed by the id of the experience line that tells the outcome and written in the same transaction (`outcomes::write`). Its columns: `observer` (btree), `at_ms`, `kind`, `ok`, `skill`, `code`, `what` (the act as described), `why` (the rules' words for a refusal or a failure; empty when done) and `other` (the killer, for a death). `my_act_outcomes` (`perception.rs`, `primary_key = id`) returns the rows of the caller's current character (`current`: living, or the one that died last until they join again, for the death screen), one btree point read. The line itself is unchanged: minds and the log still read it.
+
+**Codes** (`living_rules::outcome`, append-only, test `the_codes_only_grow`):
+
+| `kind` | When | `code` |
+| --- | --- | --- |
+| `act` | a deliberate act ends or never starts (`acts.rs`: a player's `human_act`, a mind's act) | `done`; `unreadable` (the act could not be read), `busy` (too much waiting), `expired` (waited past `QUEUE_MS`), `unseen` (its target not in sight, or not seen), `check` (the skill's `_check` refused it), `timing` (cooldown, recovery, a windup under way), `reach` (out of reach), `refused` (the engine refused it as it would start, for another reason), `failed` (it started and then failed), `broken_off` (a reflex took the body back), `set_aside` (waiting acts dropped by a reflex; no skill) |
+| `own` | a graph's action told to a person playing the character (a one-shot command of a moment skill, `act::tell`): its failures only | the same codes |
+| `death` | the character's own death (`act::die`) | `starved`, `cold` (cold and exposure), `exhausted`, `old_age`, `killed`, `killed_yielding`, `other` (an admin's `kill` with its own words) |
+
+`check`, `timing`, `reach` and `unseen` are set where `begin` (or `perform`) refuses (`act::refuse`) and read once by whoever reports it (`act::refusal`); any other refusal is `refused`. A death's line, new in this change, is told to the one who died when a person plays the character (now, or while the minds hold it): "You were killed by a stranger in orange." with the killer as they knew them (`label_for`), "You starved.", "You died (…)." for an admin's words (`living_rules::outcome::death_words`). Under the minds the line is staged and released for the person's client at once. `character.cause` is unchanged.
+
+**Written only for a played character.** An act's row is written only when a person plays the character now (`combat::human`), the case in which its line is staged for the client (`frame::line`); minds' acts write none. A death's row is written for a played character either way.
+
+**Retention.** A row goes with its line: when `frame::release_lines` drops a line beyond the newest `LINES_SHOWN` (64) from `line_seen`, its row goes too (`outcomes::dropped`), so a character has at most as many rows as lines in `my_experience`. When a person joins with a new character, the rows of the one they played before go (`set_player`, `outcomes::forget`). The table therefore holds at most 64 rows per person, not per character ever played.
+
+| Path | Reads | Writes | Index | Recipients | Frequency | Growth |
+| --- | --- | --- | --- | --- | --- | --- |
+| `outcomes::write` | `HUMANS` cache | one `act_outcome` insert | PK | that player (`my_act_outcomes`) | one per act end, refusal or death of a played character | ≤ 64 per person |
+| `outcomes::dropped` | — | a PK delete per line pruned (a no-op for a line with no row) | PK | that player | at a line release past 64 | — |
+| `outcomes::forget` | `act_outcome.observer` | the old character's rows deleted | btree | that player | at a join with a new character | — |
+
+The row is written with the line, and the line reaches `my_experience` at the character's next release (at most 100 ms later, `LINES_MS`), so a client may see a row before its line and joins them by id.
+
+#### SpacetimeDB documentation consulted (act outcomes)
+
+The pages and versions of [My senses](#spacetimedb-documentation-consulted-eighth-change-2026-11-11) above. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/): "removing or modifying existing columns (type …)" is refused, so no column of `experience` (embedded in `line_seen`) changes; adding a table is always allowed. [Views](https://spacetimedb.com/docs/functions/views/): a btree `.filter()` gives an exact read set, so `my_act_outcomes` re-runs only when that character's rows change. [Event tables](https://spacetimedb.com/docs/tables/event-tables/) were not used: views cannot read them and a reconnecting client (or the death screen) must still find the row. [Performance](https://spacetimedb.com/docs/tables/performance/): "Be mindful of unbounded table growth": rows go with their lines.
 
 ### Compatibility: the `LIVING_PERCEPTION` build switch
 
