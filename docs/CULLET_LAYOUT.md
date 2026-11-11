@@ -159,6 +159,15 @@ The eye-height shares fell because a third of the points are now in enclosed pla
 - **Views.** The cupola axis and the Heron at the Net Wynd's foot were placed by geometry and checked in stills from above; they were not walked at eye height in a connected world.
 - **Performance.** 114 more models and draw calls were added without a frame measurement.
 
-## Verification
+## Verification (2026-11-11)
 
-See the branch's report and [verify-generation's validation](../.agents/skills/verify-generation/references/validation.md).
+On the dev-box, with a private `CARGO_TARGET_DIR` and my own container (`layout1-stdb`, SpacetimeDB 2.14.1, port 3324).
+
+- `cullet_plan.py --check` and `author_world.py cullet --check` (0 errors, 0 warnings: 64 residents, 22 homes bound) pass; `cullet.json` keeps its residents, homes, ways, town life and 34 structures.
+- `cargo test -p living-rules`: 171 passed, 9 ignored, with `the_cullet_seed_is_valid_and_reachable` and the pinned digests.
+- `cullet_kit_check.py`: 363 of 363 on footprint, triangles, surfaces, palette and materials.
+- `set -o pipefail; just living-check` exits 0.
+- verify-generation `--feature worlds --seeds cullet,plan-test`: plan-test 78 of 78; Cullet 313 of 317, every plan check passing (lots as written, doors walkable, drops, resources, structures, homes, digests). The four failures come from the shared harness installing the shipped script over Cullet's laws after publishing, under which four elders die of old age at once; see [verify-generation's validation](../.agents/skills/verify-generation/references/validation.md). They are not the plan's, and they were not rerun on plain `origin/main`.
+- verify-ui `check.py support` on a scratch Cullet world: 7 of 7 (the flight, the terrace, the quay and a wall's top at their new places); the client's regenerated land matched the authority's digests. Its fixed spots were moved with the plan, and `drive.py` now honours `LIVING_STDB_URL`.
+- The game client in look-dev: 67 stills from 20 viewpoints at 13:00 and at 18:30, before and after, on the asset board (`place:cullet-strand`, `place:cullet-rows`, `place:cullet-ladder`, `place:cullet-crown-and-views`) and on the pass's page (`.local/layout-1/index.html` on the dev-box).
+- Not done: a walk in a connected world by a person; a frame-time measurement; verify-core, verify-minds and the other surfaces (no rule, mind or table changed).

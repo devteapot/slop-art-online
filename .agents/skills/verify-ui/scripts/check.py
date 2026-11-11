@@ -196,17 +196,19 @@ def themes(run, c):
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
 
 
-# Where the support scenario stands the player on Cullet (land metres) and what holds it up there:
+# Where the support scenario stands the player on Cullet (land metres; the plan's x + 510 and
+# 784 - y, as of layout pass 1: the Ladder Wynd at plan x -52, the Marver's terrace at x 68..80)
+# and what holds it up there:
 # a kit fixture's file (part of its path) and whether it is tall enough to be an occluder, so the
 # camera's fade (`envs::cutaway`) considers it at all.
 SUPPORTS = [
-    ("stairs", 410.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True),
-    ("terrace", 568.0, 720.8, "marver_terrace/", False),
+    ("stairs", 458.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True),
+    ("terrace", 584.0, 720.8, "marver_terrace/", False),
     ("quay", 450.0, 782.6, "quay/", False),
     # At the upper level's edge above a retaining wall: the drop's tiles keep you 1-1.5 m from
     # it, so it is beside you, never under you; it may fade when it stands between the camera
     # and you, as anything that hides you does.
-    ("wall", 440.0, 751.6, "retaining_wall/wall_005", False),
+    ("wall", 440.0, 751.6, "retaining_wall/wall_002", False),
 ]
 
 
