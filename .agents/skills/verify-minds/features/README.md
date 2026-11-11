@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt) | `roundtrip`, `acts` | [deliberation.md](deliberation.md) |
 | Answer speech and close an exchange | `conversation` | [conversations.md](conversations.md) |
+| The prompt frame: `LIVING_FRAME=player` opens think, compile, talk and consolidation with the player frame (sent and journaled), never an identity; the default leaves prompts unchanged; a bad value stops the service | `frame`, `roundtrip`; `prompts::` tests | [frame.md](frame.md) |
 | No-store persona/cursor, patch-loss XFAIL | `consolidation` | [consolidation.md](consolidation.md) |
 | Validate graphs, restrict actors, recover connection | `prune`, `reject`, `only`, `reconnect` | [robustness.md](robustness.md) |
 | Wait off stage and resume on stage | `lod` | [level-of-detail.md](level-of-detail.md) |
