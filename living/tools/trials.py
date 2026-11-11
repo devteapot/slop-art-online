@@ -1059,7 +1059,7 @@ class Instance:
                    LIVING_TOKEN=self.shared["token"],
                    LIVING_NEO4J_URI=f"127.0.0.1:{NEO4J_PORT}", LIVING_NEO4J_PASSWORD=self.shared["neo4j_pw"],
                    # Off (0) unless a trial asks for a rate: trials measure, they do not cap.
-                   LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY="4",
+                   LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY=os.environ.get("TRIALS_CONCURRENCY", "4"),
                    LIVING_VERIFY_FAKE_KEY="dummy-local-only", NO_PROXY="127.0.0.1,localhost",
                    RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
         # `minds.only: "all"`: the service thinks for every person and animal (no LIVING_ONLY);
