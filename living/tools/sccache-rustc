@@ -11,4 +11,10 @@ unset CARGO_TARGET_DIR CARGO_BUILD_TARGET_DIR CARGO_BUILD_BUILD_DIR CARGO_BUILD_
   CARGO_TERM_COLOR CARGO_TERM_PROGRESS_WHEN CARGO_TERM_PROGRESS_WIDTH CARGO_TERM_VERBOSE \
   CARGO_TERM_QUIET CARGO_TERM_HYPERLINKS CARGO_TERM_UNICODE CARGO_LOG CARGO_HTTP_TIMEOUT \
   CARGO_NET_RETRY CARGO_NET_OFFLINE
-exec "${SLOP_SCCACHE:-sccache}" "$@"
+# check.py sets SLOP_SCCACHE to the pinned copy (living/tools/install_sccache.sh); without it,
+# the pinned copy if installed, else an sccache on PATH.
+if [ -z "${SLOP_SCCACHE:-}" ]; then
+  SLOP_SCCACHE="$HOME/.local/share/slop-tools/bin/sccache"
+  [ -x "$SLOP_SCCACHE" ] || SLOP_SCCACHE=sccache
+fi
+exec "$SLOP_SCCACHE" "$@"

@@ -18,15 +18,23 @@ Idle means no file in the folder, and neither the worktree's index nor its HEAD 
 Never touched: the protected checkouts (~/dev/slop-art-online, ~/dev/slop-game,
 ~/dev/slop-floors, ~/dev/slop-ab-arm1, ~/dev/slop-ab-arm2) and everything under them,
 ~/archive, container storage and volumes (never pruned), anything that is not a build
-folder (evidence in .local included), the worktree roots themselves, and symlinks.
+folder (evidence in .local included), the worktree roots themselves, and symlinks. A machine
+adds its own protected paths in ~/.config/slop-disk/protect.txt (one path per line, `#`
+comments, `~` expanded; a path protects everything under it, and a build folder holding it)
+or with --protect PATH; these add to the built-in list and never shorten it.
 
 A removal renames the folder aside while holding its Cargo locks, checks again that nothing
 uses it, then deletes it. Prints a report and keeps it in ~/.local/state/slop-disk/.
 
 Usage: disk_clean.py [--apply] [--repo PATH] [--floor-gb 40] [--target-gb N] [--idle 24]
-                     [--merged-idle 2] [--pressure-idle 2] [--json]
+                     [--merged-idle 2] [--pressure-idle 2] [--protect PATH]...
+                     [--protect-file PATH] [--list-protected] [--json]
   Without --apply it is a dry run: the same report, nothing removed.
-Exit status: 0, or 3 when free space is still under the floor afterwards.
+  --protect PATH     protect PATH and everything under it (repeatable), besides the file
+  --protect-file P   read the machine's protected paths from P (~/.config/slop-disk/protect.txt)
+  --list-protected   print every protected path and where it comes from, then stop
+Exit status: 0, 2 for a bad argument or an unreadable or invalid protect file (nothing is
+removed), or 3 when free space is still under the floor afterwards.
 """
 import fcntl
 import json
@@ -41,11 +49,14 @@ import time
 HOME = os.path.expanduser("~")
 PROTECTED = [os.path.join(HOME, p) for p in ("dev/slop-art-online", "dev/slop-game", "dev/slop-floors", "dev/slop-ab-arm1", "dev/slop-ab-arm2", "archive")]
 NEVER = [os.path.join(HOME, p) for p in (".local/share/containers", ".local/share/docker", ".docker", "Library/Containers")] + ["/var/lib/containers", "/var/lib/docker"]
+# The machine's own additions to PROTECTED (never a replacement for it).
+PROTECT_FILE = os.path.join(HOME, ".config", "slop-disk", "protect.txt")
 CARGO_SIG = "Signature: 8a477f597d28d172789f06886806bc55"
 STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local/state"), "slop-disk")
 SKIP_DIRS = {".git", "node_modules", "__pycache__"}
 GB = 1024 ** 3
 WARNINGS = []
+NOTES = []  # things worth knowing that limit nothing (a container tool with nothing to run)
 
 
 def real(p):
@@ -55,6 +66,49 @@ def real(p):
 def inside(path, base):
     path, base = real(path), real(base)
     return path == base or path.startswith(base.rstrip("/") + "/")
+
+
+def read_protect_file(path):
+    """[(path, source)] from a protect file: one path per line, `#` starts a comment (a whole
+    line, or after a space), `~` is expanded. A missing file adds nothing. Raises ValueError
+    for an unreadable file or a line that is not an absolute path, so a broken file stops
+    the run instead of protecting less than it says."""
+    try:
+        text = open(path, encoding="utf-8").read()
+    except FileNotFoundError:
+        return []
+    except (OSError, UnicodeDecodeError) as e:
+        raise ValueError(f"cannot read the protect file {path}: {e}")
+    out = []
+    for n, line in enumerate(text.splitlines(), 1):
+        line = re.sub(r"(^|\s)#.*$", "", line).strip()
+        if not line:
+            continue
+        p = os.path.expanduser(line)
+        if not os.path.isabs(p):
+            raise ValueError(f"{path} line {n}: {line!r} is not an absolute path (start it with / or ~)")
+        out.append((os.path.normpath(p), f"{short(path)}, line {n}"))
+    return out
+
+
+def protected_paths(repo, extra, protect_file):
+    """Every protected path with its source: the built-in list, the repository's own main
+    checkout, the protect file and --protect."""
+    out = [(p, "built in") for p in PROTECTED]
+    if not any(real(repo) == real(p) for p, _ in out):
+        out.append((repo, "the repository's main checkout"))
+    out += read_protect_file(protect_file)
+    out += [(os.path.normpath(os.path.abspath(os.path.expanduser(p))), "--protect") for p in extra]
+    return out
+
+
+def protected_by(path, protected):
+    """The (path, source) that protects path: path lies under it, or it lies under path (a
+    build folder holding a protected path is never removed); None if none does."""
+    for p, src in protected:
+        if inside(path, p) or inside(p, path):
+            return p, src
+    return None
 
 
 def free_bytes(path="/"):
@@ -233,8 +287,58 @@ def exclusive_bytes(path):
         os.close(fd)
 
 
+_APFS = None
+
+
+def apfs_private_bytes(path):
+    """Bytes of a file no clone shares (macOS: getattrlist ATTR_CMNEXT_PRIVATESIZE, which
+    APFS keeps for every file, no root needed): what deleting it frees. None where the
+    attribute is not returned (another filesystem, an older macOS)."""
+    global _APFS
+    import ctypes
+    import ctypes.util
+    if _APFS is None:
+        try:
+            libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+
+            class AttrList(ctypes.Structure):
+                _fields_ = [("bitmapcount", ctypes.c_ushort), ("reserved", ctypes.c_uint16), ("commonattr", ctypes.c_uint32),
+                            ("volattr", ctypes.c_uint32), ("dirattr", ctypes.c_uint32), ("fileattr", ctypes.c_uint32), ("forkattr", ctypes.c_uint32)]
+            fn = libc.getattrlist
+            fn.argtypes = [ctypes.c_char_p, ctypes.POINTER(AttrList), ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint]
+            fn.restype = ctypes.c_int
+            # ATTR_BIT_MAP_COUNT, ATTR_CMN_RETURNED_ATTRS; with FSOPT_ATTR_CMN_EXTENDED the fork
+            # group means the extended common attributes, ATTR_CMNEXT_PRIVATESIZE among them
+            _APFS = (fn, AttrList(5, 0, 0x80000000, 0, 0, 0, 0x00000008))
+        except (OSError, AttributeError):
+            _APFS = False
+    if not _APFS:
+        return None
+    fn, al = _APFS
+    buf = ctypes.create_string_buffer(64)
+    # FSOPT_NOFOLLOW | FSOPT_ATTR_CMN_EXTENDED
+    if fn(os.fsencode(path), ctypes.byref(al), buf, len(buf), 0x1 | 0x20) != 0:
+        return None
+    import struct
+    # u32 length; attribute_set_t returned (5 x u32); then the off_t private size
+    length, = struct.unpack_from("=I", buf.raw, 0)
+    returned_ext, = struct.unpack_from("=I", buf.raw, 4 + 16)
+    if length < 32 or not returned_ext & 0x8:
+        return None
+    priv, = struct.unpack_from("=q", buf.raw, 24)
+    return priv if priv >= 0 else None
+
+
+def file_exclusive(path):
+    return apfs_private_bytes(path) if platform.system() == "Darwin" else exclusive_bytes(path)
+
+
+SIZE_METHOD = {"Linux": "FIEMAP", "Darwin": "getattrlist ATTR_CMNEXT_PRIVATESIZE"}
+
+
 def real_size(path):
-    """(exclusive bytes, shared bytes) of a folder tree, or None when FIEMAP is unavailable."""
+    """(exclusive bytes, shared bytes) of a folder tree, or None when the filesystem cannot
+    say which blocks a clone or reflink copy shares (SIZE_METHOD names the way it asks)."""
     excl = shared = 0
     for d, dirs, files in os.walk(path):
         for f in files:
@@ -245,7 +349,7 @@ def real_size(path):
                 continue
             if not os.path.isfile(full) or os.path.islink(full):
                 continue
-            e = exclusive_bytes(full)
+            e = file_exclusive(full)
             if e is None:
                 return None
             excl += e
@@ -319,8 +423,20 @@ def users_lsof():
     return held
 
 
-def container_mounts():
-    srcs = []
+def podman_without_machine(stderr):
+    """True when podman fails only because it has no machine to talk to (macOS, Windows):
+    then no podman container exists that could mount anything."""
+    if platform.system() == "Linux":
+        return False
+    try:
+        r = subprocess.run(["podman", "machine", "list", "--format", "{{.Name}}"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return r.returncode == 0 and not r.stdout.strip()
+
+
+def container_mounts(quiet=False):
+    srcs, answered, down = [], [], []
     for tool in ("podman", "docker"):
         if not shutil.which(tool):
             continue
@@ -331,8 +447,9 @@ def container_mounts():
                 raise OSError(f"{tool} ps exit {ps.returncode}: {(ps.stderr or '').strip()[:120]}")
             if ps.returncode != 0:
                 # no daemon answering: nothing runs under it; what its stopped containers mount is unknown
-                WARNINGS.append(f"{tool} ps failed (exit {ps.returncode}); no container of it is running, its stopped containers' mounts are unknown")
+                down.append((tool, ps.returncode, ps.stderr or ""))
                 continue
+            answered.append(tool)
             ids = ps.stdout.split()
             if ids:
                 ins = subprocess.run([tool, "inspect", "--format", "{{range .Mounts}}{{.Source}}\n{{end}}", *ids], stdout=subprocess.PIPE,
@@ -342,6 +459,14 @@ def container_mounts():
                 srcs += [(s.strip(), f"container mount ({tool})") for s in ins.stdout.splitlines() if s.strip().startswith("/")]
         except (subprocess.TimeoutExpired, OSError) as e:  # a hung daemon may still run containers
             srcs.append(("/", f"{tool} did not answer ({e}): treating every folder as mounted"))
+    if not quiet:
+        for tool, code, err in down:
+            if tool == "podman" and podman_without_machine(err):
+                NOTES.append(f"podman has no machine (ps exit {code}), so it has no containers")
+            elif answered:
+                NOTES.append(f"{tool} ps failed (exit {code}); {', '.join(answered)} answered, and no {tool} container is running")
+            else:
+                WARNINGS.append(f"{tool} ps failed (exit {code}); no container of it is running, its stopped containers' mounts are unknown")
     return srcs
 
 
@@ -430,7 +555,7 @@ def current_users():
 def remove_row(r, now, mpoints):
     """Remove one folder, or only Cargo's entries in it, if nothing uses it now; returns the
     bytes freed and records the result in r."""
-    mounts_now = container_mounts()
+    mounts_now = container_mounts(quiet=True)
     user = in_use(r["path"], current_users(), mounts_now)
     if user:
         r.update(decision="keep", result="kept", why=f"in use by now: {user}")
@@ -460,7 +585,7 @@ def remove_row(r, now, mpoints):
         else:
             aside = f"{r['path']}.slop-reclaim-{int(now)}"
             os.rename(r["path"], aside)
-        again = in_use(aside, current_users(), container_mounts()) or (
+        again = in_use(aside, current_users(), container_mounts(quiet=True)) or (
             "a filesystem is mounted inside" if any(inside(m, aside) for m in mount_points()) else None)
         if again:
             if partial:
@@ -484,7 +609,8 @@ def remove_row(r, now, mpoints):
 
 
 def main(argv):
-    opts = {"apply": False, "repo": None, "floor": 40.0, "target": None, "idle": 24.0, "merged_idle": 2.0, "pressure_idle": 2.0, "json": False}
+    opts = {"apply": False, "repo": None, "floor": 40.0, "target": None, "idle": 24.0, "merged_idle": 2.0, "pressure_idle": 2.0, "json": False,
+            "protect": [], "protect_file": PROTECT_FILE, "list": False}
     args = list(argv)
     try:
         while args:
@@ -493,6 +619,12 @@ def main(argv):
                 opts["apply"] = True
             elif a == "--json":
                 opts["json"] = True
+            elif a == "--list-protected":
+                opts["list"] = True
+            elif a == "--protect":
+                opts["protect"].append(args.pop(0))
+            elif a == "--protect-file":
+                opts["protect_file"] = os.path.expanduser(args.pop(0))
             elif a in ("--repo", "--floor-gb", "--target-gb", "--idle", "--merged-idle", "--pressure-idle"):
                 v = args.pop(0)
                 key = {"--repo": "repo", "--floor-gb": "floor", "--target-gb": "target", "--idle": "idle", "--merged-idle": "merged_idle", "--pressure-idle": "pressure_idle"}[a]
@@ -513,7 +645,17 @@ def main(argv):
         print(f"disk_clean: {repo} is not in a git repository", file=sys.stderr)
         return 2
     repo = os.path.dirname(common.strip())
-    protected = PROTECTED + [repo]  # the main checkout of the repository, wherever it is
+    try:  # the built-in list, the main checkout of the repository wherever it is, the machine's file
+        protected = protected_paths(repo, opts["protect"], opts["protect_file"])
+    except ValueError as e:
+        print(f"disk_clean: {e}; nothing removed", file=sys.stderr)
+        return 2
+    plist = [f"  {short(p)}  ({src}{'' if os.path.lexists(p) else '; does not exist now'})" for p, src in protected] + \
+            [f"  {short(n)}  (built in: container storage)" for n in NEVER]
+    if opts["list"]:
+        print("protected (never removed, nor anything under them, nor a build folder holding them):")
+        print("\n".join(plist))
+        return 0
     os.makedirs(os.path.join(STATE, "reports"), exist_ok=True)
     lockf = open(os.path.join(STATE, "clean.lock"), "w")
     try:
@@ -538,11 +680,12 @@ def main(argv):
     rows = []
     for wt in worktrees(repo):
         path = wt["path"]
-        if any(inside(path, p) for p in protected):
+        guard = next(((p, src) for p, src in protected if inside(path, p)), None)
+        if guard:
             for t in find_targets(path):
                 size, newest, _, _ = scan(t)
-                rows.append({"path": t, "worktree": path, "branch": wt.get("branch"), "size": size, "idle_h": (now - newest) / 3600,
-                             "decision": "never", "why": "protected checkout"})
+                rows.append({"path": t, "worktree": path, "branch": wt.get("branch"), "size": size, "idle_h": max(now - newest, 0) / 3600,
+                             "decision": "never", "why": f"protected: {short(guard[0])} ({guard[1]})"})
             continue
         merged = False
         clean = False
@@ -554,7 +697,13 @@ def main(argv):
             clean = st_code == 0 and not st.strip()
         gtime = git_idle(path)
         for t in find_targets(path):
-            if os.path.islink(t) or not inside(t, path) or real(t) == real(path) or any(inside(t, n) for n in NEVER + protected):
+            if os.path.islink(t) or not inside(t, path) or real(t) == real(path) or any(inside(t, n) or inside(n, t) for n in NEVER):
+                continue
+            guard = protected_by(t, protected)
+            if guard:
+                size, newest, _, _ = scan(t)
+                rows.append({"path": t, "worktree": path, "branch": wt.get("branch"), "size": size, "idle_h": max(now - newest, 0) / 3600,
+                             "decision": "never", "why": f"protected: {short(guard[0])} ({guard[1]})"})
                 continue
             try:
                 size, newest, files, crosses = scan(t)
@@ -562,8 +711,9 @@ def main(argv):
                 WARNINGS.append(f"skipped {short(t)}: {e}")
                 continue
             crosses = crosses or any(inside(m, t) for m in mpoints)
-            idle_h = (now - newest) / 3600
-            wt_idle_h = (now - max(newest, gtime)) / 3600
+            # a file written during the scan is newer than `now`: idle 0, not negative
+            idle_h = max(now - newest, 0) / 3600
+            wt_idle_h = max(now - max(newest, gtime), 0) / 3600
             row = {"path": t, "worktree": path, "branch": wt.get("branch"), "size": size, "files": files, "idle_h": idle_h,
                    "wt_idle_h": wt_idle_h, "merged": merged, "clean": clean}
             user = in_use(t, held, mounts)
@@ -593,43 +743,76 @@ def main(argv):
             rows.append(row)
     # what removing a folder really frees: reflink copies share extents, which du (and the
     # block count above) counts in every copy
+    sized = {"exclusive": 0, "blocks": 0}
     for r in rows:
         if r["decision"] in ("remove", "pressure"):
             rs = real_size(r["path"])
             if rs is not None:
                 r["shared"] = rs[1]
                 r["size"] = rs[0] if not r.get("keep_entries") else min(r["size"], rs[0])
-    # pressure: oldest idle first until the projected free space reaches the target
+                sized["exclusive"] += 1
+            else:
+                r["sized_by"] = "blocks"
+                sized["blocks"] += 1
+    # pressure: oldest idle first. The dry run projects free space from the sizes above; an
+    # applied run measures free space before each pressure removal and stops at the target,
+    # so a size that over-counts (clone blocks counted in full) never removes too little,
+    # and one that under-counts never removes too much
     projected = free0 + sum(r["size"] for r in rows if r["decision"] == "remove")
-    for r in sorted((r for r in rows if r["decision"] == "pressure"), key=lambda r: -r["idle_h"]):
+    pressure = sorted((r for r in rows if r["decision"] == "pressure"), key=lambda r: -r["idle_h"])
+    for r in pressure:
+        if opts["apply"]:
+            continue  # decided below, one at a time against measured free space
         if projected >= opts["target"] * GB:
             r.update(decision="keep", why=r["why"].replace("removed only under pressure", f"free space at or over {opts['target']:.0f} GB"))
             continue
         r.update(decision="remove", why=r["why"].replace("; removed only under pressure", f"; under pressure (free under {opts['target']:.0f} GB)"))
         projected += r["size"]
     removed_bytes = 0
+
+    def remove(r):
+        nonlocal removed_bytes
+        try:
+            removed_bytes += remove_row(r, now, mpoints)
+        except Exception as e:  # never stop half way without a report
+            r.update(decision="keep", result="error", why=f"{r['why']}; stopped: {type(e).__name__}: {e}")
+
     for r in rows:
         if r["decision"] != "remove":
             continue
         if not opts["apply"]:
             r["result"] = "would remove"
             continue
-        try:
-            removed_bytes += remove_row(r, now, mpoints)
-        except Exception as e:  # never stop half way without a report
-            r.update(decision="keep", result="error", why=f"{r['why']}; stopped: {type(e).__name__}: {e}")
+        remove(r)
+    for r in pressure if opts["apply"] else []:
+        free_now = free_bytes(repo)
+        if free_now >= opts["target"] * GB:
+            r.update(decision="keep", why=r["why"].replace("removed only under pressure", f"free space measured at {free_now / GB:.1f} GB, at or over {opts['target']:.0f} GB"))
+            continue
+        r.update(decision="remove", why=r["why"].replace("; removed only under pressure", f"; under pressure (free measured at {free_now / GB:.1f} GB, under {opts['target']:.0f} GB)"))
+        remove(r)
     free1 = free_bytes(repo)
     host = platform.node()
     stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
     lines = [f"slop disk clean on {host} at {stamp} ({'applied' if opts['apply'] else 'dry run, nothing removed'})",
              f"policy: floor {opts['floor']:.0f} GB, target {opts['target']:.0f} GB; merged+clean idle >= {opts['merged_idle']:g} h; "
              f"idle >= {opts['idle']:g} h; under pressure idle >= {opts['pressure_idle']:g} h; repo {short(repo)}",
-             f"free before: {free0 / GB:.1f} GB (sizes: blocks on disk; for folders it would remove, only the blocks no reflink copy shares; 'freed' is the measured change in free space)"] + [f"warning: {w}" for w in WARNINGS] + [""]
+             f"free before: {free0 / GB:.1f} GB; 'freed' is the measured change in free space",
+             "sizes: blocks on disk; for the folders it would remove, " + (
+                 f"only the blocks no clone or reflink copy shares (asked with {SIZE_METHOD.get(platform.system(), 'FIEMAP')}" + (
+                     f"; {sized['blocks']} folders on a filesystem that cannot say, counted in full)" if sized["blocks"] else ")")
+                 if sized["exclusive"] or not sized["blocks"] else
+                 f"all blocks: this filesystem cannot say which blocks clones share ({SIZE_METHOD.get(platform.system(), 'FIEMAP')} unavailable), so clones count in full"),
+             "pressure: " + ("removals one at a time, oldest first, each only while measured free space is under the target"
+                             if opts["apply"] else "projected from the sizes; an applied run measures free space before each removal instead"),
+             "protected (never removed, nor anything under them, nor a build folder holding them):"] + plist + \
+        [f"note: {n}" for n in NOTES] + [f"warning: {w}" for w in WARNINGS] + [""]
     order = {"remove": 0, "keep": 1, "pressure": 1, "never": 2}
     for r in sorted(rows, key=lambda r: (order[r["decision"]], -r["size"])):
         tag = {"remove": "REMOVE", "keep": "keep", "pressure": "keep", "never": "never"}[r["decision"]]
         res = f" [{r['result']}{', freed ' + fmt_gb(r['freed']).strip() if r.get('freed') is not None else ''}]" if r.get("result") else ""
         note = f" (+{r['shared'] / GB:.1f} GB shared with reflink copies, freed only with them)" if r.get("shared", 0) >= GB / 10 else ""
+        note += " (all blocks counted: clones unknown)" if r.get("sized_by") == "blocks" else ""
         lines.append(f"  {tag:6} {fmt_gb(r['size'])}  {short(r['path'])}  ({r.get('branch') or 'detached'}): {r['why']}{note}{res}")
     if not rows:
         lines.append("  no build folders found")
@@ -649,6 +832,7 @@ def main(argv):
         f.write(report + "\n")
     with open(os.path.join(STATE, "log.jsonl"), "a") as f:
         f.write(json.dumps({"at": stamp, "host": host, "apply": opts["apply"], "free0": free0, "free1": free1, "removed": removed_bytes,
+                            "protected": [[p, src] for p, src in protected], "sized": sized, "notes": NOTES, "warnings": WARNINGS,
                             "rows": [{k: r.get(k) for k in ("path", "size", "decision", "why", "result", "freed")} for r in rows]}) + "\n")
     reports = sorted(os.listdir(os.path.join(STATE, "reports")))
     for old in reports[:-300]:
