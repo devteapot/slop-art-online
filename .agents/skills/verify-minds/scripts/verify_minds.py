@@ -1618,7 +1618,7 @@ def main():
     parser.add_argument('--run', required=True, help='new suite name starting with minds- (gate- for the merge scene gate)')
     parser.add_argument('--case', action='append', choices=CASES, help='repeat to select; default all')
     parser.add_argument('--no-unit-tests', action='store_true',
-                        help="skip living-mind's cargo tests (the merge's scene gate: `just living-check` ran them)")
+                        help="skip living-mind's cargo tests (the merge's scene gate runs them as its own case, mind-unit)")
     args = parser.parse_args()
     if not re.fullmatch(r'(minds|gate)-[a-zA-Z0-9-]+', args.run):
         parser.error('--run must start with minds- (or gate- for the merge scene gate)')

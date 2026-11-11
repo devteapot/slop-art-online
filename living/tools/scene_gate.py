@@ -10,8 +10,10 @@ touches behaviour, these cases with the fake model only:
   verify-core    tick, sight, senses, refusal (one default-seed world), skirmish (an island world)
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
+  living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
 
-The four worlds run at once. Flakes: a failing case runs again once, alone, on a fresh scratch
+The four worlds and the tests run at once. A case whose only failures are parts on the red-on-main
+list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
 database; it fails the gate only when it fails twice. A case that failed twice is then judged on
 main (the merge's first parent): from the cache of main's results, from the red-on-main list
 when nothing behavioural changed since that entry was last seen red, or by running it on main's
@@ -49,6 +51,7 @@ import concurrent.futures
 import datetime
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -86,12 +89,20 @@ CASES = {
                      "flaky": "times out under load (the demand act or the rules' ask late): verify-minds validation, recipes-1, l2c, fix-death-labels"},
     "conversation": {"skill": "verify-minds", "group": "minds"},
     "combat":       {"skill": "verify-player", "group": "player",
-                     "flaky": "staged fights in town geometry (a bolt into a passer-by, an arrow into a wall): verify-player validation, l2"},
+                     "flaky": "staged fights in town geometry (a bolt into a passer-by, an arrow into a wall): verify-player validation, l2; "
+                              "the kill scene 34/35 then 2/2 (stamina-1)"},
+    # living-mind's own cargo tests: `just living-check` builds the mind but tests only living-rules.
+    "mind-unit":    {"skill": "living-mind", "group": "unit",
+                     "flaky": "timing bounds under load: llm::tests::unreachable_provider_holds_calls (1.97 s against 2 s), "
+                              "fake_transport_records_caching_usage_and_paced_429_recovery (the 180 ms queue wait)"},
 }
+# Parts of a case listed on the red-on-main list by key: `living-mind::<test>` (a mind-unit test)
+# and `combat:<scene>` (a verify-player combat scene). A case whose only failures are listed parts
+# passes, saying so; `recheck` cannot run them, so they are dropped by hand when green.
 # The skills name no owners; the surface is the owner until `reds --owner` names one.
 ORDER = list(CASES)
 V = ".agents/skills/verify/scripts/verify.py"
-LOCK = threading.Lock()
+LOCK = threading.RLock()  # say() inside the list updates takes it again
 
 
 def say(msg):
@@ -176,11 +187,16 @@ def drop_red(reds_path, case, why):
 
 # ---------------------------------------------------------------- running scenes
 
+def listed_parts(reds_path, prefix):
+    return {k[len(prefix):] for k in load_json(reds_path, {}) if k.startswith(prefix)}
+
+
 class Runner:
-    def __init__(self, stamp, env, out):
-        self.stamp, self.env, self.out = stamp, env, out
+    def __init__(self, stamp, env, out, reds_path):
+        self.stamp, self.env, self.out, self.reds_path = stamp, env, out, reds_path
         self.runs = []  # every gate run name launched, for the final sweep
         self.procs = set()
+        self.notes = {}  # (tag, case) -> what a passing run with listed failures failed
 
     def sh(self, cmd, root, log, timeout):
         """Run one command in its own process group, output appended to log; return its code."""
@@ -222,6 +238,18 @@ class Runner:
         """Run `cases` of one group on fresh worlds; {case: (ok, evidence, seconds)}."""
         t0 = time.time()
         res = {}
+        if group == "unit":
+            log = self.out / f"{tag}.log"
+            code = self.sh(["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-mind"], root, log, 2400)
+            text = log.read_text(errors="replace")
+            failed = sorted(set(re.findall(r"^test (\S+) \.\.\. FAILED$", text, re.M)))
+            listed = listed_parts(self.reds_path, "living-mind::")
+            ok = code == 0 or (bool(failed) and set(failed) <= listed)
+            if code and ok:
+                self.notes[(tag, "mind-unit")] = f"only listed red tests failed: {', '.join(failed)}"
+            elif code and failed:
+                self.notes[(tag, "mind-unit")] = f"failed: {', '.join(failed)}" + (f" (listed: {', '.join(sorted(set(failed) & listed))})" if set(failed) & listed else "")
+            return {"mind-unit": (ok, str(log), time.time() - t0)}
         if group == "minds":
             suite = f"gate-{self.stamp}-{tag}"
             ev = Path(root) / ".local/living/verify" / suite
@@ -252,7 +280,14 @@ class Runner:
                     return {"combat": (False, f"{log} (join failed)", time.time() - t0)}
                 code = self.sh([sys.executable, ".agents/skills/verify-player/scripts/combat.py", "--run", run, "--scene", "all"],
                                root, ev / "combat.txt", 1500)
-                return {"combat": (code == 0, str(ev / "combat.json"), time.time() - t0)}
+                bad = [r for r in load_json(ev / "combat.json", []) if not r.get("ok")]
+                scenes = sorted({str(r.get("scene")) for r in bad})
+                listed = listed_parts(self.reds_path, "combat:")
+                ok = code == 0 or (bool(bad) and set(scenes) <= listed)
+                if code:
+                    self.notes[(tag, "combat")] = (f"only listed red scenes failed: " if ok else "failed in scenes: ") + \
+                        ", ".join(f"{s} ({sum(1 for r in bad if str(r.get('scene')) == s)})" for s in scenes)
+                return {"combat": (ok, str(ev / "combat.json"), time.time() - t0)}
             for c in cases:
                 code = self.sh([sys.executable, ".agents/skills/verify-core/scripts/scenes.py", c, "--run", run], root,
                                ev / f"{c}.txt", 900)
@@ -284,8 +319,11 @@ def run_cases(runner, root, cases, tag):
             except Exception as e:  # a driver crash is the group's failure, never the gate's crash
                 got = {c: (False, f"gate error: {type(e).__name__}: {e}", 0.0) for c in groups[futs[f]]}
             for c, (ok, ev, secs) in got.items():
+                # a note (listed red parts that failed, or which parts failed) travels with the evidence
+                note = runner.notes.get((f"{tag}-{futs[f]}", c))
+                ev = f"{ev} [{note}]" if note else ev
                 say(f"{tag}: {c} {'passed' if ok else 'FAILED'} in {secs:.0f} s ({ev})")
-            out.update(got)
+                out[c] = (ok, ev, secs)
     return out
 
 
@@ -349,7 +387,7 @@ def judge_on_main(a, runner, repo, base, cases, record):
     if todo:
         say(f"judging {', '.join(todo)} on main {base[:10]} (checkout {root}, build {a.main_dir}-target)")
         env = dict(runner.env, CARGO_TARGET_DIR=f"{a.main_dir}-target")
-        main_runner = Runner(runner.stamp, env, runner.out)
+        main_runner = Runner(runner.stamp, env, runner.out, runner.reds_path)
         t0 = time.time()
         first = retry_each(main_runner, root, todo, "main")
         again = [c for c in todo if not first[c][0]]
@@ -420,7 +458,7 @@ def cmd_run(a):
     say(f"{base[:10]}..{head[:10]} touches {len(touched)} behavioural path{'s' if len(touched) != 1 else ''} "
         f"({', '.join(touched[:4])}{', …' if len(touched) > 4 else ''}); running {', '.join(cases)} on {container} ({a.stdb_url}), "
         f"databases verify-gate-{stamp}-*, evidence {out}")
-    runner = Runner(stamp, env, out)
+    runner = Runner(stamp, env, out, a.reds)
     try:
         first = run_cases(runner, repo, cases, "a")
         record["first_seconds"] = round(time.time() - t0)
@@ -490,7 +528,7 @@ def cmd_reds(a):
     reds = load_json(a.reds, {})
     if a.add:
         if not spec(a.add, a.skill):
-            raise SystemExit(f"the gate cannot run {a.add} of {a.skill}; `recheck` would never clear it (drop it by hand)")
+            print(f"note: `recheck` cannot run {a.add} ({a.skill}); drop it by hand when it is green (reds --drop {a.add})")
         e = reds.get(a.add) or {"case": a.add, "skill": a.skill or spec(a.add)["skill"], "first_seen": now(),
                                 "first_main": a.main, "last_seen": now(), "last_main": a.main, "times": 0}
         e.update({k: v for k, v in (("owner", a.who), ("reason", a.reason), ("last_evidence", a.evidence)) if v})
@@ -534,7 +572,7 @@ def cmd_recheck(a):
         out = Path(root) / ".local/living/verify" / f"gate-{stamp}"
         out.mkdir(parents=True, exist_ok=True)
         say(f"rechecking {', '.join(cases)} on main {base[:10]} (checkout {root}), databases verify-gate-{stamp}-*")
-        runner = Runner(stamp, env, out)
+        runner = Runner(stamp, env, out, a.reds)
         try:
             got = retry_each(runner, root, cases, "recheck")
         finally:

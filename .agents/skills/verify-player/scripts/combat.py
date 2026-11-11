@@ -28,6 +28,7 @@ spec.loader.exec_module(V)
 
 RESULTS = []
 ADMIN = None
+SCENE = None  # the scene running, named on each result (the scene gate's per-scene red-on-main list)
 
 
 def admin():
@@ -55,7 +56,7 @@ def call(st, reducer, args, who="player"):
 
 
 def check(st, name, ok, detail):
-    RESULTS.append({"check": name, "ok": bool(ok), "detail": detail})
+    RESULTS.append({"check": name, "ok": bool(ok), "detail": detail, "scene": SCENE})
     V.log(st, f"{'PASS' if ok else 'FAIL'} {name}: {detail}")
 
 
@@ -576,7 +577,9 @@ def main():
         time.sleep(1.0)
     home = body(st, me(st))
     names = list(SCENES) if a.scene == "all" else a.scene.split(",")
+    global SCENE
     for n in names:
+        SCENE = n
         if n not in ("wolves", "death") and home:
             call(st, "place_at", [me(st), home[0], home[1]], "admin")
             time.sleep(0.3)
