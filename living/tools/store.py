@@ -1557,7 +1557,8 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
                     for r in rows if r["status"] in ("excluded", "held")],
            "dropped": [{"file": scrubber.publish_path(d["file"]), "where": d["where"],
                         "why": "quotes an owner line" if d["why"].startswith("quotes") else "repeats an owner line"}
-                       for d in scrubber.dropped],
+                       for d in scrubber.dropped
+                       if d["file"] in {r["path"].split("!")[-1] for r in rows if r["status"] == "ok"}],
            "counts": {"instances": len(instances), "calls": len(calls), "rows": len(streams),
                       "prompts": len(prompts)}}
     with open(os.path.join(out_dir, "MANIFEST.json"), "w", encoding="utf-8") as f:
@@ -2129,7 +2130,8 @@ def cmd_scrub(a, cfg, machine):
         rows, totals = write_scrubbed(src, sc, os.path.join(a.write, "tree"))
     else:
         rows, totals, _ = scrub_source(src, sc)
-    dropped = list(sc.dropped)
+    okp = {r["path"].split("!")[-1] for r in rows if r["status"] == "ok"}
+    dropped = [d for d in sc.dropped if d["file"] in okp]
     dec = decision_report(src, sc, rows, totals)
     md = dry_run_markdown(src, kind, rows, totals, dec, sc)
     out = a.write or a.report or os.path.join(_dryrun_dir(), re.sub(r"[^\w.-]+", "_", tilde(src).strip("~/")))
