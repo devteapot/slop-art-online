@@ -197,7 +197,7 @@ def main():
         print(f"| {a['day']} | {a['season']} | {fmt(a['in'])} | {fmt(b['in'])} | {fmt(a['out'])} | {fmt(a['land'])} / {fmt(b['land'])} | {fmt(a['stores'])} / {fmt(b['stores'])} | {fmt(a['hungry'])} / {fmt(b['hungry'])} |")
     print("\n(Day 1 starts at 07:00, so it has 17 hours; out is what was eaten, in what the land grew.)\n")
     print("## Each winter, by scenario (points)\n")
-    print("| Scenario | Rule | Winter | Land when winter comes | Stores when winter comes | Eaten from stores in winter | Hungry in winter | Lowest stores |")
+    print(f"| Scenario | Rule | Winter | Land when winter comes | Stores when winter comes | Eaten from stores in winter | Hungry in winter | Lowest stores in {YEARS} years |")
     print("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for sc in ("eat from the land", "lay by in autumn", "bare land"):
         for rule in ("old", "new"):
@@ -205,7 +205,8 @@ def main():
             for y in range(2):
                 wd = [d for d in days if (d["day"] - 1) // YEAR_DAYS == y and d["season"] == "winter"]
                 before = [d for d in days if d["day"] == wd[0]["day"] - 1][0]
-                print(f"| {sc} | {rule} | {y + 1} | {fmt(before['land'])} | {fmt(before['stores'])} | {fmt(before['stores'] - wd[-1]['stores'])} | {fmt(sum(d['hungry'] for d in wd))} | {fmt(min(d['stores'] for d in days))} |")
+                land = "0 (emptied)" if sc == "bare land" else fmt(before["land"])
+                print(f"| {sc} | {rule} | {y + 1} | {land} | {fmt(before['stores'])} | {fmt(before['stores'] - wd[-1]['stores'])} | {fmt(sum(d['hungry'] for d in wd))} | {fmt(min(d['stores'] for d in days))} |")
     print(f"\n## Over {YEARS} years\n")
     print("| Scenario | Rule | Stores fall a year (years 2 to 3) | First winter with hunger | Hungry that winter | Hungry over all winters |")
     print("| --- | --- | ---: | ---: | ---: | ---: |")
