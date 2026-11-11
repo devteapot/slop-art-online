@@ -10,6 +10,7 @@ Slop Art Online is a persistent living-world game built with Rust, SpacetimeDB a
 - [Current state](docs/CURRENT_STATE.md), [world roadmap](docs/WORLD_ROADMAP.md) and [work queue](docs/TODO.md): implementation evidence and remaining work; the legacy sections are historical.
 - [Performance contract](docs/PERFORMANCE_CONTRACT.md): locked gameplay, latency, population and resource targets; benchmark acceptance rules.
 - [Audit and experiments](docs/AUDIT_AND_EXPERIMENTS.md): causal evidence and acceptance requirements.
+- [Characters](docs/CHARACTERS.md): the character generator that replaces VRoid bases, its parameters and commands.
 
 The seven-stage roadmap has completed a bounded implementation pass. That does not establish autonomous ascension, sustainable large populations or performance acceptance. The locked target is 60 Hz active movement/combat, stable 60 FPS with higher refresh-rate support, and 2,000 active characters including a 200-character local battle for 8 hours within the performance contract's latency/resource limits. The immediate gate is 216 characters for 30 minutes at the same quality limits. Existing whole-World processing and finite actor limits are prototype constraints to address, not patterns to extend. Historical 20 Hz checkpoints, ADRs and old current-state sections do not override newer evidence or agreed design.
 
@@ -46,6 +47,7 @@ Use the [Justfile](Justfile) and the [living core](docs/LIVING_CORE.md). The leg
 
 ```bash
 just living-check     # authority wasm + mind + both observers + game client + rules tests; run before every commit
+just living-merge <branch> -m "Merge <branch>: …"  # coordinators: --no-ff merge, check, push, retry when main moved (docs/TOOLING.md)
 just living-game-assets # regenerate the game client's git-ignored assets (needs Blender; Kimodo cache for clips)
 just living-test      # rules tests
 just living-up        # SpacetimeDB + Neo4j containers
@@ -69,6 +71,7 @@ All agent work on this project runs on Claude.
 
 - **Coordinators:** each machine has one coordinator thread on Claude Opus 5.5 (`claude-opus-5-5`) at high reasoning effort.
 - **Subagents:** Claude Opus 5.5 at high reasoning effort by default.
+- **Ultracode:** off for coordinators and subagents. Turn it on only when the owner asks for it for a named piece of work, and only for that work.
 - **Fable exceptions:** use Claude Fable 5.2 (`claude-fable-5-2`) at high reasoning effort for asset generation, such as 3D models and textures, and for a task that Opus has attempted and could not solve. Say in the report when a task was moved to Fable and why.
 - A model or provider the owner asks for by name overrides these defaults for that task.
 - A model named inside a skill does not override this section. This section does not switch the model of a thread the owner started.

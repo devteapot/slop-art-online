@@ -2017,6 +2017,7 @@
        ],
        "district": "the Strand",
        "building": false,
+       "seed": 96817,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2046,6 +2047,8 @@
        "landmark": true,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/heron/heron.glb",
+       "seed": 22480,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2127,6 +2130,8 @@
        ],
        "district": "the Strand",
        "building": true,
+       "model": "cullet/counting_house/counting_house.glb",
+       "seed": 77922,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2156,6 +2161,8 @@
        "height_m": 8.5,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/net_loft/net_loft_1.glb",
+       "seed": 90582,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2184,6 +2191,8 @@
        "height_m": 8.5,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/net_loft/net_loft_2.glb",
+       "seed": 54316,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2212,6 +2221,8 @@
        "height_m": 8.5,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/net_loft/net_loft_3.glb",
+       "seed": 94106,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2240,6 +2251,8 @@
        "height_m": 8.5,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/net_loft/net_loft_4.glb",
+       "seed": 73657,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2268,6 +2281,8 @@
        "height_m": 8.5,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/net_loft/net_loft_5.glb",
+       "seed": 45871,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2296,6 +2311,8 @@
        "height_m": 8.5,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/net_loft/net_loft_6.glb",
+       "seed": 5461,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2324,6 +2341,8 @@
        "height_m": 6.4,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/smokehouse/smokehouse_1.glb",
+       "seed": 35824,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2352,6 +2371,8 @@
        "height_m": 6.4,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/smokehouse/smokehouse_2.glb",
+       "seed": 27434,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2380,6 +2401,8 @@
        "height_m": 11.36,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/store/store.glb",
+       "seed": 5390,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2412,6 +2435,8 @@
        "height_m": 10.6,
        "district": "the Strand",
        "building": true,
+       "model": "cullet/boatshed/boatshed.glb",
+       "seed": 33054,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2440,6 +2465,8 @@
        "height_m": 8.0,
        "district": "the Strand",
        "building": false,
+       "model": "cullet/dry_dock/dry_dock.glb",
+       "seed": 88448,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2468,6 +2495,8 @@
        "height_m": 0,
        "district": "the Strand",
        "building": false,
+       "model": "cullet/slip/slip.glb",
+       "seed": 9563,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2527,6 +2556,8 @@
        ],
        "district": "Cinder Row",
        "building": true,
+       "model": "cullet/cone/cone.glb",
+       "seed": 9745,
        "wear": {
         "salt": 1.0,
         "soot": 1.0,
@@ -2571,6 +2602,8 @@
        ],
        "district": "Cinder Row",
        "building": false,
+       "model": "cullet/cone_yard/cone_yard.glb",
+       "seed": 36759,
        "wear": {
         "salt": 1.0,
         "soot": 0.06,
@@ -2629,6 +2662,8 @@
        ],
        "district": "Cinder Row",
        "building": true,
+       "model": "cullet/wash_house/wash_house.glb",
+       "seed": 72496,
        "wear": {
         "salt": 1.0,
         "soot": 0.84,
@@ -2658,6 +2693,8 @@
        "height_m": 14.6,
        "district": "Cinder Row",
        "building": true,
+       "model": "cullet/lehr_house/lehr_house.glb",
+       "seed": 85438,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2686,6 +2723,8 @@
        "height_m": 7.6,
        "district": "Cinder Row",
        "building": true,
+       "model": "cullet/pot_house/pot_house.glb",
+       "seed": 53990,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2714,6 +2753,8 @@
        "height_m": 5.72,
        "district": "Cinder Row",
        "building": true,
+       "model": "cullet/cullet_shed/cullet_shed.glb",
+       "seed": 24636,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2742,6 +2783,8 @@
        "height_m": 7.4,
        "district": "Cinder Row",
        "building": true,
+       "model": "cullet/ash_house/ash_house.glb",
+       "seed": 97450,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2770,6 +2813,8 @@
        "height_m": 8.82,
        "district": "the mole",
        "building": true,
+       "model": "cullet/lamp_house/lamp_house.glb",
+       "seed": 16671,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2828,6 +2873,8 @@
        ],
        "district": "the mole",
        "building": true,
+       "model": "cullet/watchglass/watchglass.glb",
+       "seed": 2436,
        "wear": {
         "salt": 1.0,
         "soot": 0.0,
@@ -2856,6 +2903,8 @@
        "height_m": 9.62,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_1.glb",
+       "seed": 16841,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -2894,6 +2943,8 @@
        "height_m": 9.62,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_2.glb",
+       "seed": 33811,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -2932,6 +2983,8 @@
        "height_m": 9.92,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_3.glb",
+       "seed": 25637,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -2966,6 +3019,8 @@
        "height_m": 9.62,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_4.glb",
+       "seed": 28134,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -3004,6 +3059,8 @@
        "height_m": 9.62,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_5.glb",
+       "seed": 14192,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -3065,6 +3122,8 @@
        ],
        "district": "the Rows",
        "building": true,
+       "model": "cullet/batch/batch.glb",
+       "seed": 16941,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -3094,6 +3153,8 @@
        "height_m": 9.62,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_6.glb",
+       "seed": 32458,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -3132,6 +3193,8 @@
        "height_m": 9.62,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_7.glb",
+       "seed": 23388,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -3170,6 +3233,8 @@
        "height_m": 9.62,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_8.glb",
+       "seed": 3949,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -3208,6 +3273,8 @@
        "height_m": 5.9,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_9.glb",
+       "seed": 82299,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -3243,6 +3310,8 @@
        "height_m": 10.22,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/low_10.glb",
+       "seed": 97281,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
@@ -3297,6 +3366,8 @@
        ],
        "district": "the Rows",
        "building": true,
+       "model": "cullet/marver/marver.glb",
+       "seed": 72884,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3377,6 +3448,7 @@
        ],
        "district": "the Rows",
        "building": false,
+       "seed": 40878,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3405,6 +3477,8 @@
        "height_m": 9.82,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/mid_1.glb",
+       "seed": 19180,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3443,6 +3517,8 @@
        "height_m": 9.82,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/mid_2.glb",
+       "seed": 82518,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3481,6 +3557,8 @@
        "height_m": 5.9,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/mid_3.glb",
+       "seed": 6368,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3515,6 +3593,8 @@
        "height_m": 9.82,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/mid_4.glb",
+       "seed": 83427,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3553,6 +3633,8 @@
        "height_m": 10.22,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/mid_5.glb",
+       "seed": 55189,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3591,6 +3673,8 @@
        "height_m": 9.92,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/mid_6.glb",
+       "seed": 26063,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3625,6 +3709,8 @@
        "height_m": 10.22,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/mid_7.glb",
+       "seed": 93433,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3663,6 +3749,8 @@
        "height_m": 10.22,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/high_1.glb",
+       "seed": 53250,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3701,6 +3789,8 @@
        "height_m": 10.22,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/high_2.glb",
+       "seed": 52568,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3739,6 +3829,8 @@
        "height_m": 10.22,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/high_3.glb",
+       "seed": 93998,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3777,6 +3869,8 @@
        "height_m": 9.92,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/high_4.glb",
+       "seed": 57741,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3811,6 +3905,8 @@
        "height_m": 10.22,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/high_5.glb",
+       "seed": 76987,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3849,6 +3945,8 @@
        "height_m": 9.92,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/high_6.glb",
+       "seed": 45953,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3883,6 +3981,8 @@
        "height_m": 5.9,
        "district": "the Rows",
        "building": true,
+       "model": "cullet/row_house/high_7.glb",
+       "seed": 4215,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -3933,18 +4033,21 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_1.glb",
+       "seed": 36197,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
         "wind": 0.46,
         "age": 0.3,
-        "repair": 0.7,
+        "repair": 0.9,
         "empty": 0.0,
         "cause": "+5.5 m above the sea; 188 m from the Cone at bearing 277; front faces 180"
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
        "leans_on": "the low terrace wall",
-       "state": "working"
+       "state": "sound",
+       "repair_cause": "the lowest terrace, sheltered by the Rows: whole"
       },
       {
        "id": "glasshouse_2",
@@ -3979,18 +4082,21 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_2.glb",
+       "seed": 52031,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
         "wind": 0.46,
         "age": 0.3,
-        "repair": 0.7,
+        "repair": 0.9,
         "empty": 0.0,
         "cause": "+5.5 m above the sea; 201 m from the Cone at bearing 277; front faces 180"
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
        "leans_on": "the low terrace wall",
-       "state": "working"
+       "state": "sound",
+       "repair_cause": "the lowest terrace, sheltered by the Rows: whole"
       },
       {
        "id": "glasshouse_3",
@@ -4025,18 +4131,21 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_3.glb",
+       "seed": 55465,
        "wear": {
         "salt": 0.12,
         "soot": 0.0,
         "wind": 0.46,
         "age": 0.3,
-        "repair": 0.7,
+        "repair": 0.9,
         "empty": 0.0,
         "cause": "+5.5 m above the sea; 257 m from the Cone at bearing 275; front faces 180"
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
        "leans_on": "the low terrace wall",
-       "state": "working"
+       "state": "sound",
+       "repair_cause": "the lowest terrace, sheltered by the Rows: whole"
       },
       {
        "id": "glasshouse_4",
@@ -4071,6 +4180,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_4.glb",
+       "seed": 394,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4082,7 +4193,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; Cora Stannard's flowers in a corner",
        "leans_on": "the mid terrace wall",
-       "state": "working"
+       "state": "patched",
+       "repair_cause": "open to the wind above the Rows: patched"
       },
       {
        "id": "glasshouse_5",
@@ -4117,6 +4229,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_5.glb",
+       "seed": 85372,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4128,7 +4242,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
        "leans_on": "the mid terrace wall",
-       "state": "working"
+       "state": "patched",
+       "repair_cause": "open to the wind above the Rows: patched"
       },
       {
        "id": "glasshouse_6",
@@ -4163,6 +4278,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_6.glb",
+       "seed": 34310,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4174,7 +4291,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; broken in last autumn's storm, not mended",
        "leans_on": "the mid terrace wall",
-       "state": "broken"
+       "state": "broken",
+       "repair_cause": "broken in last autumn's storm"
       },
       {
        "id": "glasshouse_7",
@@ -4209,6 +4327,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_7.glb",
+       "seed": 72400,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4220,7 +4340,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
        "leans_on": "the high terrace wall",
-       "state": "working"
+       "state": "patched",
+       "repair_cause": "open to the wind above the Rows: patched"
       },
       {
        "id": "glasshouse_8",
@@ -4255,6 +4376,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_8.glb",
+       "seed": 68993,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4266,7 +4389,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
        "leans_on": "the high terrace wall",
-       "state": "working"
+       "state": "patched",
+       "repair_cause": "open to the wind above the Rows: patched"
       },
       {
        "id": "glasshouse_9",
@@ -4301,6 +4425,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_9.glb",
+       "seed": 37399,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4312,7 +4438,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; Jory Greave's fruit tree in one bay",
        "leans_on": "the high terrace wall",
-       "state": "working"
+       "state": "patched",
+       "repair_cause": "open to the wind above the Rows: patched"
       },
       {
        "id": "glasshouse_10",
@@ -4347,6 +4474,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_10.glb",
+       "seed": 20179,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4358,7 +4487,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
        "leans_on": "the upper terrace wall",
-       "state": "working"
+       "state": "patched",
+       "repair_cause": "open to the wind above the Rows: patched"
       },
       {
        "id": "glasshouse_11",
@@ -4393,6 +4523,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_11.glb",
+       "seed": 60613,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4404,7 +4536,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; broken in last autumn's storm, not mended",
        "leans_on": "the upper terrace wall",
-       "state": "broken"
+       "state": "broken",
+       "repair_cause": "broken in last autumn's storm"
       },
       {
        "id": "glasshouse_12",
@@ -4439,6 +4572,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_12.glb",
+       "seed": 97695,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4450,7 +4585,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
        "leans_on": "the upper terrace wall",
-       "state": "working"
+       "state": "patched",
+       "repair_cause": "open to the wind above the Rows: patched"
       },
       {
        "id": "glasshouse_13",
@@ -4485,6 +4621,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_13.glb",
+       "seed": 34185,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4496,7 +4634,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; broken in last autumn's storm, not mended",
        "leans_on": "the crown terrace wall",
-       "state": "broken"
+       "state": "broken",
+       "repair_cause": "broken in last autumn's storm"
       },
       {
        "id": "glasshouse_14",
@@ -4531,6 +4670,8 @@
        ],
        "district": "the Ladder",
        "building": true,
+       "model": "cullet/glasshouse/glasshouse_14.glb",
+       "seed": 87434,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4542,7 +4683,8 @@
        },
        "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
        "leans_on": "the crown terrace wall",
-       "state": "working"
+       "state": "patched",
+       "repair_cause": "open to the wind above the Rows: patched"
       },
       {
        "id": "root_plot_1",
@@ -4561,6 +4703,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 20736,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4589,6 +4732,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 6138,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4617,6 +4761,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 51756,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4645,6 +4790,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 93839,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4673,6 +4819,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 78041,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4701,6 +4848,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 62083,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4729,6 +4877,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 26389,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4757,6 +4906,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 3300,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4785,6 +4935,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 95218,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4813,6 +4964,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 5295,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4841,6 +4993,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 22329,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4869,6 +5022,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 21763,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4897,6 +5051,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 56789,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4925,6 +5080,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 99830,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4953,6 +5109,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 32,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -4981,6 +5138,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 95354,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5009,6 +5167,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 18156,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5037,6 +5196,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "seed": 40861,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5074,6 +5234,8 @@
        ],
        "district": "the Crown",
        "building": false,
+       "model": "cullet/cistern/cistern.glb",
+       "seed": 29586,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5102,6 +5264,8 @@
        "height_m": 5.0,
        "district": "the Crown",
        "building": true,
+       "model": "cullet/cistern_house/cistern_house.glb",
+       "seed": 58567,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5146,6 +5310,8 @@
        ],
        "district": "the Crown",
        "building": true,
+       "model": "cullet/readers_house/readers_house.glb",
+       "seed": 54869,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5181,6 +5347,8 @@
        "height_m": 0,
        "district": "the Crown",
        "building": false,
+       "model": "cullet/graveyard/graveyard.glb",
+       "seed": 83674,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5209,6 +5377,8 @@
        "height_m": 4.5,
        "district": "the Crown",
        "building": false,
+       "model": "cullet/thorn/thorn.glb",
+       "seed": 57329,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5253,6 +5423,8 @@
        ],
        "district": "the Crown",
        "building": false,
+       "model": "cullet/crown_bench/crown_bench.glb",
+       "seed": 68345,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5281,6 +5453,8 @@
        "height_m": 7.6,
        "district": "the Crown",
        "building": true,
+       "model": "cullet/peat_barn/peat_barn.glb",
+       "seed": 92476,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5309,6 +5483,8 @@
        "height_m": 6.0,
        "district": "the Moss",
        "building": true,
+       "model": "cullet/turf_house/turf_house.glb",
+       "seed": 96845,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5343,6 +5519,8 @@
        "height_m": 6.32,
        "district": "the Hanger",
        "building": true,
+       "model": "cullet/hanger_cottage/hanger_cottage.glb",
+       "seed": 90059,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,
@@ -5378,6 +5556,8 @@
        "landmark": true,
        "district": "the north headland",
        "building": false,
+       "model": "cullet/lintel/lintel.glb",
+       "seed": 64442,
        "wear": {
         "salt": 0.0,
         "soot": 0.0,

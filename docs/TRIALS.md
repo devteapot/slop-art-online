@@ -400,6 +400,68 @@ Batches: `l6` (main 445db098, island presets, 6 h planned), `l7` (valley, 6 h), 
 
 **Weak measures.** `goals_reached` is the least reliable. Goal wording drifts inside a cluster, so an outcome can answer a different wording of the same goal, and the outcome classes are keyword matches. `goals_1d` depends on how often consolidation rewords goals (Jaccard threshold 0.4). `acts_other` counts every `say` and `wave` as "other", so asking for food scores as living. `self_started` counts every `wander` as exploring. `prompted` has been checked only on `s11`. `fail_streak` is broken by any act outcome in between.
 
+### Owner-tuned player score
+
+`life_feel.py` stays a set of heuristics until the owner's judgement says which columns, if any, track "a player living their own life". Three tools close that loop. All three read evidence read-only and make no model calls. The one exception is an explicit `feel_tune.py judge --run`, which needs real ratings.
+
+1. **Excerpts.** `feel_excerpts.py build` cuts candidate windows of 10 real minutes from every thinking character's run. It scores each window with life_feel's own columns, computed on just that window, and draws about 20 excerpts. The draw follows a per-source quota and spreads across the arms within each source. Within an arm it alternates trials and early and late windows, and it reaches toward the 5th and 95th percentiles of `feel0`, a provisional composite: the mean percentile of the initiative, exploration and social columns minus the loop columns. `feel0` only stratifies the draw and is not a score. Each excerpt is a plain second-person timeline of at most 12 lines. It opens with the plan held at the start. Exchanges (a line to the character and its reply) are kept together, and the other lines follow: plan changes, failures and struggles, things learned, given and received, and other percepts. A line said again, or a repeated percept, is folded into one line with a count. A closing line gives how the body spent the window and how hunger moved. Runs whose subject is a scripted human (the greeting trials) are followed through a thinking resident. Its speech comes from `speech.jsonl` joined to `audience.jsonl`, and other people are named only once the resident knows them. Its other percepts are the stamped lines of its journal requests, placed in time through the census, and its body comes from `census.jsonl`. A subject, who has the same newcomer name in every trial, gets a pseudonym, while a resident keeps its own name. Ids, coordinates, day numbers and clock minutes are removed, and nothing names a run, batch, model or arm. It writes `.local/living/feel/excerpts.json` (blind, for the page) and `.local/living/feel/excerpts_key.json` (private: id → source, run, variant, window, columns). Both are under the git-ignored `.local/living/`. Never serve, commit or show the key to the rater.
+2. **Rating page.** `feel_page.py` turns the blind file into one HTML page. Each excerpt carries one question, "Does this feel like a player living their own life?", answered on a 1–5 scale with an optional one-line reason. The page is published as a private claude.ai Artifact with the `db`, `user` and `downloads` capabilities. Every click saves the document `owner_ratings/<excerpt id>` = `{score, reason, at, rater, source: "page"}` on the artifact's server-side store. The page never touches the `ratings` collection, where the proxy's ratings are kept, and it ignores any `proxy:` document, so the owner always rates blind. To read the ratings back, call the ArtifactData tool's `list` on collection `owner_ratings` for that artifact URL and save the result as JSON. Without the store, for example in a saved copy, the page keeps ratings in the browser and offers "Copy ratings" and "Download ratings.json", which write the shape `feel_tune.py` reads.
+3. **Tuning.** `feel_tune.py fit --ratings R` joins the ratings to the key. Per column, for both the window values and the whole-run values, it reports Spearman ρ and a permutation p. It then fits a ridge on the standardized columns and a single-column isotonic fit. Both are scored leave-one-out, with the column and λ chosen inside each training fold, against two baselines: the mean rating and `feel0`. Each predictor gets Spearman, within-one, exact agreement and MAE. The report lists every excerpt where the score and the owner disagree, with the owner's reason. `feel_tune.py judge` builds an LLM-judge rubric from the owner's reasons, leave-one-out, so no excerpt is judged with its own rating in the prompt. The default `--dry-run` writes the prompts and a cost estimate. `--run` uses DeepSeek V4.1 Flash on Mistral's API (`MISTRAL_API_KEY`) and refuses synthetic ratings. Both commands refuse with "no ratings: no agreement claim" when fewer than 5 ratings exist. `feel_tune.py synth` writes a clearly labelled synthetic ratings file for testing the plumbing, and every report built from it carries a "SYNTHETIC RATINGS" banner.
+
+```bash
+python3 living/tools/feel_excerpts.py build                    # default sources and quotas (docstring); --source L=DIR --quota L=N to change
+python3 living/tools/feel_excerpts.py show [--key]             # the blind excerpts as text (--key adds sources: coordinator only)
+python3 living/tools/feel_page.py                              # .local/living/feel/page/player_feel.html, to publish as the Artifact
+python3 living/tools/feel_tune.py fit --ratings .local/living/feel/ratings.json
+python3 living/tools/feel_tune.py judge --ratings .local/living/feel/ratings.json            # dry run: prompts and cost only
+python3 living/tools/feel_tune.py fit --ratings DIR --proxy                 # proxy ratings only, labelled PROXY on every output
+python3 living/tools/feel_tune.py compare --owner NEW_DUMP --proxy OLD_PROXY_DUMP   # the owner's ratings against the proxy's
+python3 living/tools/feel_tune.py judge --ratings .local/living/feel/ratings.json --run --env-file ~/dev/slop-trials-e6/.env --base-url https://api.mistral.ai/v1   # paid; only with the owner's ratings
+```
+
+The first page (2026-11-11, 22 excerpts) is the claude.ai Artifact `https://claude.ai/artifact/MyiNwW9QmdXt1m91H4b5xX`, and its key is `.local/living/feel/excerpts_key.json` in the `tool-feel-tune` worktree on the Spark. It leaves out the `greet-nearest` (gr1a) and `park-concurrent` (gr1b) arms, whose runs failed at publish (`--skip`, default). They rerun as `gr1c`, which `build --quota gr1c=N` adds to a later page. To collect the owner's ratings, save an ArtifactData `list` of collection `owner_ratings` with `out_dir` and pass that directory as `--ratings`. A rebuild draws new excerpt ids, so do not rebuild while ratings for the published page are still coming in. Keep the key that matches the page. The excerpts cover 10 real minutes and the owner rates lives as they read, so a window-level column can agree with the owner while the whole-run column does not, or the reverse. The report gives both.
+
+**Proxy ratings.** A rating document whose `rater` starts with `proxy:` (or that names `proxy_for`) comes from someone rating on the owner's behalf. `fit` and `judge` refuse such documents unless `--proxy` is given. With `--proxy` they use only proxy documents. Every output then says "PROXY RATINGS (general coordinator, rating for the owner); not the owner's judgement", and files get a `_proxy` suffix. No proxy report claims agreement with the owner. The page (version 2, 2026-11-11) writes the owner's ratings to `owner_ratings`, so they never replace the proxy's documents in `ratings`. `compare --owner <owner_ratings dump> --proxy <ratings dump or the saved copy>` reports the differences.
+
+On 2026-11-11 the owner asked the general coordinator to rate the first page in their place, so those 22 ratings are proxy ratings. They are saved in `.local/living/feel/ratings-proxy-2026-11-11/` on the Spark, and the fit is in `.local/living/feel/proxy-fit/tune_report_proxy.md`. The proxy's rubric:
+
+- 4–5: pursues something of its own beyond food and warmth, deals with other people and is answered; relationships with history (a debt, a promise, a child learning); wants negotiated with someone.
+- 3: an agenda beyond survival, but nobody answers or the act lands on no one.
+- 1–2: a survival loop; plans restated unchanged; the same line said to silence; repeated failures; nobody else present.
+- Being answered mattered most.
+
+**Circularity.** The proxy rater stated that being answered mattered most. A fit that finds `heard` and `answered` as the signal therefore shows that the rubric was applied consistently, not that it matches the owner's judgement. `feel_tune.py` prints this in the header of every proxy report and of every proxy-tuned score.
+
+What the proxy fit says (proxy ratings, n = 22; one rater, one sample):
+
+1. Window columns about being spoken to track the proxy ratings best: `heard` ρ +0.90, `silence` −0.79, `addressed` +0.78, `answered` +0.76, all p < 0.001.
+2. Leave-one-out, the window ridge reaches Spearman +0.70, within-one 0.86 and MAE 0.84. Its whole-pipeline permutation p, with fitting and the pick of the best predictor included, is 0.020 over 200 shuffles. `feel0` reaches +0.57, and the run-level ridge +0.53.
+   After `feel_excerpts.py rescore` (the same windows, placed from the key's 0.1-minute starts, with the own-project columns kept out of the models as probes), the window ridge reaches +0.68, within-one 0.91, MAE 0.89, with a whole-pipeline p of 0.030 over 200 shuffles.
+3. Much of this is the split between worlds. Excerpts where everyone thinks average 4.10 and single-thinker lives 1.75 (AUC 0.92). `heard` and `answered` are 0 in every single-thinker window, so they cannot rank those lives. Within the single-thinker lives the window ridge reaches only +0.43 (p 0.08, n = 12); `addressed` (+0.82), `lines` (+0.77), `self_started` (+0.74) and `people` (+0.74) are the columns that vary with the rating there. The whole-run columns mostly encode the split: all-minds runs are short and hold few goals, so `goals_1d` and `min` correlate negatively with the rating.
+
+**The proxy-tuned score, never alone.** The score rises when residents simply talk more, including when they answer lines meant for others or repeat themselves. `feel_tune.py score BATCH_DIR...` applies the fit's window ridge to every thinking character's windows, per arm. It always prints the score beside three guards over the same lives:
+
+- false replies per minute, from `greet_report.py` where the batch's checkout has it;
+- the share of a character's own lines that repeat one of its own from the last 10 minutes;
+- the share of addressed lines that led to something within 180 s: an outcome the character is part of (a trade, lesson, gift, help, hosting or agreement), or a new plan of its own or of the addressee that names the other.
+- beside it, a placebo: the same test with every line moved 6 minutes earlier. Whatever the placebo still finds was not caused by the line, so read the difference.
+
+Runs without `final.json` (still running, or failed before writing their rows) are left out unless `--include-running` is given. Against a baseline arm (a `control` arm, else `default`), an arm that raises the score while any guard gets worse is reported as `LOST`, and a guard that cannot be measured is named as unmeasured. On 2026-11-11, with the proxy-tuned model (report `.local/living/feel/score/score_report_proxy.md` on the Spark):
+
+- gr1a `greet-nearest` (finished run r4 only) raised the score (4.13 against 4.11) while false replies rose from 0.010 to 0.081 per minute and repeated lines from 0.11 to 0.13. It is reported `LOST`.
+- pf2 `player-frame` (still running, scored with `--include-running`) raised the score (2.72 against 2.56) while talk that led to something fell from 0.02 to 0.00. It is reported `LOST`, with false replies unmeasured.
+- In the hamlet, talk that led to something is 0.64–0.71, but the placebo already finds 0.47–0.58. Most of what this guard counts there would happen without the line, so only the difference means anything.
+
+**Sustained own-project activity** (`life_feel.py` measure 7: `own_project`, `project_acts`, `project_progress`). It looks for a goal of the character's own, held from the first to the last third of the window's plans and intentions. Food and fire or cold are excluded, but a cloak or a shelter can be a craft project, and names and filler words are excluded too. It then counts the acts toward that goal, each once: decided acts or, failing those, attempts, plus the character's own lines naming it. It also records whether one of them was done. The measure was added for the known blind spot: a resident with her own project in a village that talks around her (Mara, timber for her own house) got 1.2 from the window ridge where the proxy gave 4. `feel_excerpts.py rescore` recomputes the key's windows with it, and `fit --probe` reports it outside every model, so nothing is refitted to claim agreement. A review found that the first version depended on hash order and took words like "pack/full/work" or "Millbrook" as projects; both are fixed. Result, on proxy ratings:
+
+- It marks Mara (`own_project` 1.0, timber, 4 acts) and two other highly rated residents: Cal teaching and writing (rytd3, 1.0) and the carpentry in tha3g (0.94).
+- It does not close the other gap. vpxff, also underrated, scores 0. It also gives high values to four low-rated single-thinker lives with a held but unanswered project: storage (2zt89, 0.95), a shelter (vnr8j, 0.94), wood and toolmaking (s2asb, 1.0) and a trap line (u86uh, 0.71).
+- Across the 22 excerpts it tracks neither the proxy ratings (ρ +0.05) nor the window ridge's residual (ρ −0.04).
+
+The measure finds held projects. What the proxy rewarded is whether anyone answers, which this measure does not see.
+
+**No LLM judge on proxy ratings.** `judge --proxy` refuses outright, building no prompts and making no call. The judge waits for the owner's own ratings.
+
 ## The hamlet: a small world where everyone thinks (2026-11-11)
 
 Branch `exp-hamlet-births`. Status: **built and proved with fake minds only** (`hm2` on Cullet's day and laws, `hm0` and `hm1` before them on the 12-minute day; below). No paid run has been made on it.
@@ -654,6 +716,59 @@ The trial service listens on the LAN: `http://192.168.1.103:3320` (container `sl
 - Get the token: `ssh gooning@192.168.1.103 docker exec slop-trials-stdb spacetime login show --token`. It is printed after "Your auth token"; don't paste it into logs or chat.
 - **Observer (read-only):** natively, `LIVING_TOKEN=<token> LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --manifest-path living/Cargo.toml --release -p living-viewer`. On the web, `just living-web` and then `http://127.0.0.1:8330/?server=http://192.168.1.103:3320&db=<database>#token=<token>`; the browser never sends the fragment to a server. The observer subscribes and calls no reducer.
 - **Game client:** `LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --release --manifest-path living/Cargo.toml -p living-game` connects with its own player identity and always calls `join` when that identity has no living character. That adds a player newcomer to the trial world, whom the main character perceives, so it changes the run. As a player it sees only its own perception, not the main character's. The client has no spectator or owner mode, so it cannot watch a trial without changing it. A watch mode that follows a named character with the owner's token is UI work, not built.
+
+## Resident inspector
+
+`living/tools/inspector.py` answers "why did they do that?" for one run as a single static page: pick a resident and a moment, or a line someone said. It reads evidence only and makes no model calls. The page is one self-contained HTML file with its data embedded (gzip; it needs a browser with `DecompressionStream`). Open it from disk; no server is involved.
+
+```bash
+python3 living/tools/inspector.py .local/living/trials/<batch>/<instance> -o page.html   # a trial, finished or running
+python3 living/tools/inspector.py .local/living/playtest-2 -o page.html                  # a play session's evidence folder
+python3 living/tools/inspector.py RUN --who "Agnes Fenner,Avice Hollis" --since 600 --until 1200 -o page.html   # a large run, narrowed
+```
+
+**What it reads.** It reads everything it finds under the folder.
+- Trials: `state.json` (the start `t0`), `cast.json`, `census.jsonl`, `chronicle.jsonl`, `speech.jsonl`, `experiences.jsonl`, `audience.jsonl`, `samples.jsonl`, `graphs.jsonl`, `mind_rows.jsonl`, `human.jsonl`, `events.jsonl`, `final.json`, `mind.log`, `mind-env.json`, and `journal/`. A running trial has not copied its journal yet, so the page reads the live one (`<LIVING_ROOT>/.local/living/journal/<LIVING_RUN>/`).
+- Play sessions: `journal/` (or `session/journal/`), `mind.log` (or `session/run/mind.log`), and any world-table exports below the folder. These are either the CLI's text tables (`spacetime sql … > chronicle.txt`) or `verify.py sql --save` JSON lists.
+  - Export at least `chronicle`, `character` (or `id, name, alive, died_ms, cause`) and `presence`.
+  - Export `experience` for the player too. Residents' own experience rows are evicted past a 400-row window. What a resident perceived then comes from the experience lines their own requests show.
+  - Tables are recognised by their columns; `--rows` adds files or folders kept elsewhere.
+
+**Residents.** A timeline per character, filtered by lane, for the whole run, a time window ("around hh:mm:ss ± 90 s"), or the last 90 s of their life. Each row shows wall time, time since the start, and game time.
+- *perceive*: experience rows, plus the percept lines of each request. Lines read from requests are marked ≈ and placed at the middle of their game minute (0.5 s in current worlds), on a game clock fitted from the requests' "Now" lines.
+- *recall*: the "What comes to mind" and "Memories this brings back" sections of each request.
+- *decide*: every model exchange, placed when it was queued. Click it for the timings (queued → sent → reply, queue wait, model latency), the "why now" section, the line being answered, the full request section by section, the system prompt and the reply.
+- *graph*: what each deliberation installed (plan, acts, intent graph), and `brain` revisions where recorded.
+- *body*: chronicle rows, census and sample activity, and the position, health and activity from each request's scene. It also shows what others saw the body do ("seen by …"), and the player's reducer calls.
+- *talk*: lines said and heard. *log*: the mind log's lines naming them.
+
+**Sources.** The files read, the fitted game clock, the mind's switches, and per purpose the model exchanges' queue wait (admission) against model time, as p50, p90 and max.
+
+**Lines.** Every line said, merged from the chronicle, the speaker's `said` row, listeners' speech rows and requests, and the mind log. The chronicle keeps one row for a line repeated within 2 minutes; the speaker's `said` rows keep each one.
+- Click a line for each hearer's fate: a talk turn (with its latency), an answer from a deliberation, parked behind a running deliberation (each release and re-park, and the turn that finally followed), a settled pair, or no turn.
+- For "no turn" the page lists the gate's inputs as the evidence shows them (talk.rs `on_speech`): addressed or not (the line's `to`, the hearer's salience, or who stood within the 6 m `address_m` of the speaker), whether the hearer cares (their relation from the nearest request's "People you know"), an active or closed exchange, another exchange, and whether the line asks something.
+- Below the hearers is the exchange around the line, from every side: the participants' lines, their talk turns and deliberations, and the mind log.
+
+- The mind's draws are deterministic (talk.rs `draw(listener, at_ms)`). The page recomputes the remark draw and the overheard draw from the line's exact time and the hearer's sociability, as their requests show it. So "let the remark pass" is shown as a fact, not a guess, although the mind logs it at debug level only.
+- A line said to someone who did not hear it is marked as such. The evidence is the line's audience row, the speaker's "No answer from …" percept, or the mind's "out of earshot" at the line. A player's character is never judged as a mind before the AI takes it over.
+
+**What it cannot show.**
+- Stamina and the off-stage hold are not recomputed. When a turn was due and none came, the page names them as the possible causes.
+- Without `audience` rows or salience, whether a line said to no one was addressed is shown only where distances near the line are known. Otherwise the page says it is unknown.
+- Hearers are those the evidence shows. Without `audience` rows, others in earshot may be missing.
+- The verdicts follow main's gate and log lines, plus the `exp-greet` switches' log lines (drawn in, faced, alongside). The greet modes' own curiosity draw is not recomputed. A changed gate needs the page updated.
+- Scene positions are dated at the request's queue time. A scene can be older than that, so distances from scenes more than 10 s from a line are not used for the address rule.
+
+### What it showed on the greeting batches `gr1a` and `gr1b` (2026-11-11, 18:15)
+
+Coverage: the instances with evidence at 18:15. gr1a: control ×4, nearest-concurrent ×3 (r4 still running), nearest ×1 (r1–r3 failed). gr1b: curious ×4, facing ×2, park-concurrent ×1. Six instances failed between 16:58 and 17:00 with SQL timeouts against the trial service. `greet_report.py` gives answered shares and latencies; the inspector adds the following.
+
+- **Many counted answers were not answers to the line.** A resident's line to the player within 60 s, which the table counts as an answer, was often caused by something else. Examples are a deliberation that began before the line, a delayed answer to an earlier line, or a resident repeating "your name?" because the scripted player never gives one. For lines to no one, the share not caused by the line was 6 of 8 in control, 4 of 19 in curious and 9 of 19 in facing. In control-r1, the "answer" to "Hello there!" 2.8 s later ("That's the whole of it, friend…") came from Wenna's deliberation about the earlier question on work.
+- **The trial's model queue, not the model, sets the pace.** With `LIVING_CONCURRENCY=4` for 11 minds, the median queue wait was 6–13 s for think and deliberate calls (p90 up to 41 s) and 2–7 s for talk turns (p90 15–25 s, max 78 s). Model time was a median 0.8 s for talk and 5–6 s for deliberation. A deliberation counts as running from its prompt, so lines heard during its queue wait are parked. Play-test 2 ran with 192 and had queue waits under 0.2 s. Latency and parking results from these trials therefore do not carry over to play.
+- **Parked lines are released and parked again at once.** A released line is often parked again in the same second, because the listener's next deliberation has already started. Some waited 74 s and got no turn (control-r1, Oren), and one was re-parked three times (curious-r1, Sefa). Under `LIVING_PARK=concurrent` such lines get their turn alongside instead ("parked alongside" 44 times in nearest-concurrent; addressees answered 19 of 20).
+- **The script's addressed statements meet the remark draw.** "You look like you know this place well." and "That looks like hard work." ask nothing, so a resident who passes the gate can still let them pass. The recomputed draw refused 4 of 22 addressed lines in control.
+- **The script addressed characters who are not minds.** Tobin is not in `LIVING_ONLY`: 2 of 22 addressed lines in control and 5 of 23 in curious went to him and could never be answered.
+- **Hearers do not answer each other's turns.** With curious and nearest, one hearer is drawn in and the others' verdicts read "another took it": a line to no one draws one hearer.
 
 ## Results
 

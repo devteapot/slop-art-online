@@ -932,7 +932,24 @@ def adopt(report, a, clips_path, lib):
     into the library (never overwriting) and set its entry in clips.json."""
     w, name = report["winner"], report["clip"]
     entry = dict(report["entry_chosen"])
-    if any("--write refuses" in x for x in report.get("entry_warnings", [])):
+    if a.take is not None and a.take != w["seed"]:
+        # a take chosen by a person (a verdict), not the lab's winner: its own variant's entry
+        t = next((t for t in report["takes"] if t["seed"] == a.take), None)
+        if t is None:
+            raise SystemExit(f"{name}: s{a.take} was not scored in {report['out']}/{name}/checks.json")
+        strip = lambda x: {k: v for k, v in x.items() if k not in ("prompt", "seeds", "pick", "note")}
+        if t["source"] == "lab":
+            made = next(v["entry"] for v in json.load(open(os.path.join(report.get("out", a.out), name, "variants.json")))
+                        if v["variant"] == t["variant"])
+        else:
+            made = report["entry_before"]
+        if strip(made) != strip(report["entry_scored"]):
+            raise SystemExit(f"{name}: s{a.take} was generated from an entry that differs from the one it was judged against")
+        entry = dict(report["entry_scored"])
+        entry["prompt"], entry["seeds"], entry["pick"] = made["prompt"], list(made["seeds"]), a.take
+        w = {"seed": a.take, "source": t["source"],
+             "why": f"chosen with --take over the lab's s{w['seed']}; it " + ("passes every check" if not t["fails"] else "fails " + ", ".join(t["fails"]))}
+    elif any("--write refuses" in x for x in report.get("entry_warnings", [])):
         raise SystemExit(f"{name}: " + "; ".join(report["entry_warnings"]))
     if a.note:
         entry["note"] = a.note
@@ -980,8 +997,6 @@ def handoff(group, names, a, clips_path, lib):
             raise SystemExit(f"{name}: " + "; ".join(rep["entry_warnings"]))
         if strip(rep["entry_scored"]) != strip(e):
             raise SystemExit(f"{name}: its entry differs from the one {ck} judged; re-score it as it is")
-        if name in changed and rep["winner"]["seed"] != e.get("pick"):
-            raise SystemExit(f"{name}: clips.json picks s{e.get('pick')} but the lab's winner is s{rep['winner']['seed']}; run --write or re-score")
         w = next((t for t in rep["takes"] if t["seed"] == e.get("pick")), None)
         if w is None:
             raise SystemExit(f"{name}: its pick s{e.get('pick')} was not scored; re-score it")
@@ -990,7 +1005,8 @@ def handoff(group, names, a, clips_path, lib):
             raise SystemExit(f"{name}: the scored take {w['file']} differs from {lib_file}")
         entries.append(e)
         items.append((name, e, ck, w))
-        change = "retake" if name in changed else "kept" + (f" (lab ranks s{rep['winner']['seed']} first)" if rep["winner"]["seed"] != e["pick"] else "")
+        other = f" (lab ranks s{rep['winner']['seed']} first)" if rep["winner"]["seed"] != e["pick"] else ""
+        change = ("retake" + (" by verdict" + other if other else "")) if name in changed else "kept" + other
         rows.append(f"| {name} | s{e['pick']} | {change} | {'pass' if not w['fails'] else 'FAIL ' + ','.join(w['fails'])} | {w['penalty']} | {summary(w['metrics'], w['checks'])} |")
     table = "| clip | pick | change | verdict | penalty | scores |\n|---|---|---|---|---|---|\n" + "\n".join(rows) + "\n"
     tmp = path + ".tmp"
@@ -1028,6 +1044,7 @@ def main():
     ap.add_argument("--score-only", action="store_true", help="score the existing takes; generate nothing")
     ap.add_argument("--write", action="store_true", help="adopt the last run's winner (its checks.json): copy its takes into --lib, set its entry in --clips")
     ap.add_argument("--note", help="with --write: the entry's new note")
+    ap.add_argument("--take", type=int, help="with --write: adopt this scored seed instead of the winner (a verdict)")
     ap.add_argument("--rekey", action="store_true", help="with --write: adopt although other entries are keyed to a take it drops")
     ap.add_argument("--handoff", metavar="GROUP", help="write ~/clip-handoff/GROUP-<date>.tar.gz for --clip")
     ap.add_argument("--handoff-dir", default=os.path.expanduser("~/clip-handoff"))

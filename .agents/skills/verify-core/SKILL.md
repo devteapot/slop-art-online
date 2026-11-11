@@ -48,7 +48,7 @@ K=$R-skirmish
 mkdir -p ".local/living/verify/$K"
 python3 "$V" launch --run "$K" --seed island > ".local/living/verify/$K/launch.txt" 2>&1
 python3 "$C/scenes.py" skirmish --run "$K" > ".local/living/verify/$K/skirmish.txt" 2>&1
-# The drop scene over a low thing (tile 9, a cart below eye height) on the same island world.
+# The drop scene over low tiles (9: a cart, an open stall, a well, a building's overhang: open at eye height) on the same island world.
 python3 "$C/scenes.py" low --run "$K" > ".local/living/verify/$K/low.txt" 2>&1
 python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
 
@@ -137,7 +137,7 @@ cargo test --manifest-path living/Cargo.toml -p living-mind
 cargo test --manifest-path living/Cargo.toml -p living-viewer sync::tests
 ```
 
-The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets. Only its test step runs rules tests. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
+The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets. Only its test step runs rules tests. It skips a step that already passed on this machine on identical inputs (docs/TOOLING.md); `just living-check-full` runs every step, and `LIVING_CHECK_SERIAL=1` shows cargo's output and the test counts on the terminal. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
 
 ## Drive the existing mechanics and steering scripts
 

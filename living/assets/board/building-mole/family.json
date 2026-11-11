@@ -1,0 +1,7 @@
+{
+ "schema": 1,
+ "family": "building:mole",
+ "kind": "building",
+ "title": "The mole",
+ "description": "The ship-day mole in pieces: sea walls (below the floor, so mostly out of the asset view), the wave wall, ship's bollards, the tip's rail with its south spans gone"
+}
