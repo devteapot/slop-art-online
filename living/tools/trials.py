@@ -670,6 +670,83 @@ class Mind:
             pass
 
 
+def out_of_capacity(error):
+    """A provider's 429 that says it has no capacity for the model (Mistral: "Not enough
+    capacity available", `backend_out_of_capacity`, code 3505). The mind sends listed memory
+    work to the overflow and retries a failed consolidation later (llm.rs `capacity_overflow`,
+    mind.rs `retry_after`)."""
+    return bool(error) and "429" in error and ("Not enough capacity" in error or "out_of_capacity" in error)
+
+
+def failure_kind(error):
+    """What a journaled call's error says about who failed: None (it succeeded), a provider
+    kind (`capacity_429`, `rate_429`, `http_5xx`, `connection`: the provider out of capacity,
+    limiting the rate, failing or unreachable; the mind falls back, retries or holds its calls)
+    or `mind` (anything else: a request the provider refused, a missing key, a reply that was
+    not JSON; the same act failing again and again is a runaway)."""
+    if not error:
+        return None
+    if out_of_capacity(error):
+        return "capacity_429"
+    if error.startswith("HTTP 429"):
+        return "rate_429"
+    if re.match(r"HTTP 5\d\d", error):
+        return "http_5xx"
+    # llm.rs `chat_once`: the request could not be sent or answered (connect, timeout), or
+    # its body was cut off or was not the provider's JSON envelope.
+    if error.startswith(("request", "body", "response json")):
+        return "connection"
+    return "mind"
+
+
+CONSOLIDATION_COLUMNS = ("attempted", "primary", "fallback", "retried", "lost", "trimmed", "capacity_429")
+
+
+def consolidation_table(jdir):
+    """What each character's consolidations came to, from the mind's outcome lines
+    (`<journal>/outcomes/consolidations.jsonl`, one per consolidation that called a model,
+    failed or found experiences lost): attempted; integrated on the primary model or on the
+    fallback (its overflow); failed and retried later; failed with no later attempt (lost: its
+    experiences were never integrated before the run stopped); experiences of failed ones that
+    left the inbox before they were integrated (trimmed: the authority keeps a character's last
+    400); failures that were a capacity 429. None when the mind wrote no outcomes (before
+    2026-11-11)."""
+    path = Path(jdir) / "outcomes" / "consolidations.jsonl"
+    if not path.exists():
+        return None
+    lines = []
+    for line in path.read_text().splitlines():
+        try:
+            lines.append(json.loads(line))
+        except ValueError:
+            pass
+    by = {}
+    for name in dict.fromkeys(r.get("actor") for r in lines):
+        mine = sorted((r for r in lines if r.get("actor") == name), key=lambda r: r.get("at_ms") or 0)
+        tried = [r for r in mine if r.get("model_call") or r.get("outcome") == "failed"]
+        row = dict.fromkeys(CONSOLIDATION_COLUMNS, 0)
+        row["attempted"] = len(tried)
+        for i, r in enumerate(tried):
+            if r.get("outcome") == "integrated":
+                row["fallback" if r.get("route") == "fallback" else "primary"] += 1
+            else:
+                row["retried" if i + 1 < len(tried) else "lost"] += 1
+                row["capacity_429"] += 1 if out_of_capacity(r.get("failure")) else 0
+        row["trimmed"] = sum(r.get("trimmed") or 0 for r in mine)
+        by[name] = row
+    total = {k: sum(r[k] for r in by.values()) for k in CONSOLIDATION_COLUMNS}
+    return {"total": total, "by_character": by}
+
+
+# A provider is down for every route when no call has succeeded for this long while calls are
+# still failing on it (the last within OUTAGE_LIVE_S): only then does an outage stop a run.
+OUTAGE_STOP_S = 600
+OUTAGE_LIVE_S = 180
+# Provider failures with no success on any route for this long are recorded as an outage; a
+# shorter gap (a capacity 429 the fallback answers a second later) is counted, not recorded.
+OUTAGE_RECORD_S = 30
+
+
 class Instance:
     def __init__(self, batch, trial, variant, rep, opts, shared):
         self.trial, self.variant, self.rep, self.opts, self.shared = trial, variant, rep, opts, shared
@@ -697,6 +774,10 @@ class Instance:
         self.died = None
         self.snapshots = 0
         self.runaway_seen = []
+        self.provider_fails = []
+        self.last_ok = None
+        self.outage_since = None
+        self.outages = []
         self.published = False
 
     # -- plumbing
@@ -1129,7 +1210,7 @@ class Instance:
             # `fake-<model>`, so the journal shows which profile each call was routed to.
             port = self.shared["fake_port"]
             m["profiles"] = {name: {"base_url": f"http://127.0.0.1:{port}/v1", "model": f"fake-{p['model']}", "key_env": "LIVING_VERIFY_FAKE_KEY",
-                                    "max_tokens": 512, "requests_per_minute": 6000, **({"overflow": p["overflow"]} if p.get("overflow") else {})}
+                                    "max_tokens": 512, "requests_per_minute": 6000, **{k: p[k] for k in ("overflow", "capacity_overflow") if p.get(k)}}
                              for name, p in m["profiles"].items()}
         return m
 
@@ -1273,7 +1354,7 @@ class Instance:
 
     # -- state kept for `resume`
     STATE = ("status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
-             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "census_at")
+             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "census_at", "outages")
 
     def save(self):
         st = {k: getattr(self, k, None) for k in self.STATE}
@@ -1324,8 +1405,7 @@ class Instance:
                         continue
                     tok = r.get("tokens") or 0
                     key = (r.get("purpose"), r.get("model"))
-                    # The call's own time: a resumed runner re-reads the whole journal.
-                    self.recent.append(((r.get("at_ms") or 0) / 1000, r.get("purpose"), (r.get("error") or "")[:100]))
+                    self.note_call(r)
                     self.tokens[key] += tok
                     self.calls[key] += 1
                     if r.get("latency_ms"):
@@ -1333,6 +1413,17 @@ class Instance:
                     if not self.opts.fake:
                         with _lock:
                             self.shared["spent"] += tok
+
+    def note_call(self, r):
+        """One journaled call for the runaway and outage guards, at the call's own time (a
+        resumed runner re-reads the whole journal)."""
+        at = (r.get("at_ms") or 0) / 1000
+        kind = failure_kind(r.get("error"))
+        self.recent.append((at, r.get("purpose"), (r.get("error") or "")[:100], kind))
+        if kind is None:
+            self.last_ok = at if self.last_ok is None else max(self.last_ok, at)
+        elif kind != "mind":
+            self.provider_fails.append((at, kind))
 
     # -- sampling
     def sample(self):
@@ -1439,7 +1530,12 @@ class Instance:
         cause is fixed rather than hidden behind a cap."""
         now = time.time()
         self.recent = [r for r in self.recent if now - r[0] <= 300]
-        errors = [r for r in self.recent if r[2]]
+        # A provider outage is not a loop: its failures (capacity or rate 429s, 5xx, no
+        # connection) count toward no failure limit (ar1: 7 of 28 instances stopped over
+        # consolidation's capacity 429s while the mind retried them, most within a minute).
+        # They still count as calls, so a mind that storms a failing provider trips the call
+        # rate; the outage itself stops a run only when no route answers (`outage`).
+        errors = [r for r in self.recent if r[3] == "mind"]
         same = Counter((r[1], r[2]) for r in errors).most_common(1)
         last_min = sum(1 for r in self.recent if now - r[0] <= 60)
         why = None
@@ -1460,6 +1556,7 @@ class Instance:
         # `budget.runaway_calls_per_min` limits it; failures and restarts above still apply.
         elif last_min > self.rate_limit():
             why = f"{last_min} model calls in one minute"
+        why = why or self.outage(now)
         recent_starts = [t for t in self.starts if now - t <= 1800]
         if len(recent_starts) > 5:
             why = f"the mind was restarted {len(recent_starts)} times in 30 minutes"
@@ -1467,6 +1564,37 @@ class Instance:
             self.emit("events", {"t": self.t(), "runaway": why})
             self.runaway_seen.append([self.t(), why])
         return why
+
+    def outage(self, now):
+        """Provider failures since the last call that succeeded on any route: recorded as an
+        outage (an `outage` event when it starts, one in `outages` and the events when a call
+        succeeds again), and the run's stop only when nothing has answered for OUTAGE_STOP_S
+        while calls still fail (the last within OUTAGE_LIVE_S)."""
+        if self.last_ok is not None:
+            self.provider_fails = [f for f in self.provider_fails if f[0] > self.last_ok]
+        rel = lambda at: None if self.t0 is None else round(at - self.t0, 1)
+        if self.outage_since is not None and self.last_ok is not None and self.last_ok > self.outage_since:
+            ended = {"since_t": rel(self.outage_since), "until_t": rel(self.last_ok), "seconds": round(self.last_ok - self.outage_since, 1),
+                     "failed": self.outage_failed, "kinds": dict(self.outage_kinds)}
+            if not any(o.get("since_t") == ended["since_t"] for o in self.outages):
+                self.outages.append(ended)
+                self.emit("events", {"t": self.t(), "outage_ended": ended})
+            self.outage_since = None
+        if not self.provider_fails:
+            return None
+        since = min(f[0] for f in self.provider_fails)
+        if now - since < OUTAGE_RECORD_S:
+            return None
+        if self.outage_since is None:
+            self.emit("events", {"t": self.t(), "outage": {"since_t": rel(since), "kind": self.provider_fails[0][1]}})
+        self.outage_since = since
+        self.outage_failed = len(self.provider_fails)
+        self.outage_kinds = Counter(k for _, k in self.provider_fails)
+        last = max(f[0] for f in self.provider_fails)
+        if now - since >= OUTAGE_STOP_S and now - last <= OUTAGE_LIVE_S:
+            kinds = ", ".join(f"{k} {n}" for k, n in self.outage_kinds.most_common())
+            return f"provider outage: no route answered for {(now - since) / 60:.0f} minutes ({self.outage_failed} failed calls: {kinds})"
+        return None
 
     # -- hourly snapshots (life runs)
     def snapshot(self, row):
@@ -1602,7 +1730,7 @@ class Instance:
             elif cap and sum(self.tokens.values()) >= cap:
                 self.stopped_by = "trial token cap"
             elif why:
-                self.stopped_by = f"runaway: {why}"
+                self.stopped_by = why if why.startswith("provider outage") else f"runaway: {why}"
             elif self.died is not None and self.t() - self.died >= 20 and self.trial.get("life", {}).get("stop_on_death", True):
                 self.stopped_by = "subject died"
             elif mind_down:
@@ -1641,10 +1769,13 @@ class Instance:
             self.log(f"FAILED: {e!r}")
             self.stop_mind()
         finally:
+            if self.outage_since is not None and not any(o.get("since_t") == round(self.outage_since - (self.t0 or 0), 1) for o in self.outages):
+                self.outages.append({"since_t": round(self.outage_since - (self.t0 or 0), 1), "until_t": None, "failed": self.outage_failed,
+                                     "kinds": dict(self.outage_kinds)})
             self.save()
             summary = summarize(self.dir, self.trial, extra={"db": self.db, "variant": self.variant, "replicate": self.rep,
                                 "stopped_by": self.stopped_by, "fake": bool(self.opts.fake), "minutes_planned": self.opts.minutes or self.trial.get("minutes", 15),
-                                "runaways": self.runaway_seen, "mind_starts": len(self.starts),
+                                "runaways": self.runaway_seen, "mind_starts": len(self.starts), "outages": self.outages,
                                 "day_ms": (getattr(self, "world", None) or {}).get("day_ms"),
                                 "concurrency": getattr(self, "concurrency", None) or mind_concurrency(self.trial)})
             (self.dir / "summary.json").write_text(json.dumps(summary, indent=1))
@@ -1776,6 +1907,7 @@ def summarize(d, trial, extra):
     # reopen), else the instance's copy.
     live = ROOT / ".local/living/journal" / f"{PREFIX}{d.parent.name}-{d.name}"
     jdir = live if live.exists() else d / "journal"
+    s["consolidations"] = consolidation_table(jdir)
     for f in sorted(jdir.glob("*.jsonl")) if jdir.exists() else []:
         for n, line in enumerate(f.read_text().splitlines(), 1):
             try:
@@ -1785,6 +1917,8 @@ def summarize(d, trial, extra):
             except ValueError:
                 pass
     j.sort(key=lambda r: r.get("at_ms", 0))
+    # Failed calls by who failed (`failure_kind`): the provider's kinds, and `mind`.
+    s["call_failures"] = dict(Counter(k for k in (failure_kind(r.get("error")) for r in j) if k))
     by_purpose = defaultdict(lambda: {"calls": 0, "tokens": 0, "errors": 0, "latency_ms": []})
     by_model = defaultdict(lambda: {"calls": 0, "tokens": 0, "prompt": 0, "completion": 0, "cached": 0})
     remembered = 0
@@ -1793,6 +1927,7 @@ def summarize(d, trial, extra):
         p["calls"] += 1
         p["tokens"] += r.get("tokens") or 0
         p["errors"] += 1 if r.get("error") else 0
+        p["capacity_429"] = p.get("capacity_429", 0) + (1 if out_of_capacity(r.get("error")) else 0)
         if r.get("latency_ms"):
             p["latency_ms"].append(r["latency_ms"])
         m = by_model[r.get("model")]
@@ -2023,7 +2158,7 @@ def shared_for(trials, a, bdir):
         shared["fake_port"] = s.getsockname()[1]
         s.close()
         # `--fake-script`: the fake server's rules (e.g. living/trials/fake/latency.json: model
-        # latencies like the real ones, so that timing can be tried without a provider).
+        # latencies like the real ones; or capacity 429s on consolidation, fake-llm.md).
         script = ["--script", str(Path(a.fake_script).resolve())] if getattr(a, "fake_script", None) else []
         shared["fake"] = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl"), *script],
                                           stdout=open(bdir / "fake.log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
@@ -2311,6 +2446,40 @@ ROWS = ["subject", "stopped_by", "minutes_run", "game_days", "tokens_per_game_da
         "refusals", "learned", "built", "relations_end", "judgments_end", "memories_remembered", "prompt_frame", "ooc_lines", "ooc_private", "calls", "tokens"]
 
 
+def consolidation_report(sums):
+    """report.md's consolidation tables: per instance, then per character (summary.json
+    `consolidations`, from the mind's outcome lines; see `consolidation_table`)."""
+    have = [s for s in sums if s.get("consolidations")]
+    if not have:
+        return []
+    head = " | ".join(c.replace("_", " ") for c in CONSOLIDATION_COLUMNS)
+    rule = " ---: |" * len(CONSOLIDATION_COLUMNS)
+    name = lambda s: f"{s.get('trial')}/{s.get('variant')}/r{s.get('replicate')}"
+    out = ["## Consolidations\n",
+           "Per character: attempted; integrated on the primary model or on the fallback; failed and retried later; failed with no later attempt "
+           "(lost: never integrated before the stop); experiences of failed ones that left the inbox unintegrated (trimmed); failures that were capacity 429s.\n",
+           f"| Instance | {head} |\n| --- |{rule}"]
+    for s in have:
+        t = s["consolidations"]["total"]
+        out.append(f"| {name(s)} | " + " | ".join(str(t[c]) for c in CONSOLIDATION_COLUMNS) + " |")
+    out += ["", f"| Instance | Character | {head} |\n| --- | --- |{rule}"]
+    for s in have:
+        for who, r in sorted(s["consolidations"]["by_character"].items(), key=lambda kv: str(kv[0])):
+            out.append(f"| {name(s)} | {str(who).replace('|', '/')} | " + " | ".join(str(r[c]) for c in CONSOLIDATION_COLUMNS) + " |")
+    missing = [name(s) for s in sums if not s.get("consolidations")]
+    if missing:
+        out.append(f"\nNo consolidation outcomes (a mind before 2026-11-11, or none ran): {', '.join(missing)}.")
+    out.append("")
+    if any(s.get("outages") for s in sums):
+        out.append("## Provider outages\n\n| Instance | From (s) | Until (s) | Failed calls | Kinds |\n| --- | ---: | ---: | ---: | --- |")
+        for s in sums:
+            for o in s.get("outages") or []:
+                kinds = ", ".join(f"{k} {n}" for k, n in (o.get("kinds") or {}).items())
+                out.append(f"| {name(s)} | {o.get('since_t')} | {o.get('until_t') if o.get('until_t') is not None else 'still down at the stop'} | {o.get('failed')} | {kinds} |")
+        out.append("")
+    return out
+
+
 def report(a):
     bdir = OUT / a.batch
     sums = [json.loads(p.read_text()) for p in sorted(bdir.glob("*/summary.json"))]
@@ -2349,6 +2518,7 @@ def report(a):
             l50 = sorted(x for x, _ in lats[k])
             out.append(f"| {k} | {v['calls']} | {v['tokens']:,} | {l50[len(l50) // 2] if l50 else '–'} | {max((y for _, y in lats[k]), default='–')} | {v['errors']} | {v['empty']} | {v['repaired']} | {v['invalid']} |")
         out.append("")
+    out += consolidation_report(sums)
     for (trial, variant), ss in sorted(groups.items()):
         ss.sort(key=lambda s: s["replicate"])
         out.append(f"## {trial} / {variant}\n")
@@ -2407,7 +2577,7 @@ def reclaim(a):
 def resummarize(a):
     """Recompute every instance's summary from its kept evidence (after a probe changes)."""
     bdir = OUT / a.batch
-    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms", "concurrency")
+    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms", "concurrency", "outages")
     for p in sorted(bdir.glob("*/summary.json")):
         old = json.loads(p.read_text())
         extra = {k: old.get(k) for k in keep}
@@ -2457,7 +2627,7 @@ def main():
     p.add_argument("--replicates", type=int, default=3)
     p.add_argument("--minutes", type=float)
     p.add_argument("--fake", action="store_true", help="answer every model call from the local fake server (no provider keys)")
-    p.add_argument("--fake-script", help="with --fake: the fake server's rules file (e.g. living/trials/fake/latency.json)")
+    p.add_argument("--fake-script", help="with --fake: the fake server's rules file (e.g. living/trials/fake/latency.json, or capacity 429s)")
     p.add_argument("--parallel", type=int, default=18)
     p.add_argument("--keep-db", action="store_true")
     p.add_argument("--stagger", type=float, default=2, help="seconds between instance starts")
