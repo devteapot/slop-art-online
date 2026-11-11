@@ -1,8 +1,8 @@
 //! What a character perceives (docs/PERCEPTION.md): the one sight rule, what an observer
 //! perceives of another character, and what a human player's client may receive.
 //!
-//! - **The sight rule** ([`in_sight`]): within the observer's sight (day, night, or night with a
-//!   torch: `common::sight_for`) and with a clear sight line (`Map::sight_clear`: walls, rock and
+//! - **The sight rule** ([`in_sight`]): within the observer's sight (the script's per-creature
+//!   `senses` law: day, night, a torch; `common::sight_for`) and with a clear sight line (`Map::sight_clear`: walls, rock and
 //!   shut gates hide). Players' perceived sets, minds' percepts and scenes, behaviour graphs and
 //!   the combat feed all see by it.
 //! - **What an observer perceives of a target** ([`project`]): the target's record through the
@@ -14,7 +14,7 @@
 //!   projection, so a mind and a player know the same things about the same target.
 //! - **The perceived set.** Every [`SWEEP_MS`] the authority works out, for each living
 //!   character a person controls, which creatures it sees. A creature already seen stays seen
-//!   until it is [`KEEP_MARGIN`] beyond sight, so one at the edge does not flicker. The answer
+//!   until it is the `keep_seen_m` law beyond sight, so one at the edge does not flicker. The answer
 //!   is kept as `perceived` rows (private), written only when someone comes into or goes out of
 //!   sight, and its projections as `projected` rows (private), written when a creature comes
 //!   into sight and when its projection changes (whom the viewer knows, a reveal, a band).
@@ -43,14 +43,12 @@ use std::rc::Rc;
 
 /// How often each player's perceived set is worked out again (ms), staggered by character.
 pub const SWEEP_MS: u64 = 200;
-/// Tiles beyond sight a creature already seen stays seen.
-pub const KEEP_MARGIN: f32 = 1.0;
 
 /// A body's current motion segment as clients draw it (see `Body`): from `(x, y)` facing
 /// `heading` at `t_ms`, moving at velocity `(vx, vy)`, turning at `turn` rad/s for `turn_s`
 /// seconds, until `next_ms` (the segment's end, when steering looks again; `u64::MAX` at
 /// rest). `speed` is the cruising speed of the movement under way, which tells its gait
-/// (a walk, or a run at the rules' `run_speed` times a walk). About 52 B against the `body`
+/// (a walk, or a run at the creature's `motion` law's `run` times a walk). About 52 B against the `body`
 /// row's 70 B plus 16 B per path corner.
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
 pub struct Motion {
@@ -120,9 +118,10 @@ pub fn visible(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u
     common::creatures_near(ctx, at, sight, now).into_iter().filter(|c| c.id != id && map.sight_clear(at, c.pos)).collect()
 }
 
-/// The largest sight anyone has now (for gathering onlookers before each one's own test).
+/// The largest sight anyone has now (for gathering onlookers before each one's own test): the
+/// `senses` law's reach.
 pub fn widest_sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
-    common::sight(ctx, w, now).max(common::laws(ctx).sight_torch)
+    common::widest_sight(ctx, w, now)
 }
 
 // ---- what an observer perceives of a target (the `perceived_of` law) ----------------------
@@ -219,9 +218,20 @@ pub fn revealed(ctx: &ReducerContext, observer: u32, target: u32, now: u64) -> V
 
 /// The law's answer for `observer` looking at `target` now.
 pub fn regard(ctx: &ReducerContext, observer: &Character, target: &Character, now: u64) -> Regard {
-    let w = common::world(ctx);
-    let mut knows = common::knows(ctx, observer.id);
+    regard_knowing(ctx, observer, &known_techniques(ctx, observer.id), target, now)
+}
+
+/// What `observer` knows how to do, as the law receives it (sorted).
+fn known_techniques(ctx: &ReducerContext, id: u32) -> Vec<String> {
+    let mut knows = common::knows(ctx, id);
     knows.sort();
+    knows
+}
+
+/// The law's answer with the observer's know-how already read (one observer, several targets).
+fn regard_knowing(ctx: &ReducerContext, observer: &Character, knows: &[String], target: &Character, now: u64) -> Regard {
+    let w = common::world(ctx);
+    let knows = knows.to_vec();
     let input = RegardIn {
         observer_kind: observer.kind.clone(),
         knows,
@@ -287,16 +297,19 @@ pub fn project(ctx: &ReducerContext, observer: &Character, target: &Character, n
 
 /// How `observer` refers to `id` (the projection's label).
 pub fn label(ctx: &ReducerContext, observer: &Character, id: u32, now: u64) -> String {
-    match ctx.db.character().id().find(id) {
-        Some(t) => {
-            if regard(ctx, observer, &t, now).name {
-                t.name
-            } else {
-                stranger(&t.kind, t.stage)
-            }
-        }
-        None => "someone".into(),
-    }
+    labels(ctx, observer, &[id], now).pop().unwrap_or_default()
+}
+
+/// How `observer` refers to each of `ids`, its know-how read once.
+pub fn labels(ctx: &ReducerContext, observer: &Character, ids: &[u32], now: u64) -> Vec<String> {
+    let knows = known_techniques(ctx, observer.id);
+    ids.iter()
+        .map(|id| match ctx.db.character().id().find(*id) {
+            Some(t) if regard_knowing(ctx, observer, &knows, &t, now).name => t.name,
+            Some(t) => stranger(&t.kind, t.stage),
+            None => "someone".into(),
+        })
+        .collect()
 }
 
 impl Projection {
@@ -328,8 +341,9 @@ pub fn sweep(ctx: &ReducerContext, now: u64) {
     }
     let due: Vec<(u32, Identity)> = LAST.with(|l| {
         let mut l = l.borrow_mut();
-        l.retain(|id, _| humans.iter().any(|(h, _)| h == id));
-        PROJECTED.with(|p| p.borrow_mut().retain(|id, _| humans.iter().any(|(h, _)| h == id)));
+        let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
+        l.retain(|id, _| ids.contains(id));
+        PROJECTED.with(|p| p.borrow_mut().retain(|id, _| ids.contains(id)));
         humans
             .into_iter()
             .filter(|(id, _)| {
@@ -356,6 +370,8 @@ pub fn sweep(ctx: &ReducerContext, now: u64) {
 
 /// Work out one player's perceived set now (also right after a join or a return).
 pub fn sweep_now(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64) {
+    crate::frame::catch_up_lines(ctx, id);
+    crate::combat::clear_feed(ctx, viewer);
     LAST.with(|l| l.borrow_mut().insert(id, now));
     PROJECTED.with(|p| p.borrow_mut().remove(&id));
     sweep_one(ctx, id, viewer, &common::world(ctx), &common::map(ctx), now);
@@ -369,11 +385,12 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(viewer).collect();
     let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
-    for c in common::creatures_near(ctx, here, sight + KEEP_MARGIN, now) {
+    let keep = common::laws(ctx).keep_seen_m;
+    for c in common::creatures_near(ctx, here, sight + keep, now) {
         if c.id == id {
             continue;
         }
-        let reach = if had.contains(&c.id) { sight + KEEP_MARGIN } else { sight };
+        let reach = if had.contains(&c.id) { sight + keep } else { sight };
         if in_sight(map, here, c.pos, c.dist, reach) {
             seen.insert(c.id);
         }
@@ -381,12 +398,25 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     for p in &rows {
         if !seen.contains(&p.body) {
             ctx.db.perceived().id().delete(p.id);
+            ctx.db.motion_seen().id().delete(crate::frame::key(id, p.body));
+            ctx.db.fighter_seen().id().delete(crate::frame::key(id, p.body));
+            ctx.db.doing_seen().id().delete(crate::frame::key(id, p.body));
         }
     }
     let entered: Vec<u32> = seen.difference(&had).copied().collect();
     let left = had.len() + entered.len() != seen.len();
     for body in &entered {
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });
+        // How it moves, as it is now; frames keep it current (`frame.rs`).
+        if let Some(b) = ctx.db.body().id().find(*body) {
+            let row = MotionSeen { id: crate::frame::key(id, *body), viewer, motion: Motion::from(&b) };
+            if ctx.db.motion_seen().id().find(row.id).is_some() {
+                ctx.db.motion_seen().id().update(row);
+            } else {
+                ctx.db.motion_seen().insert(row);
+            }
+        }
+
         // An instinct-only resident who sees the player's character back keeps that it came
         // into view, for the mind it may get (`woken`).
         if let Some(r) = ctx.db.character().id().find(*body).filter(|r| crate::woken::resident(ctx, r) && crate::woken::rings_kept(ctx)) {
@@ -397,6 +427,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             }
         }
     }
+    crate::frame::scene(id, viewer, &seen);
     // The projections follow: a row per creature in the scene (itself included), projected
     // when it comes into sight, and again only when an input of the law changed: whom the
     // viewer knows (its knowledge epoch, or this instance has not projected it yet), a reveal
@@ -451,12 +482,19 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         let pr = project(ctx, &me, &t, now);
         ctx.db.projected().insert(pr.into_row(viewer, *body, *body == id, 0));
     }
+    // The move of each newcomer that has fought, with the band its projection grants.
+    for body in &entered {
+        crate::frame::show_fighter(ctx, id, viewer, *body, true, now);
+        crate::frame::show_doing(ctx, id, viewer, *body);
+    }
 }
 
 /// A creature's health moved (a blow, a heal, the 1 Hz band follow-up): the players who
-/// perceive it see its band follow, and exact health where the law grants it.
+/// perceive it see its band follow, and exact health where the law grants it: its own player
+/// at once, the others at their next frame (`frame.rs`).
 pub fn health_moved(ctx: &ReducerContext, id: u32, now: u64) {
-    let rows: Vec<Projected> = ctx.db.projected().body().filter(id).collect();
+    crate::frame::hurt(id);
+    let rows: Vec<Projected> = ctx.db.projected().body().filter(id).filter(|p| p.own).collect();
     if rows.is_empty() {
         return;
     }
@@ -475,19 +513,40 @@ pub fn health_moved(ctx: &ReducerContext, id: u32, now: u64) {
 }
 
 /// A player's character died: it perceives nothing any more.
-pub fn forget(ctx: &ReducerContext, viewer: Identity) {
+pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
+    crate::frame::forget(ctx, id);
     for p in ctx.db.perceived().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.perceived().id().delete(p);
+    }
+    for p in ctx.db.motion_seen().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+        ctx.db.motion_seen().id().delete(p);
+    }
+    for p in ctx.db.fighter_seen().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+        ctx.db.fighter_seen().id().delete(p);
+    }
+    for p in ctx.db.doing_seen().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+        ctx.db.doing_seen().id().delete(p);
     }
     for p in ctx.db.projected().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.projected().id().delete(p);
     }
 }
 
-/// A character is no longer seen by anyone (it died): its rows in others' sets go.
+/// A character is no longer seen by anyone (it died): its rows in others' sets go, its motion
+/// in the same update (a body leaves `seen_bodies` with its death's feed row).
 pub fn gone(ctx: &ReducerContext, id: u32) {
-    for p in ctx.db.projected().body().filter(id).map(|p| p.id).collect::<Vec<_>>() {
-        ctx.db.projected().id().delete(p);
+    let rows: Vec<Projected> = ctx.db.projected().body().filter(id).collect();
+    if rows.is_empty() {
+        return;
+    }
+    let players: HashMap<Identity, u32> = crate::combat::humans(ctx).into_iter().map(|(c, who)| (who, c)).collect();
+    for p in rows {
+        if let Some(viewer) = players.get(&p.viewer) {
+            ctx.db.motion_seen().id().delete(crate::frame::key(*viewer, id));
+            ctx.db.fighter_seen().id().delete(crate::frame::key(*viewer, id));
+            ctx.db.doing_seen().id().delete(crate::frame::key(*viewer, id));
+        }
+        ctx.db.projected().id().delete(p.id);
     }
 }
 
@@ -524,21 +583,44 @@ pub fn reveal(ctx: &ReducerContext, observer: u32, target: u32, what: &str, secs
 
 // ---- views --------------------------------------------------------------------------------
 
-/// The characters this connection's person controls (not minds' characters: a mind service's
-/// identity reads the tables themselves).
-fn mine(ctx: &ViewContext) -> impl Iterator<Item = Character> + '_ {
-    ctx.db.character().controller().filter(ctx.sender()).filter(|c| !c.ai)
+/// The character this connection's person plays now, or the one that died last until they
+/// join again (`player`). Not a character the world's minds hold while its person is away
+/// (`ai`), and not minds' characters: a mind service's identity reads the tables themselves.
+/// A person with no `player` row yet (a world from before the table) is found by the old
+/// walk over every character it controlled, until its next reducer call writes the row.
+pub(crate) fn current(ctx: &ViewContext) -> Option<Character> {
+    let me = ctx.sender();
+    match ctx.db.player().identity().find(me) {
+        Some(p) => ctx.db.character().id().find(p.character).filter(|c| c.controller == me && !c.ai),
+        None => ctx.db.character().controller().filter(me).filter(|c| !c.ai).max_by_key(|c| (c.alive, c.id)),
+    }
 }
 
-/// The creatures in the scene: my living character, then everyone it perceives.
-fn scene(ctx: &ViewContext) -> Vec<u32> {
-    let mut ids: Vec<u32> = mine(ctx).filter(|c| c.alive).map(|c| c.id).collect();
-    for p in ctx.db.perceived().viewer().filter(ctx.sender()) {
-        if !ids.contains(&p.body) {
-            ids.push(p.body);
-        }
+/// The current character while it lives.
+pub(crate) fn living(ctx: &ViewContext) -> Option<Character> {
+    current(ctx).filter(|c| c.alive)
+}
+
+/// The caller's living character for a player reducer (`player`; a person with no row yet is
+/// found by the old walk, and the row is written).
+pub fn player_character(ctx: &ReducerContext) -> Option<Character> {
+    let me = ctx.sender();
+    if let Some(p) = ctx.db.player().identity().find(me) {
+        return ctx.db.character().id().find(p.character).filter(|c| c.alive && !c.ai && c.controller == me);
     }
-    ids
+    let c = ctx.db.character().controller().filter(me).find(|c| c.alive && !c.ai)?;
+    set_player(ctx, me, c.id);
+    Some(c)
+}
+
+/// `who` plays `character` now.
+pub fn set_player(ctx: &ReducerContext, who: Identity, character: u32) {
+    let row = Player { identity: who, character };
+    if ctx.db.player().identity().find(who).is_some() {
+        ctx.db.player().identity().update(row);
+    } else {
+        ctx.db.player().insert(row);
+    }
 }
 
 /// What I perceive of each creature in my scene, mine included (the projections).
@@ -546,10 +628,18 @@ fn projections(ctx: &ViewContext) -> impl Iterator<Item = Projected> + '_ {
     ctx.db.projected().viewer().filter(ctx.sender())
 }
 
-/// How the bodies in my scene move (the narrow stream; my own body included).
+/// How the bodies in my scene move (the narrow stream): the others, as my last frame showed
+/// them (`motion_seen`, `frame.rs`). My own body is `my_body`, so my own moves and steering
+/// re-run one row, not my whole scene.
 #[spacetimedb::view(accessor = seen_bodies, public, primary_key = id)]
 pub fn seen_bodies(ctx: &ViewContext) -> Vec<Motion> {
-    scene(ctx).into_iter().filter_map(|id| ctx.db.body().id().find(id)).map(|b| Motion::from(&b)).collect()
+    ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.motion).collect()
+}
+
+/// How my own living character's body moves, as it is.
+#[spacetimedb::view(accessor = my_body, public, primary_key = id)]
+pub fn my_body(ctx: &ViewContext) -> Vec<Motion> {
+    living(ctx).and_then(|c| ctx.db.body().id().find(c.id)).map(|b| Motion::from(&b)).into_iter().collect()
 }
 
 /// What I perceive of the creatures in my scene, mine included: their records through the
@@ -563,50 +653,68 @@ pub fn seen_characters(ctx: &ViewContext) -> Vec<SeenCharacter> {
 }
 
 /// How the fighters in my scene look: the move under way, and the health band as I perceive
-/// it (the projection's; 255 when not perceived).
+/// it (the projection's; 255 when not perceived), as my last frame showed them (`fighter_seen`,
+/// `frame.rs`). Mine is `my_fighter`.
 #[spacetimedb::view(accessor = seen_fighters, public, primary_key = id)]
 pub fn seen_fighters(ctx: &ViewContext) -> Vec<Fighter> {
-    projections(ctx).filter_map(|p| ctx.db.fighter().id().find(p.body).map(|f| Fighter { band: p.band, ..f })).collect()
+    ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter).collect()
 }
 
-/// What the creatures in my scene are visibly doing.
+/// My own living character's move under way and health band, as they are.
+#[spacetimedb::view(accessor = my_fighter, public, primary_key = id)]
+pub fn my_fighter(ctx: &ViewContext) -> Vec<Fighter> {
+    living(ctx).and_then(|c| ctx.db.fighter().id().find(c.id)).into_iter().collect()
+}
+
+/// What the creatures in my scene are visibly doing, as my last frame showed them
+/// (`doing_seen`, `frame.rs`). Mine is `my_doing`.
 #[spacetimedb::view(accessor = seen_doing, public, primary_key = id)]
 pub fn seen_doing(ctx: &ViewContext) -> Vec<Doing> {
-    scene(ctx).into_iter().filter_map(|id| ctx.db.doing().id().find(id)).collect()
+    ctx.db.doing_seen().viewer().filter(ctx.sender()).map(|d| d.doing).collect()
 }
 
-/// My characters, the dead included (the death screen).
+/// What my own living character is visibly doing, as it is.
+#[spacetimedb::view(accessor = my_doing, public, primary_key = id)]
+pub fn my_doing(ctx: &ViewContext) -> Vec<Doing> {
+    living(ctx).and_then(|c| ctx.db.doing().id().find(c.id)).into_iter().collect()
+}
+
+/// My current character, alive, or the one that died last until I join again (the death
+/// screen). Not every character I ever had.
 #[spacetimedb::view(accessor = my_characters, public, primary_key = id)]
 pub fn my_characters(ctx: &ViewContext) -> Vec<Character> {
-    mine(ctx).collect()
+    current(ctx).into_iter().collect()
 }
 
-/// My living characters' exact needs and health.
+/// My living character's exact needs and health.
 #[spacetimedb::view(accessor = my_vitals, public, primary_key = id)]
 pub fn my_vitals(ctx: &ViewContext) -> Vec<Vitals> {
-    mine(ctx).filter(|c| c.alive).filter_map(|c| ctx.db.vitals().id().find(c.id)).collect()
+    living(ctx).and_then(|c| ctx.db.vitals().id().find(c.id)).into_iter().collect()
 }
 
-/// What reached my characters' senses (the bounded per-character window), the dead included.
+/// What reached my character's senses lately: the newest `frame::LINES_SHOWN` lines of my
+/// living character, released at its frames (`line_seen`, `frame.rs`), or, while none lives,
+/// of the one that died last (the death screen). Not every dead character's: a player who
+/// dies often would re-read all of their windows at each line.
 #[spacetimedb::view(accessor = my_experience, public, primary_key = id)]
 pub fn my_experience(ctx: &ViewContext) -> Vec<Experience> {
-    mine(ctx).flat_map(|c| ctx.db.experience().observer().filter(c.id).collect::<Vec<_>>()).collect()
+    current(ctx).map(|c| ctx.db.line_seen().by_observer_shown().filter((c.id, true)).map(|l| l.line).collect()).unwrap_or_default()
 }
 
 /// The places my living characters know.
 #[spacetimedb::view(accessor = my_places, public, primary_key = id)]
 pub fn my_places(ctx: &ViewContext) -> Vec<Place> {
-    mine(ctx).filter(|c| c.alive).flat_map(|c| ctx.db.place().actor().filter(c.id).collect::<Vec<_>>()).collect()
+    living(ctx).map(|c| ctx.db.place().actor().filter(c.id).collect()).unwrap_or_default()
 }
 
 /// What my living characters carry.
 #[spacetimedb::view(accessor = my_inventory, public, primary_key = id)]
 pub fn my_inventory(ctx: &ViewContext) -> Vec<Inventory> {
-    mine(ctx).filter(|c| c.alive).flat_map(|c| ctx.db.inventory().owner().filter(c.id as u64).collect::<Vec<_>>()).collect()
+    living(ctx).map(|c| ctx.db.inventory().owner().filter(c.id as u64).collect()).unwrap_or_default()
 }
 
 /// What my living characters know how to do.
 #[spacetimedb::view(accessor = my_know_how, public, primary_key = id)]
 pub fn my_know_how(ctx: &ViewContext) -> Vec<KnowHow> {
-    mine(ctx).filter(|c| c.alive).flat_map(|c| ctx.db.know_how().actor().filter(c.id).collect::<Vec<_>>()).collect()
+    living(ctx).map(|c| ctx.db.know_how().actor().filter(c.id).collect()).unwrap_or_default()
 }

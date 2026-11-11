@@ -52,4 +52,4 @@ A land world (`--seed island`, see `docs/ISLAND_AUTHORITY.md`) adds the public `
 
 The probe reports rows, not bytes. For volume, read the database's `spacetime_num_bytes_sent_to_clients_total` from `http://127.0.0.1:3300/v1/metrics` before and after. The 2026-11-09 measurements are in `docs/ISLAND_AUTHORITY.md`.
 
-The game client's own land-world queries (`:sender`, the character join, and windows that move as the player walks) are in [game-client.md](game-client.md). Once the game client switches to the perception views (docs/PERCEPTION.md, client patch), only `terrain_chunk` and `lot` stay windowed.
+The game client's own queries are in [game-client.md](game-client.md): the perception and own-state views with no window and no join, and two chunk windows of public world data (`terrain_chunk`, `resource_node` and `structure` near; `lot` far).

@@ -56,7 +56,7 @@ SHAPED_PORT = int(os.environ.get("GATE_RELAY_PORT", "3398"))
 LOCAL_PORT = int(os.environ.get("GATE_LOCAL_RELAY_PORT", "3396"))
 FAKE_PORT = int(os.environ.get("GATE_FAKE_PORT", "3395"))
 TARGET = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "living/target"))
-WASM_DIR = TARGET / "wasm32-unknown-unknown/release"
+WASM_DIR = Path(os.environ.get("GATE_WASM_DIR", TARGET / "wasm32-unknown-unknown/release"))
 LOAD = Path(os.environ.get("GATE_LOAD", TARGET / "release/gate-load"))
 GAME = Path(os.environ.get("GATE_GAME", TARGET / "release/living-game"))
 MIND = Path(os.environ.get("GATE_MIND", TARGET / "release/living-mind"))
@@ -109,6 +109,17 @@ def http(path, body=None, token=None, raw=False, timeout=60):
             return r.status, r.read().decode()
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()
+
+
+def new_identity():
+    """A fresh identity's token; retried, since a busy server sometimes resets the connection."""
+    for attempt in range(5):
+        try:
+            return json.loads(http("/v1/identity", {})[1])["token"]
+        except OSError:
+            if attempt == 4:
+                raise
+            time.sleep(1)
 
 
 def call(db, reducer, args, token):
@@ -205,8 +216,11 @@ def container_up(r):
         sh("docker", "run", "-d", "--name", CONTAINER, "--cpus", "16", "--security-opt", "label=disable", "--stop-signal", "SIGINT",
            "-p", f"127.0.0.1:{PORT}:3000", "-v", f"{VOLUME}:/home/spacetime", "-v", f"{WASM_DIR}:/wasm:ro", IMAGE, "start", "--listen-addr", "0.0.0.0:3000")
     for _ in range(60):
-        if http("/v1/ping", timeout=5)[0] == 200:
-            return
+        try:
+            if http("/v1/ping", timeout=5)[0] == 200:
+                return
+        except OSError:
+            pass  # a fresh container resets connections while it starts
         time.sleep(1)
     raise RuntimeError("the server did not answer /v1/ping")
 
@@ -410,7 +424,7 @@ def _run(a, procs):
         "skills_rhai_sha256": sha256(ROOT / "living/scripts/skills.rhai"),
         "seed": "island", "network": {"one_way_ms": ONE_WAY_MS, "rtt_ms": 2 * ONE_WAY_MS, "jitter": 0, "loss": 0, "how": "pasta user+net namespace per client process, tc netem on the namespace's lo"},
         "workload": {"battle_players": a.battle, "walkers": a.walkers, "active_total": a.battle + a.walkers, "warmup_s": a.warmup, "window_s": a.seconds, "calm_s": a.calm,
-                     "fight_period_ms": a.fight_ms, "walk_period_ms": a.walk_ms, "rejoin_s": 3, "battle_radius_m": a.radius, "game_client": not a.no_game, "observer": True, "minds": "fake model server"},
+                     "client": a.client, "fight_period_ms": a.fight_ms, "walk_period_ms": a.walk_ms, "rejoin_s": 3, "battle_radius_m": a.radius, "game_client": not a.no_game, "observer": True, "minds": "fake model server"},
     }
     r.save("manifest.json", manifest)
     stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", db, "--delete-data", "-y")
@@ -440,14 +454,14 @@ def _run(a, procs):
         mind = Proc(r, "mind", [str(MIND)], env=env, stdin=False, lines=False)
     # Player identities.
     n = a.battle + a.walkers
-    tokens = [json.loads(http("/v1/identity", {})[1])["token"] for _ in range(n + 1)]
+    tokens = [new_identity() for _ in range(n + 1)]
     players = [{"token": tokens[i], "name": f"GateB{i}" if i < a.battle else f"GateW{i - a.battle}", "role": "battle" if i < a.battle else "walk"} for i in range(n)]
     watch = Proc(r, "watch", [str(LOAD), "watch"])
     watch.send(json.dumps({"uri": URL, "db": db, "token": token, "out": str(r.dir / "ticks.csv")}))
     watch.expect("ready", 60)
     load = Proc(r, "players", shaped(f"{LOAD} players"))
     behaviour = {"fight_period_ms": a.fight_ms, "walk_period_ms": a.walk_ms, "rejoin_s": 3, "grace_s": 5}
-    load.send(json.dumps({"uri": f"http://127.0.0.1:{SHAPED_PORT}", "db": db, "events": str(r.dir / "events.jsonl"), "battle": list(center), "behaviour": behaviour, "players": players}))
+    load.send(json.dumps({"uri": f"http://127.0.0.1:{SHAPED_PORT}", "db": db, "events": str(r.dir / "events.jsonl"), "battle": list(center), "behaviour": behaviour, "players": players, "client": a.client}))
     joined = load.expect("joined", 600)
     r.log(f"{len(joined['players'])} players joined in {joined['after_s']:.1f} s")
     ids = {p["p"]: p["id"] for p in joined["players"]}
@@ -818,7 +832,7 @@ def frames_analysis(path, win):
     rows = []
     for line in open(path):
         f = line.strip().split(",")
-        if len(f) == 3 and f[0].isdigit():
+        if len(f) == 3 and all(x.isdigit() for x in f):
             rows.append((int(f[0]) / 1e6, int(f[1]) / 1000, int(f[2]) / 1000))
     out = {}
     for wname, (a, b) in win.items():
@@ -977,7 +991,18 @@ def cleanup(a):
                       "volume_present": VOLUME in sh("docker", "volume", "ls", "--format", "{{.Name}}").split()}, indent=2))
 
 
+def raise_open_files():
+    """Each relayed connection holds a few descriptors, and the relays run outside the shaped
+    namespaces, so a shell's soft limit (often 1,024) runs out near 170 players ("Too many open
+    files" in the relay). Raise it to the hard limit for this process and its children."""
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft != resource.RLIM_INFINITY and (hard == resource.RLIM_INFINITY or soft < hard):
+        resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+
+
 def main():
+    raise_open_files()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
@@ -994,6 +1019,8 @@ def main():
     r.add_argument("--no-game", action="store_true")
     r.add_argument("--no-minds", action="store_true")
     r.add_argument("--keep", dest="delete", action="store_false", help="keep the database afterwards")
+    r.add_argument("--client", choices=["gate", "game"], default="gate",
+                   help="what the players stand for: gate (confirmed reads and the gate's subscriptions, as first measured) or game (unconfirmed reads, the script row and resource/structure windows, as living/game reads since the player verbs)")
     r.add_argument("--smoke", action="store_true", help="a short run: 6 battle, 4 walkers, 20 s warm-up, 90 s window")
     an = sub.add_parser("analyze")
     an.add_argument("dir")

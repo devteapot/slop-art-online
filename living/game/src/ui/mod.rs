@@ -80,13 +80,26 @@ fn default_camera(mut commands: Commands, cams: Query<Entity, Added<Camera3d>>) 
 /// Designed at 1080p; scales with the target's height (1600×900 → 0.83, 2560×1440 → 1.33).
 fn scale(mut ui: ResMut<UiScale>, cams: Query<&Camera, With<Camera3d>>) {
     let h = cams.iter().find_map(|c| c.logical_viewport_size()).map_or(1080.0, |s| s.y);
-    let s = (h / 1080.0).clamp(0.7, 2.5);
+    // Designed at 1080p, drawn 10% larger and never under 0.9 of it: at 720p it was 0.67, and
+    // its 9–12 px type read as 6–8 px (play-test 1).
+    let s = (h / 1080.0 * 1.1).clamp(0.9, 2.5);
     if (ui.0 - s).abs() > 1e-3 {
         ui.0 = s;
     }
 }
 
 // ---- small helpers shared by the widgets --------------------------------------------------
+
+/// A rules name as the UI shows it: words, the first capitalised ("berry_bush" → "Berry bush").
+/// The rules' own names read as code in a list (play-test 1).
+pub(crate) fn label(s: &str) -> String {
+    let s = s.replace('_', " ");
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => s,
+    }
+}
 
 pub(crate) fn set_text(t: &mut Text, s: &str) {
     if t.0 != s {
@@ -116,5 +129,16 @@ pub(crate) fn set_bg(c: &mut BackgroundColor, col: Color) {
 pub(crate) fn set_width(n: &mut Node, w: Val) {
     if n.width != w {
         n.width = w;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn rules_names_and_labels_read_as_words() {
+        assert_eq!(super::label("berry_bush"), "Berry bush");
+        assert_eq!(super::label("a stranger"), "A stranger");
+        assert_eq!(super::label("Old Hale"), "Old Hale");
+        assert_eq!(super::label(""), "");
     }
 }

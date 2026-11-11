@@ -45,13 +45,6 @@ pub fn is_night(hour: f32) -> bool {
     !(6.0..20.0).contains(&hour)
 }
 
-pub const SIGHT: f32 = 11.0;
-pub const NIGHT_SIGHT: f32 = 6.0;
-pub const HEARING: f32 = 9.0;
-
-/// Days after which a newborn counts as grown (can build, craft, fight, conceive).
-pub const ADULT_DAYS: f32 = 3.0;
-
 /// A span of world days in words ("a few hours", "about 2 days").
 pub fn describe_days(d: f32) -> String {
     if d < 0.2 {
@@ -116,6 +109,3 @@ mod season_tests {
         let _ = start;
     }
 }
-
-/// Sight at night while carrying a torch.
-pub const TORCH_SIGHT: f32 = 9.0;

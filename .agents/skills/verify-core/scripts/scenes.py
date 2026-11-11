@@ -650,6 +650,187 @@ def sight(s):
 
 
 
+def open_line(s, length=16):
+    """A row of `length` walkable tiles on this world's map, west to east, with nothing that
+    blocks sight on it: the tile centres from its west end."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray(W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7)
+    for y in range(8, H - 8, 3):
+        for x in range(8, W - length - 8, 2):
+            if all(walk(x + i, y + d) for i in range(length) for d in (-1, 0, 1)):
+                return [(x + i + .5, y + .5) for i in range(length)]
+    raise RuntimeError("no open line on this map")
+
+
+def world_hour(s):
+    w = s.rows("SELECT epoch_ms, day_ms FROM world")[0]
+    now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    day = w["day_ms"]
+    return ((now - w["epoch_ms"] + day * 7 // 24) % day) / day * 24, day
+
+
+def senses(s):
+    """Sight and hearing are the script's `senses(a)` law per creature (docs/WORLD_RULES.md,
+    "Laws"): by day one sees 11 m, at night 6, with a torch 9; speech carries 9 m. Watchers
+    stand 5, 8, 10 and 13 m from a subject on an open line; each one's graph faces the subject
+    when it `sees` it. Then installed overlays change the law, as a floor or a passive would:
+    day sight 14 m (and its reach with it), and a world where it is always dark for the eyes,
+    where a torch in the pack is the difference at 8 m. Hearing: the subject speaks; listeners
+    at 8 and 10 m, then with hearing 12. The shipped script is installed again at the end."""
+    line = open_line(s)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    subject, *watchers = s.people(5)
+    for w in watchers:
+        s.graph(w, {"wait": 1})
+    dists = [5, 8, 10, 13]
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+
+    def overlay(**fns):
+        src = shipped
+        for name in fns:
+            src = src.replace(f"fn {name}(", f"fn base_{name}(", 1)
+        return src + "\n" + "\n".join(fns.values()) + "\n"
+
+    def place():
+        s.call("place_at", subject, *line[0])
+        for w, d in zip(watchers, dists):
+            s.call("place_at", w, *line[d])
+
+    def seen(label, want):
+        place()
+        s.graph(subject, {"wait": 300})
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        # A watcher that sees the subject faces it, then turns away (east), so the next look is a
+        # real turn again ("you already face it" refuses a turn to where one faces).
+        for w, d in zip(watchers, dists):
+            away = {"do": {"skill": "face", "target": {"at": [line[d][0] + 4.0, line[d][1]]}}}
+            s.graph(w, {"first": {"label": "watch", "children": [
+                {"seq": [{"if": {"cond": {"sees": {"id": subject}}, "then": {"do": {"skill": "face", "target": {"id": subject}}}}}, away]},
+                away,
+                {"wait": 2}]}})
+        # Graphs start at each body's own evaluation slot: wait until the expected watchers have
+        # faced the subject (at most 30 s), then 4 s more for any that should not.
+        def faced():
+            uses = [u for u in s.rows("SELECT * FROM skill_use", f"uses-{label}") if u["at_ms"] >= t0 and u["skill"] == "face" and u["target"] == subject]
+            return sorted(d for w, d in zip(watchers, dists) if any(u["actor"] == w for u in uses))
+        end = time.monotonic() + 30
+        while time.monotonic() < end and not set(want) <= set(faced()):
+            time.sleep(1)
+        time.sleep(4)
+        got = faced()
+        # Short waits between phases: a body in a long wait is looked at again only when it ends.
+        for w in watchers:
+            s.graph(w, {"wait": 1})
+        return got
+
+    def heard(label):
+        place()
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        s.graph(subject, {"seq": [{"say": f"Can you hear me? ({label})"}, {"wait": 300}]})
+        time.sleep(4)
+        got = []
+        for w, d in zip(watchers, dists):
+            rows = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {w}") if r["kind"] == "speech" and r["at_ms"] >= t0]
+            if rows:
+                got.append(d)
+        s.graph(subject, {"wait": 300})
+        return got
+
+    def light():
+        hour, day = world_hour(s)
+        # Keep a margin of 25 s of world time from dusk and dawn.
+        margin = 25_000 / day * 24
+        if any(abs(hour - b) < margin for b in (6.0, 20.0)):
+            time.sleep(30)
+            hour, day = world_hour(s)
+        return "night" if not 6.0 <= hour < 20.0 else "day"
+
+    try:
+        now = light()
+        want = [5, 8, 10] if now == "day" else [5]
+        got = seen("shipped", want)
+        s.expect(f"shipped law ({now}): seen within {11 if now == 'day' else 6} m", got == want, {"seen": got, "want": want, "light": now})
+        got = heard("shipped")
+        s.expect("shipped law: speech heard within 9 m", got == [5, 8], got)
+
+        s.call("install_script", overlay(sight_in='fn sight_in(light) { if light == "day" { 14.0 } else { base_sight_in(light) } }',
+                                         hearing_of_people="fn hearing_of_people() { 12.0 }"))
+        now = light()
+        want = [5, 8, 10, 13] if now == "day" else [5]
+        got = seen("day14", want)
+        s.expect(f"an installed law changes sight, and its reach with it ({now})", got == want, {"seen": got, "want": want, "light": now})
+        got = heard("hear12")
+        s.expect("an installed law changes hearing: 10 m heard at 12", got == [5, 8, 10], got)
+
+        s.call("install_script", overlay(light_of='fn light_of(a) { if inv(a, "torch") > 0 { "torch" } else { "night" } }'))
+        got = seen("dark", [5])
+        s.expect("always dark for the eyes: seen within 6 m", got == [5], got)
+        s.call("grant_items", watchers[1], "torch", 1)
+        s.call("grant_items", watchers[2], "torch", 1)
+        got = seen("torch", [5, 8])
+        s.expect("a torch in the pack: 8 m seen, 10 m not (9 m with a torch)", got == [5, 8], got)
+    finally:
+        s.call("install_script", shipped)
+
+
+def moves(s):
+    """How a creature moves besides its walk is the script's `motion(a)` law: a flight at 1.15
+    times the walk, turning on the spot at 6 rad/s. A person walks off (its cruising speed is
+    its walk), then flees a second person (1.15 times that), then turns to face someone behind
+    it (the body row's turn rate). An installed overlay with a flight of 2 and turning at 3
+    shows both changed; the shipped script is installed again at the end."""
+    line = open_line(s)
+    a, b = s.people(2)
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+
+    def body(label):
+        return s.rows(f"SELECT * FROM body WHERE id = {a}", label)[0]
+
+    def measure(label):
+        s.call("place_at", a, *line[3])
+        s.call("place_at", b, *line[0])
+        time.sleep(1)
+        s.graph(a, {"seq": [{"do": {"skill": "goto", "target": {"at": [line[15][0], line[15][1]]}}}, {"wait": 300}]})
+        time.sleep(1.5)
+        walk = body(f"{label}-walk")["speed"]
+        s.call("place_at", a, *line[3])
+        s.graph(a, {"seq": [{"do": {"skill": "flee", "target": {"id": b}}}, {"wait": 300}]})
+        time.sleep(1.5)
+        flee = body(f"{label}-flee")["speed"]
+        s.graph(a, {"wait": 300})
+        time.sleep(2.5)
+        h = body(f"{label}-stand")["heading"]
+        here = body_at(s, a)
+        s.call("place_at", b, here[0] - 3 * math.cos(h), here[1] - 3 * math.sin(h))
+        time.sleep(0.5)
+        s.graph(a, {"seq": [{"do": {"skill": "face", "target": {"id": b}}}, {"wait": 300}]})
+        time.sleep(2)
+        turn = abs(body(f"{label}-face")["turn"])
+        return {"walk": walk, "flee": flee, "ratio": round(flee / walk, 3) if walk else None, "turn": round(turn, 3)}
+
+    try:
+        got = measure("shipped")
+        s.expect("shipped law: a flight is 1.15 times the walk", got["ratio"] and abs(got["ratio"] - 1.15) < 0.02, got)
+        s.expect("shipped law: turning on the spot at 6 rad/s", abs(got["turn"] - 6.0) < 0.01, got)
+        src = shipped.replace("fn motion(a)", "fn base_motion(a)", 1) + "\nfn motion(a) { let m = base_motion(a); m.flee = 2.0; m.turn_rate = 3.0; m }\n"
+        s.call("install_script", src)
+        got = measure("overlay")
+        s.expect("an installed law changes the flight: 2 times the walk", got["ratio"] and abs(got["ratio"] - 2.0) < 0.03, got)
+        s.expect("an installed law changes turning: 3 rad/s", abs(got["turn"] - 3.0) < 0.01, got)
+    finally:
+        s.call("install_script", shipped)
+
+
 def body_at(s, actor, now=None, row=None):
     """A body's position now, from its segment (straight-line; turns are short)."""
     b = row or s.rows(f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {actor}")[0]
@@ -876,17 +1057,17 @@ REMAINS_S = 90
 
 
 def carcass_law(kind):
-    """The shipped `carcass(kind)` law's items for a kind, read from skills.rhai."""
+    """What the shipped script gives a kind's remains: the `carcass` trait of its row in
+    `kinds()` (read by the `carcass(kind)` law)."""
     src = (ROOT / "living/scripts/skills.rhai").read_text()
-    body = src[src.index("fn carcass(kind)"):].split("\n", 1)[0]
-    m = re.search(r'"%s"\s*=>\s*#\{([^}]*)\}' % kind, body)
+    m = re.search(r'name:\s*"%s"[^\n]*?carcass:\s*#\{([^}]*)\}' % kind, src)
     return {k: int(v) for k, v in re.findall(r"(\w+):\s*(\d+)", m.group(1))} if m else {}
 
 
 def remains(s):
     """Every death leaves remains with the `carcass` law's items; a kill feeds nobody by itself;
     any creature beside the remains takes from them; they are gone after `remains_s`; a wander
-    keeps its heading (`wander_keep_s`). Needs a world with deer and wolves (stage1-acts)."""
+    keeps its heading (the `motion` law's `wander_turn`, `wander_keep_s`). Needs a world with deer and wolves (stage1-acts)."""
     src = compose((ROOT / "living/scripts/skills.rhai").read_text(), {"remains_s": f"fn remains_s(kind) {{ {REMAINS_S} }}"})
     s.call("install_script", src)
     for c in s.rows("SELECT id FROM character WHERE alive = true"):
@@ -962,7 +1143,7 @@ def remains(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "remains": remains}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains}
 
 
 def main():

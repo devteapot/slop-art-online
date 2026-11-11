@@ -35,6 +35,8 @@ python3 "$C/scenes.py" food --run "$R" > "$E/food.txt" 2>&1
 python3 "$C/scenes.py" refusal --run "$R" > "$E/refusal.txt" 2>&1
 python3 "$C/scenes.py" seize --run "$R" > "$E/seize.txt" 2>&1
 python3 "$C/scenes.py" sight --run "$R" > "$E/sight.txt" 2>&1
+python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
+python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
 # The starter combat skills under graphs use the island seed (its newcomer kit, pack and

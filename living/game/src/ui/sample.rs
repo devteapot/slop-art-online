@@ -9,7 +9,9 @@
 //! - `chat`: the chat input is open with a line being typed;
 //! - `lowhp`: low health, a hostile attacker, losing health and in combat;
 //! - `cooldown`: skills on cooldown, one unavailable for lack of energy;
-//! - `death`: the death screen.
+//! - `death`: the death screen;
+//! - `crowd`: with `bubbles`, eight speakers at once and up to twelve people with plates (a
+//!   market crowd, for judging overlap and legibility; with `LIVING_GAME_CROWD`).
 //!
 //! Sample characters are the look-dev scene's own (`characters::Character`), with sample names.
 //! In a window the sample loops (bubbles come and go, cooldowns run down); in scripted
@@ -29,6 +31,7 @@ pub struct States {
     pub lowhp: bool,
     pub cooldown: bool,
     pub death: bool,
+    pub crowd: bool,
 }
 
 /// The sample states asked for, if the sample HUD is on.
@@ -42,12 +45,16 @@ pub fn states() -> Option<States> {
         match w {
             "hover" => s.hover = true,
             "bubbles" => s.bubbles = true,
+            "crowd" => {
+                s.crowd = true;
+                s.bubbles = true;
+            }
             "chat" => s.chat = true,
             "lowhp" => s.lowhp = true,
             "cooldown" => s.cooldown = true,
             "death" => s.death = true,
             "quiet" => {}
-            other => warn!("LIVING_GAME_HUD: unknown state {other} (hover, bubbles, chat, lowhp, cooldown, death)"),
+            other => warn!("LIVING_GAME_HUD: unknown state {other} (hover, bubbles, chat, lowhp, cooldown, death, crowd)"),
         }
     }
     Some(s)
@@ -131,10 +138,10 @@ pub fn fill(
     let hovered = if s.hover || s.lowhp { hostile.or(near.first().map(|n| n.0)) } else { None };
 
     // Speakers: the nearest few, when bubbles are asked for.
-    let speakers: Vec<Entity> = if s.bubbles { near.iter().map(|n| n.0).filter(|e| Some(*e) != hostile).take(3).collect() } else { Vec::new() };
+    let speakers: Vec<Entity> = if s.bubbles { near.iter().map(|n| n.0).filter(|e| Some(*e) != hostile).take(if s.crowd { 8 } else { 3 }).collect() } else { Vec::new() };
     model.actors = near
         .iter()
-        .take(8)
+        .take(if s.crowd { 12 } else { 8 })
         .map(|&(e, head, distance, _)| {
             let is_hostile = Some(e) == hostile;
             Actor {
@@ -142,7 +149,7 @@ pub fn fill(
                 name: if is_hostile { "Varek the Brigand".into() } else { name(e) },
                 head,
                 distance,
-                hovered: Some(e) == hovered,
+                hovered: Some(e) == hovered || (s.crowd && distance < 9.0),
                 targeted: Some(e) == hovered,
                 talking: speakers.contains(&e),
                 greeted: false,

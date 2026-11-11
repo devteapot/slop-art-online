@@ -9,10 +9,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-// Behavior switches from the seed's `rules` block (build.rs writes the file; each lab arm
-// compiles its own). True is the enforced rule; false hands the behavior to the minds.
-include!(concat!(env!("OUT_DIR"), "/rules_flags.rs"));
-
 thread_local! {
     static MAP: RefCell<Option<Rc<Map>>> = const { RefCell::new(None) };
     static SCRIPTS: RefCell<Option<(u32, Rc<Scripts>)>> = const { RefCell::new(None) };
@@ -73,8 +69,39 @@ pub fn span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
     PROFILE.with(|p| p.get()).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
 }
 
+thread_local! {
+    /// The transaction whose `now` was last asked for: its stamp, its `now`, a sequence number
+    /// unique to it (the key of caches valid within one transaction), and the latest `now` any
+    /// transaction has used.
+    static TX: std::cell::Cell<(i64, u64, u64, u64)> = const { std::cell::Cell::new((0, 0, 0, 0)) };
+}
+
+/// The transaction's time in ms, never earlier than a time an earlier transaction already used.
+///
+/// A client's reducer is stamped when the host receives it, before the database's queue
+/// (2.14.1 `module_host.rs` `call_reducer_params`), so a call that waited behind a tick runs
+/// with a time older than the tick's. Its writes would then begin in the past: `motion::anchor`
+/// restamps a body's segment earlier than where the tick left it (the body jumps ahead by its
+/// speed times the wait), and readiness and the input bucket are judged at a time already
+/// passed. The world has moved on to the tick's time, so a late call acts at that time.
 pub fn now_ms(ctx: &ReducerContext) -> u64 {
-    (ctx.timestamp.to_micros_since_unix_epoch() / 1000) as u64
+    let received = (ctx.timestamp.to_micros_since_unix_epoch() / 1000) as u64;
+    let st = stamp(ctx);
+    TX.with(|t| {
+        let (s, now, seq, latest) = t.get();
+        if s == st {
+            return now;
+        }
+        let now = received.max(latest);
+        t.set((st, now, seq + 1, now));
+        now
+    })
+}
+
+/// A number unique to the current transaction (after its first `now_ms`): the key of module
+/// caches valid within one transaction, which `now` alone no longer distinguishes.
+pub fn tx_seq() -> u64 {
+    TX.with(|t| t.get().2)
 }
 
 /// The transaction's timestamp in microseconds: the key of caches that are valid only
@@ -175,11 +202,11 @@ pub fn flush_counts(k: &mut Clock) -> bool {
 }
 
 /// Who controls a seeded or newborn character that has no player: the admin's minds, which
-/// deliberate and receive experiences (the default), or, with the seed's `rules.minds` false,
-/// the database itself, so the character lives on its behaviour graph alone and no
+/// deliberate and receive experiences (the default), or, with the `minds` law false (a seed's
+/// `rules`), the database itself, so the character lives on its behaviour graph alone and no
 /// experiences or deliberation requests are written for it.
 pub fn mind_controller(ctx: &ReducerContext) -> (spacetimedb::Identity, bool) {
-    if MINDS {
+    if laws(ctx).minds {
         (world(ctx).admin, true)
     } else {
         (ctx.database_identity(), false)
@@ -298,13 +325,19 @@ pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terr
     Ok(())
 }
 
-/// World laws from the installed scripts (cached with them).
+/// World laws from the installed scripts, with the world's own values over them (its seed's
+/// `rules`, `world_law`). Cached with the scripts: writing a world law moves `scripts_rev`.
 pub fn laws(ctx: &ReducerContext) -> living_rules::script::Laws {
     let rev = scripts_rev(ctx);
     if let Some(l) = LAWS.with(|l| l.get().filter(|(r, _)| *r == rev).map(|(_, l)| l)) {
         return l;
     }
-    let l = scripts(ctx).laws();
+    let over: Vec<(String, serde_json::Value)> = ctx.db.world_law().iter().filter_map(|w| serde_json::from_str(&w.value).ok().map(|v| (w.name, v))).collect();
+    let sc = scripts(ctx);
+    let l = sc.laws_with(&over).unwrap_or_else(|e| {
+        log::warn!("world laws: {e}; the script's own values hold");
+        sc.laws()
+    });
     LAWS.with(|c| c.set(Some((rev, l))));
     l
 }
@@ -462,13 +495,15 @@ pub fn age_days(c: &Character, w: &World, now: u64) -> f32 {
     c.birth_age_days + now.saturating_sub(c.born_ms) as f32 / w.day_ms.max(1) as f32
 }
 
-pub fn sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
-    let l = laws(ctx);
-    if night(w, now) {
-        l.sight_night
-    } else {
-        l.sight_day
-    }
+/// The farthest anyone sees now (the `senses` law's reach by day or by night): onlookers are
+/// gathered within it before each one's own sight is tested.
+pub fn widest_sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
+    scripts(ctx).reach().sight(night(w, now))
+}
+
+/// The farthest anyone hears.
+pub fn widest_hearing(ctx: &ReducerContext) -> f32 {
+    scripts(ctx).reach().hearing
 }
 
 // ---- bodies ---------------------------------------------------------------------
@@ -600,11 +635,8 @@ pub fn food_count(ctx: &ReducerContext, owner: u64) -> u32 {
 
 // ---- resources ----------------------------------------------------------------
 
-/// Resource amount now: regrowth counts only growing (non-winter) time.
-/// Grazing per grassy tile a chunk holds, and its regrowth per minute of growing time.
-/// Regrowth is a world law (`pasture_regen` in the rules script).
-const PASTURE_PER_TILE: f32 = 0.02;
-
+/// A chunk's pasture: grazing per grassy tile it holds (`pasture_per_tile`) and its regrowth per
+/// minute of growing time (`pasture_regen`), both world laws.
 fn pasture_row(ctx: &ReducerContext, chunk: u32, now: u64) -> Pasture {
     if let Some(p) = ctx.db.pasture().chunk().find(chunk) {
         return p;
@@ -620,7 +652,7 @@ fn pasture_row(ctx: &ReducerContext, chunk: u32, now: u64) -> Pasture {
             }
         }
     }
-    let max = tiles as f32 * PASTURE_PER_TILE;
+    let max = tiles as f32 * laws(ctx).pasture_per_tile;
     Pasture { chunk, amount: max, max, regen: tiles as f32 * laws(ctx).pasture_regen, at_ms: now }
 }
 
@@ -629,7 +661,7 @@ pub fn pasture_now(ctx: &ReducerContext, chunk: u32, now: u64) -> f32 {
     let p = pasture_row(ctx, chunk, now);
     let (epoch, day, year) = calendar(ctx);
     // Regrowth follows the current rules (the row keeps the chunk's grassy tiles as its max).
-    let regen = p.max / PASTURE_PER_TILE * laws(ctx).pasture_regen;
+    let regen = p.max / laws(ctx).pasture_per_tile.max(1e-6) * laws(ctx).pasture_regen;
     (p.amount + regen * living_rules::growing_ms(p.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(p.max)
 }
 
@@ -682,13 +714,77 @@ pub fn season(ctx: &ReducerContext, now: u64) -> &'static str {
     living_rules::SEASONS[living_rules::season_of(now, epoch, day, year)]
 }
 
-/// Sight for a particular creature: a torch pushes back the night.
+/// How far a creature sees now (the `senses` law: day, night, a torch, whatever the world's
+/// rules say).
 pub fn sight_for(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
-    if night(w, now) && inv_count(ctx, id as u64, "torch") > 0 {
-        laws(ctx).sight_torch
-    } else {
-        sight(ctx, w, now)
+    senses_of(ctx, id, w, now).sight
+}
+
+/// How far a creature hears now.
+pub fn hearing_for(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
+    senses_of(ctx, id, w, now).hearing
+}
+
+/// A creature's answers from the laws asked per creature on the hot path, for one moment.
+#[derive(Clone, Copy, Default)]
+struct Hot {
+    senses: Option<living_rules::script::Senses>,
+    moves: Option<living_rules::script::Moves>,
+}
+
+thread_local! {
+    /// The hot laws' answers by creature for one moment (`now`): every look and step in a tick
+    /// asks the same few creatures again. Cleared when the moment or the script revision changes.
+    static HOT: RefCell<(u64, u32, HashMap<u32, Hot>)> = RefCell::new((0, 0, HashMap::new()));
+}
+
+/// A hot law's answer for creature `id` now: kept for this moment here, else the law over the
+/// few facts it reads (gathered by its plan), kept per state by the scripts.
+fn hot<T: Copy>(ctx: &ReducerContext, id: u32, w: &World, now: u64, law: &str, slot: fn(&mut Hot) -> &mut Option<T>, ask: impl FnOnce(&Scripts, &living_rules::script::SkillCtx) -> T) -> T {
+    let rev = scripts_rev(ctx);
+    if let Some(v) = HOT.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.0 != now || c.1 != rev {
+            return None;
+        }
+        c.2.get_mut(&id).and_then(|h| *slot(h))
+    }) {
+        return v;
     }
+    let sc = scripts(ctx);
+    let c = crate::act::law_ctx(ctx, id, w, now, &sc.law_plan(law));
+    let v = ask(&sc, &c);
+    HOT.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.0 != now || c.1 != rev {
+            *c = (now, rev, HashMap::new());
+        }
+        *slot(c.2.entry(id).or_default()) = Some(v);
+    });
+    v
+}
+
+/// A creature's senses now (the `senses` law).
+pub fn senses_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> living_rules::script::Senses {
+    hot(ctx, id, w, now, "senses", |h| &mut h.senses, |sc, c| {
+        sc.senses(c).unwrap_or_else(|e| {
+            log::warn!("senses for {id}: {e}");
+            let r = sc.reach();
+            living_rules::script::Senses { sight: r.sight(c.night), hearing: r.hearing }
+        })
+    })
+}
+
+/// How a creature moves now (the `motion` law): its run, flight and step aside as shares of its
+/// walk, its turning and how far it keeps from others.
+pub fn moves_of(ctx: &ReducerContext, id: u32, now: u64) -> living_rules::script::Moves {
+    let w = world(ctx);
+    hot(ctx, id, &w, now, "motion", |h| &mut h.moves, |sc, c| {
+        sc.moves(c).unwrap_or_else(|e| {
+            log::warn!("motion for {id}: {e}");
+            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0, wander_turn: 1.2, wander_keep_s: 0.0 }
+        })
+    })
 }
 
 /// Techniques a character knows, by their current names (a row a world kept from before a
@@ -719,14 +815,15 @@ pub struct NearCreature {
 
 thread_local! {
     /// Bodies per chunk at one instant, shared by every evaluation in the same tick.
-    static CHUNK_BODIES: RefCell<(u64, HashMap<u32, Rc<Vec<(u32, Rc<str>, (f32, f32))>>>)> = RefCell::new((0, HashMap::new()));
+    static CHUNK_BODIES: RefCell<((u64, u64), HashMap<u32, Rc<Vec<(u32, Rc<str>, (f32, f32))>>>)> = RefCell::new(((0, 0), HashMap::new()));
 }
 
 fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<(u32, Rc<str>, (f32, f32))>> {
     CHUNK_BODIES.with(|c| {
         let mut c = c.borrow_mut();
-        if c.0 != now {
-            c.0 = now;
+        let key = (tx_seq(), now);
+        if c.0 != key {
+            c.0 = key;
             c.1.clear();
         }
         if let Some(v) = c.1.get(&chunk) {
@@ -740,7 +837,7 @@ fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<(u32, Rc<s
 
 /// Forget cached bodies (after a body is removed or moved to another chunk this instant).
 pub fn invalidate_bodies() {
-    CHUNK_BODIES.with(|c| c.borrow_mut().0 = 0);
+    CHUNK_BODIES.with(|c| c.borrow_mut().0 = (0, 0));
 }
 
 pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<NearCreature> {
@@ -941,11 +1038,15 @@ pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String 
 
 /// The same, to begin a sentence with.
 pub fn label_cap(ctx: &ReducerContext, observer: &Character, id: u32) -> String {
-    let l = label_for(ctx, observer, id);
+    capitalized(&label_for(ctx, observer, id))
+}
+
+/// A label to begin a sentence with.
+pub fn capitalized(l: &str) -> String {
     let mut c = l.chars();
     match c.next() {
         Some(f) => f.to_uppercase().chain(c).collect(),
-        None => l,
+        None => String::new(),
     }
 }
 

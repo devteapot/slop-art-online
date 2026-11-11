@@ -15,6 +15,8 @@ use std::collections::HashMap;
 
 const PLATES: usize = 12;
 const BUBBLES: usize = 8;
+/// How far apart stacked bubbles are kept (px): the overlap test's 3 px margin and a gap.
+const BUBBLE_GAP: f32 = 7.0;
 /// Wrapper width (Val px) that plates and bubbles are centred in.
 const WRAP: f32 = 320.0;
 
@@ -116,6 +118,9 @@ fn relevant<'a>(model: &'a HudModel, project: impl Fn(Vec3) -> Option<Vec2>) -> 
         .actors
         .iter()
         .filter(|a| a.hovered || a.targeted || a.greeted || a.exact.is_some() || a.stance == Stance::Hostile)
+        // A speaker's bubble carries the name: a plate that would add nothing else (no health, not
+        // hostile) under it only repeats it, which in a crowd doubled every hovered speaker.
+        .filter(|a| a.hp.is_some() || a.exact.is_some() || a.stance == Stance::Hostile || !model.bubbles.iter().any(|b| b.speaker == a.id))
         .filter_map(|a| {
             let p = project(a.head)?;
             let mut alpha = 1.0 - smoothstep(14.0, 32.0, a.distance);
@@ -162,7 +167,7 @@ pub fn plates(
     }
     for (pn, mut t, mut c) in &mut names {
         if let Some((_, alpha, a)) = shown(pn.0) {
-            set_text(&mut t, &a.name);
+            set_text(&mut t, &super::label(&a.name));
             let col = if a.stance == Stance::Hostile {
                 theme::HOSTILE
             } else if a.targeted {
@@ -253,7 +258,10 @@ pub fn bubbles(
         for _ in 0..placed.len() + 1 {
             let r = Rect::new(x - size.x / 2.0 - 3.0, base - lift - size.y - 3.0, x + size.x / 2.0 + 3.0, base - lift + 3.0);
             match placed.iter().find(|(id, o)| *id != Some(b.speaker) && !o.intersect(r).is_empty()) {
-                Some((_, o)) => lift = lift.max(base - o.min.y + 1.0),
+                // Clear of it by the test's margin and a gap: rising by a pixel left the same
+                // obstacle within the margin, so the passes ran out a pixel at a time and later
+                // bubbles landed on earlier ones in a crowd.
+                Some((_, o)) => lift = lift.max(base - o.min.y + BUBBLE_GAP),
                 None => break,
             }
         }
@@ -295,7 +303,7 @@ pub fn bubbles(
     }
     for (bn, mut t, mut c) in &mut names {
         if let Some((_, _, _, alpha, b)) = slot_of[bn.0] {
-            set_text(&mut t, &b.name);
+            set_text(&mut t, &super::label(&b.name));
             let col = if b.mine { Color::srgb(0.62, 0.43, 0.12) } else { Color::srgb(0.24, 0.43, 0.62) };
             set_color(&mut c, theme::with_alpha(col, alpha));
         }
