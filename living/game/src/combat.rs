@@ -614,7 +614,8 @@ pub fn input(
             }
             _ => (tgt.unwrap_or(0), aim),
         };
-        let r = conn.reducers.use_skill_then(skill.clone(), target_id, point.x, point.y, net.on_reply("skill"));
+        let args = || serde_json::json!({"skill": skill, "target": target_id, "x": point.x, "y": point.y});
+        let r = conn.reducers.use_skill_then(skill.clone(), target_id, point.x, point.y, net.on_reply("skill", "use_skill", args));
         net.report("skill", r);
         c.pressed.insert(skill.clone(), now);
         if look(card).clips.len() > 1 {
@@ -627,7 +628,7 @@ pub fn input(
         c.predicted = Some((skill, now));
     }
     for skill in releases {
-        let r = conn.reducers.release_skill_then(skill.clone(), net.on_reply("release"));
+        let r = conn.reducers.release_skill_then(skill.clone(), net.on_reply("release", "release_skill", || serde_json::json!({"skill": skill})));
         net.report("release", r);
         if cards.by_name(&skill).is_some_and(|card| card.aim == "facing") {
             c.guarding = false;

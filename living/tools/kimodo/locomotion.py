@@ -58,7 +58,19 @@ def line(total, speed, direction):
     return [[0, 0, 0], [total, round(direction[0] * speed * total, 3), round(direction[1] * speed * total, 3)]]
 
 
-def end_of(path):
+FPS = 30  # Kimodo's frame rate (batch.py: a take of `seconds` has round(seconds * FPS) frames)
+
+
+def end_of(path, seconds):
+    """Where the path is at the take's last frame, for its end keyframe (`end_offset`). batch.py
+    keys the end pose at frame round(seconds * FPS) - 1, a frame before `seconds`: offset at the
+    path's own end, a moving body's hips surged that last frame's travel ahead of the path in the
+    last frames (walk_start 5.1 cm, run_start 9.4 cm). cliplab.py's lint flags the gap."""
+    t = (round(seconds * FPS) - 1) / FPS
+    for (a, xa, za), (b, xb, zb) in zip(path, path[1:]):
+        if a <= t <= b:
+            f = (t - a) / (b - a) if b > a else 0.0
+            return [round(xa + (xb - xa) * f, 3), round(za + (zb - za) * f, 3)]
     return [path[-1][1], path[-1][2]]
 
 
@@ -163,17 +175,17 @@ def entries():
             heading=[[0, 0], [0.3, 0], [1.7, 180 * sign], [2.0, 180 * sign]], kind="once", ease=[0.25, 0.0], turn_deg=-180 * sign)
     p = profile([[0, 0], [0.15, 0], [0.95, W], [1.5, W]], 1.5)
     add("walk_start", prompt="a person standing still starts walking forward, stepping off with the right foot", seconds=1.5, seeds=s8,
-        start="neutral", end=WALK_L, end_offset=end_of(p), path=p, kind="once", travel="path")
+        start="neutral", end=WALK_L, end_offset=end_of(p, 1.5), path=p, kind="once", travel="path")
     # stops within one braking step: the authority stops a body where it is (0.27 m, 0.42 m)
     p = profile([[0, W], [0.35, 0], [1.5, 0]], 1.5)
     add("walk_stop", prompt="a person walking forward stops abruptly in one step and stands still", seconds=1.5, seeds=REDO["walk_stop"]["seeds"],
-        start=WALK_R, end="neutral", end_offset=end_of(p), path=p, kind="once", travel="path")
+        start=WALK_R, end="neutral", end_offset=end_of(p, 1.5), path=p, kind="once", travel="path")
     p = profile([[0, 0], [0.1, 0], [1.1, R], [1.4, R]], 1.4)
     add("run_start", prompt="a person standing still starts running forward, pushing off with the right foot first", seconds=1.4, seeds=s8,
-        start="neutral", end=RUN_R, end_offset=end_of(p), path=p, kind="once", travel="path")
+        start="neutral", end=RUN_R, end_offset=end_of(p, 1.4), path=p, kind="once", travel="path")
     p = profile([[0, R], [0.3, 0], [1.6, 0]], 1.6)
     add("run_stop", prompt="a person running forward stops abruptly, braking hard in one step, and stands still", seconds=1.6, seeds=REDO["run_stop"]["seeds"],
-        start=RUN_R, end="neutral", end_offset=end_of(p), path=p, kind="once", travel="path")
+        start=RUN_R, end="neutral", end_offset=end_of(p, 1.6), path=p, kind="once", travel="path")
     add("jump_stand", prompt="a person jumps straight up on the spot and lands", seconds=1.7, seeds=s8,
         start="neutral", end="neutral", path=still(1.7), kind="once")
     # The first jump_stand (a small hop), kept beside the clip lab's tuck jump to be judged against
@@ -222,7 +234,7 @@ def entries():
                                ("jump_right", "sideways to the right", (-1, 0), 90)):
         p = profile(knots, total, d)
         add(name, prompt=f"a person takes a big leap {word} and lands", seconds=total, seeds=s8, start="neutral", end="neutral",
-            end_offset=end_of(p), path=p, heading=0, kind="once", travel="path", hop=[t0, round(t0 + JT, 3)], travel_deg=deg)
+            end_offset=end_of(p, total), path=p, heading=0, kind="once", travel="path", hop=[t0, round(t0 + JT, 3)], travel_deg=deg)
 
     # Group B, optional: diagonal travel facing ahead.
     c = 0.7071

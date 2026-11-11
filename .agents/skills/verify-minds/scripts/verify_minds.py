@@ -21,7 +21,7 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
-         'death-names', 'frame', 'reasons', 'speech')
+         'death-names', 'frame', 'reasons', 'speech', 'health-seen')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -197,6 +197,8 @@ def run_case(run, case):
         return drop_case(run)
     if case == 'death-names':
         return death_names_case(run)
+    if case == 'health-seen':
+        return health_seen_case(run)
     if case == 'resident':
         return resident_case(run)
     if case == 'parked':
@@ -297,6 +299,12 @@ def run_case(run, case):
         sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
         felt = [m.split('How your body feels: ', 1)[1].split('\n', 1)[0] for e in sent for m in [json.dumps(e, ensure_ascii=False).replace('\\n', '\n')] if 'How your body feels: ' in m]
         assert felt and not any(ch.isdigit() for ch in felt[0]), felt[:2]
+        # The words are the world's `status_of` law's (since rules-senses-outcomes): one word per
+        # meter, the health and energy ones always there (the shipped law's `felt`).
+        health = ('unhurt', 'a little hurt', 'hurt', 'badly wounded', 'barely alive')
+        energy = ('well rested', 'rested', 'a little tired', 'tired', 'exhausted', 'utterly spent')
+        parts = [p.strip() for p in felt[0].split(';')[0].split(',')]
+        assert any(p in health for p in parts) and any(p in energy for p in parts), felt[:2]
         # The world's rules are told from the laws' own descriptions (docs/WORLD_RULES.md, since
         # laws-2): the sections and the numbers the script's laws give, the same in every prompt.
         told = [json.dumps(e, ensure_ascii=False).replace('\\n', '\n') for e in sent]
@@ -825,6 +833,69 @@ def death_names_case(run):
     (run.directory / 'death-names.json').write_text(json.dumps(texts, indent=2))
     assert all(checks.values()), checks
     return {'status': 'pass', **texts}
+
+
+def health_seen_case(run):
+    """A mind in a fight is told its opponent's health as the band everyone sees, never as a
+    number, except while its own appraisal of them holds (`act::fight_report`,
+    `perception::health_seen`, docs/PERCEPTION.md). Two strangers fight: A is thought for by
+    the real mind service (the fake model's plans keep A attacking), B by a guarding graph. The fight
+    reports reach A's prompts; after A appraises B, a report inside the 20 s reveal gives B's
+    exact health. B only holds its guard toward A (blocked blows count toward a report and B
+    takes a quarter of each), so A is never hurt into yielding, which would break the
+    appraisal off. Before 2026-11-11 the report read "theirs looks about 70%"."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 2, True)
+    a, b = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    for who in (a, b):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    run.admin('place_near', b, a)
+    attack = lambda target: {'first': [{'do': {'skill': 'attack', 'target': {'id': target}}}, {'wait': 1}]}
+    script = {'replies': {'think': {'thought': 'I fight on.', 'intend': ['attack'], 'say': None},
+                          'deliberate': {'graph': attack(b), 'weight': 1.5, 'plan': 'verify minds fight'}}}
+    models = model(run, script)
+    run.start(models, [a])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    reports = lambda: [l for e in requests() for l in sent_text(e).split('\n') if 'The fight with' in l]
+    guard = {'first': [{'do': {'skill': 'block', 'target': {'id': a}, 'qty': 8000}}, {'wait': 0.2}]}
+    run.admin('set_behavior', a, json.dumps(attack(b)))
+    run.admin('set_behavior', b, json.dumps(guard))
+    banded = run.wait(lambda: reports(), 'a fight report in a prompt', 90)
+    words = ('unhurt', 'scratched', 'hurt', 'badly hurt', 'barely standing')
+    exact = re.compile(r'they have \d+ of \d+ health\.')
+    band_only = lambda l: any(f'they look {w}.' in l for w in words) and not exact.search(l) and 'theirs looks about' not in l and '%' not in l
+    n_before = len(banded)
+    # A pause, and A looks B over (a deliberate act, as a mind or a player would; a reflex
+    # under attack would break it off). Then the fight goes on.
+    for who in (a, b):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    time.sleep(2.0)
+    run.admin('mind_act', a, [json.dumps({'do': 'appraise', 'target': {'id': b}})], 'verify-minds')
+    try:
+        reveal = run.wait(lambda: run.private(f'SELECT * FROM reveal WHERE observer = {a} AND target = {b}', 'reveal'), 'the appraisal reveals', 20)[0]
+    finally:
+        run.private(f'SELECT * FROM experience WHERE observer = {a}', 'experiences-a')
+        run.private(f'SELECT * FROM activity WHERE id = {a}', 'activity-a')
+        run.private(f'SELECT * FROM act_queue WHERE actor = {a}', 'act-queue-a')
+        run.private(f'SELECT * FROM brain WHERE id = {a}', 'brain-a')
+    run.admin('set_behavior', a, json.dumps(attack(b)))
+    run.admin('set_behavior', b, json.dumps(guard))
+    max_b = round(run.private(f'SELECT * FROM vitals WHERE id = {b}', 'vitals-b')[0]['max_hp'])
+    appraised = run.wait(lambda: [l for l in reports()[n_before:] if exact.search(l)], 'a report with exact health inside the reveal', 25)
+    for who in (a, b):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    out = {'band_reports': banded, 'appraised_reports': appraised, 'all_reports': reports(), 'reveal_until_ms': reveal['until_ms'], 'max_hp_b': max_b}
+    (run.directory / 'health-seen.json').write_text(json.dumps(out, indent=2))
+    checks = {'band_reports_have_band_words': all(band_only(l) for l in banded),
+              'appraised_report_has_exact_health': any(f'of {max_b} health.' in l for l in appraised),
+              'no_percentage_anywhere': not any('theirs looks about' in l for l in reports())}
+    out['checks'] = checks
+    (run.directory / 'health-seen.json').write_text(json.dumps(out, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **out}
 
 
 def animals_case(run):

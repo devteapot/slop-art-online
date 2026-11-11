@@ -15,6 +15,7 @@
 | A mind sees what its character sees: the scene the model is sent and the deaths it witnesses follow the sight line | `sight` | [sight.md](sight.md) |
 | Sight that depends on facing (the `fov_on` law): what a mind hears and does not see, in its scene and the prompt in a person's words with no id, its facing, the percept when a sound begins, the person instinct's "turn to a sound" habit turning the body | `fov` | [fov.md](fov.md) |
 | A mind is told of drops and low things in words (`terrain_near`), and sees the one across them, on the island | `drop` | [drop.md](drop.md) |
+| A fighting mind's prompts give its opponent's health as the band ("they look hurt"), exact ("they have 70 of 100 health") only inside its own appraisal's 20 s; never a percentage | `health-seen` | [sight.md](sight.md) |
 | The dead keep their names for those who knew them: a community member killed in view is named in the mind's death experience and in its next prompt (what happened, relations), not "a stranger"; the killer reads "killed by you" | `death-names` | [sight.md](sight.md) |
 | Cheaper animal minds: one call picks among built options (choose), the deer it sees reuse it (pack), nothing new answers by instinct (salient) | `animals` | [animals.md](animals.md) |
 | Reorganization at night, in the night's batch round | `night` (scheduling, no store); `verify-knowledge` sleep stage (the batch job) | [sleep.md](sleep.md) |

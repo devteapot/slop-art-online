@@ -1138,7 +1138,7 @@ fn script(
         "goto" => {
             if let (Some(conn), Some((x, y))) = (net.conn.as_ref(), arg.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?)))) {
                 let node = serde_json::json!({"do": {"skill": "goto", "target": {"at": [x, y]}}}).to_string();
-                let r = conn.reducers.human_act_then(node, net.on_reply("goto"));
+                let r = conn.reducers.human_act_then(node.clone(), net.on_reply("goto", "human_act", || serde_json::json!({"node": node})));
                 net.report("goto", r);
                 input.scripted = None;
             }
