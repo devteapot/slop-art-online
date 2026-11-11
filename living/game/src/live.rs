@@ -79,7 +79,7 @@ impl Plugin for LivePlugin {
             .add_systems(Update, (land, lots, bodies, me).chain().in_set(Phase::Present).after(crate::combat::actions).after(crate::town::shows))
             .add_systems(
                 Update,
-                (crate::envs::hdr, crate::island::stream, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
+                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
                     .chain()
                     .in_set(Phase::Present)
                     .after(me)
@@ -258,7 +258,10 @@ fn land(
         net.errors.lock().unwrap().push("land digests differ from the authority's".into());
     }
     let defs = crate::envs::load_defs();
-    if let Some(def) = defs.iter().find(|d| d.world.is_some()) {
+    // The mood of the environment made for this land (its `world` names the row's seed and
+    // size), else the first world environment's.
+    let mine = defs.iter().find(|d| d.world.as_ref().is_some_and(|w| w.seed == row.seed && w.size == row.size));
+    if let Some(def) = mine.or_else(|| defs.iter().find(|d| d.world.is_some())) {
         crate::envs::apply_mood(&def.mood, &mut style, &mut look, &mut lights, &mut cams, &mut clear);
     }
     live.hosted = Some(built.hosted);
@@ -298,12 +301,14 @@ fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, 
     let mut todo: Vec<(f32, Lot)> = conn.db.lot().iter().filter(|l| !live.lots.contains_key(&l.id)).map(|l| (Vec2::new(l.x, l.y).distance(here), l)).filter(|(d, _)| *d < LOT_FAR).collect();
     todo.sort_by(|a, b| a.0.total_cmp(&b.0));
     for (_, l) in todo.into_iter().take(LOTS_PER_FRAME) {
-        let site = conn.db.settlement().id().find(&l.settlement).and_then(|s| crate::island::site_kind(&s.kind));
+        let set = conn.db.settlement().id().find(&l.settlement);
+        let site = set.as_ref().and_then(|s| crate::island::site_kind(&s.kind));
         let (Some(site), Some(kind)) = (site, living_rules::settle::LotKind::from_id(&l.kind)) else {
             live.lots.insert(l.id, Vec::new());
             continue;
         };
-        let row = LotRow { id: l.id, site, kind, at: Vec2::new(l.x, l.y), yaw: l.yaw, floor_m: l.floor_m, height_m: l.height_m, model: l.model.clone() };
+        let env = set.as_ref().map_or(site.env(), |s| living_rules::settle::env_of(&s.style));
+        let row = LotRow { id: l.id, site, kind, at: Vec2::new(l.x, l.y), yaw: l.yaw, floor_m: l.floor_m, height_m: l.height_m, width_m: l.width_m, depth_m: l.depth_m, model: l.model.clone(), env };
         let es = island.spawn_lot(&mut commands, &assets, &row);
         live.lots.insert(l.id, es);
     }
