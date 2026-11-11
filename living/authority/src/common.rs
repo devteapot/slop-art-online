@@ -561,6 +561,16 @@ pub fn stage_of(ctx: &ReducerContext, c: &Character, w: &World, now: u64) -> liv
     life_of(ctx, &c.kind).stage(age_days(c, w, now), pace(w))
 }
 
+/// A life stage's name from its code (`stage_code`).
+pub fn stage_name(code: u8) -> &'static str {
+    match code {
+        0 => "infant",
+        1 => "child",
+        3 => "elder",
+        _ => "adult",
+    }
+}
+
 pub fn stage_code(s: living_rules::life::Stage) -> u8 {
     match s {
         living_rules::life::Stage::Infant => 0,

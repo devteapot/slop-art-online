@@ -55,6 +55,24 @@ pub struct SkillSpec {
     pub moment: bool,
     /// In a graph it takes the body back from a deliberate act (a flight).
     pub reflex: bool,
+    /// What its target may be, by the rules' target classes (`TARGET_CLASSES`: a creature, a
+    /// resource, a structure, a place); empty: any. `target_class: "creature"` in the spec.
+    pub target_class: Vec<String>,
+}
+
+/// The classes a target may be (`a.target.class` in a law).
+pub const TARGET_CLASSES: [&str; 4] = ["creature", "resource", "structure", "place"];
+
+impl SkillSpec {
+    /// Whether it may be aimed at a target of `class` (one of [`TARGET_CLASSES`]).
+    pub fn takes_class(&self, class: &str) -> bool {
+        self.needs_target && (self.target_class.is_empty() || self.target_class.iter().any(|c| c == class))
+    }
+
+    /// Whether it may be aimed at a thing (anything but a creature).
+    pub fn takes_things(&self) -> bool {
+        self.needs_target && (self.target_class.is_empty() || self.target_class.iter().any(|c| c != "creature"))
+    }
 }
 
 /// Every skill a world has, in the order the script declares them.

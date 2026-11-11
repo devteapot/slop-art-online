@@ -192,6 +192,11 @@ pub struct EnvDef {
     pub mood: Mood,
     pub ground: GroundDef,
     pub slots: Vec<Slot>,
+    /// A planned settlement's authored resources drawn with its kit: resource kind → the kit's
+    /// folder (`envs/<id>/<folder>/`) its models are taken from (Cullet: `tree` → `hanger_tree`).
+    /// A kind it leaves out is not drawn from the plan.
+    #[serde(default)]
+    pub resources: HashMap<String, String>,
     /// A generated world instead of a ground disc and slots (`island.rs`).
     #[serde(default)]
     pub world: Option<crate::island::WorldDef>,
@@ -377,8 +382,10 @@ pub(crate) struct Fixture {
     pub at: [f32; 2],
     /// The way its front (glTF +Z) looks, on the land.
     pub front: [f32; 2],
-    /// The ground its origin stands on.
-    pub floor: f32,
+    /// The ground its origin stands on. None: it stands on the land's ground at its point and
+    /// leans with the slope there (nature on a hillside), as [`crate::island`] places it.
+    #[serde(default)]
+    pub floor: Option<f32>,
     pub height: f32,
     /// Its rectangle (along its front, then deep), when the kit says: the ground it covers, so an
     /// open lot it stands on is not also drawn as a slab ([`Fixture::covers`]).

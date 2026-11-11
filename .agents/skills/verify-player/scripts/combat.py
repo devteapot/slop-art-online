@@ -501,6 +501,15 @@ def scene_death(st):
     deaths = [e for e in ev if e["kind"] == 7 and e["actor"] == cid]
     wit = [e["actor"] for e in ev if e["kind"] == 8 and e["target"] == cid]
     check(st, "the dead player is told of the death and who saw it", deaths and wit, f"killer {deaths and deaths[-1]['target']}, witnesses {wit}")
+    # How it died, in codes (my_act_outcomes, since rules-senses-outcomes): a death row, code
+    # killed, the killer's id; its line names the killer as the dead knew them (a label).
+    outs = [o for o in sql(st, "SELECT * FROM my_act_outcomes", "player") if o["kind"] == "death"]
+    lines = {e["id"]: e for e in sql(st, "SELECT id, kind, text FROM my_experience", "player")}
+    killer = deaths[-1]["target"] if deaths else None
+    line = lines.get(outs[-1]["id"]) if outs else None
+    check(st, "the death in codes: a death row, code killed, the killer in `other`; its line 'You were killed by …'",
+          outs and outs[-1]["code"] in ("killed", "killed_yielding") and outs[-1]["other"] == killer and line and line["text"].startswith("You were killed by "),
+          {"row": outs[-1] if outs else None, "line": line, "killer": killer})
     code, _ = call(st, "join", ["Tester Again"])
     time.sleep(0.5)
     new = me(st)
