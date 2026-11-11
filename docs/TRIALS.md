@@ -246,7 +246,25 @@ All 34 island animals (10 wolves, 24 deer) are subjects; a person has no mind. A
 - **The wolves starve, minds or not.** 56 of the 60 wolf deaths were starvation, in two waves at minutes 56–62 and 86–89 in every run. Two were killed by residents and one died of old age. The packs killed 0–7 deer per run before dying. `hunger-1` changed people's food routine, not the wolves'. Why the wolves' starting ways do not feed them is not established here: the same clock in every run, minds or not, points at the instinct graph or the deer's reach, not at the minds. On main 9be23e9 with no minds at all (`eco9`, `animals-life` × `instinct`, 120 min), 9 of 10 wolves starved and 2 deer were killed by wolves, so it is the instinct ecology and not the minds; it is not changed by `hunger-1`.
 - **Hunting and herding realism** cannot be read from these runs. Deliberations were few (4–210 per run, a median of 14), and the wolves were dead by minute 90.
 
-#### Tokens and cost
+#### Baseline on main 445db098 (`b5`, 2026-11-11 01:26–02:25)
+
+The six scripted trials, glm-flash (`default`), 4 replicates each, `trials-1` 1ff107c. All 24 runs survived; 952 calls, 7.18M tokens, **$0.96**. Against `b4` on the same trials (main a4d79c0, 3 replicates; its glm-flash compiled at high effort and mostly returned empty text, so its DeepSeek arm is the fairer reference):
+
+| Trial | b5 survived | b5 trial-specific | b4 glm-flash | b4 deepseek-flash |
+| --- | --- | --- | --- | --- |
+| hungry | 4/4 | received food 3/4; peak hunger 42.9 (41.7–44.4) | 1/3, received 1/3 | 3/3, received 0/3 |
+| hungry-village | 4/4 | received food 2/4; peak hunger 48.9 (41.4–60.5) | 3/3, received 0/3 | 3/3, received 3/3 |
+| teacher | 4/4 | learned the cloak 2/4, made it 2/4 | 0/3, 0/3 | 3/3, 2/3 |
+| theft | 4/4 | perceived the theft 2/4, spoke to the thief 2/4 | 0/3, 0/3 | 1/3, 2/3 |
+| wolves | 4/4 | struck at a wolf 4/4; lowest health 28 (12–37) | 2/3 | 1/3 |
+| wolves-valley | 4/4 | struck at a wolf 1/4; lowest health 86 (55–97) | 3/3 | 3/3 |
+
+- **No regression after the merges.** Every subject lived; the wolves trial, which killed most subjects in b1, b2 and b4, now ends with the subject fighting (4/4 struck a wolf) and surviving at 12–37 health.
+- **Decisions are active again on glm-flash:** 12–23 graph revisions and 8–18 lines per run, against 2–4 and 1–5 for b4's glm-flash (the empty-reply problem, since fixed by per-purpose efforts).
+- **Cheaper per game day** in four of six trials (theft 153k against 207k–219k; hungry 186k against 158k–232k); wolves is dearer (363k), because the fight is decided turn by turn.
+- Invalid deliberations: 6 of 374. Spread is wide in every trial (first meal 0.4–13 min in theft); 4 replicates is the floor for comparisons against this baseline.
+
+### Tokens and cost
 
 | Batch | Calls | Tokens | Cost |
 | --- | ---: | ---: | ---: |
@@ -403,8 +421,9 @@ Evidence for every row is under `.local/living/trials/<batch>/` on the Spark (`r
 | b3 | af8332d, runner files ahead (theft at the stall) | before 0887d81 | Mistral Small | theft × 3 |
 | b4 | 6589924 (main up to a4d79c0: one damage rule, GLM/DeepSeek models) | **current**: one damage rule | `default` = glm-flash as configured, against `deepseek-flash` | 6 trials × 2 variants × 3 |
 | l1–l3 | 378b2c1 (main up to 8f6ac72: three tiers, new buildings table) | current | life runs, below | |
+| b5 | 1ff107c (main 445db098: arrival-1, rules-2, fix-host-example, fix-agreement-terms, fix-mind-small, fix-rules-small, player-told) | **current** | `default` = glm-flash per-purpose efforts | 6 trials × 4 |
 
-Batch b4 is the reference for current rules. Its island predates the buildings-table update in 3f3caf0 (lots and footprints changed; rules did not). b1–b3 are kept as history. Every variant is single-profile for people: one profile thinks, compiles, talks and consolidates for a person. The models config has no per-purpose mix for people yet. When it does, a variant names one through its `models` patch, which is merged into the config as given.
+**Batch b5 (2026-11-11) is the reference for main 445db098 and later arms.** Batch b4 was the reference before. Its island predates the buildings-table update in 3f3caf0 (lots and footprints changed; rules did not). b1–b3 are kept as history. Every variant is single-profile for people: one profile thinks, compiles, talks and consolidates for a person. The models config has no per-purpose mix for people yet. When it does, a variant names one through its `models` patch, which is merged into the config as given.
 
 ### Tokens and cost
 
