@@ -152,8 +152,8 @@ class Text(unittest.TestCase):
 class Files(unittest.TestCase):
     def test_refusals(self):
         s = scrubber()
-        for name, why in ((".env", "secrets"), ("neo4j.env", "secrets"), ("cli.toml", "secrets"),
-                          ("id_ed25519", "secrets"), ("._summary.json", "macOS"), (".DS_Store", "macOS")):
+        for name, why in ((".env", "secret path"), ("neo4j.env", "secret path"), ("cli.toml", "secret path"),
+                          ("id_ed25519", "secret path"), ("._summary.json", "macOS"), (".DS_Store", "macOS")):
             st, reason = s.classify(f"a/{name}")
             self.assertEqual(st, "refused", name)
             self.assertIn(why, reason)
@@ -1004,6 +1004,174 @@ class CommandRows(unittest.TestCase):
             self.assertTrue(all(d.get("action", "").startswith("kept") for d in s.dropped))
             man = store.pack_session(t, os.path.join(t, "_p"), scrubber(kind="play-session"), machine="test")
             self.assertTrue(man["dropped"] and all(d["action"].startswith("kept") for d in man["dropped"]))
+
+
+class SelfGivenNames(unittest.TestCase):
+    """A name the player gives themself once is the player's name: replaced by "Player" wherever
+    residents repeat it, in text, memory graphs and file names, with no flag."""
+
+    def session(self, t, intro):
+        write(t, "session/run/client.log", "2026-11-11T15:15:35.0Z INFO playing character #26\n"
+                                           "2026-11-11T15:19:20.0Z INFO quit\n")
+        talk = f"# You and a stranger (#26)\n\n# What you are answering\na stranger: “{intro}”"
+        write(t, "session/journal/Bram.jsonl", "\n".join([
+            journal_entry("Bram", "talk", talk, '{"say": "Well met."}'),
+            journal_entry("Bram", "think", "- [1201] day 1 09:20 The stranger called «Zorbin» waved {Zorbin=#26}\n"
+                                           "- Zorbin (#26) [Person]", '{"thought": "Zorbin seems kind"}'),
+            journal_entry("Bram", "consolidate", "notes",
+                          json.dumps({"nodes": [{"key": "person:26", "labels": ["Person"], "name": None,
+                                                 "props": {"known_name": "Zorbin"}}],
+                                      "relations": [{"id": 26, "trust": 5, "note": "goes by ZORBIN"}]})),
+        ]) + "\n")
+        write(t, "session/journal/Mercy.jsonl",
+              journal_entry("Mercy", "think", "I heard of zorbin from Bram.", '{"thought": "the zorbin fellow"}') + "\n")
+        write(t, "session/journal/Zorbin.jsonl", journal_entry("Zorbin", "internalize", "x", "{}") + "\n")
+        write(t, "session/run/notes_about_zorbin.log", "Zorbin arrived\n")
+
+    def check(self, t, s):
+        rows, totals, data = store.scrub_source(t, s, keep_data=True)
+        self.assertIn("Zorbin", s.self_names)
+        blob = "".join(v.decode() for v in data.values())
+        names = " ".join(s.publish_path(r) for r in data)
+        self.assertIsNone(re.search(r"(?i)zorbin", blob), blob[:400])
+        self.assertIsNone(re.search(r"(?i)zorbin", names), names)
+        self.assertIn("Player", blob)
+        self.assertIn("session/journal/Player.jsonl", names)
+        self.assertIn("notes_about_player.log", names)
+        return blob
+
+    def test_intro_forms(self):
+        for intro in ("I'm Zorbin", "hi, call me Zorbin!", "my name is zorbin", "Name's Zorbin.", "Hello, I am Zorbin"):
+            with tempfile.TemporaryDirectory() as t:
+                self.session(t, intro)
+                self.check(t, scrubber({"model_exchanges": "include"}, kind="play-session"))
+
+    def test_from_graph_only(self):
+        """Named only in a memory graph (known_name about person:26), never in a typed line."""
+        with tempfile.TemporaryDirectory() as t:
+            self.session(t, "hello there friend")
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            self.check(t, s)
+
+    def test_known_name_alone(self):
+        """The only evidence is a memory graph node about person:26 with known_name, inside a
+        model reply (JSON text); the name is then replaced in other journals and file names."""
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            write(t, "session/journal/Bram.jsonl", journal_entry("Bram", "consolidate", "notes", json.dumps(
+                {"nodes": [{"key": "person:26", "labels": ["Person"], "props": {"known_name": "Velkas"}}]})) + "\n")
+            write(t, "session/journal/Mercy.jsonl", journal_entry("Mercy", "think", "Velkas is near.", "{}") + "\n")
+            write(t, "session/run/velkas-notes.log", "VELKAS left\n")
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            rows, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(s.self_names, {"Velkas"})
+            blob = "".join(v.decode() for v in data.values())
+            self.assertNotIn("elkas", blob.lower())
+            self.assertIn("PLAYER left", blob)
+            self.assertIn("session/run/player-notes.log", [s.publish_path(r) for r in data])
+
+    def test_states_are_not_names(self):
+        s = scrubber(kind="play-session")
+        for line in ("I'm fine", "I'm lost", "I am new here", "call me later", "it's cold"):
+            s.self_names.clear()
+            s.owner_lines = {line}
+            s.finish_learning()
+            self.assertEqual(s.self_names, set(), line)
+
+    def test_player_name_option(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            write(t, "session/run/mind.log", "Quix and Brummel walked by\n")
+            s = scrubber(kind="play-session", player_names=["Quix", "Brummel"])
+            _, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(data["session/run/mind.log"].decode(), "Player and Player walked by\n")
+            old = store.Identity.from_runtime
+            store.Identity.from_runtime = classmethod(lambda cls, *a, **k: ident())
+            try:
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(store.main(["scrub", "--write", os.path.join(t, "w"), t, "--kind", "play-session",
+                                                 "--player-name", "Quix", "--player-name", "Brummel"]), 0)
+            finally:
+                store.Identity.from_runtime = old
+            with open(os.path.join(t, "w", "tree", "session", "run", "mind.log")) as f:
+                self.assertEqual(f.read(), "Player and Player walked by\n")
+
+    def test_said_rows_limited_to_the_played_span(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "2026-11-11T15:15:35.0Z INFO playing character #26\n"
+                                               "2026-11-11T15:19:20.0Z INFO quit\n")
+            inside = store._iso_ms("2026-11-11T15:16:05Z")
+            after = store._iso_ms("2026-11-11T15:20:15Z")
+            write(t, "session/run/authority.jsonl",
+                  json.dumps({"subject": 26, "at_ms": inside, "text": "You said to a child: “typed by the owner”"}) + "\n" +
+                  json.dumps({"subject": 26, "at_ms": after, "text": "You said to a stranger: “said by the AI mind”"}) + "\n")
+            s = scrubber(kind="play-session")
+            store.scrub_source(t, s)
+            self.assertIn("typed by the owner", s.owner_lines)
+            self.assertNotIn("said by the AI mind", s.owner_lines)
+
+
+class TrailingPunctuation(unittest.TestCase):
+    def test_short_line_without_its_punctuation(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            talk = "# You and a stranger (#26)\n\n# What you are answering\na stranger: “where am i ?”"
+            write(t, "session/journal/Bram.jsonl", "\n".join([
+                journal_entry("Bram", "talk", talk, '{"say": "Brackenford."}'),
+                journal_entry("Bram", "think", "He asked “where am I?” and then “Where  am i”.", '{"thought": "lost"}'),
+            ]) + "\n")
+            write(t, "session/run/mind.log", "INFO Bram: the stranger wonders where am I\n")
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            _, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(s.owner_lines, {"where am i ?"})
+            blob = "".join(v.decode() for v in data.values())
+            self.assertIsNone(re.search(r"(?i)where\s+am\s+i", blob), blob)
+
+
+class CredentialFiles(unittest.TestCase):
+    """Credential files are refused by name, never opened (an open() spy proves it), and listed
+    as held with the reason."""
+
+    def test_never_opened(self):
+        import builtins
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "playtest-9")
+            write(src, "session/run/client.log", "playing character #26\n")
+            planted = [write(src, rel, "hf" + "_" + _fake(_ALNUM, 34) + "\n") for rel in
+                       ("play3-state/tokens/player.token", "play3-state/tokens/README.txt", "session/run/a.key",
+                        ".env", "session/.env.local", "secrets/x.json", "session/run/id_ed25519",
+                        "session/run/admin.token", "creds.pem")]
+            # a tarball holding a token: the member must not be extracted
+            with tarfile.open(os.path.join(src, "state.tgz"), "w:gz") as tf:
+                tf.add(planted[0], arcname="tokens/player.token")
+                tf.add(os.path.join(src, "session/run/client.log"), arcname="session/run/client.log")
+            opened, extracted = [], []
+            real_open, real_extract = builtins.open, tarfile.TarFile.extractfile
+
+            def spy_open(f, *a, **k):
+                opened.append(os.path.abspath(str(f)) if not isinstance(f, int) else f)
+                return real_open(f, *a, **k)
+
+            def spy_extract(self, member):
+                extracted.append(getattr(member, "name", member))
+                return real_extract(self, member)
+            builtins.open, tarfile.TarFile.extractfile = spy_open, spy_extract
+            try:
+                s = scrubber(kind="play-session")
+                rows, totals, data = store.scrub_source(src, s, keep_data=True)
+                man = store.pack_session(src, os.path.join(t, "packed"), scrubber(kind="play-session"), machine="test")
+            finally:
+                builtins.open, tarfile.TarFile.extractfile = real_open, real_extract
+            for p in planted:
+                self.assertNotIn(os.path.abspath(p), opened, p)
+            self.assertNotIn("tokens/player.token", extracted)
+            st = {r["path"]: (r["status"], r["reason"]) for r in rows}
+            for rel in ("play3-state/tokens/player.token", "play3-state/tokens/README.txt", ".env",
+                        "session/run/admin.token", "state.tgz!tokens/player.token"):
+                self.assertEqual(st[rel], ("refused", "secret path, not read"), rel)
+            held = {h["path"]: h["reason"] for h in man["held"]}
+            self.assertEqual(held.get("play3-state/tokens/player.token"), "secret path, not read")
+            self.assertEqual(totals.counts.get("hf-token"), None)     # nothing was read to redact
 
 
 if __name__ == "__main__":
