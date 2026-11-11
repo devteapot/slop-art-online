@@ -1,20 +1,23 @@
 # Validation record (entry point and shared harness)
 
-## 2026-11-11: launch keeps a seed's own laws (`fix-verify-laws`)
+## 2026-11-11: launch keeps a seed's own laws, read back (`fix-verify-laws`)
 
-Regression from `exp-player-frame` (b7328bc0): `launch` installed the plain `skills.rhai` over HTTP after every publish, so each `--seed cullet` world since ran without Cullet's laws while its seeded state reflected them. `launch` now installs the seed's script, the shipped one with the seed's `laws`/`laws_file` composed over it, still over HTTP. The composition is `living/tools/install_script.py`'s `seed_script`/`compose_laws`, which `trials.py` now imports instead of keeping its own copy. `doctor` reads the `script` row back and checks the seed's laws. Driven on the Spark's trial server (`slop-trials-stdb`, `LIVING_STDB_URL=http://127.0.0.1:3320`), commit 1d71e6c2 plus this change. Evidence: `.local/living/verify/{vlaws-cullet,core-vlaws-cullet,core-vlaws-cullet-laws,core-vlaws-world}/`.
+Regression from `exp-player-frame` (b7328bc0): `launch` installed the plain `skills.rhai` over HTTP after every publish, so `--seed cullet` worlds ran without Cullet's laws while their seeded state reflected them. goods-2 (main 3b09d4a7) restored the skip: a seed with its own laws keeps the script its world installed at creation. On top of that one path, `launch` now reads the `script` row back and stops unless it is the seed's script, the shipped script with the seed's laws composed over it by `living/tools/install_script.py`'s `seed_script` (the one Python copy of `floors::compose`; `trials.py` imports it). `doctor` checks the seed's laws. Driven on the Spark's trial server (`slop-trials-stdb`, `LIVING_STDB_URL=http://127.0.0.1:3320`), merge 0bb1041b plus this change. Evidence: `.local/living/verify/core-vlaws2-cullet/` and `core-vlaws2-world/` (with `living-check.log`); the first round, before the merge, in `vlaws-cullet/`, `core-vlaws-cullet/`, `core-vlaws-cullet-laws/` and `core-vlaws-world/`.
 
 | Check | Run | Result |
 | --- | --- | --- |
-| Fresh Cullet world: the world's own `script` row (composed by `floors::compose` at creation) equals `seed_script("cullet")` | `vlaws-cullet`, `core-vlaws-cullet` | equal; the composed script (152,147 bytes, sha256 `f859545e102a`) installed and read back |
-| `doctor` on Cullet | `core-vlaws-cullet` | `ok installed script carries seed cullet's laws (worlds/cullet/laws.rhai, 14564 bytes)`, `ok world day is the seed's day_minutes 48 (day_ms 2880000)`; the row holds `fn hunger_awake() { 2.4 }` and `fn base_rates(` (`vlaws-cullet/script-row.rhai`) |
-| `doctor` fails when the bare script is installed over Cullet | `vlaws-cullet` | `FAIL installed script carries seed cullet's laws` after `install_script.py verify-vlaws-cullet` (`doctor-bare.txt`); `ok` again after `install_script.py verify-vlaws-cullet --seed cullet` (`doctor-restored.txt`) |
-| `cullet-laws` seed | `core-vlaws-cullet-laws` | launch and doctor as for Cullet |
-| `--keep-data` update of the Cullet world | `core-vlaws-cullet` (`launch-keep.txt`, `doctor-keep.txt`) | composed script installed again; doctor ok |
-| Default seed | `core-vlaws-world` | plain `skills.rhai` installed (sha256 `2b06964f17f5`, the file's); `ok installed script is the shipped one without a floor overlay` |
-| verify-core `tick` on each | `core-vlaws-cullet`, `core-vlaws-world` | 4 of 4 PASS on both (`tick.txt`) |
+| Fresh Cullet world: no install; the row read back equals `seed_script("cullet")` | `core-vlaws2-cullet` (`launch.txt`) | `the seed carries its own laws: kept as installed at creation (no install_script); the script row read back is the seed's script (sha256 5dcee9b135ee)` |
+| `doctor` on Cullet | `core-vlaws2-cullet` (`doctor.txt`) | `ok installed script carries seed cullet's laws (worlds/cullet/laws.rhai, 15146 bytes)`, `ok world day is the seed's day_minutes 48 (day_ms 2880000)`; the row holds `fn hunger_awake() { 2.4 }` and `fn base_rates(` (`script-row.rhai`) |
+| The bare script installed over Cullet is caught | `core-vlaws2-cullet` | `doctor` `FAIL installed script carries seed cullet's laws` (`doctor-bare.txt`); a `--keep-data` launch over it stops with the remedy (`launch-keep-bare.txt`); `install_script.py … --seed cullet` restores it and doctor passes (`doctor-restored.txt`) |
+| `--keep-data` update of the Cullet world | `core-vlaws2-cullet` (`launch-keep.txt`) | kept; read back equal |
+| Default seed | `core-vlaws2-world` | `installed skills.rhai; the script row read back is the seed's script (sha256 4f01dd9eecfc)`; `ok installed script is the shipped one without a floor overlay` |
+| verify-core `tick` on each | `core-vlaws2-cullet`, `core-vlaws2-world` | 6 of 6 PASS on both (`tick.txt`) |
+| `cullet-laws` seed (first round, before the merge) | `core-vlaws-cullet-laws` | launch and doctor as for Cullet |
+| Trial runner laws guard, fake hamlet instance | `.local/living/trials/vlaws1/` | `laws guard passed: the script row read back is the source sent; the seed laws are composed as the world composed them; day_ms 2880000` before the mind started; ran its 3 minutes (`stopped_by: duration`); database and Neo4j minds cleaned |
+| Guard self-test | `living/tools/trials_laws_selftest.py` (`vlaws1/laws-selftest.txt`) | 16 of 16: each planted mismatch (bare row after install, creation composition differing, wrong day, `keep_laws` on a bare world, a `wasm_tag` row without the laws) refused through `Instance.publish` on a fake database, with an `error` event |
+| `just living-check` (`set -o pipefail`) | `core-vlaws2-world/living-check.log` | ok in 575 s, exit 0 |
 
-Not driven: `--seed none` (floor modules keep the bare install; `create_floor` composes), and a trial run with `trials.py` importing the shared copy (import checked only).
+Not driven: `--seed none` (floor modules get the bare script; `create_floor` composes), a real `keep_laws` or `wasm_tag` trial variant (self-test only), and paid runs.
 
 ## 2026-10-04: harness after the surface split and the review round
 
