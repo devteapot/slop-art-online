@@ -30,7 +30,16 @@ thread_local! {
     /// When each person last checked for, and last felt, knowing something alone (kept here:
     /// evaluator marks are reset when a new plan is installed).
     static LEGACY: std::cell::RefCell<std::collections::HashMap<u32, (u64, u64)>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// When each person last wondered about each newcomer (`newcomer_drive_s`): (observer,
+    /// newcomer) → ms. Working state like `LEGACY`; a module restart forgets it.
+    static WONDERED: std::cell::RefCell<std::collections::HashMap<(u32, u32), u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
 }
+/// A newcomer is wondered about again at most this often while they stay near.
+const WONDER_AGAIN_MS: u64 = 600_000;
+/// One wonders about one newcomer at a time: at most one such feeling this often.
+const WONDER_GAP_MS: u64 = 60_000;
+/// Nobody is wondered about once this long has passed since one first saw them.
+const WONDER_WITHIN_MS: u64 = 1_800_000;
 /// Alert bits for ongoing situations (bits 1..8 are bodily alarms).
 const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
@@ -934,6 +943,13 @@ impl<'a> Ev<'a> {
             (32, calm && self.st.heard_ms > 0 && alone_ms as f32 > lonely_after, "You feel lonely: it has been a long time since you spoke with anyone.".into()),
             (128, broody, longing),
         ];
+        // Wondering about a newcomer who stays near (the `newcomer_drive_s` law; 0, the shipped
+        // value, is never).
+        let nl = common::scripts(self.ctx).newcomers(&self.me.kind);
+        if nl.drive_s > 0.0 && calm && self.me.kind == "person" && self.me.stage >= 1 {
+            let (c, s) = (trait_of("curiosity"), trait_of("sociability"));
+            self.wonder(&nl, c, s);
+        }
         for (bit, on, text) in drives {
             let was = self.st.alerts & bit != 0;
             if on && !was {
@@ -988,7 +1004,8 @@ impl<'a> Ev<'a> {
         let prev = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, thing)).next();
         match prev.clone() {
             Some(mut f) => {
-                if self.now.saturating_sub(f.last_ms) > 30_000 {
+                // A glimpse in a crowd (`glimpse`, times 0) is taken in now: it was never news.
+                if f.times == 0 || self.now.saturating_sub(f.last_ms) > 30_000 {
                     f.last_ms = self.now;
                     f.times += 1;
                     self.ctx.db.familiar().id().update(f);
@@ -996,18 +1013,86 @@ impl<'a> Ev<'a> {
             }
             None => {
                 let row = self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 1 });
-                if row.id % 16 == 0 {
-                    let mut all: Vec<(u64, u64)> = self.ctx.db.familiar().actor().filter(self.me.id).map(|f| (f.last_ms, f.id)).collect();
-                    if all.len() > FAMILIAR_LIMIT {
-                        all.sort_unstable();
-                        for (_, id) in &all[..all.len() - FAMILIAR_LIMIT] {
-                            self.ctx.db.familiar().id().delete(*id);
-                        }
-                    }
-                }
+                self.bound_familiar(row.id);
             }
         }
         prev
+    }
+
+    /// Keep at most `FAMILIAR_LIMIT` familiarity rows per character, the least recent forgotten
+    /// (checked on every 16th insert).
+    fn bound_familiar(&mut self, inserted: u64) {
+        if inserted % 16 == 0 {
+            let mut all: Vec<(u64, u64)> = self.ctx.db.familiar().actor().filter(self.me.id).map(|f| (f.last_ms, f.id)).collect();
+            if all.len() > FAMILIAR_LIMIT {
+                all.sort_unstable();
+                for (_, id) in &all[..all.len() - FAMILIAR_LIMIT] {
+                    self.ctx.db.familiar().id().delete(*id);
+                }
+            }
+        }
+    }
+
+    /// A person glimpsed in a crowd (any `newcomer_*` law on): when one first saw them is kept
+    /// (a familiarity row with `times` 0) without making it news, so that what is new to one is
+    /// known even among many. The first sight outside a crowd still tells of them as a first
+    /// encounter. One indexed read; a write only the first time.
+    fn glimpse(&mut self, id: u32) {
+        let thing = FAM_CREATURE | id as u64;
+        if self.ctx.db.familiar().by_actor_thing().filter((self.me.id, thing)).next().is_none() {
+            let row = self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 0 });
+            self.bound_familiar(row.id);
+        }
+    }
+
+    /// Whether `id` would be a newcomer first seen near home now (`newcomer_salience`).
+    fn newcomer_here(&self, id: u32, first_ms: u64, nl: &living_rules::script::Newcomers) -> bool {
+        let home = (self.me.home_x, self.me.home_y);
+        home != (0.0, 0.0) && dist(self.at, home) <= nl.home_m && self.relation(id).is_none() && common::newcomer(self.ctx, &self.me, id, first_ms)
+    }
+
+    /// The wondering about a newcomer who stays near (`newcomer_drive_s`, off at 0): a calm
+    /// person who has no feelings about someone not of their community, first seen more than
+    /// `newcomer_wait_ms` ago and within the last 30 minutes, standing within `newcomer_near_m`,
+    /// feels it and thinks. Once per newcomer every 10 minutes, and one such feeling a minute.
+    fn wonder(&mut self, nl: &living_rules::script::Newcomers, curiosity: f32, sociability: f32) {
+        let wait = living_rules::script::newcomer_wait_ms(nl.drive_s, curiosity, sociability) as u64;
+        let me = self.me.id;
+        let now = self.now;
+        let mut near: Vec<NearCreature> = self.scene().creatures.iter().filter(|c| &*c.kind == "person" && c.id != me && c.dist <= nl.near_m).cloned().collect();
+        near.sort_by(|a, b| a.dist.total_cmp(&b.dist));
+        // (me, 0): when one last wondered about anyone.
+        if WONDERED.with(|w| w.borrow().get(&(me, 0)).is_some_and(|t| now.saturating_sub(*t) < WONDER_GAP_MS)) {
+            return;
+        }
+        for c in near {
+            if WONDERED.with(|w| w.borrow().get(&(me, c.id)).is_some_and(|t| now.saturating_sub(*t) < WONDER_AGAIN_MS)) {
+                continue;
+            }
+            let Some(first) = common::first_seen(self.ctx, me, c.id) else { continue };
+            let since = now.saturating_sub(first);
+            if since < wait || since > WONDER_WITHIN_MS || self.relation(c.id).is_some() || !common::newcomer(self.ctx, &self.me, c.id, first) {
+                continue;
+            }
+            WONDERED.with(|w| {
+                let mut w = w.borrow_mut();
+                if w.len() > 512 {
+                    w.retain(|_, t| now.saturating_sub(*t) < WONDER_AGAIN_MS);
+                }
+                w.insert((me, c.id), now);
+                w.insert((me, 0), now);
+            });
+            let who = common::label_for(self.ctx, &self.me, c.id);
+            let text = format!(
+                "You find yourself wondering about {who}, {:.0} tiles {}: someone you do not know, about here since you first saw them {} ago.",
+                c.dist,
+                direction(self.at, c.pos),
+                common::ago_words(since)
+            );
+            percept(self.ctx, &self.me, now, "feeling", c.id, 0, c.pos, text.clone(), 0.5);
+            self.deliberate(&format!("You feel something: {text}"));
+            return;
+        }
     }
 
     /// Recently checked (fast path that avoids familiarity lookups every second).
@@ -1065,12 +1150,25 @@ impl<'a> Ev<'a> {
         let wolf_arrived = wolf_near && self.st.alerts & WOLF_NEAR == 0;
         self.st.alerts = if wolf_near { self.st.alerts | WOLF_NEAR } else { self.st.alerts & !WOLF_NEAR };
         let mut announced = 0;
+        // The newcomer laws (all 0 in the shipped rules: none of this happens).
+        let nl = common::scripts(self.ctx).newcomers(&me_kind);
+        let watch = nl.any();
         for c in &cands {
             if announced >= 2 {
                 break;
             }
             if crowded && &*c.kind == "person" && self.relation(c.id).is_none() {
-                continue;
+                // A crowd hides those one has no feelings about. With `newcomer_salience`, not
+                // a newcomer seen near home for the first time; with any newcomer law, one still
+                // keeps when one first saw them.
+                let unseen = watch && self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().map_or(true, |f| f.times == 0);
+                let shows = unseen && nl.salience > 0.0 && self.newcomer_here(c.id, common::first_seen(self.ctx, self.me.id, c.id).unwrap_or(now), &nl);
+                if !shows {
+                    if unseen {
+                        self.glimpse(c.id);
+                    }
+                    continue;
+                }
             }
             let danger = wolf_arrived && &*c.kind == "wolf" && c.dist <= laws.danger_near;
             if self.recently_seen(c.id) && !danger {
@@ -1081,8 +1179,16 @@ impl<'a> Ev<'a> {
             let who = common::label_for(self.ctx, &self.me, c.id);
             let doing = crate::perception::doing_of(self.ctx, c.id, (self.me.id, &me_kind, at), &cands, now).map(|d| format!(", {d}")).unwrap_or_default();
             let place = format!("{:.0} tiles {}{doing}", c.dist, direction(at, c.pos));
+            // A glimpse in a crowd (times 0) was never news: this is the first encounter.
+            let first = prev.as_ref().map_or(true, |f| f.times == 0);
+            let newcomer = first && nl.salience > 0.0 && ch.kind == "person" && self.newcomer_here(c.id, prev.as_ref().map_or(now, |f| f.first_ms), &nl);
             let (text, sal) = match prev {
-                None if ch.kind == "person" || ch.kind == self.me.kind => (format!("For the first time you see {who}, {place}."), 0.45),
+                _ if newcomer => {
+                    let t = common::traits_of(self.ctx, self.me.id);
+                    (format!("For the first time you see {who}, {place}, near your home."), living_rules::script::newcomer_salience(nl.salience, t[0], t[1]))
+                }
+                _ if first && (ch.kind == "person" || ch.kind == self.me.kind) => (format!("For the first time you see {who}, {place}."), 0.45),
+                // (Glimpses are only of people, whom the arm above takes.)
                 None => (format!("You see {who} {place}."), 0.65),
                 Some(f) if now.saturating_sub(f.last_ms) > day => (format!("You see {who} again after a long time, {place}."), 0.25),
                 Some(_) if danger => {
@@ -1091,7 +1197,13 @@ impl<'a> Ev<'a> {
                 Some(_) => continue,
             };
             announced += 1;
-            percept(self.ctx, &self.me, now, "saw", c.id, 0, c.pos, text, sal);
+            // A sight salient enough to wake one (0.6) asks for a thought about it: only a
+            // newcomer's (`newcomer_salience`); other first sights stay below it or are animals'.
+            let think = newcomer && sal >= 0.6;
+            percept(self.ctx, &self.me, now, "saw", c.id, 0, c.pos, text.clone(), sal);
+            if think {
+                self.deliberate(&text);
+            }
         }
 
         // Structures. One made of several tiles (a town gate is a block of gate tiles) is noticed

@@ -92,6 +92,14 @@ python3 "$V" launch --run "$W" --seed cullet-laws > ".local/living/verify/$W/lau
 python3 "$C/scenes.py" laws --run "$W" > ".local/living/verify/$W/laws.txt" 2>&1
 python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
 
+# The newcomer laws (about 3 min on a hamlet world; off in the shipped rules): a crowd, a
+# first sight near home, the scene's "new to you", wondering (features/sight.md, docs/TRIALS.md).
+N=$R-newcomers
+mkdir -p ".local/living/verify/$N"
+python3 "$V" launch --run "$N" --seed hamlet > ".local/living/verify/$N/launch.txt" 2>&1
+python3 "$C/scenes.py" newcomers --run "$N" > ".local/living/verify/$N/newcomers.txt" 2>&1
+python3 "$V" cleanup --run "$N" > ".local/living/verify/$N/cleanup.txt" 2>&1
+
 # Infant assertions use their own small, long-lived family fixture.
 I=$R-infant
 IE=.local/living/verify/$I

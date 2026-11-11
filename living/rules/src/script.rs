@@ -400,6 +400,54 @@ pub struct Laws {
     pub longing_food: f32,
 }
 
+/// The newcomer laws (docs/TRIALS.md, "Arrivals"): number laws of a creature's kind, read by
+/// name (`newcomer_salience(kind)`, ...; [`Scripts::newcomers`]). Each switch is 0 in the
+/// shipped rules, which leaves everything as it was. A newcomer to someone is a person who came
+/// into the world, and was first seen by them, more than a few seconds after they themselves
+/// came into it, and who is not of their community.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Newcomers {
+    /// How much more salient the first sight of a newcomer near one's home is, by the
+    /// observer's curiosity and sociability ([`newcomer_salience`]). Above 0 a crowd no longer
+    /// hides one, and a sight salient enough to wake the observer (0.6) asks for a thought.
+    pub salience: f32,
+    /// Within this many metres of one's home door one is near home.
+    pub home_m: f32,
+    /// The scene marks a newcomer in sight as new to you while one first saw them within this
+    /// many real minutes (0: unmarked).
+    pub scene_min: f32,
+    /// A calm person wonders about a newcomer they have no feelings about who stays within
+    /// `near_m`, about this many seconds after first seeing them ([`newcomer_wait_ms`]; 0: never).
+    pub drive_s: f32,
+    /// How near a newcomer must be for that wondering, metres.
+    pub near_m: f32,
+}
+
+impl Newcomers {
+    pub const OFF: Newcomers = Newcomers { salience: 0.0, home_m: 60.0, scene_min: 0.0, drive_s: 0.0, near_m: 12.0 };
+
+    /// Whether any newcomer law is on.
+    pub fn any(&self) -> bool {
+        self.salience > 0.0 || self.scene_min > 0.0 || self.drive_s > 0.0
+    }
+}
+
+/// The salience of a first sight of a newcomer near home: the shipped 0.45 raised by `law`
+/// times the observer's curiosity and sociability (each 0..100, their mean as a share), at
+/// most 0.95. `law` 0 leaves it at 0.45.
+pub fn newcomer_salience(law: f32, curiosity: f32, sociability: f32) -> f32 {
+    let t = (curiosity.clamp(0.0, 100.0) + sociability.clamp(0.0, 100.0)) / 200.0;
+    (0.45 + law.max(0.0) * t).min(0.95)
+}
+
+/// How long after first seeing a newcomer who stays near a person begins to wonder about
+/// them: `drive_s` seconds, from 1.5 times that for the least curious and sociable to half of
+/// it for the most.
+pub fn newcomer_wait_ms(drive_s: f32, curiosity: f32, sociability: f32) -> f32 {
+    let t = (curiosity.clamp(0.0, 100.0) + sociability.clamp(0.0, 100.0)) / 200.0;
+    1000.0 * drive_s.max(0.0) * (1.5 - t)
+}
+
 /// How long after one's own birth, or one's youngest child's, a grown person waits before
 /// longing for a child: `after_min` real minutes, shortened by nurture (0..100) to a sixth of
 /// it at most nurturing. With the shipped 20 minutes this is the old `20 - nurture / 6`.
@@ -1597,6 +1645,21 @@ impl Scripts {
         v.unwrap_or(default)
     }
 
+    /// The newcomer laws of a kind of creature ([`Newcomers`]): `newcomer_salience(kind)`,
+    /// `newcomer_home_m`, `newcomer_scene_min`, `newcomer_drive_s`, `newcomer_near_m`, cached by
+    /// name like any number law; a script without them has them off.
+    pub fn newcomers(&self, kind: &str) -> Newcomers {
+        let d = Newcomers::OFF;
+        let g = |f: &str, v: f32| self.num_of(f, kind, v as f64) as f32;
+        Newcomers {
+            salience: g("newcomer_salience", d.salience).clamp(0.0, 1.0),
+            home_m: g("newcomer_home_m", d.home_m).clamp(0.0, 1_000.0),
+            scene_min: g("newcomer_scene_min", d.scene_min).clamp(0.0, 1_440.0),
+            drive_s: g("newcomer_drive_s", d.drive_s).clamp(0.0, 3_600.0),
+            near_m: g("newcomer_near_m", d.near_m).clamp(0.0, 64.0),
+        }
+    }
+
     /// Items a one-argument law gives as a map (`fn carcass(kind) { #{ meat: 5, hide: 1 } }`),
     /// with whole positive amounts; empty without the law or for anything else it returns.
     /// Cached by argument, like [`Self::num_of`].
@@ -2134,6 +2197,28 @@ mod tests {
         let w = over("longing_after_min", serde_json::json!(90)).unwrap();
         assert_eq!((w.longing_after_min, over("longing_food", serde_json::json!(4)).unwrap().longing_food), (90.0, 4.0));
         assert!((longing_wait_ms(90.0, 60.0) - 60_000.0 * 45.0).abs() < 0.5);
+        // Newcomers: every switch is off in the shipped rules, and a first sight keeps 0.45.
+        let n = sc.newcomers("person");
+        assert_eq!(n, Newcomers::OFF);
+        assert!(!n.any());
+        for (c, s) in [(0.0, 0.0), (50.0, 50.0), (100.0, 100.0)] {
+            assert_eq!(newcomer_salience(n.salience, c, s), 0.45);
+        }
+        assert!((newcomer_salience(0.5, 50.0, 50.0) - 0.7).abs() < 1e-6);
+        assert!((newcomer_salience(0.5, 0.0, 20.0) - 0.5).abs() < 1e-6);
+        assert_eq!(newcomer_salience(1.0, 100.0, 100.0), 0.95);
+        assert_eq!(newcomer_wait_ms(n.drive_s, 80.0, 80.0), 0.0);
+        assert!((newcomer_wait_ms(90.0, 50.0, 50.0) - 90_000.0).abs() < 0.5);
+        assert!((newcomer_wait_ms(90.0, 100.0, 100.0) - 45_000.0).abs() < 0.5);
+        // A world's values are its script's (a variant's skills_patch changes them).
+        let src = include_str!("../../scripts/skills.rhai")
+            .replace("fn newcomer_salience(kind) { 0.0 }", "fn newcomer_salience(kind) { 0.5 }")
+            .replace("fn newcomer_drive_s(kind) { 0.0 }", "fn newcomer_drive_s(kind) { 90.0 }");
+        let on = Scripts::new(&src).unwrap();
+        assert!(on.validate().is_ok());
+        let n = on.newcomers("person");
+        assert_eq!((n.salience, n.scene_min, n.drive_s, n.home_m, n.near_m), (0.5, 0.0, 90.0, 60.0, 12.0));
+        assert!(n.any());
     }
 
     fn ctx() -> SkillCtx {

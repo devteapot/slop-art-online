@@ -1680,6 +1680,24 @@ fn play_check(a) { if a.actor.stage == "infant" { return "too small to play"; } 
 fn play_duration(a) { 4000 }
 fn play_done(a) { [#{ op: "vitals", energy: -0.5 }] }
 
+// ---- newcomers (docs/TRIALS.md, "Arrivals") ------------------------------------------
+// Number laws of the observer's kind, read once. A newcomer to someone is a person who came
+// into the world (joined, arrived, was born) and was first seen by them more than 10 s after
+// they themselves came into it, and who is not of their community. Each
+// switch is 0 here, which leaves perception, the scene and the drives as they were.
+// `newcomer_salience`: the first sight of a newcomer within `newcomer_home_m` of one's home
+// door has salience 0.45 + this x the mean of one's curiosity and sociability (as a share; at
+// most 0.95), a crowd does not hide it, and a sight salient enough to wake one (0.6) asks for
+// a thought. `newcomer_scene_min`: what one perceives marks a newcomer first seen within this
+// many minutes as new to you. `newcomer_drive_s`: a calm person who has no feelings about a
+// newcomer within `newcomer_near_m` wonders about them this many seconds after first seeing
+// them (x 1.5 for the least curious and sociable, x 0.5 for the most), once every 10 minutes.
+fn newcomer_salience(kind) { 0.0 }
+fn newcomer_home_m(kind) { 60.0 }
+fn newcomer_scene_min(kind) { 0.0 }
+fn newcomer_drive_s(kind) { 0.0 }
+fn newcomer_near_m(kind) { 12.0 }
+
 // What others see of a skill: `<skill>_shows()`, read once when the script is installed.
 // Every skill with one gets an `act_card` and a presentation code (its place in name order),
 // and while it is performed a `doing` row anyone in view can see. Traits:
@@ -1833,6 +1851,11 @@ fn perceived_of_law() {
 fn dealings_law() {
     #{ cadence: "event", covers: ["record_text", "on_give", "on_store", "on_host", "on_expire", "due_by_dark"],
        about: "Agreements and demands are kept by the world: it counts what each side hands over, stores or hosts for the other, and tells both sides when an agreement is kept, broken or lapses at its dusk, and when a demand is met or goes unpaid." }
+}
+
+fn newcomers_law() {
+    #{ cadence: "compile", covers: ["newcomer_salience", "newcomer_home_m", "newcomer_scene_min", "newcomer_drive_s", "newcomer_near_m"],
+       about: "How someone new to a person (who came into the world, and was first seen, after their own first moments, and is not of their community) is noticed: how salient a first sight near home is, whether the view marks them new, and when one wonders about one who stays near. Off in the shipped rules." }
 }
 
 fn occupations_law() {

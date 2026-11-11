@@ -23,6 +23,14 @@ python3 living/tools/trials.py clean --batch dry1
 - `journal/` in the instance directory is a copy of the mind's journal (`.local/living/journal/<db>/`), with the actual requests and replies.
 - After `clean`, the batch's databases answer SQL with 404 and the Neo4j nodes of their runs are gone; the evidence directory remains.
 
+## A scripted player, small-world records and worktrees
+
+- `subject.join` (`{"name", "after_s"}`) joins a human player through the real `join` reducer with its own HTTP identity (`Player`), after the world has lived `after_s` seconds. `human` plays it on a thread with the player reducers only (`human_move`, `human_act`, `human_say`), calling at least every 10 s so no takeover happens. `human.script: arrive` (`Player.arrive_session`, the `arrive` trial) walks (`goto` to the densest group's centre, re-aimed every 15 s) until two residents are within `within_m`, then stands silent `stand_s`, `stands` times, each next group sharing the fewest members with the last; it never speaks or gestures. Each stand is a `human_stand` / `human_stand_end` event pair with from/to ms, the group and who was within 12 m.
+- `record` (small worlds; whole-table reads each sample): `speech` (every `speech` chronicle row to `speech.jsonl`), `talk` (every `thought` of kind `talk` to `talk.jsonl`), `experiences` (every experience row as it arrives, before minds integrate and delete it, to `experiences_all.jsonl`), `gestures` (`skill_use` rows of `wave`, `nod`, `face`, `appraise` to `gestures.jsonl`), `positions` (every person's position, heading and activity with the creature it is aimed at, to `positions.jsonl`). `living/tools/arrive_report.py BATCH` reads them.
+- `run --fake --fake-script FILE` gives the fake server a rules file; `living/trials/fake/latency.json` sets model latencies near the real ones and open talk replies (from `exp-greet`).
+- From a git worktree, `build` copies each module into the trial container's `/wasm` mount (another checkout's directory) as `<module>-wt<hash>` (`served_name`), and `run` publishes that name, so a worktree never overwrites a module another checkout's batches publish. Remove the tagged files from the mount when the branch is done.
+- A variant's `skills_patch` applies to the composed script (the seed's laws over the shipped file); the `arrive-*` variants patch the newcomer number laws (`fn newcomer_salience(kind) { 0.0 }` → `{ 0.5 }`).
+
 ## Life runs, resume and disk
 
 - A `"kind": "life"` trial spawns its subject with the admin-only `spawn_newcomer` (a player's `join`, thought for by the minds), keeps no timeline, restarts a mind that exits, writes `snapshots/hNN.json` hourly and pauses its database at the end. `trials.py life --batch B` writes `timeline.md` from rows.
@@ -38,3 +46,4 @@ Real batches spend money. Run them only when the user has authorized them. There
 - Determinism: a seed does not make inference repeatable; read spread across replicates.
 - Fake-model runs prove the plumbing (setup, timeline, sampling, journal, stop, cleanup), not what minds decide.
 - Population, latency or memory claims; see `AGENTS.md` and `docs/PERFORMANCE_CONTRACT.md`.
+- The trial service's open files: each live database holds file descriptors, and the trial container's soft limit is 1,024. With about 120 kept databases (2026-11-11) publishes fail with "cannot create a memfd: Too many open files" or `identity: timed out`. Clean kept batches before running wide.

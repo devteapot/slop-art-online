@@ -1,5 +1,12 @@
 # Internal mind validation
 
+## 2026-11-11 exp-arrive: the arrival trial and the newcomer laws (Spark)
+
+Branch `exp-arrive` from main `fba1778`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake model only. The mind service is unchanged; the authority gained the newcomer laws (off by default), and the trial runner gained the scripted arrival player, `record` options, `subject.join.after_s`, `--fake-script` and worktree module names (features/trials.md).
+
+- Full suite `minds-arrive-172139` (load about 15, beside the paid greeting batch): roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink-llm, dealings and parked pass. Consolidation is its known XFAIL. `animals` failed at its known gap ("nothing new: no call", the 2026-11-11 lives-2 entry). `rethink` timed out waiting 40 s for its first gate, and passed alone (`minds-arrive-rt-175042`).
+- Trials free tier: `af1`, the `arrive` trial × five variants (`arrive-control`, `-notice`, `-known`, `-wonder`, `-all`), one replicate each, 14 minutes, `--fake --fake-script living/trials/fake/latency.json`. All five ran to their duration with every `record` file written. `arrive_report.py af1` reads them (docs/TRIALS.md, "Arrivals"). The first attempt hit the trial service's file-descriptor limit (about 120 kept databases); the coordinator cleaned up and raised the limit.
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.

@@ -94,5 +94,62 @@
   "env": {
    "LIVING_ANIMAL_MINDS": "pack,salient,choose"
   }
+ },
+ "arrive-control": {
+  "about": "Default with the shipped newcomer laws (all 0): the arrival trial's control.",
+  "models": {},
+  "env": {}
+ },
+ "arrive-notice": {
+  "about": "Default with `newcomer_salience` 0.5 (skills_patch): the first sight of a newcomer within 60 m of one's home has salience 0.45 + 0.5 x mean(curiosity, sociability)/100 (0.45-0.95), a crowd does not hide it, and at 0.6 or more (mean temperament 30 or more) it asks for a thought. Hypothesis: nobody is asked to think when a stranger appears.",
+  "models": {},
+  "env": {},
+  "skills_patch": {
+   "newcomer_salience": [
+    "fn newcomer_salience(kind) { 0.0 }",
+    "fn newcomer_salience(kind) { 0.5 }"
+   ]
+  }
+ },
+ "arrive-known": {
+  "about": "Default with `newcomer_scene_min` 30 (skills_patch): in every scene a newcomer (who came into the world, and was first seen, more than 10 s after one came into it, and is not of one's community) first seen within 30 minutes carries \"new to you\": \"first seen N minutes ago\". Information only, no trigger. Hypothesis: when residents do think, the newcomer reads like any neighbour whose name is out of range (\"a stranger\").",
+  "models": {},
+  "env": {},
+  "skills_patch": {
+   "newcomer_scene_min": [
+    "fn newcomer_scene_min(kind) { 0.0 }",
+    "fn newcomer_scene_min(kind) { 30.0 }"
+   ]
+  }
+ },
+ "arrive-wonder": {
+  "about": "Default with `newcomer_drive_s` 90 (skills_patch): a calm person with no feelings about a newcomer within 12 m feels \"You find yourself wondering about ...\" (a feeling that asks for a thought) 45-135 s after first seeing them, sooner the more curious and sociable; once per newcomer per 10 minutes, within 30 minutes of the first sight. Hypothesis: no drive is fed by people one sees.",
+  "models": {},
+  "env": {},
+  "skills_patch": {
+   "newcomer_drive_s": [
+    "fn newcomer_drive_s(kind) { 0.0 }",
+    "fn newcomer_drive_s(kind) { 90.0 }"
+   ]
+  }
+ },
+ "arrive-all": {
+  "about": "Default with all three newcomer laws: `newcomer_salience` 0.5, `newcomer_scene_min` 30, `newcomer_drive_s` 90.",
+  "models": {},
+  "env": {},
+  "skills_patch": {
+   "newcomer_salience": [
+    "fn newcomer_salience(kind) { 0.0 }",
+    "fn newcomer_salience(kind) { 0.5 }"
+   ],
+   "newcomer_scene_min": [
+    "fn newcomer_scene_min(kind) { 0.0 }",
+    "fn newcomer_scene_min(kind) { 30.0 }"
+   ],
+   "newcomer_drive_s": [
+    "fn newcomer_drive_s(kind) { 0.0 }",
+    "fn newcomer_drive_s(kind) { 90.0 }"
+   ]
+  }
  }
 }

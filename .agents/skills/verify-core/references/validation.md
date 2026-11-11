@@ -1,6 +1,15 @@
 # Core validation record
 
 
+## 2026-11-11 exp-arrive: the newcomer laws (Spark)
+
+Branch `exp-arrive` from main `fba1778`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`. New scene `newcomers` (features/sight.md) on hamlet runs: `core-arrive-n3` 18 of 18, and `core-arrive-n4` 18 of 18 again after the glimpse rows were bounded like other familiarity rows. The earlier attempts were scene defects:
+- `core-arrive-n1` passed the shipped phase, then could not install the composed script as one CLI argument (`Argument list too long`); the scene now installs over HTTP (`Scene.install`).
+- Its retry wondered about a newcomer left from the first attempt, and about a child of the other settlement first seen minutes after the world began. The scene now moves everyone else away. The rule now requires a newcomer to have come into the world after the observer: seeded neighbours have no shared past in the rows.
+- `core-arrive-n2` could not publish: the service was out of file descriptors (about 120 kept databases, soft limit 1,024; raised by the coordinator).
+
+Baseline `core-arrive-b1` (default seed): cargo checks (rules 151 with the newcomer checks, authority 16, mind 82, viewer sync 5), tick, needs, food, refusal, seize, sight, senses, moves and death-names pass (53 checks). `doing` failed once under load: the walker's activity had ended before the observer looked. A fresh `core-arrive-b2` passed it 7 of 7. `just living-check` exits 0. Not run: skirmish, low, drop, dealings, town, lives, laws, infant, mechanics, steering, life and wildlife.
+
 ## 2026-11-11 drop-1: drops and low things are see-through (dev-box)
 
 Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).

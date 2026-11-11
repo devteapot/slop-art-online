@@ -25,6 +25,9 @@ A trial is a JSON file in [`living/trials/`](../living/trials/). Fields:
 | `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. A world seed with its own laws (`laws`/`laws_file`) has them composed over the file first (`compose_laws`, as `floors::compose` does at creation), and the runner checks its composition against the world's. |
 | `census_s` | Every so many seconds, every character of the world goes to `census.jsonl`: stage, alive, cause and time of death, parents, position, hunger, activity, and who the mind thinks for. This is meant for small worlds (four whole-table reads per census). |
 | `life.stop_on_death` | `false`: a life run goes on to its duration after the subject dies, and the mind keeps running (default `true`: it stops 20 s after the death). |
+| `subject.join` | A human player joins as the subject through the real `join` reducer with its own identity (`Player` in trials.py): `name`, and `after_s`, how long the world lives first. |
+| `human` | The joined player's script, played with the player reducers only: `script: arrive` for [the arrival trial](#arrivals-a-stranger-who-says-nothing-2026-11-11) (`settle_s`, `walk_s`, `within_m`, `stand_s`, `stands`); without `script` it plays the takeover session. |
+| `record` | Small-world evidence, whole-table reads each sample: `speech` (every line said, `speech.jsonl`), `talk` (every conversation turn, `talk.jsonl`), `experiences` (every character's experience rows before minds integrate them, `experiences_all.jsonl`), `gestures` (wave, nod, face, appraise uses, `gestures.jsonl`), `positions` (every person's position, heading and activity target, `positions.jsonl`). |
 
 Steps (`do`): `place` (`to`: an anchor), `graph` (a graph, `instinct:<name>` from `instincts.json`, or `original`: the graph the character had before the trial changed it), `items`, `know`, `say` (`text`, `to`), `act` (`act` or `acts`: `do` nodes), `structure`, `background`, `kill`, `clear_routines`, `clear_items`, `call` (any admin reducer), `note`.
 
@@ -63,6 +66,8 @@ python3 living/tools/trial_evidence.py b4 --quotes 2      # per instance: death,
 python3 living/tools/trial_evidence.py b1 b4 --table      # one row per trial x variant with spread
 python3 living/tools/trials.py down                      # stop the containers (kept)
 ```
+
+Two runner behaviours from `exp-greet`, ported with the arrival trial (2026-11-11): `run --fake --fake-script FILE` gives the fake server a rules file (`living/trials/fake/latency.json`: model latencies near the real ones, open talk replies), and run from a git worktree `build` copies each module into the container's `/wasm` mount (another checkout's) as `<module>-wt<hash>` (`served_name`), which `run` publishes, so a worktree never overwrites another checkout's modules. Remove the tagged files from the mount when done.
 
 Each instance is a database `verify-trial-<batch>-<trial>-<variant>-r<k>` on the trial service and one `living-mind` process. Its evidence directory, `.local/living/trials/<batch>/<trial>-<variant>-r<k>/`, holds:
 
@@ -550,6 +555,120 @@ These are upper bounds. Fewer think when deaths outrun births, and only the cap 
 - Cullet's laws were written for Cullet's town (lamplight, hearths, coats). The hamlet's houses and campfires are what the authored-test layout gives: no lamps and no coats in the stores.
 - The arms' values are derived from the arithmetic, not tuned. How often a pair actually carries 8 food, so whether the provided arm's gate binds, is not known until real minds run.
 - The `family_laws` scene proves each law's gate on a scratch world. It does not prove what minds do with them.
+
+## Arrivals: a stranger who says nothing (2026-11-11)
+
+Branch `exp-arrive`. Status: **diagnosed, three switches built, proved with fake minds only** (`af1`, below). No paid run has been made on it.
+
+**The owner's observation (play-test 3).** The owner said one "Hi", to the child Bram, who answered in character in 3.2 s. Then the owner stood silent on and around the square for 3 min 16 s with residents in earshot, and nobody approached or spoke. In play-test 2 the only unprompted greeting came by luck. A player who sees a stranger arrive does something about it; the residents did not.
+
+**The question.** When a newcomer stands near residents and says nothing, how often does anyone approach, greet, watch or talk about them, and what stops them? Changes are information, perception, salience or drives in the general rules, for every character, off by default. None is a script or rule that makes anyone greet, and there is no canned speech.
+
+### What stands between "a stranger is seen" and "someone does something"
+
+The answer comes from the source, the play-test 3 record (`.local/living/arrive/playtest-3-bundle/` in the worktree, from `~/playtest-3/playtest-3.tgz`, residents' journals; positions were not recorded in that build) and the paid greeting batch's control arm (`gr1a`, `greet-control`, 4 runs, real models; the greeting trial is on branch `exp-greet`, its evidence in `~/dev/slop-runs-greet/.local/living/trials/gr1a/`).
+
+1. **Nobody is asked to think.** Seeing a person for the first time (`brain.rs` `noticed`) makes one experience, "For the first time you see a stranger, 9 tiles east, waiting." at salience 0.45. That is below the 0.6 that wakes a body and asks for nothing. Experiences feed consolidation (memory) and the recent experiences of the *next* deliberation, whenever that comes. A person's next thought comes from a plan finishing or failing, a bodily alarm, a drive, dawn or the reflection timer (`reflect_s` 240 s plus 0–120 s by id, counted from the last deliberation). Speech gets conversation turns, but a silent newcomer says nothing.
+   - In play-test 3, between Bram's answer and the end of the session (196 s), the world's 16 people past infancy thought 6 times between them: Cuth 3 times, Aldric, Linnet and Osric once each (`arrive_report.py --journal`, `.local/living/arrive/playtest3-journals.md`). Twelve did not think at all. The world was 38 s old when Diego joined, so everyone's reflection timer from their first thought fell due at about 190–250 s, at the end of his wait.
+   - In the greeting batch's listening windows, residents thought 0.36–0.48 times a minute each: one thought every 2–3 minutes.
+2. **A crowd hides a stranger entirely.** In `noticed`, with more than `crowd` (6) people in sight, a person one has no feelings about is skipped: no experience at all, and no familiarity row, so no "first time" either until the crowd thins. With Cullet's 48 m sight a square easily holds 7 people in sight. In the greeting batch, Brisk's experiences read "For the first time you see a stranger, 48 tiles northeast", then "You are among a crowd of about 7 people".
+3. **When residents do think, the newcomer reads like a neighbour.** The deliberation scene lists the newcomer as `{"who": "a stranger", "doing": "wait", "dist": 25.9}`. Every person whose name the observer does not know, or who is beyond the knowing distance (Cullet's 24 m), reads the same "a stranger": in play-test 3 the residents of a fresh world were "a stranger" to one another (Cuth "taught a stranger medicine"); in the greeting batch Brisk's own community's Mara at 25.6 m was "a stranger". Nothing says the person is new to you or new here. The first-sight experience, which does say it, has usually been consolidated, and so deleted, before the next thought. Aldric's and Linnet's thoughts in play-test 3 had Diego in the scene and no experience of him.
+   - In play-test 3 all four thoughts with Diego in sight were about something else: Cuth's about a failed lesson ("Maud has wandered off again before I could teach her", Diego jumping 1.8 m away), Aldric's about teaching Maud the ledger (Diego 25.9 m, waiting), Linnet's about reading the elders' sign (32 m). None named him.
+4. **Only a deliberation can open a conversation.** Talk turns answer speech heard (`talk.rs` `on_speech`); there is no path from seeing someone to a turn. A mind opens contact only through a deliberation's `say`, act or graph.
+5. **No drive involves people seen.** Restlessness follows time since the last deliberation (4–12 minutes, by curiosity) and loneliness time since one last spoke or was spoken to (4–14 minutes, by sociability). A stranger standing beside one changes neither.
+6. **The request can be dropped.** A non-urgent request within a person's `think_min_s` (20 s) of their last deliberation is refused, not merged, when nothing is pending. A first sight is a one-time event, so a sight that lands just after a thought is lost as a trigger.
+
+**The models are willing when asked with the stranger in view.** In the greeting batch's control runs, residents opened contact with the player more than 60 s after the player's last line 9 times in 4 runs (1, 6, 0 and 2). Each came from a thought asked for some other reason: "A quiet moment to take stock" (Wenna: "You waited patient by our fire — who are you, friend, and what brings you to Reedmouth?"), restlessness (Lio: "Hello there! You called out before — I'm Lio. Have you ever seen a wolf?"; Sefa), a finished plan (Brisk). There the player had greeted first, so it was salient in their experiences. In play-test 3 Bram's talk prompt held the first-sight experience and he asked "Are you new here?" at once. What is missing is the moment and the salience, not the willingness.
+
+### The switches (laws off by default)
+
+Three number laws of the observer's kind in `skills.rhai`, read once per script revision by `Scripts::newcomers` (`num_of`, cached), with `newcomer_home_m` (60) and `newcomer_near_m` (12) as their distances. They are not `laws()` constants: `laws_about`'s descriptions already use 1,971 of the 2,048 characters Rhai allows one map's strings, so a constant more no longer fits. `newcomers_law()` describes them, with no topic, so minds' world text is unchanged. Each is 0 in the shipped rules, and every code path they add is behind a non-zero value.
+
+A **newcomer** to someone (`common::newcomer`) is a person who came into the world (joined, arrived, was born) and was first seen by them (`familiar.first_ms`) more than 10 s after they themselves came into it, and who is not of their community. A seeded world's people all begin together and have no shared past in the rows, so the first condition keeps them from being newcomers to one another; a joined player, a spawned newcomer or a later birth can be one.
+
+| Switch (variant) | Law and value | Rule | Hypothesis |
+| --- | --- | --- | --- |
+| `arrive-notice` | `newcomer_salience` 0.5 | The first sight of a newcomer within `newcomer_home_m` (60 m) of one's home door, with no relation to them, is not hidden by a crowd and reads "For the first time you see a stranger, 4 tiles east, waiting, near your home." Its salience is 0.45 + 0.5 × mean(curiosity, sociability)/100 (0.45–0.95). At 0.6 or more (mean temperament 30 or more) it wakes the body and asks for a thought with the percept as its reason, like any request (`think_min_s`, merging, the rethink gate if on). | Nobody is asked to think when a stranger appears, and crowds hide them. |
+| `arrive-known` | `newcomer_scene_min` 30 | In the deliberation scene, a newcomer first seen within the last 30 minutes carries `"new to you": "first seen 2 minutes ago"`. Information only: no trigger. | When residents do think, the newcomer is indistinguishable from neighbours whose names are out of range. |
+| `arrive-wonder` | `newcomer_drive_s` 90 | A drive: a calm person (hunger < 60, energy > 35, health > 60) with no relation to a newcomer within `newcomer_near_m` (12 m), first seen 45–135 s ago (90 × 1.5 for the least curious and sociable down to × 0.5 for the most) and within the last 30 minutes, feels "You find yourself wondering about a stranger, 5 tiles east: someone you do not know, about here since you first saw them 2 minutes ago." (a `feeling` at 0.5) and is asked to think about it. Once per newcomer per 10 minutes, at most one such feeling a minute. | No drive is fed by the people one sees; a stranger who lingers should make a curious person wonder. |
+| `arrive-all` | all three | | |
+
+With any law on, a person seen in a crowd gets a familiarity row with `times` 0 (`glimpse`) without becoming news, so the scene and the drive know when one first saw them. The first sight outside a crowd is still told as a first encounter.
+
+**Default unchanged.** With the shipped values: `noticed` runs the old arms (the crowd skip, `None` as before, the 0.45 and 0.65 first sights); no `glimpse` row is written (no `familiar` row has `times` 0, and `familiarity` treats only such rows differently); the scene adds no field; the drive is not evaluated. Prompts are unchanged: the laws have no topic, so the minds' world text is the same. Proof: `script::tests` (`Newcomers::OFF` from the shipped script, salience 0.45 at any temperament, wait 0), and the `newcomers` scene's shipped phase on a hamlet world (`core-arrive-n3`, below).
+
+### The trial and the report
+
+[`arrive`](../living/trials/arrive.json): the hamlet on Cullet's day and laws (12 people in two settlements, everyone past infancy thought for, at most 12). The world lives 30 s (`subject.join.after_s`). Then a scripted player (`Player.arrive_session`: `join`, `human_act`, `human_move` with its own identity) joins at the arrival point, waits 20 s, walks to the densest group until two residents are within 5 m, steps to face into it and stands silent 5 minutes. Then it walks to the group sharing fewest members with the first and stands silent 5 more minutes, then stays to the end (14 minutes). It never speaks, gestures or names itself. Arms differ only in the variants' `skills_patch`. Every line, conversation turn, experience row (before it is integrated), gesture and position with activity target is recorded (`record`).
+
+[`arrive_report.py`](../living/tools/arrive_report.py) (read-only, no model calls; its docstring defines every column), per resident within 12 m of the newcomer during a stand:
+
+- `seen`, `first_s`, `first_sal`, `crowd`: the newcomer in their experiences, the first-sight percept's time and salience, or none;
+- `asked`: a thought whose reason is an experience about the newcomer;
+- `thinks`, `in_prompt`: thoughts during the stands and how many prompts had the newcomer;
+- `mention`, `words`: replies naming them by id, or with stranger/newcomer words;
+- `approach`, `aimed`, `close`: came up to them (distance fell 3 m and ended within 4 m), an activity aimed at them, within 3 m;
+- `gesture`: wave, nod, face or appraise at them;
+- `to_them`, `about_them`: lines to them, or about them to others or to no one.
+
+Per run, it gives the share of residents in range who acted, the time from the arrival to the first resident-initiated contact, thoughts per resident-minute, and calls, tokens and dollars per hour. `--journal DIR --subject ID --from-ms --to-ms` reads a play-test's journals (no positions).
+
+```bash
+python3 living/tools/trials.py build arrive
+python3 living/tools/trials.py run --batch af1 arrive --variants arrive-control,arrive-notice,arrive-known,arrive-wonder,arrive-all \
+    --replicates 1 --fake --fake-script living/trials/fake/latency.json --parallel 5 --stagger 15
+python3 living/tools/arrive_report.py af1 --examples 2
+python3 living/tools/trials.py clean --batch af1
+```
+
+### Fake proof (`af1`)
+
+`af1`: 2026-11-11 17:03–17:19, one run per arm, 14 minutes, fake model with `living/trials/fake/latency.json`, module `trial-hamlet-5a897620` served as `-wtd128d6`. The trial service also carried the paid greeting batch. Fake replies never greet, wave or walk to anyone, so `acted` is 0 in every arm. The table shows where the newcomer reaches the residents, not what they do about it. In range means within 12 m during a stand; the two stands make 10 minutes.
+
+| Arm | In range | First sight (of those) | Near-home first sights, salience | Asked to think by the newcomer | Prompts with the newcomer / marked "new to you" | Wonderings (residents) | Deliberate contact |
+| --- | ---: | ---: | --- | ---: | --- | --- | ---: |
+| `arrive-control` | 12 | 11 | none (all 0.45) | 0 | 32 / 0 | 0 | 0 |
+| `arrive-notice` | 7 | 6 | 11 of 11, 0.61–0.80 | 6 of 7 | 44 / 0 | 0 | 0 |
+| `arrive-known` | 8 | 7 | none | 0 | 73 / 73 | 0 | 0 |
+| `arrive-wonder` | 9 | 8 | none | 7 of 9 | 30 / 0 | 9 (8) | 0 |
+| `arrive-all` | 7 | 6 | 11 of 11, 0.61–0.80 | 7 of 7 | 92 / 92 | 9 (6) | 0 |
+
+- Under the shipped laws no thought was asked for by the newcomer. One resident in range never had a first-sight percept at all: a crowd hid the newcomer.
+- `notice`: every first sight near home read "…, near your home." at the observer's own salience (0.61–0.80 from the fake personas' temperaments), and six of the seven residents in range were asked to think with it as the reason.
+- `known`: every prompt with the newcomer in it marked them "new to you", and no other arm's did. No resident was marked: the rule's "came into the world after you" keeps the seeded neighbours of the other settlement out.
+- `wonder`: 9 wonderings by 8 residents, 21–743 s after the first-sight percept. The drive counts from the familiarity row, which a glimpse in a crowd can write before the percept. None was about a resident.
+- Thoughts per resident-minute in the stands were 0.48 (control), 0.64, 0.94, 0.59 and 1.33. The fake's 2-second plans make some residents re-think every 9 s ("I finished my plan"). While a call runs, `clear_deliberation` drops plan reasons that arrive but keeps the request's other reasons. So a one-time feeling stays the reason of every later thought: Ilsa's one wondering (at 129 s) was the reason of 40 thoughts in `arrive-all`, and "You long for another child" of 25–27 in `known` and `wonder`. This predates the switches, and control shows it too ("My actions keep failing" 11 times). The switches give it one more feeling to repeat. It is reported, not changed here.
+- Geometric passes (`approach` 18–31 per run, `close` for most residents) happen in every arm, control included: residents' routines bring them past a player who stands on the square. That is why the report's contact share counts only deliberate contact.
+
+The fake run shows the mechanics. Whether residents then greet, watch or talk about the newcomer is for the paid batch.
+
+Driving the laws on a scratch world: `scenes.py newcomers` on a hamlet run (`core-arrive-n3`) passed 18 of 18 checks. Shipped: the crowd hides the newcomer; the first sight is 0.45, not near home, and asks for no thought. On: seen in the crowd, "near your home", 0.7 (persona-less, temperament 50); asks for a thought; the scene marks them and no neighbour; wonders about them 20 s later and about no neighbour.
+
+### The paid batch, planned
+
+```bash
+cd <a checkout of exp-arrive with .env>; . ~/slop-sysroot/env.sh
+export CARGO_TARGET_DIR=$HOME/slop-<checkout>-target
+python3 living/tools/trials.py build arrive
+python3 living/tools/trials.py run --batch ar1 arrive \
+    --variants arrive-control,arrive-notice,arrive-known,arrive-wonder,arrive-all \
+    --replicates 4 --parallel 10 --stagger 15
+python3 living/tools/arrive_report.py ar1 --examples 3
+python3 living/tools/trials.py clean --batch ar1
+```
+
+Five arms × 4 replicates × 14 minutes = 20 runs, 4.7 world-hours with 11–12 minds thinking. The cost is an estimate, not a measurement. The greeting batch's control arm cost $1.62–2.01 per world-hour on the same hamlet and models (`arrive_report.py` over `gr1a` control, `usd_h`). At that rate the batch is about $8–9.5. The switches add thoughts in their arms: the fake rates were 1.2–1.3 times control for `notice` and `wonder`, more for `all`, though fake cadence is not a price. That allows about $10–12 in all. The coordinator's rule of thumb (about $0.10 per thinking person-hour, $1.2 per world-hour) gives $5.6. At `--parallel 10`, two waves take about 35 minutes, about $16–24 an hour while it runs.
+
+Read first: `asked` (did the newcomer get a thought), then `acted` and `first_contact_s` (deliberate contact: lines to them, gestures, activities aimed at them), `lines_about` (talk about them), `mention` (thoughts naming them), against control. Then the examples: a greeting that names the stranger "new here" is the hoped-for answer; residents wondering aloud about every passer-by would be the cost.
+
+### Not covered
+
+- No real model has met a silent newcomer under the switches. Fake minds never greet, so the fake batch proves where the newcomer enters percepts, reasons and prompts, not what residents do.
+- Play-test 3 has no positions: who was within earshot of Diego, and for how long, is not known from its record. The owner's "at least four in earshot" is the coordinator's account.
+- `approach` is a geometric heuristic. Residents' routines bring them past a standing player; read it beside `aimed`, gestures and lines.
+- The newcomer rule's "came into the world after you" uses `born_ms`, a fact of the rows rather than something perceived. It stands in for the shared past seeded people lack.
+- `WONDERED` is working state in the module and is forgotten when the module restarts, as `LEGACY` is.
+- A newcomer laws' cost at scale was not measured: each is a few indexed reads per evaluated body with a newcomer in sight, and nothing when off.
 
 ## Fast iterations
 
