@@ -602,7 +602,9 @@ fn record(
     roam: Res<crate::envs::Roam>,
     scene: Option<NonSend<crate::world::Scene>>,
     camera: Query<&GlobalTransform, With<Camera3d>>,
+    (input, net): (Option<Res<crate::controls::Input>>, Option<NonSend<crate::net::Net>>),
     mut feet: Local<HashMap<Entity, Tracked>>,
+    mut spine: Local<HashMap<Entity, [Option<Entity>; 3]>>,
 ) {
     // The island's ground, else the look-dev environment's.
     let ground = |x: f32, z: f32| match (&island, &envs) {
@@ -643,6 +645,19 @@ fn record(
         let anim = anims.get(e).ok();
         let fwd = root.rotation() * Vec3::Z;
         let yaw = fwd.z.atan2(fwd.x).to_degrees();
+        // The hips', chest's and head's facing as drawn, in the same sense as `yaw` (VRoid bones'
+        // rest rotations are identity, so each bone's +Z is where it faces).
+        let at = *spine.entry(e).or_insert_with(|| ["J_Bip_C_Hips", "J_Bip_C_UpperChest", "J_Bip_C_Head"].map(|n| children.iter_descendants(e).find(|d| bones.get(*d).is_ok_and(|(x, _)| x.as_str() == n))));
+        let bone_yaw = |b: Option<Entity>| {
+            b.and_then(|b| bones.get(b).ok()).map(|(_, g)| {
+                let f = g.rotation() * Vec3::Z;
+                f.z.atan2(f.x).to_degrees()
+            })
+        };
+        // Where I look and travel (sim radians as degrees, counter-clockwise from east), and the
+        // authority's segment speed: connected play only.
+        let mine = net.as_ref().and_then(|n| n.my_id).and_then(|id| scene.as_ref().and_then(|s| s.shown.get(&id).copied()));
+        let look = input.as_ref().and_then(|i| i.scripted_look.or(i.look)).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x).to_degrees());
         let rest = serde_json::json!({
             "t": time.elapsed_secs_f64(),
             "root": [p.x, p.y, p.z],
@@ -653,6 +668,15 @@ fn record(
             // its upper body turns from it and whether it walks backwards (`twist.rs`, `anim.rs`).
             "yaw": yaw,
             "twist": motions.get(e).ok().map(|m| m.twist.to_degrees()),
+            "neck": motions.get(e).ok().map(|m| m.neck.to_degrees()),
+            "eyes": motions.get(e).ok().map(|m| m.eyes.to_degrees()),
+            "travel_rel": motions.get(e).ok().map(|m| m.travel.to_degrees()),
+            "hips_yaw": bone_yaw(at[0]),
+            "chest_yaw": bone_yaw(at[1]),
+            "head_yaw": bone_yaw(at[2]),
+            "look": look,
+            "heading": mine.and_then(|(_, h)| h).map(|h| h.to_degrees()),
+            "sim": mine.map(|(p, _)| [p.x, p.y]),
             "reverse": motions.get(e).ok().map(|m| m.reverse),
             "pace": motions.get(e).ok().map(|m| m.pace),
             // Connected play: the authority time my body is drawn at, and its segment then.
