@@ -1453,9 +1453,12 @@ pub struct Presence {
 }
 
 /// A person's daily rhythm (private; seed content or drawn at birth, docs/SEEDED_LIVES.md):
-/// when it rises and goes to bed (hours of the day; `bed_h` may pass 24, e.g. 24.5 is 00:30)
-/// and how many hours before bed it keeps as its evening. Graphs read it as `bedtime` and
-/// `evening`; its new day starts at `rise_h`. Without a row: the world's night, and 18–22.
+/// when it rises and goes to bed (hours of the day; `bed_h` may pass 24, e.g. 24.5 is 00:30,
+/// and lies 8 to 22 hours after `rise_h`, which may be any hour), how many hours before bed it
+/// keeps as its evening, its working hours and a second sleep (spans whose end may pass 24; an
+/// end not after its start is none). Graphs read it as `bedtime`, `evening` and `work_hours`
+/// (`living_rules::rhythm`); its new day starts at `rise_h`. Without a row: the world's night,
+/// and 18–22.
 #[spacetimedb::table(accessor = rhythm)]
 pub struct Rhythm {
     #[primary_key]
@@ -1466,6 +1469,16 @@ pub struct Rhythm {
     /// The world day whose new day it last began (`living_rules::day_of`); the day it is
     /// born into counts as begun, so a world's people do not all begin one at its creation.
     pub last_day: u32,
+    /// Working hours (none: 0 and 0, so any waking hour outside the evening is work's).
+    #[default(0.0f32)]
+    pub work_from_h: f32,
+    #[default(0.0f32)]
+    pub work_to_h: f32,
+    /// A second sleep in the day (none: 0 and 0), e.g. a baker's afternoon.
+    #[default(0.0f32)]
+    pub nap_from_h: f32,
+    #[default(0.0f32)]
+    pub nap_to_h: f32,
 }
 
 /// A guest of a household (private; the database owner reads it): `guest` may sleep in the

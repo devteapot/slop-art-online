@@ -663,8 +663,8 @@ fn answer_offer(how: &str, from: u32, conn: Option<&DbConnection>, verbs: &mut c
     match how {
         "accept" => verbs.send.push((crate::verbs::Aim::Creature { id: from }, crate::verbs::Choice { skill: "accept".into(), item: None, want: None, words: false, say: None, label: "accept".into(), have: 0 })),
         _ => {
-            for o in conn.into_iter().flat_map(|c| c.db.my_offers().iter()).filter(|o| o.incoming && o.from == from) {
-                talks.dismissed.insert(o.id);
+            if let Some(c) = conn {
+                talks.dismissed.extend(c.db.my_offers().iter().filter(|o| o.incoming && o.from == from).map(|o| o.id));
             }
         }
     }

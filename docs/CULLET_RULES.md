@@ -56,6 +56,19 @@ Two new facts, as general primitives:
 
 `perceived_of(p)` may read `p.dist` (whole metres, rounded up). The engine gives the distance only to a law that reads it (`Scripts::regard_reads_dist`), so the shipped law's cache key is unchanged. When the law reads it, a player's projections are worked out again at every sweep (every 200 ms per player) and written only when they change, since a target crossing the knowing distance changes what the player is told. That is the cost this adds; it is bounded by the creatures each player perceives, and is measured below only at small numbers.
 
+### People's lives: the life table as a law
+
+Added on branch `lives-3` (2026-11-11), at the owner's decision through the general coordinator: Cullet's people live longer (old age from about 75) and childhood ends at 15, so the cast's 15- and 16-year-olds (Col Roon, Tobiah Dunmore) start as adults and its elders (61 to 70) keep their ages without dying of age early.
+
+Before this, a species' life table was species data only: `species.json` (a person lives 70 years, a child until 0.23 of it, 16.1 years; old from 0.85, 59.5; deaths of old age between 0.87, 60.9, and the lifespan), which a compiled seed could replace with its own `species` map, but no law could read or change. It is now a law over that data, general for every world:
+
+- **`life_years(t)`** is given a species' table in years: `kind`, `lifespan`, and the ages `infant`, `child`, `elder` and `old_age` where those stages end or begin, `gestation`, `interbirth`. It returns the table with any of them changed. An age it leaves alone keeps its years under a new lifespan. The engine asks it once per species and keeps the answer for the script revision (`Scripts::life`), and everything that reads a life table reads it through the world's rules (`common::life_of(ctx, kind)`): stages and their changes in the tick, deaths of old age, ages at seeding, what a body's laws see (`a.actor.stage`, `a.actor.life`), gestation, the years between births, a person's own "age" in their perception, and the life line the minds are told (`prompts::life_line`).
+- **The shipped script has no `life_years`**, and then the table is `species.json`'s exactly (no conversion, the same `f32` values): every other world is unchanged. `cullet_check::life_tests::worlds_without_the_law_keep_the_species_tables` checks every species of `species.json` bit for bit under the shipped script.
+- **Install check.** A world's law is run on a person's and a wolf's table when it is installed; a table whose ages are not in order (`infant <= child <= elder <= old_age <= lifespan`) or not numbers is refused (`a_wrong_life_table_is_refused`). The law has a description (`life_years_law`, with no topic of its own: the minds' LIFE line is built from the table it gives).
+- **`author_world.py --check`** cannot run Rhai: it reads Cullet's `person_years()` map, the form Cullet's law gives its ages in, and says which source it used ("rule life stages (living/seeds/worlds/cullet/laws.rhai life_years, ...)"). A world whose law has another form stops the check with a message.
+
+**Cullet's values** (`living/seeds/worlds/cullet/laws.rhai`, `person_years()`): a person lives up to **90** years; a child until **15**; deaths of old age from **75** (each person's own point between 75 and 90, fixed by their id, as before); a baby until 2.1, old (the elder stage, which tires sooner and heals slower) from 59.5, pregnancy and the years between births keep the shipped ages. Animals keep their tables. Under it the cast's stages are child 14, adult 44, elder 6, as the cast counts them, and nobody is seeded within reach of old age (the eldest, Halvard Dunmore, is 70).
+
 ## Cullet's laws
 
 Values per game hour unless noted; in brackets per real minute on that world's day. A Cullet game hour is two real minutes; an island game hour is half a real minute. "Island" is the shipped script with `person_pace` 0.3, the old value in game time.
@@ -84,6 +97,7 @@ Values per game hour unless noted; in brackets per real minute on that world's d
 | What gives light | nothing | campfire, hall and inn 6 m; lamp 8 m while it has oil (`structures`) | |
 | Name and health band shown | within sight | within 24 m (`known_within`, `perceived_of`) | Decision 6 |
 | Speech | 9 m | 12 m (`hearing_of_people`) | §5 |
+| A person's life | 70 years; a child until 16.1, old from 59.5, deaths of old age from 60.9 (`species.json`) | up to 90 years; a child until 15, old from 59.5, deaths of old age from 75 (`life_years`, `person_years`) | The owner's decision, 2026-11-11 |
 | A shout | none | none (not built) | 30 m |
 | Spoiling, raw fish | 5% a real minute | unchanged (goods) | About a day |
 
