@@ -21,7 +21,7 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
-         'death-names')
+         'death-names', 'reasons')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 DROP, LOW = 8, 9
@@ -195,6 +195,8 @@ def run_case(run, case):
         return resident_case(run)
     if case == 'parked':
         return parked_case(run)
+    if case == 'reasons':
+        return reasons_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -1021,6 +1023,71 @@ def parked_case(run):
     assert len(talks()) == after_first, 'a talk turn repeated what the deliberation answered'
     assert 'in its deliberation' in run.log()
     return {'status': 'pass', 'talk_turns': len(talks())}
+
+
+def reasons_case(run):
+    """A deliberation consumes the reasons its prompt contained (living_rules::reasons,
+    `clear_deliberation`). The mind's plan finishes every few seconds and each model call takes
+    longer than that, so "I finished my plan." arrives during calls (a person asks again at most
+    every 20 s without a pending request, `think_min_s`). The old code then kept the feeling,
+    and the next plan's own "I finished" merged into that surviving request (bypassing
+    `think_min_s`), so thoughts ran back to back. Before 2026-11-11
+    that churn kept a one-off feeling pending and the reason of every later thought. A reason
+    arriving during a call (a player's offer) still waits for the next deliberation, and only
+    that one. Each deliberate thought records its reasons with `carried_before`."""
+    people = prepare(run)
+    actor = people[0]['id']
+    marker = 'verify one-off feeling'
+    churn = {'seq': [{'wait': 1}, {'wait': 1}]}
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': {'graph': churn, 'weight': 1.5, 'plan': 'verify minds churn'}},
+              'rules': [{'purpose': 'think', 'delay_s': 9, 'times': -1}]}
+    models = model(run, script)
+    # Before the mind starts: a one-off feeling, then the plan finishing (a sequence's root
+    # ends every 8 s at most, brain.rs ROOT_MARK).
+    run.admin('set_behavior', actor, json.dumps({'seq': [{'think': marker}, {'wait': 1}]}))
+    run.wait(lambda: any(marker in d['reason'] for d in run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'pending-feeling')),
+             'the feeling is pending', 30)
+    run.harness('player', 'join', 'ReasonsTrader')
+    player = run.sql("SELECT id FROM character WHERE name = 'ReasonsTrader'", 'trader')[0]['id']
+    run.admin('place_near', player, actor)
+    run.admin('grant_items', player, 'stone', 2)
+    run.start(models, [actor])
+    requests = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    in_call = lambda: (lambda r: len([e for e in r if e.get('purpose') == 'think']) > len([e for e in r if e.get('purpose') == 'deliberate']))(requests())
+    installed = {'revision': None}
+
+    def deliberations(save='thoughts'):
+        # The mind's plan finishes once (a desire); the churn is a sequence root, reinstalled
+        # over each plan the mind installs, which reports "I finished my plan." every 8 s.
+        brain = run.private(f'SELECT * FROM brain WHERE id = {actor}', 'brain')
+        if brain and brain[0]['source'] == 'mind' and brain[0]['revision'] != installed['revision']:
+            run.admin('set_behavior', actor, json.dumps(churn))
+            installed['revision'] = brain[0]['revision']
+        return [json.loads(t['detail']) for t in run.thoughts(actor, save) if t['kind'] == 'deliberate']
+    run.wait(lambda: len(deliberations()) >= 2, 'two deliberations', 120)
+    # A reason that arrives during a call: the player's offer.
+    run.wait(lambda: deliberations() is not None and in_call(), 'a model call in flight', 60)
+    offer_at = int(time.time() * 1000)
+    run.harness('player', 'act', json.dumps({'do': 'offer', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'want': 'wood', 'want_qty': 1}))
+    run.wait(lambda: len(deliberations()) >= 5, 'five deliberations', 300)
+    ds = deliberations('thoughts-final')
+    carrying = [i for i, d in enumerate(ds) if marker in d['reason']]
+    offers = [i for i, d in enumerate(ds) if 'offers you' in d['reason']]
+    reasons = [r for d in ds for r in d.get('reasons', [])]
+    plan_finished_during_calls = len([d for d in ds[1:] if 'I finished my plan' in d['reason']])
+    out = {'deliberations': len(ds), 'carrying_feeling': len(carrying), 'carrying_offer': len(offers),
+           'offer_sent_ms': offer_at, 'max_carried_before': max((r['carried_before'] for r in reasons), default=None),
+           'plan_finished_reasons': plan_finished_during_calls}
+    (run.directory / 'reasons.json').write_text(json.dumps({**out, 'reasons': [d.get('reasons') for d in ds]}, indent=2))
+    assert all('reasons' in d for d in ds), 'a deliberate thought without its reasons record'
+    assert carrying == [0], f'the one-off feeling was carried by deliberations {carrying} of {len(ds)}'
+    assert len(offers) == 1 and offers[0] > 0, f'the offer that arrived during a call: deliberations {offers}'
+    assert out['max_carried_before'] == 0, f'a reason was carried twice: {out}'
+    # Later thoughts were asked for by the plan finishing (the old code dropped those lines
+    # on install and kept the feeling instead, so this count is 0 there).
+    assert plan_finished_during_calls >= 2, f'no plan churn to test against: {out}'
+    return {'status': 'pass', **out}
 
 
 def main():

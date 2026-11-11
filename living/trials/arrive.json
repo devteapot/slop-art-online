@@ -30,7 +30,8 @@
   "talk": true,
   "experiences": true,
   "gestures": true,
-  "positions": true
+  "positions": true,
+  "thoughts": true
  },
  "census_s": 30,
  "cast": {},

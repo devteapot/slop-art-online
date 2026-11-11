@@ -407,16 +407,13 @@ fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool) 
     let revision = ctx.db.brain().id().find(id).map(|b| b.revision).unwrap_or(0);
     let scene = scene_json(ctx, id, now);
     if let Some(mut d) = ctx.db.deliberation().actor().find(id) {
-        if !d.reason.contains(reason) && d.reason.len() < 900 {
-            d.reason.push_str("\n");
-            d.reason.push_str(reason);
-        }
+        living_rules::reasons::add(&mut d.reason, &mut d.arrived, reason, now);
         d.scene = scene;
         d.revision = revision;
         d.updated_ms = now;
         ctx.db.deliberation().actor().update(d);
     } else {
-        ctx.db.deliberation().insert(Deliberation { actor: id, controller: c.controller, reason: reason.into(), requested_ms: now, updated_ms: now, scene, revision });
+        ctx.db.deliberation().insert(Deliberation { actor: id, controller: c.controller, reason: reason.into(), requested_ms: now, updated_ms: now, scene, revision, arrived: living_rules::reasons::first(reason, now) });
         common::count(|k| k.deliberations += 1);
     }
     true

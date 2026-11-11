@@ -17,6 +17,7 @@ pub mod city;
 pub mod genes;
 pub mod life;
 pub mod realm;
+pub mod reasons;
 pub mod records;
 pub mod normalize;
 #[cfg(feature = "scripting")]

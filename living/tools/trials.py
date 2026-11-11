@@ -1201,13 +1201,16 @@ class Instance:
         minds integrate and delete them, to `experiences_all.jsonl`; `gestures`, every use of a
         gesture or turn (`wave`, `nod`, `face`, `appraise`; `skill_use`) to `gestures.jsonl`;
         `positions`, every person's position, heading and activity (its skill, and whom it is aimed
-        at) each sample to `positions.jsonl`."""
+        at) each sample to `positions.jsonl`; `thoughts`, every character's thought rows (with
+        `detail.reasons`, what each deliberation carried) to `thoughts_all.jsonl`."""
         rec = self.trial.get("record", {})
-        if rec.get("talk"):
+        if rec.get("talk") or rec.get("thoughts"):
             for r in sorted(self.rows(f"SELECT * FROM thought WHERE id > {self.cursor['talk']}"), key=lambda r: r["id"]):
                 self.cursor["talk"] = max(self.cursor["talk"], r["id"])
-                if r.get("kind") == "talk":
+                if rec.get("talk") and r.get("kind") == "talk":
                     self.emit("talk", {"t": self.t(), **r})
+                if rec.get("thoughts"):
+                    self.emit("thoughts_all", {"t": self.t(), **r})
         if rec.get("experiences"):
             for r in sorted(self.rows(f"SELECT * FROM experience WHERE id > {self.cursor['all_experience']}"), key=lambda r: r["id"]):
                 self.cursor["all_experience"] = max(self.cursor["all_experience"], r["id"])
@@ -1894,6 +1897,10 @@ def purpose_model(j, thoughts):
                   "errors": o["errors"], "empty": o["empty"], "repaired": o["repaired"], "invalid": o["invalid"], "profiles": dict(o["profiles"]),
                   "cached": o["cached"], "cost_usd": round(c, 4) if c is not None else None}
     retries = pruned = rejected = 0
+    # Reasons each deliberation carried (`detail.reasons`, since 2026-11-11): `reused` counts
+    # reasons an earlier deliberation of the same service already carried (same words, same
+    # arrival), which should be 0 since the stale-reasons fix.
+    carried = reused = max_before = 0
     for t in thoughts:
         if t.get("kind") == "error":
             rejected += 1
@@ -1904,7 +1911,12 @@ def purpose_model(j, thoughts):
         if isinstance(det, dict):
             retries += max(0, (det.get("attempts") or 1) - 1)
             pruned += 1 if det.get("pruned") else 0
-    res["deliberations"] = {"retried_attempts": retries, "pruned_graphs": pruned, "rejected": rejected}
+            for r in det.get("reasons") or []:
+                carried += 1
+                reused += 1 if r.get("carried_before") else 0
+                max_before = max(max_before, r.get("carried_before") or 0)
+    res["deliberations"] = {"retried_attempts": retries, "pruned_graphs": pruned, "rejected": rejected,
+                            "reasons_carried": carried, "reasons_reused": reused, "max_carried_before": max_before}
     return res
 
 

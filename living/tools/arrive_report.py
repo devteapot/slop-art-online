@@ -73,8 +73,10 @@ Then, per batch x arm (an arm is the variant, or `trial:variant` for another tri
 - **Cost**: dollars per hour and per run, calls and tokens per minute; `reused_share`, the share
   of reason lines of residents' thoughts that an earlier thought of theirs already had, and
   `reused_events`, those of them that are one-time events (a feeling, a first sight) rather than
-  plan states. Since a pending request keeps its other reasons (`clear_deliberation`), these show
-  how often one event drives many thoughts.
+  plan states (read from the journals' prompts, so they work on any run); and, where the runs
+  have `thoughts_all.jsonl` (`record.thoughts`) from a build with the stale-reasons fix, `carried`
+  (reasons the residents' deliberations carried, `detail.reasons`) and `carried_again` (those an
+  earlier deliberation had already carried: 0 when each reason is consumed once).
 
 `--journal` reads a play-test record instead (a journal directory of `<Name>.jsonl`, no
 positions): only `asked`, `thinks`, `in_prompt`, `mention` and `words`, per journal, for model
@@ -250,6 +252,14 @@ def reused_reasons(jdir):
                     feelings += not line.startswith(plan)
                 seen.add(line)
     return {"reasons": total, "reused": reused, "reused_events": feelings}
+
+
+def _detail(t):
+    try:
+        v = json.loads(t.get("detail") or "{}")
+    except ValueError:
+        return {}
+    return v if isinstance(v, dict) else {}
 
 
 def windows_of(events):
@@ -471,6 +481,11 @@ def run_report(d):
                   "replies": len(theirs), "reply_s": gaps, "others_joined": [names.get(x, f"#{x}") for x in joined],
                   "lines": [s["text"][:200] for s in theirs[:4]]}
     reasons = reused_reasons(d / "journal")
+    # What each deliberation carried (`detail.reasons`, since fix-stale-reasons; `record.thoughts`):
+    # a reason an earlier deliberation already carried (same words, same arrival) is re-used.
+    carried = [r for t in jl(d / "thoughts_all.jsonl") for r in (_detail(t).get("reasons") or [])]
+    reasons["carried"] = len(carried) if carried else None
+    reasons["carried_again"] = sum(1 for r in carried if r.get("carried_before")) if carried else None
     return {
         "run": d.name, "variant": summary.get("variant", "?"), "fake": fake, "newcomer": sid, "stands": len(wins),
         "stand_min": round(minutes, 1), "in_range": len(rows), "acted": len(acted), "any": len(anyx),
@@ -491,6 +506,7 @@ def run_report(d):
         "converge_60s": most, "together_4m": together, "converge_any_60s": most_any, "together_any_4m": together_any,
         "reasons": reasons["reasons"], "reused": reasons["reused"], "reused_events": reasons["reused_events"],
         "reused_share": round(reasons["reused"] / reasons["reasons"], 2) if reasons["reasons"] else None,
+        "carried": reasons["carried"], "carried_again": reasons["carried_again"],
         "follow": follow, "trial": summary.get("trial") or d.name.rsplit("-", 2)[0],
         "classes": {c: sum(1 for r in rows if r["contact"] == c) for c in CLASSES},
         "residents": rows,
@@ -590,12 +606,12 @@ def main():
     krows = []
     for (b, v), rs in sorted(groups.items()):
         row = {"batch": b, "arm": v, "n": len(rs)}
-        for c in ["converge_60s", "together_4m", "converge_any_60s", "together_any_4m", "usd_h", "usd", "calls_min", "tok_min", "reused_share", "reused_events"]:
+        for c in ["converge_60s", "together_4m", "converge_any_60s", "together_any_4m", "usd_h", "usd", "calls_min", "tok_min", "reused_share", "reused_events", "carried", "carried_again"]:
             xs = [r[c] for r in rs if r.get(c) is not None]
             row[c] = f"{statistics.mean(xs):.2f} ({min(xs)}–{max(xs)})" if xs else None
         row["runs_3plus"] = f"{sum(1 for r in rs if r['converge_60s'] >= 3)} of {len(rs)}"
         krows.append(row)
-    print(table(krows, ["batch", "arm", "n", "converge_60s", "together_4m", "runs_3plus", "converge_any_60s", "together_any_4m", "usd_h", "usd", "calls_min", "tok_min", "reused_share", "reused_events"]))
+    print(table(krows, ["batch", "arm", "n", "converge_60s", "together_4m", "runs_3plus", "converge_any_60s", "together_any_4m", "usd_h", "usd", "calls_min", "tok_min", "reused_share", "reused_events", "carried", "carried_again"]))
     print("\n## Residents in range\n")
     for r in runs:
         print(f"### {r['batch']} {r['run']}\n")
