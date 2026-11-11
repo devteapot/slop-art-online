@@ -45,10 +45,15 @@ death (a fall: body 22 cm, palms 5 cm under the floor); run and run_fast (loop v
 - cadence: step period against the library's forward pick of the same gait (walk, run, sneak);
   or of the entry's `cadence_ref` (the forward take made for the same speed; a forward take names
   itself and is not checked);
-- plants (gaits; reported, check with `--expect 'plant_frames_min>=4'`): the bake's foot-down markers
-  emulated on the raw take driven at the entry's `game_speed` (game m/s on Vivi; default the take's
-  own speed): the shortest and median plant in game frames, how many each foot has, and the farthest
-  a planted ball moves (plant_slide_cm). A take scaled past its own speed loses its short plants;
+- planted slide (gaits; **the gate for gaits**, checked for every gait at 4 cm): `plant_slide_cm`,
+  the game's marker_check.py slide emulated on the raw take driven at the entry's `game_speed`
+  (game m/s on Vivi; default the take's own speed). Per plant, the slower of the heel point and
+  the ball is followed against the ground and its movement summed; the worst plant counts. It is
+  a distance per plant, not a share of speed. `plants` (how many each foot has), and
+  `plant_frames_min` and `plant_frames_med` (game frames; check `--expect 'plant_frames_min>=4'`)
+  come from the same emulated markers: a take scaled past its own speed loses its short plants.
+  The raw number reads lower than the laptop's on the baked clip (see docs/GAME_BRIEF.md), so
+  marker_check on the bake stays the final word;
 - toe slide (gaits; reported, check it with `--expect 'toe_slide_pct<=5'`): the slower toe near the
   floor as a share of the body's speed (median), the laptop's no-slide line; air_share: flight;
 - air (`hop` or a name starting with jump): the longest stretch with both feet off the ground;
@@ -148,12 +153,15 @@ LIMITS = {  # check: (metric, limit, "max" | "min")
     "turn": ("turn_err_deg", 12.0, "max"),
     "facing": ("facing_drift_deg", 15.0, "max"),
     "cadence": ("cadence_err", 0.12, "max"),
+    "plant_slide": ("plant_slide_cm", 4.0, "max"),  # gaits: marker_check.py's SLIDE_M, on the raw take (see measure)
     "air": ("air_s", 0.2, "min"),  # jumps (a `hop` window or a name starting with jump)
     "hop": ("hop_iou", 0.7, "min"),  # the airborne stretch against the entry's `hop` [t0, t1]
 }
 SOFT = {"pop", "floor_fingers"}
 TOE_REST_M = 0.02  # the toe joint's height standing (stand#3)
-HEEL_REST_M = 0.0705  # the ankle joint's height standing
+# marker_check.py's heel point (under the ankle at the ball's height, a quarter of the foot behind
+# the ankle), in each ankle joint's own frame, from the neutral pose stand#3@45
+HEEL_IN_ANKLE = {"L": (0.0032, -0.0501, -0.0332), "R": (-0.0007, -0.0506, -0.0333)}
 K_GAME = 0.955  # game metres per SOMA metre on Vivi (a path-pinned take's baked natural speed over its raw speed; Shino 0.985, own-man 0.93)
 GAIT_SLIDE_CM_S = 10.0  # a gait's contacts include touchdown and toe-off frames; a turn's heels sweep about the ball
 
@@ -190,7 +198,8 @@ def turned(q, turn):
 def load(path):
     d = np.load(path)
     return {"P": d["posed_joints"].astype(np.float64), "root": d["root_positions"].astype(np.float64),
-            "fc": d["foot_contacts"].astype(bool), "R": d["local_rot_mats"].astype(np.float64)}
+            "fc": d["foot_contacts"].astype(bool), "R": d["local_rot_mats"].astype(np.float64),
+            "G": d["global_rot_mats"].astype(np.float64)}
 
 
 def ref_pose(spec, neutral, dirs, offset=(0.0, 0.0), turn_deg=0.0):
@@ -538,37 +547,61 @@ def measure(e, take, lib, dirs, refs):
             m["air_share"] = round(float(air[a:].mean()), 2)  # both feet off the ground: a run's flight
             m["hips_bounce_cm"] = round(100 * float(np.ptp(root[a:, 1])), 1)  # run#1: 8, run_fast#1: 9; a bounding take: 30+
         if fam and dist > 0.2:
-            # the bake's foot-down markers (animate.py foot_markers), emulated on the raw take driven
-            # at the entry's `game_speed` (game m/s on Vivi; default: the take's own speed): a foot is
-            # down while its heel or ball is within 3 cm (game) of its standing height and moves at
-            # most 0.3 game m/s in the game's world. Time-scaling by s shortens a plant to 1/s of its
-            # frames and makes it s times faster, so short plants vanish. The laptop's rule
-            # (2026-11-12): every plant holds at least 4 frames at the game speed
+            # Plants and planted slide, as the game's marker_check.py measures them on the baked
+            # clip (living/tools/marker_check.py, `slide`), emulated on the raw take driven at the
+            # entry's `game_speed` (game m/s on Vivi; default: the take's own speed):
+            # - the take is re-timed as the bake does (animate.py resample: n / time-scale frames);
+            # - a foot is down in a frame while its heel point or its ball is within 3 cm (game) of
+            #   the sole's standing height and moves at most 0.3 game m/s to the next frame
+            #   (animate.py foot_markers), gaps of up to 2 frames filled and plants of up to 2
+            #   dropped (clean_contacts(gap=2, short=2)); the heel point is under the ankle at the
+            #   ball's height, a quarter of the foot behind it, rigid with the foot;
+            # - over each plant, the slower of the two points' movement against the ground is
+            #   summed frame by frame; the ground passes at the clip's own speed, which on the raw
+            #   take is the point's movement in the take's world. The worst plant is the slide.
+            # It is a total distance per plant (cm), not a share of speed. marker_check warns
+            # above 4 cm; the laptop's rule (2026-11-12) is also that every plant holds 4 frames.
             nat = m["speed_m_s"] * K_GAME
             sc = float(e["game_speed"]) / nat if e.get("game_speed") and nat > 0 else 1.0
+            n_ = T - 1
+            mm = max(2, round(n_ / sc))
+            xs = np.arange(mm + 1) * n_ / mm
+            i0 = np.minimum(np.floor(xs).astype(int), n_)
+            i1 = np.minimum(i0 + 1, n_)
+            wt = (xs - i0)[:, None]
             lens, slides, counts = [], [], {}
-            for side, pts in (("L", (LFOOT, LTOE)), ("R", (RFOOT, RTOE))):
-                dn = np.zeros(T, bool)
-                for j, rest in zip(pts, (HEEL_REST_M, TOE_REST_M)):
-                    pv = np.zeros(T)
-                    pv[:-1] = np.hypot(*(P[1:, j, [0, 2]] - P[:-1, j, [0, 2]]).T) * FPS
-                    pv[-1] = pv[-2]
-                    dn |= ((P[:, j, 1] - rest) * K_GAME <= 0.03) & (pv * K_GAME * sc <= 0.3)
-                merged = []
-                for x, y in runs(dn):  # animate.py's clean_contacts: gaps of up to 2 game frames filled
-                    if merged and x - merged[-1][1] - 1 <= max(1, round(2 * sc)):
-                        merged[-1][1] = y
-                    else:
-                        merged.append([x, y])
-                wins = [(x, y) for x, y in merged if (y - x + 1) / sc > 2 and x >= a and y < T - 1]  # and plants of up to 2 dropped
+            for side, ank, ball in (("L", LFOOT, LTOE), ("R", RFOOT, RTOE)):
+                heel = P[:, ank] + np.einsum("tij,j->ti", d["G"][:, ank], np.array(HEEL_IN_ANKLE[side]))
+                pts = [heel[i0] * (1 - wt) + heel[i1] * wt, P[i0, ball] * (1 - wt) + P[i1, ball] * wt]
+                step = [np.hypot(*(q[1:, [0, 2]] - q[:-1, [0, 2]]).T) for q in pts]  # to the next frame
+                dn = np.zeros(mm, bool)
+                for q, st in zip(pts, step):
+                    dn |= ((q[:-1, 1] - TOE_REST_M) * K_GAME <= 0.03) & (st * FPS * K_GAME <= 0.3)
+                c = list(dn)
+                for val, run in ((True, 2), (False, 2)):
+                    i = 0
+                    while i < mm:
+                        if c[i] != val:
+                            j = i
+                            while j < mm and c[j] != val:
+                                j += 1
+                            if j - i <= run and i > 0 and j < mm:
+                                c[i:j] = [val] * (j - i)
+                            i = j
+                        else:
+                            i += 1
+                slow = np.minimum(step[0], step[1])
+                wins = [(x, y + 1) for x, y in runs(c) if x >= a / sc and y + 1 < mm]  # whole plants after the skip
                 counts[side] = len(wins)
-                lens += [(y - x + 1) / sc for x, y in wins]
-                slides += [float(np.hypot(*(P[y, pts[1], [0, 2]] - P[x, pts[1], [0, 2]]))) * K_GAME for x, y in wins]
+                lens += [y - x for x, y in wins]
+                slides += [float(slow[x:y].sum()) * K_GAME for x, y in wins]
             m["time_scale"] = round(sc, 3)
             m["plants"] = f"L{counts['L']} R{counts['R']}"
-            m["plant_frames_min"] = round(min(lens), 1) if lens and min(counts.values()) else 0.0
+            m["plant_frames_min"] = int(min(lens)) if lens and min(counts.values()) else 0
             m["plant_frames_med"] = round(float(np.median(lens)), 1) if lens else 0.0
-            m["plant_slide_cm"] = round(100 * max(slides), 1) if slides else None
+            # a foot that never plants cannot be measured: 99 fails the check
+            m["plant_slide_cm"] = round(100 * max(slides), 1) if slides and min(counts.values()) else 99.0
+            m["plant_slide_med_cm"] = round(100 * float(np.median(slides)), 1) if slides else None
         # `cadence_ref`: the forward entry made for the same speed (a forward take names itself: its
         # period and metres a cycle are reported, not checked). Default: the family's forward gait
         ref_name = e.get("cadence_ref", fam)
@@ -932,7 +965,7 @@ def seeds_used(name, dirs):
 
 
 def summary(m, checks):
-    keys = ["active", "frozen", "floor_hands", "floor_fingers", "floor_feet", "floor_body", "slide", "drift", "loop_pose", "loop_vel",
+    keys = ["active", "frozen", "floor_hands", "floor_fingers", "floor_feet", "floor_body", "slide", "drift", "plant_slide", "loop_pose", "loop_vel",
             "start_key", "end_key", "path", "travel", "travel_dir", "turn", "facing", "cadence", "air", "hop", "pop"]
     bits = []
     for k in keys + [k for k in checks if k.startswith("expect_")]:

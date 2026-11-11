@@ -331,7 +331,26 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 
       For a 3.4 m/s walk, `walk_v30` driven at 3.4 (time scale 1.14) is cleaner than any take made near 3.4.
     - **Lessons from the laptop's verdicts on the speed takes (2026-11-12):**
-      - **Check plants at the game speed before a handoff.** A take that is time-scaled loses its short plants: the game's marker check found a foot that never registers as planted on three directional runs scaled 1.42–1.55. `plant_frames_min` emulates the bake's foot-down markers on the raw take at an entry's `game_speed` (heel or ball within 3 cm of standing height and at most 0.3 game m/s); the rule is 4 frames or more (`--expect 'plant_frames_min>=4'`). It does not reproduce the planted slide the laptop measured on those takes (21–40 cm), so its `plant_slide_cm` is a lower bound until the two are matched.
+      - **Planted slide is the gate for gaits.** `plant_slide_cm` is the game's `living/tools/marker_check.py` slide, emulated on the raw take driven at the entry's `game_speed` (game m/s on Vivi). For each plant, the slower of two points (the heel point under the ankle, a quarter of the foot behind it, and the ball) is followed against the ground passing at the clip's own speed, and its movement is summed; the worst plant counts. It is a distance per plant in cm, not a share of speed, so compare it with marker_check's number, not with `toe_slide_pct`. The check is built in for every gait at marker_check's 4 cm. `plants` (per foot), `plant_frames_min` and `plant_frames_med` come from the same emulated foot-down markers (heel point or ball within 3 cm of the sole's standing height and at most 0.3 game m/s, gaps of 2 frames filled, plants of 2 dropped, after the bake's re-timing); the laptop's rule is 4 frames or more (`--expect 'plant_frames_min>=4'`).
+      - **How far the raw number can be trusted** (2026-11-12, against the laptop's marker_check on the baked clips of three rigs):
+
+        | Clip (time scale) | `plant_slide_cm`, raw | Laptop, baked, cm | Agree at 4 cm? |
+        |---|---|---|---|
+        | `walk_v30` (1.00) | 2.9 | 3–7, accepted | yes |
+        | `walk_v34` (1.04) | 4.8 | 10–19, failed | yes |
+        | walk diagonals of the 2.6 set (1.00) | 2.6, 3.7, 3.2, 3.0 | 3–9 | yes |
+        | `walk_back_v26` (1.00) | 4.6 | 14–24 | yes |
+        | `strafe_walk_left_v26` (1.00) | 4.7 | 15–21 | yes |
+        | `walk_brisk` #1 (1.00, unpinned) | 4.7 | 3–6, today's clip | no: the raw number is over the line |
+        | `run_back_v48` (1.48) | 2.1; feet plant 2 and 1 times in 3.5 s | 37–40 | no |
+        | `run_diag_fr_v48` (1.48) | 2.0 | 21 | no |
+        | `run_diag_fl_v48`, `run_diag_bl_v48` (1.48) | 2.3, 1.2; bl plants once a foot | clean | slide yes; the plant count is too strict on bl |
+        | `strafe_run_left_v48`, `strafe_run_right_v48`, `run_diag_br_v48` (1.48) | 1.3–2.2; 2–3 plants a foot, shortest 3 frames | a foot never planted | by plants, not by slide |
+
+        - **Walks near their own speed:** it sides with the laptop on all eight reported takes, but it reads 2 to 5 times lower than the bake on the failing ones (4.6–4.8 against 10–24 cm), so the margin at the line is thin: the worst passing walk reads 3.7 and the best failing one 4.6.
+        - **Takes scaled well past their own speed (×1.3 and more):** the raw slide does not show the bake's (2 against 21–40 cm). The warning there is the plants: a 3-frame shortest plant and feet that plant fewer times than they step. Hold those to `plant_frames_min>=4` and a plant every stride.
+        - Unpinned takes that speed up over their length (`walk_brisk` #1, `walk_v26`'s last second at 6.2) read high because the whole take after the skip is scored, not the bake's one cut cycle.
+        - marker_check on the baked clip stays the final word; the lab's number is for not handing off what will plainly fail. The bake cannot be run on the Spark (no Blender).
       - **One stride a loop.** Keep the entry's `cycle` upper bound under twice the take's step period: two diagonal walks with a 0.6–0.68 s period and `cycle` up to 1.2 s were cut as two strides.
       - **Directional takes are not worth more lab time for now.** None of the 14 backward, sideways and diagonal takes of the 2.6 m/s walk set and the 4.8 m/s run set was wired. Since look-walk the legs stay on the travel line, so directional loops play only after sudden turns and at the twist limit, where the procedural fallback does as well.
     - **Not covered:** it judges the raw take, not the retargeted VRoid clip. Skirts, grips, the game's foot IK and how a clip looks in the renderer are judged in the game.
