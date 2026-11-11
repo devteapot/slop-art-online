@@ -74,6 +74,29 @@ PICKS = {
     "run_stop": (1, "starts in run#1's frame 91 (the right foot comes down) at run#1's speed; three braking steps, still by 0.93 s"),
     "jump_stand": (4, "in the air 0.63-1.10 s (0.47 s); the hips rise 0.38 m and the feet clear 0.27 m, less than the 0.45 m asked"),
     "jump_forward": (2, "a leap off the left foot: in the air 0.97-1.43 s, against the path's hop window 0.95-1.394 s (1.674 m at 3.77 m/s, the rules' jump); a run-up at run#1's speed before, slowing to 1.9 m/s after. Only seeds 2, 4 and 7 leap; 4 and 7 are in the air too early or too long"),
+    # Group B. Cycles are animate.py's best loop cut on the raw take; the forward picks cut the same way are
+    # walk#1 1.067 s and 1.70 m a cycle, run#1 0.70 s and 2.30 m a cycle.
+    "walk_back": (1, "cycle 1.10 s (x1.03 of walk#1) at 1.1 m/s: 1.22 m a cycle against walk#1's 1.70 m; hips ahead within 3 degrees; toe ends 1.8 cm under the floor at push-off (11 frames). Seeds 2 and 5 are cleaner on the floor at a 1.0 s and 0.97 s cycle"),
+    "run_back": (2, "a backward jog: cycle 0.73 s (x1.05 of run#1) at 2.0 m/s, 1.47 m a cycle against run#1's 2.30 m; almost no flight"),
+    "strafe_walk_left": (3, "a step touch: the only seed of 8 whose feet never cross (heels 9.5 to 77 cm apart). Slower than the walk: cycle 1.40 s (x1.31 of walk#1) at 0.46 m/s, 0.64 m a cycle. The relaxed-arm side-step prompts all crossed the trailing foot behind"),
+    "strafe_walk_right": (3, "a step touch, feet never cross (heels 4 to 76 cm apart); cycle 1.53 s (x1.44 of walk#1) at 0.44 m/s, 0.69 m a cycle. Seed 0 has the walk's cadence (1.13 s) and no crossing, but its chest turns up to 16 degrees and the arms lift"),
+    "strafe_run_left": (3, "crossover steps: cycle 0.70 s (x1.00 of run#1) at 2.0 m/s, 1.40 m a cycle against run#1's 2.30 m; chest within -9..5 degrees of ahead"),
+    "strafe_run_right": (6, "crossover steps: cycle 0.67 s (x0.95 of run#1) at 2.0 m/s, 1.33 m a cycle; chest within -7..1 degrees of ahead; toe ends 1.4 cm under the floor for 7 frames"),
+    "strafe_walk_cross_left": (1, "not asked for: a sideways walk with the feet crossing, close to the forward walk: cycle 1.00 s (x0.94 of walk#1) at 1.3 m/s, 1.31 m a cycle; arms down"),
+    "strafe_walk_cross_right": (3, "not asked for: a sideways walk with the feet crossing: cycle 0.90 s (x0.84 of walk#1) at 1.3 m/s, 1.18 m a cycle; arms down. Seeds 0 and 5 match the walk's cadence but hold the hands at chest height"),
+    # Group C. The asked-for hop from a walk did not come out: with a walking run-up the takes kept stepping.
+    "jump_back": (3, "from and to the neutral pose, not from a walk; in the air 0.70-1.03 s against the path's hop 0.6-1.044 s. Fails the floor on every seed: toe ends up to 3.7 cm under it for 20 frames here, the least of 8"),
+    "jump_left": (3, "from and to the neutral pose, not from a walk; in the air 0.67-1.00 s against the path's hop 0.6-1.044 s; feet clear 0.33 m; toe end 1.8 cm under the floor for 6 frames"),
+    "jump_right": (1, "from and to the neutral pose, not from a walk; in the air 0.70-1.03 s against the path's hop 0.6-1.044 s; toe ends 2.2 cm under the floor for 15 frames; the hips turn up to 7 degrees"),
+    # Group B, optional diagonals.
+    "walk_diag_fl": (5, "cycle 1.00 s (x0.94 of walk#1) at 1.4 m/s, 1.44 m a cycle; the feet cross; chest 3 to 10 degrees to the right of ahead"),
+    "walk_diag_fr": (1, "cycle 1.00 s (x0.94 of walk#1) at 1.4 m/s, 1.39 m a cycle; the feet cross; chest within -7..8 degrees. Seed 0 has the walk's cycle but holds the hands at chest height"),
+    "walk_diag_bl": (1, "cycle 1.07 s (x1.00 of walk#1) at 1.1 m/s, 1.16 m a cycle; the feet cross; chest within -7..3 degrees"),
+    "walk_diag_br": (0, "cycle 1.07 s (x1.00 of walk#1) at 1.1 m/s, 1.16 m a cycle; the feet cross; chest within -6..4 degrees"),
+    "run_diag_fl": (3, "cycle 0.73 s (x1.05 of run#1) at 2.6 m/s, 1.91 m a cycle; chest within -7..7 degrees. Seeds 1, 2 and 4 turn the chest 17 to 18 degrees"),
+    "run_diag_fr": (5, "cycle 0.70 s (x1.00 of run#1) at 2.6 m/s, 1.84 m a cycle; chest up to 13 degrees to the left of ahead"),
+    "run_diag_bl": (5, "a backward jog: cycle 0.77 s (x1.10 of run#1) at 2.0 m/s, 1.54 m a cycle; chest within -6..7 degrees"),
+    "run_diag_br": (3, "a backward jog: cycle 0.73 s (x1.05 of run#1) at 2.0 m/s, 1.47 m a cycle; chest within -9..4 degrees"),
 }
 
 
@@ -117,6 +140,50 @@ def entries():
     p = profile([[0, R], [t0 - 0.25, R], [t0, JV], [t0 + JT, JV], [t0 + JT + 0.35, 1.9], [total, 1.9]], total)
     add("jump_forward", prompt="a person running forward leaps forward over a gap, lands and keeps walking", seconds=total, seeds=s8,
         path=p, kind="once", travel="path", hop=[t0, round(t0 + JT, 3)])
+    # Group B: loops for the "face the cursor" scheme. The hips are pinned to a straight line at a
+    # steady speed and to face ahead (heading 0). Each has its own speed key, so animate.py keeps
+    # its natural speed unless a target is given for that key.
+    def loop(name, prompt, seconds, speed, direction, gait, cycle, travel_deg, key, seeds=s8):
+        add(name, prompt=prompt, seconds=seconds, seeds=seeds, path=line(seconds, speed, direction), heading=0, kind="loop",
+            locomotion=gait, cycle=cycle, skip=1.5, speed=key, travel_deg=travel_deg)
+
+    loop("walk_back", "a person walks backward, looking straight ahead, arms swinging lightly", 6, 1.1, (0, -1), "walk", [0.8, 1.4], 180, "walk_back")
+    loop("run_back", "a person jogs backward, backpedaling, looking straight ahead", 5, 2.0, (0, -1), "run", [0.5, 0.9], 180, "run_back")
+    for side, x, deg in (("left", 1, -90), ("right", -1, 90)):
+        loop(f"strafe_walk_{side}", f"a person does a step touch to the {side}, over and over, arms relaxed at the sides", 6, 0.45, (x, 0),
+             "walk", [1.0, 1.8], deg, "strafe_walk")
+    for side, x, deg in (("left", 1, -90), ("right", -1, 90)):
+        loop(f"strafe_run_{side}", f"a person runs sideways to the {side} with crossover steps, chest facing forward", 5, 2.0, (x, 0),
+             "run", [0.5, 0.9], deg, "strafe_run")
+    # Not asked for: a sideways walk whose feet cross, at the forward walk's cadence and nearly its
+    # cycle length. The step touch above does not cross but is slower and covers 0.64 m a cycle.
+    for side, x, deg in (("left", 1, -90), ("right", -1, 90)):
+        loop(f"strafe_walk_cross_{side}", f"a person steps sideways to the {side}", 6, 1.3, (x, 0), "walk", [0.8, 1.4], deg, "strafe_walk_cross", s6)
+
+    # Group C: hops for the cursor scheme, from and to the neutral pose, facing ahead. The path
+    # holds the rules' hop (1.674 m in 0.444 s) from 0.6 s, with 0.15 s to speed up and to stop.
+    t0, total = 0.6, 1.7
+    knots = [[0, 0], [t0 - 0.15, 0], [t0, JV], [t0 + JT, JV], [t0 + JT + 0.15, 0], [total, 0]]
+    for name, word, d, deg in (("jump_back", "backward", (0, -1), 180), ("jump_left", "sideways to the left", (1, 0), -90),
+                               ("jump_right", "sideways to the right", (-1, 0), 90)):
+        p = profile(knots, total, d)
+        add(name, prompt=f"a person takes a big leap {word} and lands", seconds=total, seeds=s8, start="neutral", end="neutral",
+            end_offset=end_of(p), path=p, heading=0, kind="once", travel="path", hop=[t0, round(t0 + JT, 3)], travel_deg=deg)
+
+    # Group B, optional: diagonal travel facing ahead.
+    c = 0.7071
+    for tag, d, deg in (("fl", (c, c), -45), ("fr", (-c, c), 45), ("bl", (c, -c), -135), ("br", (-c, -c), 135)):
+        side = "left" if d[0] > 0 else "right"
+        if d[1] > 0:
+            loop(f"walk_diag_{tag}", f"a person walks diagonally forward to the {side}, chest facing forward", 6, 1.4, d, "walk", [0.8, 1.4], deg, "walk_diag", s6)
+        else:
+            loop(f"walk_diag_{tag}", f"a person walks backward diagonally to the {side}, looking straight ahead", 6, 1.1, d, "walk", [0.8, 1.4], deg, "walk_diag_back", s6)
+    for tag, d, deg in (("fl", (c, c), -45), ("fr", (-c, c), 45), ("bl", (c, -c), -135), ("br", (-c, -c), 135)):
+        side = "left" if d[0] > 0 else "right"
+        if d[1] > 0:
+            loop(f"run_diag_{tag}", f"a person runs diagonally forward to the {side}, chest facing forward", 5, 2.6, d, "run", [0.5, 0.9], deg, "run_diag", s6)
+        else:
+            loop(f"run_diag_{tag}", f"a person jogs backward diagonally to the {side}, looking straight ahead", 5, 2.0, d, "run", [0.5, 0.9], deg, "run_diag_back", s6)
     return out
 
 
