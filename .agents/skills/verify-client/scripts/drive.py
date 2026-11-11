@@ -83,8 +83,8 @@ SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
 OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how']
-OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
-UNWALKABLE = {2, 4, 7}      # water, rock, wall
+OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
+UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
 # `my_combat`, so these calls succeed for any living character.
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block']}
@@ -96,6 +96,8 @@ ADMIN = {
     'grant_repertoires': [], 'purge_dead': [], 'kill': [0, 'probe'],
     'set_background': [0, '{}'], 'grant_items': [0, 'berries', 0],
     'place_structure': [0, 'shelter'], 'set_behavior': [0, '{"wait":30}'],
+    # Scene setup: a resource node beside a character (2026-11-11, goods-1).
+    'place_resource': [0, 'tree', 0.0, 0.0, 0.0, 0],
     'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
     'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
     'spawn_newcomer': ['probe'],
@@ -462,6 +464,16 @@ class Run:
         write(self.directory / 'visibility.json', visibility)
         self.check('private table visibility', all(v['pass'] for v in visibility), 'visibility.json',
                    f'{len(visibility)} tables ({self.mode} build)')
+        # What a client reads to show a fire burning and a shared stock (2026-11-11, goods-1):
+        # `structure.lit_until_ms` and `resource_node.pool` are public in every build, while the
+        # inventory a fire's fuel would otherwise be is private when scoped.
+        try:
+            fires, stocks, error = self.sql_rows('SELECT id, kind, lit_until_ms FROM structure'), self.sql_rows('SELECT id, kind, pool FROM resource_node'), ''
+        except RuntimeError as e:
+            fires, stocks, error = [], [], str(e)
+        write(self.directory / 'fire-signal.json', {'error': error, 'structures': fires[:20], 'resource_nodes': stocks[:20], 'counts': [len(fires), len(stocks)]})
+        self.check('fire and shared-stock signals public to anonymous SQL', not error and fires and stocks and
+                   all('lit_until_ms' in r for r in fires) and all('pool' in r for r in stocks), 'fire-signal.json', error[:120])
         # The minds' thoughts, raw replies included, never reach a client without the owner's token.
         leaked = self.probe('privacy-thought', ['SELECT * FROM thought'])
         self.check('anonymous thought privacy', leaked['status'] == 'rejected' and 'private' in leaked.get('error', '').lower(),

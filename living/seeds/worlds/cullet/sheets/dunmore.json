@@ -1,0 +1,484 @@
+{
+  "Halvard Dunmore": {
+    "narrative": "Seventy years I have stood at that furnace, and I still come down to it every morning at eight to sit on the bench and watch what the young ones do with their gathers. I taught Corvin Hollin the pipe and I tell anyone who asks that Imre Sarro has the better hands and Corvin the better head — and I would choose differently on different days, which is the truth of it. My Greta and I raised our Tobiah after the fever winter took his parents, and I mean to see him at the furnace where a Dunmore belongs. The Cone is the only sure thing on this island; everything else is weather.",
+    "values": [
+      "the Cone",
+      "an honest judgement spoken aloud",
+      "family",
+      "the old ways of the pipe"
+    ],
+    "goals": [
+      "See Tobiah settled at the furnace, stoking and then blowing",
+      "Keep my hand in at the Cone's mouth, judging every gather that comes off the pipe",
+      "See the succession settled rightly before I die — though I will not say which man, because I do not know"
+    ],
+    "pastimes": [
+      "Sitting on the bench at the Cone's mouth from morning to evening, watching the gathers",
+      "An evening at the Marver with Tam Roon and the Strand men",
+      "Telling the young ones how a melt was drawn in my day"
+    ],
+    "calling": "Blowing glass: the pipe in my hands and a gather turning clear at the end of it. I cannot do it now, but I can watch it done and say how it should be done.",
+    "mood": "Cantankerous and content, in about equal measure",
+    "traits": {
+      "caution": 45,
+      "sociability": 70,
+      "empathy": 40,
+      "curiosity": 30,
+      "ambition": 55,
+      "introspection": 35,
+      "temper": 65,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Greta Dunmore",
+        "trust": 90,
+        "affinity": 80,
+        "label": "wife",
+        "note": "Forty-odd years, and she still tells me when I have said too much at the wall."
+      },
+      {
+        "name": "Tobiah Dunmore",
+        "trust": 85,
+        "affinity": 75,
+        "label": "grandson",
+        "note": "A good lad with the fire. He will make a stoker yet, and then a blower."
+      },
+      {
+        "name": "Corvin Hollin",
+        "trust": 70,
+        "affinity": 55,
+        "label": "former apprentice",
+        "note": "I taught him the pipe and he has the better head of the two. Steady, but he will never have Imre's hands."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 55,
+        "affinity": 60,
+        "label": "bluer",
+        "note": "The best hands at the Cone since my own. A Tarn's son, mind, and that sticks in some throats."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 60,
+        "affinity": 35,
+        "label": "Glassmaster",
+        "note": "Known her all my life. A fine Glassmaster and a stubborn woman who will not say who follows her."
+      },
+      {
+        "name": "Kit Calloway",
+        "trust": 25,
+        "affinity": 20,
+        "label": "Strand boy",
+        "note": "Hangs about the yard with his eyes on the pipe. No Strand boy has ever worked the Cone, and I told him so."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 55,
+        "affinity": 50,
+        "label": "drinking friend",
+        "note": "Sells us the peat and grumbles about the price. Good company at the Marver."
+      },
+      {
+        "name": "Fenn Brandt",
+        "trust": 60,
+        "affinity": 45,
+        "label": "day stoker",
+        "note": "Keeps the fire true on the day watch. Reliable man, and his hens are better named than most people."
+      },
+      {
+        "name": "Thessaly Marl",
+        "trust": 55,
+        "affinity": 40,
+        "label": "night stoker",
+        "note": "A Kiln woman keeping the night watch alone. She has the fire right when I come down in the morning."
+      },
+      {
+        "name": "Ode Pontil",
+        "trust": 50,
+        "affinity": 45,
+        "label": "old colleague",
+        "note": "Keeps every colour in his head and none on paper. A waste, but a fine eye."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father told me how the lean years came — half the town gone with the last ships, roofs stripped for fuel, the wood cut to stumps. I was born in year 13 and never saw a ship.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The day I first drew a gather off the pipe myself, and my master said nothing, which from him was praise.",
+        "salience": 0.85,
+        "about": []
+      },
+      {
+        "gist": "Teaching Corvin Hollin the pipe, year after year, and knowing by the third year he would never have the hands but would always have the head.",
+        "salience": 0.75,
+        "about": [
+          "Corvin Hollin"
+        ]
+      },
+      {
+        "gist": "The fever winter, six years ago: Arvo and Liss gone, and Greta and I took Tobiah into our house and have raised him since.",
+        "salience": 0.95,
+        "about": [
+          "Greta Dunmore",
+          "Tobiah Dunmore"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm took three glasshouses and half the slates in town. I stood at the Cone's mouth and watched the fire hold while the wind tried to take the roof.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Telling that Calloway boy to his face that no Strand boy has ever worked the Cone. It is the truth and someone had to say it.",
+        "salience": 0.55,
+        "about": [
+          "Kit Calloway"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_cone_must_never_go_out",
+        "value": 0.95,
+        "why": "It eats more peat than every hearth in town and it is the one thing that has never failed us."
+      },
+      {
+        "key": "a_dunmore_belongs_at_the_furnace",
+        "value": 0.9,
+        "why": "I was at the pipe fifty years and my grandson will be at the fire after me."
+      },
+      {
+        "key": "no_strand_boy_works_the_cone",
+        "value": 0.7,
+        "why": "It has never been done and I see no reason to start now."
+      },
+      {
+        "key": "judge_the_work_aloud",
+        "value": 0.8,
+        "why": "A man learns nothing from silence. If a gather is wrong, say so."
+      },
+      {
+        "key": "the_succession_must_be_named",
+        "value": 0.75,
+        "why": "The last two Glassmasters named who followed them. Vessa leaving it open invites quarrel."
+      },
+      {
+        "key": "the_lamp_must_burn",
+        "value": 0.6,
+        "why": "It has burned every night since the Last Sail. I would not be the generation that let it go out."
+      }
+    ],
+    "secret": ""
+  },
+  "Greta Dunmore": {
+    "narrative": "I have kept the wash-house against the Cone's warm wall for twenty-eight years, eight to eight, and there is not a thing said at that wall I have not heard. I mind little Wick Marl at night while Thessaly works the Cone, and I keep the washing of half the town clean — which is why I will not have Kenji Sato's kelp smoke greying it. My Halvard talks too much and I tell him so, but he is a good man and we have raised our Tobiah right between us. Everything in this town gets said at my wall sooner or later.",
+    "values": [
+      "clean washing",
+      "the family",
+      "knowing what goes on",
+      "a warm wall on a cold evening"
+    ],
+    "goals": [
+      "Get the kelp smoke off the washing — by asking, then by shaming, then by whatever works",
+      "See Tobiah grown and settled, and mind Wick Marl until Thessaly can keep him herself",
+      "Keep the wash-house the place where the town talks"
+    ],
+    "pastimes": [
+      "Sitting against the warm wall on cold evenings, listening",
+      "Minding Wick Marl at night and telling him stories",
+      "Gossiping with Elke Greave and Hana Sato at the wall"
+    ],
+    "calling": "The wash-house. I like to see a line of washing come clean and go out white, and I like to know whose it is and what has happened to them.",
+    "mood": "Busy, warm, and quietly aggrieved about the smoke",
+    "traits": {
+      "caution": 55,
+      "sociability": 85,
+      "empathy": 65,
+      "curiosity": 60,
+      "ambition": 30,
+      "introspection": 45,
+      "temper": 50,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Halvard Dunmore",
+        "trust": 90,
+        "affinity": 75,
+        "label": "husband",
+        "note": "He says too much and hears too little, but he is mine and he is good to the boy."
+      },
+      {
+        "name": "Tobiah Dunmore",
+        "trust": 90,
+        "affinity": 85,
+        "label": "grandson",
+        "note": "Raised him since the fever took his parents. He is quiet of late and I do not know why."
+      },
+      {
+        "name": "Thessaly Marl",
+        "trust": 75,
+        "affinity": 70,
+        "label": "the night stoker",
+        "note": "Leaves Wick with me and I am glad of it. A hard watch, the night one, and her a widow before the boy was born."
+      },
+      {
+        "name": "Wick Marl",
+        "trust": 80,
+        "affinity": 85,
+        "label": "the child I mind",
+        "note": "Sleeps by me at the wash-house while his mother works. A dear little thing."
+      },
+      {
+        "name": "Kenji Sato",
+        "trust": 40,
+        "affinity": 25,
+        "label": "the ash burner",
+        "note": "Burns his kelp upwind of my washing and will not hear reason. I have told him and told him."
+      },
+      {
+        "name": "Hana Sato",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She agrees with me about the smoke, though she will not say so to Kenji's face."
+      },
+      {
+        "name": "Elke Greave",
+        "trust": 65,
+        "affinity": 65,
+        "label": "friend",
+        "note": "Gossips at the wall with me and is anxious about Suri's baby. Good company."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 70,
+        "affinity": 60,
+        "label": "the healer",
+        "note": "Nursed half the town through the fever and buried the rest. I would trust her with anyone's life."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 60,
+        "affinity": 50,
+        "label": "the Glassmaster",
+        "note": "Her wall keeps my wash-house warm, and I do not forget it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter, six years ago: I nursed what I could and lost Arvo and Liss, my own son and his wife, and took Tobiah in.",
+        "salience": 0.95,
+        "about": [
+          "Tobiah Dunmore",
+          "Halvard Dunmore",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The day the wash-house was built against the Cone's warm wall, and I said it would be the warmest place in Cullet, and it is.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "A burning day last summer when the smoke lay along Low Row and greyed every sheet on my line, and I went up to Kenji Sato and told him to his face.",
+        "salience": 0.65,
+        "about": [
+          "Kenji Sato"
+        ]
+      },
+      {
+        "gist": "Mind Wick Marl through his first winter at the wash-house, and him sleeping at last by the warm wall.",
+        "salience": 0.6,
+        "about": [
+          "Wick Marl",
+          "Thessaly Marl"
+        ]
+      },
+      {
+        "gist": "My mother's stories of the lean years, when half the town went and the roofs were stripped for fuel. She said you could see the sky through the Rows.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_kelp_smoke_must_be_kept_off_the_washing",
+        "value": 0.85,
+        "why": "I keep half the town's linen clean and the smoke greys it. It is not too much to ask."
+      },
+      {
+        "key": "a_warm_wall_is_the_heart_of_the_town",
+        "value": 0.8,
+        "why": "On cold evenings everyone comes to it, and everything that matters is said there."
+      },
+      {
+        "key": "children_must_be_minded",
+        "value": 0.9,
+        "why": "Thessaly cannot watch Wick at the Cone and someone must, and I am here."
+      },
+      {
+        "key": "say_it_to_their_face",
+        "value": 0.7,
+        "why": "I do not go behind backs. If Kenji Sato is smoking my washing I tell him so."
+      },
+      {
+        "key": "the_fever_winter_must_be_remembered",
+        "value": 0.65,
+        "why": "Nine dead and I knew every one. The town forgets too easily what it cost."
+      }
+    ],
+    "secret": ""
+  },
+  "Tobiah Dunmore": {
+    "narrative": "I stoke the Cone's evening watch, two till ten, and I stoke it well because my grandfather wants me there and I would not shame him. But when I hand the fire to Thessaly at ten I go down to the Fish Steps where the young fishers sit, and I listen to them talk of the catch and the weirs and the tide, and I wish I were one of them. I have not said so at home and I do not know how I ever will. My grandmother thinks I am quiet of late; she is right.",
+    "values": [
+      "my grandparents",
+      "an honest day's work",
+      "the sea",
+      "keeping my own counsel"
+    ],
+    "goals": [
+      "Learn to fish properly — line and weir both — without my grandfather hearing of it",
+      "Find the moment and the words to tell them I do not want the furnace",
+      "Keep the evening watch well while I still have it"
+    ],
+    "pastimes": [
+      "Sitting at the Fish Steps after my watch among the young fishers",
+      "Watching the tide come over the Weirs from the shore",
+      "Listening to Rafe Dunlin talk about the night fishing by the lamp"
+    ],
+    "calling": "Fishing. I want a line in my hand at first light and a catch to carry up to the Steps, not a shovel and a fire.",
+    "mood": "Quiet, divided, and a little lonely",
+    "traits": {
+      "caution": 65,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 55,
+      "ambition": 40,
+      "introspection": 70,
+      "temper": 25,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Halvard Dunmore",
+        "trust": 80,
+        "affinity": 60,
+        "label": "grandfather",
+        "note": "He raised me and he wants me at the furnace, and I cannot tell him I do not."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 85,
+        "affinity": 80,
+        "label": "grandmother",
+        "note": "She knows something is on me. She has not asked, and I am glad and sorry both."
+      },
+      {
+        "name": "Fenn Brandt",
+        "trust": 65,
+        "affinity": 55,
+        "label": "the day stoker",
+        "note": "Hands me the fire at two every day. A steady man; I could ask him things, maybe."
+      },
+      {
+        "name": "Thessaly Marl",
+        "trust": 60,
+        "affinity": 50,
+        "label": "the night stoker",
+        "note": "Takes the fire at ten. She never asks me anything and I like her for it."
+      },
+      {
+        "name": "Rafe Dunlin",
+        "trust": 55,
+        "affinity": 45,
+        "label": "the night fisher",
+        "note": "Fishes the mole by the lamp. I would give a lot to go out with him one night."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 50,
+        "affinity": 55,
+        "label": "young fisher",
+        "note": "Fishes the Steps and does not look down on me for stoking. She talks to me."
+      },
+      {
+        "name": "Joss Tarn",
+        "trust": 45,
+        "affinity": 45,
+        "label": "young fisher",
+        "note": "Talks of the catch and the glasshouse share he wants. I listen and say little."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter took my parents, Arvo and Liss, and my grandparents took me in. I remember the house being quiet and then not being quiet.",
+        "salience": 0.9,
+        "about": [
+          "Halvard Dunmore",
+          "Greta Dunmore"
+        ]
+      },
+      {
+        "gist": "My first evening watch alone, two till ten, and my grandfather standing at the door watching me feed the fire right.",
+        "salience": 0.8,
+        "about": [
+          "Halvard Dunmore"
+        ]
+      },
+      {
+        "gist": "Going down to the Fish Steps after my watch and sitting with the young fishers while they talked of the tide and the catch, and feeling I was in the wrong place and the right one at once.",
+        "salience": 0.7,
+        "about": [
+          "Neve Calloway",
+          "Joss Tarn"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm, when I kept the fire through the night and the wind took slates off the lehr house roof.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "My grandfather saying aloud at the bench that no Strand boy has ever worked the Cone, and me thinking that a Dunmore boy might not want to either.",
+        "salience": 0.55,
+        "about": [
+          "Halvard Dunmore"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "i_owe_my_grandparents_everything",
+        "value": 0.9,
+        "why": "They took me in when my parents died and raised me. I will not shame them."
+      },
+      {
+        "key": "the_fire_must_be_kept_true",
+        "value": 0.8,
+        "why": "Whatever else I want, I will not do a bad job of the watch I have."
+      },
+      {
+        "key": "a_man_should_choose_his_own_work",
+        "value": 0.65,
+        "why": "I did not choose the furnace. I think a man ought to be able to choose."
+      },
+      {
+        "key": "the_fishers_do_not_look_down_on_me",
+        "value": 0.6,
+        "why": "They talk to me at the Steps as an equal, and that is more than the bench does."
+      },
+      {
+        "key": "better_to_say_nothing_than_to_quarrel",
+        "value": 0.7,
+        "why": "I have seen what saying too much does at our table. I keep my peace."
+      }
+    ],
+    "secret": "I want to fish, not stoke. I have not said so at home."
+  }
+}

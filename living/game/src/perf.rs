@@ -8,6 +8,8 @@
 //! - `nopeople`: no characters on the island;
 //! - `nosmall`: no small things (grass, flowers, props under 1.6 m) on the island;
 //! - `nostencil`: environment meshes and ground draw no outline stencil;
+//! - `nofar`: no coarse ground and sea past the island's 170 m, and no landmarks past 190 m
+//!   (`island::stream`, `live::lots`): the long view's cost;
 //! - `nohair`, `charopaque`: characters without hair, or with alpha-masked materials drawn opaque;
 //! - `shadowmap=N`, `cascades=N`, `shadowfar=M`: the sun's shadow map size, cascade count and
 //!   reach;

@@ -1,5 +1,15 @@
 # Knowledge validation
 
+## 2026-11-11 fix-death-labels on main (Spark)
+
+Main at `7837320` (the merge of `fix-death-labels`: `die` keeps the dead's name for its community, `witnessed` reads "you" for the event's object), worktree on the DGX Spark, against the trial container `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake model only, load average 19–29 from other work.
+
+- `verify_knowledge.py` (`knowledge-vdeath-20261111-155918`): all 20 proofs pass, including "death erases know-how and preserves tablets"; cleanup removed the database, the scratch Neo4j and the journal.
+- `facts_mind.py` (`knowledge-facts-vd-20261111-160643`): all four proofs pass, including "a stranger stays a stranger in what the mind is sent".
+- `player_memory.py --mode direct` (`knowledge-pmem-vd-20261111-160643`): all five proofs pass, including the death phase.
+- `player_memory.py --mode batch`: the first run (`knowledge-pmem-vdb-20261111-161258`) failed at `assert 'player memory on' in log`: the mind logged only its subscription before the driver read the log, which the driver reads once right after `world subscribed:`. A harness timing fault under load, not this change; the rerun (`knowledge-pmem-vdb2-20261111-161447`) passes all five.
+- The dead's name kept by its community is not asserted by these runners; `verify-minds`' `death-names` case (this date) and `verify-core`'s `death-names` scene cover it.
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.

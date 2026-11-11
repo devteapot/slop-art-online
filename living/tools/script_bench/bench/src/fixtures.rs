@@ -186,6 +186,8 @@ fn target(r: &mut Rng, actor_id: u32) -> TargetFacts {
         owner: 0,
         home: String::new(),
         hosts: false,
+        lit: false,
+        fuel: 0.0,
     }
 }
 
