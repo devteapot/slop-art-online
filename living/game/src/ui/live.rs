@@ -51,7 +51,7 @@ pub struct Last {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, (talk, looks, pick): (Option<Res<crate::talk::Talk>>, Res<crate::looks::Looks>, Res<crate::pick::Pick>), mut last: Local<Last>) {
+pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, (talk, looks, pick, rules, clock): (Option<Res<crate::talk::Talk>>, Res<crate::looks::Looks>, Res<crate::pick::Pick>, NonSend<crate::verbs::Rules>, Res<crate::daylight::Clock>), mut last: Local<Last>) {
     let now_ms = scene.now_ms;
     let now = now_ms / 1000.0;
     model.shown = true;
@@ -106,7 +106,9 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         last.dead = None;
     }
     let perceived = |id: u32| chars.get(&id).map(|c| c.label.clone()).or_else(|| last.labels.get(&id).cloned());
-    model.death = last.dead.and_then(|id| mine.get(&id)).map(|c| death(c, combat.killer.and_then(perceived))).map(|mut d| {
+    // The death row (`my_act_outcomes`, kind `death`): its code and, killed, the killer's id.
+    let died = conn.db.my_act_outcomes().iter().filter(|o| o.kind == "death").max_by_key(|o| o.at_ms);
+    model.death = last.dead.and_then(|id| mine.get(&id)).map(|c| death(c, died.as_ref().filter(|o| o.other != 0).map(|o| o.other).or(combat.killer).and_then(perceived), died.as_ref())).map(|mut d| {
         // Who saw it, as my character perceived (the authority's `WITNESS` rows).
         if !combat.witnesses.is_empty() {
             d.witnesses = Some(combat.witnesses.iter().map(|w| perceived(*w).unwrap_or_else(|| "someone".to_string())).collect());
@@ -125,28 +127,15 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         let hunger = (v.hunger + v.hunger_rate * m).clamp(0.0, 100.0);
         let energy = (v.energy + v.energy_rate * m).clamp(0.0, 100.0);
         let since_hurt = (now_ms - v.hurt_ms as f64) as f32 / 1000.0;
-        let mut statuses = Vec::new();
-        // Thresholds where the authority starts telling the character (brain.rs percepts).
-        if hunger >= 97.0 {
-            statuses.push(Status { kind: StatusKind::Starving, tone: Tone::Bad });
-        } else if hunger >= 80.0 {
-            statuses.push(Status { kind: StatusKind::Hungry, tone: Tone::Warn });
-        }
-        if energy < 12.0 {
-            statuses.push(Status { kind: StatusKind::Exhausted, tone: Tone::Bad });
-        } else if energy < 35.0 {
-            statuses.push(Status { kind: StatusKind::Tired, tone: Tone::Warn });
-        }
-        if v.hurt_ms > 0 && since_hurt < 15.0 {
-            statuses.push(Status { kind: StatusKind::InCombat, tone: Tone::Bad });
-        }
-        if v.hp_rate < 0.0 {
-            statuses.push(Status { kind: StatusKind::Wasting, tone: Tone::Bad });
-        } else if v.hp_rate > 0.0 && hp < v.max_hp {
-            statuses.push(Status { kind: StatusKind::Recovering, tone: Tone::Good });
-        }
+        // The bars and pills from the world's `meters()` and `status_of` over my vitals row read
+        // generically (no column named here): a new vital is one column and one meters row.
+        let (meters, statuses) = match (rules.scripts.as_ref(), mine.get(&id)) {
+            (Some(sc), Some(c)) => my_body(sc, v, &c.kind, crate::verbs::stage_name(c.stage), sc.is_night(clock.hour()), now_ms),
+            _ => (Vec::new(), Vec::new()),
+        };
         let name = mine.get(&id).map_or(net.name.clone(), |c| c.name.clone());
-        Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, statuses, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
+        let _ = hunger;
+        Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, meters, statuses, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
     });
     let hostile = |id: u32| me.is_some_and(|m| crate::combat::hostile_to_me(conn, id, m, now_ms));
     // Others' health as anyone sees it: the band of their `fighter` row, if they have fought.
@@ -328,6 +317,32 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.map = MapInfo { me: here, facing: input.facing(), yaw: cam.shown_yaw, pois: places.iter().map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect(), place };
 }
 
+/// My body as the world's rules read it: the bars (`meters()`, the shown ones in order, each value
+/// moved along `<field>_rate` per minute since `<field>_from_ms` or the row's `at_ms`, held
+/// within its max) and the pills (`status_of` over the same facts the authority and the minds
+/// build). The row is read by field name, generically.
+fn my_body(sc: &living_rules::script::Scripts, row: &impl spacetimedb_sdk::__codegen::__sats::ser::Serialize, kind: &str, stage: &str, night: bool, now_ms: f64) -> (Vec<MeterView>, Vec<StatusView>) {
+    let Ok(json) = spacetimedb_sdk::__codegen::__sats::ser::serde::serialize_to(row, serde_json::value::Serializer) else { return (Vec::new(), Vec::new()) };
+    let fields = living_rules::script::body::fields_of_json(&json);
+    let get = |k: &str| fields.iter().find(|(n, _)| n == k).map(|(_, v)| *v);
+    let mut ms: Vec<&living_rules::script::body::Meter> = sc.meters().iter().filter(|m| m.shown).collect();
+    ms.sort_by_key(|m| m.order);
+    let meters = ms
+        .iter()
+        .filter_map(|m| {
+            let raw = get(&m.value)?;
+            let max = m.max_of(&fields)?;
+            let rate = get(&format!("{}_rate", m.value)).unwrap_or(0.0);
+            let from = get(&format!("{}_from_ms", m.value)).or_else(|| get("at_ms")).unwrap_or(now_ms);
+            let v = (raw + rate * ((now_ms - from).max(0.0) / 60_000.0)).clamp(0.0, max.max(0.0));
+            Some(MeterView { name: m.name.clone(), label: m.label.clone(), value: v as f32, max: max as f32 })
+        })
+        .collect();
+    let facts = living_rules::script::BodyFacts::of(kind, stage, night, &fields, sc.meters(), now_ms.max(0.0) as u64);
+    let statuses = sc.status_of(&facts).map(|v| v.iter().map(|s| StatusView { name: s.name.clone(), tone: Tone::parse(&s.tone), text: s.text.clone() }).collect()).unwrap_or_default();
+    (meters, statuses)
+}
+
 /// What the bar says when an item a skill needs is not carried.
 fn missing(item: &str) -> String {
     // Ammunition is counted, so it reads in the plural.
@@ -351,20 +366,32 @@ pub fn default_bar(state: impl Fn(Key) -> SkillState) -> Vec<Skill> {
     ]
 }
 
-/// The death screen's words. A killer is named as I perceived them (`killer`: the label of
-/// the one my `DEATH` row names), never from `cause`, whose text carries the real name.
-fn death(c: &Character, killer: Option<String>) -> Death {
-    let cause = c.cause.trim();
-    let cause = if cause.is_empty() {
-        "You died".to_string()
-    } else if cause == "starvation" {
-        "You starved".to_string()
-    } else if cause == "old age" {
-        "You died of old age".to_string()
-    } else if cause.starts_with("killed by ") {
-        format!("Killed by {}", killer.unwrap_or_else(|| "someone".to_string()))
-    } else {
-        format!("You died of {cause}")
+/// The death screen's words: from the death row's code (`living_rules::outcome`), else from
+/// `cause`. A killer is named as I perceived them (`killer`: the label of the one the death row
+/// or my `DEATH` row names), never from `cause`, whose text carries the real name.
+fn death(c: &Character, killer: Option<String>, row: Option<&ActOutcome>) -> Death {
+    let by = || format!("Killed by {}", killer.clone().unwrap_or_else(|| "someone".to_string()));
+    let cause = match row.map(|o| o.code.as_str()) {
+        Some("starved") => "You starved".to_string(),
+        Some("cold") => "You died of cold".to_string(),
+        Some("exhausted") => "You died of exhaustion".to_string(),
+        Some("old_age") => "You died of old age".to_string(),
+        Some("killed") | Some("killed_yielding") => by(),
+        Some(_) if !row.is_some_and(|o| o.why.trim().is_empty()) => super::label(row.map_or("", |o| o.why.trim()).trim_end_matches('.')),
+        _ => {
+            let cause = c.cause.trim();
+            if cause.is_empty() {
+                "You died".to_string()
+            } else if cause == "starvation" {
+                "You starved".to_string()
+            } else if cause == "old age" {
+                "You died of old age".to_string()
+            } else if cause.starts_with("killed by ") {
+                by()
+            } else {
+                format!("You died of {cause}")
+            }
+        }
     };
     let lived_ms = c.died_ms.saturating_sub(c.born_ms);
     Death { cause, place: None, lived: (lived_ms > 0).then(|| lived(lived_ms)), witnesses: None }

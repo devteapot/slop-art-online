@@ -1517,6 +1517,18 @@ pub fn input(
     wants.menu = v.menu.is_some();
 }
 
+/// An outcome line's note, from its structured row (`my_act_outcomes`, joined by the line's
+/// id): what was done, or the rules' own words for why not. A line whose row has not come
+/// (an older line, a row not yet here) is read from its words.
+pub fn outcome_of(conn: &DbConnection, e: &Experience) -> (Option<bool>, String) {
+    match conn.db.my_act_outcomes().id().find(&e.id) {
+        Some(o) if o.ok => (Some(true), crate::ui::label(&o.what)),
+        Some(o) if !o.why.trim().is_empty() => (Some(false), crate::ui::label(o.why.trim().trim_end_matches('.'))),
+        Some(o) => (Some(false), crate::ui::label(&o.what)),
+        None => outcome_text(&e.text),
+    }
+}
+
 /// The authority's word on what I sent: my `act` experiences and refused calls.
 fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: ResMut<Verbs>) {
     let now = time.elapsed_secs_f64();
@@ -1544,7 +1556,7 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
         if (e.at_ms as f64) + 1_000.0 < oldest || v.pending.is_empty() {
             continue;
         }
-        let (ok, text) = outcome_text(&e.text);
+        let (ok, text) = outcome_of(conn, &e);
         v.toasts.push(Toast { text, ok, at: now });
         if let Some(i) = v.pending.iter().position(|p| p.act) {
             let p = v.pending.remove(i);

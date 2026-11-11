@@ -122,7 +122,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
             t.met.entry(who).or_default().introduced_ms = Some(e.at_ms);
             t.events.push((e.at_ms, wood::readable(&e.text)));
         } else if matches!(e.kind.as_str(), "act" | "record") {
-            t.events.push((e.at_ms, crate::verbs::outcome_text(&e.text).1));
+            t.events.push((e.at_ms, net.conn.as_ref().map_or_else(|| crate::verbs::outcome_text(&e.text).1, |c| crate::verbs::outcome_of(c, &e).1)));
         }
     }
     // A name the rules gave since: an event too.

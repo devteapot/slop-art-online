@@ -93,10 +93,14 @@ pub struct Me {
     pub name: String,
     pub hp: f32,
     pub max_hp: f32,
-    /// The rules' `energy` need, 0..100: the resource bar.
+    /// The rules' `energy` need, 0..100 (what a skill's cost is checked against today).
     pub energy: f32,
     pub max_energy: f32,
-    pub statuses: Vec<Status>,
+    /// The bars, as the world's `meters()` lists them (shown ones, in order): each value moved
+    /// along its rate since its row was written, so a bar refills between updates.
+    pub meters: Vec<MeterView>,
+    /// How the body is, as the world's `status_of` says (the pills).
+    pub statuses: Vec<StatusView>,
     /// 1 just after being hurt, fading to 0 (a flash on the health bar).
     pub hurt: f32,
 }
@@ -118,6 +122,36 @@ pub enum Tone {
     Good,
     Warn,
     Bad,
+    Plain,
+}
+
+impl Tone {
+    /// A status's tone as the rules name it (`TONES`: good, warn, bad, plain).
+    pub fn parse(s: &str) -> Tone {
+        match s {
+            "good" => Tone::Good,
+            "warn" => Tone::Warn,
+            "bad" => Tone::Bad,
+            _ => Tone::Plain,
+        }
+    }
+}
+
+/// One bar of my body (`meters()`): its words and where it stands now.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MeterView {
+    pub name: String,
+    pub label: String,
+    pub value: f32,
+    pub max: f32,
+}
+
+/// One status pill (`status_of`): its name, how it reads and its words.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StatusView {
+    pub name: String,
+    pub tone: Tone,
+    pub text: String,
 }
 
 pub struct Status {
