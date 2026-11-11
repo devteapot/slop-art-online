@@ -1,5 +1,21 @@
 # Validation record (player)
 
+## 2026-11-11 speech with the `speech_audience` law off (exp-greet, Spark)
+
+Branch `exp-greet`, the trial service `slop-trials-stdb` (port 3320). `player-1111-152137`, the speech part of `player-character.md`, passed. An addressed and an unaddressed `human_say` gave the same chronicle lines and listener experiences as before ("A stranger said to you: …", salience 0.9; the unaddressed line was also 0.9, because the listener was the only one close by). No `audience` row was written. `set_paused` and `install_script` were refused to the player ("admin only"), and the player's SQL on `audience` was refused (a private table). The other recipes were not rerun.
+
+## 2026-11-11 look-2: a held look turns the facing, not the travel (dev-box)
+
+Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d609819d`) on the dev-box, own container `look2-stdb` (2.14.1, port 3330, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Evidence under the worktree's `.local/living/verify/`.
+
+- `face.py` rewritten for the decoupled look: travel from successive position anchors, the facing's turn checked against the turn rate and sampled only after it settles (tolerances 0.5° travel and facing, 1% speed), open ground off the road. The pre-`look-2` walking check was flaky on the laptop (−1.02 and −0.02 rad against −0.52): both are steering's slide plan (±0.5 rad) round something ahead of a walker placed in town, not the clamp or the turn rate.
+- Merged build, final script: `player-look2-n` `face.py` 28 of 28 three times in a row (`face-run1..3.json`), the same numbers each run: travel 0.000°, speed 1.0000× cruise, sideways 0.0000; `face_turn` ∓6 rad/s for 0.1309 s (45°) and 0.2182 s (75°); settled facing −45, −75, −75, +75° for looks 45, 90, 135, 180° north (the 180° look from a facing on the travel takes the +π side), −75° for 180° after a look north (no turn: the north shoulder kept), back to 0° on release at +6 rad/s; three of eight looks taken in the narrowed bucket each run.
+- Merged build, the script before the source-wave fixes: `player-look2-m` `face.py` 27 of 27 three times; `fov.py` 18 of 18.
+- Before the merge: `player-look2-b` `face.py` 27 of 27 three times, the same numbers. Earlier attempts on `player-look2-a`: 13 of 21 (the walk ran into an obstacle and slid: heading −1.0 rad), 21 of 22 (a road sped the walk; the 180° look crossed the front before `BEHIND_BAND`), 21 of 22 (`place_at` put a wall between player and resident), 21 of 22 (Q out of range by the time the look was sent): each fixed in the script or, for the 180° crossing, in `steer::walk_face`.
+- `maintain-verification-skill` on the look feature (source wave, one reader): fixed the 180° side, the clamped `input_hz` (0.2 is taken as 1; the script now sets 1 and waits 4 s), the slack rule's conditions, and listed what is not driven live.
+- After merging origin/main again (`dfc8bcec`, rules-senses-outcomes and fix-health-leak): `player-look2-f` `face.py` 28 of 28 three times, the same numbers (cruise 2.8126 m/s for that character); `fov.py` 15 of 18: `place_at` put the player 5.0 m from R (435.5 for 436.0), within `heard_near_m`, so R was heard near, not close, and the two heard-row checks that look for the close row failed. `fov.py` now tries residents until the player stands 5.25–5.9 m off. `player-look2-g`: 17, 18, 18, 18 of 18; run 1 (the first drive on the fresh world) failed "kept at 75° once seen" once, with the 65° and 100° checks passing; not reproduced in three more runs. Kept as an intermittent failure, not waived.
+- Not run on this change: the other player scripts.
+
 ## 2026-11-11 rules-senses-outcomes: my_senses, my_act_outcomes (Spark)
 
 Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change: `senses.py` and `outcomes.py` new, `combat.py`'s death scene extended; the feature map gains `senses.md` and `outcomes.md`, and main's duplicated paragraph in SKILL.md is one again.
@@ -7,6 +23,14 @@ Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb`
 - `player-sso-214702` (default seed): `senses.py` 8 of 8 (by day; the torch at night passed on `player-senses-204918`'s second run, 6 m to 9 m); `outcomes.py` 7 of 7; `command.py` 4 of 4; `told.py` 11 of 12 on the first run (the player's gift broken off by the receiver moving away wrote no line within the script's window while the AI's did; host load about 37), 12 of 12 on the second.
 - `player-sso-island-215136` (island): `combat.py --scene death` 4 of 4: killed by a wolf, a `death` row with code `killed` and the wolf's id in `other`, its line "You were killed by …".
 - Earlier on the branch: `player-senses-204918` (senses 7 of 7, then 9 of 9 after the death case and a wait after a handback), `player-outcomes-210154` (outcomes 6 of 7, then 7 of 7 after waiting for the `own` line, which can come up to one release after its row).
+
+## 2026-11-11 ui-1 step 4: the bar, offer cards, face out of the lists (laptop)
+
+Branch `ui-1-step4` (origin/main merged at `5cd546da`), on the laptop's Docker SpacetimeDB 2.14.1, `scoped`, no model calls; world `verify-player-ui1d` (`$V launch --run player-ui1d --seed island`, joined as `Verifier`). The step changes no authority code; the rules are identical with every `_ui()` stripped (`living_rules` test), and its acts go through `human_act` and `use_skill` as before.
+
+- `offers.py` 17 of 17, `answers.py` 9 of 9 (the decline told to the walker, the player's outcome), `gesture.py` 10 of 10.
+- `offers.py` now has the walker ask for hide, not berries: the island's newcomer arrives with berries, so "accept without the goods" was accepted at once on a fresh world (an earlier run here: 13 of 17).
+- `combat.py --scene all`: 26 of 26 on `player-ui1c` before origin/main's `fix-place-free` (e3f0527f); 16 of 26 on `player-ui1d` after it. Every failure is a staged fight: the target is put on the nearest free tile, out of a strike's reach ("refused: out of reach"), and the jump finds "no room to jump". Not this branch's: its scenes need placing for the new `place_at`. Evidence `.local/living/verify/player-ui1d/combat.txt`.
 
 ## 2026-11-11 speech-2: whisper and call, refusals in the script's words (Spark)
 
@@ -245,6 +269,10 @@ Genericity: scratch authority with a throwaway `polish` (catalog line and `polis
 ## 2026-11-11, branch fix-perceived-moving (a walking player is perceived walking)
 
 Spark, the trial stack's own server (`slop-trials-stdb`, v2.14.1, :3320), worktree on `origin/main` 6a905c3 plus the change (docs/PERCEPTION.md "Activity derived from the body"). New script `approach.py`. Before the change, on island worlds built from `origin/main` (`fixperc-pre2` at 4df9a89, `fixperc-pre3` at 6a905c3 with the three authority files reverted), `--expect-wait` passed: the resident R's scene had the walking player as `"doing": "wait"`, its first sight was "For the first time you see a stranger, 11 tiles west, wait.", and the AI walking the same line read `goto → person`. After the change, on fresh island worlds (`fixperc-post4`, and `player-fixperc-1`), all 6 checks passed: the walking player read `walk → person`, R's first sight was "For the first time you see a stranger, 11 tiles west, walk → person.", the player standing read `wait`, and the AI read `goto → person`. A bystander player's `seen_bodies` held both bodies moving and its `seen_doing` no row for either. In the same `player-fixperc-1` world, `appraise.py` passed 10/10 and `gesture.py` 10/10. Earlier attempts (`fixperc-post`, `-post2`, `-post3`) show the fixture problems the script now handles: a resident on a house tile with a campfire east of it, a side with no sight line, a just-published world's late `think`, and a crowd in which strangers are not announced. Evidence: `.local/living/verify/{fixperc-pre2,fixperc-pre3,fixperc-post4,player-fixperc-1}/approach.json`.
+
+## 2026-11-11, branch fix-staging-place (staging for the free-tile `place_at`)
+
+Spark, the trial stack's own server (`slop-trials-stdb`, v2.14.1, :3320), worktree on `origin/main` d2a2d228 plus the change. Each script on its own fresh run (`player-sta-*` island, plan-test and cullet-laws; `player-stb-*` default seed). `combat.py` before the change 19 of 26 (`player-stage-1111-221608`, "out of reach" in strike, kill and block; the laptop saw 16), after 26 of 26 on the same world with `--fresh`, then 25 of 26 on a fresh island world (`player-sta-combat`: the jump saw no blow in its 1 s window) and the jump scene 4 of 4 alone (`player-stc-jump`). Unchanged and passing: gesture 10, appraise 10, host 11, drop 6, workplace 15, speak 15, told 12, command 4, new_skill 6, fov 18, face 11, offers 17, answers 9, deal 13. `approach.py` 3 of 5 after appraise on `player-sta-appraise-approach` (the AI walker had already arrived when R's scene was taken: `goto` read as `wait`), 5 of 5 on `player-stc-jump`. `living/tools/combat_scene.py` put its residents 2.0, 8.0 and 1.0 m from the player, as asked.
 
 ## Not verified
 

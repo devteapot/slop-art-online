@@ -62,7 +62,7 @@ impl Rng {
     }
 }
 
-fn pos(m: &Motion, at_ms: u64) -> (f32, f32) {
+fn pos(m: &Moving, at_ms: u64) -> (f32, f32) {
     let dt = (at_ms.saturating_sub(m.t_ms) as f32 / 1000.0).min(2.0);
     (m.x + m.vx * dt, m.y + m.vy * dt)
 }

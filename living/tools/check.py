@@ -82,7 +82,11 @@ STEPS = [
      "cmd": ["cargo", "build", "--release", "--manifest-path", "living/Cargo.toml", "-p", "living-game"]},
     {"name": "viewer-wasm", "lane": "wasm-dev", "packages": ["living-viewer"], "dirs": ["wasm32-unknown-unknown/wasm-dev", "debug"],
      "cmd": ["cargo", "build", "--manifest-path", "living/viewer/Cargo.toml", "--target", "wasm32-unknown-unknown", "--profile", "wasm-dev", "--bin", "living-viewer"]},
+    # `inputs`: the rules' ratchet `ui::tests::the_game_client_names_no_new_skills` reads the
+    # game client's sources at run time (no dep-info names them), so a client-only change must
+    # run it again: fov-client (9ddd2b6d) failed it on main while the step's stamp was reused.
     {"name": "rules-tests", "lane": "debug", "packages": ["living-rules"], "dirs": ["debug"],
+     "inputs": ["living/game/src"],
      "cmd": ["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-rules"]},
     # A seed's own laws are in force after `init` (the authority's path, natively): what a
     # harness installing another script over them would take away (fix-laws).

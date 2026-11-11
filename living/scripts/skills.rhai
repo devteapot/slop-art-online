@@ -51,6 +51,10 @@ fn laws() {
         // sets this in its seed's `rules`, like any law here. Every person has a mind: no law
         // turns minds off (docs/SEEDED_LIVES.md, "Every person a mind").
         cry_prompts_carers: true,
+        // Speech records who heard each line, how far and how far off the speaker's facing
+        // (the private `audience` table, kept a minute), for the minds' conversation rules
+        // (LIVING_GREET, `nearest` by default). Off: nothing is written.
+        speech_audience: true,
         // A grown person longs for a child this many real minutes after its own birth or its
         // youngest child's (the most nurturing sooner, down to a sixth of it), and only while
         // carrying at least `longing_food` food (0: whatever it carries).
@@ -68,10 +72,11 @@ fn laws() {
         // near within `heard_near_m`, close within `heard_close_m`, far out to hearing; it
         // lingers `heard_linger_s` after it was last heard.
         heard_near_m: 5.0, heard_close_m: 15.0, heard_linger_s: 2.0,
-        // A player's look (`human_face`): a change within `look_slack_deg` of the look held (or
-        // of where the body stands facing) is nothing new; walking, the body turns toward the
-        // look at most `look_walk_deg` off the way it is told to go (the walk bends with it).
-        look_slack_deg: 10.0, look_walk_deg: 30.0,
+        // A held look (`human_face`): a change within `look_slack_deg` of the look held (or
+        // of where the body stands facing) is nothing new; walking, the body still goes where it
+        // is told at full speed, and only its facing (head and chest: what it sees by, where a
+        // guard faces) turns toward the look, at most `look_walk_deg` off its way.
+        look_slack_deg: 10.0, look_walk_deg: 75.0,
         // Moving and breath (docs/STAMINA.md). A grown person's walk (m/s, before age, genes and
         // tiredness: `walk_base()`; a player's Settings offer 3.0 and 3.4), a person's run as a
         // share of its walk, and the fastest a road takes anyone (m/s; a body faster on its own,
@@ -1440,12 +1445,25 @@ fn tend_combat() { #{ aim: "creature" } }
 fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump"] }
 // How a skill is presented to a player: `<skill>_ui()`, read once when the script is installed
 // (docs/INTERFACE.md). It only shows: what a skill may do is its spec, shape and check. A skill
-// that declares nothing is presented by how the rules aim it; these three look otherwise.
-fn strike_ui() { #{ look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" } } }
+// that declares nothing is presented by how the rules aim it. The bar's seven say where each
+// sits, the input it takes and its named look (step 2): Q blocks, E heals, R casts the fire bolt
+// (1–3 are their twins); Space jumps; a double tap of a direction dodges.
+fn strike_ui() { #{ label: "Strike", place: "primary", look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" }, running: #{ show: "windup" } } }
+fn bowshot_ui() { #{ label: "Bow shot", place: "secondary", input: "aim_point", marker: "line", look: #{ icon: "bow", clip: "shoot", effect: "arrow" }, running: #{ show: "windup" } } }
+fn block_ui() { #{ label: "Block", place: "skill", order: 0, input: "hold", marker: "arc", look: #{ icon: "shield", clip: "guard", effect: "guard_arc" }, running: #{ show: "held" } } }
+fn heal_ui() { #{ label: "Heal", place: "skill", order: 1, look: #{ icon: "heal", clip: "cast" }, running: #{ show: "windup" } } }
+fn firebolt_ui() { #{ label: "Fire bolt", place: "skill", order: 2, input: "aim_point", look: #{ icon: "fire", clip: "cast", effect: "bolt" }, running: #{ show: "windup" } } }
+fn dodge_ui() { #{ label: "Dodge", place: "dodge", look: #{ icon: "dodge", clip: "dash" } } }
+fn jump_ui() { #{ label: "Jump", place: "jump", look: #{ icon: "jump", clip: "jump" } } }
+// Accept is also an answer on an offer's card (its window): toward the offer's maker.
+fn accept_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
 fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }
 fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
+// A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
+// theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
+fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
-fn decline_ui() { #{ look: #{ icon: "trade" } } }
+fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }
@@ -2563,6 +2581,7 @@ fn laws_about(l) {
         spawn_energy: `and energy ${short(l.spawn_energy)}`,
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
         cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
+        speech_audience: if l.speech_audience { "who heard each line, and how they stood toward the speaker, is kept for a minute" } else { "who heard a line is not kept" },
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
@@ -2576,7 +2595,7 @@ fn laws_about(l) {
         heard_close_m: `within ${short(l.heard_close_m)} m it is close, farther it is far`,
         heard_linger_s: `a sound is kept in mind ${short(l.heard_linger_s)} s after it was last heard`,
         look_slack_deg: `a player's look within ${short(l.look_slack_deg)} degrees of the last is the same look`,
-        look_walk_deg: `walking, one turns toward where one looks at most ${short(l.look_walk_deg)} degrees off one's way`,
+        look_walk_deg: `walking, one goes where one is going and faces where one looks, at most ${short(l.look_walk_deg)} degrees off one's way`,
         walk_base: `a grown person walks ${l.walk_base} m/s`,
         run_share: `and runs ${l.run_share} times that`,
         run_top: `no road takes anyone past ${l.run_top} m/s`,

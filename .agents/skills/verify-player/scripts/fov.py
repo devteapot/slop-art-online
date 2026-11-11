@@ -62,18 +62,25 @@ def main():
     a = ap.parse_args()
     p = A.P(a.run)
     me = p.me("player", "Looker")
-    r = A.wait_for(lambda: A.resident(p, {me}), 60)
-    if not r:
-        A.check(p, "a resident stands still", False, "none found within 60 s")
-        return finish(p)
-    rid = r["id"]
+    # The player 5.5 m east of R (R lies west of it): beyond the near band of hearing (5 m), so
+    # R is heard as close. `place_at` takes the nearest walkable tile, which can put the player
+    # a metre nearer (heard as near) or farther: try residents until it stands 5.25-5.9 m off.
+    tried = {me}
+    for _ in range(8):
+        r = A.wait_for(lambda: A.resident(p, tried), 60)
+        if not r:
+            A.check(p, "a resident stands still", False, "none found within 60 s")
+            return finish(p)
+        rid = r["id"]
+        tried.add(rid)
+        x, y = r["at"]
+        p.call("place_at", [me, x + 5.5, y], "admin")
+        time.sleep(1.0)
+        b = body(p)
+        px, py = b["x"], b["y"]
+        if 5.25 <= math.dist((px, py), (x, y)) <= 5.9 and abs(py - y) < 0.6:
+            break
     p.call("set_behavior", [rid, json.dumps({"wait": 600})], "admin")
-    x, y = r["at"]
-    # The player 5.5 m east of R (R lies west of it).
-    p.call("place_at", [me, x + 5.5, y], "admin")
-    time.sleep(1.0)
-    b = body(p)
-    px, py = b["x"], b["y"]
     EVIDENCE["cast"] = {"player": me, "resident": rid, "resident_at": [x, y], "player_at": [px, py]}
     west = math.atan2(y - py, x - px)
 

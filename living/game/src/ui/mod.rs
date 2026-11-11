@@ -14,7 +14,9 @@
 //! replacing these widgets step by step. Its layout is the mock-up's, drawn at 1600×900, scaled
 //! with the window's height (`UiScale`).
 
+mod cluster;
 mod death;
+mod facing;
 mod frame;
 pub mod hit;
 mod icons;
@@ -25,6 +27,7 @@ pub mod model;
 mod numbers;
 mod overhead;
 mod pack;
+pub mod prim;
 pub mod people;
 mod prompt;
 mod sample;
@@ -79,22 +82,23 @@ impl Plugin for UiPlugin {
             .init_resource::<people::Hints>()
             .init_resource::<prompt::Tip>()
             .init_resource::<pack::Carrying>()
+            .init_resource::<prim::Slots>()
             .configure_sets(Update, UiInput.in_set(crate::phase::Phase::Input).before(crate::controls::movement))
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
             .init_resource::<ThemeState>()
             // The UI's trees are spawned once the theme is known, and again on each new theme.
-            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
+            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, prim::spawn_tooltip, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
-        let widgets = (frame::vitals, frame::status, frame::skills, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
-        let windows = (people::update, people::hints, prompt::update, say::update, pack::update);
+        let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
+        let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
         } else {
             // Connected play: the game UI's input, its windows and the live source.
-            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
+            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
-                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
                 .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare));
             if perf_on() {
@@ -293,7 +297,7 @@ pub struct Dump(pub Option<std::path::PathBuf>);
 
 /// Write the game UI's state: open windows (top last) with their anchors and rectangles (UI px
 /// and fractions of the picture), the Menu list, the list of acts, the words being typed and to
-/// whom, the weapon, and every tagged node shown.
+/// whom, the notes shown, the weapon, and every tagged node shown.
 #[allow(clippy::too_many_arguments)]
 fn dump(
     mut d: ResMut<Dump>,
@@ -329,11 +333,15 @@ fn dump(
         "acts": verbs.menu.as_ref().map(|m| serde_json::json!({"title": m.title, "group": m.group, "rows": m.rows().iter().map(|r| r.label()).collect::<Vec<_>>()})),
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone())})),
         "pointer_over_ui": ui.over_ui,
+        "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
         // Who is under the cursor (`pick.rs`), whose nameplates show as hovered, and the target plate.
         "under": pick.as_ref().and_then(|p| p.under),
-        "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground})).collect::<Vec<_>>()),
+        // `holds`: the cursor is inside its outline as `pick.rs` draws it (its own test).
+        "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground, "holds": extra.pointer.pos.is_some_and(|c| s.contains(c))})).collect::<Vec<_>>()),
         "hovered": model.actors.iter().filter(|a| a.hovered).map(|a| serde_json::json!({"id": a.id, "label": a.name})).collect::<Vec<_>>(),
         "targeted": model.actors.iter().find(|a| a.targeted).map(|a| a.id),
+        // The notes on screen now (the facing-sight readout among them).
+        "toasts": model.verbs.toasts.iter().map(|(t, _, _)| t.clone()).collect::<Vec<_>>(),
         "extra": extra.json(),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
     });
@@ -345,24 +353,45 @@ fn dump(
 
 /// Further state the dump reports, from the widgets of later steps.
 #[derive(bevy::ecs::system::SystemParam)]
-pub struct DumpExtra<'w> {
+pub struct DumpExtra<'w, 's> {
     prefs: Res<'w, crate::keys::Prefs>,
     binds: Res<'w, crate::keys::Binds>,
     theme: Res<'w, ThemeState>,
+    weapon: Res<'w, crate::weapon::Weapon>,
+    slots: Res<'w, prim::Slots>,
+    talks: Res<'w, people::Talks>,
+    tip: Query<'w, 's, &'static Node, With<prim::Tooltip>>,
+    tip_title: Query<'w, 's, &'static Text, (With<prim::TooltipTitle>, Without<prim::TooltipText>)>,
+    tip_text: Query<'w, 's, &'static Text, (With<prim::TooltipText>, Without<prim::TooltipTitle>)>,
     pointer: Res<'w, crate::pointer::Pointer>,
     cam: Res<'w, crate::camera::Cam>,
+    fov: Option<Res<'w, crate::facing::FovState>>,
+    heard: Option<Res<'w, crate::heardmark::HeardMarks>>,
+    edge: Option<Res<'w, crate::sightedge::SightEdge>>,
 }
 
-impl DumpExtra<'_> {
+impl DumpExtra<'_, '_> {
     fn json(&self) -> serde_json::Value {
+        // The bar's slots as drawn: what each is, why it is greyed, held, refused just now.
+        let slots: serde_json::Map<_, _> = self.slots.0.iter().map(|(k, v)| (k.0.clone(), serde_json::json!({"label": v.label, "key": v.key, "off": v.off, "held": v.held, "refused": v.refused.is_some(), "count": v.count, "caption": v.caption}))).collect();
+        let tip = self.tip.iter().any(|n| n.display != Display::None).then(|| serde_json::json!({"title": self.tip_title.iter().next().map(|t| t.0.clone()), "text": self.tip_text.iter().next().map(|t| t.0.clone())}));
         // The game's cursor (logical px in the window, and fractions of the picture), the view's
         // yaw and zoom, and the ground point under the cursor (x, height, y): what a view turn or
         // a zoom keeps or changes.
         let size = crate::capture::size().as_vec2();
         let cursor = self.pointer.pos.map(|p| serde_json::json!({"x": p.x, "y": p.y, "fx": p.x / size.x, "fy": p.y / size.y}));
         let ground = self.cam.cursor_ground.map(|g| serde_json::json!([g.x, g.y, g.z]));
+        // Facing sight: whether it is on, the field's five values, whether this client can switch
+        // it, and the heard marks (`facing.rs`, `heardmark.rs`).
+        let fov = self.fov.as_ref().map(|f| {
+            serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last,
+                "field": f.field.map(|v| serde_json::json!({"focal_deg": v.focal_deg, "side_deg": v.side_deg, "side_share": v.side_share, "near_m": v.near_m, "margin_deg": v.margin_deg}))})
+        });
         serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
-            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground})
+            "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
+            "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
+            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
+            "facing_sight": fov, "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name())})
     }
 }
 

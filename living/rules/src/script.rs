@@ -442,6 +442,10 @@ pub struct Laws {
     pub pasture_per_tile: f32,
     /// A crying infant makes its carers think about it; false: the cry is only heard.
     pub cry_prompts_carers: bool,
+    /// Speech records who heard each line and how they stood toward the speaker (the private
+    /// `audience` table), for the mind service's conversation rules (on since 2026-11-11, when
+    /// `LIVING_GREET=nearest` became the minds' default).
+    pub speech_audience: bool,
     /// Real minutes after one's own birth, or one's youngest child's, before a grown person
     /// feels the longing for a child; the most nurturing feel it sooner ([`longing_wait_ms`]).
     pub longing_after_min: f32,
@@ -455,8 +459,9 @@ pub struct Laws {
     pub heard_near_m: f32,
     pub heard_close_m: f32,
     pub heard_linger_s: f32,
-    /// A player's look (`human_face`): a change within this many degrees is the same look; walking,
-    /// the body turns toward the look at most this many degrees off its way.
+    /// A held look (`human_face`): a change within this many degrees is the same look; walking,
+    /// the body's facing (not its travel) turns toward the look at most this many degrees off its
+    /// way (`steer::walk_face`).
     pub look_slack_deg: f32,
     pub look_walk_deg: f32,
 }
@@ -507,6 +512,7 @@ impl Default for Laws {
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
             cry_prompts_carers: true,
+            speech_audience: true,
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
@@ -514,7 +520,7 @@ impl Default for Laws {
             heard_close_m: 15.0,
             heard_linger_s: 2.0,
             look_slack_deg: 10.0,
-            look_walk_deg: 30.0,
+            look_walk_deg: 75.0,
         }
     }
 }
@@ -2204,6 +2210,7 @@ impl Scripts {
             spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
             cry_prompts_carers: flag("cry_prompts_carers", l.cry_prompts_carers),
+            speech_audience: flag("speech_audience", l.speech_audience),
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
@@ -3003,6 +3010,25 @@ mod tests {
         assert_eq!((on.heard_as("person"), on.heard_as("wolf"), on.heard_as("hare")), ("person".into(), "wolf".into(), "creature".into()));
     }
 
+    /// How far a walker's facing may turn from its way toward a held look is the world's law:
+    /// 75 degrees shipped, a world's own value taken (and kept within 0..180).
+    #[test]
+    fn the_walking_look_limit_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert_eq!(shipped.laws().look_walk_deg, 75.0);
+        assert_eq!(shipped.law_value("look_walk_deg"), Some(serde_json::json!(75.0)));
+        let about = shipped.laws_about().into_iter().find(|(k, _)| k == "look_walk_deg").map(|(_, t)| t).unwrap_or_default();
+        assert!(about.contains("75 degrees"), "{about}");
+        let tuned = Scripts::new(&with_world_laws(src, &[("look_walk_deg".into(), serde_json::json!(40))])).unwrap();
+        tuned.validate().unwrap();
+        assert_eq!(tuned.laws().look_walk_deg, 40.0);
+        let wild = Scripts::new(&with_world_laws(src, &[("look_walk_deg".into(), serde_json::json!(400))])).unwrap();
+        assert_eq!(wild.laws().look_walk_deg, 180.0);
+        // Cullet's laws leave it alone: a Cullet world takes the shipped value.
+        assert!(!include_str!("../../seeds/worlds/cullet/laws.rhai").contains("look_walk_deg"));
+    }
+
     /// A script from before a required law runs with the shipped one merged under it. The two
     /// sources share line numbers, so the field analysis must not attribute one's statements to
     /// the other's functions: the borrowed law reads what it reads, every time.
@@ -3123,6 +3149,8 @@ mod tests {
         assert_eq!(over("fire_warmth", serde_json::json!(5)).unwrap().fire_warmth, 5.0);
         assert!(over("mindz", serde_json::json!(false)).unwrap_err().starts_with("`mindz` is not a law of this world"));
         assert!(over("cry_prompts_carers", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
+        // Who heard a line is kept by default (the minds' `LIVING_GREET=nearest` reads it); a world may turn it off.
+        assert!(sc.laws().speech_audience && !over("speech_audience", serde_json::json!(false)).unwrap().speech_audience);
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));

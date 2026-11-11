@@ -42,3 +42,4 @@ Checks, per preset (21 each):
 - `heading` is the authority's segment heading, which is the direction of motion: the legs are drawn on it. Under fov-1's `human_face` (not sent while walking until look-2) the travel itself bends up to `look_walk_deg`; the legs still follow it.
 - The newcomer walks at 2.43 m/s here (2.6 × the speed gene, × 0.6 at energy under 10 for a fresh `Bender`). The speed check compares like with like within one drive.
 - Brackenford's square is no place for this: separation from residents and roads (× 1.4) swing the heading and the speed.
+- Only frames from the first scripted `look:` count. Before it the body stands wherever the last drive left it, and the first-time tip's click can strike. Since fov-client, `human_face` turns a standing body toward the cursor, so a run after `field` used to fail the leg-jump and chest checks on those setup frames alone.

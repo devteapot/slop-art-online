@@ -26,3 +26,6 @@ Preconditions: a Cullet world (`$V launch --run ui-<…> --seed cullet`), not th
 
 - `place_at` snaps to the nearest walkable tile centre: spots are written as land metres and land on x.5.
 - Ordinary things in the way still fade (net lofts in front of the camera at the wall spot; a wall on the next level): that is the rule working, not a failure.
+- The Cullet kit must be in the checkout's assets: `living/game/assets/envs/cullet` (git-ignored; link it from the main checkout). Without it the flights and buildings are drawn as plain boxes, no kit file is named, and the stairs check fails for that reason alone.
+- The cutaway names what holds you up among things it never fades too (a structure a settlement's kit models, drawn by `world.rs` with no `Occluder`; low fixtures: "… holds me up; not an occluder"), only while `living_game::envs=debug` is on.
+- The first drive after linking a kit may stall while its models load and compile; a second run goes through.

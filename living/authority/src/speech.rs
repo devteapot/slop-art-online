@@ -17,6 +17,9 @@ use spacetimedb::{ReducerContext, Table, ViewContext};
 /// `gap_s` can only make it longer.
 pub const SPEAK_GAP_MS: u64 = 2_000;
 
+/// How long a line's `audience` row is kept (`speech_audience`).
+const AUDIENCE_KEEP_MS: u64 = 60_000;
+
 /// The way a name stands for (`""` is `say`).
 fn way_name(way: &str) -> &str {
     if way.is_empty() {
@@ -138,7 +141,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     if to != 0 && !hearers.iter().any(|(c, _, _)| c.id == to) {
         let seen = ctx.db.character().id().find(to).filter(|c| c.alive).and_then(|_| ctx.db.body().id().find(to)).is_some_and(|tb| {
             let p = pos(&tb, now);
-            crate::perception::in_sight(ctx, &common::map(ctx), speaker, at, common::heading_at(&b, now), to, p, common::dist(at, p), &world, now, false)
+            crate::perception::in_sight(ctx, &common::map(ctx), speaker, at, common::facing_at(&b, now), to, p, common::dist(at, p), &world, now, false)
         });
         let text = if seen {
             let louder = sc.ways().iter().filter(|o| o.public() && o.carry_for(1.0) > w.carry_for(1.0) && o.needs.is_empty()).max_by(|a, b| a.carry_for(1.0).total_cmp(&b.carry_for(1.0)));
@@ -149,8 +152,22 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
         };
         percept(ctx, &me, now, "silence", to, speaker, at, text, 0.35);
     }
-    let address = common::laws(ctx).address_m;
+    let laws = common::laws(ctx);
+    let address = laws.address_m;
     let close = hearers.iter().filter(|(_, d, _)| *d <= address).count();
+    // Who received the words and how they stood toward the speaker, for the minds' turn-taking
+    // (`LIVING_GREET`): one `audience` row per line, where the world keeps it (`speech_audience`).
+    if laws.speech_audience {
+        let face = common::heading_at(&b, now);
+        let people: Vec<Hearer> = hearers
+            .iter()
+            .map(|(c, d, p)| Hearer { id: c.id, d: *d, off: if *d < 0.01 { 0.0 } else { living_rules::steer::wrap((p.1 - at.1).atan2(p.0 - at.0) - face).abs() } })
+            .collect();
+        for old in ctx.db.audience().at_ms().filter(..now.saturating_sub(AUDIENCE_KEEP_MS)).map(|a| a.id).collect::<Vec<_>>() {
+            ctx.db.audience().id().delete(old);
+        }
+        ctx.db.audience().insert(Audience { id: 0, speaker, to, at_ms: now, hearers: people });
+    }
     // Saying one's own name tells it to everyone who receives the words (an introduction).
     let introduces = w.introduces && mentions(&text, &me.name);
     // Words to someone that hold their name tell it to those who receive them and see whom it
@@ -161,7 +178,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     // Whether creature `id`, standing at `eye`, sees `target` at `p` (the one sight rule, with
     // its facing when the world's law gives it a field).
     let sees = |id: u32, eye: (f32, f32), target: u32, p: (f32, f32)| {
-        ctx.db.body().id().find(id).is_some_and(|ob| crate::perception::in_sight(ctx, &map, id, eye, common::heading_at(&ob, now), target, p, common::dist(eye, p), &world, now, false))
+        ctx.db.body().id().find(id).is_some_and(|ob| crate::perception::in_sight(ctx, &map, id, eye, common::facing_at(&ob, now), target, p, common::dist(eye, p), &world, now, false))
     };
     for (c, d, p) in hearers.iter().copied() {
         let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
@@ -204,7 +221,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     if let Some(line) = said_id {
         let mut seen: Vec<(f32, u32)> = hearers
             .iter()
-            .filter(|(c, d, p)| crate::perception::in_sight(ctx, &map, speaker, at, common::heading_at(&b, now), c.id, *p, *d, &world, now, false))
+            .filter(|(c, d, p)| crate::perception::in_sight(ctx, &map, speaker, at, common::facing_at(&b, now), c.id, *p, *d, &world, now, false))
             .map(|(c, d, _)| (*d, c.id))
             .collect();
         seen.sort_by(|a, b| a.0.total_cmp(&b.0));

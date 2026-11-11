@@ -292,6 +292,22 @@ pub struct Body {
     /// How long the turn lasts from `t_ms`, seconds (then straight on).
     #[default(0.0f32)]
     pub turn_s: f32,
+    /// Facing (head and chest; what facing sight and a guard read) as an offset from the travel
+    /// heading, radians at `t_ms`, turning at `face_turn` rad/s for the first `face_turn_s`
+    /// seconds, then held (`living_rules::steer::facing`; `common::facing_at`). 0 for a body
+    /// with no held look: it faces its heading. Written with the segment, never on its own.
+    #[default(0.0f32)]
+    pub face_off: f32,
+    #[default(0.0f32)]
+    pub face_turn: f32,
+    #[default(0.0f32)]
+    pub face_turn_s: f32,
+    /// Running now (docs/STAMINA.md): a run under way with breath, for every controller (a
+    /// player's run key, a graph's or a mind's `run`, a flight, a wolf's charge); false walking,
+    /// out of breath, standing, or dashing. Written with the motion, so a client draws the gait
+    /// the rules move (a run is not inferred from speed: walks differ by world and setting).
+    #[default(false)]
+    pub running: bool,
 }
 
 /// What a body is steering for (private; written when the goal changes, not per update).
@@ -318,9 +334,9 @@ pub struct Steer {
     /// Movement input bucket of a player (tokens refill at the `input_hz` law).
     pub tokens: f32,
     pub input_ms: u64,
-    /// A player's look (`human_face`): held while `look_on`, the direction (radians, the same
-    /// angle as `body.heading`) the body turns to. It is an input, like the movement direction
-    /// in `gx`/`gy`; the body's facing is still only `body.heading`.
+    /// A held look (`human_face`): held while `look_on`, the direction (radians, the same
+    /// angle as `body.heading`) the body faces. It is an input, like the movement direction in
+    /// `gx`/`gy`; what the body does with it is its facing, `body.face_*`.
     #[default(false)]
     pub look_on: bool,
     #[default(0.0f32)]
@@ -627,6 +643,33 @@ pub struct InfantCry {
     pub needs: Vec<InfantNeed>,
     pub heard_ms: u64,
     pub prompted: Vec<CryPrompt>,
+}
+
+/// One person who heard a line: how far from the speaker, and how far off the speaker's
+/// facing they stood (radians, 0 = straight ahead, up to pi = behind).
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct Hearer {
+    pub id: u32,
+    pub d: f32,
+    pub off: f32,
+}
+
+/// Who heard a line and how they stood toward the speaker. Written by `speak` only when the
+/// world's `speech_audience` law is on (on by default since 2026-11-11), one row per line, deleted after 60 s.
+/// Private: the mind service reads it as the database owner to tell, for a line said to no
+/// one in particular, which hearer was nearest or faced (talk.rs, `LIVING_GREET`).
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = audience, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = audience))]
+pub struct Audience {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub speaker: u32,
+    pub to: u32,
+    #[index(btree)]
+    pub at_ms: u64,
+    pub hearers: Vec<Hearer>,
 }
 
 /// What reached a character's senses (sights, speech, what happened to them, their own
@@ -1589,6 +1632,17 @@ pub struct MotionSeen {
     #[index(btree)]
     pub viewer: Identity,
     pub motion: crate::perception::Motion,
+    /// The body's facing segment (`body.face_*`), appended beside `motion` (whose type stays
+    /// as stored); `seen_bodies` returns both as one `Moving` row.
+    #[default(0.0f32)]
+    pub face_off: f32,
+    #[default(0.0f32)]
+    pub face_turn: f32,
+    #[default(0.0f32)]
+    pub face_turn_s: f32,
+    /// `body.running`, appended as the facing was.
+    #[default(false)]
+    pub running: bool,
 }
 
 /// An experience line of a player's character released to its client (private; frames,

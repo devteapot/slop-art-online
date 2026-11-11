@@ -222,9 +222,10 @@ pub struct Live {
     shown: HashMap<u32, Shown>,
     /// Height (m) of each drawn character, for nameplates and bubbles.
     pub heights: HashMap<u32, f32>,
-    /// Bodies gone from sight, fading out where they were last drawn (`fade.rs`), and how long
-    /// they have been fading (s).
-    leaving: Vec<(Entity, f32)>,
+    /// Bodies gone from sight, fading out where they were last drawn (`fade.rs`), how long
+    /// they have been fading (s), whose they were, and whether they stay a moment as a faint
+    /// figure first (the memory look under trial, `sightedge::Look`).
+    leaving: Vec<(Entity, f32, u32, bool)>,
 }
 
 impl Live {
@@ -440,7 +441,7 @@ fn bodies(
     mut live: ResMut<Live>,
     mut q: Query<Drawn>,
     (mut fades, anims): (Query<&mut crate::fade::Fade>, Query<&crate::anim::Anim>),
-    (time, lw): (Res<Time>, Res<crate::twist::LookWalk>),
+    (time, edge, lw): (Res<Time>, Option<Res<crate::sightedge::SightEdge>>, Res<crate::twist::LookWalk>),
 ) {
     let Some(island) = island else { return };
     let Some(conn) = net.conn.as_ref() else {
@@ -448,7 +449,7 @@ fn bodies(
         for (_, s) in live.shown.drain() {
             commands.entity(s.entity).despawn();
         }
-        for (e, _) in live.leaving.drain(..) {
+        for (e, ..) in live.leaving.drain(..) {
             commands.entity(e).despawn();
         }
         live.heights.clear();
@@ -457,9 +458,20 @@ fn bodies(
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
     // Bodies that left sight fade out where they were, then go.
-    live.leaving.retain_mut(|(e, t)| {
+    // A faint figure goes at once when its body is sent again, else fades out after a moment.
+    live.leaving.retain_mut(|(e, t, id, ghost)| {
         *t += dt;
-        let keep = *t < crate::fade::OUT_S + 0.05;
+        if *ghost && scene.shown.contains_key(id) {
+            commands.entity(*e).despawn();
+            return false;
+        }
+        let hold = if *ghost { crate::sightedge::GHOST_S } else { 0.0 };
+        if *ghost && *t >= hold {
+            if let Ok(mut f) = fades.get_mut(*e) {
+                f.target = 1.0;
+            }
+        }
+        let keep = *t < hold + crate::fade::OUT_S + 0.05;
         if !keep {
             commands.entity(*e).despawn();
         }
@@ -493,11 +505,12 @@ fn bodies(
         if let Some(s) = live.shown.remove(&id) {
             match fades.get_mut(s.entity) {
                 Ok(mut f) => {
-                    f.target = 1.0;
+                    let ghost = edge.as_deref().is_some_and(|e| e.ghosts()) && f.target < 1.0;
+                    f.target = if ghost { crate::sightedge::GHOST_LEVEL } else { 1.0 };
                     if let Ok((_, _, _, _, mut motion, _)) = q.get_mut(s.entity) {
                         motion.speed = 0.0;
                     }
-                    live.leaving.push((s.entity, 0.0));
+                    live.leaving.push((s.entity, 0.0, id, ghost));
                 }
                 Err(_) => commands.entity(s.entity).despawn(),
             }
@@ -568,7 +581,7 @@ fn bodies(
         // A person's clip file: its directional, turn, start and jump takes (`gait.rs`,
         // `takes.rs`), and its pace and stride as drawn last frame.
         let (gaits, pace, stride) = match q.get(s.entity) {
-            Ok((_, _, Some(m), ch, motion, _)) if s.person && crate::takes::enabled() => (Some(crate::gait::of(&m.file)), motion.pace, ch.map_or(1.0, |c| c.stride)),
+            Ok((_, _, Some(m), ch, motion, _)) if s.person && crate::takes::enabled() => (Some(crate::gait::of(&crate::anim::clip_file(&m.file))), motion.pace, ch.map_or(1.0, |c| c.stride)),
             _ => (None, 1.0, 1.0),
         };
         // A jump plays the take for its way, timed to the rules' hop, chosen once per jump from
@@ -962,13 +975,15 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
 ///   (a headless run has no cursor); `lookwalk:PRESET[,key=value…]` sets how the body looks aside
 ///   while walking (`twist::LookWalk::parse`); `cursor:X,Y` puts the game's cursor there (fractions of the
-///   picture; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
+///   picture, or `@NAME`, a tagged node; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
 ///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
 ///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
 ///   (photographing small things up close);
 /// - `say:TEXT`: proximity chat (`human_say`);
+/// - `sightlook:NAME`: how "not seen now" is drawn, among the looks under trial
+///   (`sightedge::Look`; `LIVING_SIGHT_LOOK` sets the first);
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
@@ -990,7 +1005,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   UI, `ui/hit.rs` `Tag`), `slide:A>B[:SECS]` holds the click at A and slides to B (a
 ///   title-bar drag, an item onto someone), `scroll:PX` swipes
 ///   two fingers over a window, `point:ID[:H]` puts the cursor on someone (hovering them; H m above their feet, default 0.3, e.g. 1.3 for the chest),
-///   `dodge:W|A|S|D` double-taps a direction, and `dump:NAME`
+///   `dodge:W|A|S|D` double-taps a direction, `weapon:toggle|draw|sheathe` is X, and `dump:NAME`
 ///   writes the game UI's state to `<dir>/NAME.json` (`ui::dump`);
 ///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
 ///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
@@ -1062,10 +1077,10 @@ fn script(
     mut out: ResMut<crate::ui::model::Outbox>,
     (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
-    target: Option<Res<crate::capture::Target>>,
+    (target, mut sight): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>),
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     (mut dump, mut taps, ui): (ResMut<crate::ui::Dump>, ResMut<crate::keys::DoubleTap>, Res<crate::ui::hit::UiPointer>),
-    (time, mut exit, cams, mut lw): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::twist::LookWalk>),
+    (time, mut exit, cams, mut weapon, mut lw): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::weapon::Weapon>, ResMut<crate::twist::LookWalk>),
 ) {
     // A point: X,Y as fractions of the picture, or @NAME, a tagged node of the game UI.
     let frac = |v: &str| match v.strip_prefix('@') {
@@ -1153,8 +1168,9 @@ fn script(
             true
         }
         "cursor" => {
+            // X,Y (fractions of the picture) or @NAME (a tagged node: hovering a slot, a button).
             s.pointing = None;
-            pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
+            pointer.scripted = frac(arg);
             true
         }
         "tap" => {
@@ -1234,6 +1250,15 @@ fn script(
             };
             true
         }
+        "weapon" => {
+            // As X: `weapon:toggle` (or `draw`, `sheathe`).
+            weapon.scripted = Some(match arg {
+                "draw" => true,
+                "sheathe" => false,
+                _ => !weapon.drawn,
+            });
+            true
+        }
         "scroll" => {
             pointer.scripted_scroll += arg.parse::<f32>().unwrap_or(0.0);
             true
@@ -1287,6 +1312,17 @@ fn script(
         }
         "say" => {
             out.say.push((arg.to_string(), 0));
+            true
+        }
+        "sightlook" => {
+            // The looks of "not seen now" under trial (`sightedge::Look`), for captures.
+            match (crate::sightedge::Look::parse(arg), sight.as_deref_mut()) {
+                (Some(l), Some(e)) => {
+                    e.look = l;
+                    info!("sight edge: look {l:?}");
+                }
+                _ => warn!("live script: no look {arg:?}"),
+            }
             true
         }
         "skill" | "aim" => {

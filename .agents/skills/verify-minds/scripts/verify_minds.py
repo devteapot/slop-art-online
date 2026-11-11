@@ -21,7 +21,7 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
-         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'run')
+         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -242,6 +242,10 @@ def run_case(run, case):
         return resident_case(run)
     if case == 'parked':
         return parked_case(run)
+    if case == 'alongside':
+        return alongside_case(run)
+    if case == 'greet':
+        return greet_case(run)
     if case == 'speech':
         return speech_case(run)
     if case == 'frame':
@@ -1239,7 +1243,8 @@ def parked_case(run):
     talks = lambda: [e for e in requests() if e['purpose'] == 'talk']
     # 1. The deliberation says nothing to the player: the line gets its turn when it ends.
     run.request(actor, 'first')
-    run.start(models, [actor])
+    # The old rule, selected explicitly (`concurrent` is the default since 2026-11-11; `alongside` covers it).
+    run.start(models, [actor], extra_env={'LIVING_PARK': 'wait'})
     run.wait(lambda: any(e['purpose'] == 'deliberate' for e in requests()), 'first deliberation running', 60)
     run.harness('player', 'say', 'Will you answer me once you have thought it over?', '--to', str(actor))
     time.sleep(3)
@@ -1262,6 +1267,168 @@ def parked_case(run):
     assert len(talks()) == after_first, 'a talk turn repeated what the deliberation answered'
     assert 'in its deliberation' in run.log()
     return {'status': 'pass', 'talk_turns': len(talks())}
+
+
+def alongside_case(run):
+    """LIVING_PARK=concurrent (talk.rs `turn_alongside`, `deliberation_decided`, `unanswered_say`):
+    (1) a line heard just after a deliberation's prompt was built gets its turn while the think
+    step is still running; (2) a line heard later waits for the think step, and gets its turn as
+    soon as the decision says nothing to the speaker, while the compile step still runs; (3) when
+    the decision would speak to the speaker that a turn alongside already answered, the
+    deliberation's words are not said."""
+    people = prepare(run)
+    actor = people[0]['id']
+    run.harness('player', 'join', 'MindsAlongside')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsAlongside'", 'player')[0]['id']
+
+    def say_now(text):
+        # Straight over HTTP with the player's token (from the run's state.json): a line that must
+        # land within 2 s of a deliberation's prompt cannot wait for a harness subprocess under load.
+        token = json.loads((run.directory / 'state.json').read_text())['token']
+        req = urllib.request.Request(f"{shared.STDB_URL}/v1/database/{run.db}/call/human_say", data=json.dumps([text, actor]).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'}, method='POST')
+        with urllib.request.urlopen(req, timeout=10) as r:
+            assert r.status == 200
+        with (run.directory / 'actions.log').open('a') as log:
+            log.write(f"{time.strftime('%H:%M:%S')} player human_say{json.dumps([text, actor])} -> 200 (HTTP, fast)\n")
+    run.admin('place_near', player, actor)
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'Answering alongside my thinking.', 'say': 'verify minds alongside answer', 'end': True}},
+              # Think requests carry the graph's 'verify' words: the warm-up's and the next two take
+              # 8 s, the third case's 6 s and speaks to the player.
+              'rules': [{'purpose': 'think', 'contains': 'verify', 'delay_s': 8, 'times': 3},
+                        {'purpose': 'think', 'contains': 'verify', 'delay_s': 6, 'times': 1,
+                         'reply': {'thought': 'I tell them while I think.', 'intend': ['wait'],
+                                   'say': {'text': 'verify minds deliberation words', 'to': player}}},
+                        {'purpose': 'deliberate', 'contains': 'verify', 'delay_s': 8, 'times': -1}]}
+    models = model(run, script)
+    requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    talks = lambda: [e for e in requests() if e['purpose'] == 'talk']
+    thinks = lambda: [e for e in requests() if e['purpose'] == 'think' and 'verify' in json.dumps(e['body'])]
+    run.start(models, [actor], extra_env={'LIVING_PARK': 'concurrent'})
+    run.wait(lambda: 'conversation switches' in run.log(), 'switches logged')
+    # A first plan, so that each case below starts from an accepted one.
+    run.request(actor, 'warmup')
+    accepted(run, actor)
+    time.sleep(3)
+    spoken = lambda text: [c for c in run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', 'alongside-speech') if text in c['text']]
+    # 1. Fresh: the line comes within 2 s of the prompt; the think step has 8 s to go.
+    compiles = lambda: [e for e in requests() if e['purpose'] == 'deliberate' and 'verify' in json.dumps(e['body'])]
+    c0, t0 = len(compiles()), len(thinks())
+    run.request(actor, 'first')
+    run.wait(lambda: len(thinks()) >= t0 + 1, 'first think running', 60)
+    say_now('Hello, do you have a moment?')
+    run.wait(lambda: talks(), 'a turn alongside the running think step', 5)
+    assert len(compiles()) == c0, 'the turn waited for the think step'
+    run.wait(lambda: spoken('verify minds alongside answer'), 'alongside answer spoken', 10)
+    assert 'gets its turn alongside' in run.log()
+    deliberated = lambda n: len([t for t in run.thoughts(actor, 'thoughts') if t['kind'] == 'deliberate']) >= n
+    base = len([t for t in run.thoughts(actor, 'thoughts-before') if t['kind'] == 'deliberate'])
+    run.wait(lambda: deliberated(base + 1), 'first deliberation done', 40)
+    time.sleep(3)
+    first = len(talks())
+    # 2. Late: the line comes 4 s into the think step; it waits for the decision, which says
+    # nothing to the player, and gets its turn before the compile step ends.
+    run.request(actor, 'second')
+    run.wait(lambda: len(thinks()) >= t0 + 2, 'second think running', 60)
+    time.sleep(4)
+    run.harness('player', 'say', 'Another matter entirely: where does the river bend north?', '--to', str(actor))
+    time.sleep(2)
+    assert len(talks()) == first, 'a late line got its turn before the decision'
+    run.wait(lambda: len(talks()) > first, 'the turn after the decision', 15)
+    assert len(compiles()) == c0 + 2 and not deliberated(base + 2), 'the deliberation ended first'
+    assert 'has decided, and not to speak to' in run.log()
+    run.wait(lambda: deliberated(base + 2), 'second deliberation done', 40)
+    time.sleep(3)
+    # 3. The decision would speak to the player, whom a turn alongside already answered.
+    run.request(actor, 'third')
+    run.wait(lambda: len(thinks()) >= t0 + 3, 'third think running', 60)
+    say_now('Something new: are the fish running today?')
+    run.wait(lambda: 'already answered' in run.log(), "the deliberation's words withheld", 40)
+    time.sleep(10)
+    assert not spoken('verify minds deliberation words'), 'the deliberation spoke to someone already answered'
+    return {'status': 'pass', 'talk_turns': len(talks())}
+
+
+def greet_case(run):
+    """LIVING_GREET (talk.rs `Facts::drawn`, `faced`): with the world keeping who heard each line
+    (`speech_audience`), a stranger's line to no one, said with two residents within 6 m, draws
+    no turn under `off`, one turn from the nearest under `nearest`, and under `facing` a turn
+    from the resident the speaker faces (here the farther one) and none from the nearer."""
+    people = prepare(run)
+    a, b = [p['id'] for p in people]
+    run.harness('player', 'join', 'MindsStranger')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsStranger'", 'player')[0]['id']
+    # a, the player 1 m east of a, b 3 m east of the player (both within the 6 m address distance).
+    body = run.sql(f'SELECT * FROM body WHERE id = {a}', 'body-a')[0]
+
+    def place():
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            try:
+                run.admin('place_at', a, body['x'], body['y'])
+                run.admin('place_at', player, body['x'] + dx, body['y'] + dy)
+                run.admin('place_at', b, body['x'] + 4 * dx, body['y'] + 4 * dy)
+                return
+            except Exception:
+                continue
+    place()
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'A stranger speaks.', 'say': 'verify minds greet answer', 'end': True}}}
+    models = model(run, script)
+    talks = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'talk']
+    # Answers by their talk-turn thought rows (the chronicle merges a line repeated word for word
+    # into its earlier row, so a second identical fake answer adds no row there).
+    answers = lambda: sorted((t for t in run.sql(f'SELECT * FROM thought WHERE kind = \'talk\'', 'greet-answers')
+                              if json.loads(t.get('detail') or '{}').get('with') == player and 'verify minds greet answer' in t['summary']), key=lambda t: t['id'])
+    results = {}
+    for arm, text in (('off', 'Hello there!'), ('nearest', 'Good day to you all.'), ('facing', 'Fine weather today.')):
+        if run.mind:
+            shared.stop(run.mind)
+            time.sleep(2)
+        subscribed = run.log().count('world subscribed:')
+        if run.mind is None:
+            run.start(models, [a, b], extra_env={'LIVING_GREET': arm})
+            # The shipped rules keep who heard each line (`speech_audience`, on by default).
+            assert (ROOT / 'living/scripts/skills.rhai').read_text().count('speech_audience: true,') == 1
+        else:
+            run.env['LIVING_GREET'] = arm
+            run.launch_mind()
+        run.wait(lambda: run.log().count('world subscribed:') > subscribed, f'{arm}: subscribed')
+        for who in (a, b):
+            run.request(who, f'{arm}-{who}')
+        run.wait(lambda: not run.private(f'SELECT * FROM deliberation WHERE actor = {a} OR actor = {b}', f'pending-{arm}'), f'{arm}: deliberations done', 60)
+        time.sleep(3)
+        # Residents wander on their own ways between arms: everyone back in place for each line.
+        place()
+        time.sleep(1)
+        if arm == 'facing':
+            run.harness('player', 'act', json.dumps({'do': 'face', 'target': {'id': b}}))
+            time.sleep(2)
+        before, heard = len(answers()), len(talks())
+        run.harness('player', 'say', text)
+        time.sleep(8)
+        new = answers()[before:]
+        aud = [r for r in run.sql(f'SELECT * FROM audience WHERE speaker = {player}', f'audience-{arm}')]
+        assert aud, f'{arm}: no audience row for the line'
+        row = max(aud, key=lambda r: r['at_ms'])
+        hs = [h if isinstance(h, list) else [h['id'], h['d'], h['off']] for h in row['hearers']]
+        # The rule's own reading of the row: the nearest, and the one within 6 m and 0.6 rad of the facing.
+        # The nearest of the hearers this service thinks for (other residents may stand nearer).
+        nearest = min((h for h in hs if h[0] in (a, b)), key=lambda h: h[1])[0]
+        cone = [h for h in hs if h[1] <= 6.0 and h[2] <= 0.6]
+        faced = min(cone, key=lambda h: (h[2], h[1]))[0] if cone else None
+        results[arm] = {'answers_by': [t['actor'] for t in new], 'talk_requests': len(talks()) - heard, 'hearers': hs, 'nearest': nearest, 'faced': faced}
+        # A restarted service replays speech under 30 s old (talk.rs STALE_MS): let this line age out.
+        time.sleep(25)
+    (run.directory / 'greet.json').write_text(json.dumps(results, indent=2))
+    assert results['off']['answers_by'] == [] and results['off']['talk_requests'] == 0, results
+    assert results['nearest']['answers_by'] == [a] and results['nearest']['nearest'] == a, results
+    assert results['facing']['faced'] == b and results['facing']['nearest'] != b and results['facing']['answers_by'] == [b], results
+    log = run.log()
+    assert 'is drawn in by' in log and 'is faced by' in log
+    return {'status': 'pass', **results}
 
 
 def reasons_case(run):

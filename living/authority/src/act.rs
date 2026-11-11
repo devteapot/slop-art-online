@@ -355,7 +355,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
     let sc = common::scripts(ctx);
     // Where the target is from where the actor faces, and whether it comes at the actor.
     if let (Some(b), Some(tp)) = (ctx.db.body().id().find(id), target_pos(ctx, &a.target, now)) {
-        target.bearing = living_rules::social::bearing(from, crate::town::motion_of(&b, now).0, tp);
+        target.bearing = living_rules::social::bearing(from, common::facing_at(&b, now), tp);
         if a.target.class == 3 && a.target.id as u32 != id {
             if let Some(tb) = ctx.db.body().id().find(a.target.id as u32) {
                 target.closing = living_rules::social::closing(from, tp, crate::town::motion_of(&tb, now).1);
@@ -375,7 +375,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
             let mut sensed: Vec<(String, u32)> = Vec::new();
             // Itself among them, as before; others when seen (a clear sight line) or smelled.
             let map = common::map(ctx);
-            let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::heading_at(&b, now));
+            let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now));
             let seen = common::creatures_near(ctx, from, common::gather_radius(ctx, sight), now).into_iter().filter(|c| c.id == id || crate::perception::in_sight(ctx, &map, id, from, heading, c.id, c.pos, c.dist, &w, now, false));
             for c in seen.chain(common::smelled_near(ctx, id, &actor.kind, from, sight, now)) {
                 match sensed.iter_mut().find(|(k, _)| *k == *c.kind) {
@@ -651,7 +651,8 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                     living_rules::combat::unit(p.0 - here.0, p.1 - here.1)
                 })
             };
-            let f = face.unwrap_or((me.heading.cos(), me.heading.sin()));
+            let faced = common::facing_at(&me, now);
+            let f = face.unwrap_or((faced.cos(), faced.sin()));
             target = Resolved::point((here.0 + f.0, here.1 + f.1));
         }
         _ if aim == Aim::Dash => {
@@ -742,7 +743,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     }
     // A turn and nothing else: already facing its target, there is nothing to do.
     if sc.shows().get(skill).is_some_and(|s| s.turn) && target.class != 0 && !(target.class == 3 && target.id as u32 == id) {
-        if living_rules::social::bearing(here, crate::town::motion_of(&me, now).0, target.at) < common::laws(ctx).face_slack {
+        if living_rules::social::bearing(here, common::facing_at(&me, now), target.at) < common::laws(ctx).face_slack {
             return Err("you already face it".into());
         }
     }
@@ -762,7 +763,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     }
     if node == PLAYER && target.class == 3 && target.id as u32 != id {
         let w = common::world(ctx);
-        let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::heading_at(&b, now));
+        let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now));
         // Already in the player's sight (its perceived set): the keep margins hold, as on its screen.
         let kept = ctx.db.perceived().viewer().filter(ctx.sender()).any(|p| p.body == target.id as u32);
         if !crate::perception::in_sight(ctx, &common::map(ctx), id, here, heading, target.id as u32, target.at, dist(here, target.at), &w, now, kept) {

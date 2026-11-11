@@ -201,7 +201,12 @@ board/<family>/<version>/       asset board photographs and pages (from the lapt
 
 **Refused whole:**
 - files in never-touch folders, or with `sao-living` in the path;
-- secrets files (`.env`, `*.env`, `cli.toml`, `id_*`, `*.pem`, `*.key`, `.netrc`, credentials);
+- **credential files, never opened** (`is_secret_path`, fbc37c32 review A4):
+  - **By file name:** `.env`, `.env.*`, `*.env`, `*.token`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`, `*.kdbx`, `*.secret(s)`, `id_*` keys, `credentials*`, `.netrc`, `.git-credentials`, `.pgpass`, `.npmrc`, `.pypirc`, `cli.toml`, `hf_token`, `token`.
+  - **By folder:** anything under `tokens/`, `secrets/`, `.ssh/`, `.gnupg/`, `.aws/`, `credentials/`.
+  - **Never read:** the check runs on the path before anything is read. On disk the loader is a stub that refuses if called, and a tarball member matching these names is listed but never extracted.
+  - **Listed as held:** with the reason "secret path, not read", in the report and the manifest's `held` section.
+  - **Exception:** the scrubber's own identity step still reads this machine's checkout `.env` files and token files on purpose, to learn the secret *values* to redact (`Identity.from_runtime`). That is not part of reading the source, and the values are never printed.
 - anything containing a private-key block;
 - browser profiles;
 - macOS metadata;
@@ -234,7 +239,8 @@ No identity is in the repository: the scrubber reads it at run time, and the tes
 | Play-test 3 (`~/playtest-3`, two tarballs) | 37 (1.7 MB) | 66 (2.8 MB): 64 journal files, 2 FEEDBACK.md | 117 macOS `._*` | `home-path` 8, `owner-first-name` 98, `owner-line` 37 (`H…`) |
 
 - **Secrets.** None of the three sources holds an API key, token, JWT, private address or owner email.
-- **Owner lines.** In play-test 2 the scrubber found exactly the owner's three typed lines (masked `h…`, `s…i[11]`, `w…p[6]`), the same lines as the hand-made diagnosis `playtest-2/diagnosis/REPORT.md`. In play-test 3 it found one (`H…`), as in the play report.
+- **Owner lines, play-test 2.** The scrubber found exactly the owner's three typed lines (masked `h…`, `s…i[11]`, `w…p[6]`), the same lines as the hand-made diagnosis `playtest-2/diagnosis/REPORT.md`.
+- **Owner lines, play-test 3.** Up to fbc37c32 the scrubber learned **two** lines there, not one. The extra is a line the owner's character said under its AI mind after the session ended: an authority row of the player (`subject` 26), timestamped 55 s after the client log's last line. The "You said" row rule assigned it to the owner. That was harmless over-redaction. Since `fix-store-scrub-2`, `You said` rows with a time count only inside the played span: the client log's first to last timestamp, from 1 s before to 5 s after. That row is now left alone, so play-test 3 should learn one line. This was not re-run here, by instruction.
 - **Packed size.** The `l9` what-if pack (`--decide model_exchanges=include`) is 9.5 MB. No home path, login, hostname or fake key is left in it.
 
 ### The owner's decisions (2026-11-11)
@@ -269,8 +275,40 @@ Exact quotes were not enough. On play-tests 2 and 3, models repeated the owner's
 Lines no one heard can sit in the player's own percepts ("You said to a child: “…”").
 
 What the scrubber does now:
-- **Learning.** Besides the rules above, `You said …: “…”` counts as the owner's line in the player's own entries (`(played by a person`, `# Who you are (<player>)`) and in rows whose `subject` is the player.
-- **Exact matches.** Any quote style counts: typographic, single, back-quote, escaped, or HTML entities (`&ldquo;`, `&quot;`, `&#39;`), in any case. So does a JSON string equal to a line.
+- **Learning.** Besides the rules above, `You said …: “…”` counts as the owner's line in the player's own entries (`(played by a person`, `# Who you are (<player>)`) and in rows whose `subject` is the player, if the row's time is inside the played span.
+  - The player's own entries carry no real time; their percepts show game time only. So a line the character's AI mind said there after the session can still be learned: over-redaction, not a leak.
+- **Exact matches.**
+  - Any quote style counts: typographic, single, back-quote, escaped, or HTML entities (`&ldquo;`, `&quot;`, `&#39;`), in any case. So does a JSON string equal to a line.
+  - The match uses the line's **core**: leading and trailing whitespace and punctuation removed, and internal whitespace of any width. "where am i ?" therefore matches “where am I?”, “Where  am i” and, being 6 characters or more, an unquoted "where am I" (fbc37c32 review A3).
+- **Names the player gave themself** (fbc37c32 review A2; narrowed in `fix-store-scrub-3` after play-test 4 v2).
+  - **Learned from what residents recorded, checked against what the player typed** (`fix-store-scrub-4`, after play-test 4 v3 learned nothing from `i'm called ""N""`):
+    1. **Candidates.** Every name residents hold for the player's *character*, tied to it by its id:
+       - the name on that person in residents' memory graphs (`name`, `known_name`, `known_as`, `introduced_as`, `nickname` and similar), including graphs inside model replies stored as JSON text, as escaped or doubly escaped JSON, or as `\uXXXX`-escaped text;
+       - residents' tags (`{N=#26}`) and labels (`N (#26)`, `N (person:26)`);
+       - name fields near the id in logs.
+
+       The player's own record (player memory, "played by a person") is not a resident's.
+    2. **Kept** as the player's self-given name only if the same word also occurs in one of the player's own typed lines in that session: case-insensitive, ignoring quotes and punctuation. No phrase pattern is needed.
+    3. **Never learned:** a name residents hold that the player never typed (an epithet): it stays.
+    4. **An extra source:** the typed self-introduction patterns (`SELF_NAME_RULES`: "I'm N", "i'm called N", "call me N", "they call me N", "named N", "the name's N", …, with stray, doubled or mixed quotes) still add a name residents do not hold.
+
+    The backstop is `names.md` and `report.json` (`names`): every name residents hold for the player, masked to its length, with who holds it in records (graphs, tags, labels), where, how often each holder uses the word in speech, journals and logs (`Uses by holder`; the player's own record is counted separately and templates not at all), whether the player typed it, and what was done (replaced, or kept and why). In the review files the `self-name` and `self-name-kept` categories, like every identity category, show only a length (`[6 chars]`). If the player's character id is not found, the report says so and no resident-held name is tied to the player.
+
+    On this machine, play-tests 2 and 3 each have 3–4 resident-held names. None was typed by the player except the owner's first name, so nothing new was learned, and both outputs are byte-identical to v3.
+  - **The owner's real first name** is still replaced everywhere, in any case.
+  - **A self-given name can also be an ordinary game word** (in play-test 4 it was), so it is replaced only where it names the player:
+    - **Never in text the game or the mind service wrote from a template:** system prompt files, system messages inside journal entries, installed scripts, `*.rhai`. These stay byte-identical, and an owner line quoted into them is still caught by the exact quoted match. Nor in JSON keys, game codes (`do`, `skill`, `kind`, … in `CODE_KEYS`), or identifiers (`on_strike`: here `_` joins words).
+    - **Replaced as a name:** after "called", "named", "introduced (themself) as", "goes by", "known as", "call me", "I'm", "calling/called himself" (and herself, themself, themselves), "self-styled", "styles himself"; in `known_name`, `known_as`, `introduced_as`, `nickname` and `name` fields (the name on the person, and memories about them); in `{X=#26}` tags and `X (#26)` labels; as an address at the start of a line or utterance ("X, come here"); capitalised, not at the start of a sentence ("I told X about the well"); in file names.
+    - **Kept as the ordinary word, silently:** lowercase after an article, possessive or determiner ("a strike", "the strike"), when the word also occurs in this run's game-written text (templates, system prompts, installed scripts).
+    - **Kept as the ordinary word, and listed** (`fix-store-scrub-5`, D2): any other lowercase use right after a possessive ("Mercy's word", "his word", "my own word") or an article ("the word"). It is listed in `ambiguous.md` as kept, with that reason. In play-test 4 v4 this keeps 3 of the 4 ambiguous places in Maud's journal.
+    - **Undecidable, so replaced and listed:** every other use in residents' speech and journals ("strike them down", a capitalised word at a sentence start). Each entry goes to `ambiguous.md` and to `report.json` (`ambiguous`), with the file, the location (row, field path, line), the context with the name masked by its length (`[6 chars]`) and the replacement. A wrong replacement there costs one word. The manifest records only the count (`self_name_ambiguous`).
+- **The installed rules script is a hard check** (`installed_sha_problems`). If a session records `installed sha256 …` in `run/installed_script.txt`, the published `installed_source.rhai` must hash to it, so the record stays verifiable. Older records have no `installed_source.rhai` and instead name their file on a `file sha256 … (…/skills.rhai)` line; that file is checked. `pack` and `publish` refuse a unit that fails, before writing anything. `scrub` writes its reports, prints MISMATCH, and exits non-zero, giving why: the script is not published, or which redactions changed it. `installed_script.txt` itself may change, but only where its home paths are redacted (`/Users/<login>/…` becomes `~/…`); the shas it records stay as they are.
+
+  Checked on this machine's sessions (outputs kept locally in `~/store-dryrun-2026-11-11/playtest-{2-v3b,3-v3}/`):
+  - Play-test 3: the installed sha matches; all 6 system prompts and `installed_source.rhai` are byte-identical; `installed_script.txt` differs only by the home path.
+  - Play-test 2: the record names `skills.rhai`, and its sha matches, both in this scrub and in the copy already published.
+  - Neither session has a self-given name, so there are 0 ambiguous places.
+  - Play-test 2's scrub is byte-identical to the published unit (38 of 38 files).
 - **Echo matcher** (`EchoMatcher`):
   - Letter runs are folded (`ssssssssshi` and `sssshi` are both `shi`).
   - A one- or two-word line matches a word that is equal after folding, or within edit ratio 0.8 for words of four letters or more.
