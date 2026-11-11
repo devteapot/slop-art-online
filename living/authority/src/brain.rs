@@ -851,15 +851,19 @@ impl<'a> Ev<'a> {
         let restless_after = 60_000.0 * (12.0 - trait_of("curiosity") / 12.0);
         let lonely_after = 60_000.0 * (14.0 - trait_of("sociability") / 10.0);
         let alone_ms = self.now.saturating_sub(self.st.heard_ms.max(self.st.spoke_ms));
-        // Grown people long for a child of their own, sooner the more nurturing they were born.
+        // Grown people long for a child of their own, sooner the more nurturing they were born
+        // (the laws `longing_after_min` and `longing_food`: how long after one's own birth or
+        // one's youngest child's, and how much food one must carry for it to be felt).
         let broody = self.me.kind == "person" && self.me.stage == 2 && calm && !common::night(&self.w, self.now) && {
             let me = self.me.id;
             let db = &self.ctx.db;
+            let laws = common::laws(self.ctx);
             let expecting = db.expecting().iter().any(|e| e.a == me || e.b == me);
             let rearing = db.rearing().id().find(me).map_or(false, |r| r.until_ms > self.now);
             let last = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).map(|c| c.born_ms).max().unwrap_or(self.me.born_ms);
-            let wait = 60_000.0 * (20.0 - trait_of("nurture") / 6.0);
-            !expecting && !rearing && self.now.saturating_sub(last) as f32 > wait
+            let wait = living_rules::script::longing_wait_ms(laws.longing_after_min, trait_of("nurture"));
+            let provided = laws.longing_food <= 0.0 || common::food_count(self.ctx, me as u64) as f32 >= laws.longing_food;
+            !expecting && !rearing && self.now.saturating_sub(last) as f32 > wait && provided
         };
         // Who one would have a child with, when there is someone: the other parent of one's youngest.
         let longing = if broody {

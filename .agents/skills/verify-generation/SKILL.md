@@ -31,7 +31,7 @@ For a focused rerun:
 .agents/skills/verify-generation/scripts/generation.py --run generation-guards-$(date +%Y%m%d-%H%M%S) --feature guards
 ```
 
-`--seeds a,b` limits the worlds to those seeds, for example `--feature worlds --seeds island,floor-megacity-2k,floor-megacity-4k` after a land or city change.
+`--seeds a,b` limits the worlds to those seeds, for example `--feature worlds --seeds island,floor-megacity-2k,floor-megacity-4k` after a land or city change. It may also name any other tracked seed in `living/seeds/` (a trial world such as `hamlet`), which gets the same generic checks: dimensions, chunks, settlements and their authored residents, sheets, parents, promised resources, animal counts.
 
 `worlds` includes repeatability. `authored` executes the real `author_world.py aske-coast --compile-only` in the copied tree with network calls blocked and recorded. `guards` runs all five `seed::tests::` native tests and publishes a valid JSON seed missing `animals`. The malformed copy stays in `.local`.
 

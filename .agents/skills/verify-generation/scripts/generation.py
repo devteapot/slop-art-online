@@ -580,7 +580,8 @@ def suite(args):
             results["seed tests"] = {"pass": code == 0}
         seeds = list(SEEDS) + ["realm"] if args.feature in ("all", "worlds") else []
         if args.seeds:
-            seeds = [x for x in args.seeds.split(",") if x in SEEDS]
+            # Any tracked seed may be named (a trial world such as `hamlet`), not only the suite's.
+            seeds = [x for x in args.seeds.split(",") if x in SEEDS or (ROOT / f"living/seeds/{x}.json").exists()]
         if args.feature in ("all", "guards"):
             malformed = json.loads((ROOT / "living/seeds/authored-test.json").read_text())
             del malformed["animals"]

@@ -1,5 +1,9 @@
 # Validation record (generation)
 
+## 2026-11-11 the hamlet seed (exp-hamlet-births, Spark)
+
+Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`; its port is published on `0.0.0.0`, which `verify.py` now accepts as local), private target dirs. `generation.py --feature worlds --seeds hamlet,authored-test` (`generation-hamlet-20261111-141545`): `hamlet` 59 of 59 checks (both settlements' 8 and 4 authored residents, sheets, parents, memberships, promised fishing spots and berry bushes, no animals), `authored-test` 40 of 40, original seeds unchanged. `--seeds` now accepts any tracked seed. The first attempt stopped at launch: the harness refused the trial service's `0.0.0.0` port binding.
+
 
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 

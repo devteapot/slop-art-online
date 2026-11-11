@@ -183,6 +183,27 @@ def world_key(t, rep):
     return f"{t['name']}#{seeds[(rep - 1) % len(seeds)]}" if seeds else t["name"]
 
 
+def journal_file(name):
+    """A character's journal file name, as the mind writes it (llm.rs: every character that is
+    not a letter or digit becomes `_`, so "Sefa Reed" is Sefa_Reed.jsonl)."""
+    return "".join(c if c.isalnum() else "_" for c in name) + ".jsonl"
+
+
+def patch_skills(text, trial, variant):
+    """A skills file with the trial's `skills_patch`, then the variant's, applied: each entry is
+    name -> [old, new], a law value changed in place. An old text that does not occur exactly
+    once is an error: a rules file that moved on must not silently run unpatched."""
+    names = []
+    for owner, patches in (("trial", trial.get("skills_patch") or {}), ("variant", variant.get("skills_patch") or {})):
+        for name, (old, new) in patches.items():
+            n = text.count(old)
+            if n != 1:
+                raise RuntimeError(f"{owner} skills_patch {name}: {old[:80]!r} occurs {n} times in the skills file")
+            text = text.replace(old, new)
+            names.append(name)
+    return text, names
+
+
 def world_seed(world):
     """A trial world is a seed plus overrides, written as a derived seed the module and the
     mind both read (LIVING_SEED is resolved under living/seeds/, so a relative path works)."""
@@ -514,10 +535,15 @@ class Instance:
         self.save()
         # A variant may name another skills file (a rules change under test); the default is the tree's.
         skills = ROOT / self.shared["variants"][self.variant].get("skills", "living/scripts/skills.rhai")
-        code, body = http(f"/v1/database/{self.db}/call/install_script", [skills.read_text()], self.shared["token"])
+        # The trial's and then the variant's `skills_patch` change law values in that file
+        # (name -> [old text, new text]; each old text must occur exactly once).
+        source, patched = patch_skills(skills.read_text(), self.trial, self.shared["variants"][self.variant])
+        code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
         if code != 200:
             raise RuntimeError(f"install_script {code}: {body[:300]}")
-        self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)} (sha256 {hashlib.sha256(skills.read_bytes()).hexdigest()[:12]})")
+        (self.dir / "skills.sha256").write_text(hashlib.sha256(source.encode()).hexdigest() + "\n")
+        self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)}"
+                 f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(source.encode()).hexdigest()[:12]})")
         end = time.time() + 60
         while time.time() < end:
             st = self.rows("SELECT * FROM stats")
@@ -584,6 +610,9 @@ class Instance:
             out.sort(key=lambda c: (dist(pos.get(c["id"], (1e9, 1e9)), at), c["id"]))
         elif spec.get("fewest_know_how"):
             out.sort(key=lambda c: (know[c["id"]], c["id"]))
+        elif spec.get("youngest"):
+            # Seeded characters share a birth time, so the youngest has the fewest days at birth.
+            out.sort(key=lambda c: (c["birth_age_days"], c["id"]))
         n = len(out) if spec.get("count") == "all" else spec.get("count", 1)
         if len(out) < n:
             raise RuntimeError(f"pick {spec}: only {len(out)} match")
@@ -858,7 +887,7 @@ class Instance:
                              for name, p in m["profiles"].items()}
         return m
 
-    def start_mind(self):
+    def start_mind(self, planned=False):
         v = self.shared["variants"][self.variant]
         if v.get("mind") is False:
             # Instinct-only control: no mind service; the subject lives on its graph.
@@ -878,9 +907,13 @@ class Instance:
                    LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY="4",
                    LIVING_VERIFY_FAKE_KEY="dummy-local-only", NO_PROXY="127.0.0.1,localhost",
                    RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
-        # `minds.only: "all"`: the service thinks for every person and animal (no LIVING_ONLY).
+        # `minds.only: "all"`: the service thinks for every person and animal (no LIVING_ONLY);
+        # with `minds.max` for at most that many at a time (`thinkers`, kept by `slots`).
         if self.trial.get("minds", {}).get("only") == "all":
             env.pop("LIVING_ONLY")
+            if self.trial["minds"].get("max"):
+                self.thinkers = self.slots()
+                env["LIVING_ONLY"] = ",".join(map(str, self.thinkers))
         if self.opts.fake:
             # A fake run must never reach a provider: no provider keys in its environment.
             for k in ("MISTRAL_API_KEY", "CARLID_NPC_API_KEY", "TYPESAFE_API_KEY"):
@@ -895,9 +928,61 @@ class Instance:
         p = subprocess.Popen([str(binary)], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         log.close()
         self.mind = Mind(p.pid, p)
-        self.starts.append(time.time())
-        self.log(f"mind pid {p.pid} LIVING_ONLY={self.subject} variant {self.variant} (start {len(self.starts)}) from {binary}")
+        # A planned restart (new thinkers) is not a crash: the runaway watchdog counts the others.
+        if not planned:
+            self.starts.append(time.time())
+        self.log(f"mind pid {p.pid} LIVING_ONLY={env.get('LIVING_ONLY', 'all')} variant {self.variant} (start {len(self.starts)}) from {binary}")
         self.save()
+
+    def slots(self):
+        """Who thinks under `minds.max` N: those already thinking who are alive, then the
+        earliest-born of the rest the mind would think for (alive, past infancy), up to N. A
+        death frees a slot; a newborn takes one when it becomes a child and one is free."""
+        n = self.trial["minds"]["max"]
+        cs = {c["id"]: c for c in self.rows("SELECT * FROM character WHERE alive = true")}
+        admin = self.world["admin"]
+        able = [c for c in cs.values() if c["ai"] and c["controller"] == admin and c["stage"] != 0]
+        keep = [i for i in (getattr(self, "thinkers", None) or []) if i in cs]
+        for c in sorted(able, key=lambda c: (c["born_ms"], c["id"])):
+            if len(keep) >= n:
+                break
+            if c["id"] not in keep:
+                keep.append(c["id"])
+        return keep
+
+    def reslot(self):
+        """Restart the mind when the thinkers under `minds.max` change (at most every 2 minutes):
+        the mind reads LIVING_ONLY when it starts."""
+        if not self.trial.get("minds", {}).get("max") or not self.mind or time.time() - getattr(self, "reslot_at", 0) < 120:
+            return
+        self.reslot_at = time.time()
+        want = self.slots()
+        gone, new = sorted(set(self.thinkers or []) - set(want)), sorted(set(want) - set(self.thinkers or []))
+        if new:
+            self.emit("events", {"t": self.t(), "reslot": want, "left": gone, "joined": new})
+            self.stop_mind()
+            self.start_mind(planned=True)
+        elif gone:
+            # Only deaths: the mind already leaves the dead alone, so it is not restarted.
+            self.thinkers = want
+
+    def take_census(self, row):
+        """Every character of a small world (`census_s`): stage, life and death, parents, where
+        it is, what it does and its hunger, and who the mind thinks for. For worlds of a few dozen."""
+        chars = self.rows("SELECT * FROM character")
+        pos = {b["id"]: self.pos(b) for b in self.rows("SELECT * FROM body")}
+        act = {a["id"]: a for a in self.rows("SELECT * FROM activity")}
+        vit = {v["id"]: v for v in self.rows("SELECT * FROM vitals")}
+        now = self.now_ms()
+        people = []
+        for c in chars:
+            v, a = vit.get(c["id"]), act.get(c["id"])
+            hunger = round(min(100.0, max(0.0, v["hunger"] + v["hunger_rate"] * (now - v["at_ms"]) / 60000)), 1) if v else None
+            people.append({"id": c["id"], "name": c["name"], "kind": c["kind"], "stage": c["stage"], "alive": c["alive"], "cause": c["cause"],
+                           "born_ms": c["born_ms"], "died_ms": c["died_ms"], "age0": round(c["birth_age_days"], 3), "parents": [c["parent_a"], c["parent_b"]],
+                           "pos": [round(x, 1) for x in pos[c["id"]]] if c["alive"] and c["id"] in pos else None, "hunger": hunger if c["alive"] else None,
+                           "activity": [a["skill"], a["target"]] if a and c["alive"] else None})
+        self.emit("census", {"t": self.t(), "hour": row.get("hour"), "now_ms": now, "thinkers": getattr(self, "thinkers", None), "people": people})
 
     def stop_mind(self):
         if self.mind and self.mind.alive():
@@ -906,7 +991,7 @@ class Instance:
 
     # -- state kept for `resume`
     STATE = ("status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
-             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen")
+             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "census_at")
 
     def save(self):
         st = {k: getattr(self, k, None) for k in self.STATE}
@@ -1208,10 +1293,15 @@ class Instance:
                 self.step(s)
             if life and self.t() >= self.snapshots * snap_s:
                 self.snapshot(row)
+            census_s = self.trial.get("census_s")
+            if census_s and self.t() >= (getattr(self, "census_at", None) or 0):
+                self.take_census(row)
+                self.census_at = self.t() + census_s
+            self.reslot()
             if row["alive"] is False and self.died is None:
                 self.died = self.t()
             mind_down = self.mind is not None and not self.mind.alive()
-            if mind_down and life and row["alive"] is not False:
+            if mind_down and life and (row["alive"] is not False or not self.trial.get("life", {}).get("stop_on_death", True)):
                 # A life run keeps its world: the mind is restarted (as run-mind.sh does).
                 self.emit("events", {"t": self.t(), "mind_exit": self.mind.exit_code() if self.mind else None})
                 self.start_mind()
@@ -1223,7 +1313,7 @@ class Instance:
                 self.stopped_by = "trial token cap"
             elif why:
                 self.stopped_by = f"runaway: {why}"
-            elif self.died is not None and self.t() - self.died >= 20:
+            elif self.died is not None and self.t() - self.died >= 20 and self.trial.get("life", {}).get("stop_on_death", True):
                 self.stopped_by = "subject died"
             elif mind_down:
                 self.stopped_by = f"mind exited ({self.mind.exit_code() if self.mind else None})"
@@ -1240,6 +1330,8 @@ class Instance:
         self.read_journal()
         if life:
             self.snapshot(row)
+        if self.trial.get("census_s"):
+            self.take_census(row)
         self.final()
         self.status = "done"
 
@@ -1482,7 +1574,7 @@ def social(s, d, S, chron, exps, samples, j, extra):
     inside = [x for x in sleeps if any(dist((t["x"], t["y"]), x["pos"]) <= t["radius_m"] for t in setts)] if setts else []
     s["slept_inside_walls"] = f"{len(inside)}/{len(sleeps)} sleep samples" if sleeps else None
     sub_name = (s.get("subject") or "").split("#")[0]
-    res = [r for r in j if not r.get("_ref", "").split("/journal/")[-1].startswith(sub_name + ".jsonl")]
+    res = [r for r in j if not r.get("_ref", "").split("/journal/")[-1].startswith(journal_file(sub_name))]
     thinking = {r.get("_ref", "").split("/journal/")[-1].split(".jsonl")[0] for r in res}
     s["residents_thinking"] = len(thinking)
     if res:
