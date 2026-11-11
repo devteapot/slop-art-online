@@ -546,9 +546,21 @@ def field(run, c):
         return rows[0] if rows else None
     walk, rel, looked, stood = b("walk"), b("released"), b("looked"), b("stood")
     north = -90.0
+    # The client releases its look while a direction is held (controls::FACE_WHILE_MOVING off,
+    # until look-2): walking north with the cursor east, the body faces and walks north. With it
+    # on, the authority would hold the body 30° toward the look (look_walk_deg).
+    face_moving = re.search(r"pub const FACE_WHILE_MOVING: bool = (\w+);", open(os.path.join(ROOT, "living/game/src/controls.rs")).read())
+    face_moving = face_moving and face_moving.group(1) == "true"
     if walk:
         h = math.degrees(heading_at(walk, snaps["walk"][0]["wall_ms"]))
-        c.check(s, "walking north with the look east: the body turns 30° toward it, not more (look_walk_deg)", abs(abs(math.degrees(wrap(math.radians(h - north)))) - 30.0) < 4.0 and math.hypot(walk["vx"], walk["vy"]) > 0.5, f"heading {h:.1f}°, speed {math.hypot(walk['vx'], walk['vy']):.2f}")
+        off = abs(math.degrees(wrap(math.radians(h - north))))
+        speed = math.hypot(walk["vx"], walk["vy"])
+        if face_moving:
+            c.check(s, "walking north with the look east: the body turns 30° toward it, not more (look_walk_deg)", abs(off - 30.0) < 4.0 and speed > 0.5, f"heading {h:.1f}°, speed {speed:.2f}")
+        else:
+            c.check(s, "walking north with the cursor east: the look is released while moving, the body faces its travel", off < 4.0 and speed > 0.5, f"heading {h:.1f}°, speed {speed:.2f}")
+        moving_rel = re.search(r"look: human_face\(0\.000, 0\.000\)", L) is not None
+        c.check(s, "…the release went as human_face(0, 0)", moving_rel or face_moving)
     if rel:
         h = math.degrees(heading_at(rel, snaps["released"][0]["wall_ms"]))
         c.check(s, "a release while walking snaps back to the travel (north)", abs(math.degrees(wrap(math.radians(h - north)))) < 4.0, f"heading {h:.1f}°")

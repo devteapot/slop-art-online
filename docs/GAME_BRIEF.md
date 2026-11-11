@@ -920,7 +920,7 @@ All five are in the same finishing pass, from the same sight field. `memory` add
 - **The readout:** each change shows two notes for a few seconds: "Facing sight on" (or off) and the five values (focal, side, side share, near, margin). Settings › Play › Facing sight shows them for as long as it is on, as "Facing sight: on/off".
 - **The switch:** F5, or the switch in Settings › Play. `set_world_law` is admin only, and the player's identity gets no admin rights. A play scene that opts in (`"law_toggle": true`) has its launcher give the client the world admin's token in a private file. The client opens a second connection with it, for that one call and only to a `verify-*` world. Elsewhere the line is read-only.
 - **The look:** `human_face(dx, dy)` (`controls::look`).
-  - Facing the cursor, the cursor's direction is sent, standing and walking. While walking, the authority bends the walk 30° toward it at most.
+  - Facing the cursor, the cursor's direction is sent while standing. While a direction is held the look is released (`FACE_WHILE_MOVING`, off until look-2 makes a look turn only the facing): on main a look bends the walk itself, which play-test 5 felt as drift.
   - Facing where you walk, a look is sent only while a move is aimed, then released.
 - **Heard, not seen:** each `heard_sounds` row is a soft, fading mark on the ground that compass way, at its band's rough distance (near, close, far), keyed by its per-viewer key (`heardmark.rs`). Visual only.
 - **Verified:** `verify-ui` `field` ([its recipe](../.agents/skills/verify-ui/features/field.md)).

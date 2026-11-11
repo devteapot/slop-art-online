@@ -8,7 +8,7 @@ While the world's `fov_on` law is on, what a character sees depends on where its
 - `living/game/src/ui/facing.rs`: Settings › Play › Facing sight, with the switch (read-only without the admin link), "Facing sight: on/off" and the values.
 - `living/game/src/heardmark.rs`: a soft ground mark per `heard_sounds` row, keyed by its per-viewer key. It sits that compass way at its band's rough distance and fades after the row goes.
 - `living/game/src/controls.rs` `look`: `human_face(dx, dy)`.
-  - Facing the cursor: the cursor's direction, standing and walking.
+  - Facing the cursor: the cursor's direction while standing; released while a direction is held (`FACE_WHILE_MOVING` off until look-2).
   - Facing where you walk: only while a move is aimed, then released with `(0, 0)`.
   - A look is sent on changes over 4°, at most every 0.1 s. A send the bucket refused ("too many movement inputs") is retried.
 
@@ -18,7 +18,7 @@ While the world's `fov_on` law is on, what a character sees depends on where its
 - `switch`: F5, or Settings › Play › Facing sight's switch, calls `set_world_law("fov_on", …)` over the admin link. Each switch is a `law_change` row (owner SQL).
 - `readout`: the log line `facing: Facing sight on — Focal ±70° · side ±110° at 33% of sight · near 3 m all round · margin 10°` and the two toasts (the dump's `toasts`).
 - `match`: at a look (live script `look:DEG`, which `human_face` sends), the authority's `perceived` rows for the player agree with the client's field texel under each creature within 15 m. Creatures that the keep margins (1 m, 10°) or a light could decide are counted apart.
-- `walk`: walking north while looking east, the body heading is held 30° off the travel (`look_walk_deg`). A release (F3 to "where you walk") snaps it back to the travel. Standing, a release leaves the facing where it was.
+- `walk`: walking north with the cursor east, the client releases its look while a direction is held (`controls::FACE_WHILE_MOVING`, off until dev-box's look-2), so the body faces and walks north. With the switch on, the authority would hold the heading 30° off the travel (`look_walk_deg`); the check follows the switch. A release (F3 to "where you walk") leaves the walk on its travel. Standing, a release leaves the facing where it was.
 - `heard`: each authority `heard` row (owner SQL) has a live mark with the same key, bearing and band in the dump's `extra.heard`. None is for someone in sight. Marks fade after their rows go.
 
 ## How to get to it (user POV)
