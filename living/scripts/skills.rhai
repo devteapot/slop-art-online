@@ -139,7 +139,9 @@ fn inv(a, item) {
 // Other traits are the rules' own data.
 fn structures() {
     [
-        #{ name: "campfire", warms: true, light: 6.0 },
+        // No `light` here: it would widen the warmth search past fire_warmth for a fact no
+        // shipped law reads (near_light).
+        #{ name: "campfire", warms: true },
         #{ name: "shelter", roof: true },
         #{ name: "storage" }, #{ name: "remains" }, #{ name: "sign" }, #{ name: "bush_patch" },
         #{ name: "house", warms: true, roof: true }, #{ name: "gate" }, #{ name: "trap" },

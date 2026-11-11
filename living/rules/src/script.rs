@@ -2029,7 +2029,7 @@ mod tests {
         assert_eq!(with(|k| k.moving), "eat signal wait");
         assert_eq!(with(|k| k.moment), "flee follow graze rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
-        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, light: 6.0, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits::default()));
+        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits::default()));
         assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
         assert_eq!((s.num_of("kept_spoil", "storage", 0.0), s.num_of("planted_max", "berry_bush", 0.0)), (1.0 / 3.0, 5.0));
         assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.num_of("remains_s", "deer", 0.0), s.num_of("dodge_speed", "person", 0.0)), (55.0, 1.8, 1800.0, 5.2));

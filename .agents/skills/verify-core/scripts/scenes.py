@@ -212,7 +212,9 @@ def needs(s):
     s.expect("actor is exposed to night cold", not cold["rate_key"] & (64 | 128))
     s.call("grant_items", a, "cloak", 1)
     s.graph(a, {"first": [{"do": "rest"}]})
-    s.wait(lambda: s.vitals(a)["rate_key"] != cold["rate_key"])
+    # The new rest resets the key to 0 before the needs are next read; wait for the key that
+    # holds the cloak (bit 10) while still resting (bit 9) at night (bit 1), not that reset.
+    s.wait(lambda: (s.vitals(a)["rate_key"] & (1024 | 512 | 2)) == (1024 | 512 | 2))
     warm = s.vitals(a, "cloaked")
     # An ordinary night's cold tires (1.5 a minute times `person_pace`, divided by the body's
     # hardiness gene) and does not hurt; only winter nights and nights in the rain do

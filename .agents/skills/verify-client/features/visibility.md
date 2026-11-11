@@ -33,3 +33,4 @@ The driver stops before driving if the private, scoped or view inventory in the 
 - Inspector filters are not permission checks. Another client can omit them.
 - The owner's evidence holds perceptions and scripted reply detail from a scratch world. It remains under `.local/`.
 - `resource_node`, `structure`, `gate` and `terrain_chunk` stay public world data; their live state (amounts, owners, a gate's last opener) is readable beyond sight (docs/PERCEPTION.md).
+- Since 2026-11-11 (`goods-1`) that live state includes whether a fire burns, `structure.lit_until_ms` (lit while it is ahead of the clock), and a fishing ground's shared stock, `resource_node.pool` (the node holding it). A fire's fuel is not kept as items, because `inventory` is private in a scoped build. `drive.py` checks both columns reach anonymous SQL (`fire-signal.json`, "fire and shared-stock signals public to anonymous SQL").

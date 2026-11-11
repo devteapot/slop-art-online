@@ -211,6 +211,8 @@ The owner's rule: resources come from the world, and nothing spawns by magic. So
 
 - **Goods.** The catalog has berries, fish and meat. Cullet needs kelp, ash, sand, glass, roots, greens, peat and lamp oil, with their recipes. The owner's "traits, not lists" decision suggests goods should become data with properties, so that food is anything with nutrition and fuel is anything that burns.
 - **Fire that eats fuel.** A furnace or hearth is lit only while it is fed.
+
+  *Built 2026-11-11 on `goods-1`:* goods, fires that eat fuel, recipes and shared fishing stocks, with Cullet's goods as data in `living/scripts/cullet_goods.rhai` ([world rules](WORLD_RULES.md#goods-recipes-and-fuel)). Placing Cullet's nodes and fires is the authored plan's.
 - **Decay and upkeep.** Panes break and need glass. The owner has asked for this, as Rhai laws.
 - **Fish as a stock.** Today a fishing spot regrows. The owner wants fish to be animals eventually. For this test, regrowing spots with a shared limit are enough.
 - **Tide** (optional, recommended). A law that gives the water's state from the clock, shifting about 50 minutes later each day. It gates the Weirs and the wrack. It changes no terrain.
