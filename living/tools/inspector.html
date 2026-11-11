@@ -100,6 +100,8 @@ function about() {
   <div class="k">Sources read</div><ul class="tight">${m.sources.map(s => `<li>${esc(s)}</li>`).join("")}</ul>
   ${m.notes.length ? `<div class="k">Notes</div><ul class="tight">${m.notes.map(s => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
   <div class="k">Game clock</div><p class="small">${m.clock ? `fitted from ${m.clock.n} anchors (request "Now" lines, experience ids); median residual ${m.clock.resid_ms} ms; one game minute = ${(m.clock.mpm / 1000).toFixed(2)} s. Percepts read from requests (marked ≈) are placed at the middle of their game minute.` : "none"}</p>
+  <div class="k">Model exchanges: queue wait and model time (s)</div><table class="small"><thead><tr><th>purpose</th><th>calls</th><th>queue p50</th><th>p90</th><th>max</th><th>model p50</th><th>p90</th><th>max</th><th>errors</th></tr></thead><tbody>${(m.timing || []).map(t =>
+    `<tr><td>${esc(t.purpose)}</td><td>${t.n}</td>${[t.q50, t.q90, t.qmax, t.m50, t.m90, t.mmax].map(v => `<td>${(v / 1000).toFixed(1)}</td>`).join("")}<td>${t.errors}</td></tr>`).join("")}</tbody></table>
   <div class="k">Mind switches</div><pre>${esc(JSON.stringify(m.env, null, 1))}</pre>
   <div class="k">How a turn is decided</div><p class="small">${esc(m.rule)}</p>
   <div class="k">Times</div><p class="small">Each row shows local wall time, time since the run start, and game time. A model exchange is placed when it was queued (reply time − model latency − queue wait); its card shows all three. Mind-log lines have one-second resolution.</p></div>`;

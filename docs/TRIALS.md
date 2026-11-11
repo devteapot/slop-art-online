@@ -525,6 +525,8 @@ python3 living/tools/inspector.py RUN --who "Agnes Fenner,Avice Hollis" --since 
 - *body*: chronicle rows, census and sample activity, and the position, health and activity from each request's scene. It also shows what others saw the body do ("seen by …"), and the player's reducer calls.
 - *talk*: lines said and heard. *log*: the mind log's lines naming them.
 
+**Sources.** The files read, the fitted game clock, the mind's switches, and per purpose the model exchanges' queue wait (admission) against model time, as p50, p90 and max.
+
 **Lines.** Every line said, merged from the chronicle, the speaker's `said` row, listeners' speech rows and requests, and the mind log. The chronicle keeps one row for a line repeated within 2 minutes; the speaker's `said` rows keep each one.
 - Click a line for each hearer's fate: a talk turn (with its latency), an answer from a deliberation, parked behind a running deliberation (each release and re-park, and the turn that finally followed), a settled pair, or no turn.
 - For "no turn" the page lists the gate's inputs as the evidence shows them (talk.rs `on_speech`): addressed or not (the line's `to`, the hearer's salience, or who stood within the 6 m `address_m` of the speaker), whether the hearer cares (their relation from the nearest request's "People you know"), an active or closed exchange, another exchange, and whether the line asks something.

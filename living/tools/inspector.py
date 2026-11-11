@@ -1467,12 +1467,22 @@ class Run:
                                    "tokens", "ptok", "ctok", "cached", "error", "finish", "mode", "src", "sys", "sections", "reply", "why", "answering", "say", "body_feel")}
             out_calls.append(d)
         used_sys = {c["sys"] for c in calls if c["sys"]}
+        # Timing per purpose: queue wait (admission) against model time.
+        def pct(v, q):
+            v = sorted(v)
+            return v[min(len(v) - 1, int(q * len(v)))] if v else None
+        timing = []
+        for purpose in sorted({c["purpose"] for c in calls}):
+            cs = [c for c in calls if c["purpose"] == purpose]
+            qw, lt = [c["qw"] for c in cs], [c["lat"] for c in cs]
+            timing.append(dict(purpose=purpose, n=len(cs), q50=pct(qw, .5), q90=pct(qw, .9), qmax=max(qw), m50=pct(lt, .5), m90=pct(lt, .9), mmax=max(lt),
+                               errors=sum(1 for c in cs if c["error"])))
         return dict(
             meta=dict(dir=str(self.root), generated=dt.datetime.now().astimezone().isoformat(timespec="seconds"),
                       start=start, tz_min=int(off.total_seconds() // 60) if off else 0, clock=self.clock, env=self.env,
                       sources=self.sources, notes=self.notes, rule=RULE_NOTE,
                       kind="trial" if (self.root / "state.json").exists() else "play session",
-                      filters=dict(who=a.who, since=a.since, until=a.until)),
+                      filters=dict(who=a.who, since=a.since, until=a.until), timing=timing),
             people=people, lines=lines, calls=out_calls, systems={k: v for k, v in self.systems.items() if k in used_sys},
             events=events)
 
