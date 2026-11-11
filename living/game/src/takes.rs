@@ -114,8 +114,8 @@ pub fn turned(g: &Gaits, p: &Playing, now_ms: f64) -> (f32, bool) {
 /// own first step (`start_gait`, the right heel coming down), so its first stride continues the
 /// gait's; else the gait runs on to double support and the idle fades in, as before (`anim.rs`).
 /// The rate brings the take's starting speed to the body's (m/s), within [`RATE`].
-pub fn stop_for(g: &Gaits, phase: f32, pace_speed: f32, speed: f32) -> Option<(&'static str, f32, f32)> {
-    if pace_speed > crate::gait::WALK_MAX - crate::gait::CROSS_BAND {
+pub fn stop_for(g: &Gaits, phase: f32, pace_speed: f32, family: crate::gait::Family, speed: f32) -> Option<(&'static str, f32, f32)> {
+    if !g.walks(pace_speed, 1.0, family) {
         return None;
     }
     let info = g.info(STOP)?;
@@ -189,11 +189,12 @@ mod tests {
         let path: Vec<[f32; 2]> = (0..45).map(|f| [0.0, (f as f32 / 30.0 * 1.4).min(0.26 + f as f32 * 0.001)]).collect();
         j["walk_stop"] = serde_json::json!({"seconds": 1.467, "loop": false, "start_gait": {"clip": "walk", "phase": 0.0}, "path_m": path});
         let g = Gaits::parse(&j);
-        let (clip, rate, from) = stop_for(&g, 0.1, 1.4, 1.4).unwrap();
+        let (clip, rate, from) = stop_for(&g, 0.1, 1.4, crate::gait::Family::Split(2.8), 1.4).unwrap();
         assert_eq!(clip, "walk_stop");
         assert!((from - 0.1 * 1.033).abs() < 1e-3 && rate > 0.6, "{rate} {from}");
-        assert_eq!(stop_for(&g, 0.6, 1.4, 1.4), None, "half a cycle on: the gait settles as before");
-        assert_eq!(stop_for(&g, 0.1, 3.5, 3.5), None, "running: no take");
+        assert_eq!(stop_for(&g, 0.6, 1.4, crate::gait::Family::Split(2.8), 1.4), None, "half a cycle on: the gait settles as before");
+        assert_eq!(stop_for(&g, 0.1, 3.5, crate::gait::Family::Split(2.8), 3.5), None, "running: no take");
+        assert_eq!(stop_for(&g, 0.1, 1.4, crate::gait::Family::Running(true), 1.4), None, "the authority says it runs: no take");
     }
 
     #[test]

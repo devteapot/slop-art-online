@@ -799,6 +799,14 @@ fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32
 pub const WALK_SPEED: f32 = 1.4;
 pub const RUN_SPEED: f32 = 3.6;
 
+/// Look-dev has no world laws: people's walk/run split is the clips' own
+/// ([`crate::gait::Family::Clips`]) unless `LIVING_GAME_SPLIT=<m/s>` gives the one a world's laws
+/// would (the geometric mean of its walk and run, `live.rs`), to measure walks past the clips'.
+fn split_family() -> crate::gait::Family {
+    static SPLIT: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
+    SPLIT.get_or_init(|| std::env::var("LIVING_GAME_SPLIT").ok().and_then(|v| v.parse().ok())).map_or(crate::gait::Family::Clips, crate::gait::Family::Split)
+}
+
 /// What models whose files carry clips (`assets/lookdev/anim/`, from
 /// `living/tools/blender/animate.py`) do (`anim.rs` plays it): you walk or run by how you move;
 /// the line-up and crowds stand, talk or walk in place at `walk_speed` (`LIVING_GAME_ACT`). Your
@@ -828,7 +836,7 @@ pub fn clips(
         if !rig.clips {
             continue;
         }
-        let mut m = crate::anim::Motion { stride: ch.map_or(1.0, |c| c.stride), now_ms: now as f64 * 1000.0, ..default() };
+        let mut m = crate::anim::Motion { stride: ch.map_or(1.0, |c| c.stride), now_ms: now as f64 * 1000.0, family: split_family(), ..default() };
         if is_player {
             m.speed = if roam.moving { roam.speed } else { 0.0 };
             m.action = probe.as_ref().and_then(|p| p.oneshot(now)).map(|(clip, rate, start)| crate::combat::Action {

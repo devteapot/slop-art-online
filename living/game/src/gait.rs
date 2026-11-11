@@ -12,9 +12,12 @@
 //! [`Gaits::blend`] turns a speed into at most two gait weights and the distance one cycle
 //! covers; `anim.rs` plays the weighted gaits at one shared phase:
 //! - **People** blend between neighbours in natural speed within a family (walk ↔ walk_brisk,
-//!   run ↔ run_fast) across the whole gap, and across families (walk_brisk ↔ run) only in a
-//!   band of ±[`CROSS_BAND`] round [`WALK_MAX`], so the rules' 2.6 m/s walk still walks and
-//!   their 3.9 m/s run runs.
+//!   run ↔ run_fast) across the whole gap, and between the walking and running families by
+//!   [`Family`]: the authority's own word on whether a body runs when it gives one, else a
+//!   split speed from the world's laws (`live.rs`: the geometric mean of a grown person's walking
+//!   and running speeds, 3.18 m/s at the rules' 2.6 and 3.9), blending only within
+//!   ±[`CROSS_BAND`] of it, else midway between the clips' own walking and running speeds. No
+//!   speed of the rules is written here, so a walk set to 3.4 m/s still walks.
 //! - **Animals** (the wolf: walk, trot, run at natural 1.3, 3.4 and 7.0 m/s; the deer: walk,
 //!   trot, bound at 1.3, 3.7 and 4.6) change footfall pattern between gaits (lateral walk,
 //!   diagonal trot, gallop or bound): halfway blends of two patterns shuffle, so they blend only
@@ -41,10 +44,23 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::sync::{Arc, Mutex, OnceLock};
 
-/// Walking clips serve speeds up to this, for a character of the 1.75 m base (m/s).
-pub const WALK_MAX: f32 = 2.8;
-/// Half the width of the walk ↔ run blend round [`WALK_MAX`] (m/s).
+/// Half the width of the walk ↔ run blend round the split speed ([`Family::Split`], m/s).
 pub const CROSS_BAND: f32 = 0.2;
+
+/// Which of a person's gait families plays: walking clips (walk, walk_brisk) or running ones
+/// (run, run_fast).
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum Family {
+    /// The authority says whether the body runs: that family only, at any speed.
+    Running(bool),
+    /// The split speed (m/s for a character of the 1.75 m base, off a road): walking clips below
+    /// it, running clips above, blending within ±[`CROSS_BAND`].
+    Split(f32),
+    /// Neither known: the split midway between the walking clips' fastest natural speed and the
+    /// running clips' slowest ([`Gaits::clips_split`]).
+    #[default]
+    Clips,
+}
 /// Animals blend two gaits within this ratio either side of their geometric mean, unless their
 /// sidecar gives its own `band`.
 const ANIMAL_BAND: f32 = 1.1;
@@ -229,8 +245,8 @@ impl ClipInfo {
 }
 
 /// A character file's locomotion clips (the forward ones sorted by natural speed, then the
-/// directional ones), whether they split into walking and running families at [`WALK_MAX`]
-/// (people) or are one family (animals), every clip's [`ClipInfo`], and the directions people
+/// directional ones), whether they split into walking and running families ([`Family`]; people)
+/// or are one family (animals), every clip's [`ClipInfo`], and the directions people
 /// have takes for (scheme "cursor": [`Gaits::blend_toward`]).
 #[derive(Debug, Default)]
 pub struct Gaits {
@@ -404,14 +420,14 @@ impl Gaits {
     /// [`CADENCE_MAX`] times as often as the forward gaits, or when the mirrored travel (left for
     /// right) would fall back: the caller falls back to the forward gaits along the travel, so
     /// both sides always look alike.
-    pub fn blend_toward(&self, speed: f32, stride: f32, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
-        let b = self.blend_side(speed, stride, travel, len)?;
-        self.blend_side(speed, stride, -travel, len)?;
+    pub fn blend_toward(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+        let b = self.blend_side(speed, stride, family, travel, len)?;
+        self.blend_side(speed, stride, family, -travel, len)?;
         Some(b)
     }
 
-    fn blend_side(&self, speed: f32, stride: f32, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
-        let fwd = self.blend(speed, stride, len);
+    fn blend_side(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+        let fwd = self.blend(speed, stride, family, len);
         let deg = {
             let d = travel.to_degrees().rem_euclid(360.0);
             if d > 180.0 { d - 360.0 } else { d }
@@ -442,6 +458,9 @@ impl Gaits {
             match dir {
                 None => parts.extend(fwd.parts().iter().map(|&(i, x)| (i, x * w))),
                 Some(d) => match (d.walk, d.run) {
+                    // The authority's word picks the take where the direction has both.
+                    (Some(a), Some(_)) if family == Family::Running(false) => parts.push((a, w)),
+                    (Some(_), Some(b)) if family == Family::Running(true) => parts.push((b, w)),
                     (Some(a), Some(b)) => {
                         // Between the two takes' natural speeds, as neighbouring forward gaits.
                         let (lo, hi) = (self.clips[a].natural, self.clips[b].natural.max(self.clips[a].natural + 0.01));
@@ -471,23 +490,56 @@ impl Gaits {
         (fwd.cycle_m <= CADENCE_MAX * b.cycle_m).then_some(b)
     }
 
+    /// Midway between the walking clips' fastest natural speed and the running clips' slowest
+    /// (m/s at stride 1): the walk ↔ run split when neither the authority nor the laws give one.
+    pub fn clips_split(&self) -> f32 {
+        let fwd = &self.clips[..self.forward];
+        let walk = fwd.iter().filter(|g| !g.run).map(|g| g.natural).fold(f32::NAN, f32::max);
+        let run = fwd.iter().filter(|g| g.run).map(|g| g.natural).fold(f32::NAN, f32::min);
+        match (walk.is_nan(), run.is_nan()) {
+            (false, false) => 0.5 * (walk + run),
+            (false, true) => walk,
+            (true, false) => run,
+            (true, true) => 0.0,
+        }
+    }
+
+    /// The walk ↔ run split for `family` (m/s at stride 1), or None when the authority picks.
+    fn split_speed(&self, family: Family) -> Option<f32> {
+        match family {
+            Family::Running(_) => None,
+            Family::Split(v) => Some(v),
+            Family::Clips => Some(self.clips_split()),
+        }
+    }
+
+    /// Whether a person moving at `speed` (m/s) with steps `stride` times the base's walks, not
+    /// runs, clear of the blend into running.
+    pub fn walks(&self, speed: f32, stride: f32, family: Family) -> bool {
+        match self.split_speed(family) {
+            None => family == Family::Running(false),
+            Some(v) => speed / stride.max(0.05) <= v - CROSS_BAND,
+        }
+    }
+
     /// The speed band (m/s at stride 1) over which gaits `i` and `i + 1` blend.
-    fn band(&self, i: usize) -> (f32, f32) {
+    fn band(&self, i: usize, family: Family) -> (f32, f32) {
         let (a, b) = (&self.clips[i], &self.clips[i + 1]);
         if !self.split {
             let m = (a.natural * b.natural).sqrt();
             (m / self.band, m * self.band)
         } else if a.run != b.run {
-            (WALK_MAX - CROSS_BAND, WALK_MAX + CROSS_BAND)
+            let v = self.split_speed(family).unwrap_or_else(|| self.clips_split());
+            (v - CROSS_BAND, v + CROSS_BAND)
         } else {
             (a.natural, b.natural)
         }
     }
 
     /// The gaits and their weights for moving at `speed` (m/s) with steps `stride` times the
-    /// base's, and the metres a cycle covers at stride 1. `len(i)` gives a gait's length (s) when
-    /// the sidecar has none.
-    pub fn blend(&self, speed: f32, stride: f32, len: impl Fn(usize) -> f32) -> Blend {
+    /// base's, in `family`, and the metres a cycle covers at stride 1. `len(i)` gives a gait's
+    /// length (s) when the sidecar has none.
+    pub fn blend(&self, speed: f32, stride: f32, family: Family, len: impl Fn(usize) -> f32) -> Blend {
         let s = speed / stride.max(0.05);
         let cycle = |i: usize| {
             let g = &self.clips[i];
@@ -497,9 +549,18 @@ impl Gaits {
         if self.forward == 0 {
             return Blend { parts: [(0, 0.0); 4], n: 0, cycle_m: 1.0 };
         }
+        // The authority's word picks the family: only its clips (sorted, so a run of them).
+        let (first, end) = match family {
+            Family::Running(r) if self.split && self.clips[..self.forward].iter().any(|g| g.run == r) => {
+                let first = self.clips[..self.forward].iter().position(|g| g.run == r).unwrap_or(0);
+                let end = first + self.clips[first..self.forward].iter().take_while(|g| g.run == r).count();
+                (first, end)
+            }
+            _ => (0, self.forward),
+        };
         let mut prev_hi = 0.0f32;
-        for i in 0..self.forward - 1 {
-            let (lo, hi) = self.band(i);
+        for i in first..end - 1 {
+            let (lo, hi) = self.band(i, family);
             let lo = lo.max(prev_hi);
             let hi = hi.max(lo + 0.01);
             prev_hi = hi;
@@ -517,7 +578,7 @@ impl Gaits {
                 return Blend { parts: [(i, 1.0 - t), (i + 1, t), (i, 0.0), (i, 0.0)], n: 2, cycle_m: (1.0 - t) * cycle(i) + t * cycle(i + 1) };
             }
         }
-        one(self.forward - 1)
+        one(end - 1)
     }
 }
 
@@ -705,6 +766,9 @@ fn record(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// The split these tests were written at (the client's fixed 2.8 m/s before gait-split-1).
+    const OLD: Family = Family::Split(2.8);
     use std::f32::consts::PI;
 
     /// Vivi's sidecar (`assets/lookdev/anim/vroid-Vivi.clips.json`): speeds, lengths and markers.
@@ -757,32 +821,32 @@ pub(crate) mod tests {
         let name = |b: &Blend| b.parts().iter().map(|&(i, w)| (g.clips[i].clip, (w * 100.0).round() / 100.0)).collect::<Vec<_>>();
         let len = |_| 1.0;
         // Straight ahead: the forward gaits, exactly as `blend`.
-        assert_eq!(g.blend_toward(1.4, 1.0, 0.0, len), Some(g.blend(1.4, 1.0, len)));
+        assert_eq!(g.blend_toward(1.4, 1.0, OLD, 0.0, len), Some(g.blend(1.4, 1.0, OLD, len)));
         // Right and behind, at a walk: that side's take.
-        assert_eq!(name(&g.blend_toward(1.2, 1.0, PI / 2.0, len).unwrap()), vec![("strafe_walk_cross_right", 1.0)]);
-        assert_eq!(name(&g.blend_toward(1.2, 1.0, PI, len).unwrap()), vec![("walk_back", 1.0)]);
+        assert_eq!(name(&g.blend_toward(1.2, 1.0, OLD, PI / 2.0, len).unwrap()), vec![("strafe_walk_cross_right", 1.0)]);
+        assert_eq!(name(&g.blend_toward(1.2, 1.0, OLD, PI, len).unwrap()), vec![("walk_back", 1.0)]);
         // Behind at the rules' 2.6 m/s walk: 1.16 m a cycle against walk_brisk's 2.03 would step
         // 1.76 times as often, so it falls back.
-        assert_eq!(g.blend_toward(2.6, 1.0, PI, len), None);
+        assert_eq!(g.blend_toward(2.6, 1.0, OLD, PI, len), None);
         // Between forward and the forward-right diagonal: both, by angle.
-        let b = g.blend_toward(1.2, 1.0, 22.5f32.to_radians(), len).unwrap();
+        let b = g.blend_toward(1.2, 1.0, OLD, 22.5f32.to_radians(), len).unwrap();
         assert_eq!(name(&b), vec![("walk", 0.5), ("walk_diag_fr", 0.5)]);
         // Right to behind (no back-right diagonal): the 90° gap blends side and back.
-        assert_eq!(name(&g.blend_toward(1.0, 1.0, 135f32.to_radians(), len).unwrap()), vec![("strafe_walk_cross_right", 0.5), ("walk_back", 0.5)]);
+        assert_eq!(name(&g.blend_toward(1.0, 1.0, OLD, 135f32.to_radians(), len).unwrap()), vec![("strafe_walk_cross_right", 0.5), ("walk_back", 0.5)]);
         // Each cycle covers the weighted metres, so the feet keep the body's speed.
-        let side = g.blend_toward(1.2, 1.0, PI / 2.0, len).unwrap();
+        let side = g.blend_toward(1.2, 1.0, OLD, PI / 2.0, len).unwrap();
         assert!((side.cycle_m - 1.3).abs() < 1e-4);
         // Between a direction's walk and run takes, by speed.
-        assert_eq!(g.blend_toward(1.9, 1.0, PI / 4.0, len).unwrap().n, 2);
+        assert_eq!(g.blend_toward(1.9, 1.0, OLD, PI / 4.0, len).unwrap().n, 2);
         // A side whose mirror falls back (no left take, and back to forward-left is too far to
         // blend) falls back too.
         let mut j = takes_json();
         j.as_object_mut().unwrap().remove("strafe_walk_cross_left");
         let lopsided = Gaits::parse(&j);
-        assert!(lopsided.blend_side(1.2, 1.0, PI / 2.0, len).is_some());
-        assert_eq!(lopsided.blend_toward(1.2, 1.0, PI / 2.0, len), None);
+        assert!(lopsided.blend_side(1.2, 1.0, OLD, PI / 2.0, len).is_some());
+        assert_eq!(lopsided.blend_toward(1.2, 1.0, OLD, PI / 2.0, len), None);
         // A file with no directional takes falls back.
-        assert_eq!(vivi().blend_toward(1.4, 1.0, PI / 2.0, len), None);
+        assert_eq!(vivi().blend_toward(1.4, 1.0, OLD, PI / 2.0, len), None);
     }
 
     #[test]
@@ -806,26 +870,46 @@ pub(crate) mod tests {
         let len = |_| 1.0;
         // Pure where one gait serves: the rules' walk and run, the look-dev walk.
         for (speed, clip) in [(1.4, "walk"), (2.5, "walk_brisk"), (3.05, "run"), (3.9, "run_fast")] {
-            assert_eq!(only(&g.blend(speed, 1.0, len)), Some(clip), "at {speed} m/s");
+            assert_eq!(only(&g.blend(speed, 1.0, OLD, len)), Some(clip), "at {speed} m/s");
         }
         // Between walk and walk_brisk both play, and the phase rate keeps the stride rule: one
         // gait at its baked cycle reproduces `speed / (baked speed × stride)`.
-        let b = g.blend(1.7, 1.0, len);
+        let b = g.blend(1.7, 1.0, OLD, len);
         assert_eq!(b.n, 2);
         assert!((b.parts[0].1 + b.parts[1].1 - 1.0).abs() < 1e-5);
-        let walk = g.blend(1.4, 1.0, len);
+        let walk = g.blend(1.4, 1.0, OLD, len);
         let rate = 1.4 / walk.cycle_m;
         assert!((rate * 1.033 - 1.4 / 1.389).abs() < 1e-3, "one cycle per {} s", 1.0 / rate);
-        // Walk ↔ run only round WALK_MAX.
-        assert_eq!(g.blend(WALK_MAX, 1.0, len).n, 2);
-        assert_eq!(only(&g.blend(WALK_MAX - CROSS_BAND - 0.01, 1.0, len)), Some("walk_brisk"));
+        // Walk ↔ run only round the split.
+        assert_eq!(g.blend(2.8, 1.0, OLD, len).n, 2);
+        assert_eq!(only(&g.blend(2.8 - CROSS_BAND - 0.01, 1.0, OLD, len)), Some("walk_brisk"));
+    }
+
+    #[test]
+    fn the_walk_run_split_follows_the_authority_or_the_laws_not_a_number() {
+        let g = vivi();
+        let len = |_| 1.0;
+        // The laws' split (the geometric mean of a 3.4 m/s walk and a 4.3 m/s run, 3.82): a walk
+        // at 3.4 m/s still walks, a run at 4.3 runs.
+        let laws = Family::Split((3.4f32 * 4.3).sqrt());
+        assert_eq!(only(&g.blend(3.4, 1.0, laws, len)), Some("walk_brisk"));
+        assert_eq!(only(&g.blend(4.3, 1.0, laws, len)), Some("run_fast"));
+        assert!(g.walks(3.4, 1.0, laws) && !g.walks(4.3, 1.0, laws));
+        // The authority's word wins at any speed: a walk at 3.6 walks, a run at 2.9 runs.
+        assert_eq!(only(&g.blend(3.6, 1.0, Family::Running(false), len)), Some("walk_brisk"));
+        assert_eq!(only(&g.blend(2.9, 1.0, Family::Running(true), len)), Some("run"));
+        assert!(g.walks(3.6, 1.0, Family::Running(false)) && !g.walks(2.0, 1.0, Family::Running(true)));
+        // Neither: midway between walk_brisk's natural 2.03 and run's 3.15 (2.59).
+        assert!((g.clips_split() - 0.5 * (2.028 + 3.15)).abs() < 0.05, "{}", g.clips_split());
+        assert_eq!(only(&g.blend(2.3, 1.0, Family::Clips, len)), Some("walk_brisk"));
+        assert_eq!(only(&g.blend(2.9, 1.0, Family::Clips, len)), Some("run"));
     }
 
     #[test]
     fn weights_are_continuous_in_speed() {
         let g = vivi();
         let w = |s: f32| {
-            let b = g.blend(s, 1.0, |_| 1.0);
+            let b = g.blend(s, 1.0, OLD, |_| 1.0);
             let mut v = [0.0f32; 4];
             for &(i, x) in b.parts() {
                 v[i] += x;
@@ -847,7 +931,7 @@ pub(crate) mod tests {
     fn longer_legs_step_slower_and_walk_further() {
         let g = vivi();
         // A giant twice the base's stride walks at 2.6 m/s with the casual walk, at half its rate.
-        let b = g.blend(2.6, 2.0, |_| 1.0);
+        let b = g.blend(2.6, 2.0, OLD, |_| 1.0);
         assert_eq!(only(&b), Some("walk"));
         let rate = 2.6 / (2.0 * b.cycle_m);
         assert!((rate * 1.033 - 2.6 / (1.389 * 2.0)).abs() < 1e-3);
@@ -887,13 +971,13 @@ pub(crate) mod tests {
         let g = wolf();
         let name = |b: &Blend| b.parts().iter().map(|&(i, w)| (g.clips[i].clip, (w * 100.0).round() / 100.0)).collect::<Vec<_>>();
         for (speed, clip) in [(1.3, "walk"), (1.0, "walk"), (3.4, "trot"), (4.1, "trot"), (7.0, "run"), (5.5, "run")] {
-            assert_eq!(name(&g.blend(speed, 1.0, |_| 1.0)), vec![(clip, 1.0)], "at {speed} m/s");
+            assert_eq!(name(&g.blend(speed, 1.0, OLD, |_| 1.0)), vec![(clip, 1.0)], "at {speed} m/s");
         }
         // walk/trot meet at sqrt(1.3 × 3.4) = 2.10 m/s, trot/run at sqrt(3.4 × 7) = 4.88.
-        assert_eq!(g.blend(2.10, 1.0, |_| 1.0).n, 2);
-        assert_eq!(g.blend(4.88, 1.0, |_| 1.0).n, 2);
+        assert_eq!(g.blend(2.10, 1.0, OLD, |_| 1.0).n, 2);
+        assert_eq!(g.blend(4.88, 1.0, OLD, |_| 1.0).n, 2);
         // A pup (stage scale 0.42) takes smaller steps: at 1.3 m/s it trots.
-        assert_eq!(name(&g.blend(1.3, 0.42, |_| 1.0)), vec![("trot", 1.0)]);
+        assert_eq!(name(&g.blend(1.3, 0.42, OLD, |_| 1.0)), vec![("trot", 1.0)]);
         // The walk's settle point has three paws down.
         let c = &g.info("walk").unwrap().contacts;
         assert_eq!(c.count(c.next_settle(0.3)), 3);
@@ -907,7 +991,7 @@ pub(crate) mod tests {
             {"name": "run", "seconds": 0.48, "loop": true, "speed": 4.6},
         ]}));
         let top = |s: f32| {
-            let b = g.blend(s, 1.0, |_| 1.0);
+            let b = g.blend(s, 1.0, OLD, |_| 1.0);
             let &(i, w) = b.parts().iter().max_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
             (g.clips[i].clip, w)
         };
@@ -915,14 +999,14 @@ pub(crate) mod tests {
         assert_eq!(top(3.7), ("trot", 1.0));
         let (clip, w) = top(3.7 * 1.15);
         assert!(clip == "run" && w > 0.9, "flee plays the bound, not {clip} at {w}");
-        assert_eq!(g.blend(4.125, 1.0, |_| 1.0).n, 2, "they still blend round the boundary");
+        assert_eq!(g.blend(4.125, 1.0, OLD, |_| 1.0).n, 2, "they still blend round the boundary");
     }
 
     #[test]
     fn a_file_without_both_gaits_uses_the_lookdev_speeds() {
         let g = Gaits::parse(&serde_json::json!({"walk": {"speed": 1.4}}));
         assert_eq!(g.clips.len(), 2);
-        let b = g.blend(3.6, 1.0, |_| 1.0);
+        let b = g.blend(3.6, 1.0, OLD, |_| 1.0);
         assert_eq!((b.n, g.clips[b.parts[0].0].clip), (1, "run"));
     }
 }
