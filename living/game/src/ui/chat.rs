@@ -65,8 +65,9 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>) {
         });
 }
 
-/// Enter opens the input; typing edits it; Enter says it, Esc cancels.
-pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, mut events: MessageReader<KeyboardInput>, mut out: ResMut<Outbox>, wants: Option<Res<crate::hud::UiWants>>, model: Res<HudModel>) {
+/// Enter opens the input; typing edits it; Tab speaks to the next person within earshot; Enter
+/// says it to them (`talk.rs`), Esc cancels.
+pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, mut events: MessageReader<KeyboardInput>, mut out: ResMut<Outbox>, wants: Option<Res<crate::hud::UiWants>>, model: Res<HudModel>, mut talk: Option<ResMut<crate::talk::Talk>>) {
     if model.death.is_some() {
         events.clear();
         return;
@@ -99,7 +100,7 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, mut event
                 if input.compose.take().is_some() {
                     input.composed = Some(line.trim().to_string());
                 } else if !line.trim().is_empty() {
-                    out.say.push(line.trim().to_string());
+                    out.say.push((line.trim().to_string(), talk.as_ref().and_then(|t| t.to).unwrap_or(0)));
                 }
                 input.chat_open = false;
                 return;
@@ -112,6 +113,11 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, mut event
             }
             LogicalKey::Backspace => {
                 input.chat.pop();
+            }
+            LogicalKey::Tab => {
+                if let Some(t) = talk.as_mut() {
+                    t.cycle = true;
+                }
             }
             LogicalKey::Space => {
                 if input.chat.chars().count() < MAX_CHARS {
@@ -142,6 +148,7 @@ pub fn update(
     mut input_row: Query<&mut Node, (With<InputRow>, Without<LogRow>)>,
     mut input_text: Query<(&mut Text, &mut TextColor), (With<InputText>, Without<LogWho>, Without<LogMsg>, Without<InputLabel>)>,
     mut input_label: Query<&mut Text, (With<InputLabel>, Without<InputText>)>,
+    talk: Option<Res<crate::talk::Talk>>,
 ) {
     let open = input.chat_open && model.death.is_none();
     let now = model.now;
@@ -188,7 +195,9 @@ pub fn update(
         show(&mut n, open);
     }
     for mut t in &mut input_label {
-        set_text(&mut t, input.compose.as_deref().map_or("Say", |c| c));
+        // Whom it goes to, as my character knows them ("Say to a stranger"; `talk.rs`).
+        let say = talk.as_ref().map_or("Say", |t| if t.label.is_empty() { "Say" } else { t.label.as_str() });
+        set_text(&mut t, input.compose.as_deref().unwrap_or(say));
     }
     if open {
         let caret = if crate::capture::scripted() || (time.elapsed_secs() * 1.8).fract() < 0.6 { "|" } else { " " };

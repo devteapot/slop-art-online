@@ -171,7 +171,7 @@ The mind service integrates what human-played characters live into their own Neo
 
 ### Perception for every character (2026-11-09)
 
-Minds, behaviour graphs and the combat feed see by the players' rule: sight by light and a clear sight line (walls, rock, shut gates hide). What one character perceives of another is its record through the script's `perceived_of` law (a name only when known, health as a band unless a skill such as `appraise` reveals it), the same projection for a mind's percepts and a player's `seen_characters` ([perception](PERCEPTION.md#what-an-observer-perceives-of-a-target)).
+Minds, behaviour graphs and the combat feed see by the players' rule: sight by light and a clear sight line (walls, rock, shut gates hide). What one character perceives of another is its record through the script's `perceived_of` law (a name only when known, health as a band unless a skill such as `appraise` reveals it), the same projection for a mind's percepts and a player's `seen_characters` ([perception](PERCEPTION.md#what-an-observer-perceives-of-a-target)). What someone is seen doing is its activity's label, or, for a body moving under motion intent with no activity of its own (a player at the keys), the motion itself (`walk → person`), so a walking player reads as walking, as an AI character does ([activity derived from the body](PERCEPTION.md#activity-derived-from-the-body)).
 
 ### Every living thing is a character
 

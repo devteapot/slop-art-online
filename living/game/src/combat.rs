@@ -114,6 +114,9 @@ pub struct Combat {
     /// Which skill key is held (indicators), and since when.
     pub aiming: Option<String>,
     pub guarding: bool,
+    /// A move is being aimed at the cursor now: a key held on a skill aimed at a creature or a
+    /// point, or a guard up (`controls::Control::Travel` turns my body to the cursor only then).
+    pub aims: bool,
     /// The direction a raised guard was sent toward (sim, unit): the authority keeps the aim
     /// of the press, so the arc shows that, not the cursor.
     guard_dir: Option<Vec2>,
@@ -344,6 +347,12 @@ pub fn pick(net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res
         .map(|(id, _)| id);
 }
 
+/// Whether a skill aimed this way turns the body toward the cursor while it is aimed: at a
+/// creature, a point or a guard's facing; not a dash, a heal on oneself or an ally, or none.
+pub fn aims_at_cursor(aim: &str) -> bool {
+    matches!(aim, "creature" | "point" | "facing")
+}
+
 /// Where I aim: the cursor's ground point (sim), else ahead of me.
 fn aim_point(cam: &Cam, me: Vec2, input: &Input) -> Vec2 {
     cam.cursor_ground.map(|c| Vec2::new(c.x, c.z)).unwrap_or_else(|| me + input.look.unwrap_or(Vec2::Y).normalize_or(Vec2::Y) * 4.0)
@@ -361,6 +370,7 @@ pub fn input(
     ui: Res<crate::hud::UiWants>,
     cards: Res<Cards>,
     mut scripted: ResMut<Scripted>,
+    (pointer, mut talk): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>),
     mut c: ResMut<Combat>,
 ) {
     let now = now_ms(&scene);
@@ -404,6 +414,27 @@ pub fn input(
     if !input.demo && typing {
         c.aiming = None;
     }
+    // A tap on a person who is not hostile to me talks to them instead of striking (play-test 2:
+    // the owner, tapping to interact, struck the first resident who greeted him). Striking them
+    // takes a held press; animals and hostile people are struck by a tap as before.
+    let peaceful = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|k| k.kind == "person") && !hostile_to_me(conn, id, me_id, now);
+    let tap_talks = |c: &Combat| {
+        let card = cards.slot(0).filter(|card| card.aim == "creature")?;
+        let whom = c.target.or_else(|| nearest(&scene, me_id, me, aim_point(&cam, me, &input), card.reach + 0.4))?;
+        peaceful(whom).then_some(whom)
+    };
+    if !input.demo && pointer.tapped && free_mouse {
+        // Open: a tap on someone addresses them instead; closed: it opens the box to them.
+        let whom = if typing { c.target.filter(|id| peaceful(*id)) } else { tap_talks(&c) };
+        if let (Some(id), Some(t)) = (whom, talk.as_mut()) {
+            t.open_to = Some(id);
+        }
+    }
+    let tapped_talk = !input.demo && !typing && pointer.tapped && talk.is_some() && tap_talks(&c).is_some();
+    if !input.demo && !typing && pointer.tapped {
+        let whom = c.target.or_else(|| nearest(&scene, me_id, me, aim_point(&cam, me, &input), cards.slot(0).map_or(0.0, |k| k.reach) + 0.4));
+        info!("tap: {} (at {:?}{})", if tapped_talk { "talk" } else { "strike" }, whom, whom.map_or(String::new(), |w| format!(", {}", if peaceful(w) { "peaceful" } else { "hostile or not a person" })));
+    }
     if !input.demo && !typing {
         let held = |k| keys.pressed(k);
         // Held keys show their skill's indicator: RMB, Q, LMB, R, E.
@@ -421,7 +452,7 @@ pub fn input(
             None
         };
         let went_down = [
-            mouse.just_pressed(MouseButton::Left) && free_mouse,
+            mouse.just_pressed(MouseButton::Left) && free_mouse && !tapped_talk,
             mouse.just_pressed(MouseButton::Right) && free_mouse,
             keys.just_pressed(KeyCode::KeyQ),
             keys.just_pressed(KeyCode::KeyE),
@@ -444,6 +475,7 @@ pub fn input(
     } else if input.demo {
         c.aiming = None;
     }
+    c.aims = c.guarding || c.aiming.as_ref().and_then(|s| cards.by_name(s)).is_some_and(|k| aims_at_cursor(&k.aim));
     for (skill, spec) in std::mem::take(&mut scripted.press) {
         if let Some(card) = cards.on_bar(&skill) {
             let (aim, tgt) = scripted_aim(conn, &scene, me_id, me, &spec, input.look);
@@ -462,9 +494,11 @@ pub fn input(
         let (target_id, point) = match card.aim.as_str() {
             "creature" => (tgt.or(c.target).or_else(|| nearest(&scene, me_id, me, aim, card.reach + 0.4)).unwrap_or(0), aim),
             "self_or_ally" => (tgt.or(c.target.filter(|t| !hostile(conn, *t, me_id))).unwrap_or(0), aim),
-            // A dash goes the way I move, else back from where I face (a jump: toward it).
+            // A dash goes the way I move, else back from where I face (a jump: toward it). Facing
+            // where I walk and not aiming, that is the facing drawn, not the cursor.
             "dash" => {
-                let back = (me - aim).normalize_or(Vec2::NEG_Y);
+                let drawn = input.face.filter(|_| !input.faces_cursor(c.aims));
+                let back = drawn.map_or((me - aim).normalize_or(Vec2::NEG_Y), |f| -f.normalize_or(Vec2::Y));
                 let d = if input.dir != Vec2::ZERO { input.dir } else if skill == "jump" { -back } else { back };
                 (0, me + d * 2.0)
             }
@@ -508,6 +542,17 @@ fn nearest(scene: &Scene, me_id: u32, me: Vec2, toward: Vec2, within: f32) -> Op
 /// Whether a creature looks hostile to me: its move under way is aimed at me.
 pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
     crate::net::find_fighter(conn, id).is_some_and(|f| f.target == me && f.act != 0)
+}
+
+/// How long after a blow its giver still counts as hostile to me (ms).
+pub const HURT_HOSTILE_MS: f64 = 15_000.0;
+
+/// Whether a creature is hostile to me as far as my client knows: its move under way is aimed
+/// at me, or it hurt me within [`HURT_HOSTILE_MS`] (my `vitals.hurt_by`). The HUD's hostile
+/// stance and the tap rule use it.
+pub fn hostile_to_me(conn: &DbConnection, id: u32, me: u32, now_ms: f64) -> bool {
+    let hurt = conn.db.my_vitals().id().find(&me).is_some_and(|v| v.hurt_by == id && v.hurt_by != 0 && now_ms - (v.hurt_ms as f64) < HURT_HOSTILE_MS);
+    hurt || hostile(conn, id, me)
 }
 
 /// An animal's move: its own clip by how the rules aim the skill (`skill_card.aim`), never by
@@ -621,7 +666,9 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
             // confirmed move (`live.rs` times one-shots on the display clock).
             if let Some((skill, t)) = c.predicted.clone().filter(|(s, _)| cards.by_name(s).is_none_or(|k| k.aim != "dash")) {
                 if let Some(a) = clip_of(cards.by_name(&skill), c.strikes, None) {
-                    out.insert(id, Action { start_ms: t, face: input.look, ..a });
+                    // Faces the cursor while it waits for the authority, if it is aimed there.
+                    let face = input.look.filter(|_| cards.by_name(&skill).is_some_and(|k| aims_at_cursor(&k.aim)));
+                    out.insert(id, Action { start_ms: t, face, ..a });
                     continue;
                 }
             }

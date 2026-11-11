@@ -293,6 +293,7 @@ pub struct MapInfo {
 /// What the player asked of the UI this frame; the active source carries it out.
 #[derive(Resource, Default)]
 pub struct Outbox {
-    pub say: Vec<String>,
+    /// Lines to say, and to whom (a character id; 0 for no one in particular).
+    pub say: Vec<(String, u32)>,
     pub rejoin: bool,
 }
