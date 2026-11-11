@@ -152,21 +152,20 @@ fn look_shade(color: vec3<f32>, p: vec3<f32>, reach: f32, r: f32, ground: f32, l
         return color;
     }
     var hsv = hsv_of(color);
-    // Hues toward the shadow hue, as toon's shadows (reds and oranges less, so they deepen and
-    // cool rather than go pink), a little less saturated, and darker: about half by day; by
-    // night, when the scene's shadows are already dark, a little less, but leaning further to
-    // the cool hue so it still reads as shadow, not as black.
+    // The toon shadow's own move (`shadow_of`): hues toward the shadow hue by the style's shift
+    // (reds and oranges less, so they deepen rather than go pink), saturation a little lower,
+    // and darker: to about half by day, a little more by night so it still reads when the
+    // scene's shadows are already dark. Then a faint neutral cool over it, the sky's light in
+    // a shadow, and no colour of its own: the shade never tints the scene.
     let red = 1.0 - smoothstep(0.05, 0.12, abs(hsv.x - round(hsv.x)));
-    let shift = clamp(edges.sight_shade.y * 2.5 * (1.0 - 0.5 * red), 0.0, 0.8);
+    let shift = edges.sight_shade.y * (1.0 - 0.75 * red);
     var dh = edges.sight_shade.x - hsv.x;
     dh = dh - round(dh);
     hsv.x = fract(hsv.x + dh * shift);
-    hsv.y = clamp(hsv.y * edges.sight_shade.z * mix(0.7, 0.85, light), 0.0, 1.0);
-    hsv.z = hsv.z * (1.0 - edges.sight_shade.w * mix(1.0, 1.2, light));
+    hsv.y = clamp(hsv.y * edges.sight_shade.z * 0.75, 0.0, 1.0);
+    hsv.z = hsv.z * (1.0 - edges.sight_shade.w * mix(1.3, 1.2, light));
     var shade = rgb_of(hsv);
-    // The shadow hue's own colour over it, as the sky's fill lights a shadow.
-    let cool = rgb_of(vec3<f32>(edges.sight_shade.x, 0.45, 1.0));
-    shade = mix(shade, cool * luma(shade) * 1.25, mix(0.4, 0.25, light)) * edges.sight_tint.rgb;
+    shade = mix(shade, vec3<f32>(0.86, 0.92, 1.04) * luma(shade), 0.25) * edges.sight_tint.rgb;
     return mix(color, shade, s);
 }
 
