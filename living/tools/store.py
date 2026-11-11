@@ -542,6 +542,8 @@ class Identity:
 
 CODE_KEYS = {"do", "skill", "kind", "type", "purpose", "act", "rel", "lane", "mix", "profile", "effort", "stage",
              "folk", "activity", "verb", "hook", "law", "fn", "status", "role", "model", "finish_reason", "stream"}
+ARTICLES = {"a", "an", "the"}
+POSSESSIVES = {"my", "your", "his", "her", "its", "our", "their", "thy"}
 DETERMINERS = {"a", "an", "the", "this", "that", "these", "those", "my", "your", "his", "her", "its", "our",
                "their", "some", "any", "no", "each", "every", "another", "one", "first", "last", "next"}
 _SELF = r"(?:him|her|them)sel(?:f|ves)"
@@ -570,6 +572,13 @@ def _self_name_kind(s, a, b, word, game_word=False):
     if (game_word and word.islower() and prev and prev.group(1).lower() in DETERMINERS
             and not re.search(r"[«“\"'‘]\s*$", before)):
         return "ordinary"                                   # "a strike", "the strike": the game's word
+    if word.islower() and not re.search(r"[«“\"'‘]\s*$", before):
+        words_before = re.findall(r"[A-Za-z'’]+", before)[-2:]
+        last = words_before[-1].lower() if words_before else ""
+        pair = [w.lower() for w in words_before]
+        if (last in ARTICLES or last in POSSESSIVES or re.search(r"['’]s$", last)
+                or (len(pair) == 2 and pair[1] == "own" and (pair[0] in POSSESSIVES or re.search(r"['’]s$", pair[0])))):
+            return "kept-listed"                            # "Mercy's word", "my own word", "the word"
     stripped = before.rstrip(" \t")
     at_start = not stripped or stripped[-1] in "\n.!?:;([{«“\"'‘—-" or stripped.endswith("\\n")
     if at_start and re.match(r"\s*[,!]", after):
@@ -612,7 +621,8 @@ def _iso_ms(t):
 
 
 IDENTITY_CATS = {"owner-first-name", "owner-name", "owner-identity", "login", "owner-line", "owner-echo",
-                 "hostname", "dropped-entry", "dropped-row", "dropped-line", "kept-row"}
+                 "hostname", "dropped-entry", "dropped-row", "dropped-line", "kept-row", "self-name",
+                 "self-name-kept"}
 SECRET_CATS = {"known-secret", "hf-token", "github-token", "api-key", "aws-key", "jwt", "bearer",
                "secret-assignment", "secret-field", "url-credentials", "slack-token", "google-key"}
 DECISIONS = {
@@ -977,6 +987,9 @@ class Scrubber:
         self.name_candidates = {}    # names residents hold for the player: lower -> forms, holders, where
         self.name_table = []         # the backstop: every candidate and what was done with it
         self._holder = ""            # who holds what is being read (a journal's actor, a file)
+        self.name_uses = {}          # candidate lower -> {holder: uses in speech, journals and logs}
+        self._name_keys = []         # name_table's candidate keys, in order (never written out)
+        self._cand_re = None
         self.session_span = None     # (first, last) unix ms of the client log: the played span
         self.decisions = dict((cfg or {}).get("decisions") or {})
         self.decisions.update(decisions or {})
@@ -1231,6 +1244,7 @@ class Scrubber:
             form = sorted(c["forms"])[0]
             entry = {"name": mask(form, "owner-first-name"), "held_by": sorted(c["holders"]),
                      "where": sorted(c["where"]), "typed_by_player": low in typed}
+            self._name_keys.append(low)
             if low in first:
                 entry["action"] = "replaced everywhere: the owner's first name"
             elif low not in typed:
@@ -1252,12 +1266,32 @@ class Scrubber:
                         before = set(self.self_names)
                         self.learn_self_name(n)
                         if self.self_names != before:
+                            self._name_keys.append(n.lower())
                             self.name_table.append({"name": mask(n, "owner-first-name"), "held_by": [],
                                                     "where": ["the player's typed self-introduction"],
                                                     "typed_by_player": True,
                                                     "action": "replaced where it names the player (typed only)"})
+        keys = sorted(set(self._name_keys), key=len, reverse=True)
+        self._cand_re = (re.compile(_lb("A-Za-z0-9_") + "(?:" + "|".join(re.escape(k) for k in keys) +
+                                    r")(?![A-Za-z0-9_])", re.I) if keys else None)
         self._names()
         self._lines()
+
+    def _count_uses(self, text, holder):
+        """Uses of each resident-held name in speech, journals and logs, by holder (not templates)."""
+        if self._cand_re is None or not text:
+            return
+        for m in self._cand_re.finditer(text):
+            d = self.name_uses.setdefault(m.group(0).lower(), {})
+            d[holder] = d.get(holder, 0) + 1
+
+    def uses_column(self):
+        """For names.md: per table row, "holder N, …", most uses first."""
+        out = []
+        for k in self._name_keys:
+            d = self.name_uses.get(k, {})
+            out.append(", ".join(f"{h} {n}" for h, n in sorted(d.items(), key=lambda x: (-x[1], x[0]))) or "–")
+        return out
 
     # -- pass 2: redact -------------------------------------------------------------------------
     def _sub(self, regex, text, cat, acc, repl, group=0):
@@ -1346,24 +1380,30 @@ class Scrubber:
             if kind == "ordinary":
                 acc.add("self-name-kept", word)
                 out.append(word)
+            elif kind == "kept-listed":
+                acc.add("self-name-kept", word)
+                out.append(word)
+                self._list_ambiguous(s, a, b, word, "kept: lowercase right after a possessive or an article "
+                                                    "(the ordinary word)")
             else:
                 acc.add("self-name", word)
                 rep = "player" if word.islower() else "PLAYER" if word.isupper() and len(word) > 1 else "Player"
                 out.append(rep)
                 if kind == "ambiguous":
-                    self._list_ambiguous(s, a, b, rep)
+                    self._list_ambiguous(s, a, b, rep, f"replaced by {rep}")
             last = b
         out.append(s[last:])
         return "".join(out)
 
-    def _list_ambiguous(self, s, a, b, rep):
+    def _list_ambiguous(self, s, a, b, rep, action):
         ctx = s[max(0, a - 70):a] + "\x00" + s[b:b + 70]
         ctx = self.self_name_path.sub(lambda m: f"[{len(m.group(0))} chars]", ctx)
         ctx = self.scrub_text(ctx, Findings(), self_names="off").replace("\n", " ")
         ctx = ctx.replace("\x00", f"[{b - a} chars]")
         line = s.count("\n", 0, a) + 1
         where = self._cur_loc + (f", line {line}" if "\n" in s else "")
-        self.ambiguous.append({"file": self._cur_file, "where": where, "context": ctx, "replacement": rep})
+        self.ambiguous.append({"file": self._cur_file, "where": where, "context": ctx,
+                               "replacement": rep if action.startswith("replaced") else None, "action": action})
     def scrub_obj(self, obj, acc):
         if isinstance(obj, dict) and obj.get("role") == "system" and not self._template:
             # a system prompt is our template: an owner line can reach it only by substitution
@@ -1629,6 +1669,10 @@ class Scrubber:
                 return "excluded", ("held: the README describes the owner or their intentions "
                                     f"({'mentions “' + hit.group(0) + '”' if hit else 'names the owner'})"), None, acc
         self._cur_file, self._cur_loc = relpath, ""
+        base = os.path.basename(relpath.split("!")[-1])
+        counting = self._cand_re is not None and not self._template and not is_template(relpath)
+        if counting and not name.endswith(".jsonl"):
+            self._count_uses(text, base)
         if name.endswith(".jsonl"):
             out = []
             for i, line in enumerate(text.splitlines()):
@@ -1636,6 +1680,12 @@ class Scrubber:
                 if not line.strip():
                     out.append(line)
                     continue
+                if counting:
+                    try:
+                        h = self._holder_of(json.loads(line), base)
+                    except ValueError:
+                        h = base
+                    self._count_uses(line, h if h is not None else "the player's own record")
                 try:
                     obj = json.loads(line)
                 except ValueError:
@@ -2629,30 +2679,34 @@ def source_label(src, scrubber):
     return scrubber.safe_text(t)
 
 
-def names_markdown(table, player_ids):
+def names_markdown(table, player_ids, uses=None):
     lines = ["# Names residents hold for the player", "",
              "Every name residents hold for the player's character (by its id), whether the player typed it, "
              "and what was done. Names appear only as their length.", ""]
     if not player_ids:
         lines += ["**The player's character id was not found** (no `playing character #N` in a client log, and no "
                   "`--player`): no resident-held names could be tied to the player.", ""]
-    lines += ["| Name | Held by | Where | Typed by the player | Done |", "| --- | --- | --- | --- | --- |"]
-    for e in table:
-        lines.append(f"| {e['name']} | {', '.join(e['held_by']) or '–'} | {'; '.join(e['where'])} | "
+    lines += ["| Name | Held by (records: graphs, tags, labels) | Where | Uses by holder (speech, journals, logs) | "
+              "Typed by the player | Done |", "| --- | --- | --- | --- | --- | --- |"]
+    uses = uses or ["–"] * len(table)
+    for e, u in zip(table, uses):
+        lines.append(f"| {e['name']} | {', '.join(e['held_by']) or '–'} | {'; '.join(e['where'])} | {u} | "
                      f"{'yes' if e['typed_by_player'] else 'no'} | {e['action']} |")
     if not table:
-        lines.append("| (none) | | | | |")
+        lines.append("| (none) | | | | | |")
     return "\n".join(lines) + "\n"
 
 
 def ambiguous_markdown(amb):
+    rep = sum(1 for d in amb if d.get("action", "replaced").startswith("replaced"))
     lines = ["# Self-given name: places it could not be told from the ordinary word", "",
-             f"{len(amb)} place(s), each replaced. The name appears only as its length. A wrong replacement "
-             "here costs one word; templates, prompts and scripts are never touched.", "",
-             "| File | Where | Context | Replaced by |", "| --- | --- | --- | --- |"]
+             f"{len(amb)} place(s): {rep} replaced, {len(amb) - rep} kept as the ordinary word (lowercase right "
+             "after a possessive or an article). The name appears only as its length. A wrong call here costs "
+             "one word; templates, prompts and scripts are never touched.", "",
+             "| File | Where | Context | Done |", "| --- | --- | --- | --- |"]
     for d in amb:
         ctx = d["context"].replace("|", "\\|")
-        lines.append(f"| `{d['file']}` | {d['where']} | {ctx} | {d['replacement']} |")
+        lines.append(f"| `{d['file']}` | {d['where']} | {ctx} | {d.get('action') or 'replaced by ' + str(d['replacement'])} |")
     return "\n".join(lines) + "\n"
 
 
@@ -2698,13 +2752,13 @@ def cmd_scrub(a, cfg, machine):
         f.write(sc.safe_text(dropped_markdown(dropped_s)))
     amb = [dict(d, file=sc.safe_text(sc.publish_path(d["file"]))) for d in sc.ambiguous if d["file"] in keep]
     with open(os.path.join(out, "names.md"), "w") as f:
-        f.write(sc.safe_text(names_markdown(sc.name_table, sc.player_ids)))
+        f.write(sc.safe_text(names_markdown(sc.name_table, sc.player_ids, sc.uses_column())))
     with open(os.path.join(out, "ambiguous.md"), "w") as f:
         f.write(sc.safe_text(ambiguous_markdown(amb)))
     with open(os.path.join(out, "report.json"), "w") as f:
         json.dump({"src": label, "kind": kind, "rows": rows_s, "redactions": totals_s,
                    "decisions": dec_s, "dropped": dropped_s, "ambiguous": sc.safe(amb),
-                   "names": sc.safe(sc.name_table),
+                   "names": sc.safe([dict(e, uses=u) for e, u in zip(sc.name_table, sc.uses_column())]),
                    "installed_check": problems or "ok",
                    "review": sorted(sc.safe_text(sc.publish_path(r.replace("!", "/"))) for r in sc.review_data)},
                   f, ensure_ascii=False, indent=1)
@@ -2723,8 +2777,8 @@ def cmd_scrub(a, cfg, machine):
     say(f"  names residents hold for the player: {len(sc.name_table)} (names.md); "
         f"self-given names learned: {len(sc.self_names)}" +
         ("" if sc.player_ids else "  WARNING: the player's character id was not found"))
-    say(f"  self-given name replaced where name and word could not be told apart: {len(amb)} place(s) "
-        f"(ambiguous.md)")
+    say(f"  self-given name where name and word could not be told apart: {len(amb)} place(s), "
+        f"{sum(1 for d in amb if (d.get('action') or '').startswith('kept'))} kept (ambiguous.md)")
     say("  installed script: " + ("sha matches the record" if not problems else "MISMATCH"))
     print(tilde(os.path.join(out, "report.md")))
     if problems:

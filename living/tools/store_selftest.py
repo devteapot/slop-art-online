@@ -1038,7 +1038,10 @@ class SelfGivenNames(unittest.TestCase):
                 self.assertEqual({n.lower() for n in s.self_names}, {"zorbin"}, intro)
                 blob = "".join(v.decode() for v in data.values())
                 names = " ".join(s.publish_path(r) for r in data)
-                self.assertIsNone(re.search(r"(?i)zorbin", blob), (intro, blob[:300]))
+                # the one use left is Mercy's "the zorbin fellow": lowercase after an article, kept
+                # as the ordinary word and listed (fix-store-scrub-5, D2)
+                self.assertEqual(re.findall(r"(?i).{4}zorbin.{7}", blob), ["the zorbin fellow"], intro)
+                self.assertTrue(any(d["action"].startswith("kept") for d in s.ambiguous))
                 self.assertIsNone(re.search(r"(?i)zorbin", names), names)
                 self.assertIn("session/journal/Player.jsonl", names)
                 self.assertIn("notes_about_player.log", names)
@@ -1379,6 +1382,91 @@ class ResidentHeldNames(unittest.TestCase):
             s = scrubber(kind="play-session")
             store.scrub_source(t, s)
             self.assertEqual(s.name_candidates, {})
+
+
+class PossessiveOrArticle(unittest.TestCase):
+    """D2: an otherwise ambiguous use right after a possessive or an article, in lowercase, is
+    the ordinary word: kept, and listed in ambiguous.md as kept with the reason."""
+
+    def test_kept_and_listed(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            talk = "# You and a stranger (#26)\n\n# What you are answering\na stranger: “call me Thorn”"
+            write(t, "session/journal/Maud.jsonl", "\n".join([
+                journal_entry("Maud", "talk", talk + "\n{Thorn=#26}", '{"say": "Hm."}'),
+                journal_entry("Maud", "think", "the hedge",
+                              json.dumps({"thought": "Mercy's thorn pricked me; my own thorn bush is bare; "
+                                                     "a thorn in the path. thorn grows wild."})),
+            ]) + "\n")
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            _, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(s.self_names, {"Thorn"})
+            thought = json.loads(json.loads(data["session/journal/Maud.jsonl"].decode().splitlines()[1])["reply"])["thought"]
+            self.assertEqual(thought, "Mercy's thorn pricked me; my own thorn bush is bare; a thorn in the path. "
+                                      "player grows wild.")
+            kept = [d for d in s.ambiguous if d["action"].startswith("kept")]
+            replaced = [d for d in s.ambiguous if d["action"].startswith("replaced")]
+            self.assertEqual(len(kept), 3)
+            self.assertEqual(len(replaced), 1)
+            self.assertIn("possessive or an article", kept[0]["action"])
+            md = store.ambiguous_markdown(s.ambiguous)
+            self.assertIn("3 kept as the ordinary word", md)
+            self.assertNotIn("horn", md.lower().replace("[5 chars]", ""))
+
+
+class SelfNameMasks(unittest.TestCase):
+    """D1: the self-name categories show only a length in every review output."""
+
+    def test_no_letters(self):
+        self.assertEqual(store.mask("Zorbin", "self-name"), "[6 chars]")
+        self.assertEqual(store.mask("thorn", "self-name-kept"), "[5 chars]")
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "playtest-9")
+            write(src, "session/run/client.log", "playing character #26\n")
+            talk = "# You and a stranger (#26)\n\n# What you are answering\na stranger: “I'm Zorbin”"
+            write(src, "session/journal/Mercy.jsonl", "\n".join([
+                journal_entry("Mercy", "talk", talk + "\n{Zorbin=#26}", '{"say": "Zorbin, welcome."}'),
+                journal_entry("Mercy", "think", "x", '{"thought": "the zorbin road. Zorbin waits."}'),
+            ]) + "\n")
+            old = store.Identity.from_runtime
+            store.Identity.from_runtime = classmethod(lambda cls, *a, **k: ident())
+            try:
+                for args in (["scrub", "--dry-run", src, "--kind", "play-session", "--report", os.path.join(t, "r"),
+                              "--decide", "model_exchanges=include"],
+                             ["scrub", "--write", os.path.join(t, "w"), src, "--kind", "play-session",
+                              "--decide", "model_exchanges=include"]):
+                    buf = io.StringIO()
+                    with redirect_stdout(buf):
+                        self.assertEqual(store.main(args), 0)
+                    out = buf.getvalue()
+                    self.assertIn("self-name", out)
+                    self.assertNotRegex(out, r"Z…n|z…n")
+                    self.assertNotIn("orbin", out.lower())
+            finally:
+                store.Identity.from_runtime = old
+            for d in ("r", "w"):
+                for name in ("report.md", "report.json"):
+                    with open(os.path.join(t, d, name)) as f:
+                        txt = f.read()
+                    self.assertIn("self-name", txt)
+                    self.assertNotRegex(txt, r"[A-Za-z]…[A-Za-z]\[\d+\]", name)
+                    self.assertIn("[6 chars]", txt)
+
+
+class UsesByHolder(unittest.TestCase):
+    def test_names_md_counts_uses(self):
+        with tempfile.TemporaryDirectory() as t:
+            ResidentHeldNames().build(t, 'i\'m called ""Zorbin""')
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            store.scrub_source(t, s, keep_data=True)
+            uses = dict(zip([e["name"] for e in s.name_table], s.uses_column()))
+            self.assertRegex(uses["[6 chars]"], r"Mercy \d+")
+            self.assertRegex(uses["[6 chars]"], r"Aldith \d+")
+            self.assertRegex(uses["[6 chars]"], r"mind\.log 2")
+            self.assertRegex(uses["[9 chars]"], r"Mercy 1")      # the epithet in Mercy's thought
+            md = store.names_markdown(s.name_table, s.player_ids, s.uses_column())
+            self.assertIn("Uses by holder", md)
+            self.assertNotIn("orbin", md.lower())
 
 
 if __name__ == "__main__":
