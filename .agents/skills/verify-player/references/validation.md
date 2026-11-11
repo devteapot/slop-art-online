@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-11 speech with the `speech_audience` law off (exp-greet, Spark)
+
+Branch `exp-greet`, the trial service `slop-trials-stdb` (port 3320). `player-1111-152137`, the speech part of `player-character.md`, passed. An addressed and an unaddressed `human_say` gave the same chronicle lines and listener experiences as before ("A stranger said to you: …", salience 0.9; the unaddressed line was also 0.9, because the listener was the only one close by). No `audience` row was written. `set_paused` and `install_script` were refused to the player ("admin only"), and the player's SQL on `audience` was refused (a private table). The other recipes were not rerun.
+
 ## 2026-11-11 rules-senses-outcomes: my_senses, my_act_outcomes (Spark)
 
 Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change: `senses.py` and `outcomes.py` new, `combat.py`'s death scene extended; the feature map gains `senses.md` and `outcomes.md`, and main's duplicated paragraph in SKILL.md is one again.

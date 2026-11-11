@@ -102,6 +102,62 @@
    "LIVING_ANIMAL_MINDS": "pack,salient,choose"
   }
  },
+ "greet-control": {
+  "about": "People think as `default` (living/configs/models.json as it stands). Conversation switches (living/mind/src/mind/talk.rs; docs/LIVING_CORE.md, Conversations): LIVING_GREET=off, LIVING_PARK=wait: the shipped conversation rules (the control). Under every LIVING_GREET mode but off, an addressed line from such a speaker skips the remark draw, and hostility (affinity <= -40) no longer counts as caring. LIVING_GREET needs the world's `speech_audience` law (the greet trial sets it).",
+  "models": {},
+  "env": {
+   "LIVING_GREET": "off",
+   "LIVING_PARK": "wait"
+  }
+ },
+ "greet-nearest": {
+  "about": "People think as `default` (living/configs/models.json as it stands). Conversation switches (living/mind/src/mind/talk.rs; docs/LIVING_CORE.md, Conversations): LIVING_GREET=nearest: a remark to no one from someone the hearer has not met or barely knows draws one turn, from the nearest hearer within 6 m free to talk. Under every LIVING_GREET mode but off, an addressed line from such a speaker skips the remark draw, and hostility (affinity <= -40) no longer counts as caring. LIVING_GREET needs the world's `speech_audience` law (the greet trial sets it).",
+  "models": {},
+  "env": {
+   "LIVING_GREET": "nearest",
+   "LIVING_PARK": "wait"
+  }
+ },
+ "greet-curious": {
+  "about": "People think as `default` (living/configs/models.json as it stands). Conversation switches (living/mind/src/mind/talk.rs; docs/LIVING_CORE.md, Conversations): LIVING_GREET=curious: such a remark may draw in a hearer within 6 m by curiosity (remark draw x (0.5 + 0.5 curiosity/100)); the first drawn takes the one turn. Under every LIVING_GREET mode but off, an addressed line from such a speaker skips the remark draw, and hostility (affinity <= -40) no longer counts as caring. LIVING_GREET needs the world's `speech_audience` law (the greet trial sets it).",
+  "models": {},
+  "env": {
+   "LIVING_GREET": "curious",
+   "LIVING_PARK": "wait"
+  }
+ },
+ "greet-facing": {
+  "about": "People think as `default` (living/configs/models.json as it stands). Conversation switches (living/mind/src/mind/talk.rs; docs/LIVING_CORE.md, Conversations): LIVING_GREET=facing: the hearer the speaker faces (within 6 m and 0.6 rad of the facing) is addressed, whoever spoke. Under every LIVING_GREET mode but off, an addressed line from such a speaker skips the remark draw, and hostility (affinity <= -40) no longer counts as caring. LIVING_GREET needs the world's `speech_audience` law (the greet trial sets it).",
+  "models": {},
+  "env": {
+   "LIVING_GREET": "facing",
+   "LIVING_PARK": "wait"
+  }
+ },
+ "park-concurrent": {
+  "about": "People think as `default` (living/configs/models.json as it stands). Conversation switches (living/mind/src/mind/talk.rs; docs/LIVING_CORE.md, Conversations): LIVING_PARK=concurrent alone: a line addressed to a listener whose deliberation is running gets its turn alongside it when it came within 2 s after the prompt was built, or once the deliberation has decided and its words are not for the speaker. Under every LIVING_GREET mode but off, an addressed line from such a speaker skips the remark draw, and hostility (affinity <= -40) no longer counts as caring. LIVING_GREET needs the world's `speech_audience` law (the greet trial sets it).",
+  "models": {},
+  "env": {
+   "LIVING_GREET": "off",
+   "LIVING_PARK": "concurrent"
+  }
+ },
+ "greet-nearest-concurrent": {
+  "about": "People think as `default` (living/configs/models.json as it stands). Conversation switches (living/mind/src/mind/talk.rs; docs/LIVING_CORE.md, Conversations): LIVING_GREET=nearest with LIVING_PARK=concurrent. Under every LIVING_GREET mode but off, an addressed line from such a speaker skips the remark draw, and hostility (affinity <= -40) no longer counts as caring. LIVING_GREET needs the world's `speech_audience` law (the greet trial sets it).",
+  "models": {},
+  "env": {
+   "LIVING_GREET": "nearest",
+   "LIVING_PARK": "concurrent"
+  }
+ },
+ "greet-facing-concurrent": {
+  "about": "People think as `default` (living/configs/models.json as it stands). Conversation switches (living/mind/src/mind/talk.rs; docs/LIVING_CORE.md, Conversations): LIVING_GREET=facing with LIVING_PARK=concurrent. Under every LIVING_GREET mode but off, an addressed line from such a speaker skips the remark draw, and hostility (affinity <= -40) no longer counts as caring. LIVING_GREET needs the world's `speech_audience` law (the greet trial sets it).",
+  "models": {},
+  "env": {
+   "LIVING_GREET": "facing",
+   "LIVING_PARK": "concurrent"
+  }
+ },
  "player-frame": {
   "about": "Default with LIVING_FRAME=player: people's deliberation (think and compile), consolidation and conversation-turn system prompts open with a short frame saying the model is an AI playing this person in a persistent world shared with other players, human and AI, where the person's body, needs, death and the world's rules are real and what to pursue is its own choice, and whatever the person says or writes stays in their own words (prompts.rs PLAYER_FRAME). Everything else as default. Probes: prompt_frame (requests that carried the frame) and ooc_lines/ooc_private (living/tools/ooc.py).",
   "models": {},
