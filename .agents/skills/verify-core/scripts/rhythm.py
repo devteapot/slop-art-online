@@ -5,8 +5,8 @@
     rhythm.py drive --run RUN           # about 15 minutes
 
 The seed is `living/seeds/cullet.json` (its plan, laws, starting ways and town life) with eight of
-the cast's residents compiled the way `author_world.py` compiles them (`compile_residents`, no
-sheets: their rhythm and places come from `cast.json`), on a 12-minute day (Cullet's own is 48)
+its residents as `author_world.py` compiled them (their sheets, and the rhythm and places of
+`cast.json`; without residents in the seed, `compile_residents` without sheets), on a 12-minute day (Cullet's own is 48)
 so one game day passes in the scene. A few goods are added to their packs, the scene's own and
 not the cast's: peat for the stokers, ash and sand for the blower, roots for the baker, and food
 for everyone (the seed has no stores yet, so hunger would otherwise send them foraging).
@@ -56,7 +56,10 @@ def make_seed(run):
     cast = json.loads((wd / "cast.json").read_text())
     town = aw.compile_residents(wd, cast, None, [])[0]
     seed = json.loads((ROOT / "living/seeds/cullet.json").read_text())
-    residents = [r for r in town["residents"] if r["name"] in PEOPLE]
+    # Cullet's own compiled residents (with their sheets) once the seed has them, else the cast
+    # compiled without sheets; both carry the cast's rhythm and places.
+    compiled = seed["towns"][0].get("residents") or town["residents"]
+    residents = [json.loads(json.dumps(r)) for r in compiled if r["name"] in PEOPLE]
     for r in residents:
         r["parents"] = [p for p in r["parents"] if p in PEOPLE]
         for k, v in (FOOD | PACKS.get(r["name"], {})).items():

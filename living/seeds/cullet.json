@@ -6725,7 +6725,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       13
+      ]
      },
      "places": [
       {
@@ -6948,7 +6952,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       14
+      ]
      },
      "places": [
       {
@@ -7157,7 +7165,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 18.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -7321,7 +7333,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 22.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       14
+      ]
      },
      "places": [
       {
@@ -7526,7 +7542,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 22.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -7731,7 +7751,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -7930,7 +7954,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 20,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -8057,7 +8085,11 @@
      "rhythm": {
       "rises": 9,
       "sleeps": 25,
-      "evening_hours": 3
+      "evening_hours": 3,
+      "works": [
+       14,
+       22
+      ]
      },
      "places": [
       {
@@ -8290,7 +8322,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -8498,7 +8534,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 23,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       15
+      ]
      },
      "places": [
       {
@@ -8726,7 +8766,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 23.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       8,
+       16
+      ]
      },
      "places": [
       {
@@ -8952,7 +8996,11 @@
      "rhythm": {
       "rises": 7.5,
       "sleeps": 23.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       16
+      ]
      },
      "places": [
       {
@@ -9164,7 +9212,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -9342,7 +9394,11 @@
      "rhythm": {
       "rises": 5,
       "sleeps": 21,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       14
+      ]
      },
      "places": [
       {
@@ -9522,7 +9578,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -9631,7 +9691,11 @@
      "rhythm": {
       "rises": 14,
       "sleeps": 31,
-      "evening_hours": 1
+      "evening_hours": 1,
+      "works": [
+       22,
+       30
+      ]
      },
      "places": [
       {
@@ -9844,7 +9908,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 20,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -9976,7 +10044,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 22.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       8,
+       18
+      ]
      },
      "places": [
       {
@@ -10184,7 +10256,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 22.0,
-      "evening_hours": 2.0
+      "evening_hours": 2.0,
+      "works": [
+       8,
+       20
+      ]
      },
      "places": [
       {
@@ -10376,7 +10452,11 @@
      "rhythm": {
       "rises": 8,
       "sleeps": 23,
-      "evening_hours": 1
+      "evening_hours": 1,
+      "works": [
+       14,
+       22
+      ]
      },
      "places": [
       {
@@ -10558,7 +10638,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -10754,7 +10838,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -10943,7 +11031,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -11133,7 +11225,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -11319,7 +11415,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -11571,7 +11671,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -11804,7 +11908,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -12036,7 +12144,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       8,
+       16
+      ]
      },
      "places": [
       {
@@ -12266,7 +12378,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 20.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -12654,7 +12770,11 @@
      "rhythm": {
       "rises": 5,
       "sleeps": 21,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       16
+      ]
      },
      "places": [
       {
@@ -12852,7 +12972,11 @@
      "rhythm": {
       "rises": 4,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       4.5,
+       11
+      ]
      },
      "places": [
       {
@@ -13052,7 +13176,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -13190,7 +13318,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -13324,7 +13456,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 23,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       13
+      ]
      },
      "places": [
       {
@@ -13558,7 +13694,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 22.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       15
+      ]
      },
      "places": [
       {
@@ -13780,7 +13920,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       17
+      ]
      },
      "places": [
       {
@@ -13987,7 +14131,11 @@
      "rhythm": {
       "rises": 5,
       "sleeps": 21,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       11
+      ]
      },
      "places": [
       {
@@ -14181,7 +14329,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -14366,7 +14518,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       11
+      ]
      },
      "places": [
       {
@@ -14554,7 +14710,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -14751,7 +14911,11 @@
      "rhythm": {
       "rises": 11,
       "sleeps": 28,
-      "evening_hours": 1
+      "evening_hours": 1,
+      "works": [
+       22,
+       27
+      ]
      },
      "places": [
       {
@@ -14949,7 +15113,11 @@
      "rhythm": {
       "rises": 7.5,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -15099,7 +15267,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -15313,7 +15485,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -15520,7 +15696,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -15723,7 +15903,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 22.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -15931,7 +16115,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -16136,7 +16324,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 2
+      "evening_hours": 2,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -16326,7 +16518,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -16481,7 +16677,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -16605,7 +16805,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 22.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       15
+      ]
      },
      "places": [
       {
@@ -16792,7 +16996,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       15
+      ]
      },
      "places": [
       {
@@ -16976,7 +17184,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       15
+      ]
      },
      "places": [
       {
@@ -17119,7 +17331,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       17
+      ]
      },
      "places": [
       {
@@ -17331,7 +17547,11 @@
      "rhythm": {
       "rises": 13,
       "sleeps": 30,
-      "evening_hours": 0.0
+      "evening_hours": 0.0,
+      "works": [
+       19.5,
+       30
+      ]
      },
      "places": [
       {
@@ -17534,7 +17754,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 23,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       8,
+       16
+      ]
      },
      "places": [
       {
@@ -17719,7 +17943,11 @@
      "rhythm": {
       "rises": 8.5,
       "sleeps": 25.0,
-      "evening_hours": 3.0
+      "evening_hours": 3.0,
+      "works": [
+       10,
+       22
+      ]
      },
      "places": [
       {
@@ -17916,8 +18144,16 @@
      },
      "rhythm": {
       "rises": 2.5,
-      "sleeps": 13.0,
-      "evening_hours": 3.0
+      "sleeps": 22.0,
+      "evening_hours": 4.5,
+      "works": [
+       3,
+       10
+      ],
+      "second_sleep": [
+       13,
+       19
+      ]
      },
      "places": [
       {
@@ -18109,7 +18345,11 @@
      "rhythm": {
       "rises": 9.5,
       "sleeps": 25.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       11,
+       19
+      ]
      },
      "places": [
       {
@@ -18300,7 +18540,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 23,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       17
+      ]
      },
      "places": [
       {
@@ -18488,7 +18732,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -18679,7 +18927,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
