@@ -5,7 +5,7 @@ The cluster at the bottom: the meters (health, energy) over the skill bar. Which
 ## Sub-features
 
 - `places`: LMB primary (strike), RMB secondary (bow shot), Q E R the skill keys (block, heal, fire bolt), Space jump, a double tap dodge; an extra row (4–9) when the bar has more.
-- `labels-looks`: declared labels ("Bow shot", "Fire bolt") and icons; the jump has its own icon.
+- `labels-looks`: declared labels ("Bow shot", "Fire bolt") and icons; the jump has its own icon (`jump`, appended to `ICONS`).
 - `sheathe-draw`: sheathed at first ("sheathed" under the weapon slot), hostile slots greyed with "Sheathed: X draws your weapon", X draws and sheathes, the auto-draw when someone turns hostile (Settings › Play).
 - `refusal`: a press the rules refuse flashes its slot red and is noted in the rules' words ("No one there to strike"). Grey is a hint: a greyed slot's press is still sent.
 - `held`: Q held raises the guard; its slot shows the held ring.
