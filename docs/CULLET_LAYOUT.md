@@ -309,7 +309,7 @@ The turf house's 9 s are the dyke: the way to the Moss goes by the peat gap. Lan
 - kit-2's `spot_at` took a spot's first number toward the west for a south front; the engine takes it east. It now follows the engine, and the three spots it reads (Halvard's bench, the cullet heaps, the trough) were moved onto the dressing kit-2 stands there, so the bench people are sent to is the bench that is drawn.
 - Tall things stand alone (the crane is its own model), because the client fades and keeps the camera out of a model by its whole box.
 - `fixtures.json` gives each fixture's `size`. The client draws no slab under an open lot a fixture stands on.
-- **A bug found in the client and fixed:** every one of the engine's own wall pieces and flights on Cullet drew a kit model of its folder at random, on top of the kit's own. It hid the quarry's face behind a wall. See [authored plans](AUTHORED_PLANS.md#the-game-client).
+- **A client fault met on the way:** every one of the engine's own wall pieces and flights on Cullet drew a kit model of its folder at random, on top of the kit's own. It hid the quarry's face behind a wall. I fixed it here; `stairs-place` fixed it on main the same evening, and its fix is the one kept after the merge ([authored plans](AUTHORED_PLANS.md#the-game-client)). The stills were taken with mine; for Cullet the two do the same.
 
 ### What still reads as empty
 
