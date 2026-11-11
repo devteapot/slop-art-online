@@ -46,7 +46,10 @@ EYE_COLOURS = dict(
     blue=(0.30, 0.47, 0.62), grey=(0.42, 0.50, 0.54), green=(0.33, 0.48, 0.33), hazel=(0.47, 0.40, 0.20), amber=(0.60, 0.40, 0.14),
     brown=(0.36, 0.23, 0.13), dark_brown=(0.21, 0.14, 0.10),
 )
-HAIR_STYLES = ("tousled", "short", "sides", "bob", "bob_parted", "kerchief")
+HAIR_STYLES = ("crop", "short", "tousled", "swept", "shag", "bob", "bob_parted", "long", "tail", "bun", "braid", "braids", "sides", "kerchief", "balding")  # hair.py STYLES
+# How far each style's hair hangs below the hairline at the sides, in metres, as drawn from a
+# seed (`hair.length`); for the short styles it scales the hairs' own length round 0.07.
+HAIR_LENGTHS = dict(shag=(0.025, 0.06), bob=(0.05, 0.11), bob_parted=(0.06, 0.12), long=(0.20, 0.36), tail=(0.10, 0.28), braid=(0.08, 0.22), braids=(0.06, 0.16), bun=(0.05, 0.11))
 BEARD_STYLES = ("none", "stubble", "moustache", "goatee", "chinstrap", "short", "full")
 COATS = ("coat", "smock", "none")
 HEADWEAR = ("none", "cap", "kerchief")
@@ -94,7 +97,7 @@ FACE_KEYS = [k for k, _, _ in FACE]
 PRESETS = {
     "man": dict(seed=3, sex="male", age=36, build=dict(height=1.80, weight=0.1, muscle=0.4), beard=dict(style="full"), hair=dict(style="tousled", colour="dark_brown"),
                 eyes=dict(colour="blue"), skin=dict(tone=0.30), outfit=dict(coat="coat", coat_colour="oilskin", jersey_colour="green", headwear="none")),
-    "woman": dict(seed=8, sex="female", age=29, build=dict(height=1.66), hair=dict(style="bob_parted", colour="chestnut"), eyes=dict(colour="green"), skin=dict(tone=0.22),
+    "woman": dict(seed=8, sex="female", age=29, build=dict(height=1.66), hair=dict(style="long", colour="chestnut", length=0.30, parting=0.0, fringe=0.95, fringe_style="straight", volume=0.55, curl=0.1), eyes=dict(colour="green"), skin=dict(tone=0.22),
                   outfit=dict(coat="smock", coat_colour="blue", jersey_colour="cream", headwear="none", apron=True)),
     "elder": dict(seed=5, sex="male", age=70, build=dict(height=1.72), beard=dict(style="short"), hair=dict(style="sides"), eyes=dict(colour="grey"), skin=dict(tone=0.30),
                   outfit=dict(coat="coat", coat_colour="tarred", jersey_colour="red", headwear="cap")),
@@ -192,14 +195,19 @@ def draw(given=None):
     natural = rnd(src if rnd(seed, "hair.own").random() < 0.7 else seed, "hair.colour").choices(
         ("black", "dark_brown", "brown", "chestnut", "auburn", "sandy", "blond"), weights=(6, 5, 2, 1, 0.3, 0.1, 0.05) if dark else (2, 5, 5, 3, 2, 3, 2 if not child else 4))[0]
     grey = clip(smooth((age - 36) / 34) + rnd(seed, "hair.grey").gauss(0, 0.16) * smooth((age - 30) / 15), 0, 1)
+    recede = clip(u("hair.recede", 0.0, 1.0) ** 1.5 * smooth((age - 24) / 40) * 1.3 if male else 0.0, 0, 1)
     if child:
-        style = pick("hair.style", ("tousled", "short", "bob") if male else ("bob", "bob_parted", "tousled"), (5, 3, 1) if male else (5, 4, 1))
+        style = pick("hair.style", ("tousled", "short", "crop", "shag", "bob") if male else ("bob", "bob_parted", "braids", "tail", "long", "tousled"), (4, 3, 2, 1.5, 1) if male else (4, 2, 4, 3, 2, 1))
     elif male:
-        style = pick("hair.style", ("tousled", "short", "sides"), (2, 3, 5) if old else (5, 4, 1))
+        style = pick("hair.style", ("tousled", "short", "crop", "swept", "shag", "tail"), (2, 3, 3, 3, 1, 0.3) if old else (4, 4, 3, 3, 2, 0.5))
+        if recede > 0.72:
+            style = "balding"
     else:
-        style = pick("hair.style", ("kerchief", "bob", "bob_parted"), (6, 2, 2) if old else (3, 3, 4))
-    p["hair"] = dict(style=style, colour=natural, grey=round(grey, 2), length=round(u("hair.length", 0.05, 0.11), 3),
-                     recede=round(clip(u("hair.recede", 0.0, 1.0) ** 1.5 * smooth((age - 24) / 40) * 1.3 if male else 0.0, 0, 1), 2))
+        style = pick("hair.style", ("kerchief", "bob", "bob_parted", "long", "tail", "bun", "braid"), (4, 1, 0.5, 0.5, 0.5, 4, 1.5) if old else (2, 2, 2, 3, 3, 3, 3))
+    lo_l, hi_l = HAIR_LENGTHS.get(style, (0.05, 0.09))
+    p["hair"] = dict(style=style, colour=natural, grey=round(grey, 2), length=round(u("hair.length", lo_l, hi_l), 3), parting=round(clip(rnd(seed, "hair.parting").gauss(0, 0.5)), 2),
+                     fringe=round(u("hair.fringe", 0.3, 0.9) if male and not child else u("hair.fringe", 0.5, 1.05), 2), volume=round(u("hair.volume", 0.25, 0.85), 2),
+                     curl=round(clip(rnd(seed, "hair.curl").betavariate(1.2, 4.5), 0, 1), 2), recede=round(recede, 2))
     # Beard (men).
     if male and age >= 17:
         bs = pick("beard.style", BEARD_STYLES, (30, 22, 7, 7, 3, 14, 17) if not old else (14, 14, 8, 6, 4, 22, 32))
@@ -214,7 +222,7 @@ def draw(given=None):
         head = "none"
     elif male:
         coat = pick("outfit.coat", COATS, (5, 3, 2))
-        head = "cap" if style == "sides" or rnd(seed, "outfit.headwear").random() < 0.15 else "none"
+        head = "cap" if rnd(seed, "outfit.headwear").random() < (0.45 if old else 0.15) else "none"
     else:
         coat = pick("outfit.coat", COATS, (2, 8, 0))
         head = "kerchief" if style == "kerchief" else "none"
@@ -229,8 +237,8 @@ def draw(given=None):
     # A style that needs its headwear, and the other way round.
     if p["hair"]["style"] == "kerchief":
         p["outfit"]["headwear"] = "kerchief"
-    if p["outfit"]["headwear"] == "cap" and p["hair"]["style"] == "tousled":
-        p["hair"]["style"] = "short"
+    if p["outfit"]["headwear"] == "cap" and p["hair"]["style"] not in ("sides", "crop", "short", "balding", "tail"):
+        p["hair"]["style"] = "sides"
     if p["outfit"]["headwear"] == "kerchief":
         p["hair"]["style"] = "kerchief"
     return p
@@ -283,6 +291,7 @@ def resolve(p):
     silver = mix(HAIR_COLOURS["grey"], HAIR_COLOURS["white"], smooth((grey - 0.5) / 0.5))
     hair = mix(natural, silver, smooth(grey / 0.85))
     hair_tip = mix(hair, (0.94, 0.88, 0.76), 0.16)
+    natural_tip = mix(natural, (0.94, 0.88, 0.76), 0.14)
     beard_c = mix(natural, silver, smooth(min(grey * 1.25, 1.0) / 0.85))
     brow = mix(mix(natural, silver, 0.6 * smooth(grey / 0.9)), (0.05, 0.04, 0.04), 0.25 if sum(natural) > 0.6 else 0.0)
     # Lines and lashes.
@@ -298,7 +307,7 @@ def resolve(p):
         blush=clip(0.20 + 0.14 * fem + 0.22 * child + 0.16 * weather, 0, 0.6), lines=clip(((age - 30) / 40), 0, 1.25) ** 1.25 * 1.15 + 0.20 * weather * (1 - child),
         freckles=skin_p.get("freckles", 0.0), nostril=clip(0.35 + 0.35 * masc * teen + 0.3 * elder - 0.3 * child, 0, 1), nose_line=clip(0.55 + 0.45 * masc * teen + 0.3 * elder - 0.3 * child, 0, 1.3),
         stubble=stubble, stubble_colour=mix(mix(skin, beard_c, 0.55), (0.35, 0.38, 0.42), 0.25), beard=style if masc else "none", beard_colour=beard_c, beard_density=1.0,
-        hair=hair, hair_tip=hair_tip, brow=brow, lash=lash, lash_tip=mix(lash, (0.42, 0.20, 0.14), 0.6),
+        hair=hair, hair_tip=hair_tip, hair_natural=natural, hair_natural_tip=natural_tip, hair_silver=silver, hair_grey=grey, brow=brow, lash=lash, lash_tip=mix(lash, (0.42, 0.20, 0.14), 0.6),
         lash_k=0.66 + 0.74 * fem + 0.34 * child * (1 - masc) + 0.12 * child, lash_wing=0.14 + 0.22 * fem + 0.06 * child, wing_lift=0.10 + 0.22 * fem,
         lashes=int(round(3 * fem + (1 if child > 0.5 and not male else 0))), fold=clip(0.65 + 0.5 * face.get("eye_fold", 0) + 0.35 * elder, 0, 1.6),
         lower=clip(0.35 + 0.45 * fem + 0.2 * child, 0, 1), iris=colour(p["eyes"]["colour"], EYE_COLOURS, "eyes.colour"),
@@ -328,6 +337,9 @@ def resolve(p):
     return dict(
         seed=seed, masc=masc, child=child, elder=elder, face=face, look=look, girth=girth, limb=limb, belly=belly, chest=chest, woman_torso=bool(not male and age >= 13),
         hair_style=hair_p["style"], hair_length=hair_p.get("length", 0.07), recede=0.024 * clip(hair_p.get("recede", 0.0), 0, 1),
+        hair=dict(style=hair_p["style"], length=float(hair_p.get("length", 0.07)), parting=float(hair_p.get("parting", 0.0)), fringe=float(hair_p.get("fringe", 0.7)), volume=float(hair_p.get("volume", 0.5)),
+                  curl=float(hair_p.get("curl", 0.0)), fringe_style=hair_p.get("fringe_style", "auto")),
+        bald=smooth((clip(hair_p.get("recede", 0.0), 0, 1) - 0.55) / 0.40) if hair_p["style"] == "balding" else 0.0,
         beard=style if male else "none", coat=None if outfit["coat"] == "none" else outfit["coat"], headwear=None if outfit["headwear"] == "none" else outfit["headwear"],
         coat_colour=cloth(seed, "coat", outfit["coat_colour"]), jersey=cloth(seed, "jersey", outfit["jersey_colour"]), headwear_colour=cloth(seed, "headwear", outfit["headwear_colour"]),
         patches=(cloth(seed, "patch1", "canvas"), cloth(seed, "patch2", "olive"), cloth(seed, "patch3", "red")), apron=bool(outfit.get("apron", False)), hem=float(outfit.get("hem", 0.74)),
