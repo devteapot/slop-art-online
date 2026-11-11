@@ -788,6 +788,7 @@ A diagnosis came first. Its stills, logs and measurements are in `.local/living/
 - **People** fade in and out of sight and into their houses. The sight rule itself (11 tiles by day) is untouched: laws-2 and lives-2 own it.
 - **Turning the view without turning you** (`pointer.rs`):
   - A left drag, a two-finger pan or a middle drag turns the view, and the cursor stays on its ground point. In a headless run, facing held at 128° while the view turned +76° and then −109°.
+  - **Changed by `cursor-pan` (2026-11-11, the owner after Cullet walk 1):** a pan carried the cursor off with the view. Now a turn or a zoom by hand (pan, drag, `[` `]`, pinch, wheel) leaves the cursor at its screen position, and what it points at, and so where you face, follows the view. Only an align keeps the cursor on its ground point. verify-ui's `turns` scenario checks it to 1 px.
   - A pinch or the wheel zooms within 0.6–1.4 of the distance. A two-finger double tap aligns.
   - A click captures the cursor: it is locked and hidden, and the game draws its own and feeds the UI's picking. Esc gives it back once panels are closed.
   - A tap strikes on release; a press held 0.22 s strikes and aims.

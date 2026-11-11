@@ -1,6 +1,6 @@
 ---
 name: verify-ui
-description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), and later the skill bar with sheathe and draw, and Settings. Use when changing living/game/src/ui/*, keys.rs, looks.rs, heard.rs, talk.rs, verbs.rs, pointer.rs or the live script, or when the screen shows something other than what the client received.
+description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), the cursor while the view turns or zooms (a two-finger pan, a pinch, a left drag), and later the skill bar with sheathe and draw, and Settings. Use when changing living/game/src/ui/*, camera.rs, pointer.rs, keys.rs, looks.rs, heard.rs, talk.rs, verbs.rs, or the live script, or when the screen shows something other than what the client received.
 ---
 
 # Verify the game interface
@@ -29,7 +29,7 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 
 ```bash
 S=.agents/skills/verify-ui/scripts
-$S/check.py --run $R                       # all scenarios: windows talk items themes (PASS/FAIL per check)
+$S/check.py --run $R                       # all scenarios: windows talk items themes turns (PASS/FAIL per check)
 LIVING_GAME_THEME=night $S/check.py --run $R windows talk items   # the same in a theme; evidence in <scenario>-night/
 $S/check.py --run $R windows               # one
 $S/drive.py --run $R --name try --plan 'ready;wait:2;click:@menu;wait:0.5;shot:menu;dump:menu;quit'
@@ -45,6 +45,7 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | `type:TEXT`, `enter`, `tab`, `chat:open\|close` | Words in the box, said to whom it addresses; Tab; the box opened or closed (closing keeps its window) |
 | `dump:NAME` | Writes `NAME.json`: open windows (top last) with anchors and rectangles, the Menu list, the list of acts, the box and whom it addresses, settings, and every tagged node shown with its centre |
 | `menu:f@id:N`, `sync:NAME`, `shot:NAME`, `scroll:PX`, `dodge:W` | F's list on someone; wait for a scene; a photograph; two-finger scroll; a double tap |
+| `cursor:X,Y`, `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | The cursor at fractions of the picture; a two-finger pan, a left drag or a pinch through the pointer's paths; no framing contexts (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
 
 Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:0:give` finds `acts:0:give:3`):
 - buttons and Menu: `pack`, `menu`, `menu:Character|Skills|Log|Settings|Leave`;
@@ -81,7 +82,7 @@ It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. 
 
 ## What this skill does not prove
 
-- A real window, trackpad or system cursor: runs are headless, so the cursor is the script's. The capture, Esc giving the system cursor back and two-finger gestures need hardware (a play-test).
+- A real window, trackpad or system cursor: runs are headless, so the cursor is the script's. The capture, Esc giving the system cursor back and how winit reports a real two-finger pan or pinch need hardware (a play-test); `turns` drives what the pointer does with them.
 - What residents answer: no mind service runs.
 - That the rules handle what the UI sends correctly: use `verify-player` and `verify-core`.
 - Frame time or scale.
