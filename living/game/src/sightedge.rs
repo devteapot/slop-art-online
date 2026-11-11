@@ -414,7 +414,7 @@ fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>
     e.sight = Vec4::new(at.x, at.z, edge.radius, mode);
     e.sight_look = Vec4::new(BAND_IN, BAND_OUT, DIM, DESATURATE);
     let sky = crate::camera::SKY.to_linear();
-    let fog = atmo.filter(|a| a.active).map_or(Vec3::new(sky.red, sky.green, sky.blue), |a| a.fog);
+    let fog = atmo.as_deref().filter(|a| a.active).map_or(Vec3::new(sky.red, sky.green, sky.blue), |a| a.fog);
     e.sight_fog = Vec4::new(fog.x, fog.y, fog.z, FLATTEN);
     e.sight_far = Vec4::new(LIMIT, SHADOW_FOG, 0.0, 0.0);
     e.sight_field = match field.as_deref().filter(|f| f.valid) {
