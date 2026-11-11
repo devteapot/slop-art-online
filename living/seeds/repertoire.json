@@ -542,6 +542,71 @@
             "if": {
               "all": [
                 {
+                  "not": {
+                    "has": {
+                      "item": "meat",
+                      "at_least": 3
+                    }
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": {
+                      "kind": "remains",
+                      "holds": "meat"
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": {
+                  "kind": "remains",
+                  "holds": "meat"
+                }
+              },
+              "item": "meat",
+              "qty": 5
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "hide",
+                      "at_least": 2
+                    }
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": {
+                      "kind": "remains",
+                      "holds": "hide"
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": {
+                  "kind": "remains",
+                  "holds": "hide"
+                }
+              },
+              "item": "hide"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
                   "has": {
                     "item": "spear"
                   }
@@ -1967,6 +2032,71 @@
             "then": {
               "do": "build",
               "item": "trap"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "meat",
+                      "at_least": 3
+                    }
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": {
+                      "kind": "remains",
+                      "holds": "meat"
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": {
+                  "kind": "remains",
+                  "holds": "meat"
+                }
+              },
+              "item": "meat",
+              "qty": 5
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "hide",
+                      "at_least": 2
+                    }
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": {
+                      "kind": "remains",
+                      "holds": "hide"
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": {
+                  "kind": "remains",
+                  "holds": "hide"
+                }
+              },
+              "item": "hide"
             }
           },
           {
@@ -3692,6 +3822,26 @@
               },
               "then": {
                 "do": "eat",
+                "item": "meat"
+              }
+            },
+            {
+              "if": {
+                "sees": {
+                  "nearest": {
+                    "kind": "remains",
+                    "holds": "meat"
+                  }
+                }
+              },
+              "then": {
+                "do": "take",
+                "target": {
+                  "nearest": {
+                    "kind": "remains",
+                    "holds": "meat"
+                  }
+                },
                 "item": "meat"
               }
             },

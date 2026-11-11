@@ -44,12 +44,12 @@ The bench module grew from 4.00 to 4.15 MB, and the island authority module from
 | Laws | Names |
 |---|---|
 | `combat_cooldown`, `combat_recover`, `combat_cost` | the combat shapes and catalog skills |
-| `lunge`, `max_hp`, `yield_ms`, `carry_limit`, `carried_spoil`, `carcass_meat`, `carcass_hide`, `<skill>_dist`, `<skill>_speed` | the creature kinds |
+| `lunge`, `max_hp`, `yield_ms`, `carry_limit`, `carried_spoil`, `remains_s`, `<skill>_dist`, `<skill>_speed` | the creature kinds |
 | `spoil_rate` | the items |
 | `regrow` | the resources |
 | `trap_every_s`, `trap_holds` | `meat` |
 
-Any other name is asked once and kept. A Rhai function of one string cannot read anything else, so the table answers exactly as the script does (`numbers_by_name_are_tables_read_once`). Block arc and hold time were already in the combat shape.
+Any other name is asked once and kept. A Rhai function of one string cannot read anything else, so the table answers exactly as the script does (`numbers_by_name_are_tables_read_once`). Item lists work the same way: `items_of(f, name)` (since 2026-11-11, for `carcass(kind)`, the items a body leaves in its remains) calls a one-argument law that returns a map of items to whole amounts once per name and keeps the list. Block arc and hold time were already in the combat shape.
 
 A lookup went from 1.49 µs to 65 ns, and from 20,656 to 1,694 instructions. It is two hash lookups by string; a typed accessor could make it a few ns, which at a few lookups per move start is not worth an API.
 

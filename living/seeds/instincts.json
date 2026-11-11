@@ -468,6 +468,39 @@
       {
         "if": {
           "cond": {
+            "all": [
+              {
+                "hunger": {
+                  "above": 15
+                }
+              },
+              {
+                "sees": {
+                  "nearest": {
+                    "kind": "remains",
+                    "holds": "meat"
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": {
+              "skill": "take",
+              "target": {
+                "nearest": {
+                  "kind": "remains",
+                  "holds": "meat"
+                }
+              },
+              "item": "meat"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
             "hurt_within": 5
           },
           "then": {
@@ -890,6 +923,39 @@
         {
           "if": {
             "cond": {
+              "all": [
+                {
+                  "hunger": {
+                    "above": 15
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": {
+                      "kind": "remains",
+                      "holds": "meat"
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": {
+                "skill": "take",
+                "target": {
+                  "nearest": {
+                    "kind": "remains",
+                    "holds": "meat"
+                  }
+                },
+                "item": "meat"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
               "hunger": {
                 "above": 55
               }
@@ -942,5 +1008,5 @@
       ]
     }
   },
-  "wolf_bold": {"first": [{"if": {"cond": {"all": [{"hurt_within": 8}, {"health": {"below": 20}}]}, "then": {"do": {"skill": "flee", "target": "attacker"}}}}, {"if": {"cond": {"has": {"item": "meat"}}, "then": {"if": {"cond": {"hunger": {"above": 15}}, "then": {"do": {"skill": "eat", "item": "meat"}}}}}}, {"if": {"cond": {"hurt_within": 6}, "then": {"do": {"skill": "attack", "target": "attacker"}}}}, {"if": {"cond": {"near": {"target": {"nearest": "person"}, "within": 10}}, "then": {"do": {"skill": "attack", "target": {"nearest": "person"}}}}}, {"if": {"cond": {"hunger": {"above": 50}}, "then": {"do": {"skill": "attack", "target": {"nearest": "deer"}}}}}, {"if": {"cond": {"all": [{"hunger": {"below": 50}}, {"not": {"near": {"target": "home", "within": 25}}}]}, "then": {"do": {"skill": "goto", "target": "home"}}}}, {"if": {"cond": {"energy": {"below": 25}}, "then": {"do": {"skill": "sleep"}}}}, {"if": {"cond": {"hunger": {"above": 50}}, "then": {"do": {"skill": "wander"}}}}, {"seq": [{"do": {"skill": "wander"}}, {"wait": 6}]}]}
+  "wolf_bold": {"first": [{"if": {"cond": {"all": [{"hurt_within": 8}, {"health": {"below": 20}}]}, "then": {"do": {"skill": "flee", "target": "attacker"}}}}, {"if": {"cond": {"has": {"item": "meat"}}, "then": {"if": {"cond": {"hunger": {"above": 15}}, "then": {"do": {"skill": "eat", "item": "meat"}}}}}}, {"if": {"cond": {"all": [{"hunger": {"above": 15}}, {"sees": {"nearest": {"kind": "remains", "holds": "meat"}}}]}, "then": {"do": {"skill": "take", "target": {"nearest": {"kind": "remains", "holds": "meat"}}, "item": "meat"}}}}, {"if": {"cond": {"hurt_within": 6}, "then": {"do": {"skill": "attack", "target": "attacker"}}}}, {"if": {"cond": {"near": {"target": {"nearest": "person"}, "within": 10}}, "then": {"do": {"skill": "attack", "target": {"nearest": "person"}}}}}, {"if": {"cond": {"hunger": {"above": 50}}, "then": {"do": {"skill": "attack", "target": {"nearest": "deer"}}}}}, {"if": {"cond": {"all": [{"hunger": {"below": 50}}, {"not": {"near": {"target": "home", "within": 25}}}]}, "then": {"do": {"skill": "goto", "target": "home"}}}}, {"if": {"cond": {"energy": {"below": 25}}, "then": {"do": {"skill": "sleep"}}}}, {"if": {"cond": {"hunger": {"above": 50}}, "then": {"do": {"skill": "wander"}}}}, {"seq": [{"do": {"skill": "wander"}}, {"wait": 6}]}]}
 }

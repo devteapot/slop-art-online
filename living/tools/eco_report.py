@@ -5,8 +5,11 @@ attack episodes, kills, meat carried, hunger) and how often each wolf had a meal
 
   living/tools/eco_report.py DIR
 
-A meal is a sample in which the meat a wolf carries rose: a kill puts the carcass's meat in the
-killer's pack, and the wolf eats it a piece at a time. With `DIR/packs.json`
+A meal is a sample in which the meat a wolf carries rose (taken from remains; before every death
+left remains, a kill put the carcass's meat in the killer's pack), eaten a piece at a time. With
+`remains` in the samples (eco_sample.py since 2026-11-11) it also gives meat eaten per wolf (from
+falls in its hunger), the remains on the ground over time, and how many creatures went to take from
+each animal's remains (`take` activities aimed at it, or eating within 8 m of it). With `DIR/packs.json`
 (`{"<wolf id>": "<pack name>"}`, from the `background` table) the meals are also given per pack.
 """
 import json, math, sys
@@ -120,6 +123,58 @@ def main():
         print(f"wolves {g}: {len(members)}; meals per wolf {sorted(n)}; 3+ meals: {sum(1 for x in n if x >= 3)}; at end {dict(fate)}")
         for i, t in members:
             print(f"   {i}: meals at min {t}{'' if chars[i]['alive'] else f'; died min {(chars[i]["died_ms"] - start) / 60000:.0f} ({chars[i]["cause"]})'}")
+    # Meat eaten per wolf: from its hunger, which a piece of meat lowers by 20 at once (a fall of
+    # 10 or more between two samples counts as round(fall / 20) pieces; hunger otherwise rises).
+    eaten, prev = Counter(), {}
+    for r in rows:
+        for v in r["vitals"]:
+            i = v["id"]
+            if chars.get(i, {}).get("kind") != "wolf":
+                continue
+            if i in prev and prev[i] - v["hunger"] >= 10:
+                eaten[i] += round((prev[i] - v["hunger"]) / 20)
+            prev[i] = v["hunger"]
+    if any(r.get("remains") is not None for r in rows):
+        per_pack = defaultdict(list)
+        for i in feeds:
+            per_pack[packs.get(str(i), "born later" if chars[i]["born_ms"] - start >= 60000 else "other")].append(eaten[i])
+        print("meat eaten per wolf:", {g: sorted(v) for g, v in sorted(per_pack.items())})
+        # Remains on the ground and the meat in them, every 10 minutes.
+        line, seen = [], set()
+        for r in rows:
+            m = int((r["clock"][0]["last_ms"] - start) / 60000 // 10 * 10)
+            if m in seen:
+                continue
+            seen.add(m)
+            rem = r.get("remains") or []
+            line.append(f"{m}: {len(rem)} ({sum(x.get('meat', 0) for x in rem)} meat)")
+        print("remains on the ground (min: count, meat in them):", "; ".join(line))
+        # Who took from each remains: creatures with a `take` aimed at it (target class 2, a
+        # structure). A take aims only at remains that hold the item, so this counts creatures
+        # that went to feed from a carcass.
+        owner_of = {x["id"]: x["owner"] for r in rows for x in r.get("remains") or []}
+        takers = defaultdict(set)
+        for r in rows:
+            for a in r["activity"]:
+                t = a.get("target") or []
+                if a["skill"] == "take" and len(t) >= 2 and t[0] == 2 and t[1] in owner_of:
+                    takers[(t[1], owner_of[t[1]])].add(a["id"])
+        # A take lasts a second and the meat is eaten at once, so most fall between samples: a
+        # creature that ate (hunger down 10 or more) within 8 m of remains between two samples
+        # fed from them too.
+        for r0, r1 in zip(rows, rows[1:]):
+            h0 = {v["id"]: v["hunger"] for v in r0["vitals"]}
+            pos = {b["id"]: (b["x"], b["y"]) for b in r1["bodies"]}
+            ate = [v["id"] for v in r1["vitals"] if v["id"] in h0 and h0[v["id"]] - v["hunger"] >= 10 and v["id"] in pos]
+            for x in r1.get("remains") or []:
+                for c in ate:
+                    if math.dist(pos[c], (x["x"], x["y"])) <= 8:
+                        takers[(x["id"], x["owner"])].add(c)
+        animal = {(x["id"], x["owner"]) for r in rows for x in r.get("remains") or [] if chars.get(x["owner"], {}).get("kind") in ("deer", "wolf")}
+        shared = [k for k in animal if len(takers.get(k, ())) >= 2]
+        fed = [k for k in animal if takers.get(k)]
+        kinds = Counter(chars.get(c, {}).get("kind", "person") for k in animal for c in takers.get(k, ()))
+        print(f"animal remains: {len(animal)}; taken from: {len(fed)}; shared (2+ takers): {len(shared)}; takers by kind {dict(kinds)}; takers per remains {sorted(len(takers.get(k, ())) for k in animal)}")
     kills = [c for c in chars.values() if c["kind"] == "deer" and "killed by" in c["cause"].lower()]
     print(f"deer killed: {len(kills)}: " + ", ".join(f"{(c['died_ms'] - start) / 60000:.0f} min ({c['cause']})" for c in kills))
 

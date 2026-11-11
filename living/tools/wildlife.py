@@ -80,7 +80,7 @@ def numbers(rev):
         "meat": arm(fn_body(rh, "nutrition"), "meat", 20.0),
         # Meat a wolf carries: the item's rate times the carrier's share (none: the item's rate).
         "spoil": arm(fn_body(rh, "spoil_rate"), "meat", 0.05) * (float(carried.group(1)) if carried else 1.0),
-        "carcass": arm(fn_body(rh, "carcass_meat"), "deer", 3),
+        "carcass": float((re.search(r'"deer"\s*=>\s*#\{[^}]*meat:\s*([\d.]+)', fn_body(rh, "carcass")) or re.search(r'"deer"\s*=>\s*([\d.]+)', fn_body(rh, "carcass_meat")) or [0, 3])[1]),
         "graze": -float(re.search(r"hunger:\s*(-?[\d.]+)", fn_body(rh, "graze_done")).group(1)),
         "pasture_regen": float(re.search(r"pasture_regen:\s*([\d.]+)", fn_body(rh, "laws")).group(1)),
         "max_hp": {k: arm(fn_body(rh, "max_hp"), k, 50.0) for k in ("deer", "wolf")},

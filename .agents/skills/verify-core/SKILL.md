@@ -137,6 +137,14 @@ python3 "$V" doctor --run "$W" > ".local/living/verify/$W/doctor.txt" 2>&1
 python3 "$C/scenes.py" wildlife --run "$W" > ".local/living/verify/$W/wildlife.txt" 2>&1
 python3 "$V" cleanup --run "$W"
 
+# Remains: every death leaves the carcass law's items, a kill feeds nobody by itself, two wolves
+# take from one kill, remains expire (remains_s shortened to 90 s here), wander keeps its heading.
+M=$R-remains
+mkdir -p ".local/living/verify/$M"
+python3 "$V" launch --run "$M" --seed stage1-acts > ".local/living/verify/$M/launch.txt" 2>&1
+python3 "$C/scenes.py" remains --run "$M" > ".local/living/verify/$M/remains.txt" 2>&1
+python3 "$V" cleanup --run "$M"
+
 # A deer flees a wolf: the distance only grows (features/steering.md#flight).
 F=$R-flee
 mkdir -p ".local/living/verify/$F"

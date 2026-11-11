@@ -692,11 +692,12 @@ impl<'a> Ev<'a> {
                 best.map(|(p, _)| Resolved { class: 4, id: 0, at: p, kind: f.kind.clone(), name: String::new() })
             }
             living_rules::catalog::KindClass::Structure => {
-                let me = self.me.id;
+                let (me, ctx) = (self.me.id, self.ctx);
+                let holds = |id: u64| f.holds.as_deref().map_or(true, |item| common::inv_count(ctx, STRUCTURE_BIT | id, item) >= 1);
                 self.scene()
                     .structures
                     .iter()
-                    .find(|(s, _)| s.kind == f.kind && (!f.mine || s.owner == me))
+                    .find(|(s, _)| s.kind == f.kind && (!f.mine || s.owner == me) && holds(s.id))
                     .map(|(s, _)| Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() })
             }
         }

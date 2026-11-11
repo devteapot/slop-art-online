@@ -9,6 +9,7 @@
 | "food" as anything with nutrition: eat and give of `food`, the most nourishing first | `scenes.py food` | [needs.md](needs.md) |
 | Birth, infancy, aging and death cleanup | `scenes.py lifecycle` and mechanics | [lifecycle.md](lifecycle.md) |
 | Species restrictions, grazing (shown as a `doing` row) and migration floor | `scenes.py wildlife` and Cargo | [wildlife.md](wildlife.md) |
+| Remains of every death (the `carcass` law's items), taking from them by any creature, their expiry (`remains_s`, the private `rot` table), and a wander keeping its heading (`wander_turn`, `wander_keep_s`) | `scenes.py remains` and Cargo | [wildlife.md](wildlife.md#remains) |
 | Blows, threaten, yield and seize | Mechanics and `scenes.py seize` | [combat.md](combat.md) |
 | One-off acts, graph coexistence and feedback | Mechanics and Cargo | [acts.md](acts.md) |
 | Dealings on records: agreements kept, broken, lapsed and not taken; demands met and unpaid; regard read by a relation filter; hooks and install checks | `scenes.py dealings` on an island run, and Cargo | [dealings.md](dealings.md) |

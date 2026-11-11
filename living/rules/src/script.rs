@@ -348,6 +348,11 @@ pub struct Laws {
     pub crowd_hz: f32,
     pub chase_hz: f32,
     pub combat_hz: f32,
+    /// A wander keeps roughly its last heading (within `wander_turn` radians either way) while
+    /// the body is moving, or has stood less than `wander_keep_s` seconds; otherwise it picks a
+    /// direction at random. 0 s keeps it only while moving.
+    pub wander_turn: f32,
+    pub wander_keep_s: f32,
     /// How often a body smells afresh (Hz): between reads it keeps what it last smelled while
     /// it has moved less than a few tiles. Scent is coarse (rough direction, distance to 10
     /// tiles), and a fresh read sweeps every chunk within the scent radius.
@@ -405,6 +410,8 @@ impl Default for Laws {
             chase_hz: 4.0,
             combat_hz: 8.0,
             scent_hz: 1.0,
+            wander_turn: 1.2,
+            wander_keep_s: 0.0,
             run_speed: 1.5,
             input_hz: 30.0,
             input_burst: 15.0,
@@ -507,6 +514,8 @@ pub struct Scripts {
     /// Numbers looked up by a name (`combat_cooldown("strike")`), read at compile for every name
     /// the engine asks and kept for any other the first time it is asked.
     names: RefCell<HashMap<String, HashMap<String, Option<f64>>>>,
+    /// Item lists from one-argument laws (`carcass(kind)`), by law and argument.
+    lists: RefCell<HashMap<String, HashMap<String, Vec<(String, u32)>>>>,
     /// `rates(a)` by the values of the fields it reads: bodies in the same state share it.
     needs: RefCell<HashMap<Vec<u8>, NeedLaw>>,
 }
@@ -577,7 +586,7 @@ fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
     for f in ["combat_cooldown", "combat_recover", "combat_cost"] {
         add(f, &skills);
     }
-    for f in ["lunge", "max_hp", "yield_ms", "carry_limit", "carried_spoil", "carcass_meat", "carcass_hide"] {
+    for f in ["lunge", "max_hp", "yield_ms", "carry_limit", "carried_spoil", "remains_s"] {
         add(f, &kinds);
     }
     add("spoil_rate", &items);
@@ -605,7 +614,7 @@ impl Scripts {
         let unary = ast.iter_functions().filter(|f| f.params.len() == 1).map(|f| f.name.to_string()).collect();
         let nullary = ast.iter_functions().filter(|f| f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -974,6 +983,8 @@ impl Scripts {
             chase_hz: g("chase_hz", l.chase_hz).clamp(0.5, 30.0),
             combat_hz: g("combat_hz", l.combat_hz).clamp(0.5, 30.0),
             scent_hz: g("scent_hz", l.scent_hz).clamp(0.1, 60.0),
+            wander_turn: g("wander_turn", l.wander_turn).clamp(0.0, std::f32::consts::PI),
+            wander_keep_s: g("wander_keep_s", l.wander_keep_s).clamp(0.0, 3_600.0),
             run_speed: g("run_speed", l.run_speed).clamp(1.0, 4.0),
             input_hz: g("input_hz", l.input_hz).clamp(1.0, 120.0),
             input_burst: g("input_burst", l.input_burst).clamp(1.0, 240.0),
@@ -1010,6 +1021,28 @@ impl Scripts {
         let v = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok().and_then(|d| number(&d));
         self.names.borrow_mut().entry(f.to_string()).or_default().insert(arg.to_string(), v);
         v.unwrap_or(default)
+    }
+
+    /// Items a one-argument law gives as a map (`fn carcass(kind) { #{ meat: 5, hide: 1 } }`),
+    /// with whole positive amounts; empty without the law or for anything else it returns.
+    /// Cached by argument, like [`Self::num_of`].
+    pub fn items_of(&self, f: &str, arg: &str) -> Vec<(String, u32)> {
+        if let Some(v) = self.lists.borrow().get(f).and_then(|t| t.get(arg)) {
+            return v.clone();
+        }
+        let mut out: Vec<(String, u32)> = Vec::new();
+        if self.has(f) {
+            if let Some(m) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok().and_then(|d| d.try_cast::<rhai::Map>()) {
+                for (k, v) in m {
+                    if let Some(n) = number(&v).filter(|n| *n >= 1.0) {
+                        out.push((k.to_string(), n as u32));
+                    }
+                }
+            }
+        }
+        out.sort();
+        self.lists.borrow_mut().entry(f.to_string()).or_default().insert(arg.to_string(), out.clone());
+        out
     }
 
     /// What a skill takes and gives, as its spec says (`<skill>_spec()`), for minds composing
@@ -1281,6 +1314,22 @@ mod tests {
 
     fn scripts() -> Scripts {
         Scripts::new(include_str!("../../scripts/skills.rhai")).expect("skills compile")
+    }
+
+    #[test]
+    fn a_body_s_remains_hold_what_the_carcass_law_gives_and_last_by_kind() {
+        let sc = scripts();
+        assert_eq!(sc.items_of("carcass", "deer"), vec![("hide".to_string(), 1), ("meat".to_string(), 5)]);
+        assert_eq!(sc.items_of("carcass", "wolf"), vec![("hide".to_string(), 1), ("meat".to_string(), 2)]);
+        assert!(sc.items_of("carcass", "person").is_empty());
+        assert!(sc.items_of("no_such_law", "deer").is_empty());
+        // A law that gives something other than a map, or no whole amounts, gives nothing.
+        let odd = Scripts::new(&format!("{}\nfn odd(k) {{ if k == \"a\" {{ 3 }} else {{ #{{ meat: 0.5, hide: -1, bone: 2 }} }} }}", include_str!("../../scripts/skills.rhai"))).unwrap();
+        assert!(odd.items_of("odd", "a").is_empty());
+        assert_eq!(odd.items_of("odd", "b"), vec![("bone".to_string(), 2)]);
+        assert_eq!((sc.num_of("remains_s", "deer", 0.0), sc.num_of("remains_s", "person", 0.0)), (1800.0, 3600.0));
+        let l = sc.laws();
+        assert_eq!((l.wander_turn, l.wander_keep_s), (1.2, 60.0));
     }
 
     #[test]

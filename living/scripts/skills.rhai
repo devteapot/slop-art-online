@@ -18,6 +18,9 @@ fn laws() {
         steer_s: 2.0, crowd_hz: 3.0, chase_hz: 4.0, combat_hz: 8.0,
         // How often a body smells afresh; between reads it keeps what it last smelled.
         scent_hz: 1.0,
+        // A wander carries on within wander_turn radians of the last heading while moving or
+        // after standing less than wander_keep_s seconds, so a search keeps a direction.
+        wander_turn: 1.2, wander_keep_s: 60.0,
         run_speed: 1.5, input_hz: 30.0, input_burst: 15.0,
         // Grass regrowth per grassy tile per growing minute: about one grazer per 300 grassy
         // tiles (it was one per 70, and the wilds filled with deer).
@@ -539,9 +542,12 @@ fn yield_check(a) {
 fn yield_duration(a) { 1000 }
 fn yield_done(a) { [#{ op: "yield" }] }
 
-// Meat left when a creature dies at someone's hand.
-fn carcass_meat(kind) { switch kind { "deer" => 5, "wolf" => 2, _ => 0 } }
-fn carcass_hide(kind) { switch kind { "deer" => 1, "wolf" => 1, _ => 0 } }
+// What a creature's body leaves in its remains when it dies, however it died, beside what it
+// carried: the remains are a structure anyone beside them may take from (`take`).
+fn carcass(kind) { switch kind { "deer" => #{ meat: 5, hide: 1 }, "wolf" => #{ meat: 2, hide: 1 }, _ => #{} } }
+// Seconds remains lie before they are gone with what is left in them (spoiled meat, bones,
+// belongings nobody took). Remains still holding an artifact (a tablet, a sign) stay.
+fn remains_s(kind) { switch kind { "person" => 3600, _ => 1800 } }
 
 fn max_hp(kind) { switch kind { "deer" => 40.0, "wolf" => 55.0, _ => 100.0 } }
 
