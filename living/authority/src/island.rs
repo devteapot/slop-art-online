@@ -30,8 +30,11 @@ pub struct Hosted {
     pub lots: Vec<PlannedLot>,
     /// The roads as a graph, for the stages of a known way (`town::seat`); dropped with the rest.
     pub ways: living_rules::ways::Ways,
-    /// Planned settlements' authored resources (`PlanSpec::resources`): kind and point.
-    pub resources: Vec<(String, (f32, f32))>,
+    /// Planned settlements' authored resources (`PlanSpec::resources`), on the land.
+    pub resources: Vec<living_rules::settle::LaidResource>,
+    /// Planned settlements' authored structures and lot stores (`PlanSpec::structures`,
+    /// `LotSpec::contents`), on the land.
+    pub structures: Vec<living_rules::settle::LaidStructure>,
 }
 
 pub struct Planned {
@@ -256,7 +259,8 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
     // Built by the planner's last step; a land made otherwise (none today) builds it here.
     let ways = land.ways.clone().unwrap_or_else(|| living_rules::ways::Ways::of(land));
     let resources = land.plans.iter().flat_map(|p| p.resources.iter().cloned()).collect();
-    Ok(Hosted { map, info, settlements, lots, ways, resources })
+    let structures = land.plans.iter().flat_map(|p| p.structures.iter().cloned()).collect();
+    Ok(Hosted { map, info, settlements, lots, ways, resources, structures })
 }
 
 /// The seed's settlement entry for each planned settlement. An entry of a site kind (`site`, or

@@ -1559,7 +1559,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     chunk: chunk_of(at.0, at.1),
                     amount: 0.0,
                     max: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
-                    regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
+                    regen: sc.regrow_per_min("berry_bush", 1.0) as f32,
                     at_ms: now,
                     pool: 0,
                 });
@@ -2229,7 +2229,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
             t.holder = STRUCTURE_BIT | s.id;
             ctx.db.artifact().id().update(t);
         }
-        let last_ms = (sc.num_of("remains_s", &kind, 1800.0).max(0.0) * 1000.0) as u64;
+        let last_ms = sc.remains_ms(&kind).max(0.0) as u64;
         ctx.db.rot().insert(Rot { structure: s.id, due_ms: now + last_ms });
     }
     if kind == "person" {

@@ -8,7 +8,7 @@ Rules: [docs/WORLD_RULES.md, "Goods, recipes and fuel"](../../../../docs/WORLD_R
 - **Fires that eat fuel.** A kind with `burns` is lit only while it holds fuel. Its one value is the public `structure.lit_until_ms`; feeding (`feed`) and a recipe's heat (op `burn`) settle it, nothing is written while it burns, and it goes out on its own. Relighting an out fire takes knowing `fire`.
 - **Warmth and light from lit fires only.** `act::warmth` counts a burning structure within `burns.warmth`; `common::lit_at` (lamplight, `a.actor.lit`) counts a burning kind's light only while it is lit; campfires (`warms` without `burns`) as before.
 - **Recipes** (`make`): at a workplace (`at`), burning (`lit`), drawing `fuel` units from it, needing a technique (`knows`).
-- **Shared stocks.** `resource_node.pool` names the node whose stock a spot draws on; seeds place nodes with `resource_nodes` and a `pool` name.
+- **Shared stocks.** `resource_node.pool` names the node whose stock a spot draws on; seeds place nodes with `resource_nodes` and a `pool` name (`max`, and `regrow_per_h` in game hours since rates-2; goods-1's `regrow`, a real minute, is still read without it).
 - **Old worlds.** The shipped tables hold what the Rust constants held; the shipped world has no fires that burn fuel and no recipes, so `feed` and `make` are not offered there.
 
 ## How to get to it

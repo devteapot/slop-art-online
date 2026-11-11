@@ -1465,7 +1465,9 @@ def dealings(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-REMAINS_S = 90
+# Remains lie 3 game hours here: 90 real seconds on the 12-minute day (`remains_h`, turned into
+# real time for the world's day by the engine).
+REMAINS_H = 3
 
 
 def carcass_law(kind):
@@ -1478,9 +1480,9 @@ def carcass_law(kind):
 
 def remains(s):
     """Every death leaves remains with the `carcass` law's items; a kill feeds nobody by itself;
-    any creature beside the remains takes from them; they are gone after `remains_s`; a wander
+    any creature beside the remains takes from them; they are gone after `remains_h` (game hours); a wander
     keeps its heading (the `motion` law's `wander_turn`, `wander_keep_s`). Needs a world with deer and wolves (stage1-acts)."""
-    src = compose((ROOT / "living/scripts/skills.rhai").read_text(), {"remains_s": f"fn remains_s(kind) {{ {REMAINS_S} }}"})
+    src = compose((ROOT / "living/scripts/skills.rhai").read_text(), {"remains_h": f"fn remains_h(kind) {{ {REMAINS_H}.0 }}"})
     s.call("install_script", src)
     for c in s.rows("SELECT id FROM character WHERE alive = true"):
         s.graph(c["id"], {"wait": 600})
@@ -1503,7 +1505,7 @@ def remains(s):
     r_a = s.wait(lambda: remains_of(a, "admin-death-remains"), seconds=10)
     s.expect("a deer's death leaves remains holding the carcass law's items", held(r_a["id"]) == law, held(r_a["id"]))
     rot = s.rows(f"SELECT * FROM rot WHERE structure = {r_a['id']}", "admin-death-rot")
-    s.expect("its remains are due after the remains_s law", len(rot) == 1 and rot[0]["due_ms"] - r_a["built_ms"] == REMAINS_S * 1000, rot)
+    s.expect("its remains are due after the remains_h law, in real time for the day", len(rot) == 1 and rot[0]["due_ms"] - r_a["built_ms"] == REMAINS_H * s.rows("SELECT day_ms FROM world")[0]["day_ms"] // 24, rot)
 
     # A wolf's kill: the carcass goes into the remains, not into the killer's pack.
     b, killer, other, walker = deer[1], wolves[0], wolves[1], wolves[2]
@@ -2077,8 +2079,122 @@ def stock(s):
     s.expect("another spot of the same ground is depleted too", heard(c, "depleted", t0), heard(c, "", t0))
 
 
+# How long the decay scene watches, in game hours (`--game-hours`; a whole day by default).
+DECAY_HOURS = 24.0
+
+
+def decay(s):
+    """Rates written in game time run in real time for the world's day (docs/CULLET_RULES.md,
+    rates-2), on a world with its own day and laws (`cullet-laws`: a 48-minute day): raw fish in a
+    pack and in a storage spoils at the laws' `spoil_per_h` turned into real minutes, once a real
+    minute (a storage at its `kept_spoil` share), and an emptied greens bed regrows its kind's
+    `regrow_per_h` a game hour, kept per real minute in the node's `regen`. Watches for
+    `--game-hours` (default a whole game day, 48 real minutes on Cullet); no clock is changed."""
+    w = s.rows("SELECT * FROM world", "world")[0]
+    hour_ms = w["day_ms"] / 24
+    seed = json.loads((ROOT / "living/seeds" / f"{json.loads((s.out / 'state.json').read_text())['seed']}.json").read_text())
+    src = (ROOT / "living/seeds" / seed["laws_file"]).read_text()
+    per_min = 60000 / hour_ms
+    fish_min = law_number(src, "spoil_per_h", "fish") * per_min
+    kept = 1.0 / 3.0  # the shipped `kept_spoil` (Cullet keeps it)
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def heard(actor, words, since):
+        return [r["text"] for r in s.rows(f"SELECT text, at_ms FROM experience WHERE observer = {actor}") if r["at_ms"] >= since and words in r["text"]]
+
+    def acts(actor, *nodes):
+        s.call("mind_act", actor, [json.dumps(n) for n in nodes], "verify-core")
+
+    def empty(actor, kind):
+        """Gather from the nearest node of a kind until it is depleted; how many were taken."""
+        got = 0
+        for _ in range(12):
+            t0, before = now(), sum(s.inventory(actor).values())
+            acts(actor, *[{"do": "gather", "target": {"nearest": kind}}] * 4)
+            try:
+                s.wait(lambda: heard(actor, "depleted", t0) or sum(s.inventory(actor).values()) >= before + 4, seconds=60, every=1)
+            except TimeoutError:
+                pass
+            time.sleep(2)
+            got += sum(s.inventory(actor).values()) - before
+            if heard(actor, "depleted", t0):
+                return got
+        return got
+
+    a, b = s.people(2)
+    for p in (a, b):
+        s.graph(p, {"wait": 3600})
+    s.call("place_near", b, a)
+    # Raw fish: 1,000 in a pack, 100 put in a storage beside it (a storage holds `storage_holds`;
+    # a `{"id": n}` target names a creature, so the storage is aimed at as the nearest).
+    s.call("place_structure", b, "storage")
+    store = max((r for r in s.rows(f"SELECT * FROM structure WHERE owner = {b}") if r["kind"] == "storage"), key=lambda r: r["id"])
+    s.call("grant_items", b, "fish", 100)
+    t0 = now()
+    acts(b, {"do": "store", "item": "fish", "qty": 100, "target": {"nearest": "storage"}})
+    owner = (1 << 40) | store["id"]
+    held = lambda: {r["item"]: r["qty"] for r in s.rows(f"SELECT item, qty FROM inventory WHERE owner = {owner}")}
+    try:
+        s.wait(lambda: held().get("fish", 0) >= 90, seconds=60, every=1)
+    except TimeoutError:
+        s.expect("the fish are stored", False, heard(b, "", t0))
+    s.call("grant_items", a, "fish", 1000)
+    t_fish = now()
+    stored0 = held().get("fish", 0)
+    # A greens bed placed beside the pair, emptied, to regrow.
+    s.call("place_resource", a, "greens_bed", 2.0, 0.0, 0.0, 0)
+    bed = max((r for r in s.rows("SELECT * FROM resource_node") if r["kind"] == "greens_bed"), key=lambda r: r["id"])
+    regrow_h = float(re.search(r'name:\s*"greens_bed"[^\n]*?regrow_per_h:\s*([\d.]+)', src).group(1))
+    s.expect("a node's regen is its kind's regrow_per_h in real minutes for the day", abs(bed["regen"] - regrow_h * per_min) < 1e-6, {"regen": bed["regen"], "regrow_per_h": regrow_h, "per_real_minute": regrow_h * per_min})
+    took = empty(b, "greens_bed")
+    t_empty = now()
+    left = s.rows(f"SELECT * FROM resource_node WHERE id = {bed['id']}", "bed-emptied")[0]
+    s.expect("the bed is emptied by gathering", took >= int(bed["max"]) and left["amount"] < 1.0, {"took": took, "row": left})
+
+    # Watch, sampling the stacks every few real minutes.
+    watch_ms = DECAY_HOURS * hour_ms
+    samples = []
+    while now() < t_fish + watch_ms:
+        samples.append({"at_ms": now(), "carried": s.inventory(a).get("fish", 0), "stored": held().get("fish", 0)})
+        time.sleep(min(180, max(5, (t_fish + watch_ms - now()) / 1000)))
+    t1 = now()
+    carried, stored = s.inventory(a, "fish-after").get("fish", 0), held().get("fish", 0)
+    samples.append({"at_ms": t1, "carried": carried, "stored": stored})
+    (s.out / "decay-samples.json").write_text(json.dumps(samples, indent=1) + "\n")
+    # Once a real minute each stack loses its share in expectation (the fraction by chance):
+    # after k sweeps a stack holds about q (1 - r)^k; k is the real minutes passed, give or take
+    # one, and each sweep's chance adds at most one.
+    mins = (t1 - t_fish) / 60000
+
+    def band(q, r):
+        ks = [max(0, int(mins) - 1), int(mins) + 1]
+        return min(q * (1 - r) ** k for k in ks) - mins - 2, max(q * (1 - r) ** k for k in ks) + mins + 2
+
+    lo, hi = band(1000, fish_min)
+    s.expect(f"raw fish carried over {DECAY_HOURS:g} game hours spoils at spoil_per_h in real time ({fish_min:.4f} a real minute)", lo <= carried <= hi, {"carried": carried, "band": [round(lo, 1), round(hi, 1)], "real_minutes": round(mins, 2), "share_left": carried / 1000})
+    lo, hi = band(stored0, fish_min * kept)
+    s.expect("raw fish in a storage spoils at a third of that", lo <= stored <= hi, {"stored": stored, "from": stored0, "band": [round(lo, 1), round(hi, 1)], "share_left": stored / max(1, stored0)})
+
+    # Regrowth, read from the bed's own row: one gathering beside it takes one unit and writes
+    # what it held then less one (`Effect::Harvest`), so what it had regrown is the new amount
+    # plus one, against its regen times the real minutes since it was emptied (growing time:
+    # not winter). Gathering more would count other beds too (`nearest` walks on to the wild
+    # ones once this one is spent).
+    t0 = now()
+    acts(b, {"do": "gather", "target": {"nearest": "greens_bed"}})
+    s.wait(lambda: s.rows(f"SELECT at_ms FROM resource_node WHERE id = {bed['id']}")[0]["at_ms"] > left["at_ms"] or heard(b, "did not work out", t0), seconds=60, every=1)
+    row = s.rows(f"SELECT * FROM resource_node WHERE id = {bed['id']}", "bed-regrown")[0]
+    had = row["amount"] + 1.0
+    grown = left["amount"] + left["regen"] * (row["at_ms"] - left["at_ms"]) / 60000
+    s.expect(f"the emptied bed regrew regrow_per_h a game hour over {DECAY_HOURS:g} game hours (growing time)", row["at_ms"] > left["at_ms"] and abs(had - min(grown, left["max"])) < 0.01,
+             {"had": round(had, 4), "expected": round(grown, 4), "game_hours": round((row["at_ms"] - left["at_ms"]) / hour_ms, 3), "row": row})
+
+
 SCENES["goods"] = goods
 SCENES["stock"] = stock
+SCENES["decay"] = decay
 
 
 def main():
@@ -2087,7 +2203,9 @@ def main():
     ap.add_argument("--run", required=True)
     ap.add_argument("--baseline", action="store_true", help="measure pre-change infant authority without new-policy assertions")
     ap.add_argument("--resume-infant", action="store_true", help="rerun cry checks from the retained thermal checkpoint")
+    ap.add_argument("--game-hours", type=float, default=DECAY_HOURS, help="decay: game hours to watch (default a whole game day)")
     a = ap.parse_args()
+    globals()["DECAY_HOURS"] = a.game_hours
     s = Scene(a.run, a.scene)
     s.baseline = a.baseline
     s.resume_infant = a.resume_infant

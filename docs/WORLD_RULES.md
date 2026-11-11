@@ -400,7 +400,7 @@ What the world has is data in the script, each a list of maps with a `name`, rea
 | --- | --- | --- |
 | `items()` | yes | `cooks_to`, `smokes_to` (what cooking or smoking makes), `fuel` (units a fire that burns `fuel` gets from one), and any trait a world's recipes read (`alkali`, `bakes_to`, `oil`) |
 | `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `lights` (metres of lamplight, rules-1), `burns` (below); other traits are the rules' data. A script with `structure_traits()` (from before, or a world's own) has its `warms`, `roof` and `lights` stand over the listed kinds' |
-| `resources()` | yes (new) | `yields`, `regrow` (a minute), `max`, `ground` and `by_water` (where a settlement's promised nodes go), `gather_ms` |
+| `resources()` | yes (new) | `yields`, `regrow_per_h` (units a game hour of growing time; `regrow`, a real minute, before rates-2), `max`, `ground` and `by_water` (where a settlement's promised nodes go), `gather_ms` |
 | `know_how()` | yes (new) | `help` (what someone taught or reading is told), `requires` |
 | `recipes()` | no (none) | below |
 
@@ -469,7 +469,7 @@ They are the goods section of Cullet's laws, [`living/seeds/worlds/cullet/laws.r
 | baking | a burning oven | 1 of anything that `bakes_to` | 0.25 unit |
 | lamp oil | any burning fire | 2 fish | — |
 
-**Shared stocks.** A resource node may draw on another's stock (`resource_node.pool`, the id of the node holding it; 0: its own). A spot of a fishing ground is fished from, but its amount, max and regrowth are its pool's: target facts, a mind's scene and the harvest all read the stock. A seed places nodes with `resource_nodes: [{kind, at, max, regrow, pool}]`; nodes naming the same pool share the first one's stock. The authored plan (task `plan-1`) is to place Cullet's.
+**Shared stocks.** A resource node may draw on another's stock (`resource_node.pool`, the id of the node holding it; 0: its own). A spot of a fishing ground is fished from, but its amount, max and regrowth are its pool's: target facts, a mind's scene and the harvest all read the stock. A seed places nodes with `resource_nodes: [{kind, at, max, regrow_per_h, pool}]` (`regrow`, a real minute, is still read when `regrow_per_h` is absent); nodes naming the same pool share the first one's stock. An authored plan places them the same way (`plans[].resources[]` with `max`, `regrow_per_h` and `pool`, [authored plans](AUTHORED_PLANS.md#the-format)); Cullet's are placed since `rates-2` ([Cullet's goods, placed](CULLET_RULES.md#cullets-goods-placed-rates-2)).
 
 ### What changed for old worlds
 
@@ -497,6 +497,12 @@ No whole-World scan was added. A fire costs nothing while it burns: no per-tick 
 - **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
 - **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here. After merging rules-1 and plan-1 (main `6a905c31`): rates 8,566, rates-law 212,202 (still the only law over budget), strike 274,209, cooldown 1,704, perceived 70,038, hook 450,841, senses 3,143, senses-law 41,866, moves 1,956.
 - **Not measured:** tick time and subscription volume at population. A fire changes one public row per feeding or recipe made; at Cullet's 64 residents that is a few rows a game hour.
+
+## Spoiling, regrowth, traps and remains in game time (rates-2)
+
+Built 2026-11-11 ([Cullet's rules](CULLET_RULES.md#the-other-rates-in-game-time-rates-2)): `spoil_per_h(item)`, a resource kind's `regrow_per_h`, `laws().pasture_regen_per_h`, `trap_every_h(x)` and a creature kind's `remains_h` are written in game time and turned into real time for the world's day by the engine (`Scripts::spoil_per_min`, `regrow_per_min`, `trap_every_ms`, `remains_ms`; `Laws::pasture_regen` stays per real minute). A script that defines the old real-time law (`spoil_rate`, `regrow`, `trap_every_s`, `remains_s`, `pasture_regen`) is read as before. On the 12-minute day every value is bit for bit what it was (`rates_check::rates_are_bit_identical`).
+
+A plan's resources, structures and stores (`plans[].resources[]` with `max`, `regrow_per_h` and `pool`; `plans[].structures[]` with `fuel` and `contents`; `lots[].contents`) are placed when the world is created. `floor::check` refuses a plan naming a resource kind, structure kind or item that the world's tables do not have ([authored plans](AUTHORED_PLANS.md#the-format)).
 
 ## Day length, game-hour rates, a seed's laws, light (rules-1)
 

@@ -192,7 +192,11 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let hour = common::hour(w, now);
     let sctx = living_rules::script::SkillCtx { actor: facts, night, dark, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
+    // Profiled apart: the law itself, asked only for a state no body has been in since the
+    // script revision (the rest are answers kept per state, finished per body).
+    let _law_timer = if common::profiling() && !sc.need_law_kept(&sctx) { common::span("needs.rates.law") } else { None };
     let law = sc.need_law(&sctx);
+    drop(_law_timer);
     let mut key = key;
     if let Ok(c) = law.as_ref().map(|l| l.cuts().unwrap_or([f32::INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::NEG_INFINITY])) {
         NEED_CUTS.with(|m| m.borrow_mut().insert(me.id, c));

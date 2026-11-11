@@ -132,7 +132,42 @@ pub fn check(s: &Seed) -> Result<Option<String>, String> {
     }
     let over: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
     sc.laws_with(&over).map_err(|e| format!("seed rules: {e}"))?;
+    plan_kinds(s, &sc)?;
     Ok(laws)
+}
+
+/// A hand-authored plan names only resource and structure kinds, and stores only items, that the
+/// world's tables have (its script with the seed's laws): a name that matches nothing is refused
+/// here, before anything is written, instead of being left out when the world is populated.
+fn plan_kinds(s: &Seed, sc: &living_rules::script::Scripts) -> Result<(), String> {
+    let Some(m) = s.map.as_ref().filter(|m| m.kind == "land") else { return Ok(()) };
+    let (_, params) = crate::island::params_of(m)?;
+    let t = sc.tables();
+    let has = |table: &str, name: &str| t.names(table).iter().any(|n| n == name);
+    for p in &params.plans {
+        let mut bad: std::collections::BTreeSet<String> = Default::default();
+        for r in &p.resources {
+            if !has("resources", &r.kind) {
+                bad.insert(format!("resource `{}`", r.kind));
+            }
+        }
+        for st in &p.structures {
+            if !has("structures", &st.kind) {
+                bad.insert(format!("structure `{}`", st.kind));
+            }
+        }
+        let contents = p.structures.iter().flat_map(|st| st.contents.keys()).chain(p.lots.iter().flat_map(|l| l.contents.keys()));
+        for item in contents {
+            if !has("items", item) {
+                bad.insert(format!("item `{item}`"));
+            }
+        }
+        if !bad.is_empty() {
+            let v: Vec<String> = bad.into_iter().collect();
+            return Err(format!("map.params.plans: plan {} names kinds this world's tables do not have: {} (resources are {}; structures are {})", p.id, v.join(", "), t.names("resources").join(", "), t.names("structures").join(", ")));
+        }
+    }
+    Ok(())
 }
 
 /// The world's day from its seed (`day_minutes`): the world row's `day_ms`, and the script

@@ -155,7 +155,8 @@ fn structures() {
 // gathered on the Wrack Strand and burnt to ash at any fire; ash and sand are melted into glass
 // at the Cone, a furnace that burns peat; fish are smoked over peat at a smokehouse; roots are
 // baked at an oven; lamp oil is rendered from fish at a fire and burnt in lamps. The numbers are
-// first guesses, to be tuned in the soak (docs/SMALL_CITY.md, phase 4).
+// first guesses, to be tuned in the soak (docs/SMALL_CITY.md, phase 4). Rates and durations are in
+// game time (`_per_h`, `_h`), turned into real time for the 48-minute day by the engine.
 
 fn items() {
     base_items() + [
@@ -185,14 +186,31 @@ fn nutrition(item) {
     }
 }
 
-fn spoil_rate(item) {
+// Share of a food that spoils in a game hour (docs/SMALL_CITY.md §4; carried in a pack, a
+// storage keeps it three times longer). Raw fish: half gone in a game day, nine tenths in four
+// (§4's 1.25% a real minute on the 48-minute day). Smoked fish keeps for weeks; roots keep for
+// about a fortnight before half are gone; greens wilt within a day or two.
+fn spoil_per_h(item) {
     switch item {
-        "roots" => 0.004,
+        "fish" => 0.025,
+        "cooked_fish" => 0.006,
+        "smoked_fish" => 0.001,
+        "roots" => 0.002,
         "baked_roots" => 0.01,
         "greens" => 0.03,
-        _ => base_spoil_rate(item),
+        _ => base_spoil_per_h(item),
     }
 }
+
+// A storage holds up to 1,000 things: the town's stores are barns (the Store's six days of food,
+// the Cone's peat; living/tools/cullet_plan.py). Every storage here, a person's crate as well.
+fn storage_holds(x) { 1000 }
+
+// There is no small game on the Wrack: a trap catches nothing (the world does not restock).
+fn trap_every_h(x) { 0.0 }
+
+// A person's remains, with what they carried, lie two game days before they are gone.
+fn remains_h(kind) { if kind == "person" { 48.0 } else { base_remains_h(kind) } }
 
 // Fires that eat fuel. Rates are units a game hour while lit; warmth and light are metres. A
 // lamp is one: it lights only while it has oil.
@@ -207,17 +225,27 @@ fn goods_structures() {
     ]
 }
 
-// What the land gives. A fishing ground's spots share one stock when the seed says so (a
-// resource node's `pool`).
+// What the land gives, a game hour of growing time (no winter) per node, up to its max. A
+// fishing ground's spots share one stock when the plan or seed says so (a resource node's
+// `pool`); the plan gives each ground its own stock and regrowth. Starting values for the soak
+// against docs/SMALL_CITY.md §2 (about 1.3 times what 64 residents and 10 players eat; fish 55%,
+// roots 30%, greens 15%; peat the tight resource), computed in living/tools/cullet_plan.py, which
+// writes each node's own values into the plan; these are a node's of each kind when nothing says
+// otherwise, and hold about two days of regrowth (docs/CULLET_RULES.md, "Cullet's goods, placed").
 fn resources() {
     base_resources() + [
-        #{ name: "kelp_bed", yields: "kelp", regrow: 1.0, max: 6.0, ground: ["sand"], by_water: true, gather_ms: 2500 },
-        #{ name: "sand_bank", yields: "sand", regrow: 2.0, max: 10.0, ground: ["sand"], gather_ms: 2000 },
-        #{ name: "peat_bank", yields: "peat", regrow: 0.15, max: 12.0, ground: ["grass", "dirt"], gather_ms: 5000 },
-        #{ name: "root_plot", yields: "roots", regrow: 0.4, max: 6.0, ground: ["dirt", "grass"], gather_ms: 3000 },
-        #{ name: "greens_bed", yields: "greens", regrow: 0.5, max: 4.0, ground: ["grass"], gather_ms: 2000 },
-        // A fish trap in the shallows.
-        #{ name: "weir", yields: "fish", regrow: 1.0, max: 4.0, ground: ["sand"], by_water: true, gather_ms: 4000 },
+        // 12 beds on the Wrack Strand: 60 kelp a day, ash for about 12 glass and kelp for the plots.
+        #{ name: "kelp_bed", yields: "kelp", regrow_per_h: 0.208, max: 10.0, ground: ["sand"], by_water: true, gather_ms: 2500 },
+        // 6 banks on the Sand Spit: 24 sand a day, two to a glass.
+        #{ name: "sand_bank", yields: "sand", regrow_per_h: 0.167, max: 8.0, ground: ["sand"], gather_ms: 2000 },
+        // 18 cuttings on the Moss: about 100 peat a day, 70% of what the Cone and the homes burn.
+        #{ name: "peat_bank", yields: "peat", regrow_per_h: 0.233, max: 11.2, ground: ["grass", "dirt"], gather_ms: 5000 },
+        // 18 plots: about 46 roots a day, 30% of the food baked (30 each).
+        #{ name: "root_plot", yields: "roots", regrow_per_h: 0.107, max: 6.0, ground: ["dirt", "grass"], gather_ms: 3000 },
+        // 11 working glasshouses: about 69 greens a day, 15% of the food.
+        #{ name: "greens_bed", yields: "greens", regrow_per_h: 0.262, max: 12.6, ground: ["grass"], gather_ms: 2000 },
+        // A fish trap in the shallows (the Weirs share one stock: the plan's pool).
+        #{ name: "weir", yields: "fish", regrow_per_h: 0.176, max: 8.5, ground: ["sand"], by_water: true, gather_ms: 4000 },
     ]
 }
 

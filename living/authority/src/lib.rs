@@ -391,7 +391,7 @@ pub fn place_resource(ctx: &ReducerContext, near: u32, kind: String, dx: f32, dy
     let (x, y) = (p.0 + dx, p.1 + dy);
     let sc = common::scripts(ctx);
     let max = if max > 0.0 { max } else { sc.tables().number("resources", &kind, "max").unwrap_or(5.0) as f32 };
-    let regen = sc.num_of("regrow", &kind, 0.5) as f32;
+    let regen = sc.regrow_per_min(&kind, 0.5) as f32;
     common::invalidate_resources(ctx, None);
     ctx.db.resource_node().insert(ResourceNode { id: 0, kind, x, y, chunk: living_rules::map::chunk_of(x, y), amount: max, max, regen, at_ms: now, pool });
     Ok(())
