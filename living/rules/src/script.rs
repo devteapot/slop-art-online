@@ -21,6 +21,7 @@ mod check;
 pub mod context;
 pub mod fields;
 mod ui;
+pub use ui::UiWork;
 pub use check::Report;
 
 #[derive(Clone, Debug, Default)]
