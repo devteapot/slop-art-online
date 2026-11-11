@@ -183,7 +183,7 @@ def main():
     ap.add_argument("--household", help="one household's id")
     ap.add_argument("--jobs", type=int, default=6)
     ap.add_argument("--clips", default="idle,walk", help="library clips each person gets (gen_person.sh ONLY)")
-    ap.add_argument("--lod", default="near,far", help="the models each person gets (gen_person.sh LOD): `near`, `far`, or both (the default)")
+    ap.add_argument("--lod", default="near,far", help="the models each person gets (gen_person.sh LOD): `near`, `far`, `both` (one file with the two, for a client that switches them), comma-separated (default near,far)")
     ap.add_argument("--no-pages", action="store_true", help="leave every person's atlas in their own file (no shared pages)")
     ap.add_argument("--models-only", action="store_true", help="make the models, the pages and town.json, and stop before the photographs")
     ap.add_argument("--skip-build", action="store_true")
@@ -221,10 +221,13 @@ def main():
         if not a.no_pages:
             # The town's faces on shared pages: 16 full atlases a page, 64 far pictures a page.
             tag = re.sub(r"[^a-z0-9]+", "-", (town.get("name") or "town").lower()).strip("-") + ("" if len(people) == len(town["people"]) else "-part")
-            for lod, sub, suffix, tile, page in (("near", "", "", 1024, 4096), ("far", "far/", "-far", 256, 2048)):
+            # A `both` file holds the two: its full model's atlas and its far picture each go
+            # onto the pages of their kind.
+            for lod, sub, suffix, tile, page, which in (("near", "", "", 1024, 4096, None), ("far", "far/", "-far", 256, 2048, None),
+                                                        ("both", "lod/", "-lod", 1024, 4096, "near"), ("both", "lod/", "-lod-far", 256, 2048, "far")):
                 if lod in lods:
-                    r = share.pages([os.path.join(LOOKDEV, sub + "anim", f"own-{p['name']}.glb") for p in people], tag + suffix, os.path.join(LOOKDEV, "pages"), tile, page)
-                    print(f"{lod} models: {len(r['people'])} people on {len(r['pages'])} page(s)")
+                    r = share.pages([os.path.join(LOOKDEV, sub + "anim", f"own-{p['name']}.glb") for p in people], tag + suffix, os.path.join(LOOKDEV, "pages"), tile, page, which)
+                    print(f"{lod} models{'' if which is None else ' (' + which + ')'}: {len(r['people'])} people on {len(r['pages'])} page(s)")
     # What the generator made of each: full parameters and the recipe.
     for p in people:
         # Beside the full model, or beside the far one when only that was made.

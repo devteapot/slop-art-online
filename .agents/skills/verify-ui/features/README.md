@@ -15,6 +15,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | The cursor pick: who is under the cursor when two overlap on screen (the one drawn in front; stacked exactly, the nearer the camera, every frame), the same for the nameplate, Enter, a tap and combat's target | [talking.md](talking.md) (`pick`) | `check.py pick` |
 | The cursor while the view turns or zooms: a two-finger pan, a pinch and a left drag keep the cursor at its screen position, and what it points at follows the view | [turns.md](turns.md) | `check.py turns` |
 | Looking aside while walking: head, then chest, then the body on an eased curve; legs on the travel's takes; a sidestep only after a sudden turn; the three presets (Settings › Play › Looking aside) | [look-walk.md](look-walk.md) | `check.py look-walk` |
+| A crowd of generated people: paged faces with their page's shadow map, the far model beyond 10 m, one shared clip file; its draw counts, asset memory and foot slide | [crowd.md](crowd.md) | look-dev, no world: `living/tools/characters/crowd.py` (`lod` runs) |
 
 ## Baseline preconditions
 
