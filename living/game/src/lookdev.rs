@@ -10,7 +10,6 @@ use crate::style::{outline, Kind, Outlined, Style, Toon};
 use crate::world::{rgb, MeshBuf, Palette};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-use bevy_mod_outline::OutlineMeshExt;
 use std::collections::{HashMap, HashSet};
 
 pub fn enabled() -> bool {

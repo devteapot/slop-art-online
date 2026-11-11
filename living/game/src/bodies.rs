@@ -11,7 +11,7 @@
 
 use crate::net::Net;
 use crate::style::{outline, Outlined, Style};
-use bevy_mod_outline::{OutlineMeshExt, PropagateOutline};
+use bevy_mod_outline::PropagateOutline;
 use crate::world::{hash, rgb, scale, MeshBuf, Scene};
 use bevy::prelude::*;
 use living_bindings::*;

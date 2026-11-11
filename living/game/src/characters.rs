@@ -462,16 +462,25 @@ pub struct Rebuilt {
 
 /// Count each character's scene spawns; on a second one, let go of what was built on the old
 /// scene, so it is built again on the new one.
+#[allow(clippy::too_many_arguments)]
 fn on_ready(
     ev: On<bevy::world_serialization::WorldInstanceReady>,
     mut commands: Commands,
-    mut chars: Query<(&Character, Option<&mut Spawns>)>,
+    mut chars: Query<(&Character, Option<&Model>, Option<&mut Spawns>)>,
     children: Query<&Children>,
+    names: Query<&Name>,
+    mut transforms: Query<&mut Transform, Without<Character>>,
     pieces: Query<(), With<outfit::Piece>>,
     mut rebuilt: MessageWriter<Rebuilt>,
 ) {
     let e = ev.entity;
-    let Ok((ch, spawns)) = chars.get_mut(e) else { return };
+    let Ok((ch, model, spawns)) = chars.get_mut(e) else { return };
+    // Identity first, on every spawn of the scene: before its bounds are first taken (skinned
+    // bounds follow the joints, and `fit` sizes the person by them) and before anything is
+    // built on its bones.
+    if let Some(model) = model.filter(|_| !ch.recipe.identity.is_empty()) {
+        set_identity(e, ch, model, &children, &names, &mut transforms);
+    }
     let Some(mut n) = spawns else {
         commands.entity(e).insert(Spawns(1));
         return;
@@ -483,6 +492,27 @@ fn on_ready(
     info!("characters: {}'s scene was spawned again ({} times); fitting and shaping it again", ch.recipe.name, n.0);
     forget_scene(&mut commands, e, children.get(e).into_iter().flatten().copied().filter(|c| pieces.contains(*c)));
     rebuilt.write(Rebuilt { entity: e });
+}
+
+/// Move a character's identity bones by its recipe's values (`identity.rs`), from the rest its
+/// file records (compose.py's `rest_translation`, else the node's own). No clip keys them, so
+/// this is done once a scene. They sit inside the head, so the recipe's `head` (the head bone's
+/// own scale, `shape`) carries them, and they need no helper joints: their children are meant to
+/// ride their scale.
+fn set_identity(e: Entity, ch: &Character, model: &Model, children: &Query<&Children>, names: &Query<&Name>, transforms: &mut Query<&mut Transform, Without<Character>>) {
+    let info = file_info(&model.file);
+    let by_name: HashMap<&str, Entity> = children.iter_descendants(e).filter_map(|d| names.get(d).ok().map(|n| (n.as_str(), d))).collect();
+    let mut moved = 0;
+    for (name, change) in identity::transforms(identity::rig(), &ch.recipe.identity) {
+        let Some(&bone) = by_name.get(name.as_str()) else { continue };
+        let rest = info.rest_extras.get(&name).or_else(|| info.rest.get(&name)).copied().unwrap_or(Vec3::ZERO);
+        if let Ok(mut tf) = transforms.get_mut(bone) {
+            *tf = change.transform(rest);
+            moved += 1;
+            debug!("identity: {} {name} t {:?} r {:?} s {:?}", ch.recipe.name, tf.translation.to_array(), tf.rotation.to_array(), tf.scale.to_array());
+        }
+    }
+    debug!("characters: {}: {} identity values on {moved} bones", ch.recipe.name, ch.recipe.identity.len());
 }
 
 /// `LIVING_GAME_PERF=rebuild=S` (perf.rs): S seconds after the first load's cover lifts, spawn
@@ -769,22 +799,6 @@ pub fn shape(
                     }
                 }
             }
-        }
-        // Identity: the type's identity bones moved from their rest by the recipe's values
-        // (`identity.rs`), once; no clip keys them. They sit inside the head, so the recipe's
-        // `head` (the head bone's own scale above) carries them, and they need no helper joints:
-        // their children are meant to ride their scale. A scene spawned again comes back here.
-        if !ch.recipe.identity.is_empty() {
-            let mut moved = 0;
-            for (name, change) in identity::transforms(identity::rig(), &ch.recipe.identity) {
-                let Some(&bone) = by_name.get(name.as_str()) else { continue };
-                let rest = info.rest_extras.get(&name).or_else(|| info.rest.get(&name)).copied().unwrap_or(Vec3::ZERO);
-                if let Ok(mut tf) = bones.get_mut(bone) {
-                    *tf = change.transform(rest);
-                    moved += 1;
-                }
-            }
-            debug!("characters: {}: {} identity values on {moved} bones", ch.recipe.name, ch.recipe.identity.len());
         }
         // Heights in model units along the rest skeleton (rest rotations are identity).
         let s = |n: &str| own.get(n).copied().unwrap_or(Vec3::ONE);

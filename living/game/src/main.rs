@@ -74,9 +74,10 @@ fn main() {
     // Assets live beside the crate, wherever the binary is run from.
     // Character files carry their outline's directions (`_OUTLINE_NORMAL`, outline_normals.py),
     // smoothed across their meshes; meshes without it get them generated (`style::outline_normals`).
+    // The gltf crate names a custom attribute without its leading underscore (`Semantic::Extras`).
     let plugins = DefaultPlugins
         .set(AssetPlugin { file_path: lookdev::asset_root(), ..default() })
-        .set(bevy::gltf::GltfPlugin::default().add_custom_vertex_attribute("_OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL));
+        .set(bevy::gltf::GltfPlugin::default().add_custom_vertex_attribute("OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL));
     let headless = capture::headless();
     if headless {
         // Scripted photographs: no window; the camera renders into an image (capture.rs).

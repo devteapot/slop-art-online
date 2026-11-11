@@ -30,7 +30,6 @@ use bevy::camera::visibility::DynamicSkinnedMeshBounds;
 use bevy::gltf::{Gltf, GltfMaterial, GltfMaterialName, GltfMesh, GltfNode, GltfSkin};
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
-use bevy_mod_outline::OutlineMeshExt;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;

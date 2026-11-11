@@ -542,7 +542,8 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
 pub fn outline_normals(mesh: &mut Mesh) -> bool {
     use bevy_mod_outline::OutlineMeshExt;
     use std::sync::atomic::Ordering::Relaxed;
-    if mesh.contains_attribute(bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL) {
+    // `LIVING_GAME_PERF=genoutlines`: generate them anyway (to compare with the file's).
+    if mesh.contains_attribute(bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL) && !crate::perf::has("genoutlines") {
         OUTLINE_NORMALS.1.fetch_add(1, Relaxed);
         return false;
     }

@@ -34,7 +34,10 @@
 //! - `rebuild=S`: S seconds after the first load's cover lifts, every character's scene is
 //!   spawned again, as a changed scene asset would make Bevy do (`characters::force_rebuild`), to
 //!   check that they are fitted, shaped and animated again; `nokeep` skips that (what happened
-//!   before rebuild-keep, for comparison).
+//!   before rebuild-keep, for comparison);
+//! - `genoutlines`: generate every mesh's outline directions, ignoring those a file brings
+//!   (`style::outline_normals`); `keeppixels`: character pictures keep their pixels on the CPU
+//!   (`characters::thumb_pictures`). Both are the way before types-1, for comparison.
 //!
 //! The frame is often limited by neither the GPU nor one system but by the render world's
 //! per-batch work: every distinct material and mesh slab is a batch set per view and pass, and

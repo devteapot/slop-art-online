@@ -32,7 +32,6 @@ use crate::style::{outline, Outlined, Style};
 use crate::world::{hash, rgb, scale, MeshBuf, Palette};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
-use bevy_mod_outline::OutlineMeshExt;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::f32::consts::{PI, TAU};

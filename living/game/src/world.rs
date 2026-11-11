@@ -9,7 +9,6 @@
 
 use crate::net::Net;
 use crate::style::{outline, Outlined, Style, Toon};
-use bevy_mod_outline::OutlineMeshExt;
 use crate::sync::{ServerClock, Tracks};
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
