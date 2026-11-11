@@ -1,0 +1,331 @@
+{
+  "Ingrid Morrow": {
+    "narrative": "I have mended nets on the Fish Steps for forty years, and I move my bench with the sun because a net-mender who sits in her own shadow works blind. I raised Lark from a baby when the fever took my Siri, and I have done it alone, and I will not have her head turned by a light on a rock and a story about a sail. The sea gives what it gives and takes what it takes; a woman who waits for ships waits hungry. I keep my bench, my needles and my granddaughter, and I mean to keep all three.",
+    "values": [
+      "family first",
+      "honest work",
+      "the sea is not a story",
+      "keep to what you can see"
+    ],
+    "goals": [
+      "Get Lark to let the sail go and settle to the wrack and the town",
+      "Keep the two of us fed and the roof patched through another winter",
+      "Mend well for Magda's house so the work keeps coming",
+      "Live to see Lark married or settled, to someone of the island"
+    ],
+    "pastimes": [
+      "Mending nets at her bench in the sun",
+      "Sitting against the wash-house wall in the evening, listening",
+      "Walking the Fish Steps at low water to see what the tide left"
+    ],
+    "calling": "The nets: a well-mended net is the difference between a full boat and a hungry house, and I am the best there is at it.",
+    "mood": "Wearied, watchful, quietly stubborn",
+    "traits": {
+      "caution": 78,
+      "sociability": 55,
+      "empathy": 62,
+      "curiosity": 30,
+      "ambition": 40,
+      "introspection": 58,
+      "temper": 45,
+      "nurture": 72
+    },
+    "relations": [
+      {
+        "name": "Lark Morrow",
+        "trust": 85,
+        "affinity": 88,
+        "label": "granddaughter",
+        "note": "The last of my Siri, and the whole of my worry. I love her and I cannot make her see sense."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 72,
+        "affinity": 65,
+        "label": "old friend",
+        "note": "I mend her house's nets and she divides my share of the catch fairly. We have buried the same people."
+      },
+      {
+        "name": "Anselm Faro",
+        "trust": 40,
+        "affinity": 25,
+        "label": "the lamp keeper",
+        "note": "A decent man with a fool's vow. His light fills my girl's head with ships."
+      },
+      {
+        "name": "Livia Faro",
+        "trust": 55,
+        "affinity": 48,
+        "label": "neighbour",
+        "note": "A good girl, but she and Lark talk at the mole at dusk and I know what they talk about."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 66,
+        "affinity": 60,
+        "label": "friend",
+        "note": "She keeps an eye on Lark on the strand, and I am glad of it."
+      },
+      {
+        "name": "Hana Sato",
+        "trust": 60,
+        "affinity": 50,
+        "label": "friend",
+        "note": "We are of an age and have both buried too much. She complains about the smoke and I let her."
+      },
+      {
+        "name": "Rafe Dunlin",
+        "trust": 58,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "A widower like me, and he fishes the night alone. I send him a fish when I have one to spare."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 62,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "Her smokehouse keeps my fish through the week. Her brother Sander's boy is her cross and she carries it."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 50,
+        "affinity": 40,
+        "label": "wash-house",
+        "note": "She hears everything and tells half of it. I sit at her wall and say nothing worth hearing."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 45,
+        "affinity": 35,
+        "label": "the reader",
+        "note": "He fills children's heads with the old script. I never learned it and I have not starved for it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: my Siri died in the bed above me and I could not get the healer there in time. I have never forgiven the cold of that room.",
+        "salience": 1.0,
+        "about": [
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "Lark at three, sitting on my bench tangling my best line and laughing. That was before Siri went.",
+        "salience": 0.7,
+        "about": [
+          "Lark Morrow"
+        ]
+      },
+      {
+        "gist": "My mother told me how her own mother remembered the lean years, when half the town's roofs came off for fuel and there was no wood left to mend them.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Last spring Lark came running up the Fish Steps saying she had seen a sail, and I looked where she pointed and saw white water and grey and the Pale, and nothing else.",
+        "salience": 0.85,
+        "about": [
+          "Lark Morrow"
+        ]
+      },
+      {
+        "gist": "Mending Magda's big net the morning after the autumn storm, with the slates down all round the town and the mole's end rail gone.",
+        "salience": 0.6,
+        "about": [
+          "Magda Tarn"
+        ]
+      },
+      {
+        "gist": "Anselm Faro lighting the Watchglass at dusk, and Lark not ten steps from him, watching, as she does every night.",
+        "salience": 0.65,
+        "about": [
+          "Anselm Faro",
+          "Lark Morrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_lamp_is_for_the_living_not_the_dead",
+        "value": 0.7,
+        "why": "Oil that could be eaten burns every night for a ship that will never come. I have said so at the wall and been told to hush."
+      },
+      {
+        "key": "no_one_saw_a_sail",
+        "value": 0.85,
+        "why": "I looked where she pointed. There was nothing but the Combs and the Pale. A girl at dusk sees what she wants."
+      },
+      {
+        "key": "work_is_the_only_answer_to_grief",
+        "value": 0.9,
+        "why": "When Siri died I went back to the bench the next day, and it kept me."
+      },
+      {
+        "key": "keep_your_own_counsel",
+        "value": 0.75,
+        "why": "Greta Dunmore hears everything said at her wall. I have learned to say little there."
+      },
+      {
+        "key": "strand_folk_must_marry_strand_or_kiln_that_will_have_them",
+        "value": 0.55,
+        "why": "The Kiln families have never taken a Strand apprentice at the Cone, and the old line does not wash out."
+      }
+    ],
+    "secret": ""
+  },
+  "Lark Morrow": {
+    "narrative": "I saw it. I was on the mole at dusk in the last of the light and there was a sail beyond the Combs, white and leaning, for as long as it takes to say so, and then the Pale had it. Nobody believes me, not my grandmother, not Amara, not Ingrid's friends at the wall. I gather kelp in the cold mornings and I watch the water every dusk, and I will see it again. The lamp is lit for it. That is what the vow means, whatever the old people say.",
+    "values": [
+      "what I saw is true",
+      "the light means something",
+      "the sea keeps its promises",
+      "I will not be talked out of it"
+    ],
+    "goals": [
+      "See the sail again, and prove it was real",
+      "Find someone who believes her, or a way to make them",
+      "Keep gathering enough kelp to hold her place and her grandmother's temper",
+      "Get out beyond the harbour mouth somehow, one day"
+    ],
+    "pastimes": [
+      "Standing at the tip of the mole at dusk to watch the lamp lit",
+      "Walking the Wrack Strand looking for sea-glass and wreck colour",
+      "Talking with Livia Faro at the lamp house"
+    ],
+    "calling": "The water beyond the Combs. I want to be the one who goes and looks, not the one who mends nets and waits.",
+    "mood": "Restless, hurt, lit up",
+    "traits": {
+      "caution": 30,
+      "sociability": 48,
+      "empathy": 55,
+      "curiosity": 88,
+      "ambition": 70,
+      "introspection": 60,
+      "temper": 52,
+      "nurture": 35
+    },
+    "relations": [
+      {
+        "name": "Ingrid Morrow",
+        "trust": 80,
+        "affinity": 75,
+        "label": "grandmother",
+        "note": "She raised me and she thinks I am a fool. I love her and I cannot make her look."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 70,
+        "affinity": 68,
+        "label": "friend",
+        "note": "She gathers beside me and does not laugh at me, though she does not believe me either."
+      },
+      {
+        "name": "Hana Sato",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend",
+        "note": "Kind, and tired, and says the smoke gets in everything. She listens better than most."
+      },
+      {
+        "name": "Anselm Faro",
+        "trust": 72,
+        "affinity": 62,
+        "label": "the lamp keeper",
+        "note": "He lights it every night and never mocks me for watching. He keeps the vow I believe in."
+      },
+      {
+        "name": "Livia Faro",
+        "trust": 75,
+        "affinity": 70,
+        "label": "friend",
+        "note": "We talk at the mole at dusk. She does not say I am wrong, and that is worth a great deal."
+      },
+      {
+        "name": "Col Roon",
+        "trust": 45,
+        "affinity": 40,
+        "label": "stranger",
+        "note": "He walks the strand when I do and has never spoken to me. I think he is shy. I think I might speak first."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 55,
+        "affinity": 45,
+        "label": "elder",
+        "note": "She divides the catch and my grandmother mends her nets. She looks at me as if I were a broken thing."
+      },
+      {
+        "name": "Bram Calloway",
+        "trust": 40,
+        "affinity": 35,
+        "label": "the boatwright",
+        "note": "He is building a ship in the dry dock. If anyone could cross the Combs it is him, and he needs trees he cannot have."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The dusk last spring on the mole: a sail beyond the Combs, white and leaning, for as long as it takes to say so, then the Pale closed over it.",
+        "salience": 1.0,
+        "about": []
+      },
+      {
+        "gist": "My mother Siri dying in the fever winter, and Ingrid's hands on my shoulders in the graveyard on the Crown, and the glass marker they chose for her.",
+        "salience": 0.9,
+        "about": [
+          "Ingrid Morrow"
+        ]
+      },
+      {
+        "gist": "Telling the whole Fish Steps what I saw, and the silence, and Lorcan Vane laughing, and Ingrid telling me to hush.",
+        "salience": 0.8,
+        "about": [
+          "Ingrid Morrow"
+        ]
+      },
+      {
+        "gist": "Gathering kelp with Amara and Hana in a cold wind, and Amara showing me which wreck a piece of blue sea-glass came from, as if the sea had a memory.",
+        "salience": 0.55,
+        "about": [
+          "Amara Okoro",
+          "Hana Sato"
+        ]
+      },
+      {
+        "gist": "Standing at the tip of the mole while Anselm Faro lit the Watchglass, and the blue band in it, and thinking: that is for the sail.",
+        "salience": 0.7,
+        "about": [
+          "Anselm Faro"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "i_saw_what_i_saw",
+        "value": 0.95,
+        "why": "It was not a wave or a bird. It was a sail, and I will not say otherwise to be comfortable."
+      },
+      {
+        "key": "the_lamp_is_kept_for_the_ships",
+        "value": 0.85,
+        "why": "The first keeper swore the light would burn until the ships came back. Why swear it if it means nothing?"
+      },
+      {
+        "key": "the_old_people_have_given_up",
+        "value": 0.7,
+        "why": "Ingrid and her friends talk only of what the sea takes. Nobody talks of what it might bring."
+      },
+      {
+        "key": "the_combs_can_be_crossed",
+        "value": 0.6,
+        "why": "The ships crossed them once. Nothing has changed about the water except that we stopped trying."
+      },
+      {
+        "key": "work_first_then_watching",
+        "value": 0.65,
+        "why": "I gather my kelp before I go to the mole. Ingrid would turn me out otherwise, and I would deserve it."
+      }
+    ],
+    "secret": ""
+  }
+}
