@@ -52,6 +52,27 @@ pub struct Occluder {
 #[derive(Component)]
 pub struct Solid;
 
+/// Becomes [`Solid`] once fitted if it is large: at least [`SOLID_TALL`] from its foot (or its
+/// foundation) to its top and [`SOLID_LONG`] along its longer side. A kit's fixtures (quay walls,
+/// retaining walls, a mole) carry it; their bollards, lamps and racks stay out of the rule, so
+/// the camera doesn't jump in front of every post.
+#[derive(Component)]
+pub struct SolidIfLarge;
+
+const SOLID_TALL: f32 = 2.0;
+const SOLID_LONG: f32 = 4.0;
+
+/// Make large fitted things [`Solid`] (after `lookdev::fit`).
+pub fn solid_if_large(mut commands: Commands, q: Query<(Entity, &Fitted), With<SolidIfLarge>>) {
+    for (e, f) in &q {
+        let mut ec = commands.entity(e);
+        ec.remove::<SolidIfLarge>();
+        if f.size.y >= SOLID_TALL && f.size.x.max(f.size.z) >= SOLID_LONG {
+            ec.insert(Solid);
+        }
+    }
+}
+
 /// A fitted thing's box: its centre, half extents and rotation (world).
 pub fn fitted_box(t: &Transform, f: &Fitted) -> (Vec3, Vec3, Quat) {
     (t.translation + t.rotation * f.center, f.size * 0.5, t.rotation)

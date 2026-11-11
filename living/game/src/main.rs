@@ -148,6 +148,10 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
             .add_systems(
                 Update,
+                envs::solid_if_large.after(lookdev::fit),
+            )
+            .add_systems(
+                Update,
                 (envs::hdr, envs::keys, envs::switch, island::stream, island::grey_boxes, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway, envs::reach).chain(),
             );
     } else {

@@ -79,7 +79,7 @@ impl Plugin for LivePlugin {
             .add_systems(Update, (land, lots, bodies, me).chain().in_set(Phase::Present).after(crate::combat::actions).after(crate::town::shows))
             .add_systems(
                 Update,
-                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, crate::envs::reach, report)
+                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::envs::solid_if_large, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, crate::envs::reach, report)
                     .chain()
                     .in_set(Phase::Present)
                     .after(me)

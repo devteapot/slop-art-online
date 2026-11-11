@@ -96,6 +96,9 @@ struct Item {
     solid: bool,
     /// A box that marks an open lot's footprint ([`MARKER`]) rather than a grey building.
     marker: bool,
+    /// A kit's fixture: the camera keeps out of it once fitted, if it is large
+    /// (`envs::SolidIfLarge`).
+    fixture: bool,
 }
 
 /// A planned settlement's open lot of no height (steps, a slip, a yard, root plots) with no
@@ -352,7 +355,9 @@ impl Island {
         for env in kits {
             for (fi, fx) in crate::envs::fixtures(env).iter().enumerate() {
                 let kind = fx.light.clone().unwrap_or_else(|| fx.kind.clone());
-                put(Item { kind, file: fx.file.clone(), at: Vec2::new(fx.at[0], fx.at[1]), yaw: fx.front[0].atan2(fx.front[1]), height: fx.height, glow: fx.glow, k: 100_000 + fi, floor: Some(fx.floor), native: true, ..default() });
+                // Flights are walked over, not walled: their box is not one the eye must leave.
+                let fixture = fx.kind != living_rules::settle::PropKind::Stairs.id();
+                put(Item { kind, file: fx.file.clone(), at: Vec2::new(fx.at[0], fx.at[1]), yaw: fx.front[0].atan2(fx.front[1]), height: fx.height, glow: fx.glow, k: 100_000 + fi, floor: Some(fx.floor), native: true, fixture, ..default() });
             }
         }
         for (si, st) in land.settlements.iter().enumerate() {
@@ -992,6 +997,9 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     }
     if it.solid {
         e.insert(crate::envs::Solid);
+    }
+    if it.fixture {
+        e.insert(crate::envs::SolidIfLarge);
     }
     let mut out = vec![e.id()];
     if let Some((light, tf)) = crate::envs::local_light(&it.kind, it.glow, it.height, it.k) {

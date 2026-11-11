@@ -369,7 +369,10 @@ pub fn fit(
         *vis = Visibility::Inherited;
         debug!("look-dev: fitted {} ({height:.2} units) to {:.2} m (×{k:.2})", model.file, model.height);
         let y_off = -base * k;
-        let center = Vec3::new((lo.x + hi.x) * 0.5 * k, (hi.y - base) * 0.5 * k, (lo.z + hi.z) * 0.5 * k);
+        // The box's middle from the root's origin, as `size` measures it: foundation included (a
+        // quay's wall stands mostly below its floor; the box used to be centred half its height
+        // above the floor, so it stood above the wall).
+        let center = (lo + hi) * 0.5 * k;
         commands.entity(e).insert(Fitted { y_off, size: (hi - lo) * k, center });
     }
 }
