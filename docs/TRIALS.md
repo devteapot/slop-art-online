@@ -759,6 +759,14 @@ python3 living/tools/inspector.py RUN --who "Agnes Fenner,Avice Hollis" --since 
 - The verdicts follow main's gate and log lines, plus the `exp-greet` switches' log lines (drawn in, faced, alongside). The greet modes' own curiosity draw is not recomputed. A changed gate needs the page updated.
 - Scene positions are dated at the request's queue time. A scene can be older than that, so distances from scenes more than 10 s from a line are not used for the address rule.
 
+**How often its verdicts are right** (2026-11-11, after two review rounds' fixes).
+- The sample: 60 turn/no-turn verdicts drawn at random (seeded) from gr1a, gr1b, gr1c and play-test 2. Every line the reviews had looked at was left out. 40 are on the scripted player's lines, 20 on residents' lines.
+- Each verdict was checked against the raw speech and audience rows, the journal's requests and replies, `mind.log`, and a separate recomputation of the draw.
+- Result: 0 of 60 wrong outcomes and 0 of 60 wrong reasons. The 95% Wilson interval is 0–6.0% overall and 0–8.8% for the player's lines (0 of 40).
+- One reason could not be fully verified: "in another exchange", where the remark draw would also have refused.
+- Two reasons were incomplete: a talk turn that came only after the line had been parked did not say so. This is fixed. A fresh sample of 12 such verdicts was all correct; two of them missed a release time, also fixed.
+- The sample checks the page against the evidence. It cannot check what the evidence does not record, such as stamina or the off-stage hold.
+
 ### What it showed on the greeting batches `gr1a` and `gr1b` (2026-11-11, 18:15)
 
 Coverage: the instances with evidence at 18:15. gr1a: control ×4, nearest-concurrent ×3 (r4 still running), nearest ×1 (r1–r3 failed). gr1b: curious ×4, facing ×2, park-concurrent ×1. Six instances failed between 16:58 and 17:00 with SQL timeouts against the trial service. `greet_report.py` gives answered shares and latencies; the inspector adds the following.
