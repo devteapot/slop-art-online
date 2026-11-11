@@ -1,5 +1,7 @@
 # Validation record (generation)
 
+**2026-11-12, branch `arrival-open`.** `generation.py --run generation-arrival-235935 --feature worlds --seeds island,plan-test,floor-megacity-2k,cullet`: all four pass, each land row matching its native regeneration (`floor_preview`). The island's layout digest is now `e798f6a9f302d538` (arrival (406.5, 257.5), open ground) and megacity-2k's `fce494ea2cf1e408`; tiles and heights are unchanged, and Cullet's arrival does not move.
+
 ## 2026-11-11 hearth-1: a household's own structures inside its lot (dev-box)
 
 Branch `hearth-1` (from `9c6ca13c`; merged with origin/main `d124c0f7`), own container `hearth1-stdb` (2.14.1, port 3331, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. The plan format gained `lots[].inside`; an owned structure placed for a lot without a spot stands on the lot's own tiles ([authored plans](../../../../docs/AUTHORED_PLANS.md#a-households-own-things-stand-inside-its-lot)); `check_plans` gained three checks (inside its lot, within 1.5 m of a tile joined to the door, each household's house, store and fire).
