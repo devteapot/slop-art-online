@@ -103,6 +103,8 @@ struct Item {
     landmark: bool,
     /// A building's or a fixture's glow is people's light, out by day (`lookdev::NightGlow`).
     night_glow: bool,
+    /// Stands on the ground (no `floor`) leaning with its slope: a fixture with no floor.
+    lean: bool,
 }
 
 /// A planned settlement's open lot of no height (steps, a slip, a yard, root plots) with no
@@ -361,7 +363,23 @@ impl Island {
                 let kind = fx.light.clone().unwrap_or_else(|| fx.kind.clone());
                 // Flights are walked over, not walled: their box is not one the eye must leave.
                 let fixture = fx.kind != living_rules::settle::PropKind::Stairs.id();
-                put(Item { kind, file: fx.file.clone(), at: Vec2::new(fx.at[0], fx.at[1]), yaw: fx.front[0].atan2(fx.front[1]), height: fx.height, glow: fx.glow, k: 100_000 + fi, floor: Some(fx.floor), native: true, fixture, night_glow: true, ..default() });
+                put(Item { kind, file: fx.file.clone(), at: Vec2::new(fx.at[0], fx.at[1]), yaw: fx.front[0].atan2(fx.front[1]), height: fx.height, glow: fx.glow, k: 100_000 + fi, floor: fx.floor, lean: fx.floor.is_none(), native: true, fixture, night_glow: true, ..default() });
+            }
+        }
+        // A planned settlement's authored resources (`plans[].resources`, on the land as its laid
+        // plan) whose kind its environment draws with the kit (`EnvDef::resources`): each on the
+        // ground at its place, a model of that folder picked by its index. Presentation only, as
+        // the island's forest is: a land world's tree rows are not drawn one by one.
+        for laid in &land.plans {
+            let env = living_rules::settle::env_of(&land.settlements[laid.settlement as usize].style);
+            let Some(def) = envs.get(env) else { continue };
+            for (ri, r) in laid.resources.iter().enumerate() {
+                let Some(folder) = def.resources.get(&r.kind) else { continue };
+                let files = crate::envs::assets_for(env, folder);
+                if let Some(file) = resource_file(&files, ri) {
+                    let at = Vec2::new(r.at.0, r.at.1);
+                    put(Item { kind: folder.clone(), file, at, yaw: hash(ri as u32, 0x7e5) * std::f32::consts::TAU, height: 6.0, k: 200_000 + ri, native: true, ..default() });
+                }
             }
         }
         for (si, st) in land.settlements.iter().enumerate() {
@@ -685,6 +703,21 @@ fn grove(seed: u64, p: Vec2) -> f32 {
 
 fn chunk_of(p: Vec2) -> (i32, i32) {
     ((p.x / CHUNK as f32).floor() as i32, (p.y / CHUNK as f32).floor() as i32)
+}
+
+/// A model for a plan's authored resource from its kit folder's files, by the resource's index.
+fn resource_file(files: &[String], index: usize) -> Option<String> {
+    (!files.is_empty()).then(|| files[(hash(index as u32, 0x7e7) * files.len() as f32) as usize % files.len()].clone())
+}
+
+/// How a thing with no floor stands on the land at `at` (game x, z), turned to `yaw`: its
+/// origin's height on the ground, and its turn leaning with the slope there (its up along the
+/// ground's normal, from the land's heights a metre either way).
+pub fn on_slope(land: &Land, at: Vec2, yaw: f32) -> (f32, Quat) {
+    let h = |x: f32, z: f32| land.height(x, z);
+    let d = 1.0;
+    let n = Vec3::new(h(at.x - d, at.y) - h(at.x + d, at.y), 2.0 * d, h(at.x, at.y - d) - h(at.x, at.y + d)).normalize_or(Vec3::Y);
+    (h(at.x, at.y), Quat::from_rotation_arc(Vec3::Y, n) * Quat::from_rotation_y(yaw))
 }
 
 fn chunk_distance(c: (i32, i32), p: Vec2) -> f32 {
@@ -1055,9 +1088,10 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
         return vec![e.id()];
     }
     let vrm = it.file.contains("vroid-");
+    let turn = if it.lean { on_slope(land, it.at, it.yaw).1 } else { Quat::from_rotation_y(it.yaw) };
     let model = Model { vrm, file: it.file.clone(), height: if it.native { 0.0 } else { it.height }, ground_y: y, glow: it.glow };
     let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(it.file.clone()));
-    let mut e = commands.spawn((EnvPart, model, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(it.yaw)), Visibility::Hidden));
+    let mut e = commands.spawn((EnvPart, model, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
     if it.height >= 3.0 {
         e.insert((Occluder { height: it.height }, crate::fade::Fade::shown()));
     }
@@ -1492,5 +1526,66 @@ mod tests {
             }
         }
         assert!(stamp > 50 && meadow > 1000, "stamp {stamp}, meadow {meadow}");
+    }
+
+    /// Kit-2's client needs, from data only: a fixture with no `floor` stands on the land's
+    /// ground leaning with the slope there; an environment's `resources` names the kit folder a
+    /// planned settlement's authored resources of a kind are drawn from (Cullet: `tree` →
+    /// `hanger_tree`).
+    #[test]
+    fn a_fixture_without_a_floor_leans_with_the_ground_and_plan_resources_take_their_kits_folder() {
+        let fx: crate::envs::Fixture = serde_json::from_str(r#"{"file": "envs/k/stump/stump_1.glb", "kind": "stump", "at": [1.0, 2.0], "front": [0.0, 1.0], "height": 0.6}"#).unwrap();
+        assert_eq!(fx.floor, None);
+        let fx: crate::envs::Fixture = serde_json::from_str(r#"{"file": "envs/k/quay/q.glb", "kind": "quay", "at": [1.0, 2.0], "front": [0.0, 1.0], "floor": 2.0, "height": 0.3}"#).unwrap();
+        assert_eq!(fx.floor, Some(2.0));
+        // On the slope, the origin is on the ground and its up is the ground's normal.
+        let (land, _) = cullet();
+        let slope = |x: f32, z: f32| ((land.height(x + 1.0, z) - land.height(x - 1.0, z)).abs() + (land.height(x, z + 1.0) - land.height(x, z - 1.0)).abs()) / 2.0;
+        let mut steep = (Vec2::ZERO, 0.0);
+        for j in (40..land.size - 40).step_by(7) {
+            for i in (40..land.size - 40).step_by(7) {
+                let (x, z) = (i as f32, j as f32);
+                let s = slope(x, z);
+                if s > steep.1 && s < 1.0 && land.height(x, z) > 1.0 {
+                    steep = (Vec2::new(x, z), s);
+                }
+            }
+        }
+        assert!(steep.1 > 0.2, "Cullet has slopes ({})", steep.1);
+        let at = steep.0;
+        let (y, turn) = on_slope(&land, at, 0.7);
+        assert!((y - land.height(at.x, at.y)).abs() < 1e-4);
+        let up = turn * Vec3::Y;
+        let (hx, hz) = ((land.height(at.x + 1.0, at.y) - land.height(at.x - 1.0, at.y)) / 2.0, (land.height(at.x, at.y + 1.0) - land.height(at.x, at.y - 1.0)) / 2.0);
+        let n = Vec3::new(-hx, 1.0, -hz).normalize();
+        assert!(up.dot(n) > 0.9999, "up {up} along the normal {n}");
+        assert!(up.y < 0.99, "it leans ({up})");
+        // Its front keeps its yaw, as far as the slope allows.
+        let front = turn * Vec3::Z;
+        let want = Quat::from_rotation_y(0.7) * Vec3::Z;
+        assert!(Vec2::new(front.x, front.z).normalize().dot(Vec2::new(want.x, want.z)) > 0.95);
+        // On level ground (a plan's level) it stands straight.
+        let mut level = None;
+        'find: for j in (40..land.size - 40).step_by(3) {
+            for i in (40..land.size - 40).step_by(3) {
+                let (x, z) = (i as f32, j as f32);
+                if land.height(x, z) > 1.0 && slope(x, z) < 1e-6 {
+                    level = Some(Vec2::new(x, z));
+                    break 'find;
+                }
+            }
+        }
+        let (_, t) = on_slope(&land, level.expect("level ground on Cullet"), 0.3);
+        assert!((t * Vec3::Y).abs_diff_eq(Vec3::Y, 1e-5) && (t * Vec3::Z).abs_diff_eq(Quat::from_rotation_y(0.3) * Vec3::Z, 1e-5));
+        // Cullet's environment draws its plan's trees from the Hanger's folder; nothing else.
+        let def: crate::envs::EnvDef = serde_json::from_str(include_str!("../assets/envs/cullet.json")).unwrap();
+        assert_eq!(def.resources.get("tree").map(String::as_str), Some("hanger_tree"));
+        assert_eq!(def.resources.len(), 1);
+        assert!(land.plans.iter().flat_map(|p| p.resources.iter()).filter(|r| r.kind == "tree").count() >= 50, "the Hanger's trees are laid on the land");
+        let files: Vec<String> = (1..=6).map(|i| format!("envs/cullet/hanger_tree/hanger_tree_{i}.glb")).collect();
+        let picked: std::collections::HashSet<String> = (0..70).filter_map(|i| resource_file(&files, i)).collect();
+        assert!(picked.len() >= 4 && picked.iter().all(|f| files.contains(f)), "{picked:?}");
+        assert_eq!(resource_file(&files, 5), resource_file(&files, 5));
+        assert_eq!(resource_file(&[], 5), None);
     }
 }
