@@ -660,7 +660,8 @@ pub fn cutaway(
     // logging is on: it costs nothing in play.
     if bevy::log::tracing::enabled!(bevy::log::Level::DEBUG) {
         for (e, t, model, f) in &others {
-            if f.size.x <= 0.0 || t.translation.xz().distance(me.xz()) > CUT_NEAR {
+            // Characters (mine among them) hold no one up.
+            if model.vrm || f.size.x <= 0.0 || t.translation.xz().distance(me.xz()) > CUT_NEAR {
                 continue;
             }
             let (half, centre, inv) = (f.size * 0.5, t.translation + t.rotation * f.center, t.rotation.inverse());
