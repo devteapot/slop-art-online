@@ -44681,7 +44681,8 @@
             },
             "then": {
               "do": "eat",
-              "item": "food"
+              "item": "food",
+              "qty": 4
             }
           },
           {
@@ -47666,8 +47667,8 @@
         {
           "want": "food",
           "weight": {
-            "base": -0.5,
-            "hunger": 2.0,
+            "base": -0.2,
+            "hunger": 3.6,
             "starving": 1.5
           },
           "do": {

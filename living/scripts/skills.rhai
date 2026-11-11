@@ -102,9 +102,14 @@ fn cold(a) {
 
 fn wet(a) { a.raining && a.actor.kind == "person" && !a.actor.near_shelter }
 
+// A cold that hurts (a floor may make every cold one): a winter night, or a night in the rain.
+fn freezing(a) { a.season == "winter" || wet(a) }
+
+// Survival is secondary (docs/SEEDED_LIVES.md, "Survival made secondary"): a person feels
+// hungry from 50, a full game day before starving at 100.
 fn body_state(a) {
     let fraction = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
-    #{ cold: cold(a), hungry: a.actor.hunger > 55.0, starving: a.actor.hunger >= 100.0,
+    #{ cold: cold(a), hungry: a.actor.hunger > 50.0, starving: a.actor.hunger >= 100.0,
        wound: if fraction < 0.15 { "barely alive" } else if fraction < 0.35 { "badly wounded" }
               else if fraction < 0.6 || a.actor.hurt_ago < 5000 { "hurt" } else { "" } }
 }
@@ -120,9 +125,16 @@ fn body_state(a) {
 //   tiring_gene               a falling energy rate is divided by this gene
 //   healing_gene              a rising health rate is multiplied by this gene
 //   wet_energy, cold_hp       exposure, added last
+//
+// Targets in game time (a game day is 12 real minutes; docs/SEEDED_LIVES.md, "Survival made
+// secondary"): a person's hunger rises 48 a game day awake (4 a minute), so a meal brought down
+// to about 5 is wanted again at about 25 two or three times a day; it feels hungry at 50 and
+// starves at 100, a full game day later; starving takes 25 minutes (two days) to kill a healthy
+// body. An ordinary night outside is uncomfortable (tiring), not harmful; only winter nights and
+// nights in the rain hurt without a fire, shelter or a warm cloak.
 fn rates(a) {
     // A predator feeds big and rarely: a wolf lasts about an hour on a deer.
-    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 5.0 };
+    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 4.0 };
     let energy = -3.0;
     let act = a.actor.activity;
     if act == "sleep" {
@@ -145,15 +157,17 @@ fn rates(a) {
     #{
         hunger: hunger, energy: energy,
         // Starving hurts; fed and rested, a body heals; with no energy left, it suffers.
-        starving_at: 100.0, starving_hp: -6.0,
+        starving_at: 100.0, starving_hp: -4.0,
         fed_below: 70.0, rested_above: 15.0, healing_hp: 3.0, healing: healing,
         spent_at: 0.0, spent_hp: -2.0,
         // Inborn endurance slows tiring; vitality speeds healing.
         tiring_gene: "endurance", healing_gene: "vitality",
-        // Rain soaks people out from under a roof (a cloak keeps some of it off): it is tiring.
-        wet_energy: if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 },
-        // Cold nights hurt people without a fire, shelter or warm cloak; winter nights are worse.
-        cold_hp: if cold(a) { if a.season == "winter" { -5.0 } else { -2.0 } } else { 0.0 },
+        // Exposure tires: rain soaks people out from under a roof (a cloak keeps some of it
+        // off), and a cold night without a fire, shelter or warm cloak is uncomfortable.
+        wet_energy: (if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 })
+            + (if cold(a) { -1.5 } else { 0.0 }),
+        // A cold night hurts only in winter or in the rain (a storm night).
+        cold_hp: if cold(a) && freezing(a) { if a.season == "winter" { -3.0 } else { -1.5 } } else { 0.0 },
     }
 }
 
@@ -208,9 +222,20 @@ fn eat_check(a) {
     if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
     ""
 }
-fn eat_duration(a) { 1500 }
+// A meal: up to `qty` (default 1) of the item, as many as bring hunger down to about 5.
+fn meal(a) {
+    let n = amount(a);
+    let have = inv(a, a.item);
+    if n > have { n = have; }
+    let want = ((a.actor.hunger - 5.0) / nutrition(a.item)).ceiling().to_int();
+    if want < 1 { want = 1; }
+    if n > want { n = want; }
+    n
+}
+fn eat_duration(a) { 1500 * meal(a) }
 fn eat_done(a) {
-    [#{ op: "remove", item: a.item, qty: 1 }, #{ op: "vitals", hunger: -nutrition(a.item), hp: 1.0 }]
+    let n = meal(a);
+    [#{ op: "remove", item: a.item, qty: n }, #{ op: "vitals", hunger: -nutrition(a.item) * n, hp: 1.0 * n }]
 }
 
 fn cook_check(a) {

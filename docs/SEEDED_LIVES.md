@@ -371,6 +371,23 @@ What the tensions need that the rules do not have yet. Each is a general rule, w
 8. **Watching a road.** Day sight is 11 m. A watch on the stone road 20–30 m from where walkers pass never sees them, and walkers cut between road points. An ambush needs either a narrow place (a ford, a bridge, a gate) or a sense that reaches further than sight (hearing footsteps, a lookout's skill). Found in the lab: the outlaws threatened the outsider who came to their steading, not the carrier who walked past.
 9. **Markets fill up.** A storage holds 120 things. Farmers store berries all day and nothing takes goods out but eating and carriers, so a market store fills and then refuses everyone, carriers included. A market that sells to strangers, spoilage of stored food, or a second store per market would each be a rule or a seed choice.
 
+## Survival made secondary
+
+The owner's first play-test (2026-11-11): survival was too hard and too central. The worlds start with a setup, not from nothing, so getting by should take a small share of a person's day and leave the rest to their life. The numbers are Rhai laws (`living/scripts/skills.rhai`: `rates`, `body_state`, `freezing`, `meal`) and seed data (the island's `ways.top` food desire and its "find food and eat" routine).
+
+**Game time.** A game day is 12 real minutes (`DEFAULT_DAY_MS`); a game hour is 30 real seconds. Rates below are per real minute (per game day in brackets).
+
+| Target | Before | After |
+|---|---|---|
+| A healthy adult wants a meal two or three times a game day | hunger +5/min (60/day); the food desire won over work at hunger ≈ 60 and lost again a few points lower, so people nibbled one item at a time near "hungry" all day | hunger +4/min (48/day) × the body's `appetite` gene; the island's food desire (`base -0.2, hunger 3.6`) wins over work at about 25; a meal (`eat`, `qty` 4) eats as many items as bring hunger to about 5 (`meal(a)`): about 20 hunger a meal, **2.4 meals a game day** |
+| A full game day hungry before it becomes dangerous | "hungry" from 55; starving at 100 came 0.75 game days later; starving took 6 health a minute (dead in about 1.4 game days) | "hungry" from 50, starving at 100: **1.04 game days** later; starving takes 4 a minute (25 minutes, about two game days, to kill a healthy body). From the last meal to death is about four game days |
+| Ordinary nights are uncomfortable outside, not harmful | a night outside without fire, shelter or a cloak took 2 health a minute (5 in winter), and the "You are freezing" alarm asked every outdoor mind to deliberate as night fell | an ordinary cold night tires (−1.5 energy a minute ÷ `hardiness`) and takes no health; the body still looks and feels cold |
+| Only winter nights or storms hurt | — | `freezing(a)`: a winter night takes 3 health a minute, a night in the rain 1.5 (both ÷ `hardiness`), without a fire, shelter or warm cloak; the freezing alarm follows the health it takes, so it no longer fires on ordinary nights |
+
+**Stores and food from the world.** Nothing spawns food: berries regrow on bushes (1.2 a minute), fish at fishing spots (1.4), and farmers, fishers and hunters bring them in by their starting ways; town stores and households start with the seed's stores and kits. At the new rates a person eats about 4 berries' worth a game day instead of 5. Whether that is enough for normal life is measured, not assumed: starvation and cold deaths on the Spark, below.
+
+**Changed with it.** The rules tests that pin the needs law (`rules/src/script.rs`: rates by activity and night, infant appearance against cold damage, the parameter law against the whole computation, food and injury appearance; `floors.rs`, where a frozen floor now overrides `freezing` too) and verify-core's `needs` and `infant` scenes (a cloak or shelter removes the cold's tiring; a summer night does not hurt).
+
 ## Open questions for the user
 
 1. **Population target for the next step:** keep about 300 ambient residents while the 216 gate is fixed, or seed toward the contract tier now (about 1,600 residents; bigger town households or the 3 km island)?

@@ -1774,7 +1774,11 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         c.actor.activity = String::new();
         c.actor.hunger = 80.0; // no regeneration, so the cold alone shows
         c.night = true;
-        assert!(s.rates(&c).unwrap().hp_per_min < 0.0, "cold nights hurt without fire or shelter");
+        let night = s.rates(&c).unwrap();
+        assert_eq!(night.hp_per_min, 0.0, "an ordinary cold night does not hurt");
+        assert!(night.energy_per_min < day.energy_per_min, "it tires");
+        c.season = "winter".into();
+        assert!(s.rates(&c).unwrap().hp_per_min < 0.0, "winter nights hurt without fire or shelter");
         c.actor.near_fire = true;
         assert!(s.rates(&c).unwrap().hp_per_min >= 0.0);
     }
@@ -1797,9 +1801,10 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
                             c.season = if winter { "winter" } else { "summer" }.into();
                             let state = s.body_state(&c).unwrap();
                             let damage = s.rates(&c).unwrap().hp_per_min;
-                            assert_eq!(state.cold, damage < 0.0);
-                            assert!(state.looks().starts_with(if damage < 0.0 { "cold" } else { "warm" }));
-                            assert_eq!(damage, if state.cold { if winter { -5.0 } else { -2.0 } } else { 0.0 });
+                            assert_eq!(state.cold, night && !fire && !shelter && !cloak);
+                            assert!(state.looks().starts_with(if state.cold { "cold" } else { "warm" }));
+                            // Cold hurts only in winter (or in the rain): an ordinary night tires.
+                            assert_eq!(damage, if state.cold && winter { -3.0 } else { 0.0 });
                         }
                     }
                 }
@@ -1808,10 +1813,10 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
     }
 
     /// `rates(a)` as it was before it returned parameters (2026-11-09, 9ea831f): the whole
-    /// computation in the script.
+    /// computation in the script, with the numbers of 2026-11-11 (survival made secondary).
     const RATES_BEFORE: &str = r#"
 fn rates(a) {
-    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 5.0 };
+    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 4.0 };
     let energy = -3.0;
     let hp = 0.0;
     let act = a.actor.activity;
@@ -1824,7 +1829,7 @@ fn rates(a) {
         energy = -12.0;
     }
     if a.actor.hunger >= 100.0 {
-        hp -= 6.0;
+        hp -= 4.0;
     } else if a.actor.hunger < 70.0 && a.actor.energy > 15.0 {
         hp += 3.0;
     }
@@ -1838,12 +1843,8 @@ fn rates(a) {
     if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
     if energy < 0.0 { energy /= a.actor.endurance; }
     if hp > 0.0 { hp *= a.actor.vitality; }
-    if wet(a) {
-        energy -= if inv(a, "cloak") > 0 { 1.0 } else { 2.5 };
-    }
-    if cold(a) {
-        hp -= if a.season == "winter" { 5.0 } else { 2.0 };
-    }
+    energy += (if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 }) + (if cold(a) { -1.5 } else { 0.0 });
+    hp += if cold(a) && freezing(a) { if a.season == "winter" { -3.0 } else { -1.5 } } else { 0.0 };
     #{ hunger: hunger, energy: energy, hp: hp }
 }
 "#;
@@ -1925,11 +1926,11 @@ fn rates(a) {
         let s = scripts();
         let mut c = ctx();
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed");
-        c.actor.hunger = 56.0;
+        c.actor.hunger = 51.0;
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, hungry");
         c.actor.hunger = 100.0;
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, starving");
-        assert_eq!(s.rates(&c).unwrap().hp_per_min, -6.0);
+        assert_eq!(s.rates(&c).unwrap().hp_per_min, -4.0);
         c.actor.hunger = 20.0;
         c.actor.hurt_ago = Some(1000.0);
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, hurt");
