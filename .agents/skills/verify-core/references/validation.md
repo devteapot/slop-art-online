@@ -1,5 +1,13 @@
 # Core validation record
 
+## 2026-11-11 fix-health-leak: another's health as perceived in fight reports and `health_of` (Spark)
+
+Branch `fix-health-leak` (from `e3f0527f`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to this change (combat.md, the README row, SKILL.md's baseline), not a source wave.
+
+- `just living-check` passes with pipefail (rules 226 passed, 10 ignored; new `combat::tests::fight_reports_show_the_band_unless_appraised`).
+- `scenes.py health_seen` (new) on `core-hleak-220618`: 13 of 13. Before an appraisal both fighters' reports end "they look scratched." / "they look hurt."; inside C's reveal C's ends "they have 52 of 85 health." (D's max) and D's "they look hurt."; after the reveal C's is banded again; `health_of` with B at 43.9 % and `below` 48.0 said "above" (band middle 52) without an appraisal and "below" during one. The first two attempts on the same world: one pair fought three times and B died before the `health_of` probe, and a person's non-urgent think is dropped within `think_min_s` of the last skip (the probe now waits it out once and leaves the request pending).
+- Not run on this change: the rest of the baseline and the other scenes.
+
 ## 2026-11-11 rules-3: store capacity by kind, regrowth by season (dev-box)
 
 Branch `rules-3` (from `93019a37`, origin/main `1d71e6c2` merged), own container `rules3-stdb` (2.14.1, port 3325), one private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to this change (goods, decay and the new winter feature), read against `script.rs`, `skills.rhai`, Cullet's laws, `common::amount_now` and `brain.rs`'s selector, not a source wave over every feature.

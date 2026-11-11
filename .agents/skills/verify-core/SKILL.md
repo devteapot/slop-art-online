@@ -40,6 +40,8 @@ python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
 python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
+# Another's health in fight reports and health_of: the band, exact only while appraised (features/combat.md).
+python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
 python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1

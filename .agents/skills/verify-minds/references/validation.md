@@ -1,5 +1,12 @@
 # Internal mind validation
 
+## 2026-11-11 fix-health-leak: a fighting mind's prompts carry its opponent's band (Spark)
+
+Branch `fix-health-leak` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake model only.
+
+- `health-seen` (new) on `minds-hleak-222228-health-seen`: passes. Before the appraisal the prompt's report ends "they look unhurt."; inside A's reveal "they have 89 of 98 health." (B's max 98); no prompt carries "theirs looks about". Earlier attempts (`minds-hleak-221415`, `-221945`, `-222106`) failed on the case's scripting: under B's blows a reflex broke A's appraisal off, then A, badly hurt, yielded and got no report inside the reveal; B now only guards.
+- Mind tests 94 passed. verify-player `appraise.py` on `player-hleak-222311` (island): 10 of 10 (the appraise feedback now reads health through `perception::health_seen`).
+
 ## 2026-11-11 speech-2: whisper and call through minds; privacy for every way (Spark)
 
 Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.

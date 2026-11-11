@@ -1406,10 +1406,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 // What the look shows, as the observer now perceives it (the same projection
                 // its scene and a player's view carry).
                 if let (Some(c), Some(t)) = (ctx.db.character().id().find(me), ctx.db.character().id().find(target)) {
-                    let p = crate::perception::project(ctx, &c, &t, now);
-                    let seen = if p.hp >= 0.0 { format!("{:.0} of {:.0} health", p.hp, p.max_hp) } else { living_rules::combat::band_words(p.band).to_string() };
-                    percept(ctx, &c, now, "appraise", target, 0, at, format!("You look {} over: {seen}.", p.label), 0.3);
-                    notes.push(format!("{} has {seen}", p.label));
+                    let label = crate::perception::label(ctx, &c, target, now);
+                    let seen = crate::perception::health_seen(ctx, &c, &t, now).map_or_else(|| "you cannot tell".to_string(), |h| h.words());
+                    percept(ctx, &c, now, "appraise", target, 0, at, format!("You look {label} over: {seen}."), 0.3);
+                    notes.push(format!("{label} has {seen}"));
                 }
             }
             Effect::Launch => {
@@ -1944,15 +1944,15 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
         return;
     }
     let label = common::label_for(ctx, &c, other);
-    let their_hp = ctx.db.vitals().id().find(other).map(|o| (common::needs(&o, now).hp / o.max_hp * 100.0).round()).unwrap_or(0.0);
+    // Their health as this fighter perceives it: the band everyone sees, exact only while an
+    // appraisal of them is in force (never their `vitals`).
+    let theirs = ctx.db.character().id().find(other).and_then(|o| crate::perception::health_seen(ctx, &c, &o, now));
     let change = if what.is_empty() {
         format!("since then you were hit {hit}×, defended {my_defense}×, and {their_defense} of your blows came to nothing")
     } else {
         what.join("; ")
     };
-    let text = format!(
-        "The fight with {label}: {change}. Your health {hp:.0}; theirs looks about {their_hp:.0}%."
-    );
+    let text = format!("The fight with {label}: {change}. {}", living_rules::combat::fight_health(hp, theirs));
     st.marks.retain(|m| m.node != REPORT_MARK && !(BAND_MARK..BAND_MARK + 5).contains(&m.node));
     st.marks.push(Mark { node: REPORT_MARK, at_ms: now });
     st.marks.push(Mark { node: BAND_MARK + band, at_ms: now });
