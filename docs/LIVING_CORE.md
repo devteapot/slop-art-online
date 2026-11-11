@@ -479,6 +479,8 @@ LIVING_LOD=1 just living-mind                          # minds with the level of
 python3 living/tools/mind_load.py <db> <run>           # model load per person, extrapolated, and off stage
 ```
 
+**Play session report.** After every owner play session, `living/tools/play_report.py` writes one page of what was on screen and a timeline of the session (lines and who heard and answered them, fights, refusals, errors, cost). The play launcher records each session (`play_report.py record-start`/`record-stop`, `LIVING_GAME_RECORD` for the client) and runs it at the end; by hand: `python3 living/tools/play_report.py --db <database> --run <run> --journal <journal dir> --logs <dir with client.log and mind.log> --out <dir> [--capture <dir>]`. See [the play report](PLAY_REPORT.md).
+
 `just living-publish` updates the module in place and installs the current skill rules. LLM exchanges are journaled to `.local/living/journal/<run>/<name>.jsonl`.
 
 **Public observer: retired (2026-11-09).** The public observer at `https://sos.carlid.dev` is gone. The user stopped and disabled its services on the dev-box (`sao-tunnel.service`, the Cloudflare tunnel, and `sao-observer-web.service`, which served the static bundle on 127.0.0.1:8331), and the site returns 530. After the perception work, the observer reads private developer truth as the database owner, which a public page cannot do without handing admin rights to every visitor ([perception](PERCEPTION.md#the-mind-service-and-the-observer)). The lab observer is local: `just living-web`, opened with the owner's token in the page fragment (`#token=…`). `just living-web-dist` still builds the optimized bundle into `.local/living/web`; nothing serves it.
