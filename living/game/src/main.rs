@@ -110,6 +110,7 @@ fn main() {
         .init_non_send::<world::Scene>()
         .init_resource::<world::Palette>()
         .init_resource::<world::Draw>()
+        .init_resource::<lookdev::NightGlows>()
         .init_resource::<sight::Sight>()
         .init_resource::<bodies::MySize>()
         .init_resource::<camera::Cam>()
@@ -148,7 +149,7 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
             .add_systems(
                 Update,
-                envs::solid_if_large.after(lookdev::fit),
+                (lookdev::night_glow, envs::solid_if_large).after(lookdev::fit),
             )
             .add_systems(
                 Update,

@@ -73,6 +73,58 @@ pub struct Fitted {
     pub center: Vec3,
 }
 
+/// On a model's root: its glow (lit panes, a furnace's mouth, a lamp's glass) is people's light,
+/// damped by daylight by the world's `daylight` law ([`night_glow`]): it shows at dusk and by
+/// night and is out by day, so a lit window is not paler than its neighbours at noon. Lots and
+/// a kit's fixtures carry it; glowing plants and crystals shine by day too.
+#[derive(Component)]
+pub struct NightGlow;
+
+/// The toon materials of [`NightGlow`] models that glow, with their glow as authored, and the
+/// daylight share last applied to them.
+#[derive(Resource, Default)]
+pub struct NightGlows {
+    mats: HashMap<AssetId<Toon>, LinearRgba>,
+    applied: Option<f32>,
+}
+
+/// How dark it is at an hour (0 day to 1 night, in steps of 0.05): the world's `daylight` law
+/// when connected (`verbs::Rules`), else the shipped script's (look-dev), read once per minute
+/// of the day.
+fn darkness(rules: Option<&crate::verbs::Rules>, hour: f32) -> f32 {
+    if let Some(sc) = rules.and_then(|r| r.scripts.as_ref()) {
+        return sc.dark(hour);
+    }
+    static SHIPPED: std::sync::OnceLock<Vec<f32>> = std::sync::OnceLock::new();
+    let day = SHIPPED.get_or_init(|| match living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")) {
+        Ok(sc) => (0..24 * 60).map(|m| sc.dark(m as f32 / 60.0)).collect(),
+        Err(e) => {
+            warn!("night glow: the shipped script does not compile ({e}); glow stays as authored");
+            Vec::new()
+        }
+    });
+    day.get(((hour.rem_euclid(24.0) * 60.0) as usize).min(24 * 60 - 1)).copied().unwrap_or(1.0)
+}
+
+/// Damp the glow of [`NightGlow`] models' materials by daylight; written only when the
+/// darkness changes (at most 20 steps a dusk) or a new glowing material appears.
+pub fn night_glow(clock: Res<crate::daylight::Clock>, rules: Option<NonSend<crate::verbs::Rules>>, mut glows: ResMut<NightGlows>, mut toons: ResMut<Assets<Toon>>) {
+    if glows.mats.is_empty() {
+        return;
+    }
+    let dark = darkness(rules.as_deref(), clock.hour());
+    if glows.applied == Some(dark) {
+        return;
+    }
+    glows.applied = Some(dark);
+    for (id, glow) in &glows.mats {
+        if let Some(mut m) = toons.get_mut(*id) {
+            m.base.emissive = *glow * dark;
+        }
+    }
+    debug!("night glow: {} materials at {dark:.2} of their glow (hour {:.2})", glows.mats.len(), clock.hour());
+}
+
 /// On a model's root: its meshes cast no shadow (grass, flowers, small props: many, and their
 /// shadows barely read).
 #[derive(Component)]
@@ -207,7 +259,8 @@ pub fn convert(
     assets: Res<AssetServer>,
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
     parents: Query<&ChildOf>,
-    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>)>,
+    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>, Has<NightGlow>)>,
+    mut glows: ResMut<NightGlows>,
     detail: Option<Res<crate::style::DetailLayers>>,
     palette: Res<Palette>,
     mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>)>,
@@ -223,7 +276,7 @@ pub fn convert(
                 break;
             }
         }
-        let Some((owner, no_shadow, beast)) = owner else { continue };
+        let Some((owner, no_shadow, beast, night)) = owner else { continue };
         if no_shadow {
             commands.entity(e).insert(bevy::light::NotShadowCaster);
         }
@@ -241,7 +294,7 @@ pub fn convert(
         // A slot's glow lights up models with no glow of their own (kits without emissive
         // materials); models that carry emissive materials keep exactly those.
         let glow = owner.glow.filter(|_| !has_glow(&owner.file));
-        let glow_key = glow.map_or(0, |g| (g[0] * 255.0) as u32 | ((g[1] * 255.0) as u32) << 8 | ((g[2] * 255.0) as u32) << 16 | 1 << 24);
+        let glow_key = glow.map_or(0, |g| (g[0] * 255.0) as u32 | ((g[1] * 255.0) as u32) << 8 | ((g[2] * 255.0) as u32) << 16 | 1 << 24) | u32::from(night) << 25;
         let Some(base) = standards.get(&mat.0) else { continue };
         // VRoid names materials …_SKIN, …_FACE, …_EYE, …_HAIR, …_CLOTH; the face's own skin is
         // `…Face_00_SKIN`.
@@ -287,7 +340,10 @@ pub fn convert(
                 // environment kits share 14 between about a thousand). One toon material per
                 // distinct content lets their meshes share bind groups and batches; each extra
                 // material costs every view and pass a batch set and its per-frame buffer writes.
-                let content = format!("{kind:?} {face_map:?} {} {b:?}", painted.is_some());
+                // People's light is its own material: its glow follows the daylight.
+                let night = night && b.emissive != LinearRgba::BLACK;
+                let authored = b.emissive;
+                let content = format!("{kind:?} {face_map:?} {} {night} {b:?}", painted.is_some());
                 let h = by_content.get(&content).and_then(|id| toons.get_strong_handle(*id)).unwrap_or_else(|| {
                     let map = face_map.as_ref().map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
                     let mut toon = style.kind(b, kind, map);
@@ -298,6 +354,10 @@ pub fn convert(
                 });
                 by_content.insert(content, h.id());
                 by_source.insert((mat.0.id(), glow_key), h.id());
+                if night && !glows.mats.contains_key(&h.id()) {
+                    glows.mats.insert(h.id(), authored);
+                    glows.applied = None;
+                }
                 h
             }
         };

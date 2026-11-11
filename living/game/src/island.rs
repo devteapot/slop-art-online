@@ -101,6 +101,8 @@ struct Item {
     fixture: bool,
     /// A landmark lot (`Lot::landmark`): it never fades for hiding you (`envs::Landmark`).
     landmark: bool,
+    /// A building's or a fixture's glow is people's light, out by day (`lookdev::NightGlow`).
+    night_glow: bool,
 }
 
 /// A planned settlement's open lot of no height (steps, a slip, a yard, root plots) with no
@@ -359,7 +361,7 @@ impl Island {
                 let kind = fx.light.clone().unwrap_or_else(|| fx.kind.clone());
                 // Flights are walked over, not walled: their box is not one the eye must leave.
                 let fixture = fx.kind != living_rules::settle::PropKind::Stairs.id();
-                put(Item { kind, file: fx.file.clone(), at: Vec2::new(fx.at[0], fx.at[1]), yaw: fx.front[0].atan2(fx.front[1]), height: fx.height, glow: fx.glow, k: 100_000 + fi, floor: Some(fx.floor), native: true, fixture, ..default() });
+                put(Item { kind, file: fx.file.clone(), at: Vec2::new(fx.at[0], fx.at[1]), yaw: fx.front[0].atan2(fx.front[1]), height: fx.height, glow: fx.glow, k: 100_000 + fi, floor: Some(fx.floor), native: true, fixture, night_glow: true, ..default() });
             }
         }
         for (si, st) in land.settlements.iter().enumerate() {
@@ -936,7 +938,7 @@ fn ready(assets: &AssetServer, scene: &Handle<WorldAsset>) -> bool {
 fn lot_item(envs: &HashMap<String, EnvDef>, land: &Land, lot: &LotRow) -> Option<Item> {
     let planned = land.lots.get(lot.id as usize).and_then(|l| land.settlements.get(l.settlement as usize)).is_some_and(|s| s.planned);
     let landmark = land.lots.get(lot.id as usize).is_some_and(|l| l.landmark);
-    let base = Item { kind: lot.kind.id().to_string(), at: lot.at, yaw: lot.yaw, height: lot.height_m, k: lot.id as usize, floor: Some(lot.floor_m), solid: true, landmark, ..default() };
+    let base = Item { kind: lot.kind.id().to_string(), at: lot.at, yaw: lot.yaw, height: lot.height_m, k: lot.id as usize, floor: Some(lot.floor_m), solid: true, landmark, night_glow: true, ..default() };
     // The row's model names its folder (`steampunk_city/clocktower/...`): a town in its own
     // style uses its own assets.
     let env = lot.model.split('/').next().filter(|_| !lot.model.is_empty()).unwrap_or(lot.env);
@@ -1006,6 +1008,9 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     }
     if it.fixture {
         e.insert(crate::envs::SolidIfLarge);
+    }
+    if it.night_glow {
+        e.insert(crate::lookdev::NightGlow);
     }
     if it.landmark {
         e.insert(crate::envs::Landmark);
