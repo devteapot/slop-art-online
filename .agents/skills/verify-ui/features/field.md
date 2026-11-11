@@ -28,7 +28,7 @@ While the world's `fov_on` law is on, what a character sees depends on where its
 
 ## Driving it with drive.py
 
-Preconditions: baseline, plus six residents (`residents(run, 6)`) placed round the player: north and south at 4.5 m, east and west at 5.5 m (past side vision's 3.7 m and its 1 m keep margin), one at 1.4 m and one 8 m to the south-east.
+Preconditions: baseline, plus six residents (`residents(run, 6)`) placed round the player: north and south at 5 m, east and west at 5.5 m (`place_at` puts them on tile centres; past the near ring's 3 m, side vision's 3.7 m and their 1 m keep margin), one at 1.4 m and one 8 m to the south-east.
 
 - **Scenario:** `check.py --run $R field`. It sets `fov_on` false first, as admin.
 - **Client flags:**
@@ -44,4 +44,4 @@ Preconditions: baseline, plus six residents (`residents(run, 6)`) placed round t
 - Owner SQL returns an identity as a one-element list (`["0x…"]`). drive.py unwraps it for `{ident}`. A perceived query on the raw value matches nothing, so the authority seems to see no one.
 - The field dumps are written at most once a second, when the field changed. Wait at least 2 s after a `look:` before the snapshot.
 - A switch reinstalls the script (`set_world_law` writes a new `script.revision`). The client recompiles it, and the readout follows within a second.
-- At night, sight is 6 m and `near_m` 2. A lit resident (a torch's glow) is seen in side vision too. The comparison leaves out what a light could decide.
+- At night, sight is 6 m and `near_m` 2. A lit resident (a torch's glow) is seen in side vision too. At night (the dump's sight under 11 m) the comparison leaves out what a light could decide. By day no one is lit, so side vision is compared.
