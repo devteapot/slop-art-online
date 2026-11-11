@@ -318,6 +318,11 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
         let lots = || h.lots.iter().filter(move |l| l.settlement as usize == sj);
         match k {
             "plaza" => s.square.iter().map(|q| near(*q)).collect(),
+            // A planned lot by its plan id: its named spots, else its door.
+            lk if lk.starts_with("lot:") => {
+                let id = &lk[4..];
+                lots().filter(|l| l.key == id).flat_map(|l| if l.spots.is_empty() { vec![l.door] } else { l.spots.iter().map(|q| q.1).collect() }).collect()
+            }
             // Fields and gardens are worked where they lie; buildings at their door.
             lk if lots().any(|l| l.kind.id() == lk) => lots().filter(|l| l.kind.id() == lk).map(|l| if lk == "field" || lk == "garden" { near(l.centre) } else { l.door }).collect(),
             other if living_rules::catalog::kind_class(other).is_some() => {

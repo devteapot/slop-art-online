@@ -259,7 +259,7 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
             label = "hosting: buildings into the tiles, digests".into();
             let _t = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.host");
             let land = w.gen.take().expect("generated land").into_land();
-            let h = crate::island::host(s.seed, m, &land, &params);
+            let h = crate::island::host(s.seed, m, &land, &params)?;
             drop(land);
             w.chunk_ids = h.map.chunks().collect();
             w.hosted = Some(h);
