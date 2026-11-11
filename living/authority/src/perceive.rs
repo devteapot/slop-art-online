@@ -509,7 +509,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let laws = common::laws(ctx);
     let join_ms = (laws.join_window_s * 1000.0) as u64;
     for o in ctx.db.trade_offer().to().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
-        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange)", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
+        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange, or decline; \"offer\": {} names this one)", o.give_qty, o.give_item, o.want_qty, o.want_item, o.id), "offer": o.id, "when": ago(o.at_ms)}));
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
         for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= join_ms) {
@@ -524,7 +524,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
     }
     for o in ctx.db.trade_offer().from().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
-        mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
+        mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "offer": o.id, "when": ago(o.at_ms)}));
     }
     if !mine.is_empty() {
         you.insert("you are waiting on".into(), Value::Array(mine));

@@ -393,6 +393,23 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         let q = action.get("want_qty").or_else(|| action.get("for_qty")).and_then(|q| q.as_f64()).unwrap_or(1.0);
         out.insert("want_qty".into(), json!(q.max(1.0).round() as u64));
     }
+    // What an answer (accept, decline) is about: the id of the trade offer or proposal seen,
+    // for a skill whose spec reads it. Elsewhere the words are ignored, as before.
+    for (key, alias) in [("offer", "offer_id"), ("record", "record_id")] {
+        if !spec.args.iter().any(|a| a == key) {
+            continue;
+        }
+        if let Some(v) = action.get(key).or_else(|| action.get(alias)).filter(|v| !v.is_null()) {
+            let id = v.as_u64().or_else(|| v.as_f64().filter(|f| *f >= 0.0 && f.fract() == 0.0).map(|f| f as u64)).or_else(|| v.as_str().and_then(|s| s.trim().trim_start_matches('#').parse::<u64>().ok()));
+            match id {
+                Some(0) => {},
+                Some(n) => {
+                    out.insert(key.into(), json!(n));
+                },
+                _ => return Err(format!("{path}.do.{key}: the id of the {} you answer (a whole number from what you were asked)", if key == "offer" { "trade offer" } else { "proposal" })),
+            }
+        }
+    }
     if let Some(t) = action.get("target").or_else(|| action.get("to")).or_else(|| action.get("from")).cloned() {
         // Any skill may be aimed (read a sign, build a wall there, sleep in a shelter: the body
         // walks there first); only wandering and waiting ignore a target.

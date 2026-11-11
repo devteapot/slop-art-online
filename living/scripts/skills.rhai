@@ -1288,18 +1288,81 @@ fn offer_done(a) { [#{ op: "offer" }] }
 
 fn accept_check(a) {
     if a.target.class != "creature" || a.target.kind != "person" { return "no one to trade with"; }
-    ""
+    answer_refused(a)
 }
 fn accept_duration(a) { 1500 }
-// Terms the person proposed to you come first; otherwise their standing trade.
+// What the act names (`offer`: a trade offer's id, `record`: a proposal's id) is accepted, and
+// nothing else; without a name, terms the person proposed to you come first, then their trade.
 fn accept_done(a) {
-    let r = proposal_from(a);
+    if a.offer_id != 0 { return [#{ op: "accept", offer: a.offer_id }]; }
+    let r = if a.record_id != 0 { named_record(a) } else { proposal_from(a) };
     if r == () { return [#{ op: "accept" }]; }
     let t = r.terms;
     [#{ op: "amend", id: r.id, status: "agreed", due_h: due_by_dark(a) },
      #{ op: "tell", to: r.parties.from, salience: 0.8, text: `{actor} accepted your terms: ${terms_line(t, "from")}, ${due_words(a)}.` },
      #{ op: "tell", to: a.actor.id, text: `agreed with {target}: ${terms_line(t, "to")}, ${due_words(a)}` },
      #{ op: "witness", text: "{a} and {b} came to an agreement." }]
+}
+
+// Saying no to what a person asked of you: the trade offer or proposal the act names, or
+// without a name the one accept would take (their terms first, then their trade). It ends it;
+// the one who made it is told, and onlookers see it.
+fn decline_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" { return "no one to answer"; }
+    answer_refused(a)
+}
+fn decline_duration(a) { 1000 }
+fn decline_done(a) {
+    let r = if a.record_id != 0 { named_record(a) } else if a.offer_id != 0 { () } else { proposal_from(a) };
+    if r != () {
+        let t = r.terms;
+        return [#{ op: "close", id: r.id, status: "declined", keep_h: 1.0 },
+                #{ op: "tell", to: r.parties.from, salience: 0.7, text: `{actor} declined your terms: ${terms_line(t, "from")}.` },
+                #{ op: "tell", to: a.actor.id, text: `declined {target}'s terms (${terms_line(t, "to")})` },
+                #{ op: "witness", text: "{a} turned down what {b} proposed." }];
+    }
+    // Their trade offer (the engine refuses when none stands for you).
+    let o = a.offer;
+    if o == () || (a.offer_id != 0 && o.id != a.offer_id) { return [#{ op: "decline", offer: a.offer_id }]; }
+    [#{ op: "decline", offer: o.id },
+     #{ op: "tell", to: o.from, salience: 0.7, text: `{actor} declined your offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}.` },
+     #{ op: "tell", to: a.actor.id, text: `declined {target}'s offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}` },
+     #{ op: "witness", text: "{a} turned down {b}'s offer." }]
+}
+
+// The proposal an answer names, among the actor's own records (closed ones are kept a while).
+fn named_record(a) {
+    for r in a.records { if r.id == a.record_id { return r; } }
+    ()
+}
+// Why an answer cannot be given to what it names (empty: it can). Without a name nothing is
+// refused here: accept and decline take what stands, as they always have.
+fn answer_refused(a) {
+    if a.offer_id != 0 && a.record_id != 0 { return "name one thing to answer: the offer or the proposal"; }
+    if a.record_id != 0 {
+        let r = named_record(a);
+        let now = proposal_from(a);
+        if r == () {
+            if now != () { return `they have changed their terms: now ${terms_line(now.terms, "to")}`; }
+            return "that proposal is gone";
+        }
+        if r.kind != "agreement" { return "that is not a proposal of terms"; }
+        if r.me != "to" || r.parties.from != a.target.id { return "that proposal is not addressed to you"; }
+        if r.status == "agreed" { return "you have already agreed to it"; }
+        if !r.open || r.status != "offered" {
+            if now != () && now.id != r.id { return `they have changed their terms: now ${terms_line(now.terms, "to")}`; }
+            return if r.status == "not taken" { "that proposal has expired" } else { `that proposal was ${r.status}` };
+        }
+        return "";
+    }
+    if a.offer_id != 0 {
+        let o = a.offer;
+        if o == () { return "that offer is gone"; }
+        if o.id != a.offer_id { return `they have changed their offer: now their ${o.give_qty} ${o.give} for your ${o.want_qty} ${o.want}`; }
+        if o.to != a.actor.id || o.from != a.target.id { return "that offer is not addressed to you"; }
+        if !o.open { return "that offer has expired"; }
+    }
+    ""
 }
 
 // ---- agreements, demands and regard (docs/WORLD_RULES.md) ---------------------------------
@@ -1477,7 +1540,7 @@ fn record_text(r) {
         let other = r.parties[other_role(r.me)];
         let t = r.terms;
         if r.status == "offered" {
-            return if r.me == "from" { `you proposed to {id:${other}}: ${terms_line(t, "from")}${words(t.words)}; they have not accepted yet` } else { `{id:${other}} proposed to you: ${terms_line(t, "to")}${words(t.words)}; accept (toward them) to agree` };
+            return if r.me == "from" { `you proposed to {id:${other}}: ${terms_line(t, "from")}${words(t.words)}; they have not accepted yet` } else { `{id:${other}} proposed to you: ${terms_line(t, "to")}${words(t.words)}; accept or decline (toward them, record ${r.id})` };
         }
         let mine = t[r.me + "_done"];
         let theirs = t[other_role(r.me) + "_done"];
@@ -1773,9 +1836,14 @@ fn offer_spec() {
        takes: "the goods in your pack when they accept", gives: "their goods in your pack, if they accept" }
 }
 fn accept_spec() {
-    #{ target: true, reach: 3.0, talk: true,
-       about: "Accept what a person beside you just proposed to you: their terms (offer_terms: it becomes an agreement the world keeps count of; you then owe what they asked of you, and they owe what they offered you), or else their swap (both sides change hands at once, if both still have the goods).",
+    #{ target: true, args: ["offer", "record"], reach: 3.0, talk: true,
+       about: "Accept what a person beside you proposed to you: their terms (offer_terms: it becomes an agreement the world keeps count of; you then owe what they asked of you, and they owe what they offered you), or their swap (both sides change hands at once, if both still have the goods). offer: the id of the trade offer, or record: the id of the proposal, you are accepting; with one, exactly that is accepted, or refused if it no longer stands as it was. Without, their terms come first, then their swap.",
        takes: "a standing proposal from them to you", gives: "the swap done, or the agreement made" }
+}
+fn decline_spec() {
+    #{ target: true, args: ["offer", "record"], reach: 3.0, talk: true,
+       about: "Say no to what a person beside you proposed to you: their swap (offer) or their terms (offer_terms). It ends that proposal, and they are told you declined. offer or record: the id of the one you decline; without, the one accept would take. Not answering lets a proposal run out; declining says so now.",
+       takes: "a standing proposal from them to you", gives: "it ended; they know you declined" }
 }
 fn offer_terms_spec() {
     #{ target: true, item: true, items: ["lodging"], args: ["qty", "want", "want_qty", "text"], reach: 3.0, talk: true,
