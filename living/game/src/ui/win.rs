@@ -456,7 +456,7 @@ pub fn place(mut ws: ResMut<Windows>, cams: Query<&Camera, With<Camera3d>>, ui_s
     }
 }
 
-/// Esc, in order: a list of acts (its sub-list first), the Menu list, the words being typed
+/// Esc, in order: the wheel, a list of acts (its sub-list first), the Menu list, the words being typed
 /// (and the window they are typed in), the top window; with nothing open, Menu opens and the
 /// system cursor is given back. Esc is then spent for every other reader this frame.
 #[allow(clippy::too_many_arguments)]
@@ -465,6 +465,12 @@ pub fn esc(mut keys: ResMut<ButtonInput<KeyCode>>, mut ws: ResMut<Windows>, mut 
         return;
     }
     keys.clear_just_pressed(KeyCode::Escape);
+    // The wheel first: it closes without choosing (nothing is sent).
+    if verbs.wheel.take().is_some() {
+        info!("ui: wheel closed (Esc): nothing sent");
+        pointer.hold = false;
+        return;
+    }
     if let Some(m) = verbs.menu.as_mut() {
         if m.group.is_some() {
             m.group = None;

@@ -962,7 +962,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
 ///   (a headless run has no cursor); `lookwalk:PRESET[,key=value…]` sets how the body looks aside
 ///   while walking (`twist::LookWalk::parse`); `cursor:X,Y` puts the game's cursor there (fractions of the
-///   picture, or `@NAME`, a tagged node; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
+///   picture, or `@NAME`, a tagged node; `cursor:` takes it away), `nudge:DX,DY` moves it by logical px
+///   (an open wheel takes it as motion), `wheel:DIR` points the open wheel as the arrows do, and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
 ///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
 ///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
@@ -1150,6 +1151,19 @@ fn script(
         }
         "frame" => {
             cam.rig.frame = arg != "0";
+            true
+        }
+        "nudge" => {
+            // The cursor moved by DX,DY logical px (a held wheel takes it as motion).
+            s.pointing = None;
+            if let Some((dx, dy)) = arg.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))) {
+                let size = crate::capture::size().as_vec2();
+                pointer.scripted = pointer.scripted.map(|f| f + Vec2::new(dx, dy) / size);
+            }
+            true
+        }
+        "wheel" => {
+            verbs.wheel = Some(arg.to_string());
             true
         }
         "cursor" => {

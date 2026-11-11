@@ -1372,6 +1372,13 @@ fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
 fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
 fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
+// The person wheel's acts look as they read (an icon each; what they do is their spec and check).
+fn give_ui() { #{ look: #{ icon: "give" } } }
+fn offer_ui() { #{ look: #{ icon: "trade" } } }
+fn teach_ui() { #{ look: #{ icon: "book" } } }
+fn appraise_ui() { #{ label: "Look over", look: #{ icon: "eye" } } }
+fn wave_ui() { #{ look: #{ icon: "wave" } } }
+fn nod_ui() { #{ look: #{ icon: "wave" } } }
 // Which places get a wheel, and its layout (docs/INTERFACE.md §8): hold F on a target, move
 // toward a section, let go. A person's social acts are pinned, so a direction learned once keeps
 // working (a refused one greys in place); anything else the rules offer is behind More. Any
