@@ -18,7 +18,10 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
-SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "floor-megacity-2k", "floor-megacity-4k")
+SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "cullet", "floor-megacity-2k", "floor-megacity-4k")
+# Resource kinds the rules know (`living_rules::catalog::RESOURCES`): a plan's authored resources
+# of these kinds are placed; others wait for their kinds.
+KNOWN_RESOURCES = ("berry_bush", "tree", "boulder", "reeds", "fishing_spot", "clay_bank")
 # Seeds derived from a tracked seed in the run's directory (published through `--seed` with an
 # absolute path): the megacity floor (docs/FLOORS.md) at 2048 m, created inside `init` from a
 # compiled seed, and at 4096 m as a floor: a module built without a seed (`--seed none`) given
@@ -208,13 +211,19 @@ def check_seed(seed, rows):
         # A founder may die in the seconds the world ticks before the snapshot, and death ends
         # membership: compare the living.
         equal(f"{t['name']} memberships of the living", sorted(r["member"] for r in rows["membership"] if r["community"] == com.get("id")), sorted(i for i in ids if chars[i]["alive"]))
-        present(f"{t['name']} settlement backgrounds", bool(ids) and all(bg.get("town_center") is not None and bg.get("walled") == t.get("walled", True) for i, bg in bgs.items() if i in ids))
+        # A town seeded with no people (Cullet's grey city, before its residents are written)
+        # has no backgrounds or places to check; its buildings' signs are checked at their lots.
+        peopled = bool(residents or t.get("occupations"))
+        present(f"{t['name']} settlement backgrounds", (bool(ids) or not peopled) and all(bg.get("town_center") is not None and bg.get("walled") == t.get("walled", True) for i, bg in bgs.items() if i in ids))
         if t.get("ledger"):
             present(f"{t['name']} ledger", any(a["text"] == t["ledger"] for a in artifacts))
         for building in t.get("buildings", []):
             places = [p for i in ids for p in bgs[i].get("places", []) if p["name"] == building["name"] and p["kind"] == building["kind"]]
             present(f"building {building['name']} place", len(places) == len(ids))
-            present(f"building {building['name']} structure", bool(places) and any(s["kind"] == building["kind"] and abs(s["x"] - places[0]["at"][0]) <= 0.51 and abs(s["y"] - places[0]["at"][1]) <= 0.51 for s in structures))
+            if not peopled:
+                present(f"building {building['name']} structure (a town with no people: a {building['kind']} structure stands)", any(s["kind"] == building["kind"] for s in structures))
+            else:
+                present(f"building {building['name']} structure", bool(places) and any(s["kind"] == building["kind"] and abs(s["x"] - places[0]["at"][0]) <= 0.51 and abs(s["y"] - places[0]["at"][1]) <= 0.51 for s in structures))
             present(f"building {building['name']} sign", any(a["topic"] == building["name"] and a["text"] == building["name"] + (". " + building["about"] if building.get("about") else "") for a in artifacts))
         for kind, count in t.get("resources", {}).items():
             count_near = sum(r["kind"] == kind and (r["x"] - com.get("home_x", -10000)) ** 2 + (r["y"] - com.get("home_y", -10000)) ** 2 <= 24 ** 2 for r in rows["resource_node"])
@@ -359,12 +368,13 @@ def check_land(seed, rows, side, tiles):
     lot_houses = {l["structure"] for l in lots if l["kind"] in ("house", "townhouse")}
     present("houses are lot houses", houses == lot_houses, {"houses": len(houses), "lot_houses": len(lot_houses)})
     owners = {structures[i]["owner"] for i in lot_houses if structures[i]["owner"]}
-    present("households own lot houses", len(owners) > 0, len(owners))
+    peopled = any(t.get("residents") or t.get("occupations") for t in seed.get("towns", []) + seed.get("villages", []))
+    present("households own lot houses" + ("" if peopled else " (none: the seed has no people)"), len(owners) > 0 if peopled else not owners, len(owners))
     bgs = {r["id"]: json.loads(r["text"]) for r in rows["background"]}
     folk = {s["community"]: s for s in settlements}
     members = {m["member"]: m["community"] for m in rows["membership"]}
     wrong = [i for i, c in members.items() if c in folk and (bgs.get(i, {}).get("folk") != folk[c]["kind"] or abs((bgs.get(i, {}).get("body_scale") or -1) - folk[c]["scale"]) > 1e-3)]
-    present("residents' backgrounds name their folk and scale", members and not wrong, wrong[:20])
+    present("residents' backgrounds name their folk and scale" + ("" if peopled else " (none: the seed has no people)"), (members if peopled else True) and not wrong, wrong[:20])
     # Town life (docs/TOWN_LIFE.md): residents know their places, found from their own
     # settlement's lots, and start on the seed's own ways.
     life = seed.get("town_life", {})
@@ -506,6 +516,25 @@ def check_plans(seed, rows, plans, tile):
             if not ok:
                 wrong.append({"lot": spec["id"], "row": {k: row[k] for k in ("kind", "model", "height_m", "width_m", "depth_m", "floor_m")}})
         present(f"plan {pid}: lots have their kinds, sizes, models, heights and level floors", not wrong, wrong[:10])
+        # Authored resources (`plans[].resources`): every one of a known kind has a node of its
+        # kind at its point (the nearest walkable tile), none of another kind is placed.
+        r = math.radians(plan.get("rotation_deg", 0.0))
+        o, e, nv = plan["origin"], (math.cos(r), math.sin(r)), (math.sin(r), -math.cos(r))
+        nodes = {}
+        for nd in rows["resource_node"]:
+            nodes.setdefault(nd["kind"], []).append((nd["x"], nd["y"]))
+        missing, waiting = [], Counter()
+        for rs in plan.get("resources", []):
+            at = (o[0] + e[0] * rs["at"][0] + nv[0] * rs["at"][1], o[1] + e[1] * rs["at"][0] + nv[1] * rs["at"][1])
+            if rs["kind"] not in KNOWN_RESOURCES:
+                waiting[rs["kind"]] += 1
+                continue
+            if not any(math.dist(at, q) < 2.5 for q in nodes.get(rs["kind"], [])):
+                missing.append({"kind": rs["kind"], "at": [round(at[0], 1), round(at[1], 1)]})
+        if plan.get("resources"):
+            placed = sum(1 for rs in plan["resources"] if rs["kind"] in KNOWN_RESOURCES)
+            present(f"plan {pid}: its {placed} authored resources of known kinds stand where written", not missing, missing[:10])
+            present(f"plan {pid}: authored resources of unknown kinds are not placed", not any(k in nodes for k in waiting), dict(waiting))
         present(f"plan {pid}: doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in rows_of if l["structure"]), [l["id"] for l in rows_of if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE])
         key = {spec["id"]: row for spec, row in zip(want, rows_of)}
         if not town:
