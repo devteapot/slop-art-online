@@ -15,6 +15,8 @@ pub struct Layout {
     pub market: Vec<(f32, f32)>,
     /// Planted berry bushes outside the walls.
     pub fields: Vec<(f32, f32)>,
+    /// A hand-authored settlement's lots by their plan ids, at their doors (empty otherwise).
+    pub lots: Vec<(String, (f32, f32))>,
 }
 
 fn land(t: Terrain) -> bool {
@@ -138,7 +140,7 @@ pub fn lay_out(map: &mut Map, center: (f32, f32), households: usize, radius: i32
             }
         }
     }
-    Layout { center: at(cx, cy), gates, houses, market, fields }
+    Layout { center: at(cx, cy), gates, houses, market, fields, lots: Vec::new() }
 }
 
 #[cfg(test)]

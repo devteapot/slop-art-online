@@ -35,9 +35,12 @@
 
 mod metro;
 mod ornament;
+mod plan;
 mod terrace;
 
 pub use metro::{District, MetroParams};
+pub use plan::{stranded_doors, validate as validate_plan, validate_all as validate_plans, Facing, Laid, LaidLot, LevelSpec, LotSpec, PlanSpec, SpotSpec, SquareSpec, StairSpec, StreetSpec};
+pub(crate) use plan::{covers as plan_covers, resolve as resolve_plan, site as plan_site, stamp_macro as stamp_plans, Resolved as PlanResolved};
 
 pub(crate) use terrace::Terrace;
 
@@ -331,6 +334,10 @@ pub struct Settlement {
     pub roads: Vec<u32>,
     /// Height of one terrace step when its ground is terraced (0: not terraced).
     pub terrace_m: f32,
+    /// Laid out from a hand-authored plan ([`PlanSpec`]): its lots are their models'
+    /// footprints exactly (no style margin), and the generated steps leave it alone.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub planned: bool,
 }
 
 impl Settlement {
@@ -347,6 +354,8 @@ pub fn env_of(style: &str) -> &'static str {
         "small" => "small_city",
         "steampunk" => "steampunk_city",
         "cyberpunk" => "cyberpunk_city",
+        // The glassmakers' harbour (docs/SMALL_CITY.md), from its own kit (`cullet.py`).
+        "cullet" => "cullet",
         // The megacity's district styles, and the wastes' outposts, camps and ruins, built from
         // the megacity kit (`Style::kit`, living/tools/blender/city.py). Its folder's name starts
         // with `cyberpunk`, so clients dress its people in the cyberpunk look.
@@ -1569,7 +1578,7 @@ fn poly_outside(poly: &[V2], p: V2) -> f32 {
 
 /// An oriented rectangle: centre, unit front, half width (across the front) and half depth.
 #[derive(Clone, Copy, Debug)]
-struct Rect {
+pub(crate) struct Rect {
     c: V2,
     f: V2,
     hw: f32,
@@ -1726,13 +1735,13 @@ struct Seg {
 }
 
 #[derive(Clone, Debug)]
-enum Shape {
+pub(crate) enum Shape {
     Rect(Rect),
     Poly(Vec<V2>),
 }
 
 #[derive(Clone, Debug)]
-struct Pad {
+pub(crate) struct Pad {
     shape: Shape,
     floor: f32,
     skirt: f32,
@@ -1777,6 +1786,8 @@ pub(crate) struct Mods {
     pads: Vec<Pad>,
     /// Terraced settlements' ground, applied before roads and pads.
     pub(crate) terr: Vec<Terrace>,
+    /// Planned settlements' ground ([`plan::Ground`]), applied first.
+    ground: Vec<plan::Ground>,
 }
 
 const MOD_CELL: f32 = 16.0;
@@ -1811,7 +1822,7 @@ fn csr(n: usize, cell: f32, boxes: &[(V2, V2)]) -> (Vec<u32>, Vec<u32>) {
 }
 
 impl Mods {
-    fn build(size: u32, segs: Vec<Seg>, pads: Vec<Pad>, terr: Vec<Terrace>) -> Self {
+    fn build(size: u32, segs: Vec<Seg>, pads: Vec<Pad>, terr: Vec<Terrace>, ground: Vec<plan::Ground>) -> Self {
         let cell = MOD_CELL;
         let n = (size as f32 / cell).ceil() as usize + 1;
         let sb: Vec<(V2, V2)> = segs
@@ -1839,7 +1850,7 @@ impl Mods {
             .collect();
         let (seg_at, seg_ids) = csr(n, cell, &sb);
         let (pad_at, pad_ids) = csr(n, cell, &pb);
-        Self { cell, n, seg_at, seg_ids, pad_at, pad_ids, segs, pads, terr }
+        Self { cell, n, seg_at, seg_ids, pad_at, pad_ids, segs, pads, terr, ground }
     }
 
     /// Shape `h`, the natural ground at (x, y), where `sd` is the signed distance to water.
@@ -1853,6 +1864,9 @@ impl Mods {
             return h;
         }
         let k = j as usize * self.n + i as usize;
+        // A planned settlement's levels and drops, whatever the water's distance (a quay stands
+        // straight out of the sea); roads and pads apply over them.
+        let h = if self.ground.is_empty() { h } else { self.ground.iter().fold(h, |t, g| g.apply((x, y), t, sd)) };
         let (s0, s1) = (self.seg_at[k] as usize, self.seg_at[k + 1] as usize);
         let (p0, p1) = (self.pad_at[k] as usize, self.pad_at[k + 1] as usize);
         if s0 == s1 && p0 == p1 && self.terr.is_empty() {
@@ -2221,12 +2235,19 @@ pub(crate) struct Staged {
     /// Island roads between their steps, and the route steps expected (known once begun).
     road_work: Option<RoadWork>,
     route_steps: u32,
+    /// Hand-authored settlements ([`PlanSpec`], from `LandParams::plans`), and what the `Plan`
+    /// step laid out of them for the later steps.
+    pub(crate) specs: Vec<PlanSpec>,
+    plans: Vec<plan::Built>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Step {
     #[default]
     City,
+    /// Planned settlements ([`plan`]): their ground, streets, lots, stairs and retaining walls.
+    /// Only when the land has plans.
+    Plan,
     /// The routing grid and the network to join.
     Roads,
     /// Settlements routed into it, [`ROUTES_PER_STEP`] per step.
@@ -2254,7 +2275,7 @@ impl Staged {
     pub(crate) fn steps(&self) -> u32 {
         // Ornament steps are counted from the settlements once they are planned (one before).
         let left = if self.next == Step::Done { 0 } else { self.dressing_left.max(1) };
-        8 + self.road_steps() + self.wards() as u32 + self.fills.iter().sum::<usize>() as u32 + self.dressed + left
+        8 + self.plan_steps() + self.road_steps() + self.wards() as u32 + self.fills.iter().sum::<usize>() as u32 + self.dressed + left
     }
 
     /// Route steps plus the end step of the island roads.
@@ -2266,15 +2287,35 @@ impl Staged {
         self.wards
     }
 
+    /// The `Plan` step, when the land has plans.
+    fn plan_steps(&self) -> u32 {
+        (!self.specs.is_empty()) as u32
+    }
+
+    fn plan_grounds(&self) -> Vec<plan::Ground> {
+        self.plans.iter().map(|b| b.ground.clone()).collect()
+    }
+
+    fn plan_pads(&self) -> Vec<Pad> {
+        self.plans.iter().flat_map(|b| b.pads.iter().cloned()).collect()
+    }
+
+    /// Where planned settlements' drops are walled ([`terrace::paint_drops`]): round each plan.
+    fn plan_zones(&self) -> Vec<(V2, f32)> {
+        self.plans.iter().map(|b| (b.res.centre, b.res.radius + b.res.skirt + 4.0)).collect()
+    }
+
     /// Steps done so far.
     pub(crate) fn done(&self) -> u32 {
         let w = (self.wards() + self.fills.iter().sum::<usize>()) as u32;
         let ward_step = |i: usize| (i + self.fills[..i].iter().sum::<usize>()) as u32;
-        let r = self.road_steps();
+        let r = self.road_steps() + self.plan_steps();
+        let q = self.plan_steps();
         match self.next {
             Step::City => 0,
-            Step::Roads => 1,
-            Step::RoadRoutes(k) => 2 + k,
+            Step::Plan => 1,
+            Step::Roads => 1 + q,
+            Step::RoadRoutes(k) => 2 + q + k,
             Step::RoadsEnd => 1 + r,
             Step::Streets => 2 + r,
             Step::Stairs => 3 + r,
@@ -2292,6 +2333,7 @@ impl Staged {
     pub(crate) fn label(&self) -> String {
         match self.next {
             Step::City => "city".into(),
+            Step::Plan => "planned settlements".into(),
             Step::Roads => "island roads: grid".into(),
             Step::RoadRoutes(k) => format!("island roads: routes {} of {}", k + 1, self.route_steps.max(1)),
             Step::RoadsEnd => "island roads: smoothing and crossings".into(),
@@ -2325,6 +2367,39 @@ impl Staged {
                     (Some(c), Some(mp)) => (0..c.wards()).map(|wi| metro::fill_steps(c, mp, wi)).collect(),
                     _ => Vec::new(),
                 };
+                if self.specs.is_empty() {
+                    Step::Roads
+                } else {
+                    Step::Plan
+                }
+            }
+            // Planned settlements, before anything is routed or traced: their ground is part of
+            // the land every later step reads (`Land::height`, the tiles).
+            Step::Plan => {
+                let res: Vec<plan::Resolved> = self.specs.iter().map(|s| plan::resolve(s).unwrap_or_else(|e| panic!("{e}"))).collect();
+                for r in &res {
+                    let (lo, hi) = plan::paint(land, r);
+                    land.update_sd(lo, hi);
+                }
+                let grounds: Vec<plan::Ground> = res.iter().map(plan::Ground::of).collect();
+                land.mods = Mods::build(land.size, Vec::new(), Vec::new(), Vec::new(), grounds.clone());
+                let city_sets = self.city.as_ref().map_or(0, |c| c.settlements.len());
+                let mut first_road = self.city.as_ref().map_or(0, |c| c.roads.len()) as u32;
+                let mut built = Vec::new();
+                for (k, r) in res.into_iter().enumerate() {
+                    let site = land.sites.iter().position(|s| s.plan.as_deref() == Some(r.id.as_str())).expect("a plan's site") as u16;
+                    let n = r.streets.len() as u32;
+                    built.push(plan::build(land, r, (city_sets + k) as u16, site, first_road));
+                    first_road += n;
+                }
+                // The stairs into the ground, then retaining walls along the finished drops.
+                let pads: Vec<Pad> = built.iter().flat_map(|b| b.pads.iter().cloned()).collect();
+                land.mods = Mods::build(land.size, Vec::new(), pads, Vec::new(), grounds);
+                for b in built.iter_mut() {
+                    let idx = b.laid.settlement;
+                    plan::retaining(land, b, idx);
+                }
+                self.plans = built;
                 Step::Roads
             }
             // Island roads, painted first so river crossings become land before profiles are
@@ -2337,7 +2412,13 @@ impl Staged {
                     }
                     pl.city = Some((c.centre, c.radius * 1.03));
                 }
-                self.road_work = pl.roads_begin();
+                for b in &self.plans {
+                    for r in &b.roads {
+                        pl.push_road(r.clone());
+                    }
+                }
+                let res: Vec<&plan::Resolved> = self.plans.iter().map(|b| &b.res).collect();
+                self.road_work = pl.roads_begin(&res);
                 self.route_steps = self.road_work.as_ref().map_or(0, |w| w.todo.len().div_ceil(ROUTES_PER_STEP) as u32);
                 if self.road_work.is_some() {
                     Step::RoadRoutes(0)
@@ -2363,6 +2444,11 @@ impl Staged {
                         }
                         pl.city = Some((c.centre, c.radius * 1.03));
                     }
+                    for b in &self.plans {
+                        for r in &b.roads {
+                            pl.push_road(r.clone());
+                        }
+                    }
                     if let Some(w) = self.road_work.take() {
                         pl.roads_end(w);
                     }
@@ -2380,7 +2466,7 @@ impl Staged {
             // Then settlement streets and lanes, and their profiles.
             Step::Streets => {
                 self.terr = terrace::terraces(land, p);
-                land.mods = Mods::build(land.size, Vec::new(), Vec::new(), self.terr.clone());
+                land.mods = Mods::build(land.size, Vec::new(), self.plan_pads(), self.terr.clone(), self.plan_grounds());
                 let mut pl = Plan::new(land, p);
                 for (i, r) in self.roads.iter().enumerate() {
                     pl.add_road_index(i as u32, r);
@@ -2392,6 +2478,11 @@ impl Staged {
                     pl.bounds = c.bounds.clone();
                     pl.walls = c.walls.clone();
                 }
+                // Planned settlements after the city's wards, before the generated ones.
+                for b in &self.plans {
+                    pl.settlements.push(b.settlement.clone());
+                    pl.bounds.push((b.bound.clone(), b.bound.clone()));
+                }
                 pl.lay_out_streets();
                 pl.fix_junctions();
                 pl.profiles();
@@ -2402,7 +2493,7 @@ impl Staged {
             }
             // Lots against the graded roads: stairs first, which lots keep clear of.
             Step::Stairs => {
-                land.mods = Mods::build(land.size, self.segs.clone(), Vec::new(), self.terr.clone());
+                land.mods = Mods::build(land.size, self.segs.clone(), self.plan_pads(), self.terr.clone(), self.plan_grounds());
                 let mut pl = Plan::new(land, p);
                 for (i, r) in self.roads.iter().enumerate() {
                     pl.add_road_index(i as u32, r);
@@ -2412,6 +2503,19 @@ impl Staged {
                 pl.settlements = std::mem::take(&mut self.settlements);
                 pl.walls = std::mem::take(&mut self.walls);
                 pl.bounds = std::mem::take(&mut self.bounds);
+                // Planned lots first, as written; generated lots keep clear of them.
+                for b in self.plans.iter_mut() {
+                    let idx = b.laid.settlement as usize;
+                    let start = pl.lots.len() as u32;
+                    for (i, lot) in b.lots.iter().enumerate() {
+                        let id = pl.lots.len() as u32;
+                        let (lo, hi) = lot.rect().bbox(0.0);
+                        pl.lot_b.insert(lo, hi, id);
+                        pl.lots.push(lot.clone());
+                        b.laid.lots[i].lot = id;
+                    }
+                    pl.settlements[idx].lots = (start, pl.lots.len() as u32);
+                }
                 pl.place_stairs();
                 self.parked = Some(pl.park());
                 if self.wards() > 0 {
@@ -2452,10 +2556,11 @@ impl Staged {
             Step::Towns => {
                 let mut pl = Plan::resume(land, p, self.parked.take().expect("parked plan"));
                 pl.place_lots();
-                let pads = pl.pads();
+                let mut pads = pl.pads();
+                pads.extend(self.plan_pads());
                 let Plan { roads, lots, settlements, crossings, stairs, .. } = pl;
                 (self.roads, self.lots, self.settlements, self.crossings, self.stairs) = (roads, lots, settlements, crossings, stairs);
-                land.mods = Mods::build(land.size, std::mem::take(&mut self.segs), pads, std::mem::take(&mut self.terr));
+                land.mods = Mods::build(land.size, std::mem::take(&mut self.segs), pads, std::mem::take(&mut self.terr), self.plan_grounds());
                 Step::Paint
             }
             // Paint the plan into the tiles.
@@ -2468,7 +2573,9 @@ impl Staged {
                 }
                 // Stairs are walkable; then the drops nobody can climb become walls.
                 terrace::paint_stairs(land, &self.stairs);
-                terrace::paint_drops(land, lots, settlements, p);
+                let planned: Vec<Prop> = self.plans.iter().flat_map(|b| b.props.iter().filter(|pr| pr.kind == PropKind::Stairs).cloned()).collect();
+                terrace::paint_stairs(land, &planned);
+                terrace::paint_drops(land, lots, settlements, p, &self.plan_zones());
                 Step::Connect
             }
             // Walls must not seal anyone in: link any pocket they made through water or rock,
@@ -2494,7 +2601,8 @@ impl Staged {
                     land.update_sd(b.0, b.1);
                 }
                 // Fords change the ground near them: wall any drop that left.
-                terrace::paint_drops(land, lots, settlements, p);
+                terrace::paint_drops(land, lots, settlements, p, &self.plan_zones());
+                land.plans = self.plans.iter().map(|b| b.laid.clone()).collect();
                 land.roads = std::mem::take(&mut self.roads);
                 land.lots = std::mem::take(&mut self.lots);
                 land.settlements = std::mem::take(&mut self.settlements);
@@ -2504,7 +2612,12 @@ impl Staged {
             }
             // Ornaments, retaining walls and the stairs, on the finished ground.
             Step::Ornaments => {
-                let d = self.dressing.take().unwrap_or_else(|| ornament::Dressing::new(land, p, std::mem::take(&mut self.stairs), metro));
+                let d = self.dressing.take().unwrap_or_else(|| {
+                    // Generated stairs, then the plans' stairs and retaining walls, as props.
+                    let mut props = std::mem::take(&mut self.stairs);
+                    props.extend(self.plans.drain(..).flat_map(|b| b.props));
+                    ornament::Dressing::new(land, p, props, metro)
+                });
                 self.dressed += 1;
                 match d.step(land, p) {
                     Ok(props) => {
@@ -2623,13 +2736,13 @@ impl<'a> Plan<'a> {
     /// ([`Plan::roads_end`]). In one go here.
     #[allow(dead_code)]
     fn island_roads(&mut self) {
-        if let Some(mut w) = self.roads_begin() {
+        if let Some(mut w) = self.roads_begin(&[]) {
             while !self.roads_route(&mut w, usize::MAX) {}
             self.roads_end(w);
         }
     }
 
-    fn roads_begin(&mut self) -> Option<RoadWork> {
+    fn roads_begin(&mut self, plans: &[&plan::Resolved]) -> Option<RoadWork> {
         let land = self.land;
         let rp = &self.p.roads;
         let mut gr = Grid::new(land, rp);
@@ -2637,13 +2750,22 @@ impl<'a> Plan<'a> {
         // Network cells: 0 none, else road id + 1, or SITE_MARK at the town's centre.
         let mut net = vec![0u32; n * n];
         let foot = vec![0u32; n * n];
-        let settled: Vec<usize> = (0..land.sites.len()).filter(|&i| land.sites[i].kind != SiteKind::Cave && !land.sites[i].ward && self.site_style(i).is_some()).collect();
+        // Planned settlements are joined through their trunk streets, not routed to.
+        let settled: Vec<usize> = (0..land.sites.len()).filter(|&i| land.sites[i].kind != SiteKind::Cave && !land.sites[i].ward && land.sites[i].plan.is_none() && self.site_style(i).is_some()).collect();
         // Roads laid out already (the city's highways and arterials) are the network's start;
         // roads between settlements keep out of the city and join them outside its wall.
         let pre = self.roads.len() as u32;
         if let Some((cc, cr)) = self.city {
             for k in 0..n * n {
                 if dist(gr.centre(k), cc) < cr {
+                    gr.cost[k] = f32::INFINITY;
+                }
+            }
+        }
+        // Nor through a planned settlement: its levels and harbour are as written.
+        for r in plans {
+            for k in 0..n * n {
+                if plan::covers(r, gr.centre(k), 2.0) {
                     gr.cost[k] = f32::INFINITY;
                 }
             }
@@ -2660,7 +2782,8 @@ impl<'a> Plan<'a> {
                 }
             }
         }
-        let town = if pre > 0 { None } else { settled.iter().find(|&&i| land.sites[i].kind == SiteKind::Town).or(settled.first()).copied() };
+        // Trunk roads laid out already are the network; without any, the first town is its hub.
+        let town = if pre > 0 && self.roads.iter().any(|r| r.class == RoadClass::Trunk) { None } else { settled.iter().find(|&&i| land.sites[i].kind == SiteKind::Town).or(settled.first()).copied() };
         if pre == 0 && town.is_none() {
             return None;
         }
@@ -2893,7 +3016,7 @@ impl<'a> Plan<'a> {
             if site.kind == SiteKind::Cave {
                 continue;
             }
-            if site.ward {
+            if site.ward || site.plan.is_some() {
                 continue;
             }
             let Some(style) = self.site_style(si) else { continue };
@@ -3238,6 +3361,7 @@ impl<'a> Plan<'a> {
             landmark: None,
             roads: mine,
             terrace_m: self.zone(si).map_or(0.0, |z| z.step),
+            planned: false,
         });
         self.bounds.push((bound, inner));
     }
@@ -3520,6 +3644,10 @@ impl<'a> Plan<'a> {
         let land = self.land;
         let rp = &self.p.roads;
         for ri in 0..self.roads.len() {
+            // A planned settlement's streets lie on its ground as written.
+            if self.roads[ri].settlement.is_some_and(|s| self.settlements.get(s as usize).is_some_and(|x| x.planned)) {
+                continue;
+            }
             // Resample to ~3 m, keeping the ends.
             let pts = {
                 let r = &self.roads[ri];
@@ -3626,6 +3754,10 @@ impl<'a> Plan<'a> {
         let rp = &self.p.roads;
         let mut out = Vec::new();
         for (ri, r) in self.roads.iter().enumerate() {
+            // A planned settlement's streets do not reshape its ground.
+            if r.settlement.is_some_and(|s| self.settlements.get(s as usize).is_some_and(|x| x.planned)) {
+                continue;
+            }
             let hw = r.width_m * 0.5;
             for i in 0..r.points.len() - 1 {
                 out.push(Seg { road: ri as u32, a: r.points[i], b: r.points[i + 1], ha: r.heights[i], hb: r.heights[i + 1], hw, fade: rp.shoulder_m + hw * 0.5, cross: r.crossfall[i] });
@@ -3639,7 +3771,7 @@ impl<'a> Plan<'a> {
 
     fn place_lots(&mut self) {
         for si in 0..self.settlements.len() {
-            if self.land.sites[self.settlements[si].site as usize].ward {
+            if self.land.sites[self.settlements[si].site as usize].ward || self.settlements[si].planned {
                 continue;
             }
             let (bound, inner) = self.bounds[si].clone();
@@ -4582,13 +4714,17 @@ impl<'a> Plan<'a> {
         let mut pads: Vec<Pad> = Vec::new();
         let mut owner: Vec<Option<u32>> = Vec::new();
         for (i, s) in self.settlements.iter().enumerate() {
+            // A planned settlement's square and lots stand on its levels.
+            if s.planned {
+                continue;
+            }
             let st = self.set_style(i as u16);
             pads.push(Pad { shape: Shape::Poly(s.plaza.points.clone()), floor: s.plaza.floor_m, skirt: (st.skirt_m * 2.0).max(1.0), gate: 0.0, rise: None });
             owner.push(None);
         }
         for (i, l) in self.lots.iter().enumerate() {
             // Lots inside a plaza stand on its level ground.
-            if !l.kind.padded() || poly_contains(&self.settlements[l.settlement as usize].plaza.points, l.centre) {
+            if !l.kind.padded() || self.settlements[l.settlement as usize].planned || poly_contains(&self.settlements[l.settlement as usize].plaza.points, l.centre) {
                 continue;
             }
             let st = self.set_style(l.settlement);

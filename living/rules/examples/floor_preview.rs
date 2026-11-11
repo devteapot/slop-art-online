@@ -108,6 +108,15 @@ fn main() {
     let arrive = host::arrival(&land, &hosted);
     let _ = writeln!(out, "arrival {:.2} {:.2}", arrive.0, arrive.1);
     let _ = writeln!(out, "blocked {} tiles, cut off {}", h.blocked_tiles, h.cut_off_tiles);
+    // Hand-authored settlements (docs/AUTHORED_PLANS.md): what each laid out, and any door no
+    // one can reach.
+    for p in &land.plans {
+        let s = &land.settlements[p.settlement as usize];
+        let _ = writeln!(out, "plan {} settlement {} ({}): {} lots, {} streets, square ({:.1}, {:.1}) at {:.2} m", p.id, p.settlement, s.style, p.lots.len(), p.streets.len(), s.plaza.centre.0, s.plaza.centre.1, s.plaza.floor_m);
+    }
+    if !land.plans.is_empty() {
+        let _ = writeln!(out, "plan doors stranded: {:?}", living_rules::settle::stranded_doors(&land, &hosted, &h.reachable));
+    }
     let mut styles: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     for s in &land.settlements {
         let e = styles.entry(format!("{}:{}", s.kind.id(), s.style)).or_default();

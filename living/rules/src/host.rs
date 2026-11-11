@@ -20,7 +20,11 @@ pub fn blocks(kind: LotKind) -> bool {
 
 /// The style margin round a settlement's models (lots are the model's footprint plus this).
 pub fn margin_of(land: &Land, p: &LandParams, lot: &Lot) -> f32 {
-    land.settlements.get(lot.settlement as usize).and_then(|s| p.settlements.style_for(s.kind, &s.style)).map_or(0.0, |s| s.margin_m)
+    // A planned settlement's lots are its models' footprints exactly.
+    match land.settlements.get(lot.settlement as usize) {
+        Some(s) if s.planned => 0.0,
+        s => s.and_then(|s| p.settlements.style_for(s.kind, &s.style)).map_or(0.0, |s| s.margin_m),
+    }
 }
 
 /// Tiles under a lot's model footprint: tiles whose centre lies inside the lot shrunk by the
