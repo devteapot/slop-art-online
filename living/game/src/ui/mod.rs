@@ -305,7 +305,7 @@ fn dump(
     input: Res<crate::controls::Input>,
     typing: Res<say::Typing>,
     talk: Option<Res<crate::talk::Talk>>,
-    extra: DumpExtra,
+    (extra, model): (DumpExtra, Res<model::HudModel>),
 ) {
     let Some(path) = d.0.take() else { return };
     let size = cams.iter().find_map(|c| c.physical_viewport_size()).map_or(Vec2::new(1600.0, 900.0), |s| s.as_vec2());
@@ -329,6 +329,9 @@ fn dump(
         "acts": verbs.menu.as_ref().map(|m| serde_json::json!({"title": m.title, "group": m.group, "rows": m.rows().iter().map(|r| r.label()).collect::<Vec<_>>()})),
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone())})),
         "pointer_over_ui": ui.over_ui,
+        // Whose nameplates show as hovered, and the target plate.
+        "hovered": model.actors.iter().filter(|a| a.hovered).map(|a| serde_json::json!({"id": a.id, "label": a.name})).collect::<Vec<_>>(),
+        "targeted": model.actors.iter().find(|a| a.targeted).map(|a| a.id),
         "extra": extra.json(),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
     });

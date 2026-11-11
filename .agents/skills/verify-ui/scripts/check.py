@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes (default: all)
+  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick (default: all)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -196,7 +196,32 @@ def themes(run, c):
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
 
 
-SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes}
+def pick(run, c):
+    """Two people overlapping on screen: the cursor on the one in front (its chest, with the one
+    behind standing where the cursor's ground point falls) names, hovers and addresses that one.
+    The pick is one function for the nameplate, Enter and combat's target (living/game/src/pick.rs);
+    before it, Enter took the hovered person nearest the cursor's ground point: the one behind."""
+    s = "pick"
+    a, b = residents(run)
+    # The view faces north (yaw 0, sim -y). A stands ahead and to the left; B 1.5 m behind A along
+    # the view, where the ray through A's chest meets the ground.
+    plan = ("ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
+            "key:Enter:tap;wait:0.6;shot:02_to_them;dump:02;type:You, in front.;enter;wait:1.2;dump:03;key:Escape:tap;wait:0.4;quit").replace("{A}", str(a))
+    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["01", "02", "03"]}
+    L = log(out)
+    hov = [h.get("id") for h in (d["01"] or {}).get("hovered") or []]
+    c.check(s, "the cursor on the one in front: only they are hovered (one nameplate)", hov == [a], f"hovered {hov}, under {(d['01'] or {}).get('under')}, in front #{a}, behind #{b}")
+    t2 = (d["02"] or {}).get("typing") or {}
+    c.check(s, "Enter addresses the one in front, in their window", t2.get("to") == a and t2.get("window") == f"Person{a}", json.dumps(t2))
+    c.check(s, "the target plate is the one addressed", (d["02"] or {}).get("targeted") == a, str((d["02"] or {}).get("targeted")))
+    c.check(s, "the line goes to them (human_say with to)", re.search(rf'say: "You, in front\." to #{a}\b', L) is not None)
+    rows = sql(run, f"SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = {a}")
+    c.check(s, "the authority's said row has to = the one in front", any("You, in front." in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
+
+
+SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick}
 
 
 def main():

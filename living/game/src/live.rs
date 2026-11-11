@@ -954,7 +954,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   `click:X,Y` clicks there (fractions of the picture; `@NAME` is a tagged node of the game
 ///   UI, `ui/hit.rs` `Tag`), `slide:A>B[:SECS]` holds the click at A and slides to B (a
 ///   title-bar drag, an item onto someone), `scroll:PX` swipes
-///   two fingers over a window, `point:ID` puts the cursor on someone (hovering them),
+///   two fingers over a window, `point:ID[:H]` puts the cursor on someone (hovering them; H m above their feet, default 0.3, e.g. 1.3 for the chest),
 ///   `dodge:W|A|S|D` double-taps a direction, and `dump:NAME`
 ///   writes the game UI's state to `<dir>/NAME.json` (`ui::dump`);
 ///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
@@ -999,8 +999,8 @@ pub struct Script {
     frames: u32,
     held: f32,
     pts: Option<(Vec2, Vec2)>,
-    /// `point:ID`: the cursor follows this character.
-    pointing: Option<u64>,
+    /// `point:ID[:H]`: the cursor follows this character, H m above its feet.
+    pointing: Option<(u64, f32)>,
     started: Option<u32>,
 }
 
@@ -1045,9 +1045,9 @@ fn script(
         None => v.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?))),
     };
     let dt = time.delta_secs();
-    if let Some(id) = s.pointing {
+    if let Some((id, lift)) = s.pointing {
         let at = hud.actors.iter().find(|a| a.id == id).and_then(|a| {
-            let ground = island.as_ref().map_or(a.head - Vec3::Y * 1.9, |i| Vec3::new(a.head.x, i.height(a.head.x, a.head.z) + 0.3, a.head.z));
+            let ground = island.as_ref().map_or(a.head - Vec3::Y * (2.2 - lift), |i| Vec3::new(a.head.x, i.height(a.head.x, a.head.z) + lift, a.head.z));
             cams.iter().find_map(|(c, t)| Some((c.world_to_viewport(t, ground).ok()?, c.logical_viewport_size()?)))
         });
         if let Some((p, size)) = at {
@@ -1193,7 +1193,10 @@ fn script(
             // Keep the cursor on character ID as drawn (their feet, where the cursor's ground
             // point finds them), frame after frame as the camera eases: hovering them, as a
             // player keeps pointing. Until a `cursor:` step or another `point:`.
-            s.pointing = arg.parse().ok();
+            s.pointing = match arg.split_once(':') {
+                Some((id, h)) => id.parse().ok().map(|id| (id, h.parse().unwrap_or(0.3))),
+                None => arg.parse().ok().map(|id| (id, 0.3)),
+            };
             true
         }
         "scroll" => {
