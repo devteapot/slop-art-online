@@ -7,7 +7,7 @@ Since 2026-11-11 (branch `rules-offers`; docs/PERCEPTION.md "Offers"). A trade o
 - An incoming offer: `incoming` true, `from` the maker's character id (named through `seen_characters`; no name in the row), `to` the player's, the goods both ways, `at_ms`, and `until_ms` = `at_ms` + the `trade_window_s` law (180 s by default), fixed when the offer is made. The player is also told it in `my_experience` ("A stranger offers you 2 wood for 1 berries.").
 - An outgoing offer: the player's own, `incoming` false. A new offer replaces the maker's earlier one.
 - Accepting: the `accept` act toward the maker (`{"do": "accept", "target": {"id": FROM}}` through `human_act`). Refused with the rules' words when either side lacks the goods, or "they have no standing offer for you" after `until_ms`; the offer then stands. Accepted, the goods move both ways in one transaction and the row goes. `accept_done` takes a proposal record of terms from the same person first (`proposal_from`, the dealings), and the standing trade only when there is none.
-- Declining: there is no act. An offer ends at `until_ms` (housekeeping deletes it within a second) or when its maker offers again.
+- Declining: there is no act. An offer ends at `until_ms` (housekeeping, at 1 Hz, deletes it at its next pass) or when its maker offers again.
 
 ## How to get to it (user POV)
 

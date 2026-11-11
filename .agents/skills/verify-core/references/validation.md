@@ -13,6 +13,10 @@ Branch `lives-3` (from the coordinator's main `3faa7bfb`; origin/main `12fd78ef`
 - Not run on this change: tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, goods, stock, laws, infant, lifecycle, wildlife, remains, flee; mechanics and steering.
 
 
+## 2026-11-11 rules-offers: every know-how can be taught (Spark)
+
+Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. `scenes.py teach` (new) on `core-teach-1111-184247`: 6 of 6, twice (`teach-results-fixed-2.json`). With origin/main's `skills.rhai` installed on the same world it gave 2 of 6: the teacher was told "there is no technique called fire_bolt (the techniques are: spear, fire, masonry, …)" (`teach-results-main-rules.json`). Cargo: `every_know_how_can_be_taught` and `cullet_s_glassmaking_can_be_taught` pass.
+
 ## 2026-11-11 eye-2: things open at eye height are see-through (dev-box)
 
 Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
