@@ -46,6 +46,14 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 /// Half the width of the walk ↔ run blend round the split speed ([`Family::Split`], m/s).
 pub const CROSS_BAND: f32 = 0.2;
+/// Gaits of a family whose natural speeds are within this ratio blend across their whole gap
+/// (walk ↔ walk_brisk 1.41, run ↔ run_fast 1.11).
+const NEIGHBOURS: f32 = 1.45;
+/// Farther apart, the slower plays alone until the speed is within this ratio of the faster's
+/// natural speed, then they blend (walk_brisk at 2.03 m/s and a 3.0 m/s walk blend from 2.8): a
+/// blend of two walks far apart in stride slid more than either alone (look-dev, 2.6 m/s: 4–5%
+/// against 3%).
+const NEAR: f32 = 1.07;
 
 /// Which of a person's gait families plays: walking clips (walk, walk_brisk) or running ones
 /// (run, run_fast).
@@ -546,8 +554,12 @@ impl Gaits {
         } else if a.run != b.run {
             let v = self.split_speed(family).unwrap_or_else(|| self.clips_split());
             (v - CROSS_BAND, v + CROSS_BAND)
-        } else {
+        } else if b.natural <= a.natural * NEIGHBOURS {
             (a.natural, b.natural)
+        } else {
+            // Far apart (a speed take above the family's usual ones): the slower plays alone,
+            // driven faster, until close to the faster's own speed.
+            ((b.natural / NEAR).max(a.natural), b.natural)
         }
     }
 
@@ -917,7 +929,11 @@ pub(crate) mod tests {
         let walk34 = Family::Split((3.4f32 * 4.3).sqrt());
         assert_eq!(names(&g.blend(3.0, 1.0, walk34, |_| 1.0)), vec![("walk_v30", 1.0)]);
         assert_eq!(names(&g.blend(3.4, 1.0, walk34, |_| 1.0)), vec![("walk_v30", 1.0)]);
-        assert_eq!(g.blend(2.5, 1.0, walk34, |_| 1.0).n, 2, "between walk_brisk and walk_v30");
+        // Far apart in natural speed (2.03 and 3.0): walk_brisk alone up to 2.8, then the blend.
+        assert_eq!(names(&g.blend(2.6, 1.0, walk34, |_| 1.0)), vec![("walk_brisk", 1.0)]);
+        assert_eq!(g.blend(2.9, 1.0, walk34, |_| 1.0).n, 2, "between walk_brisk and walk_v30");
+        // Close neighbours still blend across their whole gap.
+        assert_eq!(g.blend(1.7, 1.0, walk34, |_| 1.0).n, 2);
         assert_eq!(names(&g.blend(4.3, 1.0, walk34, |_| 1.0)), vec![("run_fast", 1.0)]);
         assert!(g.gaits()[..5].iter().all(|x| x.clip != "sneak" && x.clip != "walk_back"));
     }
