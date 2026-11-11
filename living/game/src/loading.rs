@@ -102,10 +102,29 @@ fn spawn(mut commands: Commands, assets: Res<AssetServer>) {
 
 /// What the cover says while connected play has never got through: the server and why, and when
 /// it is tried again (play-test 1: "Arriving…" stayed up forever with nothing said).
-fn status(net: Option<NonSend<crate::net::Net>>, time: Res<Time>, covers: Query<Entity, With<Cover>>, children: Query<&Children>, mut texts: Query<(&mut Text, Has<CoverDetail>)>) {
+#[allow(clippy::too_many_arguments)]
+fn status(
+    net: Option<NonSend<crate::net::Net>>,
+    time: Res<Time>,
+    island: Option<Res<crate::island::Island>>,
+    target: Res<crate::controls::Target>,
+    covers: Query<Entity, With<Cover>>,
+    children: Query<&Children>,
+    mut texts: Query<(&mut Text, Has<CoverDetail>)>,
+) {
     let Some(net) = net.filter(|_| !crate::lookdev::enabled()) else { return };
+    // Where the first load is, under "Arriving…": the world reached, the land drawn, then me.
+    let stage = if net.status != crate::net::Status::Live {
+        "Reaching the world"
+    } else if island.is_none() {
+        "Shaping the land"
+    } else if target.0.is_none() || island.as_ref().is_some_and(|i| !i.settled()) {
+        "Finding your way in"
+    } else {
+        ""
+    };
     let (title, detail) = if net.ever_live || net.attempts == 0 {
-        ("Arriving…".to_string(), String::new())
+        ("Arriving…".to_string(), stage.to_string())
     } else if net.status == crate::net::Status::Offline {
         let why = if net.detail.contains("refused") || net.detail.contains("Connect") { "the server isn't answering".to_string() } else { net.detail.chars().take(90).collect() };
         let wait = (net.retry_at - time.elapsed_secs_f64()).max(0.0).ceil() as u32;

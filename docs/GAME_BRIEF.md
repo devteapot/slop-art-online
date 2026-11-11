@@ -679,7 +679,7 @@ A player could move, fight and greet, but not gather, eat, craft, build, give, t
 - Things are named to the authority as acts name them, by kind (`{"nearest": "berry_bush"}`). When the one under the cursor is not the nearest of its kind, the act becomes a walk to it and then the act on the nearest (`{"seq": [goto, act]}`), which runs as my behaviour.
 
 **Controls and HUD** (only relevant information on screen; everything below is hidden until it matters):
-- **F** acts on what is under the cursor, else the nearest thing or creature within 3 m: a tap does the likely act, holding it (0.28 s) or a tap with no likely act opens the list. With nothing to aim at, F opens my own list. When something is in reach, a small hint over the bar names the likely act (`F gather`) or the target (`F a stranger ›`).
+- **F** acts on what is under the cursor, else the nearest thing or creature within 3 m: a tap does the likely act, holding it (0.28 s) or a tap with no likely act opens the list. With nothing to aim at, F says so in a short note (since 2026-11-11; C opens my own list). When something is in reach, a small hint over the bar names the likely act (`F gather`) or the target (`F a stranger ›`).
 - **C** opens the list of acts on myself (eat, sleep, rest, craft, build, write, drop, experiment, …), with what I carry ("eat berries ×4").
 - **The list** sits over the bar: 1–9 and 0 or a click picks, Esc goes back or closes, F or C closes it. The mouse picks from it rather than firing the bar while it is open.
 - **Notes** of what the authority said rise just over the hint for about 4.5 s: edged green when done, red when refused with the authority's reason ("You don't know how to make a bow (archery: learn it from someone who knows it or from writing, …)"), grey when an ongoing act began.
@@ -822,6 +822,24 @@ Branch `feel-3`. Evidence and before/after stills are in `.local/living/feel-3/`
   - Know-how reads "You know  …".
   - A plate sits behind the bars and the skill bar, and the health bar shows its value.
   - The pack lists each item's name, its worth as food (muted) and its count (gold), with a carry bar.
+
+## Feel pass 4: the first minutes (2026-11-11)
+
+Branch `feel-4`. Evidence is in `.local/living/feel-4/` (git-ignored). Client only.
+
+- **Arrival:**
+  - The first load names its stage under "Arriving…": reaching the world, shaping the land, finding your way in.
+  - Low buildings (market stalls) fade when they hide you; a newcomer arrives among the stalls.
+  - F with nothing in reach says so, instead of opening the list of acts on oneself.
+- **Crowds:**
+  - Speech bubbles stack without landing on one another. A lifted bubble rose 1 px past an obstacle, inside the overlap test's 3 px margin, so the stacking passes ran out.
+  - A speaker under the cursor no longer gets a nameplate repeating the name in their bubble.
+  - The authority's labels ("a stranger") are capitalised on plates, bubbles and in the log.
+  - Look-dev's sample HUD has a `crowd` state.
+- **Jump:** the legs hold their stride in the air instead of cycling, and foot IK eases out and in over the first and last fifth of the flight.
+  - Air, median foot motion: 8.8 → 1.0 cm a frame.
+  - Landing peak: 46 → 24 cm.
+  - Take-off peak: 48 → 32 cm.
 
 ## World look and camera research (2026-11-08)
 

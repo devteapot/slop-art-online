@@ -16,6 +16,7 @@
 //! - **F** acts on what is under the cursor, else the nearest thing or creature within reach:
 //!   a tap does the most likely act (the one I last chose for that kind, else the first the
 //!   rules allow on a thing); holding F, or a tap with nothing likely (a person), opens the list.
+//!   With nothing within reach, F says so (C opens the list of acts on myself).
 //! - **C** opens the list of acts on myself (eat, sleep, craft, write, ...), with what I carry.
 //! - **I** and **K** toggle the inventory and the know-how panels (`ui/verbs.rs`).
 //! - In a list: 1–9 and 0 or a click picks, Esc or the same key closes. A skill with many items opens
@@ -853,7 +854,9 @@ pub fn input(
                     }
                 }
             } else {
-                open(&mut v, Aim::Me, None);
+                // Nothing within reach: say so, briefly. Opening my own list here (as before) met a
+                // newcomer's first F with fourteen abstract acts (play-test 1); C opens it.
+                v.toasts.push(Toast { text: "Nothing within reach — C for your own acts".into(), ok: None, at: now });
             }
         }
     } else if v.menu.as_ref().is_some_and(|m| m.aim != Aim::Me) && pressed(INTERACT) {

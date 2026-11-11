@@ -131,3 +131,14 @@ pub(crate) fn set_width(n: &mut Node, w: Val) {
         n.width = w;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn rules_names_and_labels_read_as_words() {
+        assert_eq!(super::label("berry_bush"), "Berry bush");
+        assert_eq!(super::label("a stranger"), "A stranger");
+        assert_eq!(super::label("Old Hale"), "Old Hale");
+        assert_eq!(super::label(""), "");
+    }
+}
