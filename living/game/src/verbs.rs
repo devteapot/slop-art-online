@@ -843,12 +843,14 @@ fn place_of(conn: &DbConnection, aim: &Aim) -> (living_rules::ui::On, String) {
 
 /// The rules' own words for refusing a skill toward this target now (its `_check`), for the
 /// wheel's hub: the same text a mind gets back for the same facts.
-fn refusal(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill) -> String {
-    let item = if spec.item { me.actor.inv.first().map(|(i, _)| i.clone()).unwrap_or_default() } else { String::new() };
+fn refusal(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill) -> (String, String) {
+    // An item-taking skill is asked with a real item: its own first (a product to make), else
+    // the first I carry; the act sent from a greyed section names the same one.
+    let item = if spec.item { spec.items.first().cloned().or_else(|| me.actor.inv.first().map(|(i, _)| i.clone())).unwrap_or_default() } else { String::new() };
     let t = target.cloned().unwrap_or_else(|| TargetFacts { class: "none".into(), ..Default::default() });
     let want = if spec.args.iter().any(|a| a == "want") { catalog::item_names().into_iter().find(|w| *w != item).unwrap_or_default() } else { String::new() };
     let ctx = SkillCtx { actor: me.actor.clone(), target: t, item, qty: 1, want_qty: (!want.is_empty()) as u32, want, night: me.night, hour: me.hour, season: me.season.clone(), roll: 0.5, skill: spec.name.clone(), raining: me.raining, ..Default::default() };
-    sc.check(&spec.name, &ctx).err().unwrap_or_default()
+    (sc.check(&spec.name, &ctx).err().unwrap_or_default(), ctx.item)
 }
 
 /// The wheel toward a target, where the world's `menus()` gives its place one
@@ -880,7 +882,7 @@ fn wheel_toward(conn: &DbConnection, sc: &Scripts, skills: &[Skill], me: &Me, my
         cands.push(own(Section::Introduce));
     }
     let layout = wheel_of(&spec, &cands);
-    let mut w = crate::ui::wheel::WheelOpen { aim: aim.clone(), title, layout, choices, labels: Default::default(), icons: Default::default(), abouts: Default::default(), reasons: Default::default(), held: true, at, vec: Vec2::ZERO, sel: None };
+    let mut w = crate::ui::wheel::WheelOpen { aim: aim.clone(), title, layout, choices, labels: Default::default(), icons: Default::default(), abouts: Default::default(), reasons: Default::default(), grey_items: Default::default(), held: true, at, vec: Vec2::ZERO, sel: None };
     for sec in w.layout.sections.clone() {
         let (label, icon, about) = match &sec.what {
             Pin::Own(Section::Talk) => ("Talk".to_string(), None, "Say something to them.".to_string()),
@@ -894,8 +896,12 @@ fn wheel_toward(conn: &DbConnection, sc: &Scripts, skills: &[Skill], me: &Me, my
             }
         };
         if let (false, Pin::Skill(k)) = (sec.allowed, &sec.what) {
-            let why = skills.iter().find(|s| &s.name == k).map(|s| refusal(sc, me, t.target.as_ref(), s)).filter(|r| !r.is_empty()).unwrap_or_else(|| "Not now".into());
+            let (why, item) = skills.iter().find(|s| &s.name == k).map(|s| refusal(sc, me, t.target.as_ref(), s)).unwrap_or_default();
+            let why = if why.is_empty() { "Not now".to_string() } else { why };
             w.reasons.insert(sec.what.clone(), crate::ui::label(&why));
+            if !item.is_empty() {
+                w.grey_items.insert(sec.what.clone(), item);
+            }
         }
         w.labels.insert(sec.what.clone(), label);
         w.icons.insert(sec.what.clone(), icon);
@@ -1219,7 +1225,8 @@ pub fn input(
                         }
                         // Greyed: sent all the same; the authority decides and says why.
                         [] => {
-                            let c = Choice::new(&k, pretty(&k));
+                            let item = w.grey_items.get(&Pin::Skill(k.clone())).cloned();
+                            let c = Choice { item, ..Choice::new(&k, pretty(&k)) };
                             send(&net, conn, sc, &w.aim, &c, None, now_ms, &mut v, &mut controls);
                         }
                         // A further choice: its sub-list, beside the hub.
@@ -1291,6 +1298,9 @@ pub fn input(
                     Some(c) if c.words => v.compose = Some((aim, c)),
                     Some(c) => send(&net, conn, sc, &aim, &c, None, now_ms, &mut v, &mut controls),
                     None if v.has_options => wheel_or_list(&mut v, aim, held, at),
+                    // Held where the world pins acts: the wheel, greyed, says what belongs here
+                    // and why not now (a cold hearth's Make and Feed).
+                    None if held && sc.menu_for(place_of(conn, &aim).0, &place_of(conn, &aim).1).is_some_and(|m| m.choose == living_rules::ui::Choose::Wheel && m.wheel.iter().any(|p| p.is_some())) => wheel_or_list(&mut v, aim, true, at),
                     None => {
                         let text = format!("Nothing to do with {}", v.aim_name);
                         v.toasts.push(Toast { text, ok: None, at: now });

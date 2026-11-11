@@ -739,7 +739,7 @@ def wheel(run, c):
     s = "wheel"
     a, b = residents(run)
     P = "point:{A}:1.0;wait:0.6"
-    plan = ("ready;click:@tip:ok;sync:scene;wait:2;" + P + ";dump:00;"
+    plan = ("ready;sync:scene;wait:2;" + P + ";dump:00;"
             # Held: open, toward nw (wave), let go.
             "key:KeyF:down;wait:0.5;shot:01_open;dump:01;nudge:-42,-42;wait:0.3;shot:02_wave;dump:02;key:KeyF:up;wait:1.5;dump:03;"
             # Esc closes it: nothing sent.
@@ -778,16 +778,21 @@ def wheel(run, c):
 
 
 def wheel_workplace(run, c):
-    """A fuel fire's wheel on Cullet: Make pinned north and Feed east; with the fire out, Make
+    """A fuel fire's wheel on Cullet (a furnace, oven, hearth or smokehouse with no one by it):
+    Make pinned north and Feed east; with the fire out, Make
     greys with the rules' reason in the hub, and choosing it still sends it (the authority
     decides; its words are noted)."""
     s = "wheel-workplace"
-    fs = sql(run, "SELECT id, kind, x, y, lit_until_ms FROM structure WHERE kind = 'furnace'")
-    c.check(s, "the world has a furnace", len(fs) > 0, str(fs[:2]))
+    # A fuel fire with no one standing by it: a creature under the cursor is aimed before a thing.
+    fs = sql(run, "SELECT id, kind, x, y, lit_until_ms FROM structure WHERE kind = 'furnace' OR kind = 'oven' OR kind = 'hearth' OR kind = 'smokehouse'")
+    bodies = sql(run, "SELECT id, x, y FROM body")
+    alone = lambda f: min([((b["x"] - f["x"]) ** 2 + (b["y"] - f["y"]) ** 2) ** 0.5 for b in bodies] or [99.0])
+    fs.sort(key=alone, reverse=True)
+    c.check(s, "the world has a fuel fire with no one by it", len(fs) > 0 and alone(fs[0]) > 6.0, str([(f["kind"], f["id"], round(alone(f), 1)) for f in fs[:3]]))
     if not fs:
         return
     f = fs[0]
-    plan = ("ready;click:@tip:ok;wait:2;sync:there;wait:6;cursor:0.5,0.5;wait:0.5;dump:00;key:KeyF:down;wait:0.5;shot:01_open;dump:01;"
+    plan = (f"ready;wait:2;sync:there;wait:6;pointat:{f['x']},{f['y']}:0.8;wait:0.8;dump:00;key:KeyF:down;wait:0.5;shot:01_open;dump:01;"
             "nudge:0,-50;wait:0.3;shot:02_make;dump:02;key:KeyF:up;wait:3;shot:03_sent;dump:03;quit")
     # Beside the furnace (admin place_at, scene setup); F aims at the nearest thing.
     there = f"there=place_at|{{me}}|{f['x'] + 1.2}|{f['y']}"
@@ -796,7 +801,7 @@ def wheel_workplace(run, c):
     d = {k: dump(out, k) for k in ["00", "01", "02", "03"]}
     w = lambda k: (d[k] or {}).get("wheel") or {}
     secs = {x["dir"]: x for x in w("01").get("sections", [])}
-    c.check(s, "F held at a furnace opens its wheel: Make north, Feed east", secs.get("n", {}).get("what") == "make" and secs.get("e", {}).get("what") == "feed", str({k: v["what"] for k, v in secs.items()}))
+    c.check(s, f"F held at a {f['kind']} opens its wheel: Make north, Feed east", secs.get("n", {}).get("what") == "make" and secs.get("e", {}).get("what") == "feed", str({k: v["what"] for k, v in secs.items()}))
     mk = secs.get("n", {})
     c.check(s, "with the fire out, Make greys with the rules' reason", mk.get("allowed") is False and bool(mk.get("reason")), str(mk))
     L = log(out)

@@ -49,6 +49,8 @@ pub struct WheelOpen {
     pub icons: HashMap<Pin, Option<String>>,
     pub abouts: HashMap<Pin, String>,
     pub reasons: HashMap<Pin, String>,
+    /// The item a greyed item-taking section is asked and sent with (its reason is for it).
+    pub grey_items: HashMap<Pin, String>,
     /// Opened by holding F (letting go chooses) or sticky (a click, Enter or F chooses).
     pub held: bool,
     /// Where it is drawn (logical px in the window: where the cursor was), the selection vector
@@ -349,7 +351,7 @@ mod tests {
 
     #[test]
     fn the_selection_is_clamped_so_reversing_is_quick() {
-        let mut w = WheelOpen { aim: crate::verbs::Aim::Me, title: String::new(), layout: Wheel::default(), choices: Vec::new(), labels: HashMap::new(), icons: HashMap::new(), abouts: HashMap::new(), reasons: HashMap::new(), held: true, at: Vec2::ZERO, vec: Vec2::ZERO, sel: None };
+        let mut w = WheelOpen { aim: crate::verbs::Aim::Me, title: String::new(), layout: Wheel::default(), choices: Vec::new(), labels: HashMap::new(), icons: HashMap::new(), abouts: HashMap::new(), reasons: HashMap::new(), grey_items: HashMap::new(), held: true, at: Vec2::ZERO, vec: Vec2::ZERO, sel: None };
         w.layout.sections = Dir::ALL.iter().map(|d| living_rules::ui::WheelSection { dir: *d, what: Pin::parse("x"), allowed: true, pinned: false, sub: false, words: false }).collect();
         w.nudge(Vec2::new(500.0, 0.0));
         assert_eq!((w.vec.length().round(), w.sel), (MAX_PX, Some(Dir::E)));

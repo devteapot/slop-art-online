@@ -1379,6 +1379,9 @@ fn teach_ui() { #{ look: #{ icon: "book" } } }
 fn appraise_ui() { #{ label: "Look over", look: #{ icon: "eye" } } }
 fn wave_ui() { #{ look: #{ icon: "wave" } } }
 fn nod_ui() { #{ look: #{ icon: "wave" } } }
+// A workplace's wheel (Cullet's fuel fires): making and feeding.
+fn make_ui() { #{ look: #{ icon: "hammer" } } }
+fn feed_ui() { #{ look: #{ icon: "fire" } } }
 // Which places get a wheel, and its layout (docs/INTERFACE.md §8): hold F on a target, move
 // toward a section, let go. A person's social acts are pinned, so a direction learned once keeps
 // working (a refused one greys in place); anything else the rules offer is behind More. Any

@@ -235,7 +235,7 @@ fn the_three_looks_by_name_are_declared_not_coded() {
     // decline (rules-offers-2) are also answers on an offer's card, with the trade icon.
     let mut declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
     declared.sort();
-    assert_eq!(declared, ["accept", "appraise", "block", "bowshot", "decline", "dodge", "face", "firebolt", "give", "heal", "jump", "nod", "offer", "shoot", "strike", "teach", "throw", "wave"], "the shipped script declares these");
+    assert_eq!(declared, ["accept", "appraise", "block", "bowshot", "decline", "dodge", "face", "feed", "firebolt", "give", "heal", "jump", "make", "nod", "offer", "shoot", "strike", "teach", "throw", "wave"], "the shipped script declares these");
     // Face is in no list of a player's (play-test 5): a player faces where it looks, as the tip says.
     let face = s.ui("face").unwrap();
     assert!(face.on.is_empty() && face.tip.is_some() && !s.ui_default("face").unwrap().on.is_empty(), "{face:?}");
