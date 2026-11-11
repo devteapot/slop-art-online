@@ -146,10 +146,14 @@ pub struct LandParams {
 }
 
 /// Which built things hide what is behind them, for sight lines on the hosted tiles
-/// (`host::hosted_map`, docs/ISLAND_AUTHORITY.md "Sight over low things"). A lot or prop that
-/// blocks walking hides only what it stands above the eye: its footprint becomes `Wall` when it
-/// rises above `eye_m`, else `Low` (blocks the foot, not the eye). How high it rises is its
-/// model's height (`height_m`, from `data/buildings.json`), unless `hides_m` names its kind.
+/// (`host::hosted_map`, docs/ISLAND_AUTHORITY.md "Sight over low things" and "Sight through
+/// what is open at eye height"). A lot or prop that blocks walking hides only where it is solid
+/// at the eye: its footprint is `Low` (blocks the foot, not the eye) where it is not. A thing
+/// no higher than `eye_m` is `Low` throughout. Above it, where its model's footprint is measured
+/// at eye height (`eye_cells` in `data/buildings.json`, from the mesh), a tile is `Wall` when a
+/// square of the model in it blocks at least `solid` of the view, else `Low`; a model without
+/// the measure (or an eye outside the band it was measured in) is `Wall` throughout. A kind
+/// named in `hides_m` is all one or the other by that height instead.
 /// Why land data, not a Rhai law: which tiles block is decided when the land is hosted, in this
 /// crate, without the world's script; and the game client rebuilds the same hosted land for its
 /// own sight test (sight-2). The authority and the client must compute blocking from the same
@@ -165,11 +169,17 @@ pub struct Sight {
     /// open-sided stall see-through, `{"well": 0.95}` sees over a well's rim under its roof.
     /// Empty: every model hides up to its own height.
     pub hides_m: std::collections::BTreeMap<String, f32>,
+    /// How much of the view through a square of a model's footprint at eye height must be
+    /// blocked for its tile to hide (0..1, against the model's measured `eye_cells`): 0.8,
+    /// nearly all of it, so a wall or a room hides, and a post, a beam, goods on a counter, or a
+    /// well's posts with its windlass across them (about 70%) do not: on the 1 m tiles a post's
+    /// square hides the whole tile it lands on, which can close the view across a turned well.
+    pub solid: f32,
 }
 
 impl Default for Sight {
     fn default() -> Self {
-        Self { eye_m: 1.6, hides_m: Default::default() }
+        Self { eye_m: 1.6, hides_m: Default::default(), solid: 0.8 }
     }
 }
 
@@ -178,14 +188,21 @@ impl Sight {
         *self == Self::default()
     }
 
-    /// Whether a thing of `kind` whose model is `height_m` tall hides what is behind it. A kind
-    /// named in `hides_m` hides by that value; otherwise by its model's height, and a thing with
-    /// no height known (0: no model) hides, as walls did before.
+    /// Whether a thing of `kind` whose model is `height_m` tall rises above the eye (so it may
+    /// hide what is behind it, where it is solid). A kind named in `hides_m` does by that value;
+    /// otherwise by its model's height, and a thing with no height known (0: no model) does, as
+    /// walls did before.
     pub fn hides(&self, kind: &str, height_m: f32) -> bool {
         match self.hides_m.get(kind) {
             Some(&h) => h > self.eye_m,
             None => height_m <= 0.0 || height_m > self.eye_m,
         }
+    }
+
+    /// Whether a model's `eye_cells` decide where it hides: its kind is not named in `hides_m`,
+    /// and the eye lies in the band they were measured in.
+    pub fn by_cells(&self, kind: &str) -> bool {
+        !self.hides_m.contains_key(kind) && (settle::EYE_BAND_M.0..=settle::EYE_BAND_M.1).contains(&self.eye_m)
     }
 }
 

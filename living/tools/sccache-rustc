@@ -1,0 +1,14 @@
+#!/bin/sh
+# RUSTC_WRAPPER that runs rustc through sccache (living/tools/check.py sets it; docs/TOOLING.md).
+#
+# sccache puts every CARGO_* variable in a Rust compile's cache key. Cargo hands rustc the
+# caller's environment, so a worktree's private CARGO_TARGET_DIR (or terminal settings) would
+# make each worktree's cache entries its own. rustc reads none of these, so they are removed
+# here; registry crates then hit across worktrees on one machine. (The cwd and
+# CARGO_MANIFEST_DIR stay in the key, so workspace crates still hit only in their own
+# worktree, and cargo does not cache incremental builds of them anyway.)
+unset CARGO_TARGET_DIR CARGO_BUILD_TARGET_DIR CARGO_BUILD_BUILD_DIR CARGO_BUILD_JOBS \
+  CARGO_TERM_COLOR CARGO_TERM_PROGRESS_WHEN CARGO_TERM_PROGRESS_WIDTH CARGO_TERM_VERBOSE \
+  CARGO_TERM_QUIET CARGO_TERM_HYPERLINKS CARGO_TERM_UNICODE CARGO_LOG CARGO_HTTP_TIMEOUT \
+  CARGO_NET_RETRY CARGO_NET_OFFLINE
+exec "${SLOP_SCCACHE:-sccache}" "$@"

@@ -1,0 +1,226 @@
+{
+ "schema": 1,
+ "family": "building:cone",
+ "id": "20261111-368e2af4-238aaa",
+ "published": "2026-11-11T17:41:30+01:00",
+ "track": "kit-1",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-1 pass 1: built for its lot from the plan (footprint, height, wear and seed from plan.json); glow set in the game at 21:30 against 13:00. The pot room is now in the lot's south-west corner and the stair winds up the east flank, so the model stays inside its 14 m lot; two mouths lit and a third half open",
+ "source": {
+  "commit": "368e2af4b14033a9e8da023fcc63b95c27a5a9bb",
+  "branch": "kit-1",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "5f70615004be4033b28a542e829eaf40b0eef97ddcc9c31bb4e4b906c7bd9803",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "86fae680d923921d2c41e9dffc8d39c75cc88752",
+  "dirty": false,
+  "key": "86fae680",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-cone/20261111-368e2af4-238aaa",
+ "members": [
+  {
+   "name": "cone",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/cone/cone.glb",
+   "sha256": "4ee859cb6c1c94ddbce3765dddf5eb83d17fa13b22a98a6acecc5a6daf1896b2",
+   "stats": {
+    "file": "cone.glb",
+    "sha256": "4ee859cb6c1c94ddbce3765dddf5eb83d17fa13b22a98a6acecc5a6daf1896b2",
+    "bytes": 707968,
+    "triangles": 10258,
+    "vertices": 20132,
+    "parts": {
+     "cone": 10258
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowAmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 24,
+    "palette": [
+     {
+      "hex": "#3f4249",
+      "share": 0.3517
+     },
+     {
+      "hex": "#53342c",
+      "share": 0.2969
+     },
+     {
+      "hex": "#5c5e65",
+      "share": 0.16
+     },
+     {
+      "hex": "#252120",
+      "share": 0.0946
+     },
+     {
+      "hex": "#3d2b28",
+      "share": 0.0285
+     },
+     {
+      "hex": "#807b72",
+      "share": 0.0183
+     },
+     {
+      "hex": "#794231",
+      "share": 0.0157
+     },
+     {
+      "hex": "#944d38",
+      "share": 0.0099
+     },
+     {
+      "hex": "#d3cdb5",
+      "share": 0.0073
+     },
+     {
+      "hex": "#4a515f",
+      "share": 0.0043
+     },
+     {
+      "hex": "#2c2c31",
+      "share": 0.0036
+     },
+     {
+      "hex": "#c78029",
+      "share": 0.0032
+     },
+     {
+      "hex": "#56423e",
+      "share": 0.0029
+     },
+     {
+      "hex": "#8d887e",
+      "share": 0.0011
+     },
+     {
+      "hex": "other",
+      "share": 0.0023
+     }
+    ]
+   },
+   "file": "files/cone.glb",
+   "report": {
+    "file": "cone/cone.glb",
+    "what": "lot",
+    "kind": "cone",
+    "size_m": [
+     14,
+     14
+    ],
+    "plan_height_m": 24.0,
+    "seed": 9745,
+    "above_floor_m": [
+     [
+      -6.998,
+      -6.95
+     ],
+     [
+      6.998,
+      7.002
+     ]
+    ],
+    "height_m": 24.0,
+    "foundation_m": 1.8,
+    "tris": 10258,
+    "materials": {
+     "Body": 10234,
+     "GlowAmber": 24
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.931,
+    "palette_wear_blend_share": 0.069,
+    "budget_tris": 12000,
+    "doors": [],
+    "sha256": "4ee859cb6c1c94ddbce3765dddf5eb83d17fa13b22a98a6acecc5a6daf1896b2",
+    "body_m": [
+     14.0,
+     14.0
+    ],
+    "ridge_m": 24.0,
+    "opening_m": 3.2
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     14.334379196166992,
+     25.799999237060547,
+     14.250099182128906
+    ],
+    "triangles": 10258,
+    "vertices": 20132,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowAmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": [
+  {
+   "title": "kit-1 page: the dressed city at 13:00, dusk and 21:30, the checks",
+   "path": "delivered/kit-1-page/index.html",
+   "from": ".local/kit-1-page"
+  }
+ ],
+ "baseline_render": {
+  "version": "20261111-80b4ec94-95508a",
+  "path": "vs/20261111-80b4ec94-95508a/render",
+  "renderer": "86fae680",
+  "members": {
+   "cone": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ]
+  }
+ }
+}

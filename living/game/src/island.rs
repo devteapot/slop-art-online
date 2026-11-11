@@ -316,8 +316,9 @@ impl Island {
             let Some(file) = exact.or_else(|| (!files.is_empty()).then(|| pick(&files, pi, 17))) else {
                 // A planned settlement's stairs and retaining walls without models: grey
                 // treads and walls, so the grey city can be walked and read.
+                // A kit that lists its fixtures (below) brings its own flights and walls.
                 use living_rules::settle::PropKind;
-                if pr.model_file.is_none() && land.settlements[pr.settlement as usize].planned {
+                if pr.model_file.is_none() && land.settlements[pr.settlement as usize].planned && crate::envs::fixtures(env).is_empty() {
                     let (c, f) = (Vec2::new(pr.centre.0, pr.centre.1), Vec2::new(pr.front.0, pr.front.1).normalize_or(Vec2::X));
                     match pr.kind {
                         PropKind::Stairs => {
@@ -336,6 +337,19 @@ impl Island {
                 continue;
             };
             put(Item { kind: pr.kind.id().to_string(), file, at: Vec2::new(pr.centre.0, pr.centre.1), yaw: pr.yaw, height: pr.height_m, k: pi, floor: Some(pr.floor_m), native: true, ..default() });
+        }
+        // A planned settlement's fixtures: what its kit builds for places that are not lots (a
+        // quay's wall, the walls and flights of its drops, street dressing), listed by the kit's
+        // generator in `envs/<env>/fixtures.json` (docs/AUTHORED_PLANS.md). Presentation only:
+        // the rules know none of them. They replace the grey stand-ins above.
+        let mut kits: Vec<&str> = land.settlements.iter().filter(|s| s.planned).map(|s| living_rules::settle::env_of(&s.style)).collect();
+        kits.sort_unstable();
+        kits.dedup();
+        for env in kits {
+            for (fi, fx) in crate::envs::fixtures(env).iter().enumerate() {
+                let kind = fx.light.clone().unwrap_or_else(|| fx.kind.clone());
+                put(Item { kind, file: fx.file.clone(), at: Vec2::new(fx.at[0], fx.at[1]), yaw: fx.front[0].atan2(fx.front[1]), height: fx.height, glow: fx.glow, k: 100_000 + fi, floor: Some(fx.floor), native: true, ..default() });
+            }
         }
         for (si, st) in land.settlements.iter().enumerate() {
             let env = living_rules::settle::env_of(&st.style);

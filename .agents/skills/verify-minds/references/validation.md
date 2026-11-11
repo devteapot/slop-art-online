@@ -1,5 +1,12 @@
 # Internal mind validation
 
+
+## 2026-11-11 eye-2: a mind is told of drops and low things (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. New case `drop` ([features/drop.md](../features/drop.md)) on an island world: the scene sent to the fake model words the drop and the low tiles and lists the one across each. `minds-eye2-drop1` (first run) and `minds-eye2v` (`drop` and `sight`, on the final build, with the mind's tests): both pass. What the mind is shown, before (by the old format, the same direction and distance) and after:
+- before: `"drop": "west 1"`, and no low thing at all;
+- after: `"drop": "west 1, a drop to ground at another level (stairs, ramps and roads join the levels): you can see past it but not walk through it"`, `"low": "east 1, something low or open in the way, such as a cart, a low wall or an open stall: you can see past it but not walk through it"`.
+
 ## 2026-11-11 fix-death-labels on main (Spark)
 
 Main at `7837320` (the merge of `fix-death-labels`), branch `fix-death-names-minds`, worktree on the DGX Spark, trial container `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, load average 19–29 from other work.

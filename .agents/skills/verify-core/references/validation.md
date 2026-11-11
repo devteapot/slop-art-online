@@ -11,6 +11,21 @@ Branch `lives-3` (from the coordinator's main `3faa7bfb`; origin/main `12fd78ef`
 - `lives.py --minutes 24` on island runs: `core-l3-lives` 17 of 19 (two carriers did not set out), `core-l3-lives2` 18 of 19, and `core-l3base-lives` on the origin/main build 18 of 19 with the same failure: Tavvik, the meat carrier, never leaves (stages reached none of 10). Not this change (the island's graphs have no `work_hours`, its rhythms are drawn and unchanged); a finding for the lives owner: the 2026-11-11 `core-hunger-101946-lives` run had 19 of 19.
 - Not run on this change: tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, goods, stock, laws, infant, lifecycle, wildlife, remains, flee; mechanics and steering.
 
+
+## 2026-11-11 eye-2: things open at eye height are see-through (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+
+| Scene | Run | Result |
+| --- | --- | --- |
+| `sight` (default world) | `core-eye2v` | 6 of 6 |
+| `senses` (default world) | `core-eye2v` | 6 of 6 |
+| `low` (island; 9,153 low tiles since eye-2) | `core-eye2v-skirmish` | 5 of 5; the run crossed low tiles at (437, 174)–(437, 175) (`low-spots.json`), no longer only a cart's |
+| `drop` (plan-test) | `core-eye2v-drop` | 5 of 5 |
+| Rules | `cargo test -p living-rules` (in `just living-check`) | 154 passed, including `host::tests::a_well_and_an_open_stall_are_seen_through_but_a_closed_building_is_not`, `sight_is_blocked_only_above_eye_height`, `eye_cells_decode`, `pinned_digests_hold`, `map::tests::drops_and_low_things_are_told_in_words` |
+
+Maintained in the same change: sight.md (low things since eye-2, the rules tests, the night-sight gotcha of `drop`/`low`), SKILL.md, features/README.md and `scenes.py`'s docstring no longer say a low thing is a cart.
+
 ## 2026-11-11 drop-1: drops and low things are see-through (dev-box)
 
 Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
