@@ -200,6 +200,10 @@ pub struct Action {
     pub offer: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record: Option<u64>,
+    /// Run instead of walk on the way (goto, follow, the approach to a target), at the cost of
+    /// breath, while it lasts (`pools(a)`). A flight runs unless this says false.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

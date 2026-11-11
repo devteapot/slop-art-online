@@ -93,7 +93,7 @@ fn describe(c: &SkillCtx) -> String {
 /// The functions the engine calls with a context: `<skill>_check`, `_duration`, `_done`, `_hit`,
 /// `_missile`, and the need laws.
 pub const SKILL_PARTS: [&str; 5] = ["_check", "_duration", "_done", "_hit", "_missile"];
-pub const CTX_LAWS: [&str; 7] = ["rates", "body_state", "move_speed", "senses", "motion", "theft", "glow"];
+pub const CTX_LAWS: [&str; 9] = ["rates", "body_state", "move_speed", "senses", "motion", "theft", "glow", "pools", "slowed"];
 
 pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     if let Some(f) = s.borrowed.first() {
@@ -311,6 +311,14 @@ fn needs(p: &mut Probe) -> Result<(), String> {
             }
             let d = p.ctx("motion", &c)?;
             super::decode_moves(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+            if s.has("pools") {
+                let d = p.ctx("pools", &c)?;
+                super::decode_pools(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+            }
+            if s.has("slowed") {
+                let d = p.ctx("slowed", &c)?;
+                d.into_string().map_err(|_| format!("install refused: slowed must return words (\"\" when not slowed) ({})", describe(&c)))?;
+            }
             // Senses and glow, with and without a torch in the pack, in lamplight or not, and in
             // twilight: within the law's own reach.
             for (torch, lit, twilight) in [(false, false, false), (true, false, false), (false, true, false), (false, false, true), (true, true, true)] {

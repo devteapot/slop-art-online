@@ -920,7 +920,7 @@ pub fn moves_of(ctx: &ReducerContext, id: u32, now: u64) -> living_rules::script
     hot(ctx, id, &w, now, "motion", |h| &mut h.moves, |sc, c| {
         sc.moves(c).unwrap_or_else(|e| {
             log::warn!("motion for {id}: {e}");
-            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0, wander_turn: 1.2, wander_keep_s: 0.0 }
+            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0, wander_turn: 1.2, wander_keep_s: 0.0, top: f32::INFINITY }
         })
     })
 }

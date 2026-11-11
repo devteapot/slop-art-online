@@ -75,6 +75,10 @@ pub struct ActorFacts {
     /// light (its traits in `structures()`), or within the light of a fire that burns fuel while
     /// it is lit.
     pub lit: bool,
+    /// Breath (`stamina`) and the non-bodily pool (`focus`) now, as the `pools(a)` law and the
+    /// vitals row give them (docs/STAMINA_PROPOSAL.md).
+    pub stamina: f32,
+    pub focus: f32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -276,6 +280,9 @@ pub enum Effect {
     Harvest { qty: f32 },
     /// Change the actor's needs.
     Vitals { hp: f32, hunger: f32, energy: f32 },
+    /// Spend from one of the actor's short pools (`stamina` or `focus`, the `pools(a)` law):
+    /// its refill starts after the pool's delay.
+    Spend { pool: String, amount: f32 },
     /// Eat the grass where the actor stands (the chunk's pasture).
     Graze,
     /// Damage the target creature.
@@ -563,12 +570,15 @@ pub struct Moves {
     /// search keeps a direction; otherwise it picks one at random.
     pub wander_turn: f32,
     pub wander_keep_s: f32,
+    /// The fastest a road takes a body (m/s): the road's bonus stops here, though a body that
+    /// is faster on its own keeps its speed (infinite: no cap; a law without `top`).
+    pub top: f32,
 }
 
 impl Moves {
     /// Steering constants for [`crate::steer::plan`] (the road's speed is the world's).
     pub fn tuning(&self, road_speed: f32) -> crate::steer::Tuning {
-        crate::steer::Tuning { turn_rate: self.turn_rate, turn_slow: self.turn_slow, road_speed, ..Default::default() }
+        crate::steer::Tuning { turn_rate: self.turn_rate, turn_slow: self.turn_slow, road_speed, top: self.top, ..Default::default() }
     }
 }
 
@@ -809,6 +819,7 @@ pub struct Scripts {
     /// `senses(a)` and `motion(a)` the same way.
     senses: RefCell<HashMap<Vec<u8>, Senses>>,
     moves: RefCell<HashMap<Vec<u8>, Moves>>,
+    pools: RefCell<HashMap<Vec<u8>, crate::pools::Pools>>,
     /// `glow(a)` the same way.
     glows: RefCell<HashMap<Vec<u8>, f32>>,
     /// Life tables under the `life_years` law, by species.
@@ -1049,7 +1060,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1578,6 +1589,16 @@ impl Scripts {
     #[doc(hidden)]
     pub fn moves_unshared(&self, ctx: &SkillCtx) -> Result<Moves, String> {
         decode_moves(self.call("motion", ctx)?)
+    }
+
+    /// A creature's short pools (`pools(a)`), kept per state; the shipped numbers when the
+    /// script has no such law. The engine finishes the cap and the refill for the body's
+    /// tiredness (`crate::pools::PoolLaw::cap`, `regen`).
+    pub fn pools(&self, ctx: &SkillCtx) -> Result<crate::pools::Pools, String> {
+        if !self.has("pools") {
+            return Ok(crate::pools::Pools::default());
+        }
+        self.per_state("pools", &self.pools, ctx, || decode_pools(self.call("pools", ctx)?))
     }
 
     /// The same, asking the law every time (benchmarks and install checks).
@@ -2181,6 +2202,46 @@ fn decode_moves(d: Dynamic) -> Result<Moves, String> {
         separation_weight: g("separation_weight", 0.0, 5.0)?,
         wander_turn: g("wander_turn", 0.0, std::f32::consts::PI)?,
         wander_keep_s: g("wander_keep_s", 0.0, 3_600.0)?,
+        top: if m.contains_key("top") { g("top", 0.5, 50.0)? } else { f32::INFINITY },
+    })
+}
+
+/// `pools(a)`: `#{ stamina: #{ max, regen_per_s, delay_ms, run_per_s, guard_per_s, resume,
+/// tires_per_point, rested_at, spent_share, exhausted_below, exhausted_regen }, focus: #{ max,
+/// regen_per_s, delay_ms } }`; a field left out keeps the shipped number.
+fn decode_pools(d: Dynamic) -> Result<crate::pools::Pools, String> {
+    let m = d.try_cast::<Map>().ok_or("pools must return a map with stamina and focus")?;
+    let base = crate::pools::Pools::default();
+    let sub = |k: &str| -> Result<Map, String> { m.get(k).map(|v| v.clone().try_cast::<Map>().ok_or_else(|| format!("pools: `{k}` must be a map"))).unwrap_or_else(|| Ok(Map::new())) };
+    let (st, fo) = (sub("stamina")?, sub("focus")?);
+    let g = |m: &Map, k: &str, d: f32, lo: f32, hi: f32| -> Result<f32, String> {
+        match m.get(k) {
+            None => Ok(d),
+            Some(v) => number(v).map(|v| (v as f32).clamp(lo, hi)).ok_or_else(|| format!("pools: `{k}` must be a number")),
+        }
+    };
+    let pool = |m: &Map, b: crate::pools::PoolLaw| -> Result<crate::pools::PoolLaw, String> {
+        Ok(crate::pools::PoolLaw {
+            max: g(m, "max", b.max, 0.0, 10_000.0)?,
+            regen_per_s: g(m, "regen_per_s", b.regen_per_s, 0.0, 10_000.0)?,
+            delay_ms: g(m, "delay_ms", b.delay_ms as f32, 0.0, 600_000.0)? as u32,
+            rested_at: g(m, "rested_at", b.rested_at, 0.0, 100.0)?,
+            spent_share: g(m, "spent_share", b.spent_share, 0.0, 1.0)?,
+            exhausted_below: g(m, "exhausted_below", b.exhausted_below, 0.0, 100.0)?,
+            exhausted_regen: g(m, "exhausted_regen", b.exhausted_regen, 0.0, 10.0)?,
+        })
+    };
+    // Focus does not depend on tiredness unless the law says so.
+    let unbound = crate::pools::PoolLaw { rested_at: 0.0, spent_share: 1.0, exhausted_below: 0.0, exhausted_regen: 1.0, ..base.focus };
+    Ok(crate::pools::Pools {
+        stamina: pool(&st, base.stamina)?,
+        breath: crate::pools::Breath {
+            run_per_s: g(&st, "run_per_s", base.breath.run_per_s, 0.0, 10_000.0)?,
+            guard_per_s: g(&st, "guard_per_s", base.breath.guard_per_s, 0.0, 10_000.0)?,
+            resume: g(&st, "resume", base.breath.resume, 0.0, 10_000.0)?,
+            tires_per_point: g(&st, "tires_per_point", base.breath.tires_per_point, 0.0, 10.0)?,
+        },
+        focus: pool(&fo, unbound)?,
     })
 }
 
@@ -2480,6 +2541,10 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "remove" => Effect::Remove { item: s("item"), qty: qty()? },
         "harvest" => Effect::Harvest { qty: n("qty") as f32 },
         "vitals" => Effect::Vitals { hp: n("hp") as f32, hunger: n("hunger") as f32, energy: n("energy") as f32 },
+        "spend" => match s("pool").as_str() {
+            p @ ("stamina" | "focus") => Effect::Spend { pool: p.into(), amount: (n("amount") as f32).max(0.0) },
+            p => return Err(format!("spend: pool `{p}` is not stamina or focus")),
+        },
         "graze" => Effect::Graze,
         "damage" => Effect::Damage { amount: n("amount") as f32 },
         "heal" => Effect::Heal { amount: n("amount") as f32 },

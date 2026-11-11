@@ -71,11 +71,13 @@ pub struct Tuning {
     pub clearance: f32,
     /// Walking speed multiplier on road tiles.
     pub road_speed: f32,
+    /// The road's bonus stops at this speed (m/s; a body faster on its own keeps its speed).
+    pub top: f32,
 }
 
 impl Default for Tuning {
     fn default() -> Self {
-        Self { turn_rate: 6.0, snap: 0.12, sharp: 1.1, turn_slow: 0.4, clearance: 0.25, road_speed: 1.4 }
+        Self { turn_rate: 6.0, snap: 0.12, sharp: 1.1, turn_slow: 0.4, clearance: 0.25, road_speed: 1.4, top: f32::INFINITY }
     }
 }
 
@@ -150,7 +152,7 @@ pub fn plan(map: &Map, p: (f32, f32), heading: f32, cur_speed: f32, want: Want, 
 
 fn sweep_plan(map: &Map, p: (f32, f32), heading: f32, cur_speed: f32, dir: f32, want: Want, t: &Tuning) -> Segment {
     let err = wrap(dir - heading);
-    let base = want.speed * (1.0 + (t.road_speed - 1.0) * road_share(map, p, dir));
+    let base = road_pace(want.speed, road_share(map, p, dir), t);
     // Standing, a body turns on the spot (no arc) and sets off facing the way.
     let from_rest = cur_speed < base * 0.3;
     let mut seg = if want.agile || from_rest || err.abs() <= t.snap {
@@ -171,6 +173,13 @@ fn sweep_plan(map: &Map, p: (f32, f32), heading: f32, cur_speed: f32, dir: f32, 
     seg.dur = free;
     seg.blocked = blocked;
     seg
+}
+
+/// A body's speed with the road under it: the road's bonus in proportion to the road ahead,
+/// up to the top speed (`motion(a).top`); a body already faster on its own is not slowed.
+pub fn road_pace(speed: f32, share: f32, t: &Tuning) -> f32 {
+    let boosted = speed * (1.0 + (t.road_speed - 1.0) * share);
+    if boosted > t.top { t.top.max(speed) } else { boosted }
 }
 
 /// Share of road on the ground just ahead (the next two tiles along `dir`): roads speed a
@@ -296,5 +305,18 @@ mod tests {
         // Leaving the road: in proportion to the road still ahead.
         let s = plan(&m, (8.8, 5.5), 0.0, 2.0, want, &t);
         assert!(s.speed > 2.0 && s.speed < 2.0 * t.road_speed, "{s:?}");
+    }
+
+    #[test]
+    fn a_road_speeds_a_run_only_up_to_the_top_speed() {
+        let t = Tuning { top: 5.5, ..Default::default() };
+        // A walk (2.6) on a road: 3.64, under the top.
+        assert!((road_pace(2.6, 1.0, &t) - 3.64).abs() < 1e-4);
+        // A run (4.81): 6.73 uncapped, 5.5 capped.
+        assert_eq!(road_pace(4.81, 1.0, &t), 5.5);
+        assert!((road_pace(4.81, 0.0, &t) - 4.81).abs() < 1e-6, "off road the run is its own");
+        // Faster than the top on its own (a deer's flight, 6.8): not slowed by a road.
+        assert_eq!(road_pace(6.8, 1.0, &t), 6.8);
+        assert_eq!(road_pace(4.81, 1.0, &Tuning::default()), 4.81 * 1.4, "no top: no cap");
     }
 }
