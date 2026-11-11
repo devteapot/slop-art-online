@@ -353,7 +353,8 @@ pub fn env_crowd(commands: &mut Commands, assets: &AssetServer, place: &str, cen
 #[derive(Component)]
 pub struct Character {
     pub recipe: Recipe,
-    /// This character's stride against its base at 1.75 m: locomotion clips play at
+    /// This character's stride against its clip file's figure at 1.75 m (its own base, or the
+    /// shared clip file's figure for generated people, `shape`): locomotion clips play at
     /// `speed / (clip speed × stride)` so feet don't slide.
     pub stride: f32,
 }
@@ -399,7 +400,7 @@ impl FileHandle {
 
 /// A character file's root glTF, loaded once and held for the session (there are only a few
 /// bases).
-fn kept(assets: &AssetServer, file: &str) -> Handle<bevy::gltf::Gltf> {
+pub fn kept(assets: &AssetServer, file: &str) -> Handle<bevy::gltf::Gltf> {
     static KEPT: OnceLock<Mutex<HashMap<String, Handle<bevy::gltf::Gltf>>>> = OnceLock::new();
     KEPT.get_or_init(Default::default).lock().unwrap().entry(file.to_string()).or_insert_with(|| assets.load(file.to_string())).clone()
 }
@@ -675,8 +676,16 @@ pub fn shape(
         fit.size = Vec3::new(size_units.x * p.arms * p.build.sqrt() * k, ch.recipe.height, size_units.z * p.build * k);
         fit.y_off = -lo * k;
         fit.center = Vec3::new(fit.center.x / k0 * k, ch.recipe.height * 0.5, fit.center.z / k0 * k);
-        // Stride against the base at 1.75 m.
-        let base_hip = (hips0.y - lo) * 1.75 / (top0 - lo).max(0.01);
+        // Stride against the base at 1.75 m. The clips' sidecar gives metres of the figure they
+        // were baked on, scaled to 1.75 m (animate.py `--height`). That is this file's figure,
+        // or, for clips from a shared clip file, that file's: same skeleton, other meshes (hair
+        // and clothes make it a few centimetres taller or shorter), so its height stands in.
+        let clips = crate::anim::clip_file(&model.file);
+        let figure = match (clips != model.file).then(|| (crate::lookdev::figure_height(&clips), crate::lookdev::figure_height(&model.file))) {
+            Some((Some(theirs), Some(ours))) if ours > 0.01 => (top0 - lo) * theirs / ours,
+            _ => top0 - lo,
+        };
+        let base_hip = (hips0.y - lo) * 1.75 / figure.max(0.01);
         ch.stride = ((hips_y - lo) * k / base_hip.max(0.01)).max(0.05);
         debug!("characters: {} {:.2} m (×{k:.3}), hips ×{hips_k:.3}, stride {:.2}", ch.recipe.name, ch.recipe.height, ch.stride);
         commands.entity(e).insert(Shaped { hips: Some(hips), hips_k, written: Vec3::NAN, scales, helpers });
@@ -848,7 +857,13 @@ pub fn recolor(
 
 /// `LIVING_GAME_PERF=frames`: frame times every 2 s outside the island, with the number of
 /// characters and outfit meshes.
-pub fn frames(time: Res<Time>, island: Option<Res<crate::island::Island>>, chars: Query<(), With<Character>>, pieces: Query<(), With<outfit::Piece>>, mut acc: Local<(f32, f32, u32)>) {
+pub fn frames(
+    time: Res<Time>,
+    island: Option<Res<crate::island::Island>>,
+    chars: Query<Option<&crate::lookdev::Lod>, With<Character>>,
+    pieces: Query<(), With<outfit::Piece>>,
+    mut acc: Local<(f32, f32, u32)>,
+) {
     if island.is_some() || !crate::perf::has("frames") {
         return;
     }
@@ -859,7 +874,16 @@ pub fn frames(time: Res<Time>, island: Option<Res<crate::island::Island>>, chars
     if acc.0 < 2.0 {
         return;
     }
-    info!("people perf: mean {:.2} ms ({:.0} fps), worst {:.1} ms; {} characters, {} outfit meshes", acc.0 / acc.2 as f32 * 1000.0, acc.2 as f32 / acc.0, acc.1 * 1000.0, chars.iter().count(), pieces.iter().count());
+    // People with a far model (`lookdev::far_models`): how many show it now.
+    let (lods, far) = chars.iter().flatten().filter(|l| l.has_far()).fold((0, 0), |(n, f), l| (n + 1, f + usize::from(l.far_now == Some(true))));
+    info!(
+        "people perf: mean {:.2} ms ({:.0} fps), worst {:.1} ms; {} characters, {} outfit meshes, {far} of {lods} with a far model show it",
+        acc.0 / acc.2 as f32 * 1000.0,
+        acc.2 as f32 / acc.0,
+        acc.1 * 1000.0,
+        chars.iter().count(),
+        pieces.iter().count()
+    );
     *acc = (0.0, 0.0, 0);
 }
 

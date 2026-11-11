@@ -482,68 +482,80 @@ class Face:
             r = self.rings[side]
             first, ring = r["first"], r["ring"]
             k = len(ring)
-            # The lids' rim: the ring again, turned in behind the skin as far as the eye's ball.
-            ring_pos = skin[first : first + k]
-            nrm = self.skin_normals[first : first + k]
-            ball = self.balls[side]
-            oc = ring_pos - ball
-            b_ = np.sum(oc * -nrm, axis=1)
-            disc = b_ * b_ - (np.sum(oc * oc, axis=1) - EYE_R * EYE_R)
-            reach = np.where(disc > 0, -b_ - np.sqrt(np.maximum(disc, 0)), self.RIM)
-            reach = np.clip(reach + 0.0005, self.RIM, 0.012)
-            base = m.add(ring_pos - nrm * reach[:, None], look["skin_rim"], self.skin_uvs[first : first + k], [], "face")
-            mid_ring = ring_pos.mean(axis=0)
-            for i in range(k):
-                q = (first + i, first + (i + 1) % k, base + (i + 1) % k, base + i)
-                c = np.array([m.v[v] for v in q])
-                # The rim looks into the opening.
-                if np.dot(np.cross(c[1] - c[0], c[2] - c[0]), mid_ring - c.mean(axis=0)) < 0:
-                    q = tuple(reversed(q))
-                m.f.append(q)
-                m.fm.append("face")
-            # The eye's white: a patch of its ball behind the opening, with the lid's shadow painted.
-            nx, nz = 10, 7
-            mid, scale = eye_frame(hf)
-            hw, hh = EYE_COLS / 2 / scale, EYE_ROWS / 2 / scale
-            pts = [(side * hf.eye_x + lerp(-hw, hw, i / nx), hf.eye_z + mid + lerp(-hh, hh, j / nz)) for j in range(nz + 1) for i in range(nx + 1)]
-            faces = [(j * (nx + 1) + i, j * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i) for j in range(nz) for i in range(nx)]
-            m.add(on_ball(ball, [q[0] for q in pts], [q[1] for q in pts]), white, eye_uv(hf, side, [q[0] for q in pts], [q[1] for q in pts]), faces, "eye", facing=FORWARD)
-            # The iris: its own layer just off the white, following the eye's bone, so the eye
-            # can look round. `look` (yaw, pitch in degrees) turns it in the file, to photograph.
-            yaw, pitch = state.get("look", (0.0, 0.0))
-            cx, cz = iris_centre(hf, side)
-            r = hf.iris_r
-            seg = 24
-            ring_uv = lambda rho: [(math.cos(2 * math.pi * i / seg) * rho, math.sin(2 * math.pi * i / seg) * rho) for i in range(seg)]
-            disc_ = [(0.0, 0.0)] + ring_uv(0.55) + ring_uv(1.0)
-            xs = [cx + a * r * IRIS_WIDE for a, _ in disc_]
-            zs = [cz + b * r for _, b in disc_]
-            half = IRIS_PX * IRIS_FILL
-            uv = [((IRIS_COL0 + IRIS_PX / 2 + side * -a * half * IRIS_WIDE * 0 + a * half * IRIS_WIDE) / ATLAS, 1 - (IRIS_PX / 2 - b * half) / ATLAS) for a, b in disc_]
-            faces = [(0, 1 + i, 1 + (i + 1) % seg) for i in range(seg)] + [(1 + i, 1 + seg + i, 1 + seg + (i + 1) % seg, 1 + (i + 1) % seg) for i in range(seg)]
-            m.add(turn(on_ball(ball, xs, zs, 0.0006), ball, yaw, pitch), white, uv, faces, "iris", facing=FORWARD, eye=(side, 1.0))
-            # Highlights: both eyes are lit from the same side. They follow the eye half way,
-            # as a reflection does.
-            hs = look.get("light_side", 1.0)
-            for hx, hz, hrx, hrz in ((0.36 * hs, 0.36, 0.25, 0.20), (-0.34 * hs, -0.46, 0.105, 0.09)):
-                n_ = 12
-                ex = [cx + hx * r] + [cx + (hx + hrx * math.cos(2 * math.pi * i / n_)) * r for i in range(n_)]
-                ez = [cz + hz * r] + [cz + (hz + hrz * math.sin(2 * math.pi * i / n_)) * r for i in range(n_)]
-                m.add(turn(on_ball(ball, ex, ez, 0.0011), ball, 0.5 * yaw, 0.5 * pitch), (1.0, 1.0, 0.985), None, [(0, 1 + i, 1 + (i + 1) % n_) for i in range(n_)], "glint", facing=FORWARD, eye=(side, 0.5))
+            self._eye(m, skin, side, state)
             self._lines(m, side, state, dark)
             self._brow(m, side, state)
         self._mouth_inside(m, state)
         self._ears(m)
         return m
 
-    def _shell(self, m, pts, faces, cols, mat, off):
-        p, nr = self.hf.project_front(pts)
-        m.add(p + nr * off, cols, None, faces, mat, facing=FORWARD)
+    def _eye(self, m, skin, side, state):
+        """An eye behind its opening: the lids' rim turned in, the white, the iris on the eye's bone and the highlights."""
+        hf, look = self.hf, self.look
+        white = (1.0, 1.0, 1.0)
+        r = self.rings[side]
+        first, ring = r["first"], r["ring"]
+        k = len(ring)
+        # The lids' rim: the ring again, turned in behind the skin as far as the eye's ball.
+        ring_pos = skin[first : first + k]
+        nrm = self.skin_normals[first : first + k]
+        ball = self.balls[side]
+        oc = ring_pos - ball
+        b_ = np.sum(oc * -nrm, axis=1)
+        disc = b_ * b_ - (np.sum(oc * oc, axis=1) - EYE_R * EYE_R)
+        reach = np.where(disc > 0, -b_ - np.sqrt(np.maximum(disc, 0)), self.RIM)
+        reach = np.clip(reach + 0.0005, self.RIM, 0.012)
+        base = m.add(ring_pos - nrm * reach[:, None], look["skin_rim"], self.skin_uvs[first : first + k], [], "face")
+        mid_ring = ring_pos.mean(axis=0)
+        for i in range(k):
+            q = (first + i, first + (i + 1) % k, base + (i + 1) % k, base + i)
+            c = np.array([m.v[v] for v in q])
+            # The rim looks into the opening.
+            if np.dot(np.cross(c[1] - c[0], c[2] - c[0]), mid_ring - c.mean(axis=0)) < 0:
+                q = tuple(reversed(q))
+            m.f.append(q)
+            m.fm.append("face")
+        # The eye's white: a patch of its ball behind the opening, with the lid's shadow painted.
+        nx, nz = 10, 7
+        mid, scale = eye_frame(hf)
+        hw, hh = EYE_COLS / 2 / scale, EYE_ROWS / 2 / scale
+        pts = [(side * hf.eye_x + lerp(-hw, hw, i / nx), hf.eye_z + mid + lerp(-hh, hh, j / nz)) for j in range(nz + 1) for i in range(nx + 1)]
+        faces = [(j * (nx + 1) + i, j * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i) for j in range(nz) for i in range(nx)]
+        m.add(on_ball(ball, [q[0] for q in pts], [q[1] for q in pts]), white, eye_uv(hf, side, [q[0] for q in pts], [q[1] for q in pts]), faces, "eye", facing=FORWARD)
+        # The iris: its own layer just off the white, following the eye's bone, so the eye
+        # can look round. `look` (yaw, pitch in degrees) turns it in the file, to photograph.
+        yaw, pitch = state.get("look", (0.0, 0.0))
+        cx, cz = iris_centre(hf, side)
+        r = hf.iris_r
+        seg = 24
+        ring_uv = lambda rho: [(math.cos(2 * math.pi * i / seg) * rho, math.sin(2 * math.pi * i / seg) * rho) for i in range(seg)]
+        disc_ = [(0.0, 0.0)] + ring_uv(0.55) + ring_uv(1.0)
+        xs = [cx + a * r * IRIS_WIDE for a, _ in disc_]
+        zs = [cz + b * r for _, b in disc_]
+        half = IRIS_PX * IRIS_FILL
+        uv = [((IRIS_COL0 + IRIS_PX / 2 + side * -a * half * IRIS_WIDE * 0 + a * half * IRIS_WIDE) / ATLAS, 1 - (IRIS_PX / 2 - b * half) / ATLAS) for a, b in disc_]
+        faces = [(0, 1 + i, 1 + (i + 1) % seg) for i in range(seg)] + [(1 + i, 1 + seg + i, 1 + seg + (i + 1) % seg, 1 + (i + 1) % seg) for i in range(seg)]
+        m.add(turn(on_ball(ball, xs, zs, 0.0006), ball, yaw, pitch), white, uv, faces, "iris", facing=FORWARD, eye=(side, 1.0))
+        # Highlights: both eyes are lit from the same side. They follow the eye half way,
+        # as a reflection does.
+        hs = look.get("light_side", 1.0)
+        for hx, hz, hrx, hrz in ((0.36 * hs, 0.36, 0.25, 0.20), (-0.34 * hs, -0.46, 0.105, 0.09)):
+            n_ = 12
+            ex = [cx + hx * r] + [cx + (hx + hrx * math.cos(2 * math.pi * i / n_)) * r for i in range(n_)]
+            ez = [cz + hz * r] + [cz + (hz + hrz * math.sin(2 * math.pi * i / n_)) * r for i in range(n_)]
+            m.add(turn(on_ball(ball, ex, ez, 0.0011), ball, 0.5 * yaw, 0.5 * pitch), (1.0, 1.0, 0.985), None, [(0, 1 + i, 1 + (i + 1) % n_) for i in range(n_)], "glint", facing=FORWARD, eye=(side, 0.5))
 
-    def _strip(self, m, top, bottom, col_top, col_bottom, mat, off):
+    LASH_OUT = 0.0  # how far the lash line's upper edge and the lashes' tips stand forward of the lid, m (a cage head's visor)
+
+    def _shell(self, m, pts, faces, cols, mat, off):
+        """Shapes drawn in the front view, laid `off` metres off the skin (one distance, or one a point)."""
+        p, nr = self.hf.project_front(pts)
+        m.add(p + nr * np.reshape(np.asarray(off, float), (-1, 1)), cols, None, faces, mat, facing=FORWARD)
+
+    def _strip(self, m, top, bottom, col_top, col_bottom, mat, off, off_top=None):
         n = len(top)
         faces = [(i, i + 1, n + i + 1, n + i) for i in range(n - 1)]
-        self._shell(m, list(top) + list(bottom), faces, [col_top] * n + [col_bottom] * n, mat, off)
+        self._shell(m, list(top) + list(bottom), faces, [col_top] * n + [col_bottom] * n, mat, [off if off_top is None else off_top] * n + [off] * n)
 
     def _lines(self, m, side, state, dark):
         """The upper lash line with its wing and lashes, the lower lid's line, the lid's fold."""
@@ -578,7 +590,7 @@ class Face:
             w = th[-1] * (1 - t) ** 1.3
             top.append((side * x, hf.eye_z + z + w))
             bot.append((side * x, hf.eye_z + z - 0.0004 * (1 - t)))
-        self._strip(m, top, bot, mix3(dark, look["lash_tip"], 0.35), dark, "line", 0.0012)
+        self._strip(m, top, bot, mix3(dark, look["lash_tip"], 0.35), dark, "line", 0.0012, off_top=0.0012 + self.LASH_OUT)
         # Lashes: strands off the line, as the hair's locks are in small: each a tapering card
         # with a bend, fanning outward, longer toward the outer corner.
         rng = random.Random(f"lash/{look.get('seed', 0)}/{side}")
@@ -653,7 +665,7 @@ class Face:
             else:
                 pts.append((side * cx, cz))
                 cs.append(cols[1])
-        self._shell(m, pts, [(0, 1, 3, 2), (2, 3, 4)], cs, mat, off)
+        self._shell(m, pts, [(0, 1, 3, 2), (2, 3, 4)], cs, mat, [off, off, off + 0.55 * self.LASH_OUT * (mat == "line"), off + 0.55 * self.LASH_OUT * (mat == "line"), off + self.LASH_OUT * (mat == "line")])
 
     def _mouth_inside(self, m, state):
         """What an open mouth shows: a dark back, the upper teeth, the tongue."""

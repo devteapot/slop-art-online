@@ -80,7 +80,7 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
     let map = common::map(ctx);
     let r = crate::perception::widest_sight(ctx, &w, now);
     for (c, d) in minds_near(ctx, at, r, now, exclude) {
-        let Some((eye, heading)) = ctx.db.body().id().find(c.id).map(|b| (pos(&b, now), common::heading_at(&b, now))) else { continue };
+        let Some((eye, heading)) = ctx.db.body().id().find(c.id).map(|b| (pos(&b, now), common::facing_at(&b, now))) else { continue };
         if !crate::perception::in_sight(ctx, &map, c.id, eye, heading, subject, at, d, &w, now, false) {
             continue;
         }
@@ -614,7 +614,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     // cannot see, in a person's words (what it sounds like, where from the way one faces and by
     // the compass, how far), never who it is.
     if common::senses_of(ctx, id, &w, now).field.is_some() {
-        let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::heading_at(&b, now));
+        let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now));
         scene["you"]["facing"] = json!(living_rules::sight::COMPASS8[living_rules::sight::compass8(at, (at.0 + heading.cos(), at.1 + heading.sin())) as usize]);
         let laws = common::laws(ctx);
         let heard: Vec<Value> = heard_now

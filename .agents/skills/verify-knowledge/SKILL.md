@@ -40,7 +40,7 @@ Teaching a technique only a world's laws add (Cullet's glassmaking) has its own 
 .agents/skills/verify-knowledge/scripts/verify_knowledge.py world-know-how --run knowledge-glass-$(date +%Y%m%d-%H%M%S)
 ```
 
-`--target-dir DIR` builds the module in `DIR` (the shared harness's option), so it can share a worker's one build tree. Both actions read `LIVING_STDB_URL` (and the shared harness `LIVING_STDB_CONTAINER`) for a worker's own server.
+`--target-dir DIR` builds the module in `DIR` (the shared harness's option), for both actions. With `CARGO_TARGET_DIR` set, both actions build the module there and `run` builds the mind and its tests there too (otherwise in `.local/living/verify/build-knowledge`), so a worker keeps one build tree (recipes-1). Both actions read `LIVING_STDB_URL` (and the shared harness `LIVING_STDB_CONTAINER`) for a worker's own server.
 
 ## Player memory
 

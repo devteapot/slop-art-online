@@ -271,7 +271,7 @@ mod tests {
     use super::*;
 
     fn body(x: f32, t_ms: u64, vx: f32, next_ms: u64) -> Body {
-        Body { id: 1, kind: "person".into(), x, y: 0.0, t_ms, vx, vy: 0.0, path: Vec::new(), speed: vx, chunk: 0, next_ms, heading: 0.0, turn: 0.0, turn_s: 0.0 }
+        Body { id: 1, kind: "person".into(), x, y: 0.0, t_ms, vx, vy: 0.0, path: Vec::new(), speed: vx, chunk: 0, next_ms, heading: 0.0, turn: 0.0, turn_s: 0.0, face_off: 0.0, face_turn: 0.0, face_turn_s: 0.0 }
     }
 
     fn shown(tracks: &mut Tracks, b: &Body, now: f64, dt: f32) -> f32 {
