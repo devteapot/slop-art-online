@@ -17464,7 +17464,9 @@
      "parents": [],
      "inventory": {
       "cloak": 1,
-      "mark": 30
+      "mark": 30,
+      "blowpipe": 1,
+      "crucible": 1
      },
      "rhythm": {
       "rises": 4.5,
@@ -18072,7 +18074,9 @@
      "parents": [],
      "inventory": {
       "cloak": 1,
-      "mark": 14
+      "mark": 14,
+      "blowpipe": 1,
+      "crucible": 1
      },
      "rhythm": {
       "rises": 5.5,
@@ -18824,7 +18828,9 @@
      ],
      "inventory": {
       "cloak": 1,
-      "mark": 9
+      "mark": 9,
+      "blowpipe": 1,
+      "crucible": 1
      },
      "rhythm": {
       "rises": 9,
@@ -19273,7 +19279,8 @@
      "parents": [],
      "inventory": {
       "cloak": 1,
-      "mark": 22
+      "mark": 22,
+      "mould": 1
      },
      "rhythm": {
       "rises": 7,
@@ -20783,7 +20790,8 @@
      "parents": [],
      "inventory": {
       "cloak": 1,
-      "mark": 10
+      "mark": 10,
+      "blowpipe": 1
      },
      "rhythm": {
       "rises": 7,
@@ -28493,7 +28501,8 @@
      "inventory": {
       "cloak": 1,
       "mark": 4,
-      "lamp_oil": 2
+      "lamp_oil": 2,
+      "pot": 1
      },
      "rhythm": {
       "rises": 7,

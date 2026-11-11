@@ -28,6 +28,9 @@ pub mod floors;
 #[cfg(feature = "scripting")]
 pub mod cullet_check;
 mod making_check;
+mod goods_check;
+#[cfg(feature = "scripting")]
+pub mod goods_audit;
 mod rates_check;
 mod rules3_check;
 #[cfg(feature = "scripting")]
