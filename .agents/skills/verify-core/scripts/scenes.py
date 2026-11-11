@@ -1391,7 +1391,7 @@ def answers(s):
     s.expect("decline ends the offer and its maker is told", offer_of(a) is None and bool(told), told)
     seen = s.wait(lambda: s.told(d, "turned down", "record"), seconds=20)
     s.expect("an onlooker sees the decline", bool(seen), seen)
-    s.expect("the decline is the decliner's own outcome", bool(s.wait(lambda: s.told(b, "declined", "own") or s.told(b, "declined", "act"), seconds=10)),
+    s.expect("the decline is the decliner's own outcome", bool(s.wait(lambda: s.told(b, "eclined", "act"), seconds=10)),
              s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {b}", "decliner"))
 
     # Decline the terms by their record id: declined, closed, the proposer told.

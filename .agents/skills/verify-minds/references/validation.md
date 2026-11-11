@@ -1,5 +1,13 @@
 # Internal mind validation
 
+## 2026-11-11 rules-offers-2: a mind answers by id (Spark)
+
+Branch `rules-offers-2`, on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. Scoped maintain pass on dealings (dealings.md, README, SKILL.md).
+
+- `answers` (new) passes on `minds-offers2-a` and on the final code (`minds-offers2-final`): the deliberation showed `"offer": 1` in "asked of you" and "record 1)" in the dealings, the fake reply's `accept` (offer) and `decline` (record) were executed: "traded with Femi: 2 wood for 1 berries", the record `declined`, the proposer told "Datha declined your terms: you give 2 wood, they give 2 berries.".
+- `acts` passes on both. `dealings` passed on `minds-offers2-a` (before the main merge) and failed twice, then passed nine times on the final code (`minds-offers2-final`, `-final2` failed; `-final3`…`-final11` passed): in the failures the demander's `demand` act through admin `mind_act` made no record within 60 s. Its cause is not established: the driver did not keep what the demander was told, and now keeps `demander-experiences.json` either way.
+
+
 ## 2026-11-11 the prompt frame (exp-player-frame, DGX Spark)
 
 Branch `exp-player-frame` in a worktree, against the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320`, published on `0.0.0.0`, which `verify.py` now accepts), private `CARGO_TARGET_DIR`, fake model only, beside a paid trial batch on the same service (untouched).

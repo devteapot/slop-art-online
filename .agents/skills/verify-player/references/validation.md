@@ -1,5 +1,14 @@
 # Validation record (player)
 
+## 2026-11-11 rules-offers-2: answers by id (Spark)
+
+Branch `rules-offers-2` (origin/main merged at `5f7ba5b`), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. Scoped maintain pass on offers (offers.md, README, SKILL.md): "Declining: there is no act" was drift and is replaced; `answers.py` added.
+
+- `answers.py` (new): 9 of 9 on `player-offers2-a`, `-b` and the final code (`player-offers2-final-answers`). On `-a` the outcome of a decline was said twice (the engine's note and the rules' line); the engine's note is gone.
+- `offers.py` 17 of 17 and `deal.py` 13 of 13 on fresh worlds (`player-offers2-b`, `-c`; final code `player-offers2-final-offers`, `-final-deal`). Run after `answers.py` on one world they failed 4 and 2 checks on its leftovers (berries in the pack, a declined record first in `my_records`): an order dependence of the drivers, noted in offers.md.
+- Not covered: the game client sending these acts (the laptop's ui-1; `ui::act_node` is covered by Cargo).
+
+
 
 
 ## 2026-11-11 rules-offers: trade offers a player receives (Spark)

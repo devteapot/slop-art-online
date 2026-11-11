@@ -560,8 +560,11 @@ def dealings_case(run):
     # mind would decide.
     run.admin('set_behavior', other, json.dumps({'wait': 120}))
     run.admin('mind_act', other, [json.dumps({'do': 'demand', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'text': 'verify dealing'})], 'verify-minds')
-    demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 60)[0]
-    run.private(f'SELECT * FROM experience WHERE observer = {other}', 'demander-experiences')
+    try:
+        demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 60)[0]
+    finally:
+        # What the demander was told of its act (an outcome or a refusal), kept either way.
+        run.private(f'SELECT * FROM experience WHERE observer = {other}', 'demander-experiences')
     told = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'told') if e['kind'] == 'record' and 'demands 1 stone of you' in e['text']], 'told the demand', 30)
     # The rules' `ask` goes through the authority's thinking cadence (`think_min_s`): a mind that
     # thought moments ago is not asked again. Its next thought sees the demand among its dealings.

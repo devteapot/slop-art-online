@@ -1193,6 +1193,8 @@ fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "ju
 fn strike_ui() { #{ look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" } } }
 fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }
 fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
+// Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
+fn decline_ui() { #{ look: #{ icon: "trade" } } }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }
