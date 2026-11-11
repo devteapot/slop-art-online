@@ -1538,6 +1538,12 @@ impl Minds {
                 format!("{:02}:{:02}", m / 60 % 24, m % 60)
             };
             out.push_str(&format!("\nYour days: you usually rise about {} and go to bed about {}; the last {:.0} hours before bed are your evening.", hm(r.rise_h), hm(r.bed_h), r.evening_h));
+            if r.work_to_h > r.work_from_h {
+                out.push_str(&format!(" You usually work {} to {}.", hm(r.work_from_h), hm(r.work_to_h)));
+            }
+            if r.nap_to_h > r.nap_from_h {
+                out.push_str(&format!(" You sleep again from {} to {}.", hm(r.nap_from_h), hm(r.nap_to_h)));
+            }
         }
         out
     }

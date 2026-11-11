@@ -441,9 +441,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     {
         let w = common::world(ctx);
-        let life = common::life_of(&me.kind);
+        let life = common::life_of(ctx, &me.kind);
         let years = life.years_old(common::age_days(&me, &w, now), common::pace(&w));
-        you.insert("age".into(), json!(format!("{:.0} years ({})", years.floor(), common::stage_of(&me, &w, now).name())));
+        you.insert("age".into(), json!(format!("{:.0} years ({})", years.floor(), common::stage_of(ctx, &me, &w, now).name())));
     }
     // What one knows of one's own body and skill (inborn and practised).
     let body = living_rules::genes::notable(&common::genes_of(ctx, id));

@@ -457,13 +457,109 @@ At the play-test, everyone looked for shelter at the same moment when night fell
 
 What replaced them (general rules and seeded data; no role types, no scripts):
 
-- **A rhythm per person** (`rhythm` table, private; `seed::drawn_rhythm`): when they rise (about 06:00 ± 0.8 h, 04:00–09:00), when they go to bed (about 16 ± 1 waking hours later, 19:30–02:30) and how many hours before bed are their evening (1.5–4.5). A seed may give a resident's (`residents[].rhythm`: `rises`, `sleeps` (past 24 for after midnight), `evening_hours`); whatever it leaves out is drawn from the person's id alone, so the world's random stream and its generation digests do not change. Newborns get one at birth.
+- **A rhythm per person** (`rhythm` table, private; `seed::drawn_rhythm`): when they rise (about 06:00 ± 0.8 h, 04:00–09:00), when they go to bed (about 16 ± 1 waking hours later, 19:30–02:30) and how many hours before bed are their evening (1.5–4.5). A seed may give a resident's (`residents[].rhythm`: `rises`, `sleeps` (past 24 for after midnight), `evening_hours`, and since `lives-3` `works` and `second_sleep`: [below](#rhythms-at-any-hour-and-cullets-trades)); whatever it leaves out is drawn from the person's id alone, so the world's random stream and its generation digests do not change. Newborns get one at birth.
 - **Graphs read one's own day.** New weights and conditions `bedtime` and `evening` (`rules/src/graph.rs`; `common::day_phase`): the body's own hours, not the world's. The island's and the repertoire's starting desires use them: sleep `bedtime 1.2`, home `bedtime 0.6`, work `base 0.7, bedtime -0.9, evening -0.4`, and the evening routine runs in one's own evening. `night` and `hour` stay for darkness and the clock. Minds' prompts list them.
 - **Evening habits.** `town_life.evening` may name `home` (an evening in) and `work` (working late) beside the inn and the square; the island alternates inn, home, square, work by household.
 - **Desires weighed a little differently by each person.** At seeding, a founder's starting desires are varied the way a child's are varied from its parent's (`genes::vary_ways`, drawn from the person's id): weights ±8 % typical, occasionally more. Rain sends most people in, not all (`rain 1.0` against work's 0.7).
 - **Tolerance as genes.** `appetite` (how fast hunger grows) and `hardiness` (what cold and wet take) are constitution genes, ±12 % typical, inherited like the others; the needs law reads them (`appetite_gene`, `hardiness_gene`). One can tell one's own: "always hungry", "quick to feel the cold".
 - **A new day at one's own rising.** The dawn broadcast is gone. A person's new day begins within three hours of its own `rise_h`, once a game day: a "A new day begins for you" feeling and a deliberation request, which goes through the thinking throttle like any other (not urgent).
 - **What minds see.** A person's prompt says when they usually rise and go to bed and how long their evening is (`daily_life` in `mind.rs`).
+
+## Rhythms at any hour and Cullet's trades
+
+Built on branch `lives-3` (2026-11-11), for two gaps Cullet's cast exposed (`author_world.py cullet --check`): a seed's rising hour was clamped to 0–12, so Thessaly Marl (rises 14:00) and Anselm Faro (13:00) would have risen at noon; and 25 of Cullet's trades had no starting ways, so their people would have started as foragers. Everything here is a person's starting values of the routines everyone has, and seed data; the engine gained no notion of a trade.
+
+### The rhythm format
+
+A seed's `residents[].rhythm` (`seed::SeedRhythm`), every field optional:
+
+| Field | Meaning | Limits |
+| --- | --- | --- |
+| `rises` | the hour they rise, any hour | taken mod 24 |
+| `sleeps` | the hour they go to bed (past 24 for after midnight); stored as the next such hour after rising | 8 to 22 hours after rising; without it, the drawn day's length |
+| `evening_hours` | the hours before bed that are their evening | 0 to 8 |
+| `works` | their working hours `[from, to]`, across midnight as `[22, 6]` or `[22, 30]` | one span; an empty span is none |
+| `second_sleep` | a second sleep in the day `[from, to]`, e.g. a baker's afternoon | one span |
+
+**Storage.** The private `rhythm` table keeps `rise_h`, `bed_h` (in `rise_h + 8 ..= rise_h + 22`), `evening_h` and `last_day` as before, and four columns appended with `#[default(0.0f32)]`: `work_from_h`, `work_to_h`, `nap_from_h`, `nap_to_h` (an end may pass 24; an end not after its start is none). Existing rows read 0 and 0: no working hours, no second sleep. Bindings regenerated (`rhythm_type.rs`, the only generated file that changed).
+
+**What graphs read** (`living_rules::rhythm::Hours::phase`, through `common::day_phase`):
+
+- `bedtime`: from going to bed until rising, and during a second sleep.
+- `evening`: the hours before bed, not during a second sleep.
+- `work_hours` (new weight and condition, `{"work_hours": true}`): within one's working hours; with none set, every waking hour outside one's evening. Minds' graph grammar lists it.
+
+Hours from rising run `rise .. rise + 24`, so a bedtime past midnight compares in one range. The old rule pivoted at noon; for every drawn rhythm (all a seed without `rhythm` has: every world before Cullet) the new rule makes exactly the same comparisons, so their bedtime and evening are unchanged at every instant (authority test `seed::tests::drawn_rhythms_keep_their_phase`: 20,000 drawn rhythms, two instants a minute each; it found one difference within float rounding of rising in a first draft, which the rule now keeps). Drawn rhythms set no working hours and no second sleep, the varied ways draw nothing for a weight a graph does not have (`genes::vary_ways`), and no old seed's graph has `work_hours`: old seeds' rhythms, graphs and behaviour are what they were.
+
+**Sleep follows tiredness more than the clock**, as SMALL_CITY asks: the starting `sleep` desire is still `-0.7 + tired × 1.3 + exhausted + bedtime × 1.2`; the rhythm only moves where its `bedtime` falls. A person's new day begins within three hours of its own rising (not of a second sleep).
+
+**Minds** are told their hours: "Your days: you usually rise about 14:00 and go to bed about 07:00; the last 1 hours before bed are your evening. You usually work 22:00 to 06:00." and, with a second sleep, "You sleep again from 13:00 to 19:00." (`daily_life`).
+
+**Cullet's cast** (`cast.json`) keeps its own day format (`wakes`, `sleep_h`, `works` as spans, `work_at`, `evening`), now with an optional `second_sleep` and a free `note`. `author_world.py` compiles it into the seed's fields (`seed_rhythm`): one working span, from the first start to the last end when that is at most 12 hours, else the longest span (Chidi Okoro 05:00–16:00; Hobb Fenwick's 19:00 cistern hour is left to his evening; Benedikt Orme 09:00–17:00). Pieter Achterberg's hours are the owner's reading: asleep 22:00–02:30 and 13:00–19:00 (`sleep_h` 4.5, `second_sleep` [13, 19]). The wrack gatherers keep fixed early hours until a tide exists; their rhythm's `note` says so.
+
+### Cullet's trades
+
+Cullet's starting ways are `living/seeds/worlds/cullet/ways.json`, merged into `living/seeds/cullet.json` by `cullet_plan.py` as its `ways` (`top`, `common`, `occupations`) and `town_life`. They are starting graphs the character owns and may change, keyed by the occupation string as every world's are (`seed::give_repertoire`). `common` is the island's routines with Cullet's own `find food and eat` (the store, root plots, greens, fishing spots). The `top` is the island's with one change: the work desire is `base 0.1 + work_hours × 0.8 − bedtime × 0.9 − evening × 0.4`, so work comes in one's own hours and outside them is a weak pull, below company. The routines use the rules' kinds and skills (`feed`, `make`, `gather`, `take`, `store`, `keep`) and keep their post where the world has no such thing yet. The plan places no furnace, oven, smokehouse or lamp and no `kelp_bed`, `peat_bank`, `greens_bed` or `root_plot` nodes yet (its resources are of kinds `kelp`, `peat`, `greens`, `roots`, which the rules do not have); those routines act as soon as the world has them.
+
+| Trade (people) | Workplace (`town_life.work`; a resident's own `work_at` stands first) | Starting routine | What it does, in order |
+| --- | --- | --- | --- |
+| glassmaster (1) | `lot:cone` | keep the melt | make glass at the furnace; feed it peat; take sand, ash, peat from a storage; go to work; keep |
+| blower (2) | `lot:cone` | blow glass | store glass (3+); make glass at the furnace; take sand and ash; go to work; keep |
+| stoker (3) | `lot:cone` | stoke the Cone | feed the furnace peat; take peat; go to work; keep |
+| retired_blower (1) | `lot:cone` | watch the Cone | go to work; rest there |
+| cullet_sorter (1) | `lot:cullet_shed` | sort the cullet | go to work; keep |
+| glazier (1), lehr_keeper (1) | `lot:lehr_house` | glaze; keep the lehr | go to work; keep |
+| grower (5) | `greens_bed`, `lot:glasshouse_1` | tend the glasshouse | store greens (4+); go to work; gather greens; keep |
+| root_grower (2) | `root_plot`, `garden` | tend the roots | store roots (6+); go to work; gather roots; keep |
+| peat_cutter (3) | `peat_bank`, `lot:peat_barn` | cut peat | carry 8 peat to the peat barn and store it; go to work; gather peat; keep |
+| wrack_gatherer (3) | `kelp_bed`, `lot:ash_house` | gather wrack | carry 8 kelp to the ash house and store it; go to work; gather kelp; keep |
+| ash_burner (1) | `lot:ash_house` | burn kelp to ash | store ash; make ash at a hearth, the furnace or a campfire; take kelp; go to work; keep |
+| baker (1) | `lot:batch` | bake at the Batch | feed the oven peat; bake roots; store baked roots; take roots and peat; go to work; keep |
+| smoker (1) | `lot:smokehouse_1`, `lot:smokehouse_2` | smoke fish | feed the smokehouse; smoke fish; store it; take fish and peat; go to work; keep |
+| oil_renderer (1) | `lot:lamp_house` | render lamp oil | store lamp oil; render it at a fire; take fish; go to work; keep |
+| lamp_keeper (1) | `lot:watchglass` | keep the lamps | feed a lamp lamp oil; take lamp oil; go to work; keep |
+| cook (1) | `lot:marver` | keep the kitchen | cook fish at a hearth or campfire; go to work; keep |
+| server (1) | `lot:marver` | serve at the Marver | go to work; keep |
+| fisher (8) | `fishing_spot`, `lot:fish_steps` | fishing | carry 4 fish to the Store; go to work; fish; keep |
+| line_maker (1) | `fishing_spot`, `lot:net_loft_2` | fish and make lines | as a fisher |
+| net_mender (1) | `lot:fish_steps` | mend nets | go to work; keep |
+| boatwright (2) | `lot:dry_dock`, `lot:boatshed` | work on the boats | go to work; keep |
+| porter (1) | `lot:store`, `lot:heron` | carry for the Store | go to work; keep |
+| tally_keeper (1), reader (2) | `lot:counting_house`; `lot:readers_house` | keep the tally; teach and read | read a sign in reach; go to work; keep |
+| healer (1) | `lot:readers_house`, `hall` | tend the hurt | tend someone hurt in sight; go to work; keep |
+| washer (1), pot_maker (1) | `lot:wash_house`; `lot:pot_house` | keep the wash-house; make pots | go to work; keep |
+| mason (1) | `boulder`, `workshop` | mend walls | store stone; go to work; gather stone; keep |
+| warden (1) | `lot:hanger_cottage` | keep the Hanger | go to work; keep (she fells nothing) |
+| child (13; Kit Calloway, 14, is a boatwright) | — | play | the island's (anyone young starts with it whatever their trade) |
+
+`town_life.places` gives everyone `square`, `store`, `peat barn` and `ash house`; `town_life.evening` is `home` for anyone without an evening place of their own (every cast member has one). No guardrail stops anyone doing anything else: a mind may rework any of it.
+
+### Verified
+
+On the dev-box, own container `lives3-stdb` (2.14.1, port 3321), scratch databases only, no mind service, no model calls; evidence under `.local/living/verify/` (git-ignored); details in the verify skills' validation records.
+
+- **Cargo:** rules 163 pass (166 after the last merge of main), 8 ignored; authority 18; mind 82; `just living-check` exits 0 on the final merge (`f793143a`), and `rhythm.py` 20 of 20 there. New tests: `rhythm::tests` (a night worker, a second sleep, spans across midnight, bed limits), `seed::tests::drawn_rhythms_keep_their_phase` and `seeded_rhythms_rise_at_any_hour`, `cullet_check::ways_tests` (Cullet's ways parse under its rules; every trade has a workplace), `cullet_check::life_tests` (other worlds keep `species.json` bit for bit; Cullet's ages; a wrong table refused).
+- **`author_world.py cullet --check`:** 0 errors; no warning about rhythm, ways or life stages (before: Thessaly and Anselm clamped to noon, 25 trades without ways, two cast adults starting as children, six elders near old age). Six warnings remain: the plan places no `kelp_bed` or `peat_bank` (its resources are of kinds `kelp`, `peat`, `greens`, `roots`, which the rules do not have). `cullet.json` recompiled with `--compile-only` after Cullet's residents were merged.
+- **verify-generation** (island, aske-coast, cullet; `generation-l3b-172604`): 979, 286 and 313 checks pass; island's 277 and aske-coast's 68 rhythms are drawn ones (no working hours, no second sleep); Cullet's 64 are as given; its 50 workers have a workplace, everyone starts on the seed's ways; original seeds unchanged.
+- **verify-core `rhythm.py`** (`core-l3rhythm3`, eight of Cullet's residents with their sheets on a 12-minute day, a furnace placed at the Cone): 20 of 20. The night stoker is in bed at home in the morning, up and off work in the afternoon, at the Cone keeping the furnace lit from 23:00 to 04:00 while the day stoker sleeps; the day watch feeds the furnace and makes glass; the baker sleeps a second time 13:00–19:00; the lamp keeper is at the Watchglass all night; Tobiah (16) and Col (15) are adults, Halvard (70) an elder. Two earlier runs found a habit defect (fetching from an empty storage and back; `take` now targets a storage that holds the item) and a check that counted only sleep in bed hours.
+- **verify-core `town.py` and `lives.py`** (island): town 22 of 23 and lives 18 of 19, with the same failures on an origin/main build: the approach-from-behind flake (1 of 5 on main) and a meat carrier that never sets out (18 of 19 on main too).
+- **verify-client:** `rhythm` stays private (refused to anonymous clients and players); two runs each had one timing failure elsewhere (combat feed, presence), each passing in the other run.
+- **Not covered:** verify-minds and verify-llm (the prompt's rhythm sentence and the graph grammar's `work_hours` are covered by the mind's unit tests only), verify-player, verify-knowledge; Cullet's whole town living on its ways (its plan has no furnace, oven, smokehouse, lamp or Cullet resource nodes yet, and no stores), and performance.
+
+### SpacetimeDB documentation consulted
+
+Read for this change (the site's 2.0.0 pages; the service and crates are 2.14.1, and the site lists no 2.14 pages): [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) ("Adding new columns to the end of a table with a default value" is allowed; "The new column must be added at the end of the table definition and must have a default value specified"; non-updated clients "will not be aware of the new column"), [default values](https://spacetimedb.com/docs/tables/default-values) ("existing rows are automatically populated with that default"; the expression must be const-evaluable; no stated type restriction, and the repository already uses `#[default(0.0f32)]` on 2.14.1), [tables](https://spacetimedb.com/docs/tables/) (private tables are "visible only to reducers and the database owner") and [table performance](https://spacetimedb.com/docs/tables/performance/). Design consequences: the four columns are appended with defaults, so a world updated in place keeps its rows and reads "no working hours"; the table stays private (only the authority and the mind service, as owner, read it); clients need the regenerated bindings to see the columns.
+
+### Data paths
+
+| Path | Reads | Writes | Index | Recipients | Frequency | Growth |
+| --- | --- | --- | --- | --- | --- | --- |
+| A graph weighing `work_hours`, `bedtime` or `evening` | the body's `rhythm` row | — | PK | — | per evaluation of a graph that has those weights (as before for `bedtime` and `evening`) | — |
+| A person's new day | `rhythm` | `rhythm.last_day` | PK | owner only (private) | once a game day per person | — |
+| World creation | the seed's rhythm | one `rhythm` row per person (four more `f32`, 16 bytes a row) | PK | owner only | once | 16 bytes a person |
+| The life table (`life_years`) | the script, once per species per revision | — | — | — | a hash lookup per ask (an empty one for a script without the law) | one table per species |
+
+No whole-World scan was added.
 
 ## Wants beyond survival
 

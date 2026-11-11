@@ -22,6 +22,8 @@ python3 living/tools/trials.py clean --batch dry1
 - `samples.jsonl` advances every 2 s from the start; `summary.json` exists for every instance, including failed ones (`stopped_by` says why).
 - `journal/` in the instance directory is a copy of the mind's journal (`.local/living/journal/<db>/`), with the actual requests and replies.
 - After `clean`, the batch's databases answer SQL with 404 and the Neo4j nodes of their runs are gone; the evidence directory remains.
+- Every `summary.json` has `prompt_frame` (per purpose, the subject's journaled requests that opened with the player frame) and `out_of_character` (`ooc_lines`, `ooc_private`: [`ooc.py`](../../../../living/tools/ooc.py) over spoken and written lines and over private reply fields). Under `default` every purpose reads `character 0/n`; under `player-frame` every think, deliberate, talk and consolidation request is framed and starting identities are not ([frame.md](frame.md)).
+- From a git worktree, `build` copies each module into the container's `/wasm` mount (the starting checkout's `.local/living/trials/wasm/`) as `<module>-wt<tag>.wasm` and `run` publishes that copy; `actions.log` names it. The worktree needs its own `.local/living/trials/neo4j.env` and does not run `up` against a running stack.
 
 ## A scripted player, small-world records and worktrees
 

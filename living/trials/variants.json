@@ -102,6 +102,13 @@
    "LIVING_ANIMAL_MINDS": "pack,salient,choose"
   }
  },
+ "player-frame": {
+  "about": "Default with LIVING_FRAME=player: people's deliberation (think and compile), consolidation and conversation-turn system prompts open with a short frame saying the model is an AI playing this person in a persistent world shared with other players, human and AI, where the person's body, needs, death and the world's rules are real and what to pursue is its own choice, and whatever the person says or writes stays in their own words (prompts.rs PLAYER_FRAME). Everything else as default. Probes: prompt_frame (requests that carried the frame) and ooc_lines/ooc_private (living/tools/ooc.py).",
+  "models": {},
+  "env": {
+   "LIVING_FRAME": "player"
+  }
+ },
  "arrive-control": {
   "about": "Default with the shipped newcomer laws (all 0): the arrival trial's control.",
   "models": {},
