@@ -1,5 +1,15 @@
 # Internal mind validation
 
+## 2026-11-11 the prompt frame (exp-player-frame, DGX Spark)
+
+Branch `exp-player-frame` in a worktree, against the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320`, published on `0.0.0.0`, which `verify.py` now accepts), private `CARGO_TARGET_DIR`, fake model only, beside a paid trial batch on the same service (untouched).
+
+- Full suite `minds-pf-20261111-132828`: roundtrip (now also: no request is player-framed without `LIVING_FRAME`), acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink, rethink-llm, dealings, parked and the new `frame` pass; consolidation is its known XFAIL; `animals` fails on its known gap (the last step, "nothing new: no call"; see lives-2 below; animal prompts are not framed).
+- `frame`: `LIVING_FRAME=npc` exits 1 before connecting (`bad-frame.log`); under `player` the think, deliberate, both talk and the consolidation requests opened with the frame and the starting identity did not (`frame.json`: think 1/1, deliberate 1/1, talk 2/2, consolidation 1/1, identity 0/1); 5 of 6 journaled requests framed (the identity is the sixth).
+- `cargo test -p living-mind` (the suite's step): 86 passed, 11 ignored, among them the four new `prompts::` frame tests (and the prefix tests, now run under both frames).
+- `paid_safety.py` (`minds-duel-safety-pf-20261111-132828`): guard and five termination scenarios pass.
+- Trials: fake batch `pf1` (`life` × `default`, `player-frame`): see docs/TRIALS.md, "The player frame".
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
