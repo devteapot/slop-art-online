@@ -22,7 +22,7 @@ This directory is the maintained source for verifying interface D in the game cl
 ## Driving conventions
 
 - Click tagged nodes (`@win:Pack:close`), not coordinates; a tag is stable across layout changes.
-- Check state from `dump:` files, and what was sent from the client log and the authority's rows. A photograph alone is not the proof.
+- Check state from `dump:` files, and what was sent from the client log and the authority's rows. A photograph alone is not the proof. For every reducer call and its reply, give the drive `LIVING_GAME_ACTIONS=<file>` and read the JSON lines (docs/PLAY_REPORT.md, "The action log").
 - Wait 0.3–0.6 s after a click or key before a dump or a photograph: windows spawn and lay out at the end of a frame.
 
 ## Proof and skip reporting

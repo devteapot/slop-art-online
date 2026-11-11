@@ -857,7 +857,7 @@ fn send(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, 
             Aim::Creature { id } => *id,
             _ => 0,
         };
-        let r = conn.reducers.human_say_then(line.clone(), to, net.on_reply("say"));
+        let r = conn.reducers.human_say_then(line.clone(), to, net.on_reply("say", "human_say", || serde_json::json!({"text": line, "to": to})));
         if r.is_ok() {
             input.said.push((now_ms as u64, line.clone()));
         }
@@ -868,7 +868,8 @@ fn send(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, 
     // An act (a one-off the authority reports on) or behavior (ongoing: the body shows it).
     let act = node.get("do").is_some() && living_rules::acts::not_an_act(&c.skill, rules.shapes()).is_none();
     info!("verbs: {} → {}", c.label, node);
-    let r = conn.reducers.human_act_then(node.to_string(), net.on_reply("act"));
+    let node_s = node.to_string();
+    let r = conn.reducers.human_act_then(node_s.clone(), net.on_reply("act", "human_act", || serde_json::json!({"node": node_s})));
     net.report("act", r);
     let key = aim.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
     v.pending.push(Pending { sent_ms: now_ms, act, key, choice: c.clone() });
