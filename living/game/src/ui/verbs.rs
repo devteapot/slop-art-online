@@ -45,6 +45,14 @@ pub struct InvHead;
 pub struct InvRow(usize);
 #[derive(Component)]
 pub struct InvText(usize);
+/// A pack row's count and its worth as food, right-aligned beside the name.
+#[derive(Component)]
+pub struct InvQty(usize);
+#[derive(Component)]
+pub struct InvNote(usize);
+/// How much of what I can carry I carry.
+#[derive(Component)]
+pub struct InvCarry;
 #[derive(Component)]
 pub struct KnowRoot;
 #[derive(Component)]
@@ -103,9 +111,17 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>) {
             root.spawn((InvRoot, Node { width: Val::Px(230.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(1.0), padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(8.0), Val::Px(9.0)), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(12.0)), display: Display::None, ..default() }, theme::panel(12.0)))
                 .with_children(|p| {
                     p.spawn((InvHead, Text::new("Pack"), f.title(17.0), TextColor(theme::GOLD), Node { margin: UiRect::bottom(Val::Px(4.0)), ..default() }, Pickable::IGNORE));
+                    p.spawn((Node { height: Val::Px(4.0), margin: UiRect::bottom(Val::Px(6.0)), border_radius: BorderRadius::all(Val::Px(2.0)), overflow: Overflow::clip(), ..default() }, BackgroundColor(theme::TRACK), Pickable::IGNORE))
+                        .with_child((InvCarry, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(0.0), ..default() }, BackgroundColor(theme::GOLD_DIM), Pickable::IGNORE));
                     for i in 0..INV_ROWS {
-                        p.spawn((InvRow(i), Node { padding: UiRect::axes(Val::Px(5.0), Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(6.0)), ..default() }, BackgroundColor(Color::NONE)))
-                            .with_child((InvText(i), Text::new(""), f.body(14.0, 600), TextColor(theme::TEXT), Pickable::IGNORE))
+                        p.spawn((InvRow(i), Node { padding: UiRect::axes(Val::Px(5.0), Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(6.0)), justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, column_gap: Val::Px(8.0), ..default() }, BackgroundColor(Color::NONE)))
+                            .with_children(|r| {
+                                r.spawn((InvText(i), Text::new(""), f.body(14.0, 600), TextColor(theme::TEXT), Pickable::IGNORE));
+                                r.spawn((Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }, Pickable::IGNORE)).with_children(|right| {
+                                    right.spawn((InvNote(i), Text::new(""), f.body(12.0, 600), TextColor(theme::MUTED), Pickable::IGNORE));
+                                    right.spawn((InvQty(i), Text::new(""), f.body(14.0, 800), TextColor(theme::GOLD), Pickable::IGNORE));
+                                });
+                            })
                             .observe(move |_: On<PointerClick>, model: Res<HudModel>, mut v: ResMut<Verbs>| {
                                 if let Some(r) = model.verbs.inventory.as_ref().and_then(|inv| inv.rows.get(i)) {
                                     v.clicked_item = Some(r.0.clone());
@@ -272,7 +288,8 @@ pub fn toasts(model: Res<HudModel>, mut rows: Query<(&ToastRow, &mut Node, &mut 
 pub fn panels(
     model: Res<HudModel>,
     mut nodes: ParamSet<(Query<&mut Node, With<InvRoot>>, Query<(&InvRow, &mut Node)>, Query<&mut Node, With<KnowRoot>>, Query<(&KnowRow, &mut Node, &mut BackgroundColor)>)>,
-    mut texts: ParamSet<(Query<&mut Text, With<InvHead>>, Query<(&InvText, &mut Text)>, Query<&mut Text, With<KnowTech>>, Query<(&KnowText, &mut Text)>, Query<(&KnowDetail, &mut Text)>)>,
+    mut texts: ParamSet<(Query<&mut Text, With<InvHead>>, Query<(&InvText, &mut Text)>, Query<&mut Text, With<KnowTech>>, Query<(&KnowText, &mut Text)>, Query<(&KnowDetail, &mut Text)>, Query<(&InvQty, &mut Text)>, Query<(&InvNote, &mut Text)>)>,
+    mut carry: Query<&mut Node, (With<InvCarry>, Without<InvRoot>, Without<InvRow>, Without<KnowRoot>, Without<KnowRow>)>,
 ) {
     let alive = model.death.is_none();
     let inv = model.verbs.inventory.as_ref().filter(|_| alive);
@@ -287,14 +304,22 @@ pub fn panels(
             let head = if inv.limit > 0 { format!("Pack  {} / {}", inv.carried, inv.limit) } else { format!("Pack  {}", inv.carried) };
             set_text(&mut t, &head);
         }
+        for mut n in &mut carry {
+            super::set_width(&mut n, Val::Percent(if inv.limit > 0 { (inv.carried as f32 / inv.limit as f32).clamp(0.0, 1.0) * 100.0 } else { 0.0 }));
+        }
         for (r, mut t) in &mut texts.p1() {
             let s = match inv.rows.get(r.0) {
-                Some((item, n, note)) if note.is_empty() => format!("{}  ×{n}", label(item)),
-                Some((item, n, note)) => format!("{}  ×{n}   {note}", label(item)),
+                Some((item, _, _)) => label(item),
                 None if r.0 == 0 => "Nothing".to_string(),
                 None => String::new(),
             };
             set_text(&mut t, &s);
+        }
+        for (r, mut t) in &mut texts.p5() {
+            set_text(&mut t, &inv.rows.get(r.0).map_or(String::new(), |(_, n, _)| format!("×{n}")));
+        }
+        for (r, mut t) in &mut texts.p6() {
+            set_text(&mut t, &inv.rows.get(r.0).map_or(String::new(), |(_, _, note)| note.clone()));
         }
     }
     let know = model.verbs.know_how.as_ref().filter(|_| alive);
