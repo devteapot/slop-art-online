@@ -34,7 +34,7 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Every value end, alone and in pairs, is a valid head on every type** (60,648 of 60,648) after nine ranges were trimmed.
   - **Lips and blush do not survive the client's one-colour recolour of a shared skin texture;** the lid's shade does. They are to become their own small meshes or overlay styles ([what the client needs for types](#what-the-client-needs-for-types)).
 - **Pass 3, step 4: designed shadows** ([designed shadows](#designed-shadows)). The straight split down the middle of the face and the dark band along the jaw are gone.
-  - **The shadow map is drawn, not derived.** For each type a script draws the shade at 16 light angles from the type's landmarks (the side plane, the nose's wedge, the socket, the cheek triangle, the jaw), turns each drawing into a distance field and interpolates them into one threshold map, `lookdev/types/<type>.face.png`.
+  - **The shadow map is drawn, not derived.** For each type a script draws the shade at 18 light angles from the type's landmarks (the side plane, the nose's wedge, the socket, the jaw; flat until about 55°, after step 4b), turns each drawing into a distance field and interpolates them into one threshold map, `lookdev/types/<type>.face.png`.
   - **The face's normals come from a planar proxy** laid out from the same landmarks, and the skin under the jaw is one plane looking down.
   - **The map's format is unchanged,** so today's client draws it as it is.
 - **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the eyes' drawing, how the hair is finished, lines where the form turns, the face's painted softness, clothes and silhouette, hands.
@@ -637,17 +637,17 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 
 **The threshold map** is made the way anime face maps are authored ([the survey](CHARACTER_RESEARCH.md), §3): draw the shade for each of N light angles, turn each drawing into a signed distance field, interpolate.
 
-- **16 angles** from 24° to 180°, light from the face's right; the left is the mirror. Each drawing is the one before plus more, so a texel goes dark once.
-- **Drawn in the face's front view** at half a millimetre a pixel, from the landmarks:
-  1. the far side plane, from the silhouette in to the cheek's corner line (24° to 42°);
-  2. the edge crossing the front as the corner line scaled toward the middle, so it follows the cheek's own contour; it passes the middle at 90°;
-  3. between the brow and the nose's base the far half fills sooner (50° to 66°), the edge running ahead to the bridge: the socket's shade;
-  4. below the nose the far half waits about 24°, so the mouth and chin keep their light and the edge leaves the nose's wing and runs out to the jaw;
-  5. the nose's wedge on the far cheek from 30°, lengthening with the angle;
-  6. a band along the far jaw from 30°, and the near jaw's from 100°;
-  7. the cheek triangle under the far eye holds its light until 92°, shrinking toward its top edge;
-  8. the nose's near side holds its light from 90° to 150°.
-- **Interpolated** between each pair of drawings by their distance fields, then blurred by about a millimetre so the edge the shader cuts is a clean line.
+- **18 angles** from 55° to 180°, light from the face's right; the left is the mirror. Each drawing is the one before plus more, so a texel goes dark once.
+- **The face is flat until about 55°,** as the reference's is. Step 4 drew a nose wedge from 30° and a lit triangle inside the shaded cheek; close up they read as hard patches, not form, and step 4b (2026-11-12) moved every onset later and took the islands out.
+- **Drawn in the face's front view** at half a millimetre a pixel, from the landmarks. The onsets are named numbers at the top of `face_shadow.py`:
+  1. the nose's wedge on the far cheek from 56° (`WEDGE_ON`), small, taken in by the far side's shade soon after;
+  2. the far side plane, from the silhouette in to the cheek's corner line (60° to 72°, `SIDE_ON`, `SIDE_FULL`);
+  3. the edge crossing the front as the corner line scaled toward the middle, so it follows the cheek's own contour; it reaches the middle at 96° (`MIDDLE`, `CROSS`);
+  4. between the brow and the nose's base the edge runs half the way ahead toward the bridge (72° to 86°, `SOCKET_ON`, `SOCKET`): the socket's shade;
+  5. below the nose the far half waits 20° (`WAIT`), so the mouth and chin keep their light and the edge leaves the nose's wing and runs out to the jaw;
+  6. a band along the far jaw from 60° (`JAW_ON`), and the near jaw's later.
+- **Nothing holds its light inside the shade:** no cheek triangle, no bright near side of the nose.
+- **Interpolated** between each pair of drawings by their distance fields, then blurred by 1.4 mm (`SOFT_MM`), so every edge is a pixel or two soft at close range.
 - **Baked into the face's UV space** at 512 × 512. Where the skin turns from the front (behind the cheek, the skull), the drawn picture gives way to the plain rule of a round head.
 - **One map a type:** `lookdev/types/<type>.face.png`, 21 files, about 40 kB each. A person's own file gets the same map beside it, because the client looks there.
 - About 7 seconds a file.
@@ -658,7 +658,7 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 2. **The face's shade and the neck's are two tones** (`face_shadow` 1.25 on a face; the plain skin depth on the neck), so the jaw line shows where both are in shade, as on the reference.
 3. **The sun's height is not in the map.** The shapes answer the horizontal angle only, so the planes under the nose and lip cannot answer a high sun. The map's blue channel is free for a second threshold if that is wanted.
 
-**What the board shows** (`character:face-types`): the drawings at every angle for four types and the map's shade at three angles for all 21; the light sweeping across the woman, the man, the boy and the elder from 24° to 71°, close up and at the game camera, with step 3 above step 4; turned from the light; and the reference under the same sweep.
+**What the board shows** (`character:face-types`): the drawings at every angle for four types and the map's shade at three angles for all 21; the light sweeping across the woman, the man, the boy and the elder from 24° to 71°, close up and at the game camera, with step 3 above step 4 (version `ac12a5`) and step 4 above step 4b (the version after it), eyes held open; turned from the light; and the reference under the same sweep.
 
 - The sweep's heads are copies without clips, held straight: the idle clip turns the head, and with it the angle of the light, so the later shapes did not show.
 - **At the game camera a face is about a dozen pixels across.** The shapes do not read there; only which half is darker does. They are a close-up matter.
@@ -981,7 +981,7 @@ What pass 2 proposed, in order of gain, and what became of it:
 1. **The eyes' drawing:** thin lash lines and a plainer iris against the reference's heavy upper lash and two-tone iris. Step 6.
 2. **How the hair is finished** (unchanged), and how it sits on the new head at the temple.
 3. **No lines where the form turns** (jaw, chin, mouth). Step 5.
-4. **Ours shows more shade than the reference at the same angle.** The reference's face stays clean until the light is well round to the side and then splits; ours draws a nose wedge from 30° and a cheek triangle from 56°. They are drawn shapes now and read as such, but how early and how large is a matter of taste: the onset angles are single numbers in `face_shadow.py`.
+4. **The nose's wedge is still a shape the reference does not draw.** After step 4b the face is flat until about 55° and nothing is lit inside the shade, which is near the reference; the small wedge beside the nose from 56° is ours. Its onset and the others are single numbers in `face_shadow.py`.
 5. **Lips and blush are painted into the skin.** Step 6.
 6. **Clothes and silhouette, hands** (unchanged).
 
