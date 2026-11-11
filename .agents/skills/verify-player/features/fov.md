@@ -20,6 +20,7 @@ Since 2026-11-11 (`fov-1`; docs/PERCEPTION.md, "The field of view (seventh chang
 
 ## Gotchas
 
+- `place_at` takes the nearest walkable tile: the script retries residents until the player stands 5.25–5.9 m from R, since at 5 m or less R is heard near, not close.
 - 5.5 m, not 4: a creature already seen keeps 1 m (`keep_seen_m`) on the near ring (3 m) and on side vision (a third of 11 m by day), so 4 m stays seen by day.
 - Other residents nearby are heard too: the script picks the row to the west in the close band.
 
