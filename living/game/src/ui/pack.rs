@@ -175,7 +175,7 @@ pub fn update(
     (looks, rules): (Res<crate::looks::Looks>, NonSend<crate::verbs::Rules>),
     mut cells: Query<(Entity, &Cell, &mut BackgroundColor, &mut BorderColor, &mut bevy::ui::Outline, &mut Tag), (Without<Ghost>, Without<Lit>)>,
     mut cell_icons: Query<(&CellIcon, &mut Node, &mut ImageNode), (Without<Ghost>, Without<GhostIcon>)>,
-    mut texts: ParamSet<(Query<(&CellCount, &mut Text)>, Query<&mut Text, With<Carry>>, Query<&mut Text, With<GhostLabel>>, Query<&mut Text, With<KnowTech>>, Query<(&KnowRowText, &mut Text)>, Query<(&KnowDetail, &mut Text)>)>,
+    mut texts: ParamSet<(Query<(&CellCount, &mut Text)>, Query<(&mut Text, &mut TextColor), With<Carry>>, Query<&mut Text, With<GhostLabel>>, Query<&mut Text, With<KnowTech>>, Query<(&KnowRowText, &mut Text)>, Query<(&KnowDetail, &mut Text)>)>,
     mut ghost: Query<&mut Node, (With<Ghost>, Without<CellIcon>, Without<KnowRow>, Without<GhostLabelBox>)>,
     mut ghost_icon: Query<&mut ImageNode, (With<GhostIcon>, Without<CellIcon>)>,
     mut ghost_box: Query<&mut Node, (With<GhostLabelBox>, Without<Ghost>, Without<CellIcon>, Without<KnowRow>)>,
@@ -227,9 +227,14 @@ pub fn update(
             let s = inv.rows.get(c.0).filter(|r| r.1 > 1).map_or(String::new(), |r| r.1.to_string());
             set_text(&mut t, &s);
         }
-        for mut t in &mut texts.p1() {
+        // Over the rules' limit (gifts and grants can put one there): the count in the warning
+        // rose, and said.
+        let over = inv.limit > 0.0 && inv.carried > inv.limit + 1e-3;
+        for (mut t, mut c) in &mut texts.p1() {
             let s = if inv.limit > 0.0 { format!("{} / {}", amount(inv.carried), amount(inv.limit)) } else { amount(inv.carried) };
+            let s = if over { format!("{s}  · over") } else { s };
             set_text(&mut t, &s);
+            super::set_color(&mut c, if over { wood::over_limit() } else { wood::muted() });
         }
     }
     // The ghost of a carried item.

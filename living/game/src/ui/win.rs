@@ -287,15 +287,19 @@ fn close(commands: &mut Commands, ws: &mut Windows, w: Win) {
 
 fn spawn_frame(commands: &mut Commands, f: &Fonts, icons: &Icons, w: Win) -> Entity {
     let width = width_of(w);
-    commands
-        .spawn((
+    let mut frame = commands.spawn((
             HudRoot,
             WinFrame(w),
             Block,
             Node { position_type: PositionType::Absolute, width: Val::Px(width), flex_direction: FlexDirection::Column, border: wood::b(3.0), border_radius: wood::r(12.0), ..default() },
             wood::wood(),
             GlobalZIndex(Z_WINDOWS),
-        ))
+        ));
+    // A wide window is mostly reading: a theme may give it a denser panel (Glass).
+    if let Some(g) = wood::reading().filter(|_| w.wide()) {
+        frame.insert(g);
+    }
+    frame
         .with_children(|fr| {
             fr.spawn(wood::rim(9.0));
             // Title bar: grip, title, the window's key, ✕. Holding it moves the window.

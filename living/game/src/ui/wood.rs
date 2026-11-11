@@ -152,6 +152,12 @@ pub struct Theme {
     pub mine_edge: Option<Color>,
     /// A window's title bar: a ground of its own under the title (none: the frame's).
     pub head: Option<Color>,
+    /// The panel of a wide window, which is mostly reading (Skills' descriptions, Settings): top
+    /// and bottom (none: the theme's panel).
+    pub reading: Option<(Color, Color)>,
+    /// The speech bubbles over heads in the world: ground, words, my name, another's name (none:
+    /// the cream bubble of `theme.rs`).
+    pub bubble: Option<(Color, Color, Color, Color)>,
 }
 
 impl Theme {
@@ -203,6 +209,8 @@ impl Theme {
                 person_cap: None,
                 mine_edge: None,
                 head: None,
+                reading: None,
+                bubble: None,
             },
             Name::Glass => Theme {
                 name: n,
@@ -260,6 +268,8 @@ impl Theme {
                 person_cap: Some(0.42),
                 mine_edge: Some(hexa(0x86aaff, 0.65)),
                 head: Some(hexa(0x05070b, 0.62)),
+                reading: Some((hexa(0x1c2330, 0.80), hexa(0x0b0e14, 0.86))),
+                bubble: Some((hexa(0x141a24, 0.86), hex(0xf6f7fa), hex(0xffd88a), hex(0xc3d6ff))),
             },
             Name::Clear => Theme {
                 name: n,
@@ -307,6 +317,8 @@ impl Theme {
                 person_cap: None,
                 mine_edge: None,
                 head: None,
+                reading: None,
+                bubble: None,
             },
             Name::Night => Theme {
                 name: n,
@@ -354,6 +366,8 @@ impl Theme {
                 person_cap: None,
                 mine_edge: None,
                 head: None,
+                reading: None,
+                bubble: None,
             },
             Name::Linen => Theme {
                 name: n,
@@ -401,6 +415,8 @@ impl Theme {
                 person_cap: None,
                 mine_edge: None,
                 head: None,
+                reading: None,
+                bubble: None,
             },
         }
     }
@@ -598,6 +614,21 @@ pub fn mine_edge() -> Color {
     t().mine_edge.unwrap_or(t().edge)
 }
 
+/// A wide window's ground in a theme that reads text there on a denser panel (Glass), else none.
+pub fn reading() -> Option<BackgroundGradient> {
+    t().reading.map(|(a, b)| down(&[(a, 0.0), (b, 100.0)]))
+}
+
+/// A count over its limit (the pack over what the rules let one carry), readable on the theme's
+/// panel: a light rose on dark glass, a deep one on light panels.
+pub fn over_limit() -> Color {
+    if luminance(t().text) > 0.5 {
+        ROSE2
+    } else {
+        ROSE_LO
+    }
+}
+
 /// The ornament line inside a frame (nothing, in a theme without ornament).
 pub fn rim(radius: f32) -> impl Bundle {
     let th = t();
@@ -784,6 +815,13 @@ mod tests {
         let (text, muted) = (luminance(th.text), luminance(th.muted));
         assert!(ratio(text, band) >= 4.5, "text on glass {:.2}", ratio(text, band));
         assert!(ratio(muted, band) >= 3.0, "muted on glass {:.2}", ratio(muted, band));
+        // A wide (reading) window's words on its denser panel, at its clearest; a head bubble's.
+        let (rt, _) = th.reading.unwrap();
+        assert!(ratio(text, over(rt, world)) >= 4.5, "text on a reading window {:.2}", ratio(text, over(rt, world)));
+        let (bg, words, mine, other) = th.bubble.unwrap();
+        for c in [words, mine, other] {
+            assert!(ratio(luminance(c), over(bg, world)) >= 4.5, "bubble {c:?} {:.2}", ratio(luminance(c), over(bg, world)));
+        }
         // The title on its bar, at the panel's clearest (its top).
         let top = over(th.panel.0, world);
         let title = over(th.head.unwrap(), top);
