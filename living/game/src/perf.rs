@@ -30,7 +30,11 @@
 //! - `diag`: every 2 s, Bevy's render diagnostics (per-pass CPU time; GPU time only where the
 //!   backend reports timestamps, so not on Metal) and what each view draws: meshes, distinct
 //!   meshes and materials, triangles, and the characters' share, for the camera and each
-//!   shadow cascade.
+//!   shadow cascade; every 10 s, what the loaded assets hold (`assets:`);
+//! - `rebuild=S`: S seconds after the first load's cover lifts, every character's scene is
+//!   spawned again, as a changed scene asset would make Bevy do (`characters::force_rebuild`), to
+//!   check that they are fitted, shaped and animated again; `nokeep` skips that (what happened
+//!   before rebuild-keep, for comparison).
 //!
 //! The frame is often limited by neither the GPU nor one system but by the render world's
 //! per-batch work: every distinct material and mesh slab is a batch set per view and pass, and

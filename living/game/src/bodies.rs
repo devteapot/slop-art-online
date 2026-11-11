@@ -237,14 +237,15 @@ pub fn beast_file(kind: &str) -> Option<&'static str> {
 /// (0 = +Z), `size` times its real size. None: draw the box creature ([`spawn`]).
 pub fn spawn_beast(commands: &mut Commands, assets: &AssetServer, kind: &str, at: Vec3, yaw: f32, size: f32) -> Option<Entity> {
     let file = beast_file(kind)?;
-    let scene = assets.load(bevy::gltf::GltfAssetLabel::Scene(0).from_asset(file));
     let model = crate::lookdev::Model { vrm: false, file: file.to_string(), height: 0.0, ground_y: at.y, glow: None };
+    // The root alone, once: its scene follows (`characters::SceneOf`).
+    let root = crate::characters::kept(assets, file);
     Some(
         commands
             .spawn((
                 model,
                 Beast,
-                bevy::world_serialization::WorldAssetRoot(scene),
+                crate::characters::SceneOf(root),
                 crate::characters::FileHandle::kept(assets, file),
                 Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(size)),
                 Visibility::Hidden,
