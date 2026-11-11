@@ -625,7 +625,7 @@ These are upper bounds. Fewer think when deaths outrun births, and only the cap 
 
 ## The greeting trial (2026-11-11)
 
-Branch `exp-greet`. Status: **built and proved with fake minds only** (`gf4`, `gf5`, below). No paid run has been made.
+Branch `exp-greet`. Status: fake proof (`gf4`, `gf5`, below) and paid batches [gr1/gr2](#greeting-batches-gr1gr2-2026-11-11). `nearest` + `concurrent` is the default since 2026-11-11; the `greet-control` variant runs the old rules (`off`, `wait`).
 
 **What it is for.** The owner played 7 minutes in a town of 17 minds and found that "people didn't seem very interactive when talking to them". The session journals showed two causes. A newcomer's "hi" to no one, with two or more people within 6 m, drew no conversation turn, because nobody cared about a stranger. A line could also wait out a whole deliberation whose prompt was built 0.6 s before it: 12.7 s from 1 m away. The conversation switches `LIVING_GREET` and `LIVING_PARK` (docs/LIVING_CORE.md, Conversations; both off by default) address these. This trial measures them as the owner met them.
 
@@ -911,7 +911,7 @@ The full result for all three gr1 batches and gr2 is the next section.
 
 ## Greeting batches gr1/gr2 (2026-11-11)
 
-Paid runs of the greeting trial on branch `exp-greet`: the switches `LIVING_GREET` and `LIVING_PARK` ([COMMUNICATION.md §5](COMMUNICATION.md#5-how-minds-take-turns)), all off by default. The world is the [hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11): 12 people on Cullet's laws (speech carries 12 m), of whom 11 think (`LIVING_ONLY` leaves out the child Tobin), on the `people` model mix: talk turns and on-stage deliberation on deepseek-flash, everything else on glm-flash (gr2's journals: 1,607 and 2,304 calls). A scripted player joins and repeats a cycle for 25 minutes. It walks into a group and says a greeting to no one. 50 s later it says a line to the nearest resident within 12 m. It then stands among them for 150 s, saying nothing, while they talk. Six cycles make a run. The player never says its own name and never answers.
+Paid runs of the greeting trial on branch `exp-greet`: the switches `LIVING_GREET` and `LIVING_PARK` ([COMMUNICATION.md §5](COMMUNICATION.md#5-how-minds-take-turns)), all off by default when these batches ran. `nearest` + `concurrent` is the default since (the override and acceptance are under Recommendation, below). The world is the [hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11): 12 people on Cullet's laws (speech carries 12 m), of whom 11 think (`LIVING_ONLY` leaves out the child Tobin), on the `people` model mix: talk turns and on-stage deliberation on deepseek-flash, everything else on glm-flash (gr2's journals: 1,607 and 2,304 calls). A scripted player joins and repeats a cycle for 25 minutes. It walks into a group and says a greeting to no one. 50 s later it says a line to the nearest resident within 12 m. It then stands among them for 150 s, saying nothing, while they talk. Six cycles make a run. The player never says its own name and never answers.
 
 Evidence: the run checkout `~/dev/slop-runs-greet` (branch `runs-greet`, exp-greet 3383026 plus 709770a), `.local/living/trials/{gr1a,gr1b,gr1c,gr2}/`.
 
@@ -1011,8 +1011,12 @@ US dollars per hour of a run, for 11 thinking minds, from the journals at `trial
 - Its false-reply cost: none added that these runs can see. In gr1 it was 0.010 a minute in both arms, and in gr2 0.040 against control's 0.111. It never drew a resident into another resident's line, and it made no pile-ons.
 - The guarded proxy score reports it `LOST` in gr2 on talk that led to something (0.61 against 0.66, placebo-adjusted 0.10 against 0.14). That is a small cost on a circular measure, and it is recorded.
 
+**The override.** The guarded proxy score marked nearest + concurrent LOST in gr2 (talk that led to something 0.10 vs 0.14 above placebo over four runs each). The general coordinator, who set that rule, overrode it on 2026-11-11: false replies and repeated lines were no worse, the dip is small over four runs, and the change fixes what the owner complained about directly. The measure keeps being reported in the next hamlet batches to see whether it was noise.
+
+**Accepted and on by default.** The owner accepted it as communication choice 3 ([COMMUNICATION.md §11](COMMUNICATION.md#11-open-choices-for-the-owner)), and since 2026-11-11 (branch `exp-greet`, commit "Greeting switches on by default") it is the default: `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`, and the `speech_audience` law on, which `nearest` reads. `off` and `wait` remain selectable (the old rules). `facing` remains available and off (below).
+
 **What it does not fix.**
-- Later greetings to a group whose members have already spoken with the stranger often go unanswered (5 of 24 in gr2).
+- **Known shortfall:** later greetings to a group that has already spoken with the stranger often go unanswered (5 of 24 in gr2). It is queued behind the arrival experiment.
 - The trial's silent player makes residents ask its name again and again, and finally press: Ilsa's "give your name and your road now, or walk on before dark" (example 5).
 
 **`facing` is not ready for a player.** As built, it addresses every speaker's lines, residents' included. That made the only choruses (2 resident lines, 3 player lines) and the most genuine false replies (3). It answered the nearest mind only 2 times in 17, because the scripted body faced its walking direction. Before it could be on for a player:
