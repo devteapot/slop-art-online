@@ -864,7 +864,7 @@ The screen drew ground and buildings to about 180 m, while people came and went 
 - **So people vanish behind stalls and wells.** By the rules these are as opaque as a house, though the camera sees over them. In the captures, 36 of the 64 people within reach were inside 48 m by day but behind something. One stood 3.5 m away, behind the stall next to the player.
 
 How it works (`sightfield.rs`, `sightedge.rs`, `edges.wesl`, `post.rs`):
-- **The radius is the rules'.** The client asks the world's installed script (`senses(a)`, the law the authority's perception sweep uses) for your character. Night comes from the displayed clock and a torch from your inventory. The radius eases to a new answer over about a second.
+- **The radius is the rules'.** The client asks the world's installed script (`senses(a)`, the law the authority's perception sweep uses) for your character, in one place (`sightedge::my_sight`). Night and how dark it is come from the world's `daylight` law at the displayed hour (since `rules-1`), and a torch from your inventory. The radius eases to a new answer over about a second.
 - **The sight field is the authority's test on the same tiles.** The client keeps the tiles as the authority hosts them:
   - the land regenerated through `host::hosted_map`, with its digests checked;
   - the window's `terrain_chunk` rows where they differ from it;
@@ -876,6 +876,7 @@ How it works (`sightfield.rs`, `sightedge.rs`, `edges.wesl`, `post.rs`):
 
 **Checked against the authority.** The checks used `verify-sight2-1`, a scratch world from the play-test 2 module: Brackenford, no mind service. It had the scene's sight (48 m by day, 20 m with a torch, 14 m at night). Each check compared the client's dumped field with the authority's `perceived` rows and every body's position (owner SQL), at three spots by day and three at night.
 - 63 of 64 bodies within reach agreed. The one miss stood on the shadow's edge (field 0.51).
+- After merging `rules-1`, the check was repeated on a world built from it (`verify-sight2-2`, same scene; the new script with the scene's distances): 47 of 49 agreed. Both misses were at the half-metre resolution of the ground mark: one person walking on a shadow's edge, and one seen through a gap between stalls narrower than a texel. The one in the gap was drawn, since people follow the exact test, but the ground under them was drawn dimmed.
 - Over 270 client-side checks of people drawn, 2 had a broken line: people mid-departure, within the sweep's 200 ms.
 
 **Cost** (laptop, with other agents' builds running):
@@ -885,7 +886,7 @@ How it works (`sightfield.rs`, `sightedge.rs`, `edges.wesl`, `post.rs`):
 - Frame time showed no cost. Each build ran one uncapped headless window at 1280×720, among the stalls by day, 20 s per mode, under a load average of 13–17 from other work. The previous build's medians were 5.9–6.6 ms; this one's were 5.8–6.4 ms in every mode.
 
 **Not done:**
-- Lamplight and lit people. The `rules-1` branch makes night a `daylight` law and lets a light on someone show them beyond your sight (`glow`). The client asks `senses` in one place, `sightedge::my_sight`, which `rules-1` changes to read the `daylight` law. A lit person beyond your radius would be drawn in the dimmed band: they are seen because they are lit.
+- **Lit people are not marked.** Since `rules-1`, a world's `glow` law can show someone beyond your sight: Cullet's laws do this for a carried torch at 48 m and lamplight at 28 m, at night. The authority still needs a clear line to them. The client draws whoever it is sent. Such a person stands in the band dimmed by distance, and the field doesn't reach that far, so the screen doesn't mark them as lit. The fade on a broken line uses the exact test, so it holds for them.
 - The two-distance rule (see at 48 m, know at 24 m).
 - Weather shortening sight. That waits on rules that do it.
 - Terrain edits are known only within the client's `terrain_chunk` window: 7 × 7 chunks, re-centred as you walk, so at least about 24 m round you. Edits made since world creation farther out, within a 48 m sight, are not in the field.

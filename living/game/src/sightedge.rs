@@ -19,8 +19,9 @@
 //! about 22 m from me: a camera fog at a 14 m night sight would hide my own character.
 //!
 //! The radius comes from the world's rules: the installed skill script (`verbs.rs` compiles it)
-//! answers `senses(a)` for my character, with night from the displayed clock and my torch from
-//! my inventory, the same law the authority's sweep asks. It eases over about a second when day
+//! answers `senses(a)` for my character, with night and how dark it is from the world's
+//! `daylight` law at the displayed hour and my torch from my inventory, the same law the
+//! authority's sweep asks (all in [`my_sight`]). It eases over about a second when day
 //! turns to night or a torch is lit.
 //!
 //! F2 cycles the modes, with a note naming the new one and the key. The same note shows once on
