@@ -6,7 +6,7 @@ The asset board records which version of each generated asset the owner accepted
 - Records, tracked in git: `living/assets/board/`.
 - Media and pages, outside git: `~/archive/asset-board/` (`$ASSET_BOARD_HOME`).
 
-Built 2026-11-11 (branch `tool-6`). It replaces the per-pass comparison pages of the character spike (`living/tools/char_spike/`) and the ad-hoc contact sheets of `living/tools/view_assets.sh`; both remain for one-off looks.
+Built 2026-11-11 (branch `tool-6`). It replaces the per-pass comparison pages of the character spike (`living/tools/char_spike/`, since char-2 `living/tools/characters/`) and the ad-hoc contact sheets of `living/tools/view_assets.sh`; both remain for one-off looks.
 
 ## What it shows
 

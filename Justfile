@@ -72,6 +72,10 @@ living-floor name db=living_db:
 living-sql query:
     {{living_stdb}} sql -s local {{living_db}} "{{query}}"
 
+# One command to play a scene (world, memory store, minds, client); paid parts stop when the client exits.
+living-play scene *args:
+    python3 living/tools/play.py {{scene}} {{args}}
+
 living-mind:
     living/tools/run-mind.sh
 
@@ -127,6 +131,17 @@ living-game-assets:
 [positional-arguments]
 living-board *args:
     python3 living/tools/board/board.py "$@"
+
+# People from the character generator (docs/CHARACTERS.md; git-ignored output): presets, seeds or
+# parameter files, each generated, given the clip library and the face's shading data.
+# `just living-people` makes the presets; `just living-people 12 halvard=halvard.json` others.
+living-people *args:
+    living/tools/blender/gen_person.sh {{args}}
+
+# A household or a whole town of people and the page to check them by (line-up, game camera,
+# every face): `just living-town .local/town`, `--household kiln-03`, `--town cullet.json`.
+living-town *args:
+    python3 living/tools/characters/town.py {{args}}
 
 # The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
 # (numpy and Pillow through uv): `--set ground` (the default) the ground's layers for

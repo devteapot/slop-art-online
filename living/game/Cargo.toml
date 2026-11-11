@@ -14,3 +14,5 @@ living-bindings = { path = "../bindings" }
 living-rules = { path = "../rules" }
 serde_json = { workspace = true }
 serde = { workspace = true }
+# The play session recorder's stills (record.rs): scaled and written as JPEG off the main thread.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
