@@ -552,9 +552,16 @@ pub fn follow(
         pointer.place = Some(screen);
     }
 
-    // Draw out toward the horizon and fade it into the sky.
+    // Draw out toward the horizon and fade it into the sky: by the environment's mood where
+    // there is one (the island's, Cullet's), else round the tile world's draw radius. The
+    // atmosphere scales it after (`daylight::apply`: night and weather close it in), and the
+    // sight edge's limited view fogs from my sight on top of it (`sightedge.rs`).
     draw.radius = 110.0 * s.max(0.7);
-    fog.falloff = FogFalloff::Linear { start: draw.radius * 0.45, end: draw.radius * 0.95 };
+    let (start, end) = match draw.fog {
+        Some((a, b)) => (a * s.max(0.7), b * s.max(0.7)),
+        None => (draw.radius * 0.45, draw.radius * 0.95),
+    };
+    fog.falloff = FogFalloff::Linear { start, end };
     if let Projection::Perspective(p) = &mut *proj {
         p.fov = v.fov.to_radians();
     }
