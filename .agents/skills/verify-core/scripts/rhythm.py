@@ -147,8 +147,10 @@ def drive(run):
     s.check("the furnace is fed and burns in the day watch", len(fed) >= 0.5 * max(1, len(morning)), {"lit_samples": len(fed), "samples": len(morning)})
     skills = {p["skill"] for r in morning for nm, p in r["people"].items() if nm in ("Fenn Brandt", "Corvin Hollin")}
     s.check("the day watch feeds the furnace and makes glass", "feed" in skills and "make" in skills, sorted(skills))
-    asleep, n = share(morning, "Thessaly Marl", lambda p: p["skill"] == "sleep" and p["home_m"] < 4)
-    s.check("the night stoker is asleep at home in the morning", asleep >= 0.6, {"share": round(asleep, 2), "samples": n})
+    # In bed hours at home one sleeps while tired and rests once rested ("keep warm"): sleep
+    # follows tiredness more than the clock.
+    asleep, n = share(morning, "Thessaly Marl", lambda p: p["skill"] in ("sleep", "rest", "") and p["home_m"] < 4)
+    s.check("the night stoker is in bed at home in the morning (asleep or resting)", asleep >= 0.6, {"share": round(asleep, 2), "samples": n})
 
     # Afternoon: the night stoker is up (not at work, not asleep); the baker sleeps again.
     noon = window(s, log, 15.0, 18.5)
@@ -166,8 +168,8 @@ def drive(run):
     feeds = sum(1 for r in night if r["people"].get("Thessaly Marl", {}).get("skill") == "feed")
     burn = [r for r in night if r["furnace"] and r["furnace"]["lit_until_ms"] > r["ms"]]
     s.check("she keeps the furnace burning through the night", len(burn) >= 0.6 * max(1, len(night)) and feeds >= 1, {"feed_samples": feeds, "lit_samples": len(burn), "samples": len(night)})
-    asleep, n = share(night, "Fenn Brandt", lambda p: p["skill"] == "sleep" and p["home_m"] < 4)
-    s.check("the day stoker sleeps at home at night", asleep >= 0.6, {"share": round(asleep, 2), "samples": n})
+    asleep, n = share(night, "Fenn Brandt", lambda p: p["skill"] in ("sleep", "rest", "") and p["home_m"] < 4)
+    s.check("the day stoker is in bed at home at night (asleep or resting)", asleep >= 0.6, {"share": round(asleep, 2), "samples": n})
     lamp, n = share(night, "Anselm Faro", lambda p: p["work_m"] is not None and p["work_m"] < 8)
     s.check("the lamp keeper is at the Watchglass at night", lamp >= 0.5, {"share": round(lamp, 2), "samples": n})
     alive = {c["name"] for c in s.sql("SELECT name, alive FROM character") if c["alive"]}

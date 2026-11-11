@@ -1,6 +1,14 @@
 # Validation record (generation)
 
 
+## 2026-11-11 lives-3: rhythms at any hour, Cullet's ways, Cullet's life law (dev-box)
+
+Branch `lives-3` (from the coordinator's main `3faa7bfb`, origin/main `12fd78ef` merged, with Cullet's 64 drafted residents), own container `lives3-stdb` (2.14.1, port 3321, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. New checks in every child: `people without a seeded rhythm have a drawn one (no working hours, no second sleep)` and `seeded rhythms are as given (any rising hour, working hours, a second sleep)` (the `rhythm` table is snapshotted now).
+
+- `generation-l3-171418` (before the merge; `--feature worlds --seeds island,aske-coast,cullet`): island 979 and aske-coast 286 checks pass (277 and 68 drawn rhythms, none with working hours or a second sleep). Cullet, then a town with no people but with `town_life`, failed 5 town-life checks that assume residents (places known, workers' workplaces, `lot:` places); and "original seeds unchanged" failed because I regenerated `cullet.json` (the ways' `holds` fix) while the run was going. Neither is a generation defect; the town-life checks still assume people wherever a seed has `town_life`.
+- `generation-l3b-172604` (after the merge and `author_world.py cullet --compile-only`): island 979, aske-coast 286, cullet 313 checks pass; original seeds unchanged. Cullet: 64 seeded rhythms as given, 50 workers with a workplace, 149 authored places, every resident on the seed's own ways.
+- Not run: `authored` and `guards` features, the other seeds.
+
 ## 2026-11-11 drop-1: drop (8) and low (9) tiles (dev-box)
 
 Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
