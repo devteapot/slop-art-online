@@ -97,13 +97,15 @@ python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.t
 python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
 python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
 
-# Goods, fires that eat fuel and recipes over Cullet's goods (about 7 min), and a seeded
+# Goods, fires that eat fuel and recipes over Cullet's goods (about 9 min), and a seeded
 # fishing ground's shared stock (features/goods.md, docs/WORLD_RULES.md).
 G=$R-goods
 mkdir -p ".local/living/verify/$G"
 python3 "$V" launch --run "$G" --seed "$PWD/$C/goods" > ".local/living/verify/$G/launch.txt" 2>&1
 python3 "$C/scenes.py" goods --run "$G" > ".local/living/verify/$G/goods.txt" 2>&1
 python3 "$C/scenes.py" stock --run "$G" > ".local/living/verify/$G/stock.txt" 2>&1
+# Crafting, cooking and smoking as recipes, by acts and by an old graph (features/goods.md).
+python3 "$C/scenes.py" making --run "$G" > ".local/living/verify/$G/making.txt" 2>&1
 python3 "$V" cleanup --run "$G" > ".local/living/verify/$G/cleanup.txt" 2>&1
 
 # A world's own day and laws (about 30 min; it waits for the world's own night):

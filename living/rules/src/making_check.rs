@@ -59,6 +59,16 @@ mod tests {
         }
     }
 
+    /// Writes Cullet's laws composed over this branch's shipped script to `LIVING_COMPOSED_OUT`,
+    /// for installing on a Cullet world made before recipes-1 (as `floors::compose` does at
+    /// creation).
+    #[test]
+    #[ignore = "writes a file: needs LIVING_COMPOSED_OUT"]
+    fn write_cullet_composed() {
+        let path = std::env::var("LIVING_COMPOSED_OUT").expect("set LIVING_COMPOSED_OUT");
+        std::fs::write(&path, crate::floors::compose(NEW, NEW_CULLET).unwrap()).unwrap();
+    }
+
     #[test]
     #[ignore = "needs LIVING_OLD_SKILLS and LIVING_OLD_CULLET: the scripts before recipes-1 (see the module's docs)"]
     fn making_is_bit_identical() {

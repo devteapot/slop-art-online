@@ -138,7 +138,7 @@ def drop_case(run):
     """A mind is told of a drop and of a low thing in words that say what they are and that
     one sees past them but cannot walk through them (`terrain_near`), and sees the creature on
     the other side, on the island (terraced towns' drops, carts and other low things)."""
-    target = ROOT / '.local/living/target-resident-island'
+    target = (Path(os.environ['CARGO_TARGET_DIR']) if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-resident-island')
     run.harness('launch', '--seed', 'island', '--target-dir', str(target))
     run.harness('doctor')
     world = run.sql('SELECT * FROM world', 'world')[0]
@@ -988,7 +988,7 @@ def resident_case(run):
     admin controls): this service thinks for it, it answers a player through `mind_say`,
     trades and teaches through its own acts, and a replacing projection keeps its given places
     (work, inn, square, evening: world facts its starting ways walk to)."""
-    target = ROOT / '.local/living/target-resident-island'
+    target = (Path(os.environ['CARGO_TARGET_DIR']) if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-resident-island')
     run.harness('launch', '--seed', 'island', '--target-dir', str(target))
     run.harness('doctor')
     world = run.sql('SELECT * FROM world', 'world')[0]

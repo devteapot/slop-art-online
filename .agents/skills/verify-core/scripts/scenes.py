@@ -1920,8 +1920,8 @@ SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "nee
 
 def goods(s):
     """Goods are script data matched by trait, and fires eat fuel (docs/WORLD_RULES.md, "Goods,
-    recipes and fuel"), on the goods fixture: Cullet's goods (living/scripts/cullet_goods.rhai)
-    installed over the shipped rules; kelp, peat and sand gathered from nodes placed beside a
+    recipes and fuel"), on the goods fixture: Cullet's goods (the goods section of
+    living/seeds/worlds/cullet/laws.rhai) composed over the shipped rules; kelp, peat and sand gathered from nodes placed beside a
     person; kelp burnt to ash at a hearth fed with peat; ash and sand melted to glass at a
     furnace, drawing a unit of its fuel; the hearth going out on its own, refusing what needs it
     burning, and lit again only by someone who knows fire; warmth only while it burns; a seeded
@@ -2198,7 +2198,67 @@ def decay(s):
              {"had": round(had, 4), "expected": round(grown, 4), "game_hours": round((row["at_ms"] - left["at_ms"]) / hour_ms, 3), "row": row})
 
 
+def making(s):
+    """Crafting, cooking and smoking are recipes of one table made by one mechanism (recipes-1,
+    docs/WORLD_RULES.md "One table of what is made"), on the goods fixture (Cullet's laws, whose
+    recipes() is base_recipes() + its own): a person cooks fish at the seeded hearth that burns
+    peat, by an act and by an old behaviour graph naming `cook`; is refused smoking and crafting
+    a spear in the old words until they know how; then smokes meat and crafts a spear. Cooking at
+    a fire that eats fuel draws none of it."""
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    s.expect("the world was made with Cullet's laws over the shipped recipes", "base_recipes() +" in src and "fn craft_making()" in src)
+    hearth = next(r for r in s.rows("SELECT * FROM structure", "seeded-structures") if r["kind"] == "hearth")
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def heard(actor, words, since):
+        return [r["text"] for r in s.rows(f"SELECT text, at_ms FROM experience WHERE observer = {actor}") if r["at_ms"] >= since and words in r["text"]]
+
+    people = [c["id"] for c in s.rows("SELECT id, kind FROM character") if c["kind"] == "person"]
+    a = people[0]
+    for p in people:
+        s.graph(p, {"wait": 120})
+    s.call("place_at", a, hearth["x"] - 1.0, hearth["y"])
+    s.call("grant_know_how", a, "cooking")
+    for item, n in (("fish", 2), ("meat", 1), ("wood", 2), ("stone", 1)):
+        s.call("grant_items", a, item, n)
+    before = s.inventory(a, "before")
+    lit_before = s.rows(f"SELECT lit_until_ms FROM structure WHERE id = {hearth['id']}")[0]["lit_until_ms"]
+    s.expect("the seeded hearth burns", lit_before > now(), {"lit_until_ms": lit_before, "now": now()})
+
+    # Cooking by an act, then by an old graph naming the skill as before.
+    s.act(a, {"do": "cook", "item": "fish", "target": {"nearest": "hearth"}})
+    s.wait(lambda: s.inventory(a).get("cooked_fish", 0) >= 1, seconds=30)
+    inv = s.inventory(a, "cooked-by-act")
+    s.expect("cook fish at a burning hearth makes cooked fish from one fish", inv.get("cooked_fish") == 1 and inv.get("fish") == before["fish"] - 1, inv)
+    s.graph(a, {"seq": [{"do": "cook", "item": "fish", "target": {"nearest": "hearth"}}, {"wait": 120}]})
+    s.wait(lambda: s.inventory(a).get("cooked_fish", 0) >= 2, seconds=30)
+    inv = s.inventory(a, "cooked-by-graph")
+    s.expect("an old graph naming cook still cooks", inv.get("cooked_fish") == 2 and inv.get("fish", 0) == 0, inv)
+    lit_after = s.rows(f"SELECT lit_until_ms FROM structure WHERE id = {hearth['id']}", "hearth-after-cooking")[0]["lit_until_ms"]
+    s.expect("cooking draws no fuel from the hearth", lit_after == lit_before, {"before": lit_before, "after": lit_after})
+
+    # Refused in the old words until known.
+    t0 = now()
+    s.graph(a, {"wait": 120})
+    s.act(a, {"do": "smoke", "item": "meat", "target": {"nearest": "hearth"}})
+    s.act(a, {"do": "craft", "item": "spear"})
+    s.wait(lambda: len(heard(a, "did not work out", t0)) >= 2, seconds=30)
+    s.expect("smoking unknown is refused as before", heard(a, "you don't know how to smoke food", t0), heard(a, "", t0))
+    s.expect("crafting a spear unknown is refused as before", heard(a, "you don't know how to make a spear", t0), heard(a, "", t0))
+
+    s.call("grant_know_how", a, "smoking")
+    s.call("grant_know_how", a, "spear")
+    s.act(a, {"do": "smoke", "item": "meat", "target": {"nearest": "hearth"}})
+    s.act(a, {"do": "craft", "item": "spear"})
+    s.wait(lambda: s.inventory(a).get("spear", 0) >= 1 and s.inventory(a).get("smoked_meat", 0) >= 1, seconds=60)
+    inv = s.inventory(a, "after")
+    s.expect("smoke meat makes smoked meat; craft spear uses 2 wood and 1 stone", inv.get("smoked_meat") == 1 and inv.get("meat", 0) == 0 and inv.get("spear") == 1 and inv.get("wood", 0) == before.get("wood", 0) - 2 and inv.get("stone", 0) == before.get("stone", 0) - 1, {"before": before, "after": inv})
+
+
 SCENES["goods"] = goods
+SCENES["making"] = making
 SCENES["stock"] = stock
 SCENES["decay"] = decay
 
