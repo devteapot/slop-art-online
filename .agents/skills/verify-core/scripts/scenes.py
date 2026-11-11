@@ -1925,7 +1925,7 @@ def audience(s):
     s.act(a, {"do": "face", "target": {"id": c}})
     time.sleep(3)
     thought = {"kind": "verify", "summary": "verify-core audience", "detail": "", "latency_ms": 0, "tokens": 0, "model": "", "reference": "verify-core"}
-    say = lambda text: (s.call("mind_say", a, text, 0, 0, thought), time.sleep(2.2))
+    say = lambda text: (s.call("mind_say", a, text, 0, "", 0, thought), time.sleep(2.2))
     hearers = lambda row: {(h["id"] if isinstance(h, dict) else h[0]): (h["d"], h["off"]) if isinstance(h, dict) else (h[1], h[2]) for h in row["hearers"]}
     try:
         s.call("install_script", shipped.replace("speech_audience: true,", "speech_audience: false,"))

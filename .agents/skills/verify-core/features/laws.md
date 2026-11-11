@@ -44,7 +44,7 @@ python3 .agents/skills/verify-core/scripts/scenes.py audience --run "$R" > ".loc
 python3 "$V" cleanup --run "$R"
 ```
 
-The scene places a speaker, a person 1 m east, one 4 m east and one 13 m east (beyond the shipped 9 m hearing), turns the speaker east (`face`) and speaks through `mind_say`. Checks: law off (the shipped script with `speech_audience: false`, installed with `install_script`), no row. Law on (the shipped script again): one row, said to no one, with the two within hearing and not the third, distances about 1 and 4 m, both under 0.35 rad off the facing. A line 61 s later deletes the first row. The shipped script is installed again at the end. Evidence: `audience-line.json`, `audience-audience-off.json`, `audience-audience-on.json`, `audience-audience-later.json`, `audience-results.json`.
+The scene places a speaker, a person 1 m east, one 4 m east and one 13 m east (beyond the shipped 9 m hearing), turns the speaker east (`face`) and speaks through `mind_say` (way `""`, that is `say`). Checks: law off (the shipped script with `speech_audience: false`, installed with `install_script`), no row. Law on (the shipped script again): one row, said to no one, with the two within hearing and not the third, distances about 1 and 4 m, both under 0.35 rad off the facing. A line 61 s later deletes the first row. The shipped script is installed again at the end. Evidence: `audience-line.json`, `audience-audience-off.json`, `audience-audience-on.json`, `audience-audience-later.json`, `audience-results.json`.
 
 ## Decay
 
