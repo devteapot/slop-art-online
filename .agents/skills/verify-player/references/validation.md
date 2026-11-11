@@ -1,5 +1,15 @@
 # Validation record (player)
 
+## 2026-11-11 player-told (dev-box): a failed command told to the player
+
+Branch `player-told` (from `4b75812`), the worker's own container `player-told-stdb` (2.14.1, port 3447), default seed, `scoped`. `act::tell` tells a played character's failed graph action as an AI's is told.
+
+- `told.py` (new): 12 of 12 (`player-told-c`). Refused at start: one line "You failed to graze: only deer graze", the AI control's text exactly; the same command again inside the window added none. After starting: one line "You failed to give berries → person: they moved away", the AI control's text exactly. `character.ai` false at both reads (no takeover). The first two attempts failed on the driver: a `follow` whose target was moved far, and a receiver moved 40 m, are dropped by the evaluator without a report for the AI too (`player-told-a`, `-b`).
+- The same script on the unchanged module (`player-told-base`, `act.rs` stashed): 7 of 12, no line in the player's log for either failure while the AI got both. The case detects the defect.
+- `command.py`: 4 of 4 (`player-told-c`). The player-character recipe (`player-told-d`): join once, gift and its `act` feedback, follow, run, walk, stop, say, heard, admin refused; after the move the player's log also holds "You failed to follow → person: you moved" (the follow broken off by taking the controls).
+- verify-core `scenes.py refusal`: 4 of 4 (`core-player-told`).
+- Not run: `combat.py`, `gesture.py`, `host.py`, `appraise.py`, `wake.py`, `deal.py`, `new_skill.py`, `walk_times.py`, the game client binary.
+
 ## 2026-11-10 fix-rules-small (dev-box): the client-feel failures triaged
 
 Branch `fix-rules-small`, the worker's own container `rules-small-stdb` (2.14.1, port 3417), island seed, `scoped`; a clean baseline worktree of `origin/main` (`7dab3cb`, authority equal to `6c8d100`) on the same container.

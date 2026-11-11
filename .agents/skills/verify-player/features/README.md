@@ -2,7 +2,7 @@
 
 | Feature | File |
 | --- | --- |
-| Player character: join, move, act (a command runs once, `command.py`), walk far by click-to-move, speak, refusals | [player-character.md](player-character.md) |
+| Player character: join, move, act (a command runs once, `command.py`; a failed command told as an AI is told, `told.py`), walk far by click-to-move, speak, refusals | [player-character.md](player-character.md) |
 | Combat skills: use, refusals, strike, killing a person, bow, fire bolt, block, dodge, heal, wolves, death and rejoin | [combat.md](combat.md) |
 | Gestures: wave, nod and face through `human_act`, answered by residents; refusals | [gestures.md](gestures.md) |
 | Waking residents: a player's speech, wave, gift, offer and lesson wake the resident they are aimed at into a mind; an overhearing resident keeps the line in its ring; nobody else wakes; `woken` and `prior` private | [waking.md](waking.md) |

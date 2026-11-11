@@ -7,7 +7,7 @@
 - Restrict skills to a body's species.
 - Parse and expand routines and desires; rework a routine.
 - Evaluate installed work sequences, threatened and hurt guards, and locomotion.
-- An action refused as it would start (`act::begin` returns why) is a failure like one after starting (`act::refused`): it counts in its routine's `routine_stat` with the reason and in `mind_state.fails`, and an AI character is told ("You failed to …"), once per `repeat_failure_s` for the same action and reason. A guard's first choice refused on every look while its fallback runs counts once a window.
+- An action refused as it would start (`act::begin` returns why) is a failure like one after starting (`act::refused`): it counts in its routine's `routine_stat` with the reason and in `mind_state.fails`, and the character is told ("You failed to …"), once per `repeat_failure_s` for the same action and reason: an AI character, or a person playing it (since 2026-11-11, `act::tell`, the same words; `verify-player` `told.py`). A guard's first choice refused on every look while its fallback runs counts once a window.
 - `judged`: read a cached typed judgment from the private `judged` table (written by the mind service's `mind_judged`), comparing its value (`above`, `below`) or choice (`is`); with none, or an expired one, the condition is its `else` (default false). It never waits on the mind (docs/MIND_HARNESS.md, item 4).
 
 ## How to get to it (user POV)
