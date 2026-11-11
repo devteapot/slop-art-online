@@ -262,6 +262,13 @@ pub struct LotSpec {
     /// world's own kind of store, `store`, here).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub structure: Option<String>,
+    /// Where the structures a household owns stand inside it, in the frame of its spots, in
+    /// order: the first owned structure placed for the lot (`structures[]` with this `lot`, an
+    /// `owner` and no `spot`) at the first point, and so on. Each must lie inside the lot.
+    /// Without a point, such a structure takes the lot's own tile nearest its door
+    /// ([`placed_structures`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inside: Vec<[f32; 2]>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -365,6 +372,8 @@ pub(crate) struct PlanLot {
     pub(crate) landmark: bool,
     pub(crate) spots: Vec<(String, V2)>,
     pub(crate) structure: Option<String>,
+    /// [`LotSpec::inside`] on the land.
+    pub(crate) inside: Vec<V2>,
 }
 
 /// A plan converted to the land's axes, its names resolved to indices.
@@ -575,7 +584,14 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
             }
             spots.push((sp.name.clone(), add(rect.c, add(mul(right, sp.at[0]), mul(front, sp.at[1])))));
         }
-        lots.push(PlanLot { id: l.id.clone(), kind: l.kind, name: l.name.clone(), rect, level: li, model: l.model.clone().filter(|m| !m.is_empty()), height, landmark: l.landmark, spots, structure: l.structure.clone().filter(|k| !k.is_empty()) });
+        let mut inside = Vec::new();
+        for q in &l.inside {
+            if !finite(&[*q]) || q[0].abs() > rect.hw || q[1].abs() > rect.hd {
+                return Err(format!("plan {id}: lot {} has an inside point {q:?} that is not inside it (it is {} wide and {} deep)", l.id, l.size[0], l.size[1]));
+            }
+            inside.push(add(rect.c, add(mul(right, q[0]), mul(front, q[1]))));
+        }
+        lots.push(PlanLot { id: l.id.clone(), kind: l.kind, name: l.name.clone(), rect, level: li, model: l.model.clone().filter(|m| !m.is_empty()), height, landmark: l.landmark, spots, structure: l.structure.clone().filter(|k| !k.is_empty()), inside });
     }
     let mut resources = Vec::new();
     for (i, rs) in s.resources.iter().enumerate() {
@@ -588,9 +604,12 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
         }
         resources.push(LaidResource { kind: rs.kind.clone(), at: f.pt(rs.at), max: rs.max, regrow_per_h: rs.regrow_per_h, pool: rs.pool.clone() });
     }
-    // Structures at a point, a lot's door or a lot's spot; then each lot's own store.
+    // Structures at a point, a lot's door or a lot's spot; then each lot's own store. One a
+    // household owns, placed for a lot without a spot, stands inside the lot: at its next
+    // `inside` point, else where hosting finds the lot's own tile nearest its door.
     let door = |l: &PlanLot| add(l.rect.c, mul(l.rect.f, l.rect.hd + 0.5));
     let mut structures = Vec::new();
+    let mut inside_used: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for (i, st) in s.structures.iter().enumerate() {
         let name = format!("structures[{i}] ({})", st.kind);
         if st.kind.is_empty() || !(st.fuel.is_finite() && st.fuel >= 0.0) {
@@ -614,11 +633,25 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
                 _ => return Err(format!("plan {id}: {name} has owner {o:?}; an owner is \"household:<key>\", a household of the seed's residents")),
             },
         };
-        structures.push(LaidStructure { kind: st.kind.clone(), lot: String::new(), at, fuel: st.fuel, contents: st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect(), household: owner });
+        let (mut at, mut lot, mut inside) = (at, String::new(), Inside::No);
+        if let (Some(lid), None, false) = (&st.lot, &st.spot, owner.is_empty()) {
+            let l = lots.iter().find(|l| l.id == *lid).expect("found above");
+            let k = inside_used.entry(lid.clone()).or_default();
+            inside = match l.inside.get(*k) {
+                Some(q) => {
+                    at = *q;
+                    Inside::Named
+                }
+                None => Inside::Nearest,
+            };
+            *k += 1;
+            lot = lid.clone();
+        }
+        structures.push(LaidStructure { kind: st.kind.clone(), lot, at, fuel: st.fuel, contents: st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect(), household: owner, inside });
     }
     for (l, spec) in lots.iter().zip(&s.lots) {
         if !spec.contents.is_empty() {
-            structures.push(LaidStructure { kind: String::new(), lot: l.id.clone(), at: door(l), fuel: 0.0, contents: spec.contents.iter().map(|(k, v)| (k.clone(), *v)).collect(), household: String::new() });
+            structures.push(LaidStructure { kind: String::new(), lot: l.id.clone(), at: door(l), fuel: 0.0, contents: spec.contents.iter().map(|(k, v)| (k.clone(), *v)).collect(), household: String::new(), inside: Inside::No });
         }
     }
     // Fixtures that block: their tiles on the land. The others are not the rules' business.
@@ -1070,7 +1103,8 @@ pub struct LaidResource {
 }
 
 /// An authored structure on the land: a structure of `kind` to place at `at`, or (an empty
-/// kind) what the structure at lot `lot`'s door holds.
+/// kind) what the structure at lot `lot`'s door holds. One a household owns that is placed for
+/// a lot without a spot names that `lot` and stands inside it ([`Inside`]).
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct LaidStructure {
     pub kind: String,
@@ -1081,7 +1115,25 @@ pub struct LaidStructure {
     /// The household whose it is ([`StructureSpec::owner`] without `household:`); empty:
     /// nobody's.
     pub household: String,
+    pub inside: Inside,
 }
+
+/// Whether a structure stands inside its lot, and how its point is found.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub enum Inside {
+    /// Where written (a point, a lot's door or spot): placed at the nearest walkable tile.
+    #[default]
+    No,
+    /// At the lot's [`LotSpec::inside`] point (`at`), on the lot's own tile there.
+    Named,
+    /// On the lot's own tile nearest its door that no other structure of the lot has taken.
+    Nearest,
+}
+
+/// How far from a structure inside a lot someone must be able to stand: the reach of the acts
+/// one does at a household's things (cook, feed, store and take reach 1.5 m in the shipped
+/// script). Hosting refuses a plan that puts one farther than this from every reachable tile.
+pub const INSIDE_REACH_M: f32 = 1.5;
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct LaidLot {
@@ -1292,6 +1344,77 @@ pub fn stranded_doors(land: &Land, map: &crate::map::Map, reachable: &[bool]) ->
     out
 }
 
+/// A lot's own tiles on the hosted map, standable ones first, then nearest `to`: the tiles under
+/// its footprint ([`crate::host::footprint_tiles`]; a planned lot has no margin) that are not a
+/// street (a road left open under it), water, or under another of the plan's lots.
+fn own_tiles(land: &Land, map: &crate::map::Map, plan: &Laid, idx: u32, to: V2) -> Vec<(i32, i32)> {
+    let lot = &land.lots[idx as usize];
+    let reach = |l: &Lot| l.width_m.d_hypot(l.depth_m) * 0.5 + 1.0;
+    let others: Vec<&Lot> = plan.lots.iter().filter(|o| o.lot != idx).map(|o| &land.lots[o.lot as usize]).filter(|o| dist(o.centre, lot.centre) <= reach(o) + reach(lot)).collect();
+    let mut tiles: Vec<(i32, i32)> = crate::host::footprint_tiles(lot, 0.0)
+        .into_iter()
+        .filter(|&(x, y)| x >= 0 && y >= 0 && (x as u32) < map.w && (y as u32) < map.h)
+        .filter(|&(x, y)| !matches!(map.get(x, y), Terrain::Road | Terrain::Water))
+        .filter(|t| others.iter().all(|o| !crate::host::footprint_tiles(o, 0.0).contains(t)))
+        .collect();
+    let centre = |t: &(i32, i32)| (t.0 as f32 + 0.5, t.1 as f32 + 0.5);
+    tiles.sort_by(|a, b| (!map.walkable(a.0, a.1)).cmp(&!map.walkable(b.0, b.1)).then(dist(centre(a), to).total_cmp(&dist(centre(b), to))).then((a.1, a.0).cmp(&(b.1, b.0))));
+    tiles
+}
+
+/// The plans' authored structures where the world places them, on the hosted map. Those a
+/// household owns that are placed for a lot without a spot ([`Inside`]) stand inside the lot,
+/// on its own tiles (never a street's or another lot's): at the lot's `inside` point, on the
+/// tile of the lot's nearest it; else on the lot's own tile nearest its door that no other
+/// structure of the lot has taken, a standable one first (an open lot's ground), else under
+/// the building (a house's floor, behind its door). The rest are as laid (the authority puts
+/// them on the nearest walkable tile). Refused, naming them, when a structure inside a lot has
+/// no reachable tile within [`INSIDE_REACH_M`] where someone can stand to use it, or a lot has
+/// no tile of its own.
+pub fn placed_structures(land: &Land, map: &crate::map::Map, reachable: &[bool]) -> Result<Vec<LaidStructure>, String> {
+    let mut out = Vec::new();
+    let mut bad = Vec::new();
+    for p in &land.plans {
+        let mut taken: std::collections::HashMap<u32, Vec<(i32, i32)>> = std::collections::HashMap::new();
+        for st in &p.structures {
+            let mut st = st.clone();
+            if st.inside != Inside::No {
+                let Some(laid) = p.lots.iter().find(|l| l.key == st.lot) else {
+                    bad.push(format!("{}:{} ({}): no such lot", p.id, st.lot, st.kind));
+                    continue;
+                };
+                let lot = &land.lots[laid.lot as usize];
+                let named = st.inside == Inside::Named;
+                let tiles = own_tiles(land, map, p, laid.lot, if named { st.at } else { crate::host::door(lot) });
+                let used = taken.entry(laid.lot).or_default();
+                let tile = if named { tiles.iter().copied().find(|&(x, y)| (x, y) == (st.at.0.floor() as i32, st.at.1.floor() as i32)).or_else(|| tiles.first().copied()) } else { tiles.iter().copied().find(|t| !used.contains(t)).or_else(|| tiles.first().copied()) };
+                let Some(tile) = tile else {
+                    bad.push(format!("{}:{} ({}): the lot has no tile of its own", p.id, st.lot, st.kind));
+                    continue;
+                };
+                used.push(tile);
+                if !(named && (st.at.0.floor() as i32, st.at.1.floor() as i32) == tile) {
+                    st.at = (tile.0 as f32 + 0.5, tile.1 as f32 + 0.5);
+                }
+                let r = INSIDE_REACH_M.ceil() as i32;
+                let stands = (-r..=r).flat_map(|dy| (-r..=r).map(move |dx| (tile.0 + dx, tile.1 + dy))).any(|(x, y)| {
+                    map.walkable(x, y) && reachable.get((y as u32 * map.w + x as u32) as usize).copied().unwrap_or(false) && dist((x as f32 + 0.5, y as f32 + 0.5), st.at) <= INSIDE_REACH_M
+                });
+                if !stands {
+                    bad.push(format!("{}:{} ({})", p.id, st.lot, st.kind));
+                    continue;
+                }
+            }
+            out.push(st);
+        }
+    }
+    if bad.is_empty() {
+        Ok(out)
+    } else {
+        Err(format!("no one can stand within {INSIDE_REACH_M} m of the household structures inside {}", bad.join(", ")))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1461,6 +1584,79 @@ mod tests {
         assert!(m.sight_clear(inside, lane), "a Strand court's 1.5 m wall is seen over");
         let (garden, row) = (f.pt([26.4, 103.0]), f.pt([26.4, 95.6]));
         assert!(reachable(garden) && reachable(row) && !m.sight_clear(garden, row), "a Kiln garden's 2 m wall hides the garden from the Row");
+        // Since hearth-1 the households' hearths and stores stand inside their homes, on the
+        // floor behind the door, each within reach of where one stands (`inside_ok`).
+        let inside = inside_ok(&l, &m, &h.reachable);
+        let count = |k: &str| inside.iter().filter(|q| q.1 == k).count();
+        assert_eq!((count("hearth"), count("house_store"), inside.len()), (21, 22, 43), "{inside:?}");
+        assert!(inside.iter().all(|q| !q.3), "all on a building's floor");
+    }
+
+    /// Where a household's own structures stand ([`placed_structures`]): each on a tile of its own
+    /// lot (not a street's, not another lot's), within [`INSIDE_REACH_M`] of a reachable tile one
+    /// can stand on. Returns, per structure inside a lot, (lot key, kind, point, tile walkable).
+    fn inside_ok(l: &Land, m: &Map, reach: &[bool]) -> Vec<(String, String, V2, bool)> {
+        let placed = placed_structures(l, m, reach).expect("placed");
+        let laid = &l.plans[0];
+        let mut out = Vec::new();
+        for st in placed.iter().filter(|s| s.inside != Inside::No) {
+            let lot = laid.lots.iter().find(|q| q.key == st.lot).expect("its lot");
+            let tile = (st.at.0.floor() as i32, st.at.1.floor() as i32);
+            assert!(crate::host::footprint_tiles(&l.lots[lot.lot as usize], 0.0).contains(&tile), "{} of {} stands on its lot's tile", st.kind, st.lot);
+            assert!(laid.lots.iter().filter(|o| o.lot != lot.lot).all(|o| !crate::host::footprint_tiles(&l.lots[o.lot as usize], 0.0).contains(&tile)), "{} of {} is on another lot's tile", st.kind, st.lot);
+            assert_ne!(m.get(tile.0, tile.1), Terrain::Road, "{} of {} stands in the street", st.kind, st.lot);
+            let stand = (-2..=2).flat_map(|dy| (-2..=2).map(move |dx| (tile.0 + dx, tile.1 + dy))).filter(|&(x, y)| m.walkable(x, y) && reach[(y as u32 * m.w + x as u32) as usize]).map(|(x, y)| dist((x as f32 + 0.5, y as f32 + 0.5), st.at)).fold(f32::MAX, f32::min);
+            assert!(stand <= INSIDE_REACH_M, "{} of {}: the nearest standable tile is {stand} m away", st.kind, st.lot);
+            // The walk an act makes to it (`motion::start`: the nearest reachable tile, the first
+            // found in the nearest ring) ends within the act's reach for a structure on a tile's
+            // centre (the default), and within the slack an act allows a place once its walk
+            // ends (the authority's `act.rs`: reach + 1.2 m) for a named point.
+            let walk = m.nearest_reachable(crate::host::door(&l.lots[lot.lot as usize]), st.at.0, st.at.1).expect("somewhere to stand");
+            let slack = if st.inside == Inside::Nearest { 0.01 } else { 1.2 };
+            assert!(dist(walk, st.at) <= INSIDE_REACH_M + slack, "{} of {}: an act walks to {walk:?}, {} m away", st.kind, st.lot, dist(walk, st.at));
+            out.push((st.lot.clone(), st.kind.clone(), st.at, m.walkable(tile.0, tile.1)));
+        }
+        out
+    }
+
+    /// A household's own structures placed for a lot stand inside it: on the lot's own tile
+    /// nearest its door, each on its own tile (the Hollis store and fire, on the house's floor),
+    /// at the lot's `inside` point when it names one (the Wrens' store), and on the ground of an
+    /// open lot (the Wrens' woodpile in the garth). The rest stand where written. A point outside
+    /// the lot, and one no one can stand within reach of, are refused.
+    #[test]
+    fn a_households_own_structures_stand_inside_its_lot() {
+        let (l, m, reach) = plan_land();
+        let s = spec();
+        let f = Frame::of(&s);
+        let inside = inside_ok(l, m, reach);
+        let kinds: Vec<(&str, &str, bool)> = inside.iter().map(|(lot, k, _, w)| (lot.as_str(), k.as_str(), *w)).collect();
+        assert_eq!(kinds, [("house_a", "storage", false), ("house_a", "campfire", false), ("house_d", "storage", false), ("garth", "storage", true)]);
+        let laid = &l.plans[0];
+        let lot = |k: &str| &l.lots[laid.lots.iter().find(|q| q.key == k).unwrap().lot as usize];
+        // The first is on the tile nearest the door, the second beside it, both behind the door.
+        let door = crate::host::door(lot("house_a"));
+        let (a, b) = (inside[0].2, inside[1].2);
+        assert!(a != b && dist(a, door) <= 1.5 && dist(b, door) <= 2.0, "{a:?} {b:?} by the door {door:?}");
+        assert!(crate::host::footprint_tiles(lot("house_a"), 0.0).iter().all(|t| dist((t.0 as f32 + 0.5, t.1 as f32 + 0.5), door) >= dist(a, door) - 1e-4));
+        // A named point is kept as written.
+        let wren = s.lots.iter().find(|q| q.id == "house_d").unwrap();
+        let front = f.dir(wren.facing.bearing().unwrap());
+        let want = add(f.pt(wren.at), add(mul(mul(perp(front), -1.0), wren.inside[0][0]), mul(front, wren.inside[0][1])));
+        assert!(dist(inside[2].2, want) < 1e-3, "{:?} at {want:?}", inside[2].2);
+        // Unowned and spot-placed ones are as laid: the hall's lamp at its door.
+        let placed = placed_structures(l, m, reach).unwrap();
+        assert!(placed.iter().any(|q| q.kind == "lamp" && q.inside == Inside::No && dist(q.at, crate::host::door(lot("hall"))) < 1e-3));
+        // Refused: a point outside the lot, and a point deep in a building.
+        let mut bad = s.clone();
+        bad.lots.iter_mut().find(|q| q.id == "house_d").unwrap().inside[0] = [0.0, 6.0];
+        assert!(validate(&bad, 1024).unwrap_err().contains("is not inside it"));
+        let mut deep = l.clone();
+        let hall = deep.plans[0].lots.iter().find(|q| q.key == "hall").unwrap().lot;
+        let c = deep.lots[hall as usize].centre;
+        deep.plans[0].structures.push(LaidStructure { kind: "storage".into(), lot: "hall".into(), at: c, household: "hollis".into(), inside: Inside::Named, ..Default::default() });
+        let e = placed_structures(&deep, m, reach).unwrap_err();
+        assert!(e.contains("plan_test:hall (storage)"), "{e}");
     }
 
     /// Authored resources are kept on the land at their points, for the authority to place; one

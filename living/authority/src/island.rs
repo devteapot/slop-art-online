@@ -263,7 +263,8 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
     // Built by the planner's last step; a land made otherwise (none today) builds it here.
     let ways = land.ways.clone().unwrap_or_else(|| living_rules::ways::Ways::of(land));
     let resources = land.plans.iter().flat_map(|p| p.resources.iter().cloned()).collect();
-    let structures = land.plans.iter().flat_map(|p| p.structures.iter().cloned()).collect();
+    // A household's own structures stand inside its lot, within reach of where one can stand.
+    let structures = living_rules::settle::placed_structures(land, &map, &hosted.reachable).map_err(|e| format!("map.params.plans: {e}"))?;
     Ok(Hosted { map, info, settlements, lots, ways, resources, structures })
 }
 

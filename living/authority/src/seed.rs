@@ -1039,7 +1039,7 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
         let owner = ctx.db.character().iter().find(|c| c.name == st.owner).map(|c| c.id).unwrap_or(0);
         let contents: Vec<(String, u32)> = st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect();
         // A fire the seed gives fuel starts lit, burning it down from now.
-        put_authored(ctx, map, &st.kind, (st.at[0], st.at[1]), owner, &contents, st.fuel, now);
+        put_authored(ctx, map, &st.kind, (st.at[0], st.at[1]), false, owner, &contents, st.fuel, now);
     }
     place_nodes(ctx, &s.resource_nodes, now);
     for a in &s.artifacts {
@@ -1389,11 +1389,12 @@ fn plan_resources(ctx: &ReducerContext, map: &living_rules::map::Map, at: &[livi
 }
 
 /// A structure an author places (a seed's `structures`, a plan's): at the nearest walkable tile,
+/// or, `exact`, where it is (a household's own inside its lot, `settle::placed_structures`),
 /// with its contents, and, for a fire that burns fuel, lit with `fuel` units burning down from
 /// now.
 #[allow(clippy::too_many_arguments)]
-fn put_authored(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32, f32), owner: u32, contents: &[(String, u32)], fuel: f32, now: u64) -> u64 {
-    let at = map.nearest_walkable(at.0, at.1).unwrap_or((48.0, 48.0));
+fn put_authored(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32, f32), exact: bool, owner: u32, contents: &[(String, u32)], fuel: f32, now: u64) -> u64 {
+    let at = if exact { at } else { map.nearest_walkable(at.0, at.1).unwrap_or((48.0, 48.0)) };
     common::invalidate_structures(ctx);
     let burns = common::scripts(ctx).structure(kind).burns.clone();
     let lit_until_ms = burns.filter(|_| fuel > 0.0).and_then(|b| living_rules::fire::fed(0, now, fuel, b.rate, common::world(ctx).day_ms, None)).unwrap_or(0);
@@ -1421,7 +1422,10 @@ fn plan_structures(ctx: &ReducerContext, map: &living_rules::map::Map, h: &crate
                 continue;
             };
             if living_rules::catalog::is_structure(&st.kind) {
-                put_authored(ctx, map, &st.kind, st.at, owner, &st.contents, st.fuel, now);
+                // Inside its lot (on the house's floor behind its door, or an open lot's ground)
+                // as hosting placed it: not moved to the street.
+                let exact = st.inside != living_rules::settle::Inside::No;
+                put_authored(ctx, map, &st.kind, st.at, exact, owner, &st.contents, st.fuel, now);
                 owned += 1;
             }
             continue;
@@ -1437,7 +1441,7 @@ fn plan_structures(ctx: &ReducerContext, map: &living_rules::map::Map, h: &crate
             }
             stocked += 1;
         } else if living_rules::catalog::is_structure(&st.kind) {
-            put_authored(ctx, map, &st.kind, st.at, 0, &st.contents, st.fuel, now);
+            put_authored(ctx, map, &st.kind, st.at, false, 0, &st.contents, st.fuel, now);
             placed += 1;
         } else {
             log::warn!("plan: structure of a kind this world does not have, `{}`, left out", st.kind);
@@ -2382,9 +2386,10 @@ mod tests {
         // A lot's own door structure must be a kind of the world (rules-3).
         let e = with(&|v| v["map"]["params"]["plans"][0]["lots"][0]["structure"] = "silo".into()).unwrap_err();
         assert!(e.contains("structure `silo`"), "{e}");
-        // A structure a household owns names a household of the residents; Cullet's 22 do.
+        // A structure a household owns names a household of the residents; Cullet's 43 do (22
+        // stores, and since hearth-1 the 21 home hearths).
         let stores = |v: &serde_json::Value| v["map"]["params"]["plans"][0]["structures"].as_array().unwrap().iter().filter(|st| st["owner"].is_string()).count();
-        assert_eq!(stores(&serde_json::from_str(text).unwrap()), 22);
+        assert_eq!(stores(&serde_json::from_str(text).unwrap()), 43);
         let owned = |v: &mut serde_json::Value| v["map"]["params"]["plans"][0]["structures"].as_array_mut().unwrap().iter_mut().find(|st| st["owner"].is_string()).unwrap().clone();
         let first = owned(&mut serde_json::from_str(text).unwrap());
         let at = |v: &mut serde_json::Value| v["map"]["params"]["plans"][0]["structures"].as_array().unwrap().iter().position(|st| st == &first).unwrap();

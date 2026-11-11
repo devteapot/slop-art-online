@@ -860,10 +860,13 @@ structures = [
 ]
 for i in (1, 2):
     structures.append({"kind": "smokehouse", "lot": f"smokehouse_{i}", "fuel": HOLDS["smokehouse"], "note": "full (16 game hours)"})
-# A hearth at the door of every home lived in (the Marver's household uses its public hearth).
-HEARTHS = [l["id"] for l in lots if l.get("household") and l["id"] != "marver"]
-for lid in HEARTHS:
-    structures.append({"kind": "hearth", "lot": lid, "fuel": HOLDS["hearth"], "note": "the household's hearth, full (a game day)"})
+# A hearth in every home lived in (the Marver's household uses its public hearth). It is the
+# household's own (`owner`), so the engine stands it inside the house, on the floor behind the
+# door (docs/AUTHORED_PLANS.md, "A household's own things stand inside its lot"; since hearth-1:
+# before, it stood in the street at the door).
+HEARTHS = [(l["id"], l["household"]) for l in lots if l.get("household") and l["id"] != "marver"]
+for lid, hh in HEARTHS:
+    structures.append({"kind": "hearth", "lot": lid, "owner": f"household:{hh}", "fuel": HOLDS["hearth"], "note": "the household's hearth, inside its house, full (a game day)"})
 # Seven lamps where people are at night (§5: lamplight is where night life is), each full: 32
 # game hours, about three nights.
 LAMPS = [
@@ -1534,9 +1537,9 @@ structure_models = [
 ]
 # The fires and lamps the plan places (`structures` above, rates-2), in Cullet's look.
 for _id, _size, _h, _cause in (
-        ("hearth", [1.3, 0.8], 0.9, "a household's hearth, which the engine stands at its door: a basalt fire box with a pot on it, peat beside it"),
+        ("hearth", [1.3, 0.8], 0.9, "a household's hearth, which the engine stands inside its house on the floor behind the door: a basalt fire box with a pot on it, peat beside it"),
         ("lamp", [0.6, 0.6], 3.2, "one of the plan's seven lamps: the quay lamp, iron on a basalt block, odd panes"),
-        ("house_store", [1.2, 1.2], 0.95, "a household's store (rules-3), which the engine stands at its home: a tarred sea chest with a creel on it"),
+        ("house_store", [1.2, 1.2], 0.95, "a household's store (rules-3), which the engine stands inside its house beside the hearth: a tarred sea chest with a creel on it"),
         ("yard_store", [3.2, 2.9], 1.35, "the Cone yard's peat store (rules-3): the covered handcart, crates and barrels of the common store"),
         ("furnace", [2.8, 1.2], 1.5, "the Cone's furnace, which the engine stands at the front mouth: the stoker's rake and shovel in their stand, a barrow of peat"),
         ("oven", [1.5, 0.8], 1.0, "the Batch's oven, which the engine stands at the oven mouth: the cooling trestle with the morning's loaves, the ember pan"),

@@ -38,7 +38,10 @@
           "structures": [
             {"kind": "lamp", "lot": "hall", "note": "at the hall's door"},
             {"kind": "storage", "lot": "inn", "spot": "seat 1", "contents": {"fish": 2}, "note": "a crate by the inn's first seat"},
-            {"kind": "storage", "lot": "house_a", "owner": "household:hollis", "contents": {"berries": 4}, "note": "the Hollis household's own store, at its house (rules-3)"}
+            {"kind": "storage", "lot": "house_a", "owner": "household:hollis", "contents": {"berries": 4}, "note": "the Hollis household's own store, in its house (rules-3; inside since hearth-1: the lot's own tile nearest its door)"},
+            {"kind": "campfire", "lot": "house_a", "owner": "household:hollis", "note": "the Hollis fire (the shipped world has no hearth kind), in its house on the next own tile nearest the door (hearth-1)"},
+            {"kind": "storage", "lot": "house_d", "owner": "household:wren", "contents": {"fish": 1}, "note": "the Wrens' store at house_d's own inside point (hearth-1)"},
+            {"kind": "storage", "lot": "garth", "owner": "household:wren", "contents": {"wood": 2}, "note": "the Wrens' woodpile in the drying garth: an open lot, so on ground one stands on (hearth-1)"}
           ],
           "lots": [
             {"id": "store", "kind": "workshop", "name": "the Store", "at": [-30, 14], "size": [8, 9], "facing": "south", "level": "quay", "model": "cullet/workshop/store.glb", "height_m": 7.5, "wear": {"salt": 0.7}},
@@ -48,7 +51,7 @@
             {"id": "house_a", "kind": "house", "at": [-20, 32.5], "size": [6, 9], "facing": "north", "level": "row", "model": "cullet/house/row-a.glb", "height_m": 8.5, "door_colour": "oxblood", "keepsake": "glass floats"},
             {"id": "house_b", "kind": "house", "at": [-14, 32.5], "size": [6, 9], "facing": "north", "level": "row", "height_m": 8.0},
             {"id": "house_c", "kind": "house", "at": [-8, 32.5], "size": [6, 9], "facing": "north", "level": "row", "height_m": 8.5},
-            {"id": "house_d", "kind": "house", "at": [0, 47], "size": [7, 9], "facing": "south", "level": "row", "height_m": 9.0, "door_colour": "mustard"},
+            {"id": "house_d", "kind": "house", "at": [0, 47], "size": [7, 9], "facing": "south", "level": "row", "height_m": 9.0, "door_colour": "mustard", "inside": [[1.5, 3.5]]},
             {"id": "house_e", "kind": "house", "at": [7, 47], "size": [7, 9], "facing": 180, "level": "row", "height_m": 8.0},
             {"id": "garth", "kind": "lamp", "name": "the drying garth", "at": [19, 48.5], "size": [10, 7], "facing": "south", "level": "row", "height_m": 0, "spots": [{"name": "the bench", "at": [3, 1.5]}, {"name": "the lines", "at": [-2, -1]}], "note": "an open lot inside the garth wall: a place residents can be sent to (`lot:garth`), reached through the wall's gate"}
           ],
