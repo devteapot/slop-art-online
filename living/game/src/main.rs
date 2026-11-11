@@ -42,6 +42,7 @@ mod sight;
 mod sightedge;
 mod sightfield;
 mod sky;
+mod talk;
 mod style;
 mod terrain;
 mod town;
@@ -146,7 +147,7 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
             .add_systems(Update, net::pump.in_set(Phase::Net))
             .add_systems(Update, (bodies::update, world::things, controls::target, world::terrain.run_if(live::tiles)).chain().in_set(Phase::Mirror))
-            .add_systems(Update, (demo::run, controls::movement).chain().in_set(Phase::Input))
+            .add_systems(Update, (demo::run, controls::scheme, controls::movement).chain().in_set(Phase::Input))
             .add_systems(Update, net::flush.in_set(Phase::Flush))
             .add_systems(Update, (camera::follow, world::fade_trees, sight::update, controls::gizmos).chain().in_set(Phase::Camera));
         // Land worlds (the island the authority hosts) draw through the island renderer.
@@ -158,6 +159,8 @@ fn main() {
         app.add_plugins(town::TownPlugin);
         // Verbs: acts on what is in front of me and on myself, offered from the world's rules.
         app.add_plugins(verbs::VerbsPlugin);
+        // Whom the text box speaks to: the person pointed at or the nearest within earshot.
+        app.add_plugins(talk::TalkPlugin);
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
         app.add_plugins(sightfield::SightFieldPlugin);

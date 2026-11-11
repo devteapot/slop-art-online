@@ -13,7 +13,8 @@
 //!   the cursor stays on the ground point it was over (`camera.rs`), so where you face doesn't
 //!   change. A left press that doesn't move is the strike: on release when it was a tap, or once
 //!   held [`HOLD_S`] (aiming, as before). A tap therefore fires on release, a click's length
-//!   later than a press would.
+//!   later than a press would. A tap is marked ([`Pointer::tapped`]): on a peaceful person it
+//!   talks instead of striking (`combat.rs`).
 //! - **Zoom:** a pinch, or a notched mouse wheel, within a band round the current distance.
 //! - **Align:** a two-finger double tap turns the view to where you face (the middle tap too).
 //!
@@ -78,6 +79,10 @@ pub struct Pointer {
     pub scripted: Option<Vec2>,
     pub scripted_turn: f32,
     pub scripted_zoom: f32,
+    /// The left press this frame is a tap (released before it was held or dragged), not a hold.
+    pub tapped: bool,
+    /// A script's tap (headless), through the same path.
+    pub scripted_tap: bool,
     left: Left,
     /// A tap's strike was pressed this frame; let go of it next frame.
     release_next: bool,
@@ -116,14 +121,20 @@ fn update(
     p.turn_px = std::mem::take(&mut p.scripted_turn);
     p.zoom = std::mem::replace(&mut p.scripted_zoom, 1.0);
     p.align = false;
+    p.tapped = false;
     if p.release_next {
         buttons.release(MouseButton::Left);
         p.release_next = false;
     }
     let window = windows.single_mut().ok();
     let Some((win_e, mut win, mut cursor)) = window else {
-        // Headless: the script's cursor, if any.
+        // Headless: the script's cursor and taps, if any.
         p.pos = p.scripted.map(|f| f * crate::capture::size().as_vec2());
+        if std::mem::take(&mut p.scripted_tap) {
+            buttons.press(MouseButton::Left);
+            p.release_next = true;
+            p.tapped = true;
+        }
         if let Some(at) = p.place.take() {
             let size = crate::capture::size().as_vec2();
             p.scripted = Some(at / size);
@@ -178,6 +189,7 @@ fn update(
                     // A tap: the strike, pressed now and let go next frame.
                     buttons.press(MouseButton::Left);
                     p.release_next = true;
+                    p.tapped = true;
                 }
                 p.left = Left::Up;
             }

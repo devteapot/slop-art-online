@@ -105,7 +105,7 @@ pub fn fill(
             input.chat = "Has anyone seen the ferryman".into();
         }
     }
-    for line in out.say.drain(..) {
+    for (line, _) in out.say.drain(..) {
         st.said.push((t, line));
     }
     if std::mem::take(&mut out.rejoin) {

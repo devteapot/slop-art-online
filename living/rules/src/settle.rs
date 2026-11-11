@@ -39,7 +39,7 @@ mod plan;
 mod terrace;
 
 pub use metro::{District, MetroParams};
-pub use plan::{stranded_doors, validate as validate_plan, validate_all as validate_plans, Facing, Laid, LaidLot, LevelSpec, LotSpec, PlanSpec, SpotSpec, SquareSpec, StairSpec, StreetSpec};
+pub use plan::{stranded_doors, validate as validate_plan, validate_all as validate_plans, Facing, Laid, LaidLot, LevelSpec, LotSpec, PlanSpec, ResourceSpec, SpotSpec, SquareSpec, StairSpec, StreetSpec};
 pub(crate) use plan::{covers as plan_covers, resolve as resolve_plan, site as plan_site, stamp_macro as stamp_plans, Resolved as PlanResolved};
 
 pub(crate) use terrace::Terrace;
@@ -1553,7 +1553,7 @@ fn nearest_on(p: &[V2], q: V2) -> (f32, usize, f32, V2) {
     best
 }
 
-fn poly_contains(poly: &[V2], p: V2) -> bool {
+pub(crate) fn poly_contains(poly: &[V2], p: V2) -> bool {
     let mut inside = false;
     let n = poly.len();
     let mut j = n - 1;
@@ -1568,7 +1568,7 @@ fn poly_contains(poly: &[V2], p: V2) -> bool {
 }
 
 /// Distance outside a closed polygon (0 inside).
-fn poly_outside(poly: &[V2], p: V2) -> f32 {
+pub(crate) fn poly_outside(poly: &[V2], p: V2) -> f32 {
     if poly_contains(poly, p) {
         return 0.0;
     }

@@ -226,6 +226,108 @@ pub struct Relief {
     /// along one side only.
     #[serde(default)]
     pub land_shift: [f32; 2],
+    /// An authored coastline (land metres, x east, y south; docs/AUTHORED_PLANS.md): the land is
+    /// this polygon instead of the warped ellipse above, its edge still roughened by `coast_warp`
+    /// (here a fraction of half the side) at `coast_feature`. Inland the plain rises over
+    /// `outline_rise_m` from the coast. Empty: the generated shape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outline: Vec<[f32; 2]>,
+    pub outline_rise_m: f32,
+    /// Authored stamps on the relief and the regions, applied in order after the generated
+    /// relief, islets and lake basins and before the plans: a plateau, a gully, a beach, a reef.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stamps: Vec<Stamp>,
+}
+
+/// An authored stamp ([`Relief::stamps`]): inside `area` (land metres) the coarse ground is
+/// `height_m`, fading into the ground round it over `blend_m`; and/or the ground inside is of
+/// region kind `region` (its trees, beach, rocks and dirt follow that kind's look). Lake basins
+/// keep off stamps.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Stamp {
+    /// For the author; the engine does not read it.
+    #[serde(default)]
+    pub id: String,
+    pub area: Vec<[f32; 2]>,
+    #[serde(default)]
+    pub height_m: Option<f32>,
+    #[serde(default = "stamp_blend")]
+    pub blend_m: f32,
+    #[serde(default)]
+    pub region: Option<RegionKind>,
+    /// The tiles inside are this ground (`grass`, `sand`, `dirt`, `rock`, `forest`), wherever
+    /// they are not water: a strand wider than the shore's own sand, a scree.
+    #[serde(default)]
+    pub ground: Option<String>,
+}
+
+fn stamp_blend() -> f32 {
+    40.0
+}
+
+impl Stamp {
+    fn poly(&self) -> Vec<(f32, f32)> {
+        self.area.iter().map(|q| (q[0], q[1])).collect()
+    }
+}
+
+fn stamp_ground(g: &str) -> Option<Terrain> {
+    match g {
+        "grass" => Some(Terrain::Grass),
+        "sand" => Some(Terrain::Sand),
+        "dirt" => Some(Terrain::Dirt),
+        "rock" => Some(Terrain::Rock),
+        "forest" => Some(Terrain::Forest),
+        _ => None,
+    }
+}
+
+/// Signed distance to a polygon's edge: positive inside, negative outside.
+fn poly_signed(poly: &[(f32, f32)], p: (f32, f32)) -> f32 {
+    let out = settle::poly_outside(poly, p);
+    if out > 0.0 {
+        return -out;
+    }
+    let n = poly.len();
+    (0..n)
+        .map(|i| {
+            let (a, b) = (poly[i], poly[(i + 1) % n]);
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let u = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / (dx * dx + dy * dy).max(1e-9)).clamp(0.0, 1.0);
+            (p.0 - a.0 - u * dx).d_hypot(p.1 - a.1 - u * dy)
+        })
+        .fold(f32::MAX, f32::min)
+}
+
+/// Check authored relief: polygons of at least three finite points, finite heights and blends,
+/// and something for each stamp to do. The authority calls it with the plans' checks, before
+/// anything is generated.
+pub fn validate_relief(r: &Relief) -> Result<(), String> {
+    let ok = |p: &[[f32; 2]]| p.len() >= 3 && p.iter().all(|q| q[0].is_finite() && q[1].is_finite());
+    if !r.outline.is_empty() && !ok(&r.outline) {
+        return Err("relief.outline needs a polygon of at least 3 points".into());
+    }
+    if !(r.outline_rise_m.is_finite() && r.outline_rise_m > 0.0) {
+        return Err("relief.outline_rise_m must be above 0".into());
+    }
+    for (i, st) in r.stamps.iter().enumerate() {
+        let name = if st.id.is_empty() { format!("relief.stamps[{i}]") } else { format!("relief stamp {}", st.id) };
+        if !ok(&st.area) {
+            return Err(format!("{name} needs a polygon of at least 3 points"));
+        }
+        if st.height_m.is_some_and(|h| !h.is_finite()) || !(st.blend_m.is_finite() && st.blend_m >= 0.0) {
+            return Err(format!("{name}: height_m and blend_m must be numbers (blend_m at least 0)"));
+        }
+        if st.height_m.is_none() && st.region.is_none() && st.ground.is_none() {
+            return Err(format!("{name} sets neither a height, a region nor a ground"));
+        }
+        if let Some(g) = &st.ground {
+            if stamp_ground(g).is_none() {
+                return Err(format!("{name}: ground {g:?} is not grass, sand, dirt, rock or forest"));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -353,6 +455,9 @@ impl Default for Relief {
             islets: 2,
             islet_radius_m: [25.0, 60.0],
             land_shift: [0.0, 0.0],
+            outline: Vec::new(),
+            outline_rise_m: 150.0,
+            stamps: Vec::new(),
         }
     }
 }
@@ -1180,7 +1285,15 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
         (dx / l, dy / l)
     };
     let lc = (centre.0 + r.land_shift[0] * s, centre.1 + r.land_shift[1] * s);
+    let outline: Vec<(f32, f32)> = r.outline.iter().map(|q| (q[0], q[1])).collect();
     let landness = |x: f32, y: f32| {
+        if !outline.is_empty() {
+            // An authored coast: the distance inside it, roughened like the generated one.
+            let k = r.coast_warp * s * 0.5;
+            let wx = x + k * fbm(seed ^ 0x11, x, y, r.coast_feature * s, 4);
+            let wy = y + k * fbm(seed ^ 0x12, x, y, r.coast_feature * s, 4);
+            return poly_signed(&outline, (wx, wy)) / r.outline_rise_m;
+        }
         let u = (x - lc.0) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x11, x, y, r.coast_feature * s, 4);
         let v = (y - lc.1) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x12, x, y, r.coast_feature * s, 4);
         let (a, b) = ((u * axis.0 + v * axis.1) / r.elongation, (-u * axis.1 + v * axis.0) * r.elongation.sqrt());
@@ -1245,6 +1358,9 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
         }
     }
 
+    // Authored stamps (applied below, after the lake basins, which keep off them).
+    let stamps: Vec<(Vec<(f32, f32)>, &Stamp)> = r.stamps.iter().map(|st| (st.poly(), st)).collect();
+
     // Lake basins: a bowl with a rim, on flat-ish ground away from coast and spine.
     let land_nodes = elev.iter().filter(|e| **e > 0.0).count();
     let land_km2 = land_nodes as f32 * cell * cell / 1e6;
@@ -1268,6 +1384,9 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
         if near_plan(x, y, rad * 1.9 + 120.0) {
             continue;
         }
+        if stamps.iter().any(|(q, st)| poly_signed(q, (x, y)) > -(rad * 1.9 + st.blend_m)) {
+            continue;
+        }
         if basins.iter().any(|b| (b.0 - x).d_hypot(b.1 - y) < 450.0) {
             continue;
         }
@@ -1281,6 +1400,25 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
             bowl.max(dam)
         });
         basins.push((x, y, rad));
+    }
+
+    for (q, st) in &stamps {
+        let Some(h) = st.height_m else { continue };
+        let lo = q.iter().fold((f32::MAX, f32::MAX), |m, v| (m.0.min(v.0), m.1.min(v.1)));
+        let hi = q.iter().fold((f32::MIN, f32::MIN), |m, v| (m.0.max(v.0), m.1.max(v.1)));
+        let pad = st.blend_m + cell;
+        let (i0, j0) = ((((lo.0 - pad) / cell).floor().max(0.0)) as usize, (((lo.1 - pad) / cell).floor().max(0.0)) as usize);
+        let (i1, j1) = ((((hi.0 + pad) / cell).ceil().max(0.0)) as usize, (((hi.1 + pad) / cell).ceil().max(0.0)) as usize);
+        for j in j0..=j1.min(n - 1) {
+            for i in i0..=i1.min(n - 1) {
+                let k = j * n + i;
+                let d = -poly_signed(q, pos(k));
+                let w = if d <= 0.0 { 1.0 } else if st.blend_m <= 0.0 { 0.0 } else { 1.0 - smoothstep(0.0, st.blend_m, d) };
+                if w > 0.0 {
+                    elev[k] = lerp(elev[k], h, w);
+                }
+            }
+        }
     }
 
     settle::stamp_plans(&mut elev, n, cell, &plans);
@@ -1722,12 +1860,24 @@ fn macro_pass(h: Hydro, p: &LandParams) -> Work {
             Region { id: g as u16, kind: kinds[g], centre: seeds[g], area_m2: st.nodes * cell * cell, land_m2: st.land * cell * cell, mean_height_m: mean(st, st.e) }
         })
         .collect();
-    let node_kind: Vec<RegionKind> = (0..nn)
+    let mut node_kind: Vec<RegionKind> = (0..nn)
         .map(|k| match kinds[region_of[k] as usize] {
             RegionKind::Sea if !sea[k] => RegionKind::Beach,
             kind => kind,
         })
         .collect();
+    // Authored region stamps, in order: the land inside each is of its kind.
+    for st in p.relief.stamps.iter().filter(|st| st.region.is_some()) {
+        let q = st.poly();
+        let lo = q.iter().fold((f32::MAX, f32::MAX), |m, v| (m.0.min(v.0), m.1.min(v.1)));
+        let hi = q.iter().fold((f32::MIN, f32::MIN), |m, v| (m.0.max(v.0), m.1.max(v.1)));
+        for k in 0..nn {
+            let c = pos(k);
+            if c.0 >= lo.0 && c.1 >= lo.1 && c.0 <= hi.0 && c.1 <= hi.1 && !sea[k] && settle::poly_contains(&q, c) {
+                node_kind[k] = st.region.unwrap();
+            }
+        }
+    }
 
     // Wetland pools are water sources at their own ground level.
     for k in 0..nn {
@@ -1875,6 +2025,19 @@ fn tile_rows(wk: &mut Work, p: &LandParams, j0: usize, j1: usize) {
     let t: Vec<f32> = (lo * w..(hi + 1) * w).map(|k| land.terrain((k % w) as f32 + 0.5, (k / w) as f32 + 0.5)).collect();
     let rock_slope = 0.85;
     let treeline = rp.treeline_m;
+    // Authored ground stamps, with their boxes, for the rows of this band.
+    let grounds: Vec<(Vec<(f32, f32)>, (f32, f32), (f32, f32), Terrain)> = p
+        .relief
+        .stamps
+        .iter()
+        .filter_map(|st| {
+            let g = stamp_ground(st.ground.as_deref()?)?;
+            let q = st.poly();
+            let lo = q.iter().fold((f32::MAX, f32::MAX), |m, v| (m.0.min(v.0), m.1.min(v.1)));
+            let hi = q.iter().fold((f32::MIN, f32::MIN), |m, v| (m.0.max(v.0), m.1.max(v.1)));
+            (hi.1 >= j0 as f32 && lo.1 <= j1 as f32).then_some((q, lo, hi, g))
+        })
+        .collect();
     for j in j0..j1 {
         for i in 0..w {
             let k = j * w + i;
@@ -1915,6 +2078,7 @@ fn tile_rows(wk: &mut Work, p: &LandParams, j0: usize, j1: usize) {
                     Terrain::Grass
                 }
             };
+            let c = if c == Terrain::Water { c } else { grounds.iter().rev().find(|(q, lo, hi, _)| x >= lo.0 && y >= lo.1 && x <= hi.0 && y <= hi.1 && settle::poly_contains(q, (x, y))).map_or(c, |g| g.3) };
             tiles[k] = c as u8;
         }
     }
@@ -1973,7 +2137,9 @@ fn connect_pass(wk: &mut Work, p: &LandParams) {
             }
             site.facing = (-uy).d_atan2(-ux);
         }
-        let clear = if site.kind == SiteKind::Cave { 3.0 } else { r * 0.95 };
+        // A planned settlement opens its own levels (`settle::plan::paint`); a disc of its
+        // radius would also clear whatever lies between it and its outlying lots.
+        let clear = if site.kind == SiteKind::Cave { 3.0 } else if site.plan.is_some() { 0.0 } else { r * 0.95 };
         for j in (site.y - clear) as i32..=(site.y + clear) as i32 {
             for i in (site.x - clear) as i32..=(site.x + clear) as i32 {
                 if i < 0 || j < 0 || i >= w as i32 || j >= w as i32 || (i as f32 + 0.5 - site.x).d_hypot(j as f32 + 0.5 - site.y) > clear {
@@ -2579,6 +2745,55 @@ pub(crate) fn connect_walled(tiles: &mut [u8], w: usize) -> (u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An authored coastline replaces the generated island, and stamps set the ground's height,
+    /// region and tiles where they say; lake basins keep off them. Lands without either are
+    /// unchanged (`host::tests::pinned_digests_hold`).
+    #[test]
+    fn an_authored_outline_and_stamps_shape_the_land() {
+        let sq = |x0: f32, y0: f32, x1: f32, y1: f32| vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+        let mut p = LandParams { sites: Vec::new(), ..LandParams::default() };
+        p.relief = Relief { outline: sq(250.0, 300.0, 774.0, 700.0), coast_warp: 0.02, hills_m: 2.0, peak_m: [1.0, 1.0], foothills_m: 0.0, islets: 0, ..Relief::default() };
+        p.relief.stamps = vec![
+            Stamp { id: "a hill".into(), area: sq(440.0, 420.0, 520.0, 480.0), height_m: Some(40.0), blend_m: 40.0, region: Some(RegionKind::Highland), ground: None },
+            Stamp { id: "a strand".into(), area: sq(300.0, 640.0, 420.0, 712.0), height_m: Some(0.8), blend_m: 10.0, region: Some(RegionKind::Beach), ground: Some("sand".into()) },
+        ];
+        validate_relief(&p.relief).unwrap();
+        let l = generate(9, 1024, &p);
+        for (x, y) in [(120.0, 512.0), (900.0, 512.0), (512.0, 160.0), (512.0, 860.0)] {
+            assert_eq!(l.map.at(x, y), Terrain::Water, "sea at ({x}, {y})");
+        }
+        assert!(l.height(600.0, 600.0) > 2.0 && l.map.at(600.0, 600.0) != Terrain::Water, "land inside the outline");
+        let h = l.height(480.0, 450.0);
+        assert!((h - 40.0).abs() < 5.0, "the hill at {h} m");
+        assert_eq!(l.kind_at(480.0, 450.0), RegionKind::Highland);
+        let (mut sand, mut other) = (0, 0);
+        for y in 645..705 {
+            for x in 305..415 {
+                match l.map.at(x as f32 + 0.5, y as f32 + 0.5) {
+                    Terrain::Water => {}
+                    Terrain::Sand => sand += 1,
+                    _ => other += 1,
+                }
+            }
+        }
+        assert!(sand > 3000 && other == 0, "the strand: {sand} sand, {other} other");
+        for lake in &l.lakes {
+            for st in &p.relief.stamps {
+                assert!(poly_signed(&st.poly(), lake.centre) < -st.blend_m, "a lake at {:?} on {}", lake.centre, st.id);
+            }
+        }
+        let refused = |f: &dyn Fn(&mut Relief), want: &str| {
+            let mut r = p.relief.clone();
+            f(&mut r);
+            let e = validate_relief(&r).expect_err(want);
+            assert!(e.contains(want), "{want:?} not in {e:?}");
+        };
+        refused(&|r| r.outline = vec![[0.0, 0.0], [1.0, 1.0]], "outline needs a polygon");
+        refused(&|r| (r.stamps[0].height_m, r.stamps[0].region) = (None, None), "sets neither");
+        refused(&|r| r.stamps[1].ground = Some("lava".into()), "is not grass");
+        refused(&|r| r.stamps[0].height_m = Some(f32::NAN), "must be numbers");
+    }
 
     /// Dispersed sites (hamlets) are placed a bounded number per step of [`Gen`]: a land asking
     /// for many takes several steps, none places more than its budget, and they keep their

@@ -154,6 +154,8 @@ struct Shown {
     face: f32,
     /// Walking backwards (the legs face away from the travel, the gaits reversed).
     back: bool,
+    /// Standing and looking somewhere: the legs are turning to the look ([`STAND_TURN_ON`]).
+    turning: bool,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -184,6 +186,12 @@ const BACK_ON: f32 = 110.0 * PI / 180.0;
 const BACK_OFF: f32 = 80.0 * PI / 180.0;
 /// The most the upper body turns from the legs (radians).
 const TWIST_MAX: f32 = 110.0 * PI / 180.0;
+/// Standing while looking somewhere (my cursor, a move's aim), the upper body turns first; the
+/// legs turn after it only once the look is more than this far from them (radians), and then
+/// all the way, until within [`STAND_TURN_OFF`]. Before, the whole body followed every move of
+/// the cursor, so the feet stepped or slid whenever it moved.
+const STAND_TURN_ON: f32 = 55.0 * PI / 180.0;
+const STAND_TURN_OFF: f32 = 6.0 * PI / 180.0;
 
 /// Where a moving person's legs face and whether it walks backwards: the legs step along the
 /// travel, so its feet keep still, and the upper body turns toward where it looks. Clips have
@@ -358,7 +366,7 @@ fn bodies(
     mut meshes: ResMut<Assets<Mesh>>,
     palette: Res<crate::world::Palette>,
     style: Res<crate::style::Style>,
-    input: Res<Input>,
+    mut input: ResMut<Input>,
     combat: Res<crate::combat::Combat>,
     town: Res<crate::town::Town>,
     rules: NonSend<crate::verbs::Rules>,
@@ -429,17 +437,24 @@ fn bodies(
         }
         live.heights.remove(&id);
     }
+    let mut my_face = None;
     for (&id, &(p, heading)) in &scene.shown {
         let ground = island.height(p.x, p.y);
         let at = Vec3::new(p.x, ground, p.y);
         let mine = Some(id) == me;
-        // My character turns toward where I look (shown locally; the authority has no look).
-        let look = input.look.filter(|_| mine).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
+        // My character turns toward where I look (shown locally; the authority has no look): always
+        // facing the cursor, or facing where I walk and only while aiming (`controls::Control`).
+        let look = input.look.filter(|_| mine && input.faces_cursor(combat.aims)).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
         // During a move a body faces where the move goes; a gesture or settling down plays when
         // no move does.
         let show = town.shows.get(&id).copied().unwrap_or_default();
         let action = combat.actions.get(&id).copied().or(show.once);
-        let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
+        // A jump's aim is only the way it hops (the authority's dash direction: the travel), and
+        // it is drawn over whatever the body plays (`jump.rs`), so it keeps the body's facing:
+        // taken as a facing, it turned a body walking backwards or sideways to face its travel
+        // for the hop and back after (play-test 2). A dodge's roll is a forward take, so it
+        // still faces its dash.
+        let aimed = action.filter(|a| a.clip != crate::jump::CLIP).and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
         // Standing still, the body's own segment: its heading, turning on the spot by `turn` over
         // `turn_s` (the display clock may trail the row's start: then the turn has not begun).
         let row = crate::net::find_motion(conn, id);
@@ -486,7 +501,7 @@ fn bodies(
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false });
             live.heights.insert(id, height);
             continue;
         }
@@ -543,17 +558,30 @@ fn bodies(
                 let (y, b) = legs_and_twist(t, l, s.back);
                 (Some(y), b)
             }
+            // Standing and looking, with no move under way (a move turns the whole body to its
+            // aim, as a dodge's roll must): the legs stay until the look is well away, then turn.
+            (false, Some(l), _) if s.person && action.is_none() => {
+                let off = living_rules::steer::wrap(l - s.yaw).abs();
+                s.turning = if s.turning { off > STAND_TURN_OFF } else { off > STAND_TURN_ON };
+                (Some(if s.turning { l } else { s.yaw }), false)
+            }
             _ => (h, false),
         };
+        if !(s.person && !walking && look_at.is_some() && action.is_none()) {
+            s.turning = false;
+        }
         s.back = back;
         let k = 1.0 - (-dt * YAW_RATE).exp();
         if let Some(y) = legs {
             s.yaw = living_rules::steer::wrap(s.yaw + living_rules::steer::wrap(y - s.yaw) * k);
         }
-        if let Some(f) = look_at.filter(|_| walking).or(legs) {
+        if let Some(f) = look_at.filter(|_| walking || s.person).or(legs) {
             s.face = living_rules::steer::wrap(s.face + living_rules::steer::wrap(f - s.face) * k);
         }
         let twist = if s.person { living_rules::steer::wrap(s.face - s.yaw).clamp(-TWIST_MAX, TWIST_MAX) } else { 0.0 };
+        if mine {
+            my_face = Some(Vec2::new(s.face.cos(), s.face.sin()));
+        }
         let reverse = s.back;
         let (speed, person, beast, yaw) = (s.speed, s.person, s.beast, s.yaw);
         let rising = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(t, _)| t);
@@ -618,6 +646,7 @@ fn bodies(
             _ => 1.0,
         };
     }
+    input.face = my_face;
 }
 
 /// Follow my displayed body: the camera's target, the island's streaming centre and the
@@ -755,6 +784,9 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `key:NAME:down|up|tap` and `mouse:left|right|middle:down|up`: a key or button as the
 ///   window would report it (`KeyE`, `KeyQ`, `Enter`, `ShiftLeft`, …), read by every input
 ///   system this frame; `chat:open|close` opens or closes the text box, as Enter and Esc do;
+///   `tap` is a left tap as the pointer reports one (a strike, or talk to a peaceful person);
+///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
+///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
@@ -777,6 +809,7 @@ fn key_code(name: &str) -> Option<KeyCode> {
         "ShiftLeft" => KeyCode::ShiftLeft,
         "Space" => KeyCode::Space,
         "F2" => KeyCode::F2,
+        "F3" => KeyCode::F3,
         _ => return None,
     })
 }
@@ -811,7 +844,7 @@ fn script(
     mut input: ResMut<Input>,
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
-    (mut skills, mut gestures, mut verbs): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>),
+    (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
     target: Option<Res<crate::capture::Target>>,
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
@@ -885,6 +918,12 @@ fn script(
             pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
             true
         }
+        "tap" => {
+            // A left tap, as the pointer reports one (`pointer.rs`): a strike, or on a peaceful
+            // person the text box to them (`combat.rs`).
+            pointer.scripted_tap = true;
+            true
+        }
         "pan" | "drag" => {
             pointer.scripted_turn += arg.parse::<f32>().unwrap_or(0.0) * if verb == "pan" { 0.6 } else { 1.0 };
             true
@@ -907,7 +946,7 @@ fn script(
             true
         }
         "say" => {
-            out.say.push(arg.to_string());
+            out.say.push((arg.to_string(), 0));
             true
         }
         "skill" | "aim" => {
@@ -987,6 +1026,24 @@ fn script(
             } else {
                 buttons.press(b);
             }
+            true
+        }
+        "type" => {
+            // Words typed into the open text box.
+            input.chat = arg.to_string();
+            true
+        }
+        "tab" => {
+            talk.cycle = true;
+            true
+        }
+        "enter" => {
+            // As Enter in the open text box: said to whom it addresses (`talk.rs`).
+            let line = std::mem::take(&mut input.chat);
+            if !line.trim().is_empty() {
+                out.say.push((line.trim().to_string(), talk.to.unwrap_or(0)));
+            }
+            input.chat_open = false;
             true
         }
         "chat" => {

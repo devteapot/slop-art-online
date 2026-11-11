@@ -15,6 +15,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - A jump (the bar's seventh place, Space in the game) hops about 1.6 m like a dash but does not evade (`jump_combat()`'s `evades: false`): a blow winding up as you jump toward its striker lands or misses by reach, never `DODGED` (scene `jump`).
 - Heal mends yourself.
 - The seed's bold pack attacks a healthy adult player.
+- In the game client (since 2026-11-11), a left tap on a person who is not hostile to the player sends no `use_skill`; it opens the text box to them (and a `face` act). A held press, and a tap on an animal or a hostile person, strike as before. The reducers are unchanged, so `combat.py` still drives `use_skill` directly.
 - The character dies through the vitals and death rules ("killed by …"), the dead player is told of the death and who saw it, and `join` makes a new character with only the newcomer's kit.
 
 ## Driving it
