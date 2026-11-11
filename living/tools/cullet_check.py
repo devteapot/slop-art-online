@@ -52,7 +52,8 @@ class Land:
         return self.tiles[y * self.n + x] if 0 <= x < self.n and 0 <= y < self.n else 2
 
     def walk(self, x, y):
-        return self.t(x, y) not in (2, 4, 7)
+        # Water, Rock, Wall, and since drop-1 Drop and Low: `Terrain::walkable` (living/rules/src/map.rs).
+        return self.t(x, y) not in (2, 4, 7, 8, 9)
 
     def ht(self, x, y):
         x = min(max(int(x), 0), self.n - 1)

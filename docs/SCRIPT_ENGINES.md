@@ -152,7 +152,7 @@ A world that installed a script before this change is not re-validated on a modu
 
 ### 7. Fuel budgets
 
-`just living-script-gate` ([gate.sh](../living/tools/script_bench/gate.sh)) builds the Rhai bench module, runs it under wasmtime in SpacetimeDB's config with fuel on, and fails when a law's fuel per call exceeds [budgets.json](../living/tools/script_bench/budgets.json). Fuel is deterministic for the same inputs, so the budget does not depend on the machine.
+The gate builds the Rhai bench module, runs it under wasmtime in SpacetimeDB's config with fuel on, and fails when a law's fuel per call exceeds [budgets.json](../living/tools/script_bench/budgets.json) ([gate.py](../living/tools/script_bench/gate.py)). Since `tool-8` it is the `script-gate` step of `just living-check` (stamped, [tooling](TOOLING.md#the-check)); `just living-script-gate` runs that step alone, and [gate.sh](../living/tools/script_bench/gate.sh) runs it by hand, keeping the evidence. Fuel counts WASM instructions, so it does not depend on the machine. It did depend on the build until `tool-8`: Rhai's hashing keys were drawn at random when `ahash` was compiled, and they moved a law's fuel by up to 29%. The bench now fixes them and measures under eight fixed sets ([living core](LIVING_CORE.md), "Fuel budgets"). The table below is the history of the budgets, measured before that.
 
 | Law | Measured | Budget |
 |---|---:|---:|

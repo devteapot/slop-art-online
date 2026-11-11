@@ -93,7 +93,9 @@ OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
 # `my_combat`, so these calls succeed for any living character.
-PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block']}
+PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
+          # The player's look (fov-1): any living character may send it.
+          'human_face': [1.0, 0.0]}
 MIND = ['mind_routines', 'mind_install', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged']
 ADMIN = {

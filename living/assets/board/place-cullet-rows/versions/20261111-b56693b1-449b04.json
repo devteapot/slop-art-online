@@ -1,0 +1,148 @@
+{
+ "schema": 1,
+ "family": "place:cullet-rows",
+ "id": "20261111-b56693b1-449b04",
+ "published": "2026-11-11T19:41:49+01:00",
+ "imported": "2026-11-11T19:41:49+01:00",
+ "track": "layout-1",
+ "maker": "Claude Fable 5.2",
+ "note": "layout pass 1: the town drawn in; balcony Rows with back courts, back lanes and plots; the hollow on the Tally Wynd (oven court, tofts, walled gardens); the Ladder as one block of seven terraces; 114 enclosures in the kit",
+ "source": {
+  "commit": "b56693b17b2b64913a130e0ae95581903afa8090",
+  "branch": "layout-1",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "3a54a71eeedff61fb0521257382f5a5455ba8e7109a377c0b25279fe9bedb536",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-rows/20261111-b56693b1-449b04",
+ "members": [
+  {
+   "name": "low_tally",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "37454a085cdbf48577ca9992173c92c391972654fc878845e7e8fe9f799f039c",
+   "shots": [
+    "day-270_28_22",
+    "day-90_10_7_60",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-270_28_22",
+    "dusk-90_10_7_60",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "low_east",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "52c231e7d2e4ace333ddc1af8a821125a5069902847177860db763533d3dd74d",
+   "shots": [
+    "day-180_28_22",
+    "day-90_28_22",
+    "day-default",
+    "dusk-180_28_22",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "low_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "1086277d3941ee4f2ae3e81a585e4208fa578409f15aea9be45fbb3283eb3359",
+   "shots": [
+    "day-270_10_7_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-270_10_7_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "mid_row",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "31e9f384c61cc15dbc4e92d43c9b345259f3e9fe97ff1770be5a992882d9277e",
+   "shots": [
+    "day-180_28_22",
+    "day-270_28_22",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-180_28_22",
+    "dusk-270_28_22",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "mid_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "8914b568a230d7b4483ec671461b6e85e642f4cba3713c9f46e313a8fe69834e",
+   "shots": [
+    "day-270_10_7_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-270_10_7_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "high_row",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "b7503c60ae4eeb171f8dad700fb4b751f81c2bd14399c9e026856be0cc1bb9f6",
+   "shots": [
+    "day-180_30_50",
+    "day-270_28_22",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-180_30_50",
+    "dusk-270_28_22",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "high_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "96402fc7a28fd29d7e6f311ab16b67882c3d1fa43989c106cdd9b0af01a03f33",
+   "shots": [
+    "day-270_10_7_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-270_10_7_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

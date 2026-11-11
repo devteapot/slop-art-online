@@ -13,6 +13,7 @@ Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-
 - After merging origin/main (`93019a3`) into `speech-2`: `just living-check` passes; `core-speech6-regress` is identical to the base except the `introduced` rows; `core-speech6-channels` 22 of 22.
 - After merging origin/main again (`b004e6e`, the rules' UI declarations): `just living-check` passes; `core-speech8-regress` is identical to the base except the `introduced` rows; `core-speech8-channels` 22 of 22; verify-player `player-speak8` 15 of 15. The UI test `a_way_of_speaking_is_presented_in_the_box` declared its own `whisper_speech()` over the shipped script; it now presents the shipped whisper (its assertions unchanged).
 - After merging origin/main (`48cd022`, with fov-1): my table `heard` is now `line_heard` (fov-1's heard-not-seen sounds took `heard`), and the hearer list, noticing, overheard names and the truthful silence see by fov-1's `perception::in_sight` (facing, when the world's law gives a field). `just living-check` passes; `core-speech9-regress` is identical to the base except the `introduced` rows; `core-speech9-ways` 21 of 21; `core-speech9-channels` 22 of 22. verify-player `player-speak9` 15 of 15.
+- After merging origin/main (`b11855e`): `just living-check` passes (with the script fuel gate); bindings unchanged; `core-speech10-regress` identical to the base except the `introduced` rows; `core-speech10-channels` 22 of 22; verify-player `player-speak10` 15 of 15. The minds, privacy and client suites were last run at `48cd022` (above); nothing they drive changed since.
 
 ## 2026-11-11 speech-1: ways of speaking (Spark)
 
@@ -25,10 +26,39 @@ Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-s
 - `speech.py crowd` (20 people, 10 m square, 120 lines/min, 60 lines): `core-speech-crowd` on the change, `core-speech-crowdbase` on `a107fdf` (`--baseline`). Numbers in docs/COMMUNICATION.md §13. `-crowd-try1`/`-try2` were the metric parser's own fixes.
 - Not run on this change: tick, needs, food, refusal, seize, sight, senses, doing, moves, death-names, skirmish, dealings, town, lives, laws, goods, infant; mechanics.
 
+## 2026-11-11 fix-lives-tavvik: carriers take and store at stores, not squares (Spark)
+
+Branch `fix-lives-tavvik` from origin/main `accf27c8`, container `slop-trials-stdb` (port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, no minds.
+
+- Diagnosis (`core-tav1-190323`, origin/main build): Tavvik stood idle on his `square` place with 2 `cooked_meat` (he starts with 3 and eats one) and no activity. Highshelf's plaza middle is built on, so its square is a ring of edge spots; his spot is 43 m from the shelf's store, beyond a person's 11 m day sight, so the routine's `take` from `nearest storage` never resolved and no desire could act. Silas Pike's and Tern Gannet's far-market `work` (plaza spots) were 52 m and 36 m from a store, so their `store`/`take` there could not resolve either (latent; the scene does not check it).
+- Fix: `carry_graph` takes and stores at home at the `store` place; a carrier's `work` is the far town's `storage` (seed data, `author_world.py`; island.json's five carriers and four route graphs rewritten in place, since a full `--compile-only` would also rename `wound_tending`). `core-tav2-191131`: every carrier's `store` and `work` lie on a storage, legs 37.7-132.9 m; Tavvik takes 3 and leaves within 12 s.
+- `lives.py --minutes 24`: `core-lives-a-191326` 19 of 19 and `core-lives-b-193805` 19 of 19. Tavvik reached the Kettlebridge store (1.1 m, 5.9 m), carried wood back; Highshelf's store +3 wood in both.
+- `town.py` (`core-town-200247`): 22 of 23, the failure being the recorded flake (Cuth Marrow, facing someone who comes up behind; player stopped 1.8 tiles away). `just living-check` exits 0. Not run: the other baseline scenes (no rule, authority or other seed changed).
+
+## 2026-11-11 goods-2: item looks, make and feed shown, teaching a world's know-how (dev-box)
+
+Branch `goods-2` (from main `62d861f0`, merged with main four times, last with `94050f9a` at `6fefe997`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+
+| Scene | Run | Result |
+| --- | --- | --- |
+| `goods` (goods fixture), before the `doing` check | `core-goods2-goods` | 22 of 22 |
+| `stock` | `core-goods2-goods` | 4 of 4 |
+| `goods` with the new checks (`act_card` holds `make` and `feed`; A's `doing` row with `make`'s code at the furnace while the glass is made) | `core-goods2-goods-b`; merged `core-goods2m-goods` | 24 of 24 each |
+| `stock` (merged) | `core-goods2m-goods` | 4 of 4 |
+| `laws` (cullet-laws), first merge | `core-goods2-laws` | 15 pass, the known SKIP (the mirrored dark spot) |
+| `laws` (cullet-laws), second merge | `core-goods2m-laws` | 15 pass, the same SKIP |
+| `goods`, `stock` (third merge: rates-2, ui-decl-1) | `core-goods2f-goods` | 24 of 24, 4 of 4 |
+| `goods`, `stock` (fourth merge: fov-1) | `core-goods2g-goods` | 24 of 24, 4 of 4 |
+
+Rules: `cargo test -p living-rules` all pass, with `items_and_recipes_say_how_they_look`, `teaching_takes_the_worlds_know_how` and `making_and_feeding_are_seen_and_a_fire_state_is_shared`. Fuel gate A/B against main, same session: at the second merge within 0.1 % on every law (rates-law 211,278 → 211,120, then over its 160,000 budget on main). At the third merge (main `6caebe20`, rates-2's re-based budgets) within 0.5 %: rates-law 203,095 → 203,516, strike 279,080 → 280,161, perceived 76,912 → 77,252, hook 441,073 → 441,175, senses-law 60,495 → 60,767, the rest equal. **`perceived` is over its 75,000 budget on main itself** (76,912), not from this branch. The laws scene was not rerun at the third merge. `just living-check` exit 0 after each merge.
+
+Maintained: the goods scene checks `make`'s `doing` row; features/goods.md (item looks, shows, what is not covered). The harness: main's `1b3b5dd8` (projects experiment) had put back an older `verify.py` and `verify/SKILL.md`, which installed the plain script over a seed's own laws and dropped the verify-ui rows; `b7328bc0` restored the HTTP install only. goods-2 restores goods-1's `seed_laws` skip, `call ... @FILE`, the longer install timeout and the SKILL.md text, keeping main's `[::]` port and own-server wording.
+
 ## 2026-11-11 fov-1: sight that depends on facing (dev-box)
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
 
+- `core-face1-a` (`human_face`: steering bends toward a held look; a stop finishes the turn): `moves` 5 of 5, `fov` 18 of 18.
 - `core-fov1-m` (after merging `origin/main` `accf27c8`, eye-2's sight included): `fov` 18 of 18, `sight` 6, `senses` 7.
 - `core-fov1-j` (default seed, the final build before the merge: graph scenes see and hear from one gather, `perception::sensed`): `fov` 18 of 18; `tick` 6, `sight` 6, `senses` 7, `moves` 5, `death-names` 8 pass; `doing` fails as below.
 - `core-fov1-c` (the build before that): `fov` 18 of 18 (new: off as shipped; `set_world_law` refusals, the script block at a new revision, `law_change` and the chronicle row; facing east and west; the 3 m ring guarding a strike from 1 m behind; a 0.5 m ring: 1.5 m behind unseen, no guard, the blow lands; witnesses by facing; off again). Then `tick`, `sight`, `senses` and `moves` pass on the same world.

@@ -1,0 +1,91 @@
+{
+ "schema": 1,
+ "family": "place:cullet-ladder",
+ "id": "20261111-a078b5f8-625fd5",
+ "published": "2026-11-11T19:27:07+01:00",
+ "imported": "2026-11-11T19:27:07+01:00",
+ "track": "layout-1",
+ "maker": "Claude Fable 5.2",
+ "note": "before layout pass 1: kit pass 1 on main (a078b5f8), no residents' homes moved",
+ "source": {
+  "commit": "a078b5f8511900a3b86ea3783db7ec1ba1688522",
+  "branch": "main",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "2bcf01883fc512030c16e14365c52845bf39902ff54fc0b7d20694250218f8a5",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-ladder/20261111-a078b5f8-625fd5",
+ "members": [
+  {
+   "name": "ladder_low",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "ea0ea2b0cb7532cf4f4a08a1356548b20d2bfe05868113412a13b7f375dcbfc1",
+   "shots": [
+    "day-0_35_50",
+    "day-90_28_22",
+    "day-default",
+    "dusk-0_35_50",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_mid",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "eda2fb22ce9ad4a686466bf1fcdabd3cf6673ac86f8f327de5049365641e78d2",
+   "shots": [
+    "day-0_10_7_60",
+    "day-0_35_50",
+    "day-90_28_22",
+    "day-default",
+    "dusk-0_10_7_60",
+    "dusk-0_35_50",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_high",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "e8230db022f3270d6e0bb322d719f269c5b25c1f3faac1e279deaa4d72dcdebd",
+   "shots": [
+    "day-0_35_50",
+    "day-180_28_40",
+    "day-default",
+    "dusk-0_35_50",
+    "dusk-180_28_40",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_top",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "5d23b9501e48f0da10f160fd4ee9257455267557614e138fafde63dd22faf618",
+   "shots": [
+    "day-180_30_70",
+    "day-default",
+    "dusk-180_30_70",
+    "dusk-default"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

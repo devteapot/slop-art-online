@@ -231,7 +231,7 @@ fn ways(p: &mut Probe) -> Result<(), String> {
 
 fn laws_and_tables(p: &mut Probe) -> Result<(), String> {
     let s = p.s;
-    for f in s.fns.iter().filter(|f| f.as_str() == "laws" || f.as_str() == "skill_bar" || f.ends_with("_combat") || f.ends_with("_shows")) {
+    for f in s.fns.iter().filter(|f| f.as_str() == "laws" || f.as_str() == "skill_bar" || f.ends_with("_combat") || f.ends_with("_shows") || f.ends_with("_ui")) {
         let d = p.raw(f, (), &|| String::new())?;
         if f == "laws" && !d.is_map() {
             return Err("install refused: `laws` must return a map".into());
