@@ -37,6 +37,7 @@ mod island;
 mod live;
 mod loading;
 mod lookdev;
+mod mouth;
 mod net;
 mod perf;
 mod phase;
@@ -185,6 +186,8 @@ fn main() {
         app.add_plugins(verbs::VerbsPlugin);
         // Whom the text box speaks to: the person pointed at or the nearest within earshot.
         app.add_plugins(talk::TalkPlugin);
+        // Mouths move while their lines show (presentation only).
+        app.add_plugins(mouth::MouthPlugin);
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
         app.add_plugins(sightfield::SightFieldPlugin);

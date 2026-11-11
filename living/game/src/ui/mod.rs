@@ -371,6 +371,7 @@ pub struct DumpExtra<'w, 's> {
     fov: Option<Res<'w, crate::facing::FovState>>,
     heard: Option<Res<'w, crate::heardmark::HeardMarks>>,
     edge: Option<Res<'w, crate::sightedge::SightEdge>>,
+    mouths: Option<Res<'w, crate::mouth::Mouths>>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -395,7 +396,9 @@ impl DumpExtra<'_, '_> {
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
-            "facing_sight": fov, "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name())})
+            "facing_sight": fov, "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()),
+            // Each speaking body's mouth now (`mouth.rs`), by character id.
+            "mouths": self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>())})
     }
 }
 

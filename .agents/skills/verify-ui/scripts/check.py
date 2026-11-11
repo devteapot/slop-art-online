@@ -123,7 +123,8 @@ def talk(run, c):
     s = "talk"
     a, b = residents(run)
     plan = ("ready;sync:scene;wait:2;shot:01_scene;cursor:0.5,0.12;wait:0.3;key:Enter:tap;wait:0.6;shot:02_room;dump:02;type:Good morning, all.;enter;wait:11.5;shot:03_room_note;dump:03;"
-            "sync:hold;wait:0.8;dump:04p;point:{A};wait:0.4;shot:04_hover;key:Enter:tap;wait:0.6;shot:05_to_them;dump:05;type:Hello there, good morning.;enter;wait:1.2;shot:06_said;dump:06;"
+            "sync:hold;wait:0.8;dump:04p;point:{A};wait:0.4;shot:04_hover;key:Enter:tap;wait:0.6;shot:05_to_them;dump:05;type:Hello there, good morning.;enter;wait:0.3;dump:06m1;wait:0.3;dump:06m2;wait:0.3;dump:06m3;wait:0.3;shot:06_said;dump:06;"
+            "sync:answer;wait:0.3;dump:06a1;wait:0.3;dump:06a2;wait:0.3;dump:06a3;wait:0.3;shot:06_answer;wait:5.5;dump:06z;"
             "key:Enter:tap;wait:0.4;tab;wait:0.4;dump:07a;tab;wait:0.4;dump:07b;tab;wait:0.4;dump:07c;tab;wait:0.4;dump:07d;tab;wait:0.4;dump:07e;tab;wait:0.4;dump:07f;tab;wait:0.4;dump:07g;tab;wait:0.4;dump:07h;shot:07_tab;key:Escape:tap;wait:0.4;dump:08;"
             "key:KeyL:tap;wait:0.4;click:@log:tab:1;wait:0.4;shot:09_people;click:@log:person:0;wait:0.6;shot:10_window;dump:10;"
             "menu:f@id:{A};wait:0.5;click:@acts:0:window;wait:0.5;click:@person:more;wait:0.5;shot:11_more;dump:11m;click:@acts:0:introduce;wait:0.5;shot:11_intro;dump:11;quit").replace("{A}", str(a))
@@ -133,7 +134,11 @@ def talk(run, c):
     # Open ground on either side of the arrival stall (`place_at` snaps to the nearest walkable
     # tile: spots in the stall put both on one tile, stacked exactly on screen).
     hold = f"hold=place_at|{a}|(mx-3.0)|(my-1.0);set_behavior|{a}|{wait};place_at|{b}|(mx+2.0)|(my-2.0);set_behavior|{b}|{wait}"
-    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:2.0:-2.0"], syncs=[hold])
+    # A answers through the speech path minds use (admin `mind_say` for its character: scene
+    # setup, not a mind; no model runs in this tier).
+    thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
+    answer = f'answer=mind_say|{a}|"Good morning to you, stranger. Fine weather."|{{me}}|""|0|{thought}'
+    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:2.0:-2.0"], syncs=[hold, answer])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     # The scene first: the two stand apart where they landed, and on screen, before the pick.
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
@@ -166,6 +171,17 @@ def talk(run, c):
     c.check(s, "Log › People lists them; a click opens a person's window", d["10"] and any(w.startswith("Person") for w, _ in wins(d["10"])), str(wins(d["10"])))
     t11 = (d["11"] or {}).get("typing") or {}
     c.check(s, "their window › More… › Introduce yourself: an editable line to them", t11.get("words", "").startswith("I'm Verifier") and t11.get("to") == a and t11.get("window") == f"Person{a}", json.dumps(t11))
+    # Mouths (`mouth.rs`): mine moves while my line is said, A's while their answer is, and both
+    # are shut once the words are said (the dumps' `extra.mouths`, by character id).
+    me = (json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}).get("me")
+    mouth = lambda k, who: ((((dump(out, k) or {}).get("extra") or {}).get("mouths")) or {}).get(str(who))
+    mine = [mouth(k, me) for k in ("06m1", "06m2", "06m3")]
+    c.check(s, "my mouth moves while my line is said", me is not None and any((w or 0) > 0.05 for w in mine), str(mine))
+    called = [x for x in sc.get("calls", []) if x.get("reducer") == "mind_say"]
+    theirs = [mouth(k, a) for k in ("06a1", "06a2", "06a3")]
+    c.check(s, "their mouth moves while their answer is said (their line through mind_say)", called and called[0].get("code") == 0 and any((w or 0) > 0.05 for w in theirs), f"{theirs}; {called[:1]}")
+    late = (((dump(out, "06z") or {}).get("extra") or {}).get("mouths") or {})
+    c.check(s, "and both mouths are shut once the words are said", not any((late.get(str(i)) or 0) > 0 for i in (me, a)), json.dumps(late))
     rows = sql(run, f"SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = {a}")
     c.check(s, "the authority's said row has to = the addressee", any("Hello there, good morning." in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
     rows0 = sql(run, "SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = 0")

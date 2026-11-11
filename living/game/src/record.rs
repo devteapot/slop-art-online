@@ -12,7 +12,8 @@
 //!   rather than wait. Past `LIVING_GAME_RECORD_MAX_MB` of frames (default 4096) it keeps one
 //!   every 5 s.
 //! - `state.jsonl`: four times a second, where I am, the camera, the people the HUD knows
-//!   (label, distance, hovered, targeted, talking), the bubbles and chat lines on screen, the
+//!   (label, distance, hovered, targeted, talking), the bubbles and chat lines on screen, each
+//!   speaking body's mouth (`mouths`, mouth.rs), the
 //!   target, the text box, hp, the frame time and the recorder's own main-thread time.
 //! - `events.jsonl`: presses as the game reads them (a tap or a held press, keys outside the
 //!   text box), each line I send, and every reducer call with the authority's answer (net.rs
@@ -296,6 +297,7 @@ fn sample(
     hud: Res<HudModel>,
     controls: Res<crate::controls::Input>,
     cams: Query<&GlobalTransform, With<Camera3d>>,
+    mouths: Option<Res<crate::mouth::Mouths>>,
 ) {
     let now = time.elapsed_secs_f64();
     if now < rec.next_state {
@@ -326,7 +328,7 @@ fn sample(
     let chat = if controls.chat_open { Some(format!("typing ({} chars)", controls.chat.chars().count())) } else { None };
     let line = json!({
         "t": unix_us() / 1000, "me": me, "me_pos": pos, "heading": heading, "cam": cam, "drawn": drawn,
-        "bubbles": bubbles, "log": log, "target": hud.target.as_ref().map(|t| t.name.clone()),
+        "bubbles": bubbles, "mouths": mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), json!((w * 100.0).round() / 100.0))).collect::<serde_json::Map<_, _>>()), "log": log, "target": hud.target.as_ref().map(|t| t.name.clone()),
         "chat_open": controls.chat_open, "chat": chat, "hp": hud.me.as_ref().map(|m| m.hp),
         "energy": hud.me.as_ref().map(|m| m.energy), "frame_ms": (time.delta_secs_f64() * 10000.0).round() / 10.0,
         "dropped_stills": DROPPED.load(Ordering::Relaxed),

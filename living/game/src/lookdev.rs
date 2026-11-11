@@ -778,8 +778,9 @@ fn target_names(file: &str, node: &str) -> Option<Vec<String>> {
     Some(names.as_array()?.iter().filter_map(|v| v.as_str().map(String::from)).collect())
 }
 
-/// Blink every few seconds; the mouth moves while talking.
-fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32) {
+/// Blink every few seconds; the mouth moves while talking: look-dev's Talk act, or the line
+/// this body is speaking in a world (`mouth.rs`, `speaking`).
+fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32, speaking: Option<f32>) {
     let Some((face, blink, mouth)) = rig.face else { return };
     let Ok(mut w) = morphs.get_mut(face) else { return };
     let cycle = (t % 3.7) / 3.7;
@@ -790,7 +791,7 @@ fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32
         ws[blink] = close;
     }
     if mouth < ws.len() {
-        ws[mouth] = talk * 0.8;
+        ws[mouth] = speaking.unwrap_or(talk * 0.8);
     }
 }
 
@@ -868,9 +869,12 @@ pub fn animated(file: &str) -> String {
 
 /// Procedural motion for VRoid characters: arms down, breathing, a walk cycle in place,
 /// blinking, and the mouth moving while talking.
-pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&Rig, Has<crate::envs::Player>)>, mut transforms: Query<&mut Transform>, mut morphs: Query<&mut MorphWeights>, time: Res<Time>) {
+#[allow(clippy::too_many_arguments)]
+pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(Entity, &Rig, Has<crate::envs::Player>)>, mut transforms: Query<&mut Transform>, mut morphs: Query<&mut MorphWeights>, time: Res<Time>, mouths: Option<Res<crate::mouth::Mouths>>) {
     let t = time.elapsed_secs();
-    for (rig, is_player) in &rigs {
+    for (e, rig, is_player) in &rigs {
+        // In a world, a body's mouth is shut unless it is saying a line.
+        let speaking = mouths.as_ref().map(|m| m.open.get(&e).copied().unwrap_or(0.0));
         let t = t + rig.seed;
         let mut set = |bone: &str, q: Quat| {
             if let Some(mut tf) = rig.bones.get(bone).and_then(|b| transforms.get_mut(*b).ok()) {
@@ -880,7 +884,7 @@ pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&R
         let walk = look.act == Act::Walk || (is_player && roam.moving);
         let phase = t * 6.0;
         if rig.clips {
-            face(rig, &look, &mut morphs, t);
+            face(rig, &look, &mut morphs, t, speaking);
             continue;
         }
         let breathe = (t * 1.6).sin();
@@ -906,7 +910,7 @@ pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&R
         if let Some(mut hips) = rig.bones.get("J_Bip_C_Hips").and_then(|b| transforms.get_mut(*b).ok()) {
             hips.rotation = Quat::from_rotation_z(if walk { phase.sin() * 0.04 } else { 0.0 });
         }
-        face(rig, &look, &mut morphs, t);
+        face(rig, &look, &mut morphs, t, speaking);
     }
 }
 

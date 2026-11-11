@@ -15,6 +15,7 @@ Enter talks to the person under the cursor (the owner's rule, 2026-11-11), and w
 - `introduce`: "Introduce yourself" puts "I'm <name>." in the box, editable, to them.
 - `labels`: looks ("a child in red"; a second colour when two read alike), never a name the rules have not given.
 - `pending`: `heard_by` (under my line) and `introduced` ("They told you their name") show nothing until the authority writes them (`living/game/src/heard.rs`).
+- `mouth`: while a line is said, the speaker's `Fcl_MTH_A` moves (`living/game/src/mouth.rs`, read by `lookdev::face`): my own line, and every line I hear or see said, for each rigged person drawn. It moves for the line's length at 14 characters a second (open on vowels, shut on punctuation), never past its bubble, then shuts. How wide comes from the world's way of speaking (`Carry::Hearing` share: a call wider, speech 0.8; a way for a few metres or one ear, a whisper and its onlookers' rows, 0.3), found from the row's kind and heard words. Unit tests `the_mouth_over_a_line`, `loudness_comes_from_the_ways`; the dump's `extra.mouths` (character id → opening now) and the record's `state.jsonl` `mouths`.
 - `prompt-tip`: the F prompt beside the person ("F Talk · hold F · more") and the first-time tip ("New here").
 
 ## How to get to it (user POV)
@@ -31,6 +32,7 @@ Preconditions: baseline; two residents placed beside the player with `--place ID
 - **Tab.** `key:Enter:tap;tab;tab;tab` → among the dumps, another person in earshot (the window followed) and the room (window `Log`).
 - **Esc.** Closes the box and its window.
 - **Log › People.** `key:KeyL:tap;click:@log:tab:1;click:@log:person:0` → a `Person<ID>` window.
+- **Mouths.** After `type:…;enter`, dumps at 0.3, 0.6 and 0.9 s → `extra.mouths[<me>]` above 0.05 in at least one. `sync:answer` makes resident A answer through admin `mind_say` (A's controller is the admin; scene setup, the speech path minds use, no model) → dumps at 0.3–0.9 s have `extra.mouths[<A>]` above 0.05; 5.5 s later both are 0 or absent.
 - **Introduce yourself.** `click:@person:intro` → `typing.words` "I'm Verifier.", `typing.to` = ID.
 - Scenario: `check.py --run $R talk`.
 - **Two overlapping (`pick`).** The view faces north (`frame:0;yaw:0`); A at `-3.0:-1.0`, B at `-3.0:-2.5` (1.5 m behind A along the view, where the ray through A's chest meets the ground). `point:A:1.3` (A's chest) → the dump's `under` and `hovered` are A only; `key:Enter:tap` → `typing.to == A` in `Person<A>`, `targeted == A`; the line goes to #A (log and `said` row); `tap` on the same spot also opens the box to A. Scenario: `check.py --run $R pick`.
@@ -42,4 +44,5 @@ Preconditions: baseline; two residents placed beside the player with `--place ID
 - Someone behind a stall or a house is not perceived (sight is a rule), so Enter skips them; place people in the open.
 - `point:ID` puts the cursor 0.3 m above their feet. Someone standing in front of them on screen can cover that spot, and then the pick is rightly the one in front; the dump's `seen` shows where each body was.
 - A run's character keeps its old experience rows: "First seen 12 min ago" can predate the run.
-- No mind runs: nobody answers. Their lines appear only with `verify-minds` or a play-test.
+- No mind runs: nobody answers on their own. Their lines appear only with `verify-minds` or a play-test; the talk scenario's one answer is the scene's `mind_say`.
+- A mouth sampled in a dump can be near 0 at a pause or a flap's trough: the checks take three samples.
