@@ -53,6 +53,17 @@ NEVER = [os.path.join(HOME, p) for p in (".local/share/containers", ".local/shar
 PROTECT_FILE = os.path.join(HOME, ".config", "slop-disk", "protect.txt")
 CARGO_SIG = "Signature: 8a477f597d28d172789f06886806bc55"
 STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local/state"), "slop-disk")
+
+
+# System tools live outside a minimal PATH on some systems (macOS: /usr/sbin/lsof, /sbin/mount),
+# and the self-test and launchd jobs run with one. Look on PATH first, then the system's own
+# directories. Container tools (podman, docker) are only looked for on PATH, so a test's fake
+# PATH stays hermetic; the timer's PATH includes Homebrew's (disk_clean_install.sh).
+SYSTEM_DIRS = ("/usr/sbin", "/usr/bin", "/sbin", "/bin")
+
+
+def system_tool(name):
+    return shutil.which(name) or next((os.path.join(d, name) for d in SYSTEM_DIRS if os.access(os.path.join(d, name), os.X_OK)), None) or name
 SKIP_DIRS = {".git", "node_modules", "__pycache__"}
 GB = 1024 ** 3
 WARNINGS = []
@@ -117,7 +128,7 @@ def free_bytes(path="/"):
 
 
 def git(args, cwd):
-    r = subprocess.run(["git", "--no-optional-locks", *args], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    r = subprocess.run([system_tool("git"), "--no-optional-locks", *args], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     return r.returncode, r.stdout
 
 
@@ -407,7 +418,7 @@ def _proc_paths(base, pid, comm):
 def users_lsof():
     held = []
     try:
-        r = subprocess.run(["lsof", "-n", "-w", "-F", "pcn"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=120)
+        r = subprocess.run([system_tool("lsof"), "-n", "-w", "-F", "pcn"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=120)
     except (OSError, subprocess.TimeoutExpired):
         return [("*", "lsof did not answer: treating every folder as in use")]
     if r.returncode not in (0, 1) or not r.stdout:
@@ -482,8 +493,8 @@ def mount_points():
     except OSError:
         # macOS keeps `mount` in /sbin, which a minimal PATH (the self-test's, a launchd job's)
         # may leave out: try PATH, then the usual places.
-        exe = shutil.which("mount") or next((p for p in ("/sbin/mount", "/usr/sbin/mount", "/bin/mount") if os.access(p, os.X_OK)), None)
-        if exe is None:
+        exe = system_tool("mount")
+        if not os.path.isabs(exe):
             print("disk_clean: warning: no `mount` found, so bind mounts under build folders cannot be seen", file=sys.stderr)
             return pts
         try:
@@ -555,6 +566,9 @@ def fmt_gb(b):
 
 
 def short(p):
+    real_home = os.path.realpath(HOME)
+    if real_home != HOME and p.startswith(real_home):
+        p = HOME + p[len(real_home):]
     return p.replace(HOME, "~")
 
 
