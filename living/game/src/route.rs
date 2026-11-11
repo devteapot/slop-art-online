@@ -821,7 +821,7 @@ fn follow(
                                         match land.map.at(x, z) {
                                             Terrain::Water => '~',
                                             Terrain::Rock => '^',
-                                            Terrain::Road | Terrain::Wall => '=',
+                                            Terrain::Road | Terrain::Wall | Terrain::Drop | Terrain::Low => '=',
                                             _ => RegionKind::ALL.iter().position(|k| *k == land.kind_at(x, z)).map_or('?', |k| (b'0' + k as u8) as char),
                                         }
                                     })

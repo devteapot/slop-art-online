@@ -24,6 +24,14 @@ pub enum Terrain {
     Road = 6,
     /// Built by people: blocks movement.
     Wall = 7,
+    /// A drop or ledge between two ground levels (a terrace's, a planned settlement's): too
+    /// steep to step up or down, so it blocks walking, steering, routes and building like a
+    /// wall, but it is open air, so sight and missiles pass over it (`docs/PERCEPTION.md`).
+    Drop = 8,
+    /// Ground under something that stands in the way but below eye height (a cart, a low well:
+    /// `host::hosted_map` by the land's `sight` parameters): it blocks the foot like a wall, but
+    /// one sees over it, and missiles fly over it.
+    Low = 9,
 }
 
 impl Terrain {
@@ -36,11 +44,18 @@ impl Terrain {
             5 => Self::Dirt,
             6 => Self::Road,
             7 => Self::Wall,
+            8 => Self::Drop,
+            9 => Self::Low,
             _ => Self::Grass,
         }
     }
     pub fn walkable(self) -> bool {
-        !matches!(self, Self::Water | Self::Rock | Self::Wall)
+        !matches!(self, Self::Water | Self::Rock | Self::Wall | Self::Drop | Self::Low)
+    }
+    /// Whether it stops sight and missiles: rock and walls do; water, forest, a drop, a low
+    /// obstacle and open ground do not.
+    pub fn opaque(self) -> bool {
+        matches!(self, Self::Rock | Self::Wall)
     }
     pub fn name(self) -> &'static str {
         match self {
@@ -52,6 +67,8 @@ impl Terrain {
             Self::Dirt => "dirt",
             Self::Road => "road",
             Self::Wall => "wall",
+            Self::Drop => "drop",
+            Self::Low => "low",
         }
     }
 }
@@ -129,10 +146,10 @@ impl Map {
     }
 
     /// Whether a missile flies through a continuous position: walls, rock and shut gates
-    /// stop it; water, forest and open ground do not.
+    /// stop it; water, forest, a drop and open ground do not.
     pub fn passable_missile(&self, x: f32, y: f32) -> bool {
         let (tx, ty) = (x.floor() as i32, y.floor() as i32);
-        !matches!(self.get(tx, ty), Terrain::Wall | Terrain::Rock) && (self.blocked.is_empty() || !self.blocked.contains(&(ty as u32 * self.w + tx as u32)))
+        !self.get(tx, ty).opaque() && (self.blocked.is_empty() || !self.blocked.contains(&(ty as u32 * self.w + tx as u32)))
     }
 
     /// Change one tile (roads, walls); callers persist the chunk.
@@ -154,7 +171,7 @@ impl Map {
     }
 
     fn chunk_opaque(&self, cx: u32, cy: u32) -> bool {
-        (cy * CHUNK..((cy + 1) * CHUNK).min(self.h)).any(|y| (cx * CHUNK..((cx + 1) * CHUNK).min(self.w)).any(|x| matches!(Terrain::from_u8(self.tiles[(y * self.w + x) as usize]), Terrain::Wall | Terrain::Rock)))
+        (cy * CHUNK..((cy + 1) * CHUNK).min(self.h)).any(|y| (cx * CHUNK..((cx + 1) * CHUNK).min(self.w)).any(|x| Terrain::from_u8(self.tiles[(y * self.w + x) as usize]).opaque()))
     }
 
     fn opaque_chunks(&self) -> &[bool] {
@@ -296,8 +313,8 @@ impl Map {
     }
 
     /// Whether one can see from `a` to `b`: no tile the segment crosses between the two ends
-    /// is opaque (wall, rock or a shut gate, as for missiles; water, forest and open ground
-    /// are not). The ends' own tiles never block, so someone standing in a gateway is seen.
+    /// is opaque (wall, rock or a shut gate, as for missiles; water, forest, a drop and open
+    /// ground are not). The ends' own tiles never block, so someone standing in a gateway is seen.
     /// Walks the exact tiles the segment crosses (a grid traversal), so its cost grows with
     /// the distance in tiles, not with a sampling rate.
     pub fn sight_clear(&self, a: (f32, f32), b: (f32, f32)) -> bool {
@@ -632,6 +649,29 @@ mod tests {
         c.set(3, 4, Terrain::Wall);
         c.set(4, 3, Terrain::Wall);
         assert!(!c.sight_clear((2.5, 5.5), (5.5, 2.5)), "two walls meeting at a corner hide");
+    }
+
+    /// A drop between two levels: one sees and shoots across it, and no one walks, steers or
+    /// routes across it.
+    #[test]
+    fn a_drop_blocks_walking_but_not_sight_or_missiles() {
+        let mut m = Map { w: 48, h: 48, tiles: vec![Terrain::Grass as u8; 48 * 48], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        // A drop across the whole map at y = 20 (an upper level above it, a lower one below).
+        for x in 0..48 {
+            m.set(x, 20, Terrain::Drop);
+        }
+        let (up, down) = ((10.5, 17.5), (12.5, 23.5));
+        assert!(!Terrain::Drop.walkable() && !Terrain::Drop.opaque());
+        assert!(m.sight_clear(up, down) && m.sight_clear(down, up), "the levels see each other");
+        assert!(m.passable_missile(11.5, 20.5), "a missile flies over the drop");
+        assert!(!m.free(11.5, 20.5) && !m.line_clear(up, down), "no one steps onto it");
+        assert!(m.path(up, down, 20_000).is_none(), "no route across");
+        assert!(m.nearest_reachable(up, 11.5, 20.5).is_some_and(|p| p.1 < 20.0), "a click on the drop stays on my level");
+        // A stair (walkable) through it joins the levels; a wall beside it still hides.
+        m.set(30, 20, Terrain::Road);
+        assert!(m.path(up, down, 20_000).is_some(), "the stair joins the levels");
+        m.set(11, 20, Terrain::Wall);
+        assert!(!m.sight_clear((11.5, 17.5), (11.5, 23.5)), "a wall on the drop still hides");
     }
 
     #[test]

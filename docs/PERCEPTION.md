@@ -105,7 +105,7 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 
 1. reads the character's body and its sight now (`sight_for`: the night and torch rules);
 2. takes the creatures within sight + 1 tile from the per-tick chunk-body cache that minds' perception already fills (`common::creatures_near`), at their positions now along their segments;
-3. keeps those within sight (a creature already perceived stays until it is 1 tile beyond: no flicker at the edge) and with a clear sight line on the cached map (`Map::sight_clear`: a grid traversal of the exact tiles between; rock, walls and shut gates hide, water and forest do not; the two ends' own tiles never block);
+3. keeps those within sight (a creature already perceived stays until it is 1 tile beyond: no flicker at the edge) and with a clear sight line on the cached map (`Map::sight_clear`: a grid traversal of the exact tiles between; rock, walls and shut gates hide, water, forest, drops and low things do not ([Drops](#drops-sight-across-ground-levels)); the two ends' own tiles never block);
 4. compares with the player's `perceived` rows (point lookup on `perceived.viewer`) and inserts or deletes only the difference.
 
 A join sweeps the newcomer at once (`perception::sweep_now`), so the world is there on the first frame. A death deletes the player's rows (`perception::forget`). A player's own character is never a `perceived` row: the views add it.
@@ -146,6 +146,39 @@ Privacy is unchanged: every copy is a private table written only for viewers who
 ### The moving-body stream
 
 `seen_bodies` returns a narrow product type, `Motion`: `id`, `x`, `y`, `t_ms`, `vx`, `vy`, `heading`, `turn`, `turn_s`, `next_ms` (the segment's end, when steering looks again) and `speed` (the cruising speed of the movement, which tells walk from run). The client extrapolates with `living_rules::steer::pose` exactly as from a `body` row. It leaves out the path (16 B a corner), the chunk and the kind (on the creature's character row). That is 52 B of columns against `body`'s 70 B plus 16 B per path corner. No table was added and no column removed, so a running world updates in place: the view maps rows that are written anyway.
+
+### Drops: sight across ground levels
+
+Since 2026-11-11 (branch `drop-1`). A drop between two ground levels, a terrace's or a planned settlement's (docs/AUTHORED_PLANS.md), is its own terrain class, `Terrain::Drop` (tile byte 8), not `Wall` (7). Before, `terrace::paint_drops` painted it `Wall`, so on Cullet nobody on Mid Row saw anyone on Low Row a few metres below, while the client drew both plainly (docs/SMALL_CITY.md, the owner's answer to decision 6: what the screen shows of the ground and of people must agree).
+
+- **The foot:** a drop blocks like a wall. `Terrain::walkable` is false for it, so steering (`Map::free`), straight walks (`line_clear`), A* (`Map::path`), regions, areas and connected ground (`nav.rs`), click targets (`nearest_reachable`) and building (`build wall`/`gate` need a walkable tile; a road is laid where one stands) all refuse it. Only roads, ramps and stairs join levels, as before. Generation keeps drops like walls: `land::connect_walled` never cuts a ford through one, roads and plazas painted later leave it alone.
+- **The eye:** `Terrain::opaque` is true only for rock and walls. A drop is open air: `Map::sight_clear` and its per-chunk fast path pass over it, so every perception path (players' perceived sets, minds' scenes, graphs' `sees`, witnessed events, the combat feed) sees across it.
+- **Missiles:** they follow the sight rule and fly over a drop (`Map::passable_missile`, which sight already shared). This is not a balance choice but the same physical rule as sight: the drop is open air, and the authority has no height (sight lines ignore height, docs/FLOORS.md "Verticality"), so it cannot tell a shot down a terrace from one up a retaining wall. Stopping missiles at a drop would make a visible target unshootable for no visible reason. If shooting up a wall should be harder, that is a height rule for the step in FLOORS.md where levels become layers, not a terrain class.
+- **Low things** (same day): a lot or blocking prop below eye height (a cart) is `Terrain::Low` (9) on the hosted map, which blocks the foot and not the eye in the same way; what rises above the eye stays `Wall`. How high a thing rises comes from its own definition (its model's `height_m` in `data/buildings.json`); the eye height and per-kind overrides are land data, `LandParams.sight` ([island authority](ISLAND_AUTHORITY.md#sight-over-low-things-2026-11-11)). **Why land data and not a law:** which tiles block is decided when the land is hosted, in the rules crate, without the world's script, and the game client rebuilds the same hosted land for its own sight test (sight-2, `living/game/src/sightfield.rs`). The authority and the client must compute blocking from the same input, and the seed's land data is the input both have. A law could differ from what the client computes, and the client would draw people the authority hides, or hide people it perceives.
+- **What stands on a drop hides:** a building's footprint or a blocking prop over a drop tile becomes `Wall` on the hosted map (`host::hosted_map`) when it rises above the eye. On the island no footprint does (4,116 drop tiles, none under a footprint).
+- **Not modelled:** a retaining wall's face. Someone at the foot of a 4 m wall sees someone a few metres back on the level above, which the eye would not; the 2D authority sees over every drop both ways. The game client's top-down camera shows both, which is what the owner asked to agree.
+
+#### Drops and low things: measurements (2026-11-11)
+
+**Who is hidden on Brackenford's square** (the island's arrival square, seed 7 at 2048 m), from the arrival point, within 48 m, on the hosted tiles (`living/rules/examples/sight_census.rs`):
+
+| Points | Before (drops and low things as `Wall`) | After (height rule, 1.6 m) | Stalls see-through (`hides_m {"market_stall": 0}`) |
+| --- | --- | --- | --- |
+| Every walkable tile centre (5,141) | 3,853 hidden | 3,853 | 2,554 (2,163 with wells at 0.95 m too) |
+| People in a live island world (44 of 277 within 48 m, one `body` snapshot of `verify-core-bench-after`) | 29 hidden | 29 | 17 |
+
+The square has no blocking thing below eye height: its stalls (2.6 m), its well (3.4 m) and its market cross (5.4 m) rise above it by their models' heights, so the height rule alone changes nothing there. On the plan-test land the change hides 2,288 of 3,461 points round its arrival, against 2,421 before (its drops). On Cullet's seed (`living/seeds/cullet.json`, plan-2's Wrack: seed 83 at 1024 m, 1,753 drop tiles, no low ones), from its arrival on the quay: 1,225 of 4,241 points within 48 m hidden, against 2,516 before; the Rows now see each other across their drops.
+
+**Cost.** `living/tools/bench.py` on fresh `island` databases, one at a time on a private 2.14.1 server, before (main `fd2030c3`) and after (this change), each with a profiled span `brain.scene` round a graph's scene added for the measurement: 60 s at rest after a 15 s settle, then `spawn_skirmish(200, 12)` and 60 s, two repetitions each, interleaved. The dev-box was shared (load average about 21 on 32 cores from other builds), so differences under about 15% are noise.
+
+| Window | Arm | Tick p50 / p99 (ms) | Graph evaluations/s | `brain.scene` p50 / p99 (ms), ms per s |
+| --- | --- | --- | --- | --- |
+| Rest | before | 1.51 / 3.37, 1.43 / 2.79 | 369, 371 | 0.023 / 0.092, 9.8; 0.021 / 0.086, 9.4 |
+| Rest | after | 1.60 / 3.66, 1.79 / 3.64 | 373, 374 | 0.024 / 0.088, 10.2; 0.026 / 0.091, 11.3 |
+| Skirmish (200) | before | 2.19 / 18.9, 3.04 / 24.7 | 802, 804 | 0.018 / 0.089, 16.0; 0.026 / 0.107, 22.4 |
+| Skirmish (200) | after | 2.03 / 24.4, 2.26 / 40.1 | 809, 775 | 0.020 / 0.082, 17.3; 0.025 / 0.091, 19.3 |
+
+No change shows outside the spread on the island, where only 61 tiles became low and the drops lie in terraced towns away from the arrival and the skirmish. The second after-skirmish p99 (40 ms) is a single window; the first was 24 ms. A battle on a terraced street, or at 48 m sight (Cullet), was not measured. Raw reports: `.local/drop1/bench/` in the `drop-1` worktree (git-ignored).
 
 ### Minds see what their character sees
 

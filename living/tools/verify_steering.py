@@ -92,7 +92,7 @@ def pose(r, t):
 
 
 def walkable(db):
-    """Terrain lookup for choosing open ground (water, rock and walls block)."""
+    """Terrain lookup for choosing open ground (water, rock, walls, drops and low things block)."""
     cache = {}
 
     def ok(x, y):
@@ -104,7 +104,7 @@ def walkable(db):
             cache[cid] = bytes.fromhex(hexes[0][2:]) if hexes else b""
         t = cache[cid]
         i = (int(y) % 16) * 16 + int(x) % 16
-        return i < len(t) and t[i] not in (2, 4, 7)
+        return i < len(t) and t[i] not in (2, 4, 7, 8, 9)
 
     return ok
 

@@ -206,6 +206,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
 impl<'a> Ev<'a> {
     fn scene(&mut self) -> &Scene {
         if self.scene.is_none() {
+            let _span = common::span("brain.scene");
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             // What the body sees: within its sight and with a clear sight line (the rule every
             // observer perceives by, `perception::in_sight`).

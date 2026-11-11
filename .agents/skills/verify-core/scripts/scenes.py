@@ -680,7 +680,7 @@ def wall_geometry(s):
             if x < W and y < H:
                 tiles[y * W + x] = t
     at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
-    walk = lambda x, y: at(x, y) not in (2, 4, 7)
+    walk = lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
     for y in range(4, H - 4):
         for x in range(4, W - 4):
             if not walk(x, y):
@@ -727,6 +727,97 @@ def sight(s):
 
 
 
+def drop_geometry(s, cls=8):
+    """On this world's own map: an `eye` tile and an `across` one on one axis with only tiles of
+    class `cls` (8 a drop, 9 a low thing; 1 to 3 of them) between and walkable ground behind each
+    for 3 tiles, away from the obstacle's ends (it runs on across the line for 2 tiles each way, 1
+    for a low thing), so the way round is not a step past its end. Returns the spots and a tile
+    lookup."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray([4]) * (W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
+    walk = lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
+    for y in range(4, H - 4):
+        for x in range(4, W - 4):
+            if at(x, y) != cls:
+                continue
+            ext = 2 if cls == 8 else 1
+            for dx, dy in [(1, 0), (0, 1)]:
+                if not walk(x - dx, y - dy) or not all(at(x + k * dy, y + k * dx) == cls for k in range(-ext, ext + 1)):
+                    continue
+                for gap in (1, 2, 3):
+                    bx, by = x + gap * dx, y + gap * dy
+                    if walk(bx, by) and all(at(x + i * dx, y + i * dy) == cls for i in range(gap)) \
+                            and all(walk(x - i * dx, y - i * dy) and walk(bx + i * dx, by + i * dy) for i in range(1, 4)):
+                        return {"eye": (x - 2 * dx + .5, y - 2 * dy + .5), "across": (bx + 2 * dx + .5, by + 2 * dy + .5), "drop": [(x + i * dx, y + i * dy) for i in range(gap)]}, at
+    raise RuntimeError(f"no {'drop' if cls == 8 else 'low'} geometry on this map")
+
+
+def drop(s):
+    """A drop between two ground levels (tile 8, `Terrain::Drop`) blocks the foot, not the eye
+    (docs/PERCEPTION.md). A fight on one side is watched from the other: the watcher's graph sees
+    the attacker and waves at it, and it witnesses the fight. Then a person on the far side is
+    sent (`goto`) to the fight's spot: its body never stands on a drop tile, and the route the
+    authority keeps for it (`body.path`, from where it is) never crosses one; it goes round (by a
+    stair or the drop's end) or is refused. On a world with
+    drops (`--seed plan-test` or `island`). Admin `place_at` and `set_behavior` set the scene.
+    As the `low` scene the same is driven over a low thing (tile 9: a cart, below eye height,
+    `LandParams.sight`) on an `island` run."""
+    what = "drop" if s.name == "drop" else "low thing"
+    spots, at = drop_geometry(s, 8 if s.name == "drop" else 9)
+    (s.out / f"{s.name}-spots.json").write_text(json.dumps(spots, indent=2) + "\n")
+    attacker, victim, watcher, walker = s.people(4)
+    fight = spots["eye"]
+    s.call("place_at", attacker, *fight)
+    s.call("place_at", victim, *fight)
+    s.call("place_at", watcher, *spots["across"])
+    s.call("place_at", walker, spots["across"][0] + 1.0, spots["across"][1])
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(watcher, {"first": {"label": "watch", "children": [
+        {"if": {"cond": {"sees": {"id": attacker}}, "then": {"do": {"skill": "wave", "target": {"id": attacker}}}}},
+        {"wait": 3}]}})
+    s.graph(attacker, {"do": {"skill": "attack", "target": {"id": victim}}})
+    time.sleep(8)
+    uses = [u for u in s.rows("SELECT * FROM skill_use", "uses") if u["at_ms"] >= t0 and u["skill"] == "wave"]
+    s.expect(f"a graph across the {what} sees the attacker (waves at it)", any(u["actor"] == watcher and u["target"] == attacker for u in uses), uses, fatal=False)
+    fights = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {watcher}", "experience-watcher") if r["kind"] == "fight" and r["at_ms"] >= t0]
+    s.expect(f"the resident across the {what} witnesses the fight", fights, fights[:2], fatal=False)
+    s.expect("the fight happened (chronicle)", s.rows(f"SELECT * FROM chronicle WHERE kind = 'attack' AND a = {attacker}", "attack-story"))
+    s.graph(attacker, {"wait": 120})
+    # The walker is sent across: steering and routing keep it off the drop.
+    start = body_at(s, walker)
+    s.graph(walker, {"seq": [{"do": {"skill": "goto", "target": {"at": list(fight)}}}, {"wait": 300}]})
+    pts, routes = [], []
+    end = time.monotonic() + 12
+    while time.monotonic() < end:
+        row = s.rows(f"SELECT x, y, t_ms, vx, vy, next_ms, path FROM body WHERE id = {walker}")[0]
+        here = body_at(s, walker, row=row)
+        pts.append(here)
+        corners = [(w["x"], w["y"]) if isinstance(w, dict) else (w[0], w[1]) for w in row["path"]]
+        routes.append([here] + corners)
+        time.sleep(0.25)
+    is_blocked = lambda q: at(math.floor(q[0]), math.floor(q[1])) in (2, 4, 7, 8, 9)
+    blocked = [q for q in pts if is_blocked(q)]
+    # The route ahead, walked in 0.1 m steps: no leg crosses a blocked tile.
+    def crosses(a, b):
+        n = max(1, math.ceil(math.dist(a, b) / 0.1))
+        return any(is_blocked((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) for i in range(n + 1))
+    jumps = [(r[i], r[i + 1]) for r in routes for i in range(len(r) - 1) if crosses(r[i], r[i + 1])]
+    goto = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {walker}", "walker-uses") if u["skill"] == "goto" and u["at_ms"] >= t0]
+    (s.out / f"{s.name}-walk.json").write_text(json.dumps({"start": start, "trail": pts, "routes": routes, "uses": goto}, indent=1) + "\n")
+    s.expect(f"a walk across the {what} never stands on it, and its route never crosses it", pts and not blocked and not jumps,
+             {"start": start, "end": pts[-1] if pts else None, "walked_m": round(sum(math.dist(a, b) for a, b in zip(pts, pts[1:])), 1), "goto": [u["outcome"] for u in goto][-1:], "route_corners": max((len(r) - 1 for r in routes), default=0), "blocked": blocked[:5], "crossing_legs": jumps[:3]})
+
+
 def open_line(s, length=16):
     """A row of `length` walkable tiles on this world's map, west to east, with nothing that
     blocks sight on it: the tile centres from its west end."""
@@ -741,7 +832,7 @@ def open_line(s, length=16):
             x, y = cx * 16 + k % 16, cy * 16 + k // 16
             if x < W and y < H:
                 tiles[y * W + x] = t
-    walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7)
+    walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7, 8, 9)
     for y in range(8, H - 8, 3):
         for x in range(8, W - length - 8, 2):
             if all(walk(x + i, y + d) for i in range(length) for d in (-1, 0, 1)):
@@ -1276,7 +1367,7 @@ def tile_grid(s):
             x, y = cx * 16 + k % 16, cy * 16 + k // 16
             if x < W and y < H:
                 tiles[y * W + x] = t
-    return W, H, lambda x, y: 0 <= x < W and 0 <= y < H and tiles[int(y) * W + int(x)] not in (2, 4, 7)
+    return W, H, lambda x, y: 0 <= x < W and 0 <= y < H and tiles[int(y) * W + int(x)] not in (2, 4, 7, 8, 9)
 
 
 def open_ray(s, length):
@@ -1441,7 +1532,7 @@ def laws(s):
     s.expect("an ordinary night outside costs no health", night["hp_rate"] >= 0, night)
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop}
 
 
 def main():

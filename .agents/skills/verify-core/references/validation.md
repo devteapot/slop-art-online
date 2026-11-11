@@ -1,5 +1,16 @@
 # Core validation record
 
+
+## 2026-11-11 drop-1: drops and low things are see-through (dev-box)
+
+Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `core-drop1-20261111-153740` (default seed): cargo checks (rules 148, authority 12, mind 82, viewer sync 5), `sight` 6 of 6, `senses` 7 of 7, `moves` 5 of 5. Its steering run failed to publish (the module copy's name has underscores for hyphens: `living_authority_verify_<run with _>.wasm`); rerun in `core-drop1b-20261111-154703-steering`: 5 of 5.
+- `core-drop1-20261111-153740-island`: `sight` 6 of 6 on the island.
+- First `drop` (plan-test) and `low` (island) runs in `core-drop1-20261111-153740-drop`/`-island`: sight across both passed; the walk check failed on a harness defect, not a rule: it compared CLI samples about 2 s apart (a 2.8 m "jump" was a walk round the drop's end), and the geometry picked the obstacle's very end. The check now walks the route the authority keeps (`body.path`) and the geometry keeps away from the ends.
+- `core-drop1b-20261111-154703-drop` (plan-test): `drop` 5 of 5. `core-drop1b-20261111-154703-island`: `low` 5 of 5 (a cart's tiles; the watcher across it waves and witnesses; the walker's route never crosses it).
+- Not run on this change: tick, needs, food, refusal, seize, skirmish, dealings, town, lives, laws, infant; mechanics.
+
 ## 2026-11-11 fix-death-labels (Spark)
 
 Branch `fix-death-labels` (rebased on main `6a905c3`, then on `a8d95fc`), the trials stack's container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; `verify.py` now accepts its `0.0.0.0` binding), private `CARGO_TARGET_DIR` and `--target-dir` per seed, no minds.
