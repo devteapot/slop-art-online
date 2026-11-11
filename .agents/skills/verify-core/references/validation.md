@@ -10,6 +10,36 @@ Branch `rules-offers-2` (from `rules-offers` `de0faea`, origin/main merged at `3
 - A shared `CARGO_TARGET_DIR` between two checkouts (a temporary main worktree and this one) linked the other checkout's `living-rules` as fresh; touching the sources rebuilt it. Keep one checkout per target dir.
 - Cargo: `cargo test -p living-rules` 210 pass with `answers_take_what_they_name`, `answers_carry_what_they_name`, `ui::tests::an_act_toward_an_offer_names_it`; `just living-check` ok.
 
+## 2026-11-11 goods-2: item looks, make and feed shown, teaching a world's know-how (dev-box)
+
+Branch `goods-2` (from main `62d861f0`, merged with main four times, last with `94050f9a` at `6fefe997`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+
+| Scene | Run | Result |
+| --- | --- | --- |
+| `goods` (goods fixture), before the `doing` check | `core-goods2-goods` | 22 of 22 |
+| `stock` | `core-goods2-goods` | 4 of 4 |
+| `goods` with the new checks (`act_card` holds `make` and `feed`; A's `doing` row with `make`'s code at the furnace while the glass is made) | `core-goods2-goods-b`; merged `core-goods2m-goods` | 24 of 24 each |
+| `stock` (merged) | `core-goods2m-goods` | 4 of 4 |
+| `laws` (cullet-laws), first merge | `core-goods2-laws` | 15 pass, the known SKIP (the mirrored dark spot) |
+| `laws` (cullet-laws), second merge | `core-goods2m-laws` | 15 pass, the same SKIP |
+| `goods`, `stock` (third merge: rates-2, ui-decl-1) | `core-goods2f-goods` | 24 of 24, 4 of 4 |
+| `goods`, `stock` (fourth merge: fov-1) | `core-goods2g-goods` | 24 of 24, 4 of 4 |
+
+Rules: `cargo test -p living-rules` all pass, with `items_and_recipes_say_how_they_look`, `teaching_takes_the_worlds_know_how` and `making_and_feeding_are_seen_and_a_fire_state_is_shared`. Fuel gate A/B against main, same session: at the second merge within 0.1 % on every law (rates-law 211,278 → 211,120, then over its 160,000 budget on main). At the third merge (main `6caebe20`, rates-2's re-based budgets) within 0.5 %: rates-law 203,095 → 203,516, strike 279,080 → 280,161, perceived 76,912 → 77,252, hook 441,073 → 441,175, senses-law 60,495 → 60,767, the rest equal. **`perceived` is over its 75,000 budget on main itself** (76,912), not from this branch. The laws scene was not rerun at the third merge. `just living-check` exit 0 after each merge.
+
+Maintained: the goods scene checks `make`'s `doing` row; features/goods.md (item looks, shows, what is not covered). The harness: main's `1b3b5dd8` (projects experiment) had put back an older `verify.py` and `verify/SKILL.md`, which installed the plain script over a seed's own laws and dropped the verify-ui rows; `b7328bc0` restored the HTTP install only. goods-2 restores goods-1's `seed_laws` skip, `call ... @FILE`, the longer install timeout and the SKILL.md text, keeping main's `[::]` port and own-server wording.
+
+## 2026-11-11 fov-1: sight that depends on facing (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `core-face1-a` (`human_face`: steering bends toward a held look; a stop finishes the turn): `moves` 5 of 5, `fov` 18 of 18.
+- `core-fov1-m` (after merging `origin/main` `accf27c8`, eye-2's sight included): `fov` 18 of 18, `sight` 6, `senses` 7.
+- `core-fov1-j` (default seed, the final build before the merge: graph scenes see and hear from one gather, `perception::sensed`): `fov` 18 of 18; `tick` 6, `sight` 6, `senses` 7, `moves` 5, `death-names` 8 pass; `doing` fails as below.
+- `core-fov1-c` (the build before that): `fov` 18 of 18 (new: off as shipped; `set_world_law` refusals, the script block at a new revision, `law_change` and the chronicle row; facing east and west; the 3 m ring guarding a strike from 1 m behind; a 0.5 m ring: 1.5 m behind unseen, no guard, the blow lands; witnesses by facing; off again). Then `tick`, `sight`, `senses` and `moves` pass on the same world.
+- `doing` failed twice on that world (`doing.txt`, `doing-2.txt`): the admin CLI took 1 to 14 s a call on the loaded host, so the walkers finished before the observer's scene was written (`doing-actions.jsonl`). No field was on. It failed the same way on `origin/main` (`6288f599`, exported to `.local/fov1/main-src`, run `core-main-doing`), so it is an existing failure under load, not this change.
+- Earlier `fov` attempts (`core-fov1-a`, `-b`, `-d` to `-i`) found harness faults, now fixed in the scene. `say` lines are 2 s apart. The same graph does not restart, and waits are held to 120 s. The dark near ring (2 m) is a separate law. Onlookers stand on the open line, not off it. Witnesses are told only a fight's first blow (30 s), so duels are 31 s apart. A striker facing away cannot see its target with a 0.5 m ring, so it turns first; a strike cannot be a `mind_act`.
+- Not run on this change: needs, food, refusal, seize, death-names, skirmish, drop, low, dealings, town, lives, goods, laws, infant; mechanics.
 
 
 ## 2026-11-11 rates-2: spoiling, regrowth, traps and remains in game time; the decay scene (dev-box)

@@ -318,6 +318,13 @@ pub struct Steer {
     /// Movement input bucket of a player (tokens refill at the `input_hz` law).
     pub tokens: f32,
     pub input_ms: u64,
+    /// A player's look (`human_face`): held while `look_on`, the direction (radians, the same
+    /// angle as `body.heading`) the body turns to. It is an input, like the movement direction
+    /// in `gx`/`gy`; the body's facing is still only `body.heading`.
+    #[default(false)]
+    pub look_on: bool,
+    #[default(0.0f32)]
+    pub look: f32,
 }
 
 /// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):
@@ -682,6 +689,11 @@ pub struct Deliberation {
     pub updated_ms: u64,
     pub scene: String,
     pub revision: u32,
+    /// When each line of `reason` arrived, in milliseconds separated by spaces and aligned with
+    /// its lines: a deliberation consumes the lines its prompt contained (living_rules::reasons).
+    /// A string because a column default must be a constant.
+    #[default("")]
+    pub arrived: String,
 }
 
 // ---- mind projections (observer and behavior inputs) ----------------------
@@ -1268,6 +1280,60 @@ pub struct Perceived {
     pub viewer: Identity,
     pub body: u32,
     pub since_ms: u64,
+}
+
+/// What a human player hears but does not see (private; docs/PERCEPTION.md, "Heard, not
+/// seen"): one row per creature within the player's hearing and outside its field, written at
+/// the perception sweep when one starts to be heard or its bearing or band changes, and gone
+/// about `heard_linger_s` after it was last heard (or at once when it comes into sight). Only
+/// while the world's `fov_on` law gives the player a field. The `heard_sounds` view returns
+/// `key`, `kind`, `bearing` and `band`, never `target`: `key` is derived from the listener,
+/// the target and a salt that rotates every few minutes (`hear_salt`), so it cannot be traced to
+/// a character, and stays the same while the sound lasts.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = heard)]
+pub struct Heard {
+    #[primary_key]
+    pub key: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    /// The listener's character.
+    pub listener: u32,
+    /// Who is heard (never sent to the player).
+    pub target: u32,
+    /// What it sounds like: "person", "deer", "wolf" or "creature" (the `heard_as` law).
+    pub kind: String,
+    /// One of eight compass ways from the listener, 0 north, clockwise.
+    pub bearing: u8,
+    /// 0 near, 1 close, 2 far (the `heard_near_m`, `heard_close_m` laws).
+    pub band: u8,
+    pub since_ms: u64,
+}
+
+/// The secret salt behind heard keys (private; one row, drawn from the module's random source
+/// at the first sound).
+#[spacetimedb::table(accessor = hear_salt)]
+pub struct HearSalt {
+    #[primary_key]
+    pub id: u8,
+    pub salt: u64,
+}
+
+/// Every change of a world law on a running world (`set_world_law`), kept for good (private;
+/// read by the owner, a run's evidence): which law, its value before and after (JSON; before:
+/// the value in force then), when, and who asked.
+#[spacetimedb::table(accessor = law_change)]
+pub struct LawChange {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub name: String,
+    pub old: String,
+    pub new: String,
+    pub at_ms: u64,
+    pub by: Identity,
+    /// The script revision the change installed (`script.revision`).
+    pub revision: u32,
 }
 
 /// What a human player perceives of each creature in its scene, its own character included

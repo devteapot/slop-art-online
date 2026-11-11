@@ -388,6 +388,9 @@ pub enum Target {
     Hailer,
     /// Where a fight or a death is happening within sight (a point).
     Commotion,
+    /// Toward the nearest thing I hear and cannot see (a point in its direction; only while
+    /// sight depends on facing, the `fov_on` law). Who or what it is is not known.
+    Sound,
     Nearest(Filter),
     /// A perceived character by name.
     Named(String),
@@ -801,6 +804,7 @@ pub fn describe_target(t: &Target) -> String {
         Target::Partner => "partner".into(),
         Target::Hailer => "whoever greeted me".into(),
         Target::Commotion => "the commotion".into(),
+        Target::Sound => "the sound".into(),
         Target::Nearest(f) => {
             let mut s = format!("nearest {}", f.kind);
             if let Some(r) = &f.relation {
