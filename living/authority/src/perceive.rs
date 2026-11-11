@@ -566,7 +566,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         if s.kind == "house" && s.owner != 0 {
             o["home_of"] = json!(common::label_for(ctx, &me, s.owner));
         }
-        if s.kind == "storage" || s.kind == "remains" {
+        if s.kind == "remains" || t.holds.is_some() {
             let inv: JMap<String, Value> = common::inv_list(ctx, STRUCTURE_BIT | s.id).into_iter().map(|(k, q)| (k, json!(q))).collect();
             o["contents"] = Value::Object(inv);
         }

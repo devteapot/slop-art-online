@@ -2022,7 +2022,120 @@ def say(s):
         s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40)
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov}
+def world_tiles(s):
+    """This world's tiles (`terrain_chunk`) and a walkable test by tile code (water, rock,
+    wall, drop and low tiles are not walkable; off the map is rock)."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray(W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
+    return W, H, at, lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
+
+
+def old_snap(walk, x, y):
+    """The tile the pre-fix `place_at` chose (`Map::nearest_walkable`: rings outward, first
+    walkable tile in row order), for the evidence."""
+    tx, ty = math.floor(x), math.floor(y)
+    for r in range(12):
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if (abs(dx) == r or abs(dy) == r) and walk(tx + dx, ty + dy):
+                    return (tx + dx, ty + dy)
+    return None
+
+
+PLACE_RADIUS = 6.0
+
+
+def placement(s):
+    """Admin placement (`place_near`, `place_at`) puts a body on the nearest free walkable tile:
+    walkable, and no other body on it, within 6 m (`PLACE_RADIUS` in living/authority/src/lib.rs),
+    and refuses when there is none. `place_near` beside a target whose east tile is an obstacle
+    lands on a walkable tile of the target's ground and the body then walks (`goto`) away; two
+    `place_at` requests 1.9 m apart that the old nearest-walkable snapping put on one tile land
+    on two; a request with no free walkable tile within the radius is refused."""
+    W, H, at, walk = world_tiles(s)
+    tile = lambda p: (math.floor(p[0]), math.floor(p[1]))
+    # A target tile with an obstacle (rock, wall or water) east and open ground west of it,
+    # more than 10 m from every body (the world's people, an earlier attempt's actors).
+    now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    others = [body_at(s, None, now, row=b) for b in s.rows("SELECT x, y, t_ms, vx, vy, next_ms FROM body")]
+    spot = next(((x, y) for y in range(8, H - 8) for x in range(12, W - 8)
+                 if walk(x, y) and at(x + 1, y) in (2, 4, 7)
+                 and all(math.dist((x + .5, y + .5), o) > 10 for o in others)
+                 and all(walk(x - i, y + d) for i in range(1, 7) for d in (-1, 0, 1))), None)
+    if spot is None:
+        raise RuntimeError("no walkable tile with an obstacle east of it on this map")
+    # Two requests 1.9 m apart that the old snapping put on one tile, a few metres off.
+    pair = None
+    for y in range(4, H - 4):
+        for x in range(4, W - 4):
+            if walk(x, y):
+                continue
+            p = (x + .5, y + .5)
+            for q in ((p[0] + 1.9, p[1]), (p[0], p[1] + 1.9)):
+                o = old_snap(walk, *p)
+                if not walk(*tile(q)) and o is not None and o == old_snap(walk, *q) \
+                        and max(math.dist(r, (o[0] + .5, o[1] + .5)) for r in (p, q)) <= 2.5:
+                    pair = (p, q)
+                    break
+            if pair:
+                break
+        if pair:
+            break
+    # A point with no walkable tile within the radius: deep water or rock if the map has it,
+    # else off the map's edge (off the map is rock).
+    deep = next(((x + .5, y + .5) for y in range(0, H, 2) for x in range(0, W, 2)
+                 if not any(walk(x + dx, y + dy) for dy in range(-7, 8) for dx in range(-7, 8))), (-20.0, -20.0))
+    (s.out / f"{s.name}-spots.json").write_text(json.dumps({"target": spot, "pair": pair, "deep": deep,
+        "old_pair_tiles": [old_snap(walk, *p) for p in pair] if pair else None}, indent=2) + "\n")
+    target, near, c, d, e = s.people(5)
+    s.call("place_at", target, spot[0] + .5, spot[1] + .5)
+    s.expect("place_at on a free walkable tile puts the body on that tile's centre",
+             body_at(s, target) == (spot[0] + .5, spot[1] + .5), body_at(s, target))
+    s.call("place_near", near, target)
+    p = body_at(s, near)
+    s.expect("place_near beside an obstacle lands on a walkable tile, not the target's own",
+             walk(*tile(p)) and tile(p) != spot and tile(p) != (spot[0] + 1, spot[1]) and math.dist(p, (spot[0] + .5, spot[1] + .5)) <= PLACE_RADIUS + .5,
+             {"placed": p, "tile_code": at(*tile(p)), "obstacle": (spot[0] + 1, spot[1]), "obstacle_code": at(spot[0] + 1, spot[1])})
+    goal = (spot[0] - 5 + .5, spot[1] + .5)
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(near, {"seq": [{"do": {"skill": "goto", "target": {"at": list(goal)}}}, {"wait": 300}]})
+    s.wait(lambda: math.dist(body_at(s, near), goal) < 1.0, seconds=20)
+    uses = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {near}", "near-uses") if u["skill"] == "goto" and u["at_ms"] >= t0]
+    s.expect("the placed body can then goto (it walks 5 m away)", math.dist(body_at(s, near), goal) < 1.0
+             and not any("could not get there" in (u["outcome"] or "") or "blocked" in (u["outcome"] or "") for u in uses),
+             {"at": body_at(s, near), "goal": goal, "goto": [u["outcome"] for u in uses]})
+    s.call("place_near", e, target)
+    pe = body_at(s, e)
+    s.expect("a second place_near beside the same target takes another free tile",
+             walk(*tile(pe)) and tile(pe) not in (spot, tile(body_at(s, near))), {"placed": pe})
+    if pair:
+        s.call("place_at", c, *pair[0])
+        s.call("place_at", d, *pair[1])
+        pc, pd = body_at(s, c), body_at(s, d)
+        s.expect("two place_at requests 1.9 m apart land on different free walkable tiles",
+                 tile(pc) != tile(pd) and walk(*tile(pc)) and walk(*tile(pd)),
+                 {"requests": pair, "placed": [pc, pd], "old_snap": [old_snap(walk, *q) for q in pair]})
+    else:
+        s.expect("this map has two requests 1.9 m apart the old snapping joined", False, "none found", fatal=False)
+    before = body_at(s, c)
+    r = s.call("place_at", c, *deep, check=False)
+    out = (r.stdout or "") + (r.stderr or "")
+    s.expect("a request with no free walkable tile within 6 m is refused, and the body stays",
+             r.returncode != 0 and "no free walkable tile within 6 m" in out and body_at(s, c) == before,
+             {"request": deep, "exit": r.returncode, "error": out[-300:]})
+
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement}
 
 
 def goods(s):
@@ -2232,7 +2345,8 @@ def decay(s):
                 pass
             time.sleep(2)
             got += sum(s.inventory(actor).values()) - before
-            if heard(actor, "depleted", t0):
+            # A spent node is not `nearest` any more: "no nearest ... in sight", not "depleted".
+            if heard(actor, "depleted", t0) or heard(actor, f"no nearest {kind}", t0):
                 return got
         return got
 
@@ -2240,7 +2354,7 @@ def decay(s):
     for p in (a, b):
         s.graph(p, {"wait": 3600})
     s.call("place_near", b, a)
-    # Raw fish: 1,000 in a pack, 100 put in a storage beside it (a storage holds `storage_holds`;
+    # Raw fish: 1,000 in a pack, 100 put in a storage beside it (a storage holds its kind's `holds`, 120;
     # a `{"id": n}` target names a creature, so the storage is aimed at as the nearest).
     s.call("place_structure", b, "storage")
     store = max((r for r in s.rows(f"SELECT * FROM structure WHERE owner = {b}") if r["kind"] == "storage"), key=lambda r: r["id"])
@@ -2264,7 +2378,8 @@ def decay(s):
     took = empty(b, "greens_bed")
     t_empty = now()
     left = s.rows(f"SELECT * FROM resource_node WHERE id = {bed['id']}", "bed-emptied")[0]
-    s.expect("the bed is emptied by gathering", took >= int(bed["max"]) and left["amount"] < 1.0, {"took": took, "row": left})
+    # The bed's own row says it is spent; the pack is no count (spoiling and eating shrink it).
+    s.expect("the bed is emptied by gathering", left["amount"] < 1.0 and left["at_ms"] > bed["at_ms"], {"took_into_pack": took, "row": left})
 
     # Watch, sampling the stacks every few real minutes.
     watch_ms = DECAY_HOURS * hour_ms
@@ -2305,9 +2420,97 @@ def decay(s):
              {"had": round(had, 4), "expected": round(grown, 4), "game_hours": round((row["at_ms"] - left["at_ms"]) / hour_ms, 3), "row": row})
 
 
+def winter(s):
+    """Regrowth by season is a value on each resource kind (docs/CULLET_RULES.md, "Winter";
+    rules-3), on the winter fixture (winter.json: Cullet's laws on a 4-minute day and a 4-day
+    year, no wild nodes): in a Cullet winter a fishing spot keeps regrowing at its kind's winter
+    share (0.75 of `regrow_per_h`), and a root plot, which rests, regrows nothing. Waits for the
+    world's own winter (about 11 real minutes after creation); no clock is changed."""
+    w = s.rows("SELECT * FROM world", "world")[0]
+    day, epoch, year = w["day_ms"], w["epoch_ms"], max(4, w["year_days"])
+    src = (ROOT / "living/seeds/worlds/cullet/laws.rhai").read_text()
+    shares = {k: float(v) for k, v in re.findall(r"(\w+): ([\d.]+)", re.search(r"fn winter_regrowth\(\)\s*\{([^}]*)\}", src).group(1))}
+    s.expect("the world has Cullet's laws on a short day and year", "fn winter_regrowth()" in s.rows("SELECT source FROM script")[0]["source"] and day == 4 * 60000 and year == 4, w)
+    # The seasons are quarters of the year from day 1's midnight (the world starts at 07:00).
+    origin = epoch - day * 7 // 24
+    winter0, winter1 = origin + day * year * 3 // 4, origin + day * year
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def heard(actor, words, since):
+        return [r["text"] for r in s.rows(f"SELECT text, at_ms FROM experience WHERE observer = {actor}") if r["at_ms"] >= since and words in r["text"]]
+
+    def acts(actor, *nodes):
+        s.call("mind_act", actor, [json.dumps(n) for n in nodes], "verify-core")
+
+    def node(kind):
+        return max((r for r in s.rows("SELECT * FROM resource_node") if r["kind"] == kind), key=lambda r: r["id"])
+
+    def empty(actor, n):
+        """Gather at node `n` one at a time until its own row holds less than one. Read the row:
+        a node under one unit is not `nearest` any more ("no nearest ... in sight", not
+        "depleted"), and spoiling shrinks the pack, so neither words nor the pack can tell."""
+        row = lambda: s.rows(f"SELECT * FROM resource_node WHERE id = {n['id']}")[0]
+        for _ in range(20):
+            before, t0 = row(), now()
+            if before["amount"] < 1.0 and before["at_ms"] >= winter0:
+                return
+            acts(actor, {"do": "gather", "target": {"nearest": n["kind"]}})
+            try:
+                s.wait(lambda: row()["at_ms"] > before["at_ms"] or heard(actor, "did not work out", t0), seconds=30, every=0.5)
+            except TimeoutError:
+                pass
+        raise AssertionError(f"the {n['kind']} was not emptied")
+
+    a, = s.people(1)
+    # Everyone waits: the fixture's band would forage from the placed nodes, hungry on a 4-minute day.
+    for p in [c["id"] for c in s.rows("SELECT id, kind FROM character") if c["kind"] == "person"]:
+        s.graph(p, {"wait": 3600})
+    s.call("place_resource", a, "fishing_spot", 1.0, 0.0, 0.0, 0)
+    s.call("place_resource", a, "root_plot", 0.0, 1.5, 0.0, 0)
+    fish, roots = node("fishing_spot"), node("root_plot")
+    s.expect("a placed fishing spot and root plot, with their kinds' regen", fish["regen"] > 0 and roots["regen"] > 0, [fish, roots])
+    print(f"waiting {max(0, winter0 - now()) / 1000:.0f} s for winter", flush=True)
+    s.wait(lambda: now() >= winter0 + 2000, seconds=max(60, (winter0 - now()) / 1000 + 120), every=5)
+    s.expect("it is winter in the world (the calendar's last quarter)", winter0 <= now() < winter1, {"now": now(), "winter": [winter0, winter1]})
+    # Empty both in winter, the root plot first: it is checked last, once its full rate would
+    # have grown more than a unit (so a refusal means it rested), the fishing spot 45 s after it.
+    empty(a, roots)
+    empty(a, fish)
+    left = {k: s.rows(f"SELECT * FROM resource_node WHERE id = {n['id']}", f"{k}-emptied")[0] for k, n in (("fishing_spot", fish), ("root_plot", roots))}
+    s.expect("both nodes are emptied in winter", all(r["amount"] < 1.0 for r in left.values()) and all(r["at_ms"] >= winter0 for r in left.values()), left)
+    s.wait(lambda: now() >= left["fishing_spot"]["at_ms"] + 45_000, seconds=90, every=2)
+    s.expect("still winter", now() < winter1 - 15_000, {"now": now(), "winter_ends": winter1})
+    # One gathering at each: the fishing spot gives what it regrew at its winter share (the row
+    # holds what it had less one), the root plot refuses, depleted, its row unchanged.
+    t0 = now()
+    acts(a, {"do": "gather", "target": {"nearest": "fishing_spot"}})
+    s.wait(lambda: s.rows(f"SELECT at_ms FROM resource_node WHERE id = {fish['id']}")[0]["at_ms"] > left["fishing_spot"]["at_ms"] or heard(a, "did not work out", t0), seconds=60, every=1)
+    row = s.rows(f"SELECT * FROM resource_node WHERE id = {fish['id']}", "fishing_spot-regrown")[0]
+    lf = left["fishing_spot"]
+    had = row["amount"] + 1.0
+    share = shares["fishing_spot"]
+    grown = lf["amount"] + lf["regen"] * share * (row["at_ms"] - lf["at_ms"]) / 60000
+    s.expect(f"a fishing spot regrows in a Cullet winter, at {share:g} of its rate", row["at_ms"] > lf["at_ms"] and abs(had - min(grown, lf["max"])) < 0.01,
+             {"had": round(had, 4), "expected": round(grown, 4), "at_full_rate": round(lf["amount"] + lf["regen"] * (row["at_ms"] - lf["at_ms"]) / 60000, 4), "game_hours": round((row["at_ms"] - lf["at_ms"]) / (day / 24), 3), "row": row})
+    lr = left["root_plot"]
+    full = lambda: lr["regen"] * (now() - lr["at_ms"]) / 60000
+    s.wait(lambda: full() >= 1.5 or now() >= winter1 - 12_000, seconds=240, every=1)
+    t0 = now()
+    acts(a, {"do": "gather", "target": {"nearest": "root_plot"}})
+    # A node under one unit is not `nearest`: the gathering is refused ("no nearest root_plot").
+    s.wait(lambda: heard(a, "did not work out", t0) or s.rows(f"SELECT at_ms FROM resource_node WHERE id = {roots['id']}")[0]["at_ms"] > lr["at_ms"], seconds=60, every=1)
+    rrow = s.rows(f"SELECT * FROM resource_node WHERE id = {roots['id']}", "root_plot-after")[0]
+    grown_full = round(full(), 3)
+    s.expect(f"a root plot regrows nothing in a Cullet winter (share {shares['root_plot']:g}), where its full rate would have grown a unit", now() < winter1 and grown_full >= 1.0 and heard(a, "did not work out", t0) and rrow["at_ms"] == lr["at_ms"] and rrow["amount"] < 1.0,
+             {"heard": heard(a, "", t0), "row": rrow, "would_have_grown_at_full_rate": grown_full, "winter_left_ms": winter1 - now()})
+
+
 SCENES["goods"] = goods
 SCENES["stock"] = stock
 SCENES["decay"] = decay
+SCENES["winter"] = winter
 
 
 def main():

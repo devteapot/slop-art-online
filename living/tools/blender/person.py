@@ -131,12 +131,16 @@ CHEST = 0.0  # how much wider and deeper a strong chest is
 LONG = 0.07  # how far a bob hangs below the hairline, m
 HF = None  # the head's form (head_form.Head)
 
+# Materials, by shading kind (the game picks the toon kind from VRoid's name tags): a person is
+# six meshes, one each. Cloth, skin and the face's lines are white with colour per vertex, so
+# every person's are the same material; the face, the eyes and the hair carry textures, which
+# living/tools/characters/share.py puts on files that people share. `far` is the far model's
+# skin (head, neck and hands), textured with the far picture.
 MAT = dict(
-    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", brow="M00_000_00_FaceBrow_00_FACE",
-    line="M00_000_00_FaceEyeline_00_FACE", mouth="M00_000_00_FaceMouth_00_FACE", hair="M00_000_Hair_00_HAIR",
-    jersey="M00_001_01_Tops_01_CLOTH", trousers="M00_001_01_Bottoms_01_CLOTH", boots="M00_001_01_Shoes_01_CLOTH",
-    coat="M00_001_01_Coat_01_CLOTH",
+    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", line="M00_000_00_FaceEyeline_00_FACE",
+    hair="M00_000_Hair_00_HAIR", cloth="M00_001_01_Cloth_01_CLOTH", far="M00_000_00_Body_01_SKIN",
 )
+FAR = False  # building the far model (--lod): coarse cages, a head without openings, thin locks
 
 # ---------------------------------------------------------------------------------------------
 # The skeleton: an adult man, 1.78 m to the scalp. Blender axes: +Y forward, +Z up, left at -X.
@@ -771,6 +775,9 @@ def build(part, arm, mat, colour, levels=1, solid=0.0, post=None, materials=None
     colour(tag, u, v, co, normal) -> sRGB; it is called per face corner with the face's tag and
     mean ring parameters, so a tag's edge is a crisp colour edge. `materials`: tag -> material
     name for parts with more than one."""
+    if FAR:
+        # The far model: the cage itself, one skin thick.
+        levels, solid = 0, 0.0
     me = bpy.data.meshes.new(part.name)
     bm = bmesh.new()
     vs = [bm.verts.new(c) for c in part.co]
@@ -935,8 +942,9 @@ def make_face(arm, spec, atlas_path):
     face = head_mesh.Face(HF, look, keep=lambda c: c[2] < hairline(az_of(c)) + 0.016 or bald_depth(c) > -0.012)
     m = face.mesh
     # The iris shares the eye's material (the atlas); highlights are plain colour, as the lines are.
-    fm = [dict(iris="eye", glint="line").get(k, k) for k in m.fm]
-    order = [k for k in ("face", "eye", "line", "brow", "mouth") if k in set(fm)]
+    # The lash lines, brows, highlights and the mouth's inside are one material (plain colour).
+    fm = [dict(iris="eye", face="face", eye="eye").get(k, "line") for k in m.fm]
+    order = [k for k in ("face", "eye", "line") if k in set(fm)]
     base = np.array(HEAD)[None, :]
     world = base + np.array(m.v) * HEAD_SCALE
     eye_bone = {-1: "J_Adj_L_FaceEye", 1: "J_Adj_R_FaceEye"}
@@ -953,6 +961,27 @@ def make_face(arm, spec, atlas_path):
     img.pack()
     for k in ("face", "eye"):
         mat = material(MAT[k])
+        tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        tex.image = img
+        bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+        mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    return ob, face.base_pos, face.base_quads
+
+
+def make_far_head(arm, spec, picture_path):
+    """The far model's head (head_mesh.FarFace): the same form on a coarse grid with no
+    openings; the eyes, lash lines and brows are painted on its skin (face_paint.paint_far).
+    Returns the object and the head's surface for hair and headwear."""
+    look = spec["look"]
+    face = head_mesh.FarFace(HF, look, keep=lambda c: c[2] < hairline(az_of(c)) + 0.030 or bald_depth(c) > -0.012)
+    m = face.mesh
+    world = np.array(HEAD)[None, :] + np.array(m.v) * HEAD_SCALE
+    ob = raw_object("FarHead", world, m.f, [{"J_Bip_C_Head": 1.0}] * len(m.v), m.col, MAT["far"], arm, uvs=m.uv)
+    face_paint.write_png(picture_path, face_paint.paint_far(HF, look))
+    img = bpy.data.images.load(picture_path)
+    img.pack()
+    mat = material(MAT["far"])
+    if not any(n.type == "TEX_IMAGE" for n in mat.node_tree.nodes):
         tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
         tex.image = img
         bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
@@ -1062,7 +1091,7 @@ def hair_depth(p):
     return min(p[2] - (hairline(az_of(p)) - 0.002), -bald_depth(p))
 
 
-def make_hair(arm, spec, pos, quads, covered=None):
+def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     """Hair (hair.py): a cap on the scalp and layers of locks combed over it, textured with one
     shared picture of strands. Long locks hang from spring bones, which are added to the
     armature here. Returns the objects (hair, and ties in cloth)."""
@@ -1120,9 +1149,10 @@ def make_hair(arm, spec, pos, quads, covered=None):
     collar = dict(coat=0.090, smock=0.068).get(spec["coat"], 0.064)
     body = dict(neck_r=collar / HEAD_SCALE, neck_y=(-0.018 - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if spec["coat"] else 0.014)),
                 half_w=(0.182 * GIRTH + 0.035) / HEAD_SCALE, half_d=(0.108 * GIRTH + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE)
-    h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body)
+    h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body, detail=0.4 if FAR else 1.0)
     base = len(verts)
-    names = add_spring_bones(arm, h.chains)
+    # The far model's hair follows the bones the full model's hair added, when both are built.
+    names = add_spring_bones(arm, h.chains) if bones is None else {i: bones.get(i) for i, c in enumerate(h.chains) if bones.get(i)}
     for p_, c_, uv_, ch, al in zip(h.v, h.col, h.uv, h.chain, h.along):
         verts.append(hw(p_))
         cols.append(tuple(c_))
@@ -1140,7 +1170,9 @@ def make_hair(arm, spec, pos, quads, covered=None):
     # The strands' picture, the same for everyone.
     path = STRANDS_PATH
     if not os.path.exists(path):
-        face_paint.write_png(path, hair.paint_strands())
+        # Written whole or not at all: several people are generated at once.
+        face_paint.write_png(path + f".{os.getpid()}.tmp", hair.paint_strands())
+        os.replace(path + f".{os.getpid()}.tmp", path)
     img = bpy.data.images.load(path)
     img.pack()
     mat = material(MAT["hair"])
@@ -1171,8 +1203,10 @@ def make_hair(arm, spec, pos, quads, covered=None):
                 tf.append((a, b, b + 1, a + 1))
         ch = d.get("chain", -1)
         w = chain_weights(names[ch], h.chains[ch]["step"] * HEAD_SCALE, d["along"] * HEAD_SCALE) if ch >= 0 and names.get(ch) else {"J_Bip_C_Head": 1.0}
-        obs.append(raw_object("HairTie", tv, tf, [w] * len(tv), tc, MAT["coat"], arm, orient=True))
-    spec["springs"] = [names[i] for i in sorted(names) if names[i]]
+        obs.append(raw_object("HairTie", tv, tf, [w] * len(tv), tc, MAT["cloth"], arm, orient=True))
+    if bones is None:
+        spec["springs"] = [names[i] for i in sorted(names) if names[i]]
+        spec["spring_bones"] = names
     return obs
 
 
@@ -1278,7 +1312,7 @@ def make_kerchief(arm, pos, quads, colour):
     cp, cn, cd, cf = region_shell(pos, quads, depth, lambda p: snap_plane(p, depth))
     verts = [hw(p_ + n_ * (0.0045 + 0.0110 * smooth(d_ / 0.012))) for p_, n_, d_ in zip(cp, cn, cd)]
     cols = [mix(colour, (0, 0, 0), 0.22 * (1 - smooth(d_ / 0.012))) for d_ in cd]
-    obs = [face_out(raw_object("Kerchief", verts, [list(f) for f in cf], [{"J_Bip_C_Head": 1.0}] * len(verts), cols, MAT["coat"], arm))]
+    obs = [face_out(raw_object("Kerchief", verts, [list(f) for f in cf], [{"J_Bip_C_Head": 1.0}] * len(verts), cols, MAT["cloth"], arm))]
     # The knot and tails.
     verts, cols, faces = [], [], []
     knot = Vector((0, -0.112, -0.060))
@@ -1303,7 +1337,7 @@ def make_kerchief(arm, pos, quads, colour):
             a = first + 2 * i
             faces.append([a, a + 1, a + 3, a + 2])
             faces.append([a + 2, a + 3, a + 1, a])
-    obs.append(raw_object("KerchiefKnot", verts, faces, [{"J_Bip_C_Head": 1.0}] * len(verts), cols, MAT["coat"], arm))
+    obs.append(raw_object("KerchiefKnot", verts, faces, [{"J_Bip_C_Head": 1.0}] * len(verts), cols, MAT["cloth"], arm))
     return obs
 
 
@@ -1321,7 +1355,7 @@ def make_cap(arm, pos, quads, colour):
         q[2] = min(q[2], 0.132 - 0.16 * max(q[1], 0.0))
         verts.append(hw(q))
         cols.append(mix(colour, (0, 0, 0), 0.25 * (1 - smooth(d_ / 0.010))))
-    obs = [face_out(raw_object("Cap", verts, [list(f) for f in cf], [{"J_Bip_C_Head": 1.0}] * len(verts), cols, MAT["coat"], arm))]
+    obs = [face_out(raw_object("Cap", verts, [list(f) for f in cf], [{"J_Bip_C_Head": 1.0}] * len(verts), cols, MAT["cloth"], arm))]
     # The peak: out from the front edge, two-sided.
     verts, cols, faces = [], [], []
     azs = [-62 + 124 * i / 12 for i in range(13)]
@@ -1340,7 +1374,7 @@ def make_cap(arm, pos, quads, colour):
             a, b = 3 * i + r, 3 * (i + 1) + r
             faces.append([a, a + 1, b + 1, b])
             faces.append([b, b + 1, a + 1, a])
-    obs.append(raw_object("CapPeak", verts, faces, [{"J_Bip_C_Head": 1.0}] * len(verts), cols, MAT["coat"], arm))
+    obs.append(raw_object("CapPeak", verts, faces, [{"J_Bip_C_Head": 1.0}] * len(verts), cols, MAT["cloth"], arm))
     return obs
 
 
@@ -1379,7 +1413,7 @@ def make_buttons(arm):
             a, b = first + 2 * k, first + 2 * ((k + 1) % 8)
             faces.append((a, b, b + 1, a + 1))
             faces.append((a + 1, b + 1, first + 16))
-    return raw_object("Buttons", verts, faces, weights, cols, MAT["coat"], arm, orient=True)
+    return raw_object("Buttons", verts, faces, weights, cols, MAT["cloth"], arm, orient=True)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1437,6 +1471,40 @@ def make_hand(part):
     e1 = THUMB_DIR.cross(Vector((0, 0, 1))).normalized()
     e2 = e1.cross(THUMB_DIR).normalized()
     tube(THUMB_ROOT, THUMB_DIR, e1, e2, THUMB_LEN, THUMB_R, [f"J_Bip_L_Thumb{i}" for i in (1, 2, 3)], "J_Bip_L_Hand")
+    return part
+
+
+def make_mitt(part):
+    """The far model's left hand: the palm and the fingers as one flat block that curls with the
+    middle finger's bones, and a stub of a thumb."""
+    hand = {"J_Bip_L_Hand": 1.0}
+    y0, z0 = ARM_Y, ARM_Z
+    k = HAND_K
+    mid = "J_Bip_L_Middle"
+    stations = [
+        (0.045, 0.000, 0.0265, 0.0215, {"J_Bip_L_LowerArm": 1.0}),
+        (0.000, 0.000, 0.0280, 0.0195, blend(("J_Bip_L_LowerArm", 0.5), ("J_Bip_L_Hand", 0.5))),
+        (-0.045 * k, 0.003 * k, 0.0420 * k, 0.0170 * k, hand),
+        (-0.098 * k, 0.001 * k, 0.0440 * k, 0.0140 * k, blend(("J_Bip_L_Hand", 0.6), (mid + "1", 0.4))),
+        (-0.142 * k, 0.001 * k, 0.0400 * k, 0.0115 * k, blend((mid + "1", 0.5), (mid + "2", 0.5))),
+        (-0.185 * k, 0.001 * k, 0.0330 * k, 0.0095 * k, {mid + "3": 1.0}),
+    ]
+    prev = None
+    for i, (dx, dy, hy, hz, w) in enumerate(stations):
+        cur = ring(part, (WRIST_X + dx, y0 + dy, z0), (0, 1, 0), (0, 0, 1), hy, hz, 6, w, p=0.62)
+        if prev:
+            part.band(prev, cur, i - 1, i, tag=1 if i == len(stations) - 1 else 0)
+        prev = cur
+    part.fan(prev, part.v((WRIST_X - 0.196 * k, y0, z0), {mid + "3": 1.0}), len(stations), tag=1)
+    e1 = THUMB_DIR.cross(Vector((0, 0, 1))).normalized()
+    e2 = e1.cross(THUMB_DIR).normalized()
+    prev = None
+    for i, (s_, r, w) in enumerate(((-0.014, 1.0, hand), (sum(THUMB_LEN) * 0.55, 0.95, {"J_Bip_L_Thumb2": 1.0}))):
+        cur = ring(part, THUMB_ROOT + THUMB_DIR * s_, e1, e2, THUMB_R * r, THUMB_R * r * 0.92, 4, w)
+        if prev:
+            part.band(prev, cur, i - 1, i)
+        prev = cur
+    part.fan(prev, part.v(THUMB_ROOT + THUMB_DIR * sum(THUMB_LEN), {"J_Bip_L_Thumb3": 1.0}), 2, tag=1)
     return part
 
 
@@ -1505,7 +1573,10 @@ def configure(spec):
     g["HEAD"] = Vector((0, -0.004, 1.535 - HF.chin_z * HEAD_SCALE))
 
 
-def build_person(arm, spec, atlas_path, body=False):
+def build_person(arm, spec, atlas_path, body=False, bones=None):
+    """Every part of a person, as separate objects (join_kinds joins them by shading kind). With
+    FAR set these are the far model's parts; `bones` then names the full model's hair bones,
+    when it was built first."""
     obs = []
     coat = spec["coat"]
     seed = spec["seed"]
@@ -1536,7 +1607,7 @@ def build_person(arm, spec, atlas_path, body=False):
             hem=[(-0.030, 0.003), (-0.034, -0.006)], cuff=(-0.700, [(-0.012, 0.003), (-0.026, 0.003), (-0.028, -0.004)]),
             collar=[(0.022, -0.004, blend(("J_Bip_C_Neck", 0.8), ("J_Bip_C_UpperChest", 0.2))), (0.050, -0.002, neck), (0.058, -0.006, neck), (0.050, -0.012, neck)], tag_fn=jtag,
         ).mirrored()
-        obs.append(build(p, arm, MAT["jersey"], jersey_colour(spec["jersey"])))
+        obs.append(build(p, arm, MAT["cloth"], jersey_colour(spec["jersey"])))
         chest = blend(("J_Bip_C_UpperChest", 0.75), ("J_Bip_C_Neck", 0.25))
         if coat == "coat":
             def ctag(kind, k, r):
@@ -1555,8 +1626,9 @@ def build_person(arm, spec, atlas_path, body=False):
                 hem=[], cuff=(-0.640, [(-0.030, 0.006)]), collar=[(0.028, 0.012, chest), (0.060, 0.026, chest)],
                 front=lambda z: lerp(0.058, 0.026, smooth((z - 0.70) / 0.75)), skirt=1.0, tag_fn=ctag,
             ).mirrored()
-            obs.append(build(p, arm, MAT["coat"], coat_colour(spec["coat_colour"], spec["patches"]), solid=0.006))
-            obs.append(make_buttons(arm))
+            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"]), solid=0.006))
+            if not FAR:
+                obs.append(make_buttons(arm))
         elif coat == "smock":
             # A pull-over smock to the knee, an apron tied over it.
             zs = [z for z in (0.50, 0.58, 0.66, 0.74, 0.82, 0.90, 0.98, 1.06, 1.13, 1.20, 1.26, 1.32) if z >= hem - 1e-6]
@@ -1576,10 +1648,10 @@ def build_person(arm, spec, atlas_path, body=False):
                 Part("Smock"), 0.018, zs, hem=[(-0.004, -0.008)], cuff=(-0.655, [(-0.022, 0.004), (-0.024, -0.004)]),
                 collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0, tag_fn=stag,
             ).mirrored()
-            obs.append(build(p, arm, MAT["coat"], coat_colour(spec["coat_colour"], spec["patches"])))
+            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
         # Trousers, tucked into the boots.
         p = trousers(Part("Trousers"), 0.012).mirrored()
-        obs.append(build(p, arm, MAT["trousers"], lambda tag, u, v, co, n: mottle(mix(PAL["iron"], PAL["slate"], 0.25 + 0.10 * (int(u * 44) % 2)), co, 0.08)))
+        obs.append(build(p, arm, MAT["cloth"], lambda tag, u, v, co, n: mottle(mix(PAL["iron"], PAL["slate"], 0.25 + 0.10 * (int(u * 44) % 2)), co, 0.08)))
         # Sea boots: tarred leather, a paler folded top, a dark sole.
         def boot_colour(tag, u, v, co, n):
             if co.z < 0.022:
@@ -1601,16 +1673,16 @@ def build_person(arm, spec, atlas_path, body=False):
                     v.co.z = 0.0
 
         p = boot(Part("Boots"), tag_fn=lambda kind, k, r: 1 if kind == "fold" else 0).mirrored()
-        obs.append(build(p, arm, MAT["boots"], boot_colour, post=flat_sole))
+        obs.append(build(p, arm, MAT["cloth"], boot_colour, post=flat_sole))
     # Hands.
-    p = make_hand(Part("Hands")).mirrored()
+    p = (make_mitt if FAR else make_hand)(Part("Hands")).mirrored()
     obs.append(build(p, arm, MAT["skin"], lambda tag, u, v, co, n: mix(SKIN, SKIN_WARM, 0.30) if tag == 1 else SKIN))
     # Head and face, neck, hair, beard, headwear.
-    head, pos, quads = make_face(arm, spec, atlas_path)
+    head, pos, quads = make_far_head(arm, spec, atlas_path) if FAR else make_face(arm, spec, atlas_path)
     obs.append(head)
     obs.append(make_neck(arm))
     covered = dict(kerchief=lambda p: min(kerchief_depth(p), (p[2] + 0.070) * 2), cap=cap_depth).get(spec["headwear"])
-    obs += make_hair(arm, spec, pos, quads, covered)
+    obs += make_hair(arm, spec, pos, quads, covered, bones)
     if spec["headwear"] == "kerchief":
         obs += make_kerchief(arm, pos, quads, spec["headwear_colour"])
     elif spec["headwear"] == "cap":
@@ -1621,7 +1693,7 @@ def build_person(arm, spec, atlas_path, body=False):
 # ---------------------------------------------------------------------------------------------
 # Painted shade: how closed-in each vertex is, multiplied into its colour.
 
-AO_FLAT = ("Face",)  # the face shades others (the neck under the jaw) but takes none: its shade is painted
+AO_FLAT = ("Face", "FarHead")  # the face shades others (the neck under the jaw) but takes none: its shade is painted
 AO_SOFT = {"Neck": 0.7, "Hands": 0.6}
 
 
@@ -1677,6 +1749,58 @@ def bake_shade(obs, strength=0.50, reach=0.11):
         data[:, 1] *= k
         data[:, 2] *= k ** 1.05
         attr.data.foreach_set("color", data.ravel())
+
+
+# ---------------------------------------------------------------------------------------------
+# One mesh per shading kind.
+
+
+def join_kinds(obs, far=False):
+    """Join a person's parts into one object per shading kind, so the game draws six meshes a
+    person and not a dozen: `Cloth` (every garment, buttons, ties and headwear), `Skin` (hands
+    and neck), `Face` (its skin, eyes and lines are three materials, so three meshes) and
+    `Hair`. The far model is three: `FarCloth`, `FarSkin` (head, neck and hands, on the far
+    picture) and `FarHair`. Returns the joined objects."""
+    skin_parts = ("Hands", "Neck", "FarHead") if far else ("Hands", "Neck")
+    groups = {}
+    for ob in obs:
+        name = ob.name.split(".")[0]  # Blender numbers a name that is taken (the full model's `Hair`)
+        kind = "Skin" if name in skin_parts else ("Face" if name == "Face" else ("Hair" if name == "Hair" else "Cloth"))
+        groups.setdefault(kind, []).append(ob)
+    if far and "Skin" in groups:
+        # Hands and neck take the far picture's swatch of plain skin: their colours become
+        # shades of it, as the ears' are.
+        base = np.array(lin(SKIN), dtype=np.float32)
+        for ob in groups["Skin"]:
+            me = ob.data
+            if ob.name.split(".")[0] == "FarHead":
+                continue
+            attr = me.color_attributes["Color"]
+            data = np.empty(len(me.loops) * 4, dtype=np.float32)
+            attr.data.foreach_get("color", data)
+            data = data.reshape(-1, 4)
+            data[:, :3] = np.clip(data[:, :3] / base[None, :], 0, 1)
+            attr.data.foreach_set("color", data.ravel())
+            for layer in list(me.uv_layers):
+                me.uv_layers.remove(layer)
+            uvl = me.uv_layers.new(name="UVMap")
+            uvl.data.foreach_set("uv", np.tile(np.array(head_mesh.SWATCH_UV, dtype=np.float32), len(me.loops)))
+            me.materials.clear()
+            me.materials.append(material(MAT["far"]))
+    out = []
+    for kind in ("Cloth", "Skin", "Face", "Hair"):
+        parts = groups.get(kind)
+        if not parts:
+            continue
+        # The object whose custom normals or shape keys must survive leads the join.
+        lead = next((o for o in parts if o.name.split(".")[0] in ("FarHead", "Face", "Hair")), parts[0])
+        if len(parts) > 1:
+            with bpy.context.temp_override(active_object=lead, object=lead, selected_objects=parts, selected_editable_objects=parts):
+                bpy.ops.object.join()
+        lead.name = ("Far" if far else "") + kind
+        lead.data.name = lead.name
+        out.append(lead)
+    return out
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1773,6 +1897,8 @@ def main():
     ap.add_argument("--look", default="", help="turn the eyes in the file, to look at it: `yaw,pitch` in degrees of the eyes' bones (about 6 is fully aside)")
     ap.add_argument("--body", action="store_true", help="the unclothed form instead of the clothes")
     ap.add_argument("--no-shade", action="store_true", help="leave out the painted shade (bake_shade)")
+    ap.add_argument("--lod", default="near", choices=("near", "far", "both"), help="`near` the full model (the default); `far` the far model alone (about 6,000 triangles, for beyond 10 m); "
+                    "`both` one file with the two on one skeleton, the far model's meshes named Far*")
     ap.add_argument("--blend")
     a = ap.parse_args(argv)
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -1798,13 +1924,19 @@ def main():
     g = globals()
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
     arm = make_armature()
-    obs = build_person(arm, spec, stem + ".atlas.png", body=a.body)
-    if not a.no_shade:
-        bake_shade(obs)
-    tris = {}
-    for ob in obs:
-        ob.data.calc_loop_triangles()
-        tris[ob.name] = len(ob.data.loop_triangles)
+    obs, tris = [], {}
+    for far in (False, True):
+        if a.lod == ("far" if not far else "near"):
+            continue
+        g["FAR"] = far
+        parts = build_person(arm, spec, stem + (".far.png" if far else ".atlas.png"), body=a.body, bones=spec.get("spring_bones") if far else None)
+        if not a.no_shade:
+            bake_shade(parts)
+        for ob in parts:
+            ob.data.calc_loop_triangles()
+            tris[("Far" if far and not ob.name.startswith("Far") else "") + ob.name] = len(ob.data.loop_triangles)
+        obs += join_kinds(parts, far)
+    g["FAR"] = False
     if a.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.blend))
     bpy.ops.export_scene.gltf(
@@ -1813,10 +1945,11 @@ def main():
         export_rest_position_armature=True, use_selection=False, export_morph=True, export_morph_normal=False,
         export_try_sparse_sk=False,  # Bevy's loader rejects sparse morph accessors
     )
-    j = add_vrm(out, f"Cullet resident {params['seed']} ({params['sex']}, {params['age']:.0f})", spec.get("springs"))
+    # The far model alone hangs rigid: it lists no spring bones, so the game simulates none.
+    j = add_vrm(out, f"Cullet resident {params['seed']} ({params['sex']}, {params['age']:.0f})", spec.get("springs") if a.lod != "far" else None)
     zs = [v.co.z for ob in obs for v in ob.data.vertices]
-    print(f"PERSON {out}: {params['sex']} {params['age']:.0f}y seed {params['seed']}, {sum(tris.values())} triangles, {len(arm.data.bones)} bones, {len(j['materials'])} materials, "
-          f"{len(j.get('images', []))} texture, height {max(zs) - min(zs):.3f} m, floor {min(zs):+.4f}")
+    print(f"PERSON {out}: {params['sex']} {params['age']:.0f}y seed {params['seed']}, lod {a.lod}, {sum(tris.values())} triangles, {sum(len(m['primitives']) for m in j['meshes'])} meshes, {len(arm.data.bones)} bones, "
+          f"{len(j['materials'])} materials, {len(j.get('images', []))} texture, height {max(zs) - min(zs):.3f} m, floor {min(zs):+.4f}")
     print("PERSON parts: " + ", ".join(f"{k} {v}" for k, v in tris.items()))
 
 

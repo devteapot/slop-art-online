@@ -105,6 +105,103 @@ def read_glb(path):
     return out
 
 
+def coplanar_overlaps(prims, tol=0.001, min_area=1e-5):
+    """Pairs of triangles of one model that lie in one plane (within `tol` metres) and overlap in
+    area, facing the same way or opposite ways: surfaces that fight for depth in the renderer
+    (the owner's flicker at a gable's roof edge, 2026-11-11). Triangles are bucketed by their
+    plane (the normal's direction up to sign, and the plane's distance from the origin), so only
+    triangles of one plane are compared; an overlap is a real area, not a shared edge.
+    Returns (count, a few examples)."""
+    import math
+    planes = {}
+    tris = []
+    for name, positions, colours, idx in prims:
+        for t in range(len(idx) // 3):
+            a, b, c = (positions[idx[3 * t + j]] for j in range(3))
+            u = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+            v = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
+            n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+            l = math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2])
+            if l < 2 * min_area:
+                continue
+            n = (n[0] / l, n[1] / l, n[2] / l)
+            flip = next((1.0 if x > 0 else -1.0 for x in n if abs(x) > 1e-4), 1.0)  # one of each pair of opposite normals
+            m = (n[0] * flip, n[1] * flip, n[2] * flip)
+            d = m[0] * a[0] + m[1] * a[1] + m[2] * a[2]
+            tris.append((a, b, c, m, d, flip, name))
+    # Buckets of normal (to 0.002) and distance (to tol); a triangle is filed under its own
+    # cell and compared with the neighbouring cells, so a plane on a cell's border is not missed.
+    q = 0.004
+    for i, (a, b, c, m, d, flip, name) in enumerate(tris):
+        planes.setdefault((round(m[0] / q), round(m[1] / q), round(m[2] / q), math.floor(d / tol)), []).append(i)
+
+    def axes(m):
+        k = max(range(3), key=lambda j: abs(m[j]))
+        return [j for j in range(3) if j != k]
+
+    def overlap(p, r):
+        """Two 2D triangles overlap in area (separating axes, shrunk by a hair)."""
+        eps = 2e-4
+        for tri, other in ((p, r), (r, p)):
+            for j in range(3):
+                x0, y0 = tri[j]
+                x1, y1 = tri[(j + 1) % 3]
+                nx, ny = y1 - y0, x0 - x1
+                l = math.hypot(nx, ny) or 1.0
+                nx, ny = nx / l, ny / l
+                s_in = (tri[(j + 2) % 3][0] - x0) * nx + (tri[(j + 2) % 3][1] - y0) * ny
+                side = [((qx - x0) * nx + (qy - y0) * ny) for qx, qy in other]
+                if s_in > 0 and max(side) < eps:
+                    return False
+                if s_in < 0 and min(side) > -eps:
+                    return False
+        return True
+
+    count, examples, seen = 0, [], set()
+    for key, members in planes.items():
+        near = list(members)
+        for dn in ((0, 0, 0, 1),):
+            near += planes.get((key[0], key[1], key[2], key[3] + 1), [])
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    if (dx, dy, dz) == (0, 0, 0):
+                        continue
+                    for dd in (-1, 0, 1):
+                        other = planes.get((key[0] + dx, key[1] + dy, key[2] + dz, key[3] + dd))
+                        if other and (key[0] + dx, key[1] + dy, key[2] + dz, key[3] + dd) > key:
+                            near += other
+        if len(near) < 2:
+            continue
+        ax = axes(tris[members[0]][3])
+        flat = {i: [(tris[i][j][ax[0]], tris[i][j][ax[1]]) for j in range(3)] for i in near}
+        box = {i: (min(p[0] for p in flat[i]), min(p[1] for p in flat[i]), max(p[0] for p in flat[i]), max(p[1] for p in flat[i])) for i in near}
+        order = sorted(near, key=lambda i: box[i][0])
+        for a_i, i in enumerate(order):
+            for j in order[a_i + 1:]:
+                if box[j][0] >= box[i][2] - 1e-4:
+                    break
+                if i not in members and j not in members:
+                    continue
+                if box[j][1] >= box[i][3] - 1e-4 or box[i][1] >= box[j][3] - 1e-4:
+                    continue
+                ti, tj = tris[i], tris[j]
+                if abs(ti[3][0] * tj[3][0] + ti[3][1] * tj[3][1] + ti[3][2] * tj[3][2]) < 0.99999:
+                    continue
+                # Both triangles' corners within tol of the other's plane.
+                if max(abs(ti[3][0] * p[0] + ti[3][1] * p[1] + ti[3][2] * p[2] - ti[4]) for p in tj[:3]) > tol:
+                    continue
+                pair = (min(i, j), max(i, j))
+                if pair in seen or not overlap(flat[i], flat[j]):
+                    continue
+                seen.add(pair)
+                count += 1
+                if len(examples) < 4:
+                    c = [round(sum(p[k_] for p in ti[:3]) / 3, 2) for k_ in range(3)]
+                    examples.append(dict(at=c, normal=[round(x, 2) for x in ti[3]], facing="same" if ti[5] == tj[5] else "opposite", materials=sorted({ti[6], tj[6]})))
+    return count, examples
+
+
 def check_model(item, rec, path):
     hw, hd = item["size"][0] / 2, item["size"][1] / 2
     prims = read_glb(path)
@@ -142,6 +239,8 @@ def check_model(item, rec, path):
     ok["surfaces"] = out["tagged_share"] >= 0.9
     ok["palette"] = shares[0] == 0
     ok["materials"] = all(m == "Body" or m.startswith("Glow") for m in mats)
+    out["coplanar_overlaps"], out["coplanar_examples"] = coplanar_overlaps(prims)
+    ok["coplanar"] = out["coplanar_overlaps"] == 0
     if item.get("what") == "lot" and "ridge_m" in rec:
         out["ridge_m"], out["plan_height_m"] = rec["ridge_m"], item["height_m"]
         ok["height"] = abs(rec["ridge_m"] - item["height_m"]) <= 0.1 or item["height_m"] == 0
@@ -177,6 +276,7 @@ def main():
     report = json.loads((kit / "report.json").read_text())
     items = {l["id"]: dict(l, what="lot") for l in plan["lots"] if l.get("model")}
     items.update({f["id"]: dict(f, what="fixture") for f in plan["fixtures"]})
+    items.update({f["id"]: dict(f, what="structure") for f in plan.get("structure_models", [])})
     results, fails = {}, []
     for id, rec in report["models"].items():
         item = items[id]

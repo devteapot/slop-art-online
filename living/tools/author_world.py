@@ -728,7 +728,7 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
         problems += [f"kit {w}: {i} is not an item" for i in kit if i not in items]
     for s in world["settlements"]:
         problems += [f"{s['name']}: store {i} is not an item" for i in s["stores"] if i not in items]
-        # A storage holds `storage_holds` things in all (living/scripts/skills.rhai); a walled
+        # A storage holds its kind's `holds` things in all (120, living/scripts/skills.rhai); a walled
         # town's goods are split over two. Seeded stores leave room for what people bring.
         cap = world.get("store_holds", 120) * (2 if entries_walled(seed, s) else 1)
         if sum(s["stores"].values()) > cap * 0.8:
