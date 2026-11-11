@@ -1,6 +1,8 @@
 ---
 pretty_name: Slop Art Online assets
 license: mit
+# The takes are binary (.npz), not tables: the dataset viewer is off for this repository.
+viewer: false
 tags:
 - motion
 - animation

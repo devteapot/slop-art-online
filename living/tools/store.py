@@ -1622,7 +1622,11 @@ def _safe_join(root, rel):
 
 def pack_session(src, out_dir, scrubber, name=None, machine=None):
     """A play session: the same shape as a batch with one 'instance' per top-level folder."""
-    return pack_batch(src, out_dir, scrubber, name=name, machine=machine)
+    man = pack_batch(src, out_dir, scrubber, name=name, machine=machine)
+    man["unit"] = "session"
+    with open(os.path.join(out_dir, "MANIFEST.json"), "w", encoding="utf-8") as f:
+        json.dump(man, f, ensure_ascii=False, indent=1)
+    return man
 
 
 def pack_motion(src, out_dir, scrubber, machine=None):

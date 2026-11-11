@@ -804,6 +804,7 @@ class SessionAllowList(unittest.TestCase):
             man = store.pack_session(src, out, store.Scrubber(ident(), cfg=cfg, machine="test", kind="play-session"),
                                      machine="test")
             store.check_publishable(man, s)
+            self.assertEqual(man["unit"], "session")
             held = {h["path"]: h["reason"] for h in man["held"]}
             for path in ("diagnosis/REPORT.md", "FEEDBACK.md", "session/CHECKLIST.md", "session/README.md"):
                 self.assertIn(path, held)
