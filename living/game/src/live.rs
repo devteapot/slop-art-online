@@ -154,6 +154,8 @@ struct Shown {
     face: f32,
     /// Walking backwards (the legs face away from the travel, the gaits reversed).
     back: bool,
+    /// Standing and looking somewhere: the legs are turning to the look ([`STAND_TURN_ON`]).
+    turning: bool,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -184,6 +186,12 @@ const BACK_ON: f32 = 110.0 * PI / 180.0;
 const BACK_OFF: f32 = 80.0 * PI / 180.0;
 /// The most the upper body turns from the legs (radians).
 const TWIST_MAX: f32 = 110.0 * PI / 180.0;
+/// Standing while looking somewhere (my cursor, a move's aim), the upper body turns first; the
+/// legs turn after it only once the look is more than this far from them (radians), and then
+/// all the way, until within [`STAND_TURN_OFF`]. Before, the whole body followed every move of
+/// the cursor, so the feet stepped or slid whenever it moved.
+const STAND_TURN_ON: f32 = 55.0 * PI / 180.0;
+const STAND_TURN_OFF: f32 = 6.0 * PI / 180.0;
 
 /// Where a moving person's legs face and whether it walks backwards: the legs step along the
 /// travel, so its feet keep still, and the upper body turns toward where it looks. Clips have
@@ -473,7 +481,7 @@ fn bodies(
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false });
             live.heights.insert(id, height);
             continue;
         }
@@ -530,14 +538,24 @@ fn bodies(
                 let (y, b) = legs_and_twist(t, l, s.back);
                 (Some(y), b)
             }
+            // Standing and looking, with no move under way (a move turns the whole body to its
+            // aim, as a dodge's roll must): the legs stay until the look is well away, then turn.
+            (false, Some(l), _) if s.person && action.is_none() => {
+                let off = living_rules::steer::wrap(l - s.yaw).abs();
+                s.turning = if s.turning { off > STAND_TURN_OFF } else { off > STAND_TURN_ON };
+                (Some(if s.turning { l } else { s.yaw }), false)
+            }
             _ => (h, false),
         };
+        if !(s.person && !walking && look_at.is_some() && action.is_none()) {
+            s.turning = false;
+        }
         s.back = back;
         let k = 1.0 - (-dt * YAW_RATE).exp();
         if let Some(y) = legs {
             s.yaw = living_rules::steer::wrap(s.yaw + living_rules::steer::wrap(y - s.yaw) * k);
         }
-        if let Some(f) = look_at.filter(|_| walking).or(legs) {
+        if let Some(f) = look_at.filter(|_| walking || s.person).or(legs) {
             s.face = living_rules::steer::wrap(s.face + living_rules::steer::wrap(f - s.face) * k);
         }
         let twist = if s.person { living_rules::steer::wrap(s.face - s.yaw).clamp(-TWIST_MAX, TWIST_MAX) } else { 0.0 };
