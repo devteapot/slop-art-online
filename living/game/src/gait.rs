@@ -318,7 +318,8 @@ const DIR_GAP_MAX: f32 = 91.0;
 /// two or three times as often as the forward gait: a scurry.
 pub const CADENCE_MAX: f32 = 1.6;
 
-/// The clips this module chooses between, and whether each is a run.
+/// The forward gaits of a sidecar from before `locomotion` was written for every loop, and whether
+/// each is a run.
 const LOCOMOTION: [(&str, bool); 4] = [("walk", false), ("walk_brisk", false), ("run", true), ("run_fast", true)];
 /// An animal's gaits, one family.
 const ANIMAL: [&str; 3] = ["walk", "trot", "run"];
@@ -369,15 +370,29 @@ impl Gaits {
             return if clips.is_empty() { Self { info, ..Self::fallback() } } else { Self { clips, forward, split: false, info, band, dirs: vec![] } };
         }
         let info = json.as_object().map(|m| m.iter().filter(|(_, c)| c.is_object()).map(|(k, c)| (k.clone(), info_of(c, &PEOPLE_FEET))).collect()).unwrap_or_default();
-        let mut clips = LOCOMOTION
-            .iter()
-            .filter_map(|&(clip, run)| {
-                let c = json.get(clip)?;
-                let speed = c["speed"].as_f64()? as f32;
-                let natural = c["natural_speed"].as_f64().map_or(speed, |n| n as f32);
-                (speed > 0.1 && natural > 0.1 && c["loop"].as_bool() != Some(false)).then_some(Gait { clip, speed, natural, run, seconds: c["seconds"].as_f64().map(|s| s as f32) })
+        let gait = |clip: &'static str, run: bool| {
+            let c = json.get(clip)?;
+            let speed = c["speed"].as_f64()? as f32;
+            let natural = c["natural_speed"].as_f64().map_or(speed, |n| n as f32);
+            (speed > 0.1 && natural > 0.1 && c["loop"].as_bool() != Some(false)).then_some(Gait { clip, speed, natural, run, seconds: c["seconds"].as_f64().map(|s| s as f32) })
+        };
+        // The forward gaits: every loop the sidecar marks a walk or a run (`locomotion`) with no
+        // travel of its own, so a new take joins its family by its natural speed (a 3.0 m/s walk
+        // between walk_brisk and running); a sidecar from before the field, the named four.
+        let tagged: Vec<Gait> = json
+            .as_object()
+            .map(|m| {
+                m.iter()
+                    .filter(|(_, c)| c["travel_deg"].is_null() && c["loop"].as_bool() == Some(true))
+                    .filter_map(|(k, c)| match c["locomotion"].as_str() {
+                        Some("walk") => gait(crate::anim::intern(k), false),
+                        Some("run") => gait(crate::anim::intern(k), true),
+                        _ => None,
+                    })
+                    .collect()
             })
-            .collect::<Vec<_>>();
+            .unwrap_or_default();
+        let mut clips = if tagged.is_empty() { LOCOMOTION.iter().filter_map(|&(clip, run)| gait(clip, run)).collect::<Vec<_>>() } else { tagged };
         if clips.iter().any(|g| !g.run) && clips.iter().any(|g| g.run) {
             // Walks first, then runs, each by natural speed.
             clips.sort_by(|a, b| a.run.cmp(&b.run).then(a.natural.total_cmp(&b.natural)));
@@ -883,6 +898,28 @@ pub(crate) mod tests {
         // Walk ↔ run only round the split.
         assert_eq!(g.blend(2.8, 1.0, OLD, len).n, 2);
         assert_eq!(only(&g.blend(2.8 - CROSS_BAND - 0.01, 1.0, OLD, len)), Some("walk_brisk"));
+    }
+
+    #[test]
+    fn a_new_walk_joins_its_family_by_natural_speed() {
+        // A sidecar that marks its gaits' families: walk_v30 (a 3.0 m/s walk) goes between
+        // walk_brisk and the runs, by its natural speed, not its name.
+        let g = Gaits::parse(&serde_json::json!({
+            "walk": {"speed": 1.389, "natural_speed": 1.435, "seconds": 1.033, "loop": true, "locomotion": "walk"},
+            "walk_brisk": {"speed": 2.028, "natural_speed": 2.028, "seconds": 1.0, "loop": true, "locomotion": "walk"},
+            "walk_v30": {"speed": 3.0, "natural_speed": 3.0, "seconds": 0.7, "loop": true, "locomotion": "walk"},
+            "run": {"speed": 3.67, "natural_speed": 3.146, "seconds": 0.6, "loop": true, "locomotion": "run"},
+            "run_fast": {"speed": 3.497, "natural_speed": 3.497, "seconds": 0.767, "loop": true, "locomotion": "run"},
+            "sneak": {"speed": 0.747, "natural_speed": 0.747, "seconds": 1.6, "loop": true, "locomotion": "sneak"},
+            "walk_back": {"speed": 1.05, "natural_speed": 1.05, "seconds": 1.1, "loop": true, "locomotion": "walk", "travel_deg": 180},
+        }));
+        let names = |b: &Blend| b.parts().iter().map(|&(i, w)| (g.gaits()[i].clip, (w * 100.0).round() / 100.0)).collect::<Vec<_>>();
+        let walk34 = Family::Split((3.4f32 * 4.3).sqrt());
+        assert_eq!(names(&g.blend(3.0, 1.0, walk34, |_| 1.0)), vec![("walk_v30", 1.0)]);
+        assert_eq!(names(&g.blend(3.4, 1.0, walk34, |_| 1.0)), vec![("walk_v30", 1.0)]);
+        assert_eq!(g.blend(2.5, 1.0, walk34, |_| 1.0).n, 2, "between walk_brisk and walk_v30");
+        assert_eq!(names(&g.blend(4.3, 1.0, walk34, |_| 1.0)), vec![("run_fast", 1.0)]);
+        assert!(g.gaits()[..5].iter().all(|x| x.clip != "sneak" && x.clip != "walk_back"));
     }
 
     #[test]
