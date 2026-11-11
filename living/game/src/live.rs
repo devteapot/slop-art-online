@@ -213,9 +213,10 @@ pub struct Live {
     shown: HashMap<u32, Shown>,
     /// Height (m) of each drawn character, for nameplates and bubbles.
     pub heights: HashMap<u32, f32>,
-    /// Bodies gone from sight, fading out where they were last drawn (`fade.rs`), and how long
-    /// they have been fading (s).
-    leaving: Vec<(Entity, f32)>,
+    /// Bodies gone from sight, fading out where they were last drawn (`fade.rs`), how long
+    /// they have been fading (s), whose they were, and whether they stay a moment as a faint
+    /// figure first (the memory look under trial, `sightedge::Look`).
+    leaving: Vec<(Entity, f32, u32, bool)>,
 }
 
 impl Live {
@@ -373,7 +374,7 @@ fn bodies(
     mut live: ResMut<Live>,
     mut q: Query<Drawn>,
     mut fades: Query<&mut crate::fade::Fade>,
-    time: Res<Time>,
+    (time, edge): (Res<Time>, Option<Res<crate::sightedge::SightEdge>>),
 ) {
     let Some(island) = island else { return };
     let Some(conn) = net.conn.as_ref() else {
@@ -381,7 +382,7 @@ fn bodies(
         for (_, s) in live.shown.drain() {
             commands.entity(s.entity).despawn();
         }
-        for (e, _) in live.leaving.drain(..) {
+        for (e, ..) in live.leaving.drain(..) {
             commands.entity(e).despawn();
         }
         live.heights.clear();
@@ -390,9 +391,20 @@ fn bodies(
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
     // Bodies that left sight fade out where they were, then go.
-    live.leaving.retain_mut(|(e, t)| {
+    // A faint figure goes at once when its body is sent again, else fades out after a moment.
+    live.leaving.retain_mut(|(e, t, id, ghost)| {
         *t += dt;
-        let keep = *t < crate::fade::OUT_S + 0.05;
+        if *ghost && scene.shown.contains_key(id) {
+            commands.entity(*e).despawn();
+            return false;
+        }
+        let hold = if *ghost { crate::sightedge::GHOST_S } else { 0.0 };
+        if *ghost && *t >= hold {
+            if let Ok(mut f) = fades.get_mut(*e) {
+                f.target = 1.0;
+            }
+        }
+        let keep = *t < hold + crate::fade::OUT_S + 0.05;
         if !keep {
             commands.entity(*e).despawn();
         }
@@ -426,11 +438,12 @@ fn bodies(
         if let Some(s) = live.shown.remove(&id) {
             match fades.get_mut(s.entity) {
                 Ok(mut f) => {
-                    f.target = 1.0;
+                    let ghost = edge.as_deref().is_some_and(|e| e.ghosts()) && f.target < 1.0;
+                    f.target = if ghost { crate::sightedge::GHOST_LEVEL } else { 1.0 };
                     if let Ok((_, _, _, _, mut motion, _)) = q.get_mut(s.entity) {
                         motion.speed = 0.0;
                     }
-                    live.leaving.push((s.entity, 0.0));
+                    live.leaving.push((s.entity, 0.0, id, ghost));
                 }
                 Err(_) => commands.entity(s.entity).despawn(),
             }
@@ -768,6 +781,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
 ///   (photographing small things up close);
 /// - `say:TEXT`: proximity chat (`human_say`);
+/// - `sightlook:NAME`: how "not seen now" is drawn, among the looks under trial
+///   (`sightedge::Look`; `LIVING_SIGHT_LOOK` sets the first);
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
@@ -846,7 +861,7 @@ fn script(
     mut out: ResMut<crate::ui::model::Outbox>,
     (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
-    target: Option<Res<crate::capture::Target>>,
+    (target, mut sight): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>),
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     time: Res<Time>,
     mut exit: MessageWriter<AppExit>,
@@ -947,6 +962,17 @@ fn script(
         }
         "say" => {
             out.say.push((arg.to_string(), 0));
+            true
+        }
+        "sightlook" => {
+            // The looks of "not seen now" under trial (`sightedge::Look`), for captures.
+            match (crate::sightedge::Look::parse(arg), sight.as_deref_mut()) {
+                (Some(l), Some(e)) => {
+                    e.look = l;
+                    info!("sight edge: look {l:?}");
+                }
+                _ => warn!("live script: no look {arg:?}"),
+            }
             true
         }
         "skill" | "aim" => {
