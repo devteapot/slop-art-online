@@ -110,7 +110,7 @@ pub fn create_floor(ctx: &ReducerContext, seed_json: String) -> Result<(), Strin
         return Err("this floor already has its seed".into());
     }
     let s: Seed = serde_json::from_str(&seed_json).map_err(|e| format!("seed: {e}"))?;
-    check_rules(&seed_json)?;
+    check_rules(ctx, &s)?;
     if let Some(m) = s.map.as_ref().filter(|m| m.kind == "land") {
         crate::island::params_of(m)?;
     }
@@ -120,25 +120,31 @@ pub fn create_floor(ctx: &ReducerContext, seed_json: String) -> Result<(), Strin
     Ok(())
 }
 
-/// The seed's `rules` switches are compiled into the module (build.rs); a runtime seed that
-/// asks for others would silently get the module's, so it is refused instead.
-fn check_rules(json: &str) -> Result<(), String> {
-    let v: serde_json::Value = serde_json::from_str(json).map_err(|e| format!("seed: {e}"))?;
-    let flag = |name: &str| v.get("rules").and_then(|r| r.get(name)).and_then(|f| f.as_bool()).unwrap_or(true);
-    for (name, compiled) in [("cry_prompts_carers", common::CRY_PROMPTS_CARERS)] {
-        if flag(name) != compiled {
-            return Err(format!("seed rule {name} = {} differs from this module's {compiled}; build the module with that seed", flag(name)));
-        }
+/// A seed's `rules` are the world's own values of the script's laws: each must name a law and
+/// have its kind (a number, or true or false).
+fn check_rules(ctx: &ReducerContext, s: &Seed) -> Result<(), String> {
+    let over: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    common::scripts(ctx).laws_with(&over).map(|_| ()).map_err(|e| format!("seed rules: {e}"))
+}
+
+/// Keep the seed's `rules` as the world's own laws (`world_law`) and have every cache read them.
+fn world_laws(ctx: &ReducerContext, s: &Seed) {
+    for (name, value) in &s.rules {
+        ctx.db.world_law().name().delete(name.clone());
+        ctx.db.world_law().insert(WorldLaw { name: name.clone(), value: value.to_string() });
     }
-    // Every person has a mind; a world of people without one is not an option.
-    if !flag("minds") {
-        return Err("seed rule minds = false is gone: every person has a mind (LIVING_ONLY limits which ones a mind service thinks for)".into());
+    if s.rules.is_empty() {
+        return;
     }
-    Ok(())
+    let mut k = common::clock(ctx);
+    k.scripts_rev += 1;
+    ctx.db.clock().id().update(k);
+    common::invalidate_scripts_rev();
 }
 
 /// Create the world from the active seed: in this call, or by scheduling the first step.
 pub fn begin(ctx: &ReducerContext, s: &Seed, now: u64) {
+    world_laws(ctx, s);
     let staged = s.map.as_ref().filter(|m| m.kind == "land").and_then(|m| crate::island::params_of(m).ok()).is_some_and(|(size, _)| size > INLINE_MAX_M);
     if !staged {
         seed::seed(ctx, now);

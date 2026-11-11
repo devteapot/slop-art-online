@@ -24,6 +24,9 @@ const ROOT_MARK: u16 = u16::MAX - 1;
 const FAIL_MARK: u16 = u16::MAX - 2;
 pub(crate) const REFLECT_MARK: u16 = u16::MAX - 3;
 thread_local! {
+    /// The hunger and energy levels where each body's need rates change, from the law's last
+    /// answer for it (`NeedLaw::cuts`).
+    static NEED_CUTS: std::cell::RefCell<std::collections::HashMap<u32, [f32; 4]>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// When each person last checked for, and last felt, knowing something alone (kept here:
     /// evaluator marks are reset when a new plan is installed).
     static LEGACY: std::cell::RefCell<std::collections::HashMap<u32, (u64, u64)>> = std::cell::RefCell::new(std::collections::HashMap::new());
@@ -77,7 +80,6 @@ struct Ev<'a> {
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
 /// holding (sleeping until rested, not until barely awake). Movement and combat stay reactive.
-const LATCHES: &[&str] = &["sleep", "rest", "eat", "gather", "build", "craft", "cook", "teach", "experiment", "write", "read", "plant", "store", "take", "give"];
 
 pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let Some(me) = ctx.db.character().id().find(id) else { return };
@@ -106,7 +108,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
-    ev.latched = cur.filter(|a| a.revision == ev.st.revision && (LATCHES.contains(&a.skill.as_str()) || sc.shows().aside(&a.skill))).map(|a| a.node);
+    ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
     ev.alerts();
     let root = ev.g.clone();
     let played = !ev.me.ai;
@@ -152,12 +154,17 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let cloak = common::inv_count(ctx, me.id as u64, "cloak") > 0;
     let season = common::season(ctx, now);
     let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
-    let key = 1
+    // The levels where the state's rates change are the law's (`starving_at`, `fed_below`,
+    // `rested_above`, `spent_at`), as it last answered for this body. Unknown (a fresh module
+    // instance): ask the law again.
+    let cuts = NEED_CUTS.with(|c| c.borrow().get(&me.id).copied());
+    let [starving_at, fed_below, rested_above, spent_at] = cuts.unwrap_or([f32::NAN; 4]);
+    let key = (cuts.is_some() as u32)
         | (night as u32) << 1
-        | ((n.hunger >= 100.0) as u32) << 2
-        | ((n.hunger < 70.0) as u32) << 3
-        | ((n.energy > 15.0) as u32) << 4
-        | ((n.energy <= 0.0) as u32) << 5
+        | ((n.hunger >= starving_at) as u32) << 2
+        | ((n.hunger < fed_below) as u32) << 3
+        | ((n.energy > rested_above) as u32) << 4
+        | ((n.energy <= spent_at) as u32) << 5
         | (near_fire as u32) << 6
         | (near_shelter as u32) << 7
         | ((activity == "sleep") as u32) << 8
@@ -165,7 +172,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         | (cloak as u32) << 10
         | ((season == "winter") as u32) << 11
         | (crate::town::raining(ctx) as u32) << 12;
-    if key == v.rate_key {
+    if cuts.is_some() && key == v.rate_key {
         return Some(v);
     }
     // Profiled: what a recompute costs (the facts and the law), and how many there are.
@@ -175,7 +182,14 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let hour = common::hour(w, now);
     let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
-    if let Ok(r) = sc.rates(&sctx) {
+    let law = sc.need_law(&sctx);
+    let mut key = key;
+    if let Ok(c) = law.as_ref().map(|l| l.cuts().unwrap_or([f32::INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::NEG_INFINITY])) {
+        NEED_CUTS.with(|m| m.borrow_mut().insert(me.id, c));
+        // The key as the new thresholds read it, so the next look does not ask again.
+        key = (key & !0b11_1101) | 1 | ((n.hunger >= c[0]) as u32) << 2 | ((n.hunger < c[1]) as u32) << 3 | ((n.energy > c[2]) as u32) << 4 | ((n.energy <= c[3]) as u32) << 5;
+    }
+    if let Ok(r) = law.map(|l| l.rates(&sctx.actor)) {
         common::settle(&mut v, now);
         v.hp_rate = r.hp_per_min;
         v.hunger_rate = r.hunger_per_min;
@@ -674,7 +688,7 @@ impl<'a> Ev<'a> {
             living_rules::catalog::KindClass::Terrain => {
                 // The nearest tile of that ground within sight.
                 let map = common::map(self.ctx);
-                let sight = if common::night(&self.w, self.now) { living_rules::NIGHT_SIGHT } else { living_rules::SIGHT };
+                let sight = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
                 let r = sight as i32;
                 let (cx, cy) = (self.at.0.floor() as i32, self.at.1.floor() as i32);
                 let mut best: Option<((f32, f32), f32)> = None;
@@ -723,7 +737,7 @@ impl<'a> Ev<'a> {
             }
             Cond::Sees(t) => match t {
                 Target::Place(_) | Target::At(_) | Target::Home => {
-                    let r = common::sight(self.ctx, &self.w, self.now);
+                    let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
                     self.resolve(t).map_or(false, |p| dist(self.at, p.at) <= r)
                 }
                 _ => self.resolve(t).is_some(),
@@ -741,7 +755,7 @@ impl<'a> Ev<'a> {
                 let scene = self.scene.as_ref().expect("scene built");
                 let mut n = 0u32;
                 for x in &scene.creatures {
-                    if dist(at, x.pos) > c.within || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
+                    if c.within.is_some_and(|w| dist(at, x.pos) > w) || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
                         continue;
                     }
                     if let Some(rel) = &c.of.relation {

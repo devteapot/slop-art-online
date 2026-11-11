@@ -247,6 +247,8 @@ pub mod walk_route_type;
 pub mod waypoint_type;
 pub mod weather_table;
 pub mod weather_type;
+pub mod world_law_table;
+pub mod world_law_type;
 pub mod world_table;
 pub mod world_type;
 
@@ -491,6 +493,8 @@ pub use walk_route_type::WalkRoute;
 pub use waypoint_type::Waypoint;
 pub use weather_table::*;
 pub use weather_type::Weather;
+pub use world_law_table::*;
+pub use world_law_type::WorldLaw;
 pub use world_table::*;
 pub use world_type::World;
 
@@ -1040,6 +1044,7 @@ pub struct DbUpdate {
     walk_route: __sdk::TableUpdate<WalkRoute>,
     weather: __sdk::TableUpdate<Weather>,
     world: __sdk::TableUpdate<World>,
+    world_law: __sdk::TableUpdate<WorldLaw>,
 }
 
 impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
@@ -1345,6 +1350,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "world" => db_update
                     .world
                     .append(world_table::parse_table_update(table_update)?),
+                "world_law" => db_update
+                    .world_law
+                    .append(world_law_table::parse_table_update(table_update)?),
 
                 unknown => {
                     return Err(__sdk::InternalError::unknown_name(
@@ -1614,6 +1622,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.world = cache
             .apply_diff_to_table::<World>("world", &self.world)
             .with_updates_by_pk(|row| &row.id);
+        diff.world_law = cache
+            .apply_diff_to_table::<WorldLaw>("world_law", &self.world_law)
+            .with_updates_by_pk(|row| &row.name);
         diff.my_body = cache
             .apply_diff_to_table::<Motion>("my_body", &self.my_body)
             .with_updates_by_pk(|row| &row.id);
@@ -1965,6 +1976,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "world" => db_update
                     .world
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "world_law" => db_update
+                    .world_law
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 unknown => {
                     return Err(
                         __sdk::InternalError::unknown_name("table", unknown, "QueryRows").into(),
@@ -2275,6 +2289,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "world" => db_update
                     .world
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "world_law" => db_update
+                    .world_law
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 unknown => {
                     return Err(
                         __sdk::InternalError::unknown_name("table", unknown, "QueryRows").into(),
@@ -2389,6 +2406,7 @@ pub struct AppliedDiff<'r> {
     walk_route: __sdk::TableAppliedDiff<'r, WalkRoute>,
     weather: __sdk::TableAppliedDiff<'r, Weather>,
     world: __sdk::TableAppliedDiff<'r, World>,
+    world_law: __sdk::TableAppliedDiff<'r, WorldLaw>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
 
@@ -2573,6 +2591,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<WalkRoute>("walk_route", &self.walk_route, event);
         callbacks.invoke_table_row_callbacks::<Weather>("weather", &self.weather, event);
         callbacks.invoke_table_row_callbacks::<World>("world", &self.world, event);
+        callbacks.invoke_table_row_callbacks::<WorldLaw>("world_law", &self.world_law, event);
     }
 }
 
@@ -3332,6 +3351,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         walk_route_table::register_table(client_cache);
         weather_table::register_table(client_cache);
         world_table::register_table(client_cache);
+        world_law_table::register_table(client_cache);
     }
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "acquaintance",
@@ -3433,5 +3453,6 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "walk_route",
         "weather",
         "world",
+        "world_law",
     ];
 }

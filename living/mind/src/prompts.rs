@@ -40,40 +40,13 @@ fn shared(text: impl AsRef<str>) -> String {
     out.render()
 }
 
-const RULES: &str = "\
-One day lasts 12 real minutes; night is 20:00-06:00 and cuts sight to 6 tiles (11 by day).
-SEASONS_LINE
-BODY: hunger rises ~5/min (100 = starving, which drains health); energy falls ~3/min awake and recovers while sleeping (faster within 2 tiles of a shelter). \
-At night, people farther than 3 tiles from a campfire and 2 from a shelter or house, and without a warm cloak, lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.
-KNOW-HOW: you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), \
-torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs), \
-masonry (walls), carpentry (houses and gates; needs shelter), toolmaking (axe, pick). Others may know what you don't: \
-ask them to teach you (teach takes time beside each other), read what someone wrote, or experiment with materials to work something out yourself. \
-What only one person knows dies with them unless they teach it or write it down.
-FOOD: berries 12, raw fish 16, raw meat 20, cooked fish 34, cooked meat 42 (hunger points). Cook raw fish/meat at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it three times longer. A pack holds about 40 things. \
-Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (3 meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).
-MAKING: campfire = 3 wood, shelter = 6 wood + 3 fiber, storage = 4 wood (anyone can take from a storage), spear = 2 wood + 1 stone (hits much harder, faster fishing), \
-cloak = 2 hide + 1 fiber, torch = 1 wood + 1 fiber, tablet or sign = 1 wood (write), \
-house = 6 wood + 4 clay + 2 stone (a home: warm like a shelter and a fire), gate = 4 wood, wall = 2 stone per tile, road = 1 stone per tile (pave where you stand; walking on road is faster), \
-axe = 2 wood + 1 stone (cut wood twice as fast), pick = 2 wood + 2 stone (break stone twice as fast).
-SETTLEMENTS: walls block the way; a gate lets people through while open, and only the members of the community that keeps it may open or shut it. \
-Who is let in, when gates are shut and who keeps watch is for each community to decide.
-LIFE_LINE
-COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming \
-({\"threatened\": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard \
-(hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear up to 7 tiles (you lose it). \
-A blow lands only if you are still within reach (about 2 tiles; a wolf's leap about 3) when its windup ends: stepping back or running as it winds up makes it miss, \
-but whoever swings stands still meanwhile. People run 2.6 tiles/s, wolves 3.4, grown deer 3.7 (a wolf catches the young, old, tired or surprised): you can outrun a person who keeps stopping to swing, not a wolf. \
-While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.
-FORCE: every blow, shot or bolt does its full damage, and whoever reaches 0 health dies; a blow cannot be held back. \
-threaten = menace someone within a few tiles with harm for 2 s (no harm yet; they see it coming, as {\"threatened\": true}, and so does anyone watching). It is a threat of violence: to ask, wake, urge or call someone, speak (say) instead. seize = take items from a person's pack against their will, only from someone who has yielded to force or is badly hurt (to get goods by force you need not kill). \
-yield = give in, guard down and hands up: for 20 s you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in. \
-Everyone nearby sees which force was used.
-COMMUNITIES: people can found a community (the act {\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
-TIME: beyond staying alive, how you spend your days is yours to decide, from who you are and what you want.
-OTHERS: people hear speech within ~9 tiles. You cannot read minds; what others say may be false. You only know what you perceived or were told.";
+/// The world's own sections of the rules text, from its seed: the WORLD line, its seasons and its
+/// people's life table. The rest is the world's rule script's (`Scripts::world_text`, built
+/// from each law's description), so what minds are told follows the rules.
+static WORLD_PARTS: std::sync::OnceLock<(String, String, String)> = std::sync::OnceLock::new();
+/// The rules text for the rules revision it was built from.
+static RULES_TEXT: std::sync::RwLock<Option<(u32, Arc<str>)>> = std::sync::RwLock::new(None);
 
-static SETTING: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 /// The judgments a graph may read (`judged`), when they are refreshed (mind/judge.rs).
 static JUDGED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
@@ -178,14 +151,14 @@ pub fn set_world(setting: &str, w: u32, h: u32, year_days: f32, pace: f32, life:
     let _ = SIZE.set((w, h));
     let season_days = year_days / 4.0;
     let seasons = format!(
-        "SEASONS: a year is {} days — spring, summer, autumn, winter ({} each). In winter nothing regrows and nights are colder: store food before it.",
+        "a year is {} days — spring, summer, autumn, winter ({} each). In winter nothing regrows and nights are colder: store food before it.",
         year_days.round(),
         living_rules::describe_days(season_days)
     );
     let years = |f: f32| (f * life.years).round();
     let t = living_rules::life::Pace { year_days, pace };
     let life_line = format!(
-        "LIFE: a person lives about {} years (a year is {} days): a baby until about {}, a child until about {}, old from about {}. \
+        "a person lives about {} years (a year is {} days): a baby until about {}, a child until about {}, old from about {}. \
 Babies cannot walk far or feed themselves; they cry when hungry, cold or alone. Children are slow, cannot build, craft or fight, and depend on others. \
 Old people tire sooner and heal slower. Two adults who both choose to start a family (the act `conceive` toward each other) within two minutes, while fed, have a child about {} later.",
         life.years.round(),
@@ -195,13 +168,25 @@ Old people tire sooner and heal slower. Two adults who both choose to start a fa
         years(life.elder),
         living_rules::describe_days(life.gestation_days(t))
     );
-    let rules = RULES.replace("SEASONS_LINE", &seasons).replace("LIFE_LINE", &life_line);
-    let _ = SETTING.set(format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}); walking covers about 3 tiles a second.\n{rules}"));
+    let world = format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}; a tile is a metre).");
+    let _ = WORLD_PARTS.set((world, seasons, life_line));
 }
 
-/// The world's rules as every mind is told them.
-pub fn world_rules() -> &'static str {
-    SETTING.get().map(|s| s.as_str()).unwrap_or(RULES)
+/// The world's rules as every mind is told them: the world's line, then the rule script's
+/// world text with the world's seasons and life table. Built once per rules revision, so the
+/// static prefix of every prompt that holds it changes only when the rules do.
+pub fn world_rules() -> Arc<str> {
+    let rev = RULES_SOURCE.read().unwrap().as_ref().map_or(0, |(r, _)| *r);
+    if let Some((r, t)) = RULES_TEXT.read().unwrap().as_ref() {
+        if *r == rev {
+            return t.clone();
+        }
+    }
+    let (world, seasons, life) = WORLD_PARTS.get().cloned().unwrap_or_default();
+    let text = compiled().map(|s| s.world_text(&[("seasons", seasons), ("life", life)])).unwrap_or_default();
+    let full: Arc<str> = if world.is_empty() { text.into() } else { format!("{world}\n{text}").into() };
+    *RULES_TEXT.write().unwrap() = Some((rev, full.clone()));
+    full
 }
 
 pub fn grammar() -> String {

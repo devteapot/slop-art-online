@@ -7,7 +7,7 @@
 //! `fn NAME(` to `fn base_NAME(`, then appends the overlay, so:
 //! - the overlay's `NAME` is the one every caller reaches, the engine and the base script's own
 //!   functions alike (Rhai resolves functions by name at call time);
-//! - the overlay can build on the base: `fn laws() { let l = base_laws(); l.sight_day = 7.0; l }`.
+//! - the overlay can build on the base: `fn laws() { let l = base_laws(); l.fire_warmth = 5.0; l }`.
 //!
 //! The result is one ordinary script source for [`crate::script::Scripts::new`]: it is cached
 //! per revision like any installed script, and the mind service and clients read the same text.
@@ -75,10 +75,10 @@ fn cold(a) {
 fn freezing(a) { true }
 fn laws() {
     let l = base_laws();
-    l.sight_day = 7.0;
     l.fire_warmth = 5.0;
     l
 }
+fn sight_in(light) { if light == "day" { 7.0 } else { base_sight_in(light) } }
 "#;
 
     fn person_by_day() -> SkillCtx {
@@ -91,9 +91,14 @@ fn laws() {
         let frozen = Scripts::new(&compose(BASE, FROZEN).expect("composes")).expect("frozen floor compiles");
         // Laws read once per revision: the overlay builds on the base's own values.
         let (lb, lf) = (base.laws(), frozen.laws());
-        assert_eq!((lb.sight_day, lb.fire_warmth), (11.0, 3.5));
-        assert_eq!((lf.sight_day, lf.fire_warmth), (7.0, 5.0));
-        assert_eq!(lf.sight_night, lb.sight_night, "laws the overlay leaves alone keep the base's value");
+        assert_eq!((lb.fire_warmth, lf.fire_warmth), (3.5, 5.0));
+        assert_eq!(lf.shelter_warmth, lb.shelter_warmth, "laws the overlay leaves alone keep the base's value");
+        // A creature's senses are a law per creature: the floor shortens sight by day only.
+        let day = person_by_day();
+        let mut night = day.clone();
+        night.night = true;
+        assert_eq!((base.senses(&day).unwrap().sight, frozen.senses(&day).unwrap().sight), (11.0, 7.0));
+        assert_eq!(frozen.senses(&night).unwrap(), base.senses(&night).unwrap());
         // The base `rates` calls `cold`, and reaches the floor's: a person away from fire loses
         // health by day on the frozen floor and heals on the base.
         let c = person_by_day();
@@ -135,7 +140,7 @@ fn laws() {
         let laws = s.laws();
         let t = std::time::Instant::now();
         for _ in 0..n {
-            acc += std::hint::black_box(&laws).sight_day;
+            acc += std::hint::black_box(&laws).fire_warmth;
         }
         let cached_ns = t.elapsed().as_secs_f64() * 1e9 / n as f64;
         println!("rates {rates_us:.1} us, move_speed {speed_us:.1} us, num_of(lunge) {num_us:.1} us, cached law {cached_ns:.1} ns per call ({acc})");

@@ -52,7 +52,7 @@ Findings move from the lab to the game when a core version is released and the g
 
 The user's idea: seeing only what is in front of you makes sense, and skills, passives or kinds of character could change the view. That fits the core's rules:
 
-- The authority already gives every character a sight range (`sight_day` 11, `sight_night` 6, `sight_torch` 9 tiles) and `hearing` 9, and minds receive only what falls inside them. Players are the exception today: they receive every table.
+- The authority already gives every character a sight range (11 tiles by day, 6 at night, 9 with a torch) and hearing 9 (since 2026-11-11 the script's per-creature `senses` law, docs/WORLD_RULES.md), and minds receive only what falls inside them. Players are the exception today: they receive every table.
 - **Principle:** the camera presents the character's perception, not the world. A higher or wider view then reveals nothing the character doesn't perceive, so the camera stops being a fairness question. The authority enforces it (perception-scoped views); the client only draws it.
 - **Then the view can be a capability**, granted, learned or bodily like any skill. Possible forms:
   - a wider or farther sight (a scout, an elevated perch);

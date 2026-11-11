@@ -42,12 +42,27 @@ pub struct SkillSpec {
     /// prompts, and accepted for it even when they are not items, structures or techniques
     /// (e.g. `lodging`).
     pub items: Vec<String>,
+    /// A graph keeps doing it until it ends, even when a higher branch would win (eating,
+    /// building, sleeping: work that is not dropped half-done).
+    pub latch: bool,
+    /// Worth recording as an experience when done (a build, a gift, a blow), not routine.
+    pub notable: bool,
+    /// Done while the body keeps whatever motion it has (waiting, eating, a call); every other
+    /// skill stands still to be done.
+    pub moving: bool,
+    /// Behaviour of the moment (walking about, resting, grazing): it belongs in a graph, not in
+    /// a one-off act.
+    pub moment: bool,
+    /// In a graph it takes the body back from a deliberate act (a flight).
+    pub reflex: bool,
 }
 
 /// Every skill a world has, in the order the script declares them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Skills {
     list: Vec<SkillSpec>,
+    /// The world's items (`items()`), in the script's order.
+    pub items: Vec<ItemSpec>,
     /// Indexes into `list` by name.
     by_name: Vec<(String, usize)>,
     /// The world's skills are not known here (a build without the script runtime, such as the
@@ -60,7 +75,7 @@ impl Skills {
     pub fn new(list: Vec<SkillSpec>) -> Self {
         let mut by_name: Vec<(String, usize)> = list.iter().enumerate().map(|(i, s)| (s.name.clone(), i)).collect();
         by_name.sort();
-        Self { list, by_name, open: false }
+        Self { list, by_name, items: Vec::new(), open: false }
     }
 
     /// Whether a name is a skill here (any name, when the skills are not known).
@@ -142,41 +157,15 @@ pub fn is_skill(name: &str) -> bool {
     skills().has(name)
 }
 
-/// An item the world knows. What it does (feeds, spoils, cuts) is the rules' to say:
-/// `nutrition(item)`, `spoil_rate(item)` and the skills in `living/scripts/skills.rhai`.
+/// An item the world knows, as its script declares it (`items()`): its name and its traits
+/// (`cooks_to`, ...). What it does (feeds, spoils, cuts) is the rules' to say: `nutrition(item)`,
+/// `spoil_rate(item)` and the skills in `living/scripts/skills.rhai`.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ItemSpec {
-    pub name: &'static str,
+    pub name: String,
+    /// Its traits, as words (`cooks_to: cooked_fish`); a trait that is true reads "true".
+    pub traits: std::collections::BTreeMap<String, String>,
 }
-
-pub const ITEMS: &[ItemSpec] = &[
-    ItemSpec { name: "berries" },
-    ItemSpec { name: "fish" },
-    ItemSpec { name: "meat" },
-    ItemSpec { name: "cooked_fish" },
-    ItemSpec { name: "cooked_meat" },
-    ItemSpec { name: "wood" },
-    ItemSpec { name: "stone" },
-    ItemSpec { name: "fiber" },
-    ItemSpec { name: "spear" },
-    ItemSpec { name: "hide" },
-    ItemSpec { name: "cloak" },
-    ItemSpec { name: "torch" },
-    ItemSpec { name: "tablet" },
-    ItemSpec { name: "clay" },
-    ItemSpec { name: "axe" },
-    ItemSpec { name: "pick" },
-    ItemSpec { name: "smoked_fish" },
-    ItemSpec { name: "smoked_meat" },
-    ItemSpec { name: "net" },
-    ItemSpec { name: "basket" },
-    ItemSpec { name: "bow" },
-    ItemSpec { name: "arrow" },
-    ItemSpec { name: "salve" },
-    ItemSpec { name: "leather" },
-    ItemSpec { name: "armor" },
-    // Money where a settlement uses it: stamped clay tallies, worth what people agree.
-    ItemSpec { name: "mark" },
-];
 
 /// Practical techniques: must be known (world state, not belief) before use.
 pub struct TechniqueSpec {
@@ -227,8 +216,18 @@ pub fn technique_name(name: &str) -> &str {
     RENAMED.iter().find(|(old, _)| *old == name).map_or(name, |(_, new)| new)
 }
 
-pub fn item(name: &str) -> Option<&'static ItemSpec> {
-    ITEMS.iter().find(|i| i.name == name)
+/// An item of the world this process serves (any name, when its items are not known).
+pub fn item(name: &str) -> Option<ItemSpec> {
+    let w = skills();
+    if w.open {
+        return Some(ItemSpec { name: name.to_string(), ..Default::default() });
+    }
+    w.items.iter().find(|i| i.name == name).cloned()
+}
+
+/// The names of the world's items, in the script's order.
+pub fn item_names() -> Vec<String> {
+    skills().items.iter().map(|i| i.name.clone()).collect()
 }
 
 pub const RESOURCES: &[(&str, &str)] = &[

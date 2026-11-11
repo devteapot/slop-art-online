@@ -202,6 +202,12 @@ def run_case(run, case):
         sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
         felt = [m.split('How your body feels: ', 1)[1].split('\n', 1)[0] for e in sent for m in [json.dumps(e, ensure_ascii=False).replace('\\n', '\n')] if 'How your body feels: ' in m]
         assert felt and not any(ch.isdigit() for ch in felt[0]), felt[:2]
+        # The world's rules are told from the laws' own descriptions (docs/WORLD_RULES.md, since
+        # laws-2): the sections and the numbers the script's laws give, the same in every prompt.
+        told = [json.dumps(e, ensure_ascii=False).replace('\\n', '\n') for e in sent]
+        for part in ('SENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m',
+                     'MOVING: How creatures move', 'FOOD: berries 12, fish 16', 'SETTLEMENTS: walls block the way'):
+            assert all(part in m for m in told), part
     elif case == 'acts':
         run.wait(lambda: any(i['item'] == 'stone' and i['qty'] == 1 for i in run.sql(
             f'SELECT * FROM inventory WHERE owner = {other}', 'receiver-inventory-after')), 'give effect')

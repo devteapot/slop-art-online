@@ -1,8 +1,8 @@
 //! What a character perceives (docs/PERCEPTION.md): the one sight rule, what an observer
 //! perceives of another character, and what a human player's client may receive.
 //!
-//! - **The sight rule** ([`in_sight`]): within the observer's sight (day, night, or night with a
-//!   torch: `common::sight_for`) and with a clear sight line (`Map::sight_clear`: walls, rock and
+//! - **The sight rule** ([`in_sight`]): within the observer's sight (the script's per-creature
+//!   `senses` law: day, night, a torch; `common::sight_for`) and with a clear sight line (`Map::sight_clear`: walls, rock and
 //!   shut gates hide). Players' perceived sets, minds' percepts and scenes, behaviour graphs and
 //!   the combat feed all see by it.
 //! - **What an observer perceives of a target** ([`project`]): the target's record through the
@@ -14,7 +14,7 @@
 //!   projection, so a mind and a player know the same things about the same target.
 //! - **The perceived set.** Every [`SWEEP_MS`] the authority works out, for each living
 //!   character a person controls, which creatures it sees. A creature already seen stays seen
-//!   until it is [`KEEP_MARGIN`] beyond sight, so one at the edge does not flicker. The answer
+//!   until it is the `keep_seen_m` law beyond sight, so one at the edge does not flicker. The answer
 //!   is kept as `perceived` rows (private), written only when someone comes into or goes out of
 //!   sight, and its projections as `projected` rows (private), written when a creature comes
 //!   into sight and when its projection changes (whom the viewer knows, a reveal, a band).
@@ -43,14 +43,12 @@ use std::rc::Rc;
 
 /// How often each player's perceived set is worked out again (ms), staggered by character.
 pub const SWEEP_MS: u64 = 200;
-/// Tiles beyond sight a creature already seen stays seen.
-pub const KEEP_MARGIN: f32 = 1.0;
 
 /// A body's current motion segment as clients draw it (see `Body`): from `(x, y)` facing
 /// `heading` at `t_ms`, moving at velocity `(vx, vy)`, turning at `turn` rad/s for `turn_s`
 /// seconds, until `next_ms` (the segment's end, when steering looks again; `u64::MAX` at
 /// rest). `speed` is the cruising speed of the movement under way, which tells its gait
-/// (a walk, or a run at the rules' `run_speed` times a walk). About 52 B against the `body`
+/// (a walk, or a run at the creature's `motion` law's `run` times a walk). About 52 B against the `body`
 /// row's 70 B plus 16 B per path corner.
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
 pub struct Motion {
@@ -120,9 +118,10 @@ pub fn visible(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u
     common::creatures_near(ctx, at, sight, now).into_iter().filter(|c| c.id != id && map.sight_clear(at, c.pos)).collect()
 }
 
-/// The largest sight anyone has now (for gathering onlookers before each one's own test).
+/// The largest sight anyone has now (for gathering onlookers before each one's own test): the
+/// `senses` law's reach.
 pub fn widest_sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
-    common::sight(ctx, w, now).max(common::laws(ctx).sight_torch)
+    common::widest_sight(ctx, w, now)
 }
 
 // ---- what an observer perceives of a target (the `perceived_of` law) ----------------------
@@ -386,11 +385,12 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(viewer).collect();
     let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
-    for c in common::creatures_near(ctx, here, sight + KEEP_MARGIN, now) {
+    let keep = common::laws(ctx).keep_seen_m;
+    for c in common::creatures_near(ctx, here, sight + keep, now) {
         if c.id == id {
             continue;
         }
-        let reach = if had.contains(&c.id) { sight + KEEP_MARGIN } else { sight };
+        let reach = if had.contains(&c.id) { sight + keep } else { sight };
         if in_sight(map, here, c.pos, c.dist, reach) {
             seen.insert(c.id);
         }

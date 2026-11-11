@@ -6,6 +6,10 @@ On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6
 
 - `run.py` (`client-l2c4-031533`, scoped build): 30 of 30. Private table visibility: 63 tables, `rhythm` refused to anonymous clients and to the player; `woken`, `prior` and `prior_head` are gone. The reducer matrix first failed 10 `mind_update` calls (`client-l2c3-030713`): the driver's `PersonaIn` lacked `pastimes` and `calling`; fixed in `drive.py`.
 
+## 2026-11-11 laws-2 (dev-box)
+
+Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. `run.py` 30 PASS (`client-j1`). `world_law` is in `PRIVATE`. The first run (`client-l6`) stopped at the inventory check before the list had the table; `client-l6c` failed one check, "presence counts each open connection" (1 → 2 → 0 instead of 1): presence code is unchanged here, and the rerun passed.
+
 ## 2026-11-10 client feel (Mac)
 
 Branch `fix-client-feel` (from `6c8d1002`; client-only changes, authority, rules and scripts identical to `origin/main`), shared container (2.14.1), `scoped`: 30 PASS, exit 0 (`client-feel-1110-231833/`, archived under `.local/living/fix-client-feel/`). The game client was driven headless and windowed on scratch island world `verify-feel-1` with the new `key:`, `mouse:` and `chat:` script steps and a TCP proxy that cuts the connection (features/game-client.md): no bodies are drawn while offline, a notice shows, and the client resubscribes and sends the held intent again after reconnecting.
