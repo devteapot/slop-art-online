@@ -841,7 +841,7 @@ impl Minds {
         }
         for o in self.conn.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {
             if o.from == other && o.to == me {
-                between.push(format!("{other_name} offers you {} {} for {} {} (accept to exchange).", o.give_qty, o.give_item, o.want_qty, o.want_item));
+                between.push(format!("{other_name} offers you {} {} for {} {} (offer {}: accept to exchange, or decline).", o.give_qty, o.give_item, o.want_qty, o.want_item, o.id));
             } else if o.from == me && o.to == other {
                 between.push(format!("You offered {other_name} {} {} for {} {}; they have not accepted yet.", o.give_qty, o.give_item, o.want_qty, o.want_item));
             }

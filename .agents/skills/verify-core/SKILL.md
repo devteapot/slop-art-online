@@ -71,6 +71,14 @@ python3 "$V" launch --run "$D" --seed island > ".local/living/verify/$D/launch.t
 python3 "$C/scenes.py" dealings --run "$D" > ".local/living/verify/$D/dealings.txt" 2>&1
 python3 "$V" cleanup --run "$D" > ".local/living/verify/$D/cleanup.txt" 2>&1
 
+# Answers by id (about 1 min, any seed): accept/decline naming a trade offer or a proposal,
+# refusals, decline told and witnessed, the unnamed order (features/dealings.md).
+A=$R-answers
+mkdir -p ".local/living/verify/$A"
+python3 "$V" launch --run "$A" > ".local/living/verify/$A/launch.txt" 2>&1
+python3 "$C/scenes.py" answers --run "$A" > ".local/living/verify/$A/answers.txt" 2>&1
+python3 "$V" cleanup --run "$A" > ".local/living/verify/$A/cleanup.txt" 2>&1
+
 # Town life on an island world: the daily rhythm by the world's own hours (about 14 min),
 # rain, a wolf in town, gestures and making way (features/town.md, docs/TOWN_LIFE.md).
 T=$R-town

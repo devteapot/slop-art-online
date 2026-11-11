@@ -224,9 +224,10 @@ def act(actor, a):
 
 def offers(run, c):
     """A resident's swap and terms, offered to the player (admin `mind_act`, as a mind decides):
-    each a card in the maker's window; Accept is the rules' skill on `offer`; a refusal is the
-    rules' words; Dismiss is local. It leaves nothing standing; one left by a failed run opens its
-    maker's window on arrival until it lapses (`trade_window_s`)."""
+    each a card in the maker's window; its buttons are the rules' skills on `offer` (Accept,
+    Decline), naming the card's offer or record; a refusal is the rules' words; Decline tells the
+    maker. It leaves nothing standing; one left by a failed run opens its maker's window on
+    arrival until it lapses (`trade_window_s`)."""
     s = "offers"
     a, b = residents(run)
     inv = lambda who, item: sum(r["qty"] for r in sql(run, f"SELECT item, qty FROM inventory WHERE owner = {who} AND item = '{item}'"))
@@ -235,13 +236,13 @@ def offers(run, c):
     dear = act(a, {"do": "offer", "target": {"id": ME}, "item": "berries", "qty": 2, "want": "hide", "want_qty": 5})
     terms = act(b, {"do": "offer_terms", "target": {"id": ME}, "item": "berries", "qty": 1, "want": "stone", "want_qty": 1, "text": "bring it by dusk"})
     plan = ("ready;sync:scene;sync:kit;wait:1;sync:swap;wait:4;shot:01_offer;dump:01;click:@person:offer:{A}:0:0;wait:4;shot:02_taken;dump:02;"
-            "sync:dear;wait:4;dump:03;click:@person:offer:{A}:0:0;wait:4;shot:03_refused;dump:04;click:@person:dismiss:{A}:0;wait:1;shot:04_dismissed;dump:05;"
+            "sync:dear;wait:4;dump:03;click:@person:offer:{A}:0:0;wait:4;shot:03_refused;dump:04;click:@person:offer:{A}:0:1;wait:4;shot:04_declined;dump:05;"
             "sync:again;wait:4;dump:07;click:@person:offer:{A}:0:0;wait:4;dump:08;"
             "sync:terms;wait:4;shot:05_terms;dump:06;key:Escape:tap;wait:0.4;menu:f@id:{B};wait:0.5;click:@acts:0:window;wait:0.8;shot:06_terms_card;dump:09;"
             "click:@person:offer:{B}:0:0;wait:4;shot:07_agreed;dump:10;quit").replace("{A}", str(a)).replace("{B}", str(b))
     # Goods for the swaps and the terms (admin), then the residents' own acts.
     kit = f'kit=grant_items|{a}|"berries"|4;grant_items|{b}|"berries"|1;grant_items|{{me}}|"wood"|1'
-    # Offered again (it replaces the dismissed one), with the wood for it: the scene leaves nothing standing.
+    # Offered again, with the wood for it: the scene leaves nothing standing.
     again = f'grant_items|{{me}}|"wood"|1;{swap}'
     wood0 = inv(a, "wood")
     # Within reach (3 m: the rules refuse an accept from farther, "Out of reach").
@@ -250,13 +251,13 @@ def offers(run, c):
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]}
     tags = lambda k: set(((d[k] or {}).get("tags") or {}).keys())
     notes = lambda k: (d[k] or {}).get("notes") or []
-    # A card per standing proposal: its acts are the rules' skills on `offer` (Accept first), then Dismiss.
-    acc, dis = f"person:offer:{a}:0:0", f"person:dismiss:{a}:0"
-    c.check(s, "an offer opens their window with Accept and Dismiss", (f"Person{a}", "Left") in wins(d["01"]) and {acc, dis} <= tags("01"), str((wins(d["01"]), sorted(tags("01")))))
+    # A card per standing proposal: its acts are the rules' skills on `offer` (Accept, Decline).
+    acc, dec = f"person:offer:{a}:0:0", f"person:offer:{a}:0:1"
+    c.check(s, "an offer opens their window with Accept and Decline", (f"Person{a}", "Left") in wins(d["01"]) and {acc, dec} <= tags("01"), str((wins(d["01"]), sorted(tags("01")))))
     c.check(s, "the note says the offer in the rows' goods", any("offers you 2 berries for 1 wood" in n for n in notes("01")), str(notes("01")))
     L = log(out)
-    sent = len(re.findall(rf'"do":"accept","target":\{{"id":{a}\}}', L))
-    c.check(s, "Accept sends the rules' accept toward its maker (human_act)", sent >= 1, f"{sent} sent")
+    sent = len(re.findall(rf'"do":"accept","offer":\d+,"target":\{{"id":{a}\}}', L))
+    c.check(s, "Accept sends the rules' accept toward its maker, naming the offer (human_act)", sent >= 1, f"{sent} sent")
     c.check(s, "the card's button is the rules' skill on `offer`, by its label", re.search(rf'verbs: Accept → \{{"do":"accept"', L) is not None)
     c.check(s, "the card goes when the rules take the offer", acc not in tags("02"), str(sorted(tags("02"))))
     me = json.load(open(os.path.join(out, "scene.json"))).get("me")
@@ -265,15 +266,16 @@ def offers(run, c):
     c.check(s, "the authority swapped the goods (they got my wood, twice)", inv(a, "wood") - wood0 == 2, f"their wood {wood0} -> {inv(a, 'wood')}")
     c.check(s, "a second offer shows again", acc in tags("03"), str(sorted(tags("03"))))
     c.check(s, "a refused accept is noted in the rules' words and the card stays", acc in tags("04") and len(notes("04")) > len([n for n in notes("03") if n in notes("04")]), str(notes("04")))
-    c.check(s, "Dismiss hides the card here", acc not in tags("05"), str(sorted(tags("05"))))
-    # From Dismiss to the next offer, nothing is sent (it tells no one; the offer stands).
-    after = L.split("ui: dismissed Offer", 1)[-1].split("live script: sync:again")[0] if "ui: dismissed Offer" in L else ""
-    c.check(s, "and Dismiss sends nothing to the world", after != "" and "verbs: " not in after and "human_act" not in after, after[-300:])
+    c.check(s, "Decline sends the rules' decline, naming the offer", re.search(rf'verbs: Decline → \{{"do":"decline","offer":\d+,"target":\{{"id":{a}\}}', L) is not None)
+    c.check(s, "and the card closes (the rules drop the offer)", acc not in tags("05"), str(sorted(tags("05"))))
+    told = [r for r in sql(run, f"SELECT kind, text FROM experience WHERE observer = {a}") if "declined your offer" in r.get("text", "")]
+    c.check(s, "the maker is told (\"… declined your offer …\")", len(told) >= 1, str([r.get("text") for r in told][-2:]))
     c.check(s, "proposed terms are noted once, in the rules' words", len([n for n in notes("06") if "bring it by dusk" in n]) == 1, str(notes("06")))
-    c.check(s, "offered again, it shows again (a new offer, not the dismissed one)", acc in tags("07"), str(sorted(tags("07"))))
+    c.check(s, "offered again, it shows again", acc in tags("07"), str(sorted(tags("07"))))
     c.check(s, "and taken, it goes", acc not in tags("08"), str(sorted(tags("08"))))
     tb = f"person:offer:{b}:0:0"
     c.check(s, "the terms have their own card in the proposer's window", tb in tags("09") and (f"Person{b}", "Left") in wins(d["09"]), str((wins(d["09"]), sorted(t for t in tags("09") if t.startswith("person:")))))
+    c.check(s, "Accept on it names the record", re.search(rf'verbs: Accept → \{{"do":"accept","record":\d+,"target":\{{"id":{b}\}}', L) is not None)
     c.check(s, "Accept on it agrees to the terms (the record is agreed) and the card goes", tb not in tags("10") and any(r.get("status") == "agreed" for r in sql(run, f"SELECT status FROM record WHERE kind = 'agreement'")), str(sql(run, "SELECT status FROM record WHERE kind = 'agreement'")))
     c.check(s, "nothing is left standing toward me", me is not None and sql(run, f"SELECT id FROM trade_offer WHERE to = {me}") == [], str(sql(run, f"SELECT * FROM trade_offer WHERE to = {me}") if me else "?"))
     c.check(s, "and the client reads them as terms (Accept takes them)", re.search(rf"ui: proposal Terms\(\d+\) from #{b}: .*proposes terms: they give 1 berries, you give 1 stone", L) is not None)

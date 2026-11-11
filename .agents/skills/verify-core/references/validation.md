@@ -1,5 +1,16 @@
 # Core validation record
 
+## 2026-11-11 rules-offers-2: accept and decline by id; decline (Spark)
+
+Branch `rules-offers-2` (from `rules-offers` `de0faea`, origin/main merged at `37ce159` and `5f7ba5b`), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. A maintain pass scoped to dealings (features/dealings.md, README, SKILL.md): read against the changed source, not a source wave.
+
+- `scenes.py answers` (new, default seed): the first attempt (`core-offers2-a`) stopped at its fifth check, which expected "that proposal is gone" for a record id that does not exist while other terms stood; the rules answer "they have changed their terms: now …", which is the designed reply, so the scene now expects it and checks "gone" once nothing stands. `core-offers2-b`: 17 of 17. Final code (`core-offers2-final-answers`): 17 of 17.
+- `scenes.py dealings` on `core-offers2-b` (default seed): 13 of 14, the regard check failing as the map says it must off the island (no seeded records).
+- Migration: main's module (`b004e6e`) published fresh as `core-offers2-mig`, then this branch's updated in place (`launch --keep-data`): it kept ticking from tick 6,012 and its 233 `activity` rows read `offer = 0, record = 0` (`migrated.json`). `answers` on the migrated world passed 9 checks, then stopped on the driver's case-sensitive match of the decliner's outcome ("Declined …"), fixed since.
+- A shared `CARGO_TARGET_DIR` between two checkouts (a temporary main worktree and this one) linked the other checkout's `living-rules` as fresh; touching the sources rebuilt it. Keep one checkout per target dir.
+- Cargo: `cargo test -p living-rules` 210 pass with `answers_take_what_they_name`, `answers_carry_what_they_name`, `ui::tests::an_act_toward_an_offer_names_it`; `just living-check` ok.
+- After merging main `f047f04f` (`c63c372d`): `just living-check` ok, bindings regenerate identical, `answers` 17 of 17 (`core-offers2-m3-answers`).
+
 ## 2026-11-11 fix-lives-tavvik: carriers take and store at stores, not squares (Spark)
 
 Branch `fix-lives-tavvik` from origin/main `accf27c8`, container `slop-trials-stdb` (port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, no minds.
