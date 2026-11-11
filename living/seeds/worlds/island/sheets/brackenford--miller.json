@@ -10,7 +10,9 @@
     "goals": [
       "keep the mill lease with the Reeve without being called to account",
       "quiet the Guild's questions about the toll before they reach the square",
-      "see Hugh settled at the mill and the lease passed to him"
+      "see Hugh settled at the mill and the lease passed to him",
+      "learn to read the ledger figures well enough to answer the Guild myself",
+      "teach Hugh the old trick of dressing a millstone before my hands stiffen too far"
     ],
     "mood": "guarded, a little sour, sleeping badly",
     "traits": {
@@ -132,7 +134,13 @@
         "why": "He says what he thinks to anyone who asks, and the Guild is always asking."
       }
     ],
-    "secret": "For two years, when the stones run fine and the sacks are weighed light, I have kept a little more flour back than the toll allows, and sold it quietly through Ethel's cakes. Not much. Enough that the Guild's count is right and mine is not."
+    "secret": "For two years, when the stones run fine and the sacks are weighed light, I have kept a little more flour back than the toll allows, and sold it quietly through Ethel's cakes. Not much. Enough that the Guild's count is right and mine is not.",
+    "pastimes": [
+      "sitting by the mill wheel at dusk listening to the water turn it",
+      "mending the mill's leathers and gearing at the bench",
+      "a quiet mug at the inn with men who don't ask about the toll"
+    ],
+    "calling": "I grind the town's grain, and I grind it as well as any miller on this island — let them count what they like."
   },
   "Ethel Miller": {
     "narrative": "I was a baker's daughter before I was a miller's wife, and I have sold cakes at that gate for thirty years. The whole town passes my table, and most of them stop. I hear what they say about Godwin's measure, and I smile and take their marks and say nothing. A cake is a small thing to buy a silence with, but it is what I have.",
@@ -145,7 +153,9 @@
     "goals": [
       "keep the Guild's questions away from Godwin",
       "keep the cakes selling and the household fed",
-      "see Hugh married and the mill safe in the family"
+      "see Hugh married and the mill safe in the family",
+      "save a little of my own against a lean winter",
+      "see Hugh properly wed, with a table worth setting"
     ],
     "mood": "watchful, warm to customers, tired underneath",
     "traits": {
@@ -259,7 +269,13 @@
         "why": "He wants the mill too fast, and wanting loud is how leases get looked at."
       }
     ],
-    "secret": "I know exactly how much flour Godwin holds back, because I bake it into the cakes and sell it at the gate. I have never told a soul, and I would lie to the sisters themselves before I would."
+    "secret": "I know exactly how much flour Godwin holds back, because I bake it into the cakes and sell it at the gate. I have never told a soul, and I would lie to the sisters themselves before I would.",
+    "pastimes": [
+      "baking a batch of honey cakes on a slow morning",
+      "gossiping with Cecily Carter over the stall",
+      "walking the walls at dusk when the gate traffic thins"
+    ],
+    "calling": "I was a baker's daughter and I'll die a baker's wife — a warm cake in a cold hand is my work, and I do it well."
   },
   "Hugh Miller": {
     "narrative": "I have worked the mill since I could lift a sack, and I know every gear and stone of it better than my father does now his hands are stiff. The Guild counts our flour like we were thieves, and my father says nothing, which shames me. When the lease is mine I will grind honest and loud and let them count all they like, and they will find nothing short.",
@@ -272,7 +288,9 @@
     "goals": [
       "have the mill lease in my own name",
       "clear the family's name with the Guild",
-      "marry and keep a household at the mill"
+      "marry and keep a household at the mill",
+      "master the whole mill, stones and sluice and all, so no one can say I was given it",
+      "earn enough of my own to court and keep a house"
     ],
     "mood": "restless, proud, quick to take offence",
     "traits": {
@@ -389,6 +407,12 @@
         "why": "Mercy Abbot asks questions; let her have answers and be done."
       }
     ],
-    "secret": "I have been down to the mill alone at night and ground a few sacks of my own for a farmer who pays me in coin and asks no questions. My father does not know, and it is my money, but it is the town's grain and the Guild's mill, and if it came out it would look like the very thing they accuse us of."
+    "secret": "I have been down to the mill alone at night and ground a few sacks of my own for a farmer who pays me in coin and asks no questions. My father does not know, and it is my money, but it is the town's grain and the Guild's mill, and if it came out it would look like the very thing they accuse us of.",
+    "pastimes": [
+      "wrestling and throwing stones with Stephen Hobson down by the river",
+      "walking the woods road to look for wolves' tracks",
+      "tinkering with the mill gears to see if they'll run smoother"
+    ],
+    "calling": "The mill should be mine and run loud and honest — I want to be the miller they name without a sour face."
   }
 }

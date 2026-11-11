@@ -11,7 +11,9 @@
       "keep the clock and the Council's contracts exactly as written",
       "see Pell's indenture honoured, though he will not hand the boy to a beating",
       "settle the seawall clause without changing a word of it",
-      "keep his lodging and his ledgers in good order"
+      "keep his lodging and his ledgers in good order",
+      "teach himself to mend the clock's escapement so it keeps true through the coldest nights",
+      "make a fair copy of the Council's oldest ledgers before the ink fades"
     ],
     "mood": "even, watchful, a little weary of being pressed",
     "traits": {
@@ -180,6 +182,12 @@
         "why": "The town sets its day by my tower, and a slow clock is a lie told to everyone at once."
       }
     ],
-    "secret": "He has heard Pell is at Coldwell with the outlaws and has not told Josiah, because the boy was beaten in the foundry yard."
+    "secret": "He has heard Pell is at Coldwell with the outlaws and has not told Josiah, because the boy was beaten in the foundry yard.",
+    "pastimes": [
+      "winding and checking the clock tower at dawn and dusk, listening for the tick",
+      "reading old indentures and ledgers by lamplight for the pleasure of their wording",
+      "a quiet game of draughts with Ambrose Vell at the works' table"
+    ],
+    "calling": "I keep the town's clock and its contracts; the tick and the seal are the same promise kept."
   }
 }

@@ -291,10 +291,7 @@
       "if": {
         "all": [
           {
-            "hour": {
-              "above": 17.5,
-              "below": 22
-            }
+            "evening": true
           },
           {
             "raining": false

@@ -12,6 +12,8 @@ pub struct PersonaIn {
     pub goals: Vec<String>,
     pub traits: String,
     pub mood: String,
+    pub pastimes: Vec<String>,
+    pub calling: String,
 }
 
 impl __sdk::InModule for PersonaIn {

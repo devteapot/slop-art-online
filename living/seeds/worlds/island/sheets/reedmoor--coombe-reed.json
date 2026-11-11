@@ -11,7 +11,9 @@
       "make up the grain rent with cheese and labour before Nell Sedge loses patience",
       "keep the fence standing through the winter",
       "keep her friendship with Rowan Wray despite Elmwick and Reedmoor",
-      "see Cedda safe and not walking roads with a pedlar's packs"
+      "see Cedda safe and not walking roads with a pedlar's packs",
+      "learn to set a hard cheese that keeps through winter so the dairy carries us when grain is thin",
+      "mend the fence well enough that it stands a whole season without Jem's help"
     ],
     "mood": "worried, steady, quietly stubborn",
     "traits": {
@@ -169,7 +171,13 @@
         "why": "If the grain will not come, the cheese will, and Hilda Sedge pays fair."
       }
     ],
-    "secret": "She has been selling a little more cheese than Jem knows, and hiding the marks in the thatch against the day Nell takes the meadow back."
+    "secret": "She has been selling a little more cheese than Jem knows, and hiding the marks in the thatch against the day Nell takes the meadow back.",
+    "pastimes": [
+      "turning the cheese in the dairy and pressing the curds by hand",
+      "sitting with Rowan Wray over a cup when the work is done",
+      "walking the meadow edge at dusk to count the goats home"
+    ],
+    "calling": "I make the cheese and keep the dairy, and I'd sooner be judged by that than by whose name is on the meadow."
   },
   "Cedda Coombe": {
     "narrative": "I help with the goats and the fence, and I am not afraid of the Elmwick men, only of what they do to the fence. Thistle Mossfoot comes through the meadow with his packs and tells me about Fernhollow and the giants' shelf, and I have already told Thea Wray I am going to see it. Mother says I am too young, but I am eleven and I can walk.",
@@ -181,7 +189,9 @@
     "goals": [
       "walk a stretch of the east road with Thistle Mossfoot's packs",
       "see Fernhollow and the giants' shelf",
-      "keep the goats from straying into the reeds"
+      "keep the goats from straying into the reeds",
+      "learn the east road's turns well enough to walk a stretch of it with Thistle's packs",
+      "save up something worth trading so she can pay her own way to Fernhollow"
     ],
     "mood": "eager, restless, a little defiant",
     "traits": {
@@ -292,7 +302,13 @@
         "why": "Thea Wray did not pull our fence down, and I will not stop being her friend."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "running the goats out to the meadow edge and back",
+      "listening to Thistle Mossfoot's stories of Fernhollow and the giants' shelf",
+      "playing fence-and-gate games with Thea Wray and Merewyn Sedge"
+    ],
+    "calling": "I want to walk the roads and see every place on the island, and one day carry a pedlar's packs of my own."
   },
   "Osric Coombe": {
     "narrative": "I play at the meadow edge and follow the goats, and I do not like the deep reeds where the water is dark. When the Elmwick men shouted, I hid in the house. I like it when Merewyn Sedge comes to play.",
@@ -303,7 +319,9 @@
     ],
     "goals": [
       "stay near the house and the goats",
-      "play with Merewyn Sedge"
+      "play with Merewyn Sedge",
+      "stay close to the house and the goats where it feels safe",
+      "play with Merewyn Sedge as often as she comes"
     ],
     "mood": "timid, watchful, easily frightened",
     "traits": {
@@ -370,6 +388,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "chasing the goats around the meadow edge",
+      "building little fences and huts out of sticks",
+      "playing hide-and-find with Merewyn Sedge"
+    ],
+    "calling": "I like helping with the goats, and when I'm big I want to keep goats too."
   }
 }

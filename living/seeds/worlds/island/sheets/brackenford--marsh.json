@@ -11,7 +11,9 @@
     "goals": [
       "Secure the wool clip and its sale before Hilda's match is settled",
       "Keep the Marsh acres in good heart for the next year",
-      "See Hilda married well, and to a lad who will not waste her"
+      "See Hilda married well, and to a lad who will not waste her",
+      "Learn to read the wool buyers' tally sheets without needing Hilda to read them to me",
+      "Take a day to fish the north shore with Godric Rowan, as we did when we were lads"
     ],
     "mood": "steady, a little worried about the clip",
     "traits": {
@@ -130,7 +132,13 @@
         "why": "I said I would see the wool sold before the match, and I will."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the flock line at dawn to count the sheep",
+      "sitting by the hearth with a cup after the day's work",
+      "trading talk and prices with the other farmers at the gate"
+    ],
+    "calling": "Sheep and wool are my trade, and I mean to leave the Marsh acres better than I took them."
   },
   "Sigrid Marsh": {
     "narrative": "I cook for the gate guards' mess, and my barley broth is known from the south gate to the north. I keep the house and the accounts in my head, and I know what every guard takes in his bowl and what he owes for it. Hilda is a good girl and Wulf is a good lad, and I would see them happy, but Edwin is right that the wool must be sold first. I say little of it and set the bread to rise.",
@@ -144,7 +152,9 @@
     "goals": [
       "Keep the guards fed and the house in order",
       "See Hilda settled with Wulf without a quarrel between the two families",
-      "Put by a little against a hard winter"
+      "Put by a little against a hard winter",
+      "Get a proper iron pot for the mess, so the broth does not scorch",
+      "Visit her sister's household in Elmwick, which she has not seen in two years"
     ],
     "mood": "warm, watchful",
     "traits": {
@@ -258,7 +268,13 @@
         "why": "A match made in haste is a lifetime of regret; she is young yet."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "baking bread and setting the dough to rise",
+      "hearing the guards' gossip as she ladles out broth",
+      "walking to the chapel on feast days with the sisters"
+    ],
+    "calling": "I feed the gate guards and keep a good table, and there is no shame in that work."
   },
   "Hilda Marsh": {
     "narrative": "I work the sheep and the wool with my father, and I help my mother cook for the gate guards, and I love Wulf Rowan and would marry him tomorrow. But my father wants the wool clip sold first, and I will not cross him, not even for Wulf. So I keep my hands busy and my mouth shut and wait for the clip to come in.",
@@ -272,7 +288,9 @@
     "goals": [
       "Marry Wulf Rowan with both families' blessing",
       "See the wool clip sold and the money in the chest",
-      "Keep my mother's kitchen and my father's flock in good order"
+      "Keep my mother's kitchen and my father's flock in good order",
+      "Learn to weave a full bolt of cloth, not just spin the yarn",
+      "See the wool clip sold and walk to the market square to watch it weighed"
     ],
     "mood": "hopeful, restless",
     "traits": {
@@ -389,6 +407,12 @@
         "why": "The town talks, and I would not have it talk about me."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "carding and spinning wool by the fire in the evening",
+      "walking out to the meadow with Wulf when the flock is settled",
+      "singing the old songs at the inn on market night"
+    ],
+    "calling": "I work the sheep and the wool, and one day I would keep a loom of my own and weave what we grow."
   }
 }

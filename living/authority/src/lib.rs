@@ -21,7 +21,6 @@ mod seed;
 mod tables;
 mod tick;
 mod town;
-mod woken;
 mod common;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
@@ -484,8 +483,8 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
 
 /// Test support (trials, docs/TRIALS.md): a newcomer as `join` makes one — the same arrival
 /// point and the seed's newcomer kit, the species' instinct graph — but thought for by the
-/// admin's minds (`ai`), so one mind-backed character can live among residents that have no
-/// minds (`rules.minds = false`). It has no background; a caller that wants the mind to write
+/// admin's minds (`ai`), as every resident is; a trial's mind service thinks only for the
+/// characters `LIVING_ONLY` names. It has no background; a caller that wants the mind to write
 /// it an identity sets one (`set_background`), as the trial runner does.
 #[spacetimedb::reducer]
 pub fn spawn_newcomer(ctx: &ReducerContext, name: String) -> Result<(), String> {
@@ -592,5 +591,5 @@ pub(crate) fn player_controls(ctx: &ReducerContext, id: u32, now: u64) -> Result
 #[spacetimedb::reducer]
 pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), String> {
     let me = my_character(ctx)?;
-    perceive::speak(ctx, me.id, &text, to, true, common::now_ms(ctx))
+    perceive::speak(ctx, me.id, &text, to, common::now_ms(ctx))
 }

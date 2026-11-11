@@ -71,8 +71,8 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 }
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
-const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, raining, moving, believes, judged, chance, all, any, not";
+const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion", "bedtime", "evening"];
+const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, raining, moving, believes, judged, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -685,6 +685,8 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     json!({"health_of": c})
                 }
                 "night" => json!({"night": v.as_bool().unwrap_or(true)}),
+                "bedtime" => json!({"bedtime": v.as_bool().unwrap_or(true)}),
+                "evening" => json!({"evening": v.as_bool().unwrap_or(true)}),
                 "raining" => json!({"raining": v.as_bool().unwrap_or(true)}),
                 "moving" | "walking" => json!({"moving": v.as_bool().unwrap_or(true)}),
                 "standing" | "still" => json!({"moving": !v.as_bool().unwrap_or(true)}),

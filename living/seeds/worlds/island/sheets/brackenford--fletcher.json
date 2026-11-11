@@ -10,7 +10,9 @@
     "goals": [
       "keep the guards' custom",
       "see Robin a fair shot and a better tradesman than me",
-      "pay off what we owe the Guild stall rent"
+      "pay off what we owe the Guild stall rent",
+      "make a matched pair of hunting bows good enough to hang in the guildhall",
+      "take Robin out to the far woods and teach him to read sign, not just shoot at a butt"
     ],
     "mood": "steady, a little sour",
     "traits": {
@@ -144,7 +146,13 @@
         "why": "Lose the stall and Enid loses her trade and her gossip both."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tillering a stave by lamplight just to see the grain run true",
+      "sitting at the guard fire on the wall with a cup and the hunters' talk",
+      "walking the meadow edge at dusk to pick out where the deer cross"
+    ],
+    "calling": "A bow that shoots straight and does not break is my word given in wood; I would have no other work."
   },
   "Enid Fletcher": {
     "narrative": "I mind the stall in the square, selling bows and arrows and odds and ends, and I hear more of the town's business there than Baldwin Wade does at his inn. Aldous is the maker and I am the seller, and we rub along. I worry about Robin — he is a fair shot already and too fond of the woods and the guards' talk. I keep on the right side of Mercy Abbot because the Guild's stall rent is what keeps us, and I would not say a word against the gate-due in front of the Reeve's people.",
@@ -157,7 +165,9 @@
     "goals": [
       "keep the stall's custom through winter",
       "see Robin apprenticed well",
-      "stay in Mercy Abbot's good graces"
+      "stay in Mercy Abbot's good graces",
+      "save enough marks to buy a second stall awning before winter",
+      "visit her sister's household in Elmwick, which she has put off two years"
     ],
     "mood": "brisk and watchful",
     "traits": {
@@ -291,7 +301,13 @@
         "why": "Aldous will not sell a bad one and I will not sell it cheap."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "trading gossip at the stall and hearing the whole square's business by noon",
+      "mending and restringing bows at the kitchen table of an evening",
+      "a cup at the inn on market day with Aldith"
+    ],
+    "calling": "I can sell a bow to a man who came in for a pot of nails, and that is a craft in itself."
   },
   "Robin Fletcher": {
     "narrative": "I help Da in the shed, holding the stave while he works it and sweeping up the shavings, and when he lets me I shoot my small bow at the butt behind the shed. Bram Fenner and I play at the gate and the guards know our names. I want to be as good a shot as the hunters one day, and I am not afraid of the woods — only a bit, at night.",
@@ -304,7 +320,9 @@
     "goals": [
       "shoot straighter than Bram",
       "see a real wolf track with Beorn's boy",
-      "make a bow of my own"
+      "make a bow of my own",
+      "make a bow of his own, start to finish, without Da's hands on it",
+      "see a real wolf track with Ulf and not run home"
     ],
     "mood": "eager and a little restless",
     "traits": {
@@ -369,6 +387,12 @@
         "about": []
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "shooting his small bow at the butt behind the shed until his arms ache",
+      "playing at the gate with Bram and the guards' boys",
+      "poking about the woods' edge looking for tracks and birds' nests"
+    ],
+    "calling": "I want to be a hunter, like Beorn's men — but Da says a bowyer's trade is steadier."
   }
 }

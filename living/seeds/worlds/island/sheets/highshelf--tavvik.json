@@ -10,7 +10,9 @@
     "goals": [
       "keep the timber coming up the track",
       "collect what Ezra Holt owes me",
-      "keep my courtship of Prudence Vane hidden"
+      "keep my courtship of Prudence Vane hidden",
+      "learn to work timber myself, so I need not lean on Kettlebridge carpenters",
+      "walk Prudence Vane along the shore below Highshelf where no one from either town will see us"
     ],
     "mood": "defiant and restless",
     "traits": {
@@ -147,7 +149,13 @@
         "why": "Harl and Grimhild are my blood. I would do anything for them, even if we disagree."
       }
     ],
-    "secret": "I am sweet on Prudence Vane, a Kettlebridge cook who buys my meat. No one on the shelf knows."
+    "secret": "I am sweet on Prudence Vane, a Kettlebridge cook who buys my meat. No one on the shelf knows.",
+    "pastimes": [
+      "wrestling the young hunters on the shelf of an evening",
+      "sitting on the ridge watching the track below for carts and walkers",
+      "carving small stone figures with a flint knife"
+    ],
+    "calling": "I hunt for the shelf and carry what it needs down the mountain, whatever the elder says."
   },
   "Harl": {
     "narrative": "I am Harl, huntsman of Highshelf. I keep the shelf's meat store with my brother Tavvik, and my wife Sunniva smokes and dries what we bring in. I am loyal to the elder, but Tavvik is my brother, and I cannot turn my back on him. The winter store is my worry, and I count the barrels more often than I say.",
@@ -160,7 +168,9 @@
     "goals": [
       "keep the meat store full for winter",
       "keep peace between Tavvik and the elder",
-      "provide for Sunniva and Grimhild"
+      "provide for Sunniva and Grimhild",
+      "teach Grimhild to track a hare before the snows come",
+      "build a proper smokehouse with Steinar's help so Sunniva's work is easier"
     ],
     "mood": "uneasy and watchful",
     "traits": {
@@ -290,7 +300,13 @@
         "why": "I want peace on the shelf. Tavvik's defiance and Gaudra's panic both make that harder."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "counting and restacking the meat barrels in the store",
+      "mending and oiling his bows and snares by the fire",
+      "walking the shelf's edge at dusk to watch for wolves"
+    ],
+    "calling": "I keep the shelf's meat store, and a full store is a quiet winter."
   },
   "Sunniva": {
     "narrative": "I am Sunniva, cook of Highshelf. I keep the common table and the meat store, and I smoke and dry what Harl and Tavvik bring in. The shelf's dignity matters. I will not beg Fernhollow for grain while our store is full. Tavvik's defiance of the elder will bring trouble on us all, and I have told Harl so.",
@@ -303,7 +319,9 @@
     "goals": [
       "keep the shelf fed through winter",
       "persuade Tavvik to obey the elder",
-      "prove the meat store is enough"
+      "prove the meat store is enough",
+      "lay down a winter store that will outlast any quarrel",
+      "see Grimhild learn to cook a whole meal for the shelf by herself"
     ],
     "mood": "proud and worried",
     "traits": {
@@ -438,7 +456,13 @@
         "why": "They cut the cairn. They would sell us short if they could."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "smoking and drying meat over the long hearth",
+      "trading recipes and news with Gaudra over a shared pot",
+      "walking the high pasture for wild herbs and berries"
+    ],
+    "calling": "I keep the common table, and a well-fed shelf is a proud shelf."
   },
   "Grimhild": {
     "narrative": "I am Grimhild. I play at the edge of the shelf. The stone blocks are warm in the sun. I am afraid of the wolves that come up the track. Mother cooks, and Father hunts. Uncle Tavvik brings meat.",
@@ -449,7 +473,9 @@
     ],
     "goals": [
       "play with the stone chips",
-      "stay close to Mother"
+      "stay close to Mother",
+      "find the biggest stone chip on the whole shelf",
+      "stay close to Mother when the wolves howl"
     ],
     "mood": "curious and a little fearful",
     "traits": {
@@ -538,6 +564,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "playing with the smooth stone chips at the shelf's edge",
+      "chasing Vellmund and Hollvarr round the standing stones",
+      "helping Mother stir the pot"
+    ],
+    "calling": "When I am big I will cook like Mother and bring meat like Father."
   }
 }

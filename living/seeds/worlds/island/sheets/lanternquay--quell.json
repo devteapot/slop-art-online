@@ -10,7 +10,9 @@
     "goals": [
       "get stone for a seawall without paying Kettlebridge's price",
       "hold the quay together through the winter",
-      "keep my brother's name out of other people's mouths"
+      "keep my brother's name out of other people's mouths",
+      "learn to read the harbour tally-books properly, so no one can tell me what the strongbox says",
+      "share a boat's catch with Ilse Ostrander one evening without either of us mentioning the lanterns"
     ],
     "mood": "grieving, stubborn, worn thin",
     "traits": {
@@ -181,7 +183,13 @@
         "why": "I carry that duty alone, and some nights I cannot face it, and that is between me and the drowned."
       }
     ],
-    "secret": "She has not paid the stone tally and cannot; the strongbox holds less than the quay believes, and she has begun to wonder whether she will ever light the lanterns without her brother's face in them."
+    "secret": "She has not paid the stone tally and cannot; the strongbox holds less than the quay believes, and she has begun to wonder whether she will ever light the lanterns without her brother's face in them.",
+    "pastimes": [
+      "mending nets at the kitchen table with a lamp turned low",
+      "walking the upper quay at first light to count which boats came home",
+      "sitting with Dele Oyelaran over a pot of fish stew and old arguments"
+    ],
+    "calling": "I speak for the quay, and I hold it together with my own hands and my own marks."
   },
   "Wick Quell": {
     "narrative": "I fish the harbour mouth from my uncle's boat, the one they pulled him out of, and I have patched it three times with timber off the lower quay. Cormorant says the ground is his; my uncle fished it before Cormorant had a keel. My mother sits with the strongbox and will not pay Kettlebridge, and the wall does not get built, and I have counted what is in the box and it is not enough.",
@@ -194,7 +202,9 @@
     "goals": [
       "hold the harbour mouth against Ostrander Cormorant",
       "see the seawall begun before another winter",
-      "keep the boat afloat and the nets whole"
+      "keep the boat afloat and the nets whole",
+      "learn to sail by the stars well enough to fish the outer banks",
+      "save enough marks of his own, out of his mother's strongbox, to buy proper timber for the boat"
     ],
     "mood": "restless, aggrieved, quietly worried",
     "traits": {
@@ -329,7 +339,13 @@
         "why": "My mother misses them and the quay talks, and I will not have it said to me."
       }
     ],
-    "secret": "He has been counting the marks in his mother's strongbox, and he knows the quay cannot pay Kettlebridge and cannot build the wall, and he has not told her he knows."
+    "secret": "He has been counting the marks in his mother's strongbox, and he knows the quay cannot pay Kettlebridge and cannot build the wall, and he has not told her he knows.",
+    "pastimes": [
+      "fishing the harbour mouth at dawn from his uncle's patched boat",
+      "carving net-floats from driftwood in the evenings",
+      "dicing at the street stalls with Tamsin Vane after a good haul"
+    ],
+    "calling": "I fish my uncle's ground, and one day I'll fish it from a boat that doesn't leak."
   },
   "Dory Quell": {
     "narrative": "I live in the Warden's house with my aunt Mara, and I know every gull on the quay by name. My father drowned when the water came, and I do not remember his face well, only his hands. Wick lets me help with the nets, and I stay away from the tide lanterns because they are for the drowned and I do not want to be called.",
@@ -341,7 +357,9 @@
     "goals": [
       "name every gull on the quay",
       "help Wick with the boat",
-      "not go near the lanterns"
+      "not go near the lanterns",
+      "learn every gull's name and where each one nests",
+      "be allowed out on the boat for a whole morning, not just the steps"
     ],
     "mood": "watchful, quiet, quick to smile",
     "traits": {
@@ -424,6 +442,12 @@
         "why": "Wick lets me and it means I am not too small."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "watching the gulls on the quay and naming them aloud",
+      "helping Wick haul and mend the nets",
+      "playing tag along the harbour steps with Dory Gull"
+    ],
+    "calling": "When I'm big I want to fish with Wick, on the boat, on the water."
   }
 }

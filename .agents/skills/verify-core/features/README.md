@@ -18,7 +18,6 @@
 | Flight from a creature: steering runs from the threat until `flee_clear` farther | `scenes.py flee` on a `stage1-acts` run | [steering.md](steering.md#flight) |
 | Town life: daily rhythm, places, weather, gestures, commotion, `act_card`/`doing` | `town.py` on an island run, and Cargo | [town.md](town.md) |
 | Hospitality (`host`): the skill's rules, the engine's house lookup, the `guest` row and its end in housekeeping, the theft exemption | verify-player's `host.py` on an island run | [town.md](town.md#hospitality) |
-| Town life layer 2 (rules side): the `wakes` and `woken_ring` laws, instinct-only residents' perception rings, waking 20 residents for a tick measurement | `wake_many.py` on an island run; the player-side scene is verify-player's `wake.py` | [town.md](town.md#layer-2-woken-residents-and-their-rings) |
 | Seeded lives: authored residents placed, hamlets peopled, sheet relations as rows, carriers' known ways walked and goods moved between stores, outlaws at their spot on the road (threat, yield, seize), gestures by seeded relation | `lives.py` on an island run | [lives.md](lives.md) |
 | Sight for minds and graphs: a graph's `sees` and a witnessed fight follow the sight line (rock, walls, shut gates hide); names in percepts follow what the observer knows. How far each creature sees and hears is the `senses(a)` law (day, night, torch; installed overlays change it) | `scenes.py sight`, `scenes.py senses` | [sight.md](sight.md) |
 

@@ -11,7 +11,9 @@
       "pay down the grain debt without starving Thornby",
       "see Edda Wray answer for my brother's boat",
       "keep Perrin and Inga's courtship from becoming village business",
-      "get the marks Aldwyn Bexley owes me"
+      "get the marks Aldwyn Bexley owes me",
+      "learn to read the tide-race past the cape well enough to fish it safely",
+      "see Perrin settled with a boat and a hearth of his own"
     ],
     "mood": "weary, proud, quietly angry",
     "traits": {
@@ -206,7 +208,13 @@
         "why": "The talk is talk; he is a grown man and the boat is his to keep."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending the boat's oars and caulking on the shingle at low tide",
+      "sitting at the inn of an evening with a mug, listening to the old men's tales",
+      "walking the north shore at dusk to read the weather"
+    ],
+    "calling": "I am a fisherman and headman, and the sea's honesty is the only ledger I trust."
   },
   "Rona Dunn": {
     "narrative": "I keep the cook-fire and the smoke shed, and the village eats because I do. Osric carries the debt and I carry the worry of it. Inga works beside me and I watch her, because the women at the smoke shed have begun to talk about her and Perrin. I have said nothing to either of them, and I will not until I know my own mind.",
@@ -220,7 +228,9 @@
       "smoke enough fish to see Thornby through the winter",
       "keep the common store from running short",
       "decide what to say about Perrin and Inga",
-      "trade smoked fish with Simon Hollis for what we lack"
+      "trade smoked fish with Simon Hollis for what we lack",
+      "learn a new cure for the smoked fish that keeps through a wet winter",
+      "see Hob grow into a steady hand"
     ],
     "mood": "watchful, warm to her own, uneasy underneath",
     "traits": {
@@ -351,7 +361,13 @@
         "why": "Osric is sure and I am not; a light is a hard thing to prove wrong."
       }
     ],
-    "secret": "I have heard the women say Inga is too close kin for Perrin, and part of me wonders if they are right."
+    "secret": "I have heard the women say Inga is too close kin for Perrin, and part of me wonders if they are right.",
+    "pastimes": [
+      "tending the smoke shed and the cook-fire",
+      "walking the shingle for mussels and samphire at low water",
+      "visiting Mavis Tarn for herbs and a quiet word"
+    ],
+    "calling": "I keep the fire and the smoke shed, and the village eats because I do."
   },
   "Perrin Dunn": {
     "narrative": "I fish the north shore with my father and keep the boat, and I mean to marry Inga and take her out on the water with me. I do not see what the talk is about; she is the best hand with a net in Thornby. I owe Simon Hollis for a net and I will pay him when the catch is good. The debt to Brackenford is my father's worry, but it is mine too.",
@@ -365,7 +381,9 @@
       "marry Inga and keep the boat with her",
       "pay Simon Hollis for the net",
       "bring in a catch good enough to help the debt",
-      "keep clear of the talk about him and Inga"
+      "keep clear of the talk about him and Inga",
+      "own a boat of his own, not only his father's",
+      "learn the deep-water marks off the cape"
     ],
     "mood": "eager, happy, a little puzzled by the village",
     "traits": {
@@ -488,7 +506,13 @@
         "why": "The village will say what it says; I will not let it turn me from Inga."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "fishing the north shore from the boat",
+      "mending and tarring nets on the shingle",
+      "dicing at the inn with Sedge Gannet and the other young fishers"
+    ],
+    "calling": "I fish the north shore and keep the boat, and I mean to make my living from the water."
   },
   "Inga Dunn": {
     "narrative": "I fish the shallows from my small boat and mend the village nets, and I work beside Rona at the cook-fire. Perrin wants to marry me and I want him, but the women at the smoke shed have begun to talk about us being cousins, and I have not told him what they say. I think Edda Wray should be watched; a light that fails once can fail again. I keep my own counsel and my own boat.",
@@ -502,7 +526,9 @@
       "decide what to do about the talk and Perrin",
       "keep her small boat and her share of the catch",
       "mend the village nets well enough to be thanked for it",
-      "see that someone watches Edda's light"
+      "see that someone watches Edda's light",
+      "save enough marks to buy better net-twine and a second oar",
+      "learn the herb-wife's salves for rope-burn and cold hands"
     ],
     "mood": "warm, watchful, a little stung by the talk",
     "traits": {
@@ -632,7 +658,13 @@
         "why": "The village nets are the village's catch, and my hands are good at it."
       }
     ],
-    "secret": "I have heard the women say Perrin and I are too close kin, and I have not told him."
+    "secret": "I have heard the women say Perrin and I are too close kin, and I have not told him.",
+    "pastimes": [
+      "fishing the shallows from her small boat",
+      "mending the village nets",
+      "sitting with Mavis Tarn while she works her herbs"
+    ],
+    "calling": "I fish the shallows and mend nets, and I want a boat and a catch that are my own."
   },
   "Hob Dunn": {
     "narrative": "I live in the Dunn house and mend nets on the shingle. Perrin lets me come out in the boat when the sea is kind. I play with Wren Stave when the Stave folk come down the shore. I do not like the dark stair at the light and I do not like the wolves.",
@@ -644,7 +676,9 @@
     "goals": [
       "mend a net clean through without a knot slipping",
       "go out in the boat with Perrin again",
-      "play with Wren Stave"
+      "play with Wren Stave",
+      "mend a whole net clean through without a knot slipping",
+      "learn to row the small boat alone"
     ],
     "mood": "quiet, content, a little wary of the dark",
     "traits": {
@@ -718,6 +752,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending nets on the shingle",
+      "playing on the shingle with Wren Stave",
+      "watching the boats come in and counting the catch"
+    ],
+    "calling": "I want to be a fisherman like Perrin and go out in the boat."
   }
 }

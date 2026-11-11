@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""What a newcomer asked of woken residents and what came of it (docs/TRIALS.md, the social
+"""What a newcomer asked of residents and what came of it (docs/TRIALS.md, the social
 preset and "Fast iterations" 8).
 
   social_report.py BATCH [BATCH...]
 
 Per run, from the journals, chronicle and experiences: the newcomer's lines that name food, a
 lesson or a bed and are addressed to someone (asks), how many no one heard (its "No answer
-from" percept), the give/teach/host acts woken residents decided toward it (in talk turns or
+from" percept), the give/teach/host acts residents decided toward it (in talk turns or
 deliberations) and how each went (finished, or the rule's refusal), what reached it (food
 given, techniques learned from a person, lodging), and whether talk prompts carried the
 pack/know-how lines (iteration 8's mechanism). A mean (range) per variant. Read-only; the ask
@@ -106,7 +106,7 @@ def run(d):
     learned = [c["text"] for c in chron if c.get("kind") == "learn" and c.get("a") == S and "worked out" not in c["text"]]
     return {
         "run": d.name, "variant": s["variant"], "min": round(s["minutes_run"]), "tokens": s["tokens"],
-        "woken": s.get("residents_woken"), "cost": round(sum(trials.cost(m, b["prompt"], b["completion"], b["cached"]) or 0 for m, b in (s.get("by_model") or {}).items()), 2),
+        "residents_thinking": s.get("residents_thinking"), "cost": round(sum(trials.cost(m, b["prompt"], b["completion"], b["cached"]) or 0 for m, b in (s.get("by_model") or {}).items()), 2),
         "asks": asks, "heard": heard,
         "decided_give": decided["give"], "decided_teach": decided["teach"], "decided_host": decided["host"],
         "refused": sum(refused.values()), "got_food": done["food"], "got_lodging": done["lodging"], "got_lesson": done["lesson"],

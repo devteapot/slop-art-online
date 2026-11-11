@@ -202,15 +202,17 @@ pub fn flush_counts(k: &mut Clock) -> bool {
 }
 
 /// Who controls a seeded or newborn character that has no player: the admin's minds, which
-/// deliberate and receive experiences (the default), or, with the `minds` law false (a seed's
-/// `rules`), the database itself, so the character lives on its behaviour graph alone and no
-/// experiences or deliberation requests are written for it.
+/// deliberate and receive experiences. Every person has a mind; animals' are cheap (the mind
+/// service's species routes) and asked only near people.
 pub fn mind_controller(ctx: &ReducerContext) -> (spacetimedb::Identity, bool) {
-    if laws(ctx).minds {
-        (world(ctx).admin, true)
-    } else {
-        (ctx.database_identity(), false)
-    }
+    (world(ctx).admin, true)
+}
+
+/// Lives on its behaviour graph alone, with no mind to read its experiences: only the
+/// benchmark crowds the admin spawns for load (`spawn_battle`, `spawn_skirmish`,
+/// `spawn_crowd` with `minded` false). Seeded and newborn characters always have a mind.
+pub fn instinct_only(ctx: &ReducerContext, c: &Character) -> bool {
+    !c.ai && c.controller == ctx.database_identity()
 }
 
 thread_local! {
@@ -465,6 +467,36 @@ pub fn hour(w: &World, now: u64) -> f32 {
 
 pub fn night(w: &World, now: u64) -> bool {
     living_rules::is_night(hour(w, now))
+}
+
+/// Draws in [0, 1) that depend only on a character and a purpose (splitmix64), so drawing a
+/// person's own differences (rhythm, constitution) leaves the world's random stream alone.
+pub fn hashed_draws(id: u32, salt: u64) -> impl FnMut() -> f32 {
+    let mut x = (id as u64) ^ salt.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    move || {
+        x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = x;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        (z >> 40) as f32 / (1u64 << 24) as f32
+    }
+}
+
+/// Where a body is in its own day at `hour`: (its bedtime, its evening). A person's rhythm
+/// row says when it rises and goes to bed and how long its evening is; without one, bedtime
+/// is the world's night and the evening 18:00 to 22:00.
+pub fn day_phase(ctx: &ReducerContext, id: u32, hour: f32) -> (bool, bool) {
+    match ctx.db.rhythm().id().find(id) {
+        Some(r) => {
+            // Hours after noon run 12..36, so a bedtime past midnight compares in one range.
+            let h = if hour < 12.0 { hour + 24.0 } else { hour };
+            let bedtime = h >= r.bed_h && h < r.rise_h + 24.0;
+            let evening = h >= r.bed_h - r.evening_h && h < r.bed_h;
+            (bedtime, evening)
+        }
+        None => (living_rules::is_night(hour), (18.0..22.0).contains(&hour)),
+    }
 }
 
 /// A species' life table (lifespan and stages).

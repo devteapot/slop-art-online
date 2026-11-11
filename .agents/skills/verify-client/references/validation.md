@@ -1,5 +1,11 @@
 # Client protocol validation
 
+## 2026-11-11 every person a mind (lives-2, dev-box)
+
+On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
+
+- `run.py` (`client-l2c4-031533`, scoped build): 30 of 30. Private table visibility: 63 tables, `rhythm` refused to anonymous clients and to the player; `woken`, `prior` and `prior_head` are gone. The reducer matrix first failed 10 `mind_update` calls (`client-l2c3-030713`): the driver's `PersonaIn` lacked `pastimes` and `calling`; fixed in `drive.py`.
+
 ## 2026-11-11 laws-2 (dev-box)
 
 Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. `run.py` 30 PASS (`client-j1`). `world_law` is in `PRIVATE`. The first run (`client-l6`) stopped at the inventory check before the list had the table; `client-l6c` failed one check, "presence counts each open connection" (1 → 2 → 0 instead of 1): presence code is unchanged here, and the rerun passed.

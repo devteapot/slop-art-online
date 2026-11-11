@@ -10,7 +10,9 @@
     "goals": [
       "keep the Bell and Bush the one roof where the town can argue without fists",
       "see the licence renewed without bending further to Aldric",
-      "get Gareth to stand a sober watch and stop drinking the stock"
+      "get Gareth to stand a sober watch and stop drinking the stock",
+      "learn to brew a small ale good enough to sell on its own name",
+      "see Sister Elspeth more often than chapel business brings her"
     ],
     "mood": "watchful and dry",
     "traits": {
@@ -142,7 +144,13 @@
         "why": "I owe Aldric a favour and will pay it when he asks, not before."
       }
     ],
-    "secret": "I have quietly put aside a purse for the day the licence is refused, though I would never say so to Aldric."
+    "secret": "I have quietly put aside a purse for the day the licence is refused, though I would never say so to Aldric.",
+    "pastimes": [
+      "sitting at the end of the common room with a cup he nurses all evening, listening to the room",
+      "walking the walls at dusk before the gates shut",
+      "playing at dice for pins with old Cuth on quiet nights"
+    ],
+    "calling": "I keep the Bell and Bush: a roof where the town can argue and leave as friends."
   },
   "Petra Wade": {
     "narrative": "I have run the Bell and Bush kitchen since before the walls were mended, and I know every hand that has stirred my pots. Agnes is the best of them, and the girls know better than to burn a pie. My pies are what the town comes for, and I keep the store counted and the flour dry. Baldwin hears the arguments; I hear the kitchen, and the kitchen hears more.",
@@ -155,7 +163,9 @@
     "goals": [
       "keep the inn's store ahead of a hard winter",
       "teach the serving girls to bake as well as I do",
-      "see Agnes stay on, whatever her sister does"
+      "see Agnes stay on, whatever her sister does",
+      "make the Bell and Bush's pies known as far as Kettlebridge",
+      "keep a proper store-room of her own, counted and locked, that no winter can empty"
     ],
     "mood": "brisk and warm",
     "traits": {
@@ -292,7 +302,13 @@
         "why": "It is Baldwin's licence and the Reeve's due; I keep to the kitchen."
       }
     ],
-    "secret": "I have been putting by a jar of marks under the flour bin against the day the inn cannot pay its way."
+    "secret": "I have been putting by a jar of marks under the flour bin against the day the inn cannot pay its way.",
+    "pastimes": [
+      "baking a pie nobody ordered, just to try a new filling",
+      "trading recipes and gossip with Sigrid Marsh at the market",
+      "sitting in the kitchen door of an evening with the girls, telling them how the inn looked in her mother-in-law's day"
+    ],
+    "calling": "I feed the town from my kitchen, and I would have every girl who passes through it able to bake as well as I do."
   },
   "Gareth Wade": {
     "narrative": "I stand the gate with a spear and count carters' loads for Tobin Marrow, and every evening I come back to my father's common room and drink what I did not earn. I would rather keep the inn than the gate, but he has never offered it and I have never asked. There is a carter in Kettlebridge I owe marks I do not have, and he will come up the stone road again. A man can only carry so much and then he drinks.",
@@ -305,7 +321,9 @@
     "goals": [
       "find the marks to settle with the Kettlebridge carter before he comes again",
       "get his father to let him keep the inn",
-      "drink less than he did last week"
+      "drink less than he did last week",
+      "earn enough at the gate or the tables to pay off the Kettlebridge carter quietly",
+      "get his father to teach him the licence and the brewing, not just the pouring"
     ],
     "mood": "sour and restless",
     "traits": {
@@ -420,6 +438,12 @@
         "why": "When the common room is loud and the watch is done, the cup is the only thing that asks nothing."
       }
     ],
-    "secret": "I owe a Kettlebridge carter marks I cannot pay, and I have been taking a little from the due at the gate to make it up."
+    "secret": "I owe a Kettlebridge carter marks I cannot pay, and I have been taking a little from the due at the gate to make it up.",
+    "pastimes": [
+      "dice at the corner table with Walter Stanhope",
+      "walking the fish road toward Thornby when he is off the gate, telling himself it is for the air",
+      "watching the carters come in and reckoning their loads in his head"
+    ],
+    "calling": "I would keep my father's inn, if he would ever say the word; until then I keep the gate."
   }
 }

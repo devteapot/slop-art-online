@@ -127,6 +127,8 @@ No whole-world scan was added to a routine action or the tick.
 
 ## What residents do, hour by hour
 
+> Since 2026-11-11 the hours are each resident's own: a rhythm per person (when they rise and go to bed, how long their evening is), read by graphs as `bedtime` and `evening`, and evening habits that include home and working late ([seeded lives, "No lockstep"](SEEDED_LIVES.md#no-lockstep)). The world-clock hours below are the layer as first built.
+
 A census of an undisturbed island world (`core-town-census`: no scenes, no player, the world's own weather), once per world hour for a day: 189 adults and 52 children, 34 animals. "Home" is within 3 tiles of the household's door, "work" within 6 of the resident's `work` place, "evening place" within 8 of its `evening` place. Rows: `.local/living/verify/core-town-census/town-census.json` on the dev-box.
 
 | Hour | Home | Work | Evening place | Elsewhere | Most common activities (all residents) |
@@ -243,6 +245,8 @@ The items below were the list when layer 1 shipped; [layer 2](#layer-2-residents
 - **Remembering who greeted whom** is not kept: `hailed` is a moment, not a memory. A mind would integrate the experience.
 
 # Layer 2: residents who answer
+
+> **Removed 2026-11-11** (branch `lives-2`). The owner decided that every person is a full LLM mind from the start: instinct-only residents who wake into a mind when engaged were a token-saving idea for test fixtures and could be used by accident. The `woken`, `prior` and `prior_head` tables, the `wakes`, `woken_ring` and `woken_stage` laws, the mind service's `woken.rs`, the models file's `woken` route, `LIVING_ONLY=…,woken` and the seed rule `rules.minds = false` are gone. A seed that still sets `minds` in its `rules` is refused when the world is created (`init`, `create_floor`): no law of that name exists. What survives: the world-facts identity for a resident without a sheet and the facts given before a sheet (`living/mind/src/mind/facts.rs`, for every resident at the service's start), and the given places a mind's projection keeps (`place.given`, for every resident). Animals keep their cheap minds; trials that run one mind in a scripted world use `LIVING_ONLY` (docs/SEEDED_LIVES.md, "Every person a mind"). The rest of this section is the history of the layer as built.
 
 Started 2026-11-09. **Status:** phase 1 (the authority side) is on main as `6f0d9d7`. Phase 2 (the mind service side, the stage cap, the `host` act, the free tier end to end and a small paid run) is on branch `townlife-2`, built on main after the `harness-1` merge (`015707b`); see [phase 2](#phase-2-what-was-built).
 

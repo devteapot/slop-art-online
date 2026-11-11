@@ -11,7 +11,9 @@
       "bring in a catch big enough to clear the rope debt",
       "keep Bramwell Tallow from saying it aloud at the stalls again",
       "see the lower quay rebuilt so the small boats have shelter",
-      "keep Dory away from the dark water"
+      "keep Dory away from the dark water",
+      "learn the harbour's western shallows well enough to set a new line of pots",
+      "take Dory out on the calm water some fine morning and teach her the oars"
     ],
     "mood": "shamed and blustering, with a knot in the gut when the wind rises",
     "traits": {
@@ -186,7 +188,13 @@
         "why": "She's afraid of it, and I'd rather she stayed afraid than careless."
       }
     ],
-    "secret": "I've been out past the harbour mouth on the ebb more than once when the catch was short, in water I shouldn't fish and near the Cormorants' grounds, and I'd not say so to Ostrander Cormorant."
+    "secret": "I've been out past the harbour mouth on the ebb more than once when the catch was short, in water I shouldn't fish and near the Cormorants' grounds, and I'd not say so to Ostrander Cormorant.",
+    "pastimes": [
+      "mending nets and tarring rope on the quay at first light",
+      "telling tall tales of old catches to the night crews over a mug",
+      "walking the seawall at dusk to read the weather"
+    ],
+    "calling": "I'm a fisherman, and a good one; the sea's the only work I've ever wanted."
   },
   "Nia Gull": {
     "narrative": "I cook at a stall on the quay and feed the night crews, and I know to a mark what comes in and what goes out. Wick owes Bramwell Tallow for rope and tar, and the marks are short until a good catch; I'd have Bramwell wait, and I fear what Wick's temper will say before I can. I work beside Ilse Ostrander, and I think the Warden should have put the lower quay back before anything else.",
@@ -200,7 +208,9 @@
       "stretch the marks until Wick's next good catch",
       "keep Wick and Bramwell from a quarrel in the open",
       "see the lower quay rebuilt",
-      "keep Dory fed and out from under the stalls"
+      "keep Dory fed and out from under the stalls",
+      "save enough marks for a proper stall with a roof and a second pot",
+      "see Dory Quell and Dory play together more often, and the two families share a meal"
     ],
     "mood": "steady but tired, counting marks in her head",
     "traits": {
@@ -374,7 +384,13 @@
         "why": "We share what we have with those who share the boats; the rest can wait."
       }
     ],
-    "secret": "I've sold a bowl or two on credit to crews who never paid, and I've not told Wick, because he'd shout it at the stalls and make it worse."
+    "secret": "I've sold a bowl or two on credit to crews who never paid, and I've not told Wick, because he'd shout it at the stalls and make it worse.",
+    "pastimes": [
+      "singing old harbour songs while the pot simmers",
+      "trading gossip and recipes with Ilse and Nia Brine at the stalls",
+      "walking the quay at dusk to watch the lanterns lit for the drowned"
+    ],
+    "calling": "I feed the night crews, and I'd have it no other way; a full pot is my craft."
   },
   "Dory Gull": {
     "narrative": "I play under the stalls where Mama can see me, and I know the gulls' names and which boards are loose. The tide steps are dark and the water goes down and down, and I don't go near them. Dory Quell plays with me and we hide from the night crews.",
@@ -386,7 +402,9 @@
     "goals": [
       "find a gull's nest without falling",
       "play with Dory Quell",
-      "stay away from the dark water"
+      "stay away from the dark water",
+      "find a gull's nest all by herself",
+      "learn all the loose boards under the stalls by heart"
     ],
     "mood": "happy, and watchful near the water",
     "traits": {
@@ -453,6 +471,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "playing hide-and-seek under the stalls with Dory Quell",
+      "collecting smooth stones and shells from the dry boards",
+      "watching the gulls and naming them"
+    ],
+    "calling": "When I'm big I want to cook at the stall like Mama."
   }
 }

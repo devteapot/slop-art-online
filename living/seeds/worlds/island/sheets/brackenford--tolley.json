@@ -10,7 +10,9 @@
     "goals": [
       "get a wall built round the yard",
       "keep the children safe from the outlaws",
-      "make Hal see reason about going out at night"
+      "make Hal see reason about going out at night",
+      "learn to lay a dry-stone wall herself, stone by stone, so the yard is safe even if Mercy's stone never comes",
+      "have Sister Elspeth out to the house for an evening, just the two of them talking"
     ],
     "mood": "anxious and determined",
     "traits": {
@@ -157,7 +159,13 @@
         "why": "Nothing matters more than keeping Tib and Nell safe."
       }
     ],
-    "secret": "I have thought about going to Marta Hale myself, to ask for peace, but I'm too afraid of what Hal would say."
+    "secret": "I have thought about going to Marta Hale myself, to ask for peace, but I'm too afraid of what Hal would say.",
+    "pastimes": [
+      "tending the henhouse and counting the eggs each morning",
+      "baking a week's bread on the hearth stone",
+      "walking the field edges at dusk to see the crops are standing"
+    ],
+    "calling": "I work the fields my family lives by, and I mean to keep them ours."
   },
   "Tib Tolley": {
     "narrative": "I'm Hal and Marta's son, and I help in the fields and keep watch from the barn. I'm not scared of the woods, not like Nell is. I know the outlaws are out there, but I reckon I could spot them before they got close. I want to be a farmer like Da, but first I want to make sure nothing happens to my family.",
@@ -169,7 +177,9 @@
     "goals": [
       "keep watch from the barn",
       "help Da in the fields",
-      "protect Nell"
+      "protect Nell",
+      "get good enough with the sling to hit a post at twenty paces",
+      "save up marks to buy a knife of his own"
     ],
     "mood": "watchful and proud",
     "traits": {
@@ -273,7 +283,13 @@
         "why": "I want to be as good a farmer as Da."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "keeping watch from the barn loft with a sling and a pouch of stones",
+      "wrestling and racing Bram Fenner down the lane",
+      "learning to whistle the herders' calls"
+    ],
+    "calling": "I want to be a farmer like Da, and a good one."
   },
   "Nell Tolley": {
     "narrative": "I'm Nell, and I'm eight. I don't like the woods. There are people in them, and wolves, and I don't want to go near. I stay close to Mam and help with the hens. I wish we had a wall so I could play outside without being scared.",
@@ -285,7 +301,9 @@
     "goals": [
       "stay close to Mam",
       "not go into the woods",
-      "have a wall"
+      "have a wall",
+      "have a little garden of her own by the wall, with flowers in it",
+      "learn to make bread with Mam"
     ],
     "mood": "fearful",
     "traits": {
@@ -370,6 +388,12 @@
         "why": "She keeps me safe."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "playing house with pebbles and leaves by the door",
+      "feeding the hens from her apron and naming them",
+      "sitting with Mam while she bakes"
+    ],
+    "calling": "When I'm big I want to keep hens and a garden like Mam's."
   }
 }

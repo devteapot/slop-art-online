@@ -253,6 +253,13 @@ impl<'a> Ev<'a> {
         let night = if common::night(&self.w, self.now) { 1.0 } else { 0.0 };
         let me = self.me.id;
         let now = self.now;
+        // The body's own day (its rhythm): its bedtime and its evening.
+        let (bedtime, evening) = if ds.iter().any(|d| d.weight.bedtime != 0.0 || d.weight.evening != 0.0) {
+            let (b, e) = common::day_phase(self.ctx, me, common::hour(&self.w, now));
+            (if b { 1.0 } else { 0.0 }, if e { 1.0 } else { 0.0 })
+        } else {
+            (0.0, 0.0)
+        };
         // An attack or a threat aimed at me right now.
         let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
         // Company is one's own kind (people for a person, the herd or pack for an animal).
@@ -289,7 +296,7 @@ impl<'a> Ev<'a> {
                 let w = &d.weight;
                 let last = self.st.marks.iter().find(|m| m.node == DESIRE_MARK | ids[i]).map(|m| m.at_ms);
                 let longing = last.map_or(1.0, |t| (now.saturating_sub(t) as f32 / 3_600_000.0).min(1.0));
-                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted + w.rain * rain + w.hailed * hailed + w.commotion * commotion;
+                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted + w.rain * rain + w.hailed * hailed + w.commotion * commotion + w.bedtime * bedtime + w.evening * evening;
                 for (k, v) in &w.believes {
                     let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
                     s += v * j;
@@ -453,7 +460,7 @@ impl<'a> Ev<'a> {
                     None => 0,
                 };
                 self.set_mark(id);
-                match perceive::speak(self.ctx, self.me.id, &s.text, to, false, self.now) {
+                match perceive::speak(self.ctx, self.me.id, &s.text, to, self.now) {
                     Ok(()) => St::Ok,
                     Err(_) => St::Fail,
                 }
@@ -769,6 +776,8 @@ impl<'a> Ev<'a> {
             Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
             Cond::HeardWithin(s) => self.st.heard_ms != 0 && self.now.saturating_sub(self.st.heard_ms) as f32 <= s * 1000.0,
             Cond::Night(b) => common::night(&self.w, self.now) == *b,
+            Cond::Bedtime(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).0 == *b,
+            Cond::Evening(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).1 == *b,
             Cond::Raining(b) => crate::town::raining(self.ctx) == *b,
             Cond::Hailed(s) => self.hailed((s * 1000.0) as u64),
             Cond::Moving(b) => {
@@ -892,6 +901,23 @@ impl<'a> Ev<'a> {
             LEGACY.with(|l| l.borrow_mut().insert(self.me.id, (now, now)));
             percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, sole.clone(), 0.5);
             self.deliberate(&format!("You feel something: {sole}"));
+        }
+        // A person's new day begins at its own rising (its rhythm), once a day: its mind is
+        // asked to think about the day ahead, each at their own hour.
+        if self.me.kind == "person" && self.me.stage >= 1 {
+            if let Some(mut r) = self.ctx.db.rhythm().id().find(self.me.id) {
+                let hour = common::hour(&self.w, self.now);
+                let since = (hour - r.rise_h).rem_euclid(24.0);
+                let day = living_rules::day_of(self.now, self.w.epoch_ms, self.w.day_ms) as u32;
+                if since < 3.0 && r.last_day < day && !common::day_phase(self.ctx, self.me.id, hour).0 {
+                    r.last_day = day;
+                    self.ctx.db.rhythm().id().update(r);
+                    let season = common::season(self.ctx, self.now);
+                    let text = format!("A new day begins for you: day {day} ({season}).");
+                    percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, text.clone(), 0.3);
+                    self.deliberate(&text);
+                }
+            }
         }
         let drives: [(u32, bool, String); 3] = [
             (16, calm && quiet_ms as f32 > restless_after, "You feel restless: your days have been the same for a while.".into()),

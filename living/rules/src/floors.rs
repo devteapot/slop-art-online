@@ -72,6 +72,7 @@ mod tests {
 fn cold(a) {
     a.actor.kind == "person" && !a.actor.near_fire && !a.actor.near_shelter && inv(a, "cloak") == 0
 }
+fn freezing(a) { true }
 fn laws() {
     let l = base_laws();
     l.fire_warmth = 5.0;
@@ -103,7 +104,8 @@ fn sight_in(light) { if light == "day" { 7.0 } else { base_sight_in(light) } }
         let c = person_by_day();
         let (rb, rf) = (base.rates(&c).unwrap(), frozen.rates(&c).unwrap());
         assert!(rb.hp_per_min > 0.0, "base heals by day: {}", rb.hp_per_min);
-        assert!(rf.hp_per_min < rb.hp_per_min - 1.9, "frozen floor: {} vs {}", rf.hp_per_min, rb.hp_per_min);
+        // (A freezing cold outside winter takes 1.5 a minute: docs/SEEDED_LIVES.md.)
+        assert!(rf.hp_per_min < rb.hp_per_min - 1.4, "frozen floor: {} vs {}", rf.hp_per_min, rb.hp_per_min);
         // By a fire the frozen floor is the base again.
         let mut warm = c.clone();
         warm.actor.near_fire = true;

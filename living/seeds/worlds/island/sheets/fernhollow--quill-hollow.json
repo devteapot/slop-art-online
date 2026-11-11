@@ -10,7 +10,9 @@
     "goals": [
       "keep the hollow's rolls and the Eldest's letters without error",
       "see Sorrel read and write better than I do",
-      "keep Kettlebridge's contracts out of the hollow's business"
+      "keep Kettlebridge's contracts out of the hollow's business",
+      "fill a fresh roll with the hollow's garden history, in his own careful hand",
+      "write a letter to Ostrander Sallow that is not about trade at all"
     ],
     "mood": "steady, a little dry",
     "traits": {
@@ -145,7 +147,13 @@
         "why": "Sorrel will not be caught by a clause she cannot read"
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "reading old letters and rolls aloud to himself in the evening",
+      "walking the garden paths to check what the hollow has planted where",
+      "taking tea with Ostrander Sallow's letters, reading them twice"
+    ],
+    "calling": "I keep the hollow's memory in ink, and I would have every letter I write be one that binds only when it should."
   },
   "Vetch Quill": {
     "narrative": "I keep the root garden and the beehives, and the hollow eats from them. The bees know me and I know them, and honey goes to the Ferncross woodcutters for what we cannot grow. Clover Mossfoot and I have argued over the seed rows since we were girls, and I will not give her the row by the wall. This week the leaves on the beans are spotting, and I have seen the smoke lying on the gardens from Kettlebridge. I think a complaint will only make the works burn more, and I want to wait for rain.",
@@ -158,7 +166,9 @@
     "goals": [
       "bring the roots and honey through to the winter store",
       "keep the seed row Clover Mossfoot wants",
-      "see the smoke blow over without the hollow provoking the town"
+      "see the smoke blow over without the hollow provoking the town",
+      "try a new way of keeping the beans from spotting before the rain",
+      "grow a honey crop big enough to trade for a good winter cloak"
     ],
     "mood": "worried but stubborn",
     "traits": {
@@ -294,7 +304,13 @@
         "why": "Ferncross has given me fair measure; Kettlebridge has given the hollow smoke"
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "opening the hives at midday to watch the bees come and go",
+      "tending the seed rows by the wall with her hands in the soil",
+      "sitting with Sorrel Fenwick over a cup and the garden gossip"
+    ],
+    "calling": "The garden and the hives are my work, and I want the hollow's store full before the cold comes."
   },
   "Sorrel Quill": {
     "narrative": "I learn my letters from my father and help my mother with the hives, and I am quicker at both than anyone says. Tamarisk Bramblecap is my friend and we play down the garden paths. The bees do not sting me much any more, and I have read two whole letters aloud at the common table.",
@@ -307,7 +323,9 @@
     "goals": [
       "read a whole letter without stumbling",
       "keep the bees calm when mother opens the hive",
-      "play with Tamarisk down the garden paths"
+      "play with Tamarisk down the garden paths",
+      "read a whole letter without stumbling once",
+      "keep the bees calm the next time mother opens the hive"
     ],
     "mood": "bright and a little proud",
     "traits": {
@@ -392,6 +410,12 @@
         "why": "It is mine and Tamarisk's and nobody else's"
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "playing down the garden paths with Tamarisk Bramblecap",
+      "watching her mother open the hives and naming the bees",
+      "reading letters aloud at the common table"
+    ],
+    "calling": "I want to read and write better than anyone says I can, and keep the bees calm besides."
   }
 }

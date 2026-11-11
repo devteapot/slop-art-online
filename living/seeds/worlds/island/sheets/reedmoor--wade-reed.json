@@ -11,7 +11,9 @@
       "keep the village nets and traps in repair through the winter",
       "see Godric's courtship of Wyn Sedge come to a match",
       "put by enough smoked fish to trade for grain when the barley runs short",
-      "have my say about the smoke that drifts down from Kettlebridge"
+      "have my say about the smoke that drifts down from Kettlebridge",
+      "learn to read the smoke and wind well enough to say plainly what Kettlebridge does to the reeds",
+      "carve a good pair of oars for Godric's own boat, ready before he needs them"
     ],
     "mood": "steady, a little worn, quietly stubborn",
     "traits": {
@@ -144,7 +146,13 @@
         "why": "After the Lean Year I count what is in the store before I sleep, every night."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending and tarring the village nets on the shore at first light",
+      "sitting at the cook-fire telling how the channels have shifted since his father's day",
+      "walking the reed cuts at dusk to read the water and the wind"
+    ],
+    "calling": "I keep Reedmoor's nets whole, so no man goes out with a hole in his mesh."
   },
   "Leofrun Wade": {
     "narrative": "I keep the barley plots above the reeds and the vegetable rows behind the house, and I know to the basket what they will give and what they will not. Since the Lean Year I have not trusted a full store to stay full, and I count it at night when Ethelred is asleep. I have sold barley to Brackenford's store against the debt, as we all have, and there is less left than I would like with the cough going through the village. Hilda and I nurse the sick between us, and I sit with them and think about the grain.",
@@ -158,7 +166,9 @@
       "bring the village through the cough with grain to spare",
       "stretch the barley and roots to the spring without begging",
       "see Godric matched with Wyn Sedge and settled",
-      "keep trading seeds with Merrow Stave so the plots do not fail"
+      "keep trading seeds with Merrow Stave so the plots do not fail",
+      "learn a way of storing roots and grain that keeps through the damp",
+      "see the vegetable rows yield enough to trade for a little fish-oil and salt"
     ],
     "mood": "worried, careful, quietly tired",
     "traits": {
@@ -292,7 +302,13 @@
         "why": "Elmwick and the Coombes can argue; I need the meadow's cheese and not its quarrel."
       }
     ],
-    "secret": "She has quietly held back a small jar of barley in the roof thatch, against a winter she fears more than she says."
+    "secret": "She has quietly held back a small jar of barley in the roof thatch, against a winter she fears more than she says.",
+    "pastimes": [
+      "tending the barley plots and vegetable rows behind the house",
+      "sitting with the sick and telling them small news to pass the hours",
+      "trading seeds and cuttings with Merrow Stave"
+    ],
+    "calling": "I keep the barley plots honest and counted, and I sit with the sick while I think on the grain."
   },
   "Godric Wade": {
     "narrative": "I fish the deep water off the reeds from my father's boat, and every time I row out I am thinking of the day I will row out in my own. I have courted Wyn Sedge since the spring and we suit each other, but her mother has not given her word, and I know why: a man with no boat is a poor bargain. I owe Brannock Sedge for a share of a net and I mean to pay it before I ask Nell for anything. The cough is in the village and my mother counts the grain at night; I fish harder for it.",
@@ -306,7 +322,9 @@
       "save enough marks to buy a boat of my own",
       "pay Brannock Sedge for the net share",
       "win Nell Sedge's word for the match with Wyn",
-      "keep fishing through the winter so the house does not go short"
+      "keep fishing through the winter so the house does not go short",
+      "learn the offshore shoals and currents well enough to bring home a catch in any weather",
+      "make something with his hands to give Wyn when Nell gives her word"
     ],
     "mood": "eager, anxious underneath, determined",
     "traits": {
@@ -436,6 +454,12 @@
         "why": "The deep water off the reeds is where the money is, and my father's channels only take me so far."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "rowing out to the deep water off the reeds whenever the weather lets him",
+      "walking the shore path with Wyn Sedge in the evenings",
+      "dicing and swapping stories with the young fishers at the cook-fire"
+    ],
+    "calling": "I fish the deep water, and one day I mean to row out in a boat that is mine."
   }
 }

@@ -11,7 +11,9 @@
       "pay off the debt to Rook Tarn",
       "keep the traps in the channel",
       "make the salt pans yield more",
-      "see Tarn settled with a boat"
+      "see Tarn settled with a boat",
+      "get the salt pans to yield a better crop next season",
+      "learn to read the channel tides well enough to set the traps where the fish run thickest"
     ],
     "mood": "troubled and defensive",
     "traits": {
@@ -143,7 +145,13 @@
         "why": "Their smoke sours our pans and they care nothing for the shore."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending and rebaiting the fish traps at low tide",
+      "walking the shore at dusk to watch the birds come in",
+      "sharing a cup at the saltings fire with Simon Hollis after a panning day"
+    ],
+    "calling": "I keep the traps and the salt pans, and I'd have the pans yield clean and white if the smoke from Kettlebridge would only leave them be."
   },
   "Marra Brine": {
     "narrative": "I work the salt pans and keep the plot of roots and barley above the shore. I trade salt and barley with Tern Gannet of Thornby, and I have been putting aside marks in a hidden jar to pay Hollis's debt to Rook Tarn. Hollis does not know, and I am proud of my plan and afraid of what he will say.",
@@ -157,7 +165,9 @@
       "pay off Hollis's debt to Rook Tarn secretly",
       "keep the winter store from running out",
       "see Tarn settled",
-      "mend the rift with her brother Osric"
+      "mend the rift with her brother Osric",
+      "see her brother Osric Dunn again and mend what broke between them",
+      "put by enough marks to keep the winter store full through the cold months"
     ],
     "mood": "anxious but determined",
     "traits": {
@@ -299,7 +309,13 @@
         "why": "If the store does not last, we will not either."
       }
     ],
-    "secret": "I have been selling salt and barley to Tern Gannet and keeping the marks in a hidden jar to pay off Hollis's debt to Rook Tarn without telling him."
+    "secret": "I have been selling salt and barley to Tern Gannet and keeping the marks in a hidden jar to pay off Hollis's debt to Rook Tarn without telling him.",
+    "pastimes": [
+      "tending the root and barley plot above the shore",
+      "bartering salt and barley with Tern Gannet when the Thornby folk come down",
+      "singing the old shore songs while she works the pans"
+    ],
+    "calling": "I work the pans and the plot, and I'd see my family fed and clear of debt before I want for anything else."
   },
   "Tarn Brine": {
     "narrative": "I work the traps with my father and mend the boats; I want a boat of my own. I am courting Nessa Tarn, and both households know it, though her father Grim has told me not to come to the house until my father's debt to Rook Tarn is settled. I think the trap quarrel is my father's business, not mine.",
@@ -313,7 +329,9 @@
       "buy a boat of his own",
       "settle the debt to Rook Tarn so he can court Nessa openly",
       "marry Nessa Tarn",
-      "prove himself to Grim Tarn"
+      "prove himself to Grim Tarn",
+      "save enough marks to buy a boat of his own",
+      "prove himself to Grim Tarn so he can court Nessa openly"
     ],
     "mood": "hopeful and frustrated",
     "traits": {
@@ -444,7 +462,13 @@
         "why": "I will always stand by my family, even when they are wrong."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending boats hauled up on the shore",
+      "walking the shore path with Nessa Tarn when he can",
+      "dicing with Tace Hollis at the saltings"
+    ],
+    "calling": "I work the traps and mend boats, but the work I love is a boat of my own with the wind in her sail."
   },
   "Sedge Brine": {
     "narrative": "I help with the traps and the salt pans, and I know every bird on the shore. I play with Wren Stave when the Thornby folk come down the shore. I am afraid of the wolves that come down to the saltings in winter.",
@@ -456,7 +480,8 @@
     "goals": [
       "see a wolf without being seen",
       "learn to set a trap",
-      "play with Wren Stave again"
+      "play with Wren Stave again",
+      "learn to set a trap properly"
     ],
     "mood": "curious and a little fearful",
     "traits": {
@@ -537,6 +562,12 @@
         "why": "The shore is the best place to play."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "watching and naming every bird on the shore",
+      "playing with Wren Stave when the Thornby folk come down",
+      "poking about the salt pans and trap lines after her parents"
+    ],
+    "calling": "I help with the traps and the pans, and one day I'd set a trap all by myself."
   }
 }

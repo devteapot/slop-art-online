@@ -10,7 +10,9 @@
     "goals": [
       "settle the Tanglewood debt before the salve store runs dry",
       "see Pipwort name her successor openly",
-      "keep the winter cough from the elders"
+      "keep the winter cough from the elders",
+      "learn to grow the Tanglewood roots in her own rows so she need not buy them",
+      "teach Tamarisk the flowers and their uses, one at a time"
     ],
     "mood": "worried and busy",
     "traits": {
@@ -148,7 +150,13 @@
         "why": "The plants I need grow in the deep shade; cut it and the salves go with it."
       }
     ],
-    "secret": "I have been quietly watering the salves I give the healer to make them stretch, and if she finds out she will trust nothing I send."
+    "secret": "I have been quietly watering the salves I give the healer to make them stretch, and if she finds out she will trust nothing I send.",
+    "pastimes": [
+      "walking the old forest paths to see what is flowering",
+      "sorting and labelling salve jars on the shed shelf",
+      "sitting with the elders in the evening and hearing their stories"
+    ],
+    "calling": "I make the salves and doses that keep this hollow well, and I would have it no other way."
   },
   "Sorrel Bramblecap": {
     "narrative": "I work the hollow's grain patch and the berry rows, and I carry the surplus to the Ferncross woodcutters for what we cannot grow. My wife Hazel keeps the salve store and frets over her jars; I keep my grumbles to the giants' track, which takes our timber and gives us little. I want a second strip by the stream, and I have asked the Eldest for it more than once. The hollow is small and the winter is long, and I would rather be planting than talking.",
@@ -161,7 +169,9 @@
     "goals": [
       "win a second strip by the stream",
       "bring in a good berry harvest for Ferncross",
-      "see the salve store refilled before the coughs come"
+      "see the salve store refilled before the coughs come",
+      "save enough marks to buy seed for the stream strip if the Eldest ever grants it",
+      "grow a berry crop fine enough to be spoken of at Ferncross"
     ],
     "mood": "steady, a little put upon",
     "traits": {
@@ -281,7 +291,13 @@
         "why": "The stream strip is poor but it is ours to try, and I would rather try than wait."
       }
     ],
-    "secret": "I have been taking a handful of the common grain each week and hiding it in the loft against a bad winter, and I have not told Hazel."
+    "secret": "I have been taking a handful of the common grain each week and hiding it in the loft against a bad winter, and I have not told Hazel.",
+    "pastimes": [
+      "tending the berry rows at first light",
+      "dicing and trading stories at the common table after the day's work",
+      "walking the stream bank to eye the strip he wants"
+    ],
+    "calling": "I grow the hollow's grain and berries; a good row and an honest measure are enough for me."
   },
   "Tamarisk Bramblecap": {
     "narrative": "I gather berries in the rows with my father and follow my mother to the salve shed, where the jars smell of green and bitter things. I play with Rush Fenwick by the garden paths and I know which flowers are good for a cough. The deep caves in the hills frighten me, and I do not like to be out when the light goes.",
@@ -294,7 +310,9 @@
     "goals": [
       "fill my basket before my father does",
       "learn the name of every flower",
-      "not go near the caves"
+      "not go near the caves",
+      "learn the name of every flower in the hollow",
+      "fill her basket fuller than her father's before the light goes"
     ],
     "mood": "curious and easily startled",
     "traits": {
@@ -353,6 +371,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "berry-picking races with her father in the rows",
+      "playing hide-and-find along the garden paths with Rush Fenwick",
+      "sniffing jars in her mother's shed and guessing what is in them"
+    ],
+    "calling": "When I am big I want to make the green smelly medicines like Mother."
   }
 }

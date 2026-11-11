@@ -29,4 +29,4 @@ Check the character's `experience` rows of kind `act` (one per act, accepted or 
 
 - Things are named to the authority by kind, nearest first: stand by the bush you mean, or the client turns the act into a walk to it and then the act (`{"seq": [goto, act]}`), which runs as behaviour and reports no `act` row.
 - A scripted `act:` is sent whether or not the client's rules offered it (the log says which), so a refusal can be driven.
-- A resident given an item wakes into a mind ([waking](waking.md)); without a mind service it stays put under `set_behavior`.
+- A resident given an item asks its mind (every resident has one); without a mind service it stays put under `set_behavior`.

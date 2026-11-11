@@ -381,9 +381,6 @@ pub struct Laws {
     pub spawn_energy: f32,
     /// Grazing each grassy or forest tile holds (grazing units).
     pub pasture_per_tile: f32,
-    /// Characters nobody plays have minds (the world's admin's mind service deliberates for them
-    /// and they receive experiences); false: they live on their behaviour graphs alone.
-    pub minds: bool,
     /// A crying infant makes its carers think about it; false: the cry is only heard.
     pub cry_prompts_carers: bool,
 }
@@ -426,7 +423,6 @@ impl Default for Laws {
             spawn_hunger: 25.0,
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
-            minds: true,
             cry_prompts_carers: true,
         }
     }
@@ -566,6 +562,10 @@ pub enum NeedLaw {
         healing_gene: String,
         wet_energy: f64,
         cold_hp: f64,
+        /// Genes (optional, empty: none) by which hunger grows faster, and by which exposure
+        /// (`wet_energy`, `cold_hp`) is divided.
+        appetite_gene: String,
+        hardiness_gene: String,
     },
     /// A script whose `rates(a)` returns the finished rates (`hunger`, `energy`, `hp`).
     Final(Rates),
@@ -587,7 +587,7 @@ impl NeedLaw {
     pub fn rates(&self, a: &ActorFacts) -> Rates {
         match self {
             NeedLaw::Final(r) => *r,
-            NeedLaw::Params { hunger, energy, starving_at, starving_hp, fed_below, rested_above, healing_hp, spent_at, spent_hp, healing, tiring_gene, healing_gene, wet_energy, cold_hp } => {
+            NeedLaw::Params { hunger, energy, starving_at, starving_hp, fed_below, rested_above, healing_hp, spent_at, spent_hp, healing, tiring_gene, healing_gene, wet_energy, cold_hp, appetite_gene, hardiness_gene } => {
                 let (h, e) = (a.hunger as f64, a.energy as f64);
                 let mut hp = 0.0f64;
                 if h >= *starving_at {
@@ -608,9 +608,11 @@ impl NeedLaw {
                 if hp > 0.0 {
                     hp *= crate::genes::gene(&a.genes, healing_gene) as f64;
                 }
-                energy += wet_energy;
-                hp += cold_hp;
-                Rates { hunger_per_min: *hunger as f32, energy_per_min: energy as f32, hp_per_min: hp as f32 }
+                let gene = |name: &String| if name.is_empty() { 1.0 } else { crate::genes::gene(&a.genes, name) as f64 };
+                let hardy = gene(hardiness_gene).max(0.1);
+                energy += wet_energy / hardy;
+                hp += cold_hp / hardy;
+                Rates { hunger_per_min: (*hunger * gene(appetite_gene)) as f32, energy_per_min: energy as f32, hp_per_min: hp as f32 }
             },
         }
     }
@@ -1415,7 +1417,6 @@ impl Scripts {
             spawn_hunger: g("spawn_hunger", l.spawn_hunger).clamp(0.0, 100.0),
             spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
-            minds: flag("minds", l.minds),
             cry_prompts_carers: flag("cry_prompts_carers", l.cry_prompts_carers),
         };
         Ok(l)
@@ -1598,6 +1599,8 @@ impl NeedLaw {
             healing_gene: gene("healing_gene")?,
             wet_energy: n("wet_energy")?,
             cold_hp: n("cold_hp")?,
+            appetite_gene: m.get("appetite_gene").and_then(|v| v.clone().into_string().ok()).unwrap_or_default(),
+            hardiness_gene: m.get("hardiness_gene").and_then(|v| v.clone().into_string().ok()).unwrap_or_default(),
         })
     }
 }
@@ -1784,7 +1787,7 @@ mod tests {
         assert_eq!(heads[1..].join(" "), "SENSES MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
         assert!(t.starts_with("One day lasts 12 real minutes; night is 20:00-06:00.\nSENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m; at night 6 m, or 9 m carrying a torch."), "{t}");
         assert!(t.contains("FOOD: berries 12, fish 16, meat 20, cooked_fish 34, cooked_meat 42, smoked_fish 24, smoked_meat 30 (hunger points). Cook raw fish or meat at a campfire"), "{t}");
-        assert!(t.contains("BODY: hunger rises ~5/min (100 = starving") && t.contains("within reach (about 2 m; a wolf's leap about 3.2)") && t.contains("for 20 s you do not strike back") && t.contains("Deer can be hunted (5 meat)"), "{t}");
+        assert!(t.contains("BODY: hunger rises ~4/min (100 = starving") && t.contains("within reach (about 2 m; a wolf's leap about 3.2)") && t.contains("for 20 s you do not strike back") && t.contains("Deer can be hunted (5 meat)"), "{t}");
         assert!(t.contains("SETTLEMENTS: walls block the way;") && t.contains("Taking from someone else's store"), "{t}");
         assert_eq!(t, s.world_text(&[("seasons", "a year is 8 days.".into()), ("life", "a person lives about 70 years.".into())]), "the same rules give the same text");
         // A floor that changes a law changes what minds are told.
@@ -1951,10 +1954,12 @@ mod tests {
         assert_eq!(sc.laws().takeover_s, 30.0);
         // A world's own values (a seed's `rules`) over the script's: names and kinds are the laws'.
         let over = |k: &str, v: serde_json::Value| sc.laws_with(&[(k.to_string(), v)]);
-        assert!(!over("minds", serde_json::json!(false)).unwrap().minds && sc.laws().minds);
+        assert!(!over("cry_prompts_carers", serde_json::json!(false)).unwrap().cry_prompts_carers && sc.laws().cry_prompts_carers);
+        // Every person has a mind: there is no law to turn minds off, so a seed asking for one is refused.
+        assert!(over("minds", serde_json::json!(false)).unwrap_err().starts_with("`minds` is not a law of this world"));
         assert_eq!(over("fire_warmth", serde_json::json!(5)).unwrap().fire_warmth, 5.0);
         assert!(over("mindz", serde_json::json!(false)).unwrap_err().starts_with("`mindz` is not a law of this world"));
-        assert!(over("minds", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
+        assert!(over("cry_prompts_carers", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));
@@ -2426,7 +2431,11 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         c.actor.activity = String::new();
         c.actor.hunger = 80.0; // no regeneration, so the cold alone shows
         c.night = true;
-        assert!(s.rates(&c).unwrap().hp_per_min < 0.0, "cold nights hurt without fire or shelter");
+        let night = s.rates(&c).unwrap();
+        assert_eq!(night.hp_per_min, 0.0, "an ordinary cold night does not hurt");
+        assert!(night.energy_per_min < day.energy_per_min, "it tires");
+        c.season = "winter".into();
+        assert!(s.rates(&c).unwrap().hp_per_min < 0.0, "winter nights hurt without fire or shelter");
         c.actor.near_fire = true;
         assert!(s.rates(&c).unwrap().hp_per_min >= 0.0);
     }
@@ -2449,9 +2458,10 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
                             c.season = if winter { "winter" } else { "summer" }.into();
                             let state = s.body_state(&c).unwrap();
                             let damage = s.rates(&c).unwrap().hp_per_min;
-                            assert_eq!(state.cold, damage < 0.0);
-                            assert!(state.looks().starts_with(if damage < 0.0 { "cold" } else { "warm" }));
-                            assert_eq!(damage, if state.cold { if winter { -5.0 } else { -2.0 } } else { 0.0 });
+                            assert_eq!(state.cold, night && !fire && !shelter && !cloak);
+                            assert!(state.looks().starts_with(if state.cold { "cold" } else { "warm" }));
+                            // Cold hurts only in winter (or in the rain): an ordinary night tires.
+                            assert_eq!(damage, if state.cold && winter { -3.0 } else { 0.0 });
                         }
                     }
                 }
@@ -2460,10 +2470,10 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
     }
 
     /// `rates(a)` as it was before it returned parameters (2026-11-09, 9ea831f): the whole
-    /// computation in the script.
+    /// computation in the script, with the numbers of 2026-11-11 (survival made secondary).
     const RATES_BEFORE: &str = r#"
 fn rates(a) {
-    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 5.0 };
+    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 4.0 };
     let energy = -3.0;
     let hp = 0.0;
     let act = a.actor.activity;
@@ -2476,7 +2486,7 @@ fn rates(a) {
         energy = -12.0;
     }
     if a.actor.hunger >= 100.0 {
-        hp -= 6.0;
+        hp -= 4.0;
     } else if a.actor.hunger < 70.0 && a.actor.energy > 15.0 {
         hp += 3.0;
     }
@@ -2490,12 +2500,8 @@ fn rates(a) {
     if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
     if energy < 0.0 { energy /= a.actor.endurance; }
     if hp > 0.0 { hp *= a.actor.vitality; }
-    if wet(a) {
-        energy -= if inv(a, "cloak") > 0 { 1.0 } else { 2.5 };
-    }
-    if cold(a) {
-        hp -= if a.season == "winter" { 5.0 } else { 2.0 };
-    }
+    energy += (if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 }) + (if cold(a) { -1.5 } else { 0.0 });
+    hp += if cold(a) && freezing(a) { if a.season == "winter" { -3.0 } else { -1.5 } } else { 0.0 };
     #{ hunger: hunger, energy: energy, hp: hp }
 }
 "#;
@@ -2577,11 +2583,11 @@ fn rates(a) {
         let s = scripts();
         let mut c = ctx();
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed");
-        c.actor.hunger = 56.0;
+        c.actor.hunger = 51.0;
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, hungry");
         c.actor.hunger = 100.0;
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, starving");
-        assert_eq!(s.rates(&c).unwrap().hp_per_min, -6.0);
+        assert_eq!(s.rates(&c).unwrap().hp_per_min, -4.0);
         c.actor.hunger = 20.0;
         c.actor.hurt_ago = Some(1000.0);
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, hurt");

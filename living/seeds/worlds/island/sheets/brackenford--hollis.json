@@ -11,7 +11,9 @@
       "keep the north road trade with Thornby steady",
       "keep in with the Reeve without being thought his spy",
       "put by enough marks that Avice stops fretting when I leave",
-      "teach Nicholas the road and the prices before he is grown"
+      "teach Nicholas the road and the prices before he is grown",
+      "save enough to buy a second pack pony so the loads go easier",
+      "learn to read a ledger well enough to check Osric's counts himself"
     ],
     "mood": "watchful, road-worn, quietly pleased with his lot",
     "traits": {
@@ -181,7 +183,13 @@
         "why": "Every mark I bring home is for Avice and Nicholas; the road is only how I get it."
       }
     ],
-    "secret": "I have twice paid the Coldwell people a small share to pass the north woods unhindered, and told nobody, not even Avice, because the Reeve would call it dealing with outlaws."
+    "secret": "I have twice paid the Coldwell people a small share to pass the north woods unhindered, and told nobody, not even Avice, because the Reeve would call it dealing with outlaws.",
+    "pastimes": [
+      "a slow pint at the Wade's inn, listening more than talking",
+      "mending his pack straps and oiling his boots by the fire",
+      "walking the north road at dawn before the gate is busy"
+    ],
+    "calling": "I carry what the villages need and bring back what they'll part with; the road is my trade and I know it better than any man."
   },
   "Avice Hollis": {
     "narrative": "I keep the house by the west wall and a stall of dried goods in the square, and I count the days Simon is on the road the way the chapel sisters count feast days. I smoke what fish he brings back and dry what berries the farms will sell me cheap, and I sell it all in small lots to people who cannot afford a big one. I was a cook before I was a wife and I have not forgotten it; the house smells of smoke and salt and I like it that way. When the north road is quiet too long I do not sleep.",
@@ -195,7 +203,9 @@
       "keep the dried-goods stall paying through the winter",
       "have Simon give up the road before he is too old to walk it",
       "see Nicholas settled with a trade that keeps him inside walls",
-      "put by a little against a bad year"
+      "put by a little against a bad year",
+      "learn to make a proper smoked cheese that keeps through winter",
+      "have a proper stall with a roof instead of a board and a basket"
     ],
     "mood": "busy, anxious, warm to those she trusts",
     "traits": {
@@ -329,7 +339,13 @@
         "why": "I have seen lean years and I know what a fire and a full store mean when the frost comes."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "smoking fish and drying berries in the yard behind the house",
+      "trading gossip and small lots at her square stall",
+      "sitting with Sister Elspeth at the chapel on quiet afternoons"
+    ],
+    "calling": "I was a cook before I was a wife and I've not forgotten it; give me a good fire and a full larder and I'll feed half the west wall."
   },
   "Nicholas Hollis": {
     "narrative": "I walk the north road with my father and carry the light pack, and I am learning to price a load before he can tell me. I like Thornby and the smell of the fish there, and I like the way Osric Dunn counts out marks like a man who has counted them a thousand times. When we come back through the gate and Wat Fenner takes the due, I watch what he takes and reckon whether it is fair. I mean to have a cart of my own one day, and a road that is mine to walk.",
@@ -343,7 +359,9 @@
       "learn every price on the north road",
       "earn enough to buy my own pack and then a cart",
       "see Lanternquay one day, which my father has never done",
-      "prove to my mother I can keep myself safe on the road"
+      "prove to my mother I can keep myself safe on the road",
+      "learn the price of every load on the north road before the year's out",
+      "earn and save enough marks to buy his own pack, then a cart"
     ],
     "mood": "eager, restless, a little proud",
     "traits": {
@@ -453,6 +471,12 @@
         "why": "She worries enough for the both of us and I would not add to it."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "practising his counts with pebbles on the kitchen table",
+      "fishing off the Thornby quay when the loads are settled",
+      "running the walls of Brackenford with Bram Fenner and Robin Fletcher"
+    ],
+    "calling": "I mean to have a cart of my own one day and a road that's mine to walk; for now I learn every price my father knows."
   }
 }

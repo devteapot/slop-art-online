@@ -61,7 +61,7 @@ PRIVATE = ['clock', 'steer', 'walk_route', 'wake', 'familiar', 'deliberation', '
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence',
-           'woken', 'prior', 'prior_head', 'guest', 'judged',
+           'guest', 'judged', 'rhythm',
            # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
            'record', 'record_party', 'record_clock',
            # A world's own law values (its seed's `rules`; docs/WORLD_RULES.md, since laws-2).
@@ -126,7 +126,7 @@ def mind_args(name, actor, marker):
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
         'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': '', 'ttl_ms': 1000}]],
         'mind_update': [actor, {'persona': {'some': {'narrative': marker, 'values': [],
-                         'goals': [], 'traits': '{}', 'mood': 'probe'}},
+                         'goals': [], 'traits': '{}', 'mood': 'probe', 'pastimes': [], 'calling': ''}},
                          'relations': [], 'beliefs': {'none': []}, 'judgments': [],
                          'places': [], 'thought': {'some': t}, 'replace': False}],
     }[name]
@@ -453,7 +453,7 @@ class Run:
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
             row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
-            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'woken', 'prior', 'prior_head', 'guest', 'player']:
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest', 'rhythm', 'player']:
                 as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
                 code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
                 okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200

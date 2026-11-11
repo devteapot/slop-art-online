@@ -1,12 +1,9 @@
 {
  "extends": "life",
  "title": "A newcomer's life in the old valley (stage3-village)",
- "about": "As `life`, on the stage3-village seed (96x96 valley, three family bands), with rules.minds false so its people are instinct-only like the island's residents. The newcomer arrives at the classic arrival point (40, 60) with no kit beyond what spawn_newcomer gives in a seed without a `newcomer` block, and the same background.",
+ "about": "As `life`, on the stage3-village seed (96x96 valley, three family bands), with LIVING_ONLY naming only the subject, so its people live on their starting ways like the island's residents in `life`. The newcomer arrives at the classic arrival point (40, 60) with no kit beyond what spawn_newcomer gives in a seed without a `newcomer` block, and the same background.",
  "gradient": "The old valley as it was: bands at their camps, berries by the woods, deer and three wolves.",
  "world": {
-  "seed": "stage3-village",
-  "rules": {
-   "minds": false
-  }
+  "seed": "stage3-village"
  }
 }

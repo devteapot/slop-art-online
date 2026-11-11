@@ -19,6 +19,7 @@ Python standard library only.
 """
 
 import argparse
+from collections import Counter
 import importlib.util
 import json
 import math
@@ -227,7 +228,7 @@ def scene_work(t, state):
     if w:
         state["worker"] = w["id"]
         t.check("a worker reached a workplace away from home", dist(w["home"], w["places"]["work"]) > 15, f"{w['name']} (#{w['id']}) is {dist(w['at'], w['places']['work']):.1f} tiles from work, {dist(w['home'], w['places']['work']):.0f} tiles from home, doing {w['skill']}")
-    state["midday_square"] = sum(1 for p in adults(ppl) if "evening" in p["places"] and dist(p["at"], p["places"]["evening"]) <= 8)
+    state["midday_square"] = sum(1 for p in adults(ppl) if evening_out(p) and dist(p["at"], p["places"]["evening"]) <= 8)
 
 
 def standing_resident(t, ppl, near=None, skills=("keep",)):
@@ -438,15 +439,22 @@ def scene_wolf(t, state):
     t.call("kill", [wolf, "removed after the scene"])
 
 
+def evening_out(p):
+    """Its evening place is out (the inn or the square), not its home or its work (an evening
+    in, or working late: `town_life.evening`)."""
+    ev = p["places"].get("evening")
+    return ev is not None and dist(ev, p["home"]) > 8 and ("work" not in p["places"] or dist(ev, p["places"]["work"]) > 8)
+
+
 def scene_evening(t, state):
     """Evening: the square and the inn fill; people nod to each other there."""
     h = t.wait_hour(18.6, 19.8)
     since = t.now_ms() - 30_000
     ppl = t.snapshot("evening")
-    there = [p for p in adults(ppl) if "evening" in p["places"] and dist(p["at"], p["places"]["evening"]) <= 8]
+    there = [p for p in adults(ppl) if evening_out(p) and dist(p["at"], p["places"]["evening"]) <= 8]
     nods = [u for u in t.uses(since=since) if u["skill"] in ("nod", "wave") and u["source"] == "graph" and u["accepted_ms"]]
     mid = state.get("midday_square")
-    t.check("the square and the inn fill in the evening", len(there) >= 20 and (mid is None or len(there) >= 2 * max(1, mid)), f"hour {h:.1f}: {len(there)} adults at their evening place (midday: {mid})")
+    t.check("the square and the inn fill in the evening", len(there) >= 20 and (mid is None or len(there) >= 2 * max(1, mid)), f"hour {h:.1f}: {len(there)} adults whose evening is out at their evening place (midday: {mid})")
     t.check("people greet each other there", len(nods) > 0, f"{len(nods)} nods or waves by residents in the last 30 s")
 
 
@@ -460,6 +468,13 @@ def scene_night(t, state):
     state["home_at_night"] = [p["id"] for p in home]
     t.check("at night people are at home", len(home) >= 0.7 * len(a), f"hour {h:.1f}: {len(home)} of {len(a)} adults within 3 tiles of home")
     t.check("at home at night they sleep or rest", len(asleep) >= 0.8 * max(1, len(home)), f"{len(asleep)} of {len(home)} asleep or resting")
+    # Each keeps their own hours (the `rhythm` table: seeded or drawn per person), so the town
+    # does not turn in for the night, or rise, at one moment.
+    rows = [r for r in t.sql("SELECT * FROM rhythm") if r["id"] in ppl]
+    rises, beds = [r["rise_h"] for r in rows], [r["bed_h"] for r in rows]
+    sd = lambda xs: (sum((x - sum(xs) / len(xs)) ** 2 for x in xs) / len(xs)) ** 0.5 if xs else 0.0
+    t.check("each keeps their own hours", len(rows) >= 0.9 * max(1, len(a)) and sd(rises) >= 0.4 and sd(beds) >= 0.6,
+            f"{len(rows)} rhythms for {len(a)} adults; rising {min(rises or [0]):.1f}-{max(rises or [0]):.1f} h (sd {sd(rises):.2f}), bed {min(beds or [0]):.1f}-{max(beds or [0]):.1f} h (sd {sd(beds):.2f})")
 
 
 def scene_morning(t, state):
@@ -476,6 +491,12 @@ def scene_morning(t, state):
     starving = [x for x in hungers if x >= 90]
     t.check("they eat when hungry: after a day nobody is starving", hungers and len(starving) <= 0.02 * len(hungers), f"hunger p50 {sorted(hungers)[len(hungers) // 2]:.0f}, max {max(hungers):.0f}; {len(starving)} of {len(hungers)} at 90 or more; {len(t.meals)} residents seen eating during the run")
     t.check("and go to work", len(workers) >= 0.5 * max(1, len(left)), f"{len(workers)} of them at work or on their way")
+    # A new day begins once a day for each person, at its own rising (rhythm.last_day): never
+    # again and again through the morning, and not for everyone at the world's creation.
+    days = Counter(e["observer"] for e in t.sql("SELECT observer, text FROM experience WHERE kind = 'feeling'") if e["text"].startswith("A new day begins"))
+    began = [r["last_day"] for r in t.sql("SELECT last_day FROM rhythm")]
+    t.check("each person's new day begins once, at their own rising", days and max(days.values()) <= 2 and len(set(began)) >= 1,
+            f"{len(days)} people felt a new day; most by one person: {max(days.values()) if days else 0}; days begun: {sorted(Counter(began).items())}")
 
 
 def census(t, hours=24):

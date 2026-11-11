@@ -9,7 +9,9 @@
     "goals": [
       "Collect what is owed to the common store before the first frost.",
       "Open a steady trade with the giants of Highshelf for meat and hides.",
-      "Keep the east road trade with Reedmoor and the crossings running."
+      "Keep the east road trade with Reedmoor and the crossings running.",
+      "Learn enough of the giants' speech to bargain at Highshelf without a go-between",
+      "Save a small purse of his own marks, apart from the common store, for a trip to Reedmoor's shore"
     ],
     "mood": "Worried but steady; I have too much to do before winter to lose my temper.",
     "traits": {
@@ -228,7 +230,13 @@
         "why": "Thistle is too quick to blame a Ferncross woodcutter for the opened pack; I want the loss made good without breaking the trade."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "Walking the east road's first mile at dawn to see what the night left",
+      "Sitting by the store door at dusk, tallying packs aloud to himself",
+      "Sharing a cup and the day's gossip with Thistle Mossfoot when the pedlar comes through"
+    ],
+    "calling": "I keep the hollow's store, and I buy and sell on the east road so the hollow has what it needs when the frost comes."
   },
   "Willow Rush": {
     "narrative": "I tend the hollow's flax and the garden by the stream, and I keep the house while Alder is on the road. The old forest is being cut too close — I have said so to Alder and to Clover Mossfoot, and I will say it again. I worry about the winter store, and I worry about the wolves coming closer each year. But the hollow feeds its own, and I do my part.",
@@ -240,7 +248,9 @@
     "goals": [
       "Keep the flax patch and the stream garden yielding through the autumn.",
       "See the hollow's winter store full before the frost.",
-      "Persuade the hollow to leave the old forest's fallen wood where it lies."
+      "Persuade the hollow to leave the old forest's fallen wood where it lies.",
+      "Grow a new patch of flax from seed she has saved herself",
+      "See the stream garden through a whole autumn without losing a bed to rot"
     ],
     "mood": "Careful and a little anxious; the forest is changing and I do not like it.",
     "traits": {
@@ -381,7 +391,13 @@
         "why": "The spots on the leaves worry me, but I would rather wait for rain than have the hollow provoke the works."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "Tending the stream garden in the cool of the morning",
+      "Spinning flax with Sorrel and Yarrow Underbank, telling stories as the wheel turns",
+      "Walking the forest edge to see what the season has done to the trees"
+    ],
+    "calling": "I tend the flax and the garden, and I mean to keep the hollow fed and the old forest standing."
   },
   "Bracken Rush": {
     "narrative": "I am Bracken, Alder and Willow's son. I help in the store and count the packs, and I want to walk the east road with Thistle Mossfoot one day. I play with Fennel Underbank when the work is done. The wolves come closer in winter, and I do not like the deep forest.",
@@ -391,7 +407,9 @@
     ],
     "goals": [
       "Walk the east road with Thistle Mossfoot.",
-      "Count every pack in the store without a mistake."
+      "Count every pack in the store without a mistake.",
+      "Learn the road's turns and stopping places by heart from Thistle's telling",
+      "Be trusted to carry a pack of his own on the next trade run"
     ],
     "mood": "Eager and a little impatient; I want to see the road.",
     "traits": {
@@ -476,6 +494,12 @@
         "why": "Thistle says the road has stories and fish and strange folk."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "Playing chase-and-hide among the hollow's garden hedges with Fennel Underbank",
+      "Counting the store's packs and making little towers of the mark tokens",
+      "Listening at the door when Thistle Mossfoot tells road stories"
+    ],
+    "calling": "I want to walk the east road with Thistle Mossfoot and carry packs myself one day."
   }
 }

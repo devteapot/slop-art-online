@@ -43,13 +43,13 @@ What a human-played character lives, internalized into its own graph (player mem
 
 Its paid tier, `scripts/player_memory_real.py --allow-live`, runs only after the user authorizes that run.
 
-Woken residents' minds (docs/TOWN_LIFE.md, "Layer 2") have their own runner on an island world, [features/woken-minds.md](features/woken-minds.md):
+A resident's mind made from the world's facts (docs/SEEDED_LIVES.md; every person has a mind from the start) has its own runner on an island world, [features/facts-minds.md](features/facts-minds.md):
 
 ```bash
-.agents/skills/verify-knowledge/scripts/woken_mind.py run --run knowledge-woken-$(date +%Y%m%d-%H%M%S)
+.agents/skills/verify-knowledge/scripts/facts_mind.py run --run knowledge-facts-$(date +%Y%m%d-%H%M%S)
 ```
 
-Its paid tier, `scripts/woken_real.py --allow-live --run knowledge-woken-real-<name>`, runs only after the user authorizes that run (the models file as shipped; the key from the main checkout's `.env`, into the mind's environment only).
+Its paid tier, `scripts/residents_real.py --allow-live --run knowledge-residents-real-<name>`, runs only after the user authorizes that run (the models file as shipped; the key from the main checkout's `.env`, into the mind's environment only).
 
 ## Doctor
 

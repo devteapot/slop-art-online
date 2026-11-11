@@ -10,7 +10,9 @@
     "goals": [
       "keep the best trapping ground above the shore",
       "see the truth of the north light settled",
-      "keep Wren safe from the water and the wolves"
+      "keep Wren safe from the water and the wolves",
+      "tan a cape wolf pelt well enough for Aethelred to pay top price",
+      "take Wren out on the shingle and teach her to read the tide"
     ],
     "mood": "soured, watchful",
     "traits": {
@@ -168,7 +170,13 @@
         "why": "Osric is a good headman and a friend, and the debt is not his fault alone."
       }
     ],
-    "secret": "I do not know whether it was the light or the weather that took my brother, and that not knowing is what sours me."
+    "secret": "I do not know whether it was the light or the weather that took my brother, and that not knowing is what sours me.",
+    "pastimes": [
+      "walking his snare lines on the cape at first light",
+      "skinning and curing hides by the smoke shed",
+      "sitting at the inn with Osric Dunn over a cup"
+    ],
+    "calling": "I hunt the cape and keep the fish road clear of wolves, and I would not trade that for any work under a roof."
   },
   "Merrow Stave": {
     "narrative": "I keep the small barley and the vegetable plots above the shore, and I trade seeds with Rona Dunn and sell barley to Brackenford's store against the village debt. The Lean Year taught me to count every basket and to put by what I can. I mind my own house and my own rows, and I wish my husband would let the light alone.",
@@ -181,7 +189,9 @@
     "goals": [
       "bring in a good barley crop",
       "pay down Thornby's debt a little",
-      "keep Wren from the water and the cape"
+      "keep Wren from the water and the cape",
+      "bring in a barley crop to be proud of and put by a full basket extra",
+      "save enough marks to buy a young ewe for the plots"
     ],
     "mood": "steady, a little anxious",
     "traits": {
@@ -327,7 +337,13 @@
         "why": "The shore and the cape are no place for a child, however she loves to follow her father."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending her barley rows and vegetable plots above the shore",
+      "trading seeds and gossip with Rona Dunn",
+      "mending nets and clothes by the hearth in the evening"
+    ],
+    "calling": "I grow what the house eats and sell the rest, and I would have a plot twice the size if there were hands for it."
   },
   "Wren Stave": {
     "narrative": "I help my mother in the plots above the shore, and when my father goes to the cape I follow him. I am afraid of the north light and the dark stair below it, though I have never been up close. I play with Hob Dunn on the shingle and I like the smell of the smoke shed.",
@@ -339,7 +355,9 @@
     "goals": [
       "follow my father to the cape",
       "play with Hob Dunn",
-      "not be sent home early"
+      "not be sent home early",
+      "get all the way up to the north light without being sent home",
+      "find a smooth white stone for her mother's plot"
     ],
     "mood": "curious, a little fearful",
     "traits": {
@@ -416,6 +434,12 @@
         "value": 0.65,
         "why": "I am afraid of the north light and the dark stair below it."
       }
-    ]
+    ],
+    "pastimes": [
+      "playing on the shingle with Hob Dunn",
+      "following her father along the shore path",
+      "hanging about the smoke shed to smell the curing fish"
+    ],
+    "calling": "When I am big I want to go out on the water like the fishermen, or up the cape with my father."
   }
 }

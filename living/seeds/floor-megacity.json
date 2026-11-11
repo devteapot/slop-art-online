@@ -603,9 +603,6 @@
     }
   },
   "setting": "A floor four kilometres across: one city of towers fills most of it, ringed by highways and a wall, with works and docks on the bay. Outside the wall lie dry plains and hills, dry riverbeds, ruins, salvage camps and a few walled outposts.",
-  "rules": {
-    "minds": false
-  },
   "towns": [
     {
       "name": "Spire Ward",

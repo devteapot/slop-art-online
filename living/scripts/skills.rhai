@@ -46,10 +46,10 @@ fn laws() {
         spawn_hunger: 25.0, spawn_energy: 85.0,
         // Grazing each grassy or forest tile holds.
         pasture_per_tile: 0.02,
-        // Characters nobody plays have minds (false: they live on their behaviour graphs
-        // alone), and a crying infant makes its carers think about it (false: it is only
-        // heard). A world sets these in its seed's `rules`, like any law here.
-        minds: true, cry_prompts_carers: true,
+        // A crying infant makes its carers think about it (false: it is only heard). A world
+        // sets this in its seed's `rules`, like any law here. Every person has a mind: no law
+        // turns minds off (docs/SEEDED_LIVES.md, "Every person a mind").
+        cry_prompts_carers: true,
     }
 }
 
@@ -265,9 +265,14 @@ fn cold(a) {
 
 fn wet(a) { a.raining && a.actor.kind == "person" && !a.actor.near_shelter }
 
+// A cold that hurts (a floor may make every cold one): a winter night, or a night in the rain.
+fn freezing(a) { a.season == "winter" || wet(a) }
+
+// Survival is secondary (docs/SEEDED_LIVES.md, "Survival made secondary"): a person feels
+// hungry from 50, a full game day before starving at 100.
 fn body_state(a) {
     let fraction = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
-    #{ cold: cold(a), hungry: a.actor.hunger > 55.0, starving: a.actor.hunger >= 100.0,
+    #{ cold: cold(a), hungry: a.actor.hunger > 50.0, starving: a.actor.hunger >= 100.0,
        wound: if fraction < 0.15 { "barely alive" } else if fraction < 0.35 { "badly wounded" }
               else if fraction < 0.6 || a.actor.hurt_ago < 5000 { "hurt" } else { "" } }
 }
@@ -283,9 +288,16 @@ fn body_state(a) {
 //   tiring_gene               a falling energy rate is divided by this gene
 //   healing_gene              a rising health rate is multiplied by this gene
 //   wet_energy, cold_hp       exposure, added last
+//
+// Targets in game time (a game day is 12 real minutes; docs/SEEDED_LIVES.md, "Survival made
+// secondary"): a person's hunger rises 48 a game day awake (4 a minute), so a meal brought down
+// to about 5 is wanted again at about 25 two or three times a day; it feels hungry at 50 and
+// starves at 100, a full game day later; starving takes 25 minutes (two days) to kill a healthy
+// body. An ordinary night outside is uncomfortable (tiring), not harmful; only winter nights and
+// nights in the rain hurt without a fire, shelter or a warm cloak.
 fn rates(a) {
     // A predator feeds big and rarely: a wolf lasts about an hour on a deer.
-    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 5.0 };
+    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 4.0 };
     let energy = -3.0;
     let act = a.actor.activity;
     if act == "sleep" {
@@ -308,15 +320,18 @@ fn rates(a) {
     #{
         hunger: hunger, energy: energy,
         // Starving hurts; fed and rested, a body heals; with no energy left, it suffers.
-        starving_at: 100.0, starving_hp: -6.0,
+        starving_at: 100.0, starving_hp: -4.0,
         fed_below: 70.0, rested_above: 15.0, healing_hp: 3.0, healing: healing,
         spent_at: 0.0, spent_hp: -2.0,
-        // Inborn endurance slows tiring; vitality speeds healing.
-        tiring_gene: "endurance", healing_gene: "vitality",
-        // Rain soaks people out from under a roof (a cloak keeps some of it off): it is tiring.
-        wet_energy: if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 },
-        // Cold nights hurt people without a fire, shelter or warm cloak; winter nights are worse.
-        cold_hp: if cold(a) { if a.season == "winter" { -5.0 } else { -2.0 } } else { 0.0 },
+        // Inborn endurance slows tiring; vitality speeds healing; a big appetite makes one
+        // hungry sooner; hardiness divides what cold and wet weather take.
+        tiring_gene: "endurance", healing_gene: "vitality", appetite_gene: "appetite", hardiness_gene: "hardiness",
+        // Exposure tires: rain soaks people out from under a roof (a cloak keeps some of it
+        // off), and a cold night without a fire, shelter or warm cloak is uncomfortable.
+        wet_energy: (if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 })
+            + (if cold(a) { -1.5 } else { 0.0 }),
+        // A cold night hurts only in winter or in the rain (a storm night).
+        cold_hp: if cold(a) && freezing(a) { if a.season == "winter" { -3.0 } else { -1.5 } } else { 0.0 },
     }
 }
 
@@ -371,9 +386,20 @@ fn eat_check(a) {
     if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
     ""
 }
-fn eat_duration(a) { 1500 }
+// A meal: up to `qty` (default 1) of the item, as many as bring hunger down to about 5.
+fn meal(a) {
+    let n = amount(a);
+    let have = inv(a, a.item);
+    if n > have { n = have; }
+    let want = ((a.actor.hunger - 5.0) / nutrition(a.item)).ceiling().to_int();
+    if want < 1 { want = 1; }
+    if n > want { n = want; }
+    n
+}
+fn eat_duration(a) { 1500 * meal(a) }
 fn eat_done(a) {
-    [#{ op: "remove", item: a.item, qty: 1 }, #{ op: "vitals", hunger: -nutrition(a.item), hp: 1.0 }]
+    let n = meal(a);
+    [#{ op: "remove", item: a.item, qty: n }, #{ op: "vitals", hunger: -nutrition(a.item) * n, hp: 1.0 * n }]
 }
 
 fn cook_check(a) {
@@ -1320,60 +1346,6 @@ fn welcome_done(a) { [#{ op: "welcome" }] }
 fn leave_duration(a) { 1000 }
 fn leave_done(a) { [#{ op: "leave" }] }
 
-// ---- residents who get a mind (docs/TOWN_LIFE.md, "Layer 2") -----------------------------
-// On a world whose residents live on their behaviour graphs alone, someone engaging a
-// resident can wake it into a mind, which it keeps. `e` is "<what>:<by>": what is `speech`
-// (spoken to), the name of a skill aimed at the resident as it starts (`wave`, `give`,
-// `teach`, `offer`, `attack`…), `hurt` (a blow or missile landed) or `theft` (taking from its
-// store as it watched); by is `player`, `mind` (what a mind decided: its acts and words),
-// `woken` (what a woken resident's mind decided), `habit` (what a minded character's behaviour
-// graph did by itself) or `instinct`. 1 wakes, 0 does not. Habits and instincts stay at the level of detail they happen at: a neighbour's
-// evening nod or a wolf's bite wakes nobody, whether or not the neighbour has a mind (the first
-// paid run, before `habit`, had woken residents' routine nods wake 11 of 15 in 9 minutes).
-// Read once per script revision for each engagement.
-fn wakes(e) {
-    let p = e.split(":");
-    if p.len() < 2 || p[1] == "instinct" || p[1] == "habit" { return 0; }
-    let what = p[0];
-    // A woken resident's words and gestures do not wake its neighbours; a blow or a theft does.
-    // Without this, woken residents talking to each other woke 41 of 48 in three social trials
-    // (docs/TRIALS.md, "Fast iterations", 6), the newcomer 7.
-    if p[1] == "woken" && !["hurt", "theft"].contains(what) && !["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 0; }
-    if ["speech", "hurt", "theft"].contains(what) { return 1; }
-    // Kindness, dealings, lessons, asking to belong, and anything hostile.
-    if ["wave", "nod", "give", "offer", "offer_terms", "demand", "accept", "teach", "tend", "heal", "join", "welcome", "host"].contains(what) { return 1; }
-    if ["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 1; }
-    0
-}
-
-// What a resident without a mind keeps of what it perceives, for the mind it may get: a ring
-// of `slots` (at most 256; 0 keeps nothing) per resident, of perceptions at least
-// `min_salience` (an answered greeting is 0.15, a greeting 0.3, someone coming into view 0.2,
-// overheard speech 0.45), the same perception again within `repeat_s` counted in its slot,
-// someone who came into view noted again only after `sighted_s`. Measured on the island
-// (docs/TOWN_LIFE.md): without the floor a fifth of the slots held answered greetings.
-// What a woken resident's mind gets, read by the mind service: at most `cap` woken residents of
-// one settlement are on stage (thinking and talking at the full rate) at once; beyond it the
-// least recently engaged is off stage (0: no cap). A woken resident's first thought waits at
-// most `wait_s` for its mind to be made (its identity from the world's facts, then its ring).
-fn woken_stage(k) {
-    switch k {
-        "cap" => 6,
-        "wait_s" => 60,
-        _ => 0,
-    }
-}
-
-fn woken_ring(k) {
-    switch k {
-        "slots" => 24,
-        "min_salience" => 0.2,
-        "repeat_s" => 120,
-        "sighted_s" => 600,
-        _ => 0,
-    }
-}
-
 // ---- text helpers for the skills' specs (below) -----------------------------------------
 // Specs are read by minds to compose routines from skills: build them from the same numbers
 // as the rules so they change when the rules do.
@@ -1723,8 +1695,8 @@ fn needs_law() {
     let awake = rates_awake();
     let l = laws();
     let rise = if awake == () { "hunger rises over time (100 = starving, which drains health); energy falls" } else { `hunger rises ~${short(awake.hunger)}/min (${short(awake.starving_at)} = starving, which drains health); energy falls ~${short(-awake.energy)}/min` };
-    #{ cadence: "event", topic: "body", covers: ["rates", "body_state"],
-       about: `${rise} awake and recovers while sleeping (faster within ${short(l.shelter_warmth)} m of a shelter or house). At night, people farther than ${short(l.fire_warmth)} m from a campfire and ${short(l.shelter_warmth)} m from a shelter or house, and without a warm cloak, lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.` }
+    #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing"],
+       about: `${rise} awake and recovers while sleeping (faster within ${short(l.shelter_warmth)} m of a shelter or house). At night, people farther than ${short(l.fire_warmth)} m from a campfire and ${short(l.shelter_warmth)} m from a shelter or house, and without a warm cloak, are cold: it tires them, and on winter nights or in the rain it also costs health. Health recovers slowly when fed and rested. Death is permanent.` }
 }
 
 fn know_how_law() {
@@ -1790,11 +1762,6 @@ fn dealings_law() {
        about: "Agreements and demands are kept by the world: it counts what each side hands over, stores or hosts for the other, and tells both sides when an agreement is kept, broken or lapses at its dusk, and when a demand is met or goes unpaid." }
 }
 
-fn woken_law() {
-    #{ cadence: "event", covers: ["wakes", "woken_ring", "woken_stage"],
-       about: "Townsfolk live on their habits until something calls for a mind: being spoken to, a skill aimed at them, being hurt or robbed. Then they wake and think for themselves for a while." }
-}
-
 fn occupations_law() {
     #{ cadence: "compile", covers: ["occupation_knows"], about: "What someone of an occupation knows from the start of the world: a fisher spears and cooks, a builder builds shelters and houses, and so on." }
 }
@@ -1836,7 +1803,6 @@ fn laws_about(l) {
         spawn_hunger: `a body comes into the world with hunger ${short(l.spawn_hunger)}`,
         spawn_energy: `and energy ${short(l.spawn_energy)}`,
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
-        minds: if l.minds { "characters nobody plays have minds of their own" } else { "characters nobody plays live on their habits alone, without minds" },
         cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
     }
 }

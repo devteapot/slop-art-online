@@ -11,7 +11,9 @@
       "keep my place with Josiah Crane without climbing the ridge",
       "pay off what I owe Tavvik before he comes asking",
       "find stone enough to fill the Lanternquay order from somewhere else",
-      "hear no more talk of the cairn"
+      "hear no more talk of the cairn",
+      "learn to dress a block himself, so he is not only the man who finds the stone",
+      "take Bramwell out to the low faces on a quiet day and show him what honest stone looks like"
     ],
     "mood": "uneasy, defensive, tired",
     "traits": {
@@ -183,7 +185,13 @@
         "why": "Corin will say her piece and Bramwell is listening; better the yard hears it than the house."
       }
     ],
-    "secret": "I have walked up the track alone at dusk to look at the broken cairn and left a flat stone on it, and I have told no one, not even Corin."
+    "secret": "I have walked up the track alone at dusk to look at the broken cairn and left a flat stone on it, and I have told no one, not even Corin.",
+    "pastimes": [
+      "sitting by the works fire with a mug, listening to the crews argue about nothing",
+      "walking the low meadows at dusk, reading the ground underfoot out of habit",
+      "playing at dice with Silas Vance and losing more often than he likes"
+    ],
+    "calling": "I read stone the way other men read weather, and I want to go on reading it with my crew beside me and no ridge above us."
   },
   "Corin Holt": {
     "narrative": "I am a mason, and I dress the stone my husband's crew raises; a block that is not square is a block that will not hold. I keep the quarry tally for Josiah Crane and I know to the load how much ridge stone the Lanternquay order still wants, and that is the trouble: Ezra will not climb and I cannot make him. He was careless up there and I tell him so at home, because someone must. I fear the giants will come down the track one day, and I keep the yard swept and the tally straight so that whatever comes, our house is in order.",
@@ -197,7 +205,9 @@
       "get the Lanternquay order filled from some other face",
       "make Ezra face what he did without breaking him",
       "keep Bramwell away from the ridge and the talk of it",
-      "keep Josiah Crane satisfied with the tally"
+      "keep Josiah Crane satisfied with the tally",
+      "be given a face of her own to work, not only the tally and the yard",
+      "teach Bramwell to set a level true, so he has a trade in his hands whatever his father does"
     ],
     "mood": "fretful, exacting, quietly frightened",
     "traits": {
@@ -340,7 +350,13 @@
         "why": "The Lanternquay order must be met and there is stone in the lower faces that no giant ever laid."
       }
     ],
-    "secret": "I have twice written the ridge loads in the tally as though they came from the lower face, because Josiah would not take 'none' for an answer."
+    "secret": "I have twice written the ridge loads in the tally as though they came from the lower face, because Josiah would not take 'none' for an answer.",
+    "pastimes": [
+      "dressing a block in the yard when the tally is done, just to keep her hand in",
+      "walking to the clock tower square on market day to hear what the other masons say of their work",
+      "keeping a small herb plot by the door and trading cuttings with Odile Vance"
+    ],
+    "calling": "A block that is not square is a block that will not hold, and I would be a mason of dressed stone until my hands give out."
   },
   "Bramwell Holt": {
     "narrative": "I carry the water up to the crew in a bucket that is too big for me, and I like the quarry because there is always something happening. Since the cairn was cut the men go quiet when I come near, and my father does not go up the ridge any more. My mother says I am not to go up there either, and I do not want to: I saw the giant on the skyline once and I still dream of it.",
@@ -352,7 +368,9 @@
     "goals": [
       "carry the water without spilling it",
       "be allowed to hold the measuring rod",
-      "not to go up the ridge"
+      "not to go up the ridge",
+      "carry the water up the whole way without spilling a drop",
+      "be let to hold the measuring rod for a real cut"
     ],
     "mood": "watchful, a little frightened, eager to be useful",
     "traits": {
@@ -438,6 +456,12 @@
         "why": "If I carry the water well they let me stay and listen."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "carrying the water bucket up to the crew and being told he is useful",
+      "playing at quoits and tag with Perry Fenwick and Nella Marsh",
+      "watching the masons dress stone and copying the ring of the chisel on a scrap"
+    ],
+    "calling": "I want to hold the measuring rod and be one of the crew, and one day read the stone like my father."
   }
 }

@@ -11,7 +11,9 @@
       "keep the Fenwicks' weirs off the upper pools",
       "see the hollow refuse to haul timber up the giants' track lest the streams foul",
       "teach Reed every pool and trap before he is grown",
-      "smoke enough fish to trade well with Alder Rush"
+      "smoke enough fish to trade well with Alder Rush",
+      "learn to smoke a batch that Alder Rush will take at Lanternquay prices",
+      "sit with the Eldest and put the streams' case for clean water before the hollow"
     ],
     "mood": "watchful and put-upon",
     "traits": {
@@ -149,7 +151,13 @@
         "why": "Alder Rush takes my smoked fish at a fair price, and a man who trades fair is worth keeping."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending and re-weaving the willow traps by the fire of an evening",
+      "walking the upper pools at first light to read the water",
+      "smoking fish over alder chips and trading the best of it at the hollow's stalls"
+    ],
+    "calling": "I keep the weirs and read the streams; the water tells me what it needs, and I speak for it."
   },
   "Rush Willow": {
     "narrative": "I came to this house as a bride and planted the berry rows myself, and I have watched the old forest shrink a little each year since. Osier frets about his pools and Sorrel Fenwick's weirs, and I let him fret; my worry is the axe and the smoke and the wolves coming closer to the clearing. Vetch Quill and I talk of it over the hives. The hollow must eat, but the forest is what feeds it, and I will not see it cut to the stumps.",
@@ -163,7 +171,9 @@
       "keep the berry rows and the garden yielding through the winter",
       "persuade the hollow not to let the forest be cut close",
       "see Reed settled with a trade and a strip of his own one day",
-      "keep the peace between Osier and the Fenwicks if she can"
+      "keep the peace between Osier and the Fenwicks if she can",
+      "bring in a berry harvest that carries the household through winter without buying",
+      "find Reed a trade and a strip of his own in the hollow"
     ],
     "mood": "quietly anxious",
     "traits": {
@@ -297,7 +307,13 @@
         "why": "He is his father's son in the water and mine in the garden; whatever he chooses, he should choose it himself."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the berry rows and the garden at dawn",
+      "sitting with Vetch Quill over the hives, talking of the forest",
+      "drying and storing berries and fibre for winter"
+    ],
+    "calling": "I grow what feeds this house, and I mean the forest to still be standing when Reed's children eat from it."
   },
   "Reed Willow": {
     "narrative": "I help my father with the weirs and I know the streams nearly as well as he does, though he would say not yet. Reed Fenwick and I fish together sometimes, and it is awkward, because our mothers and fathers do not agree about the water. I want to see the sea at Lanternquay one day — the real sea, not the streams — and I think about it more than I should when there are traps to set.",
@@ -310,7 +326,9 @@
     "goals": [
       "learn every pool and trap from his father",
       "keep his friendship with Reed Fenwick despite the quarrel",
-      "see Lanternquay and the sea one day"
+      "see Lanternquay and the sea one day",
+      "learn every pool and trap from his father before he is grown",
+      "stay friends with Reed Fenwick whatever the parents say"
     ],
     "mood": "restless and eager",
     "traits": {
@@ -399,6 +417,12 @@
         "why": "There is a whole sea beyond the streams, and I mean to see it before I am old."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "fishing the alder bend with Reed Fenwick",
+      "setting and checking traps along the streams",
+      "listening to travellers' tales of the sea and the harbour at the hollow's edge"
+    ],
+    "calling": "I want to learn the water the way my father knows it — and then see where it runs to."
   }
 }

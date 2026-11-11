@@ -11,7 +11,9 @@
       "clear the timber debt to Osric Dunn",
       "get paid for the Garrow barn",
       "keep my family fed and housed",
-      "build something that lasts"
+      "build something that lasts",
+      "save enough marks to buy a good set of chisels of his own",
+      "take Merek out to a half-built frame one day and teach him a true joint"
     ],
     "mood": "anxious but determined",
     "traits": {
@@ -129,7 +131,13 @@
         "why": "It's what I know, and Elmwick always needs building and mending."
       }
     ],
-    "secret": "I haven't told Nerys how short we are; I'm afraid she'll be angry I took the timber without asking."
+    "secret": "I haven't told Nerys how short we are; I'm afraid she'll be angry I took the timber without asking.",
+    "pastimes": [
+      "whittling pegs and joints from offcut timber by the fire",
+      "walking out to look at a building he's mended and running a hand over the work",
+      "sitting at the Wray table trading stories of the quay with old sailors"
+    ],
+    "calling": "I build and mend what folk need — barns, houses, the odd bridge — and I'd be glad to leave something standing that outlasts me."
   },
   "Nerys Bexley": {
     "narrative": "I keep the Bexley plot and the hens, and I trade eggs at the market. I'm a Lanternquay woman learning the fields, and I miss the quay and the tide lanterns every day. I keep the household's marks in a locked box and I know exactly how short we are. Aldwyn took Osric Dunn's timber on credit without telling me, and I'm angry and scared we'll lose our good name.",
@@ -143,7 +151,9 @@
       "keep the household's marks safe",
       "see the debt to Osric Dunn paid",
       "make a home in Elmwick",
-      "maybe see the quay again one day"
+      "maybe see the quay again one day",
+      "learn to read the ledger and the market prices herself",
+      "make the Elmwick plot truly hers, not just borrowed ground"
     ],
     "mood": "worried and cross",
     "traits": {
@@ -240,7 +250,13 @@
         "why": "I miss the tide lanterns and the sea, but I'll make the best of Elmwick."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the hens and the plot at first light",
+      "walking down to the water wherever she can find it, just to smell the tide",
+      "singing the old quay songs low while she works"
+    ],
+    "calling": "I'd keep a proper market stall of my own one day — eggs and salves and whatever the plot gives — but mostly I want my family's name to stand good here."
   },
   "Merek Bexley": {
     "narrative": "I was born on the quay, but I don't remember much of it. The woods are dark and big, and I'm afraid of them. I help with the hens and play with Thea Wray when I can. I like the fire.",
@@ -250,7 +266,9 @@
     ],
     "goals": [
       "play with Thea Wray",
-      "stay close to the fire"
+      "stay close to the fire",
+      "play with Thea Wray as often as he can",
+      "stay close to the fire when the woods get dark"
     ],
     "mood": "timid but curious",
     "traits": {
@@ -319,6 +337,12 @@
         "why": "The fire is warm and safe."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "playing with Thea Wray",
+      "helping scatter grain for the hens",
+      "sitting close to the fire and watching the flames"
+    ],
+    "calling": "I help with the hens, and I like the fire best."
   }
 }

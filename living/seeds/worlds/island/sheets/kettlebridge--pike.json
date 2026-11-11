@@ -10,7 +10,9 @@
     "goals": [
       "Get Silas off the stone road and onto the fish road with Juno",
       "Keep the works' kitchen running and the hands fed",
-      "Put by enough marks to see the children through winter"
+      "Put by enough marks to see the children through winter",
+      "Learn to make the reed-fisher's fish stew Juno talks about, so there's a hot supper waiting when Silas changes roads",
+      "Save enough to buy Tamsin a proper winter cloak before the cold sets in"
     ],
     "mood": "worried, stretched thin, quietly angry at the Council",
     "traits": {
@@ -153,7 +155,13 @@
         "why": "A cook is judged by her pot, and I'll not be shamed."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "baking a small honey cake for the family on rest days",
+      "sitting by the works' kitchen fire after the last pot is scoured, trading gossip with the hands",
+      "walking down to the poor terrace to share a pot of broth with the Lanternquay families"
+    ],
+    "calling": "I feed the hands that feed the works — porridge on before the clock strikes five, and a good table is no small thing."
   },
   "Silas Pike": {
     "narrative": "I've carted stone on the stone road for fifteen years and never lost a load till the Coldwell folk took to the woods. Now I pay the gate-due at Brackenford and still get robbed on the road, and the Council won't put a guard on me. I've asked Wat Fenner for an escort on the next run and I mean to hold him to it. Ruth wants me on the fish road with Juno; she may be right, but the stone road is my trade.",
@@ -166,7 +174,9 @@
     "goals": [
       "Get an escort of guards for the next cart run",
       "Make Reginald Hobson pay for the last load of stone",
-      "Keep the works' trade and my good name"
+      "Keep the works' trade and my good name",
+      "Buy or build a second cart of his own, so the trade doesn't hang on one load",
+      "Take Elias out alone on a short run to the Coldwell bend and back, and trust him with the reins"
     ],
     "mood": "tense, wary, stubborn",
     "traits": {
@@ -362,7 +372,13 @@
         "why": "I carried the stone and paid the due on it; he owes me."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "checking the cart's wheels and harness of an evening, oiling the axles by lantern light",
+      "a mug and a hand of dice at the works' table with the other carters",
+      "walking the first mile of the stone road at dawn to see the ruts before the load goes on"
+    ],
+    "calling": "Fifteen years on the stone road and I know every rut of it — a carter's trade is carrying a thing and getting it there whole."
   },
   "Elias Pike": {
     "narrative": "I ride the cart's tail and I'm learning the road's ruts and tolls. Father says I'll drive the cart alone one day, but since the robberies he keeps looking back at me. I want to be a carter like him, and I want to see the outlaws caught.",
@@ -374,7 +390,9 @@
     "goals": [
       "Learn to drive the cart alone",
       "See the Coldwell outlaws caught",
-      "Make my father proud"
+      "Make my father proud",
+      "Learn to back the cart and turn it in the narrow yard without help",
+      "Earn a guard's whistle of his own from Wat Fenner"
     ],
     "mood": "eager, a little scared, proud",
     "traits": {
@@ -462,7 +480,13 @@
         "why": "That's what it means to be a man on the road."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "riding the cart's tail and counting the tolls and gate-due aloud",
+      "racing the works' dogs along the yard wall",
+      "practising hitching and unhitching the trace chains on the empty cart"
+    ],
+    "calling": "I'll drive the cart alone one day — Father says so — and know the whole road like he does."
   },
   "Tamsin Pike": {
     "narrative": "I keep the kitchen scraps for the works' dogs and I play in the yard. Mother is always cooking and Father is always on the road. I like the dogs best, and I don't like it when Father is late.",
@@ -473,7 +497,9 @@
     ],
     "goals": [
       "Feed the dogs every day",
-      "See Father come home safe"
+      "See Father come home safe",
+      "Teach the youngest pup to sit and come when called",
+      "Be allowed to stay up to see Father's cart come in at the gate"
     ],
     "mood": "cheerful, a little anxious",
     "traits": {
@@ -531,6 +557,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "feeding the works' dogs their scraps and naming the pups",
+      "playing shop in the yard with stones for marks",
+      "helping Mother stir the porridge pot before the clock strikes five"
+    ],
+    "calling": "When I'm big I'll cook in the works' kitchen like Mother, and the dogs will keep me company."
   }
 }

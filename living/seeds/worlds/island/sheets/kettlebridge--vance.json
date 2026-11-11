@@ -11,7 +11,9 @@
       "keep my crew off the ridge and my name clear of the cutting",
       "see Ezra stand up and answer for the cairn",
       "hold my foreman's place under Josiah Crane",
-      "get Corwin to look higher than a terrace farmer's daughter"
+      "get Corwin to look higher than a terrace farmer's daughter",
+      "master the old wedge-and-feather splitting his own father taught him, better than any man on the ridge",
+      "see Corwin stand on his own feet and earn a place that is his, not handed down"
     ],
     "mood": "grim and set in his ways",
     "traits": {
@@ -173,7 +175,13 @@
         "why": "The masters sit in the yard and set the price; it is the crews that take the risk."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the quarry floor at first light to read the stone before the crew arrives",
+      "sitting by the clock tower with Barnaby Quill, listening to the works' bell rung true",
+      "carving small stone weights and markers for the quarry sheds in his own time"
+    ],
+    "calling": "I cut good stone and set a straight line, and I want no man under me hurt by my word."
   },
   "Odile Vance": {
     "narrative": "I keep the healer's room by the clock tower, and quarrymen come to me with broken fingers and crushed feet and I set them as best I can. I buy my herbs from a Tanglewood woman who walks the old forest paths, and she has taught me more than the works' doctors ever did. When they cut into the cairn I said in my own house and to anyone who asked that it was wrong, and I have not changed my mind; the giants keep their dead on the ridges and we had no business there. Silas will not go back up and I do not press him, though Josiah Crane presses him enough for both of us.",
@@ -187,7 +195,9 @@
       "keep the quarry crews mending and the salves stocked through winter",
       "see the cairn cutting answered for, and the giants' peace mended if it can be",
       "keep Silas from being driven up the ridge by the Council",
-      "see Corwin settle with a girl who will not make him a stranger in his own house"
+      "see Corwin settle with a girl who will not make him a stranger in his own house",
+      "learn the forest salves well enough to teach them to another healer in Kettlebridge",
+      "keep a full store of herbs and splints against the winter"
     ],
     "mood": "steady, watchful, quietly disapproving",
     "traits": {
@@ -355,7 +365,13 @@
         "why": "Silas has said his piece once too often. The boy will marry where he will, and Rosalind is no bad choice."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "gathering and drying herbs on the sill of the healer's room",
+      "walking the old forest paths with the Tanglewood woman to learn what grows there",
+      "sitting with the mending crews at day's end, hearing who is hurt before they come to her door"
+    ],
+    "calling": "I set bones and mend what the stone breaks, and I would have no one go unhealed for want of a salve."
   },
   "Corwin Vance": {
     "narrative": "I work the quarry floor under Ezra Holt and I am not ashamed of it, but I mean to have my father's foreman's place and I do not see why wanting it should be a sin. My father will not go back up the ridge and the crews mutter about it; I think a foreman who will not climb is no foreman, cairn or no cairn. Rosalind Ashcombe is the best thing in my life and her father looks at me like I am the tithe collector come round, and my own father looks at her like she is beneath us, and neither of them has asked me what I want.",
@@ -369,7 +385,9 @@
       "take my father's foreman's place on the ridge",
       "marry Rosalind Ashcombe with both fathers' blessing, or without them",
       "get the ridge crews working again so the Lanternquay order is met",
-      "prove to Silas that I am not a boy to be told who to court"
+      "prove to Silas that I am not a boy to be told who to court",
+      "learn the whole trade of the quarry, from the first cut to the last cart, well enough that no man can say he was given it",
+      "marry Rosalind Ashcombe and keep a house of his own by the works"
     ],
     "mood": "restless and sure of himself",
     "traits": {
@@ -519,6 +537,12 @@
         "why": "Bisi and Lottie and Rosalind are worth more than the masters' opinions of them."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "wrestling and lifting with the quarry crews after the shift to prove his strength",
+      "walking out along the stone road with Rosalind Ashcombe when the works let them",
+      "practising the foreman's calls and signals on the quarry floor until they come without thinking"
+    ],
+    "calling": "I want to run a crew on the ridge and run it well, and I will not be told I am too young to want it."
   }
 }

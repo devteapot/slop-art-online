@@ -17,6 +17,10 @@ pub type Genes = BTreeMap<String, f32>;
 
 /// Body genes every creature has.
 pub const BODY: [&str; 4] = ["speed", "strength", "endurance", "vitality"];
+/// Constitution genes around 1.0 drawn wider than the body's, since people differ more in
+/// them: how fast hunger grows (`appetite`, read by the needs law) and how little cold and wet
+/// weather wear one down (`hardiness`).
+pub const CONSTITUTION: [&str; 2] = ["appetite", "hardiness"];
 /// Person temperament traits (animals take theirs from their species).
 pub const PERSON_TRAITS: [&str; 8] = ["caution", "sociability", "empathy", "curiosity", "ambition", "introspection", "temper", "nurture"];
 /// Skills whose pace is set by something else (walking speed, the body's needs, a signal).
@@ -67,6 +71,11 @@ pub fn founder(temperament: &BTreeMap<String, [f32; 2]>, skills: &[String], u: &
         g.insert(k.clone(), clamp(&k, v));
     }
     g
+}
+
+/// A founder's constitution genes (see [`CONSTITUTION`]): typically ±12%.
+pub fn constitution(u: &mut dyn FnMut() -> f32) -> Genes {
+    CONSTITUTION.iter().map(|k| (k.to_string(), clamp(k, 1.0 + mutation(u, 0.12)))).collect()
 }
 
 /// Person temperament ranges (animals have theirs in their species).
@@ -133,6 +142,8 @@ pub fn notable(g: &Genes) -> Vec<String> {
             "strength" => ("unusually strong", "weak for your kind"),
             "endurance" => ("tireless", "quick to tire"),
             "vitality" => ("hardy", "frail"),
+            "appetite" => ("always hungry", "of small appetite"),
+            "hardiness" => ("little troubled by cold and wet", "quick to feel the cold"),
             _ => ("", ""),
         };
         let skill = k.strip_prefix("knack:");
@@ -191,6 +202,8 @@ pub fn vary_ways(top: &Node, u: &mut dyn FnMut() -> f32) -> Option<Node> {
                 rain: vary(w.rain, u),
                 hailed: vary(w.hailed, u),
                 commotion: vary(w.commotion, u),
+                bedtime: vary(w.bedtime, u),
+                evening: vary(w.evening, u),
                 believes: w.believes.clone(),
             };
             Desire { want: d.want.clone(), weight, body: d.body.clone() }

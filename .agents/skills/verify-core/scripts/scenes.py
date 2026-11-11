@@ -178,11 +178,22 @@ def needs(s):
     cold = s.vitals(a, "cold")
     s.expect("actor is exposed to night cold", not cold["rate_key"] & (64 | 128))
     s.call("grant_items", a, "cloak", 1)
-    s.graph(a, {"wait": 120})
-    s.wait(lambda: s.vitals(a)["hp_rate"] > cold["hp_rate"] + 1.5)
+    s.graph(a, {"first": [{"do": "rest"}]})
+    s.wait(lambda: s.vitals(a)["rate_key"] != cold["rate_key"])
     warm = s.vitals(a, "cloaked")
-    s.expect("cloak removes the cold penalty", abs(warm["hp_rate"] - cold["hp_rate"] - 2) < 0.1,
+    # An ordinary night's cold tires (1.5 a minute, divided by the body's hardiness gene) and
+    # does not hurt; only winter nights and nights in the rain do (docs/SEEDED_LIVES.md).
+    hardy = hardiness(s, a)
+    s.expect("cloak removes the cold's tiring", abs(warm["energy_rate"] - cold["energy_rate"] - 1.5 / hardy) < 0.05,
+             {"cold_energy_rate": cold["energy_rate"], "cloaked_energy_rate": warm["energy_rate"], "hardiness": hardy})
+    s.expect("an ordinary night's cold does not hurt", abs(warm["hp_rate"] - cold["hp_rate"]) < 0.05,
              {"cold_hp_rate": cold["hp_rate"], "cloaked_hp_rate": warm["hp_rate"]})
+
+
+def hardiness(s, actor):
+    """The body's hardiness gene (1.0 when it has none)."""
+    g = s.rows(f"SELECT genes FROM genome WHERE id = {actor}")
+    return float(json.loads(g[0]["genes"]).get("hardiness", 1.0)) if g else 1.0
 
 
 def seize(s):
@@ -385,7 +396,7 @@ def infant(s):
         v = s.vitals(baby["id"])
         hunger = v["hunger"] + v["hunger_rate"] * max(0, now - v["at_ms"]) / 60000
         return (20 <= hour < 22 or hour < 2) and 70 <= hunger < 95
-    print("Waiting for real night with infant hunger >=70 to isolate cold HP loss.", flush=True)
+    print("Waiting for real night with infant hunger >=70 (no healing), so health shows only the cold.", flush=True)
     s.wait(night_and_no_healing, seconds=2100, every=5)
     s.expect("infant is still alive and infant", s.rows(f"SELECT stage, alive FROM character WHERE id = {baby['id']}")[0] == {"stage": 0, "alive": True})
     s.call("place_near", baby["id"], warm_anchor)
@@ -398,16 +409,18 @@ def infant(s):
     s.wait(lambda: not s.vitals(baby["id"])["rate_key"] & (64 | 128))
     cold = s.vitals(baby["id"], "exposed-vitals")
     cold_looks = scene_for(b, "exposed")
-    s.expect("shelter removes exactly the summer cold penalty", abs(warm["hp_rate"] - cold["hp_rate"] - 2) < 0.1,
+    # A summer night's cold tires and does not hurt (docs/SEEDED_LIVES.md); only winter nights
+    # and nights in the rain do.
+    s.expect("a summer night's cold does not hurt the exposed infant", abs(warm["hp_rate"] - cold["hp_rate"]) < 0.05 and cold["hp_rate"] >= 0,
              {"sheltered": warm["hp_rate"], "exposed": cold["hp_rate"]})
     if not s.baseline:
-        s.expect("parent sees warm shelter and cold exposure matching HP-rate sign",
-                 "warm" in warm_looks and "cold" in cold_looks and warm["hp_rate"] >= 0 and cold["hp_rate"] < 0,
+        s.expect("parent sees warm shelter and cold exposure",
+                 "warm" in warm_looks and "cold" in cold_looks,
                  {"sheltered_looks": warm_looks, "exposed_looks": cold_looks})
     n0 = s.needs(baby["id"], "cold-before")
     time.sleep(8)
     n1 = s.needs(baby["id"], "cold-after")
-    s.expect("exposed infant actually loses health", n1["hp"] < n0["hp"] - 0.15)
+    s.expect("the exposed infant keeps its health on a summer night", n1["hp"] >= n0["hp"] - 0.05)
 
     cast = {"baby": baby, "a": a, "b": b, "carers": carers, "witness": witness, "warm_anchor": warm_anchor}
     (s.out / "infant-cast.json").write_text(json.dumps(cast, indent=2) + "\n")

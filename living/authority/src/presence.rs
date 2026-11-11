@@ -133,7 +133,7 @@ pub fn housekeeping(ctx: &ReducerContext, now: u64) {
 fn take_over(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     p.takeover_ms = NEVER;
     let Some(mut c) = ctx.db.character().id().find(p.id).filter(|c| c.alive) else { return };
-    // The world's mind service, whatever the seed's `rules.minds` says of its residents: a
+    // The world's mind service, as for every resident: a
     // person's character lives on under a mind, with its past (with no mind service running
     // it lives on its behaviour graph, a deliberation pending).
     c.controller = common::world(ctx).admin;

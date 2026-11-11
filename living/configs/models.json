@@ -1,5 +1,5 @@
 {
-  "default": "glm-flash",
+  "default": "people",
   "profiles": {
     "glm-flash": {
       "base_url": "https://api.mistral.ai/v1",
@@ -113,7 +113,6 @@
       "reorganize": "glm-flash"
     }
   },
-  "woken": "people",
   "assign": {},
   "rotate": [],
   "species": {

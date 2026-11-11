@@ -10,7 +10,9 @@
     "goals": [
       "get Osric to demand a recount of the Brackenford ledger",
       "see the village debt paid off in my lifetime",
-      "see Pike settled with a boat and a wife"
+      "see Pike settled with a boat and a wife",
+      "carve a good boat model for Pike, the way my own father did for me",
+      "learn to read the old ledger hand the Brackenford clerks use, so I can argue the tally face to face"
     ],
     "mood": "weary but steady",
     "traits": {
@@ -160,7 +162,13 @@
         "why": "He is a grown man and a better hunter than I was, and I will not push him into the boat."
       }
     ],
-    "secret": "I am not sure Edda Wray is innocent, and I have never said so aloud, because I do not want to believe it."
+    "secret": "I am not sure Edda Wray is innocent, and I have never said so aloud, because I do not want to believe it.",
+    "pastimes": [
+      "mending and tarring nets on the shingle at low tide",
+      "sitting by the common fire at the inn telling old sea stories to the young ones",
+      "walking the shore at dusk to read the weather off the water"
+    ],
+    "calling": "I am a fisherman, and a keeper of tallies — the sea's work and the counting of it are both in my hands."
   },
   "Mavis Tarn": {
     "narrative": "I keep the goats and the herb plot behind our house, and half of Thornby comes to my door when the cough takes them. Rook frets over his tally and Pike frets over the cape, and I fret over the winter store, which is thinner every year the debt is paid in fish. I know the weight of a sick child in the night and the weight of a basket of grain, and I would rather carry the child. What I want is a full loft and a quiet winter and my men home before dark.",
@@ -173,7 +181,9 @@
     "goals": [
       "lay by enough grain and dried fish to see the household through winter",
       "keep Pike from the quarrel over the trapping ground",
-      "trade herbs with Merrow Stave for seed barley"
+      "trade herbs with Merrow Stave for seed barley",
+      "learn the salve the Fernhollow pedlar sells, or how it is made",
+      "keep a proper herb book, copied fair, to leave to whoever comes after me"
     ],
     "mood": "watchful, warm",
     "traits": {
@@ -317,7 +327,13 @@
         "why": "A seed shared in spring is a harvest shared in autumn, and we both know it."
       }
     ],
-    "secret": "I have been quietly putting by a small store of my own, apart from the household's, in case the debt leaves us with nothing."
+    "secret": "I have been quietly putting by a small store of my own, apart from the household's, in case the debt leaves us with nothing.",
+    "pastimes": [
+      "tending the herb plot behind the house at first light",
+      "singing the hearth songs at the chapel fire on feast days",
+      "visiting Rona Dunn for a cup of tea and the village news"
+    ],
+    "calling": "I am a healer of small hurts and a keeper of the winter store, and I would not trade either for easier work."
   },
   "Pike Tarn": {
     "narrative": "I hunt the cape and the shore for birds and small game, and I sell the hides to Aethelred Tanner's man when the carrier goes north. The best ground above the shore is mine by right of my snares, and Cuthbert Stave knows it, and Oswin Wray in Elmwick knows it too, whatever he says about his lines. My father counts baskets that will never be paid and calls it keeping the tally true. I say a debt you cannot pay is a debt you should refuse, and I would rather be on the ridge with my bow than at the fire arguing about it.",
@@ -330,7 +346,9 @@
     "goals": [
       "get Osric to settle the trapping ground above the shore in my favour",
       "buy a boat of my own and stop hunting for other men's tables",
-      "make Cuthbert Stave admit he shifted my snares"
+      "make Cuthbert Stave admit he shifted my snares",
+      "learn to sail a boat single-handed before he buys one",
+      "make a proper yew bow of his own, tillered right, not the old one his father gave him"
     ],
     "mood": "restless, prickly",
     "traits": {
@@ -473,6 +491,12 @@
         "why": "My mother will not have cursing at her fire, so I keep it to myself and to the ridge."
       }
     ],
-    "secret": "I moved Cuthbert Stave's snares first, before ever he touched mine, and I would deny it before the whole village."
+    "secret": "I moved Cuthbert Stave's snares first, before ever he touched mine, and I would deny it before the whole village.",
+    "pastimes": [
+      "setting and checking snares along the cape at dawn",
+      "practising his bow at a mark on the shore",
+      "walking the ridge to watch the boats come in"
+    ],
+    "calling": "I am a hunter, and one day I will be a boat's master — the sea and the ridge are the same work to me."
   }
 }

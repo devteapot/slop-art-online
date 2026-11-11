@@ -10,7 +10,9 @@
     "goals": [
       "settle the debt to Bramwell Tallow before winter",
       "keep the wolves from the Sootwood plots",
-      "get the woodcutting back on schedule"
+      "get the woodcutting back on schedule",
+      "learn to fell and stack a pit alongside Tace, hand to hand, before she goes off to the boats",
+      "one day walk the old forest ridge with Durrow without fear in either of us"
     ],
     "mood": "weary and worried",
     "traits": {
@@ -163,7 +165,13 @@
         "why": "The work is behind and the quay pays slow; I cannot spare nights for watching."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sitting by the slow charcoal pits through the night, watching the smoke",
+      "walking his Sootwood plots to read which oaks are ready",
+      "a mug and a game of dice at the quay stalls when a load goes down"
+    ],
+    "calling": "I cut oak and ash and burn the slow pits; the timber's honest and the fire's mine to mind."
   },
   "Maren Hollis": {
     "narrative": "I keep the Sootwood plots and the goats, and carry roots and charcoal down to the quay stalls when I can. Orvin owes Bramwell Tallow for rope and tar, and I've been selling eggs and roots quietly to put marks aside before winter. The smoke from our pits drifts east and I worry it sours the Fernhollow gardens, though I'd never say so to Orvin. Since the wolves came down and chased Durrow to the door, I keep the children close and sleep light.",
@@ -176,7 +184,9 @@
     "goals": [
       "settle Orvin's debt to Bramwell before winter",
       "keep the children safe from the wolves",
-      "put by enough marks for the cold months"
+      "put by enough marks for the cold months",
+      "grow the root patch big enough to sell a proper load, not just eggs",
+      "see the Fernhollow gardens with her own eyes, once, and judge the smoke for herself"
     ],
     "mood": "anxious but steady",
     "traits": {
@@ -319,7 +329,13 @@
         "why": "Our pits smoke east and I'd not have the Fernhollow folk think us careless."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the plots and the goats at first light",
+      "selling roots and eggs at the quay stalls and hearing the harbour gossip",
+      "sitting with Sena Tarn over mending and talk"
+    ],
+    "calling": "I keep the plots and the goats and carry what we grow down to the stalls; that's the work I know and do well."
   },
   "Tace Hollis": {
     "narrative": "I'm fifteen and I can stack a charcoal pit and swing an axe as well as any hand in Sootwood. I want to crew on a quay boat and see the harbour mouth, and Rook Fenner the younger taught me a quay knot I practise every night. The wolves that come down the old forest in winter scare me more than I let on. With Pell and Durrow shaken by the wolves, I keep my fears to myself and help where I can.",
@@ -332,7 +348,9 @@
     "goals": [
       "crew on a quay boat and see the harbour mouth",
       "learn the axe and the charcoal burn properly",
-      "keep Durrow from fretting about the wolves"
+      "keep Durrow from fretting about the wolves",
+      "get taken on as crew for one run out of the harbour mouth",
+      "master the charcoal burn properly, start to finish, on her own"
     ],
     "mood": "restless and brave-faced",
     "traits": {
@@ -450,7 +468,13 @@
         "why": "The wolves scare me, but someone in this house has to look brave."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "practising the quay knot Rook Fenner taught her, over and over",
+      "swinging the axe on cordwood when her father isn't watching",
+      "walking down the wood road to the harbour mouth to watch the boats"
+    ],
+    "calling": "I can stack a pit and swing an axe, but what I want is to crew a quay boat and feel the harbour swell under me."
   },
   "Durrow Hollis": {
     "narrative": "I carry kindling and play among the charcoal stacks, and when the quay folk come up the wood road I play with Tam Sedge. The wolves chased me to the door and I was scared; Pell hid behind the stacks and kept his head, and now he says he wasn't scared at all, but I don't believe him. I don't like the deep woods now and I won't go to the kindling stacks alone.",
@@ -462,7 +486,9 @@
     "goals": [
       "stay close to the door",
       "play with Tam Sedge when he comes",
-      "not think about the wolves"
+      "not think about the wolves",
+      "get brave enough to go to the kindling stacks alone again",
+      "play with Tam Sedge as often as he comes"
     ],
     "mood": "frightened",
     "traits": {
@@ -560,6 +586,12 @@
         "why": "Tam's visits are the best part of the month."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "playing among the charcoal stacks within sight of the door",
+      "playing with Tam Sedge when he comes up the wood road",
+      "helping carry kindling in a little basket"
+    ],
+    "calling": "I carry kindling and I'm going to be a woodcutter like Da when I'm big."
   }
 }
