@@ -113,6 +113,9 @@ fn described(s: &Scripts) -> Result<(), String> {
     let mut asked: Vec<String> = s.ctx_laws().into_iter().filter(|f| CTX_LAWS.contains(&f.as_str()) || f.starts_with("on_")).collect();
     asked.extend(super::name_laws(s).into_iter().map(|(f, _)| f));
     asked.extend(ENGINE_LAWS.iter().filter(|f| s.has(f)).map(|f| f.to_string()));
+    // A skill's own numbers by kind (dodge_dist, jump_speed) are described by its spec.
+    let skill_of = |f: &str| f.strip_suffix("_dist").or_else(|| f.strip_suffix("_speed")).is_some_and(|k| s.skills.get(k).is_some() || s.shapes.get(k).is_some());
+    asked.retain(|f| !skill_of(f));
     asked.sort();
     asked.dedup();
     if let Some(e) = s.law_errors.borrow().first() {
