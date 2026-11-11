@@ -349,6 +349,9 @@
   }
  },
  "slots": [],
+ "resources": {
+  "tree": "hanger_tree"
+ },
  "world": {
   "seed": 83,
   "size": 1024
