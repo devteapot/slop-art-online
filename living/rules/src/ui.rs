@@ -160,9 +160,14 @@ impl Pick {
 }
 
 vocab! {
-    /// How an item is chosen (`choose`).
-    Choose, CHOOSE { List = "list", Grid = "grid" }
+    /// How an item is chosen (`choose`), and, in a `menus()` row, whether a place's acts are a
+    /// list or a wheel (`wheel`: a skill's sub-choice may be a second wheel only for a small fixed
+    /// set, docs/INTERFACE.md §8.1).
+    Choose, CHOOSE { List = "list", Grid = "grid", Wheel = "wheel" }
 }
+
+mod wheel;
+pub use wheel::*;
 
 vocab! {
     /// Where an item choice comes from (`source`).

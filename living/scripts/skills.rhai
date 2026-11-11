@@ -1372,6 +1372,17 @@ fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
 fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
 fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
+// Which places get a wheel, and its layout (docs/INTERFACE.md §8): hold F on a target, move
+// toward a section, let go. A person's social acts are pinned, so a direction learned once keeps
+// working (a refused one greys in place); anything else the rules offer is behind More. Any
+// other creature or thing gets a wheel of what the rules allow now, nothing pinned. Oneself (C)
+// keeps its list. Presentation only: what a skill may do is its spec, shape and check.
+fn menus() { [
+    #{ on: "person", kinds: ["person"], choose: "wheel", fill: false,
+       wheel: #{ n: "talk", ne: "give", e: "offer", se: "teach", s: "more", sw: "window", w: "appraise", nw: "wave" } },
+    #{ on: "person", choose: "wheel" },
+    #{ on: "thing", choose: "wheel" },
+] }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }

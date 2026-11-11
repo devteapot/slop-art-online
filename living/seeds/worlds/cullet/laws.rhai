@@ -293,6 +293,14 @@ fn know_how() {
     ]
 }
 
+// The fires that burn fuel get a wheel with making and feeding in fixed directions (docs/
+// INTERFACE.md §8.3), over the shipped rows (a campfire needs no feeding: the general row).
+fn menus() {
+    let rows = [#{ on: "thing", kinds: ["hearth", "oven", "furnace", "smokehouse"], choose: "wheel", wheel: #{ n: "make", e: "feed" } }];
+    rows += base_menus();
+    rows
+}
+
 fn recipes() {
     [
         #{ name: "ash", at: "fire", lit: true, takes: #{ kelp: 4 }, ms: 6000 },
