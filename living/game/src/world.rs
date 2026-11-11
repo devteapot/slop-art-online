@@ -541,8 +541,35 @@ fn rock_inside(map: &Map, x: i32, y: i32) -> bool {
     (-1..=1).all(|j| (-1..=1).all(|i| map.get(x + i, y + j) == Terrain::Rock))
 }
 
+/// What a structure is drawn as: its own kind when the client has a shape for it, else the kind
+/// it is `like` in the world's rules (`structures()`: a world's own store `like: "storage"` is
+/// drawn as a storage), else its own (the generic marker). None while the rules are not compiled
+/// here and the kind has no shape of its own: it waits for them, so it is not drawn (and kept)
+/// as the marker. Resources pass `None` for the rules and are drawn as themselves.
+fn drawn_as(kind: &str, rules: Option<Option<&living_rules::script::Scripts>>) -> Option<String> {
+    if thing_mesh(kind).is_some() {
+        return Some(kind.to_string());
+    }
+    match rules {
+        None => Some(kind.to_string()),
+        Some(None) => None,
+        Some(Some(sc)) => {
+            let like = &sc.structure(kind).like;
+            Some(if !like.is_empty() && thing_mesh(like).is_some() { like.clone() } else { kind.to_string() })
+        }
+    }
+}
+
+/// The generic marker for a kind the client has no shape for.
+fn marker_mesh() -> (Mesh, Option<(Mesh, [u8; 3])>) {
+    let mut m = MeshBuf::default();
+    m.boulder(Vec3::Y * 0.25, 0.25, 1.0, 1, rgb(200, 200, 200));
+    (m.build(), None)
+}
+
 /// A resource or structure model, at real size (metres), vertex-coloured; glowing parts apart.
-fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
+/// None for a kind without a shape of its own ([`drawn_as`] picks another, or [`marker_mesh`]).
+fn thing_mesh(kind: &str) -> Option<(Mesh, Option<(Mesh, [u8; 3])>)> {
     let mut m = MeshBuf::default();
     let mut glow = None;
     match kind {
@@ -600,9 +627,20 @@ fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
             m.roof(Vec3::new(-0.9, 1.6, -0.9), Vec3::new(0.9, 1.6, 0.9), 0.2, 0.7, rgb(100, 80, 54));
         }
         "gate" => m.block(Vec3::new(-0.5, -0.2, -0.15), Vec3::new(0.5, 2.4, 0.15), rgb(110, 80, 50), rgb(96, 70, 44)),
-        _ => m.boulder(Vec3::Y * 0.25, 0.25, 1.0, 1, rgb(200, 200, 200)),
+        _ => return None,
     }
-    (m.build(), glow)
+    Some((m.build(), glow))
+}
+
+/// Whether a structure burns at `now` (authority ms): one whose kind `burns` fuel while its
+/// `lit_until_ms` is ahead, any other always; `burns` None while the world's rules are not
+/// compiled here yet, when one never lit (0) or lit till later counts as burning.
+fn burning(burns: Option<bool>, until: u64, now: u64) -> bool {
+    match burns {
+        Some(true) => living_rules::fire::lit(until, now),
+        Some(false) => true,
+        None => until == 0 || living_rules::fire::lit(until, now),
+    }
 }
 
 /// On a land world the island draws these itself: buildings as lots, gates in its walls, and
@@ -613,46 +651,86 @@ const LAND_DRAWS: &[&str] = &["tree", "house", "hall", "inn", "workshop", "marke
 /// ground under them is known): on tile worlds all of them; on a land world (the island) what it
 /// does not draw itself, standing on its ground (what `verbs.rs` lets F act on).
 #[allow(clippy::too_many_arguments)]
-pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>, island: Option<Res<crate::island::Island>>, assets: Res<AssetServer>) {
+pub fn things(
+    mut commands: Commands,
+    net: NonSend<Net>,
+    mut scene: NonSendMut<Scene>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut mats: ResMut<Assets<Toon>>,
+    mut palette: ResMut<Palette>,
+    style: Res<Style>,
+    island: Option<Res<crate::island::Island>>,
+    (assets, rules): (Res<AssetServer>, Option<NonSend<crate::verbs::Rules>>),
+    mut shown_lit: Local<HashMap<(u8, u64), bool>>,
+) {
     let Some(conn) = &net.conn else { return };
     let mut seen: HashSet<(u8, u64)> = HashSet::new();
     let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
+    // Whether a structure burns now: a kind that `burns` fuel while `lit_until_ms` is ahead of
+    // the authority's clock, any other always (a plain campfire). Before the world's rules have
+    // compiled here, one never lit (0) or lit till later counts as burning.
+    let now = scene.now_ms.max(0.0) as u64;
+    let sc = rules.as_ref().and_then(|r| r.scripts.as_ref());
+    let lit = |kind: &str, until: u64| burning(sc.map(|sc| sc.structure(kind).burns.is_some()), until, now);
     let rows = resources
         .iter()
-        .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.4, 1.0)))
-        .chain(structures.iter().map(|s| ((1u8, s.id), s.kind, s.x, s.y, 1.0)))
+        .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.4, 1.0), true))
+        .chain(structures.iter().map(|s| {
+            let on = lit(&s.kind, s.lit_until_ms);
+            ((1u8, s.id), s.kind, s.x, s.y, 1.0, on)
+        }))
         .filter(|r| island.is_none() || !LAND_DRAWS.contains(&r.1.as_str()));
     let ready = scene.ready() || island.is_some();
     let scene = &mut *scene;
-    for (key, kind, x, y, fill) in rows {
+    for (key, kind, x, y, fill, lit) in rows {
         seen.insert(key);
+        // A kit's fire is drawn again when it is lit or goes out (its glow is in its materials).
+        if shown_lit.get(&key).is_some_and(|was| *was != lit) {
+            if let Some(e) = scene.things.remove(&key) {
+                commands.entity(e).despawn();
+            }
+            shown_lit.remove(&key);
+        }
         if !ready || scene.things.contains_key(&key) {
             continue;
         }
+        // A structure kind the client has no shape or model for takes those of the kind it is
+        // `like` in the world's rules (a world's own stores are drawn as storage).
+        let Some(shape) = drawn_as(&kind, (key.0 == 1).then_some(sc)) else { continue };
+        let like = (key.0 == 1).then(|| sc.map(|sc| sc.structure(&kind).like.clone())).flatten().unwrap_or_default();
         let (mesh, glow) = palette
             .things
-            .entry(kind.clone())
+            .entry(shape.clone())
             .or_insert_with(|| {
-                let (mut m, g) = thing_mesh(&kind);
+                let (mut m, g) = thing_mesh(&shape).unwrap_or_else(marker_mesh);
                 let _ = m.generate_outline_normals(&Default::default());
                 (meshes.add(m), g.map(|(g, c)| (meshes.add(g), c)))
             })
             .clone();
         let at = island.as_ref().map_or_else(|| scene.at3(x, y), |i| Vec3::new(x, i.height(x, y), y));
         // A planned settlement's kit may model the structure (`island::structure_model`): drawn
-        // at its real size, fitted and converted like a lot's model. A fire keeps its flame
-        // unless the model glows itself.
-        if let Some((file, yaw)) = island.as_ref().filter(|_| key.0 == 1).and_then(|i| crate::island::structure_model(&i.land, &kind, Vec2::new(x, y))) {
+        // at its real size, fitted and converted like a lot's model. A lit fire's own glowing
+        // materials are damped by daylight as a lot's lit panes are (`lookdev::NightGlow`); one
+        // that is out has none (`lookdev::Unlit`). A model without glow keeps the drawn flame
+        // while it burns.
+        let model = |k: &str| island.as_ref().filter(|_| key.0 == 1 && !k.is_empty()).and_then(|i| crate::island::structure_model(&i.land, k, Vec2::new(x, y)));
+        if let Some((file, yaw)) = model(&kind).or_else(|| model(&like)) {
             let model = crate::lookdev::Model { vrm: false, file: file.clone(), height: 0.0, ground_y: at.y, glow: None };
             let root = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
             let e = commands.spawn((Thing(Vec2::new(x, y)), model, bevy::world_serialization::WorldAssetRoot(root), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)), Visibility::Hidden)).id();
-            if let (Some((g, color)), false) = (glow, crate::lookdev::has_glow(&file)) {
+            if lit {
+                commands.entity(e).insert(crate::lookdev::NightGlow);
+            } else {
+                commands.entity(e).insert(crate::lookdev::Unlit);
+            }
+            shown_lit.insert(key, lit);
+            if let (Some((g, color)), false, true) = (glow, crate::lookdev::has_glow(&file), lit) {
                 let mat = palette.color(&mut mats, &style, color, true);
                 commands.entity(e).with_children(|c| {
                     c.spawn((Mesh3d(g), MeshMaterial3d(mat), Transform::default()));
                 });
             }
-            debug!("things: {kind} #{} drawn as {file}", key.1);
+            debug!("things: {kind} #{} drawn as {file}{}", key.1, if lit { "" } else { " (out)" });
             scene.things.insert(key, e);
             continue;
         }
@@ -672,6 +750,7 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
         }
         scene.things.insert(key, e);
     }
+    shown_lit.retain(|k, _| seen.contains(k));
     scene.things.retain(|k, e| {
         let keep = seen.contains(k);
         if !keep {
@@ -724,5 +803,59 @@ pub fn fade_trees(
         if &mat.0 != want {
             mat.0 = want.clone();
         }
+    }
+}
+
+#[cfg(test)]
+mod fire_tests {
+    use super::burning;
+
+    #[test]
+    fn a_fire_that_eats_fuel_burns_only_until_its_fuel_runs_out() {
+        assert!(burning(Some(true), 2_000, 1_000));
+        assert!(!burning(Some(true), 1_000, 1_000));
+        assert!(!burning(Some(true), 0, 1_000), "never lit");
+        // A plain campfire always burns.
+        assert!(burning(Some(false), 0, 1_000));
+        // Before the rules are known: never lit, or lit till later, burns; run out does not.
+        assert!(burning(None, 0, 1_000) && burning(None, 2_000, 1_000) && !burning(None, 500, 1_000));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use living_rules::script::Scripts;
+
+    fn with(overlay: &str) -> Scripts {
+        let src = living_rules::floors::compose(include_str!("../../scripts/skills.rhai"), overlay).unwrap();
+        Scripts::new(&src).unwrap()
+    }
+
+    /// A structure kind the client has no shape for is drawn as the kind it is `like` in the
+    /// world's rules (rules-3: Cullet's four stores are `like: "storage"`), read from the compiled
+    /// script, never from a list of names here.
+    #[test]
+    fn a_kind_without_a_shape_is_drawn_as_the_kind_it_is_like() {
+        let w = with(r#"fn structures() { base_structures() + [#{ name: "crib", like: "storage", holds: 40 }, #{ name: "plinth" }] }"#);
+        assert!(thing_mesh("crib").is_none() && thing_mesh("storage").is_some());
+        assert_eq!(drawn_as("crib", Some(Some(&w))).as_deref(), Some("storage"));
+        // Its own shape first; no `like` and no shape: the marker, as before.
+        assert_eq!(drawn_as("storage", Some(Some(&w))).as_deref(), Some("storage"));
+        assert_eq!(drawn_as("campfire", Some(Some(&w))).as_deref(), Some("campfire"));
+        assert_eq!(drawn_as("plinth", Some(Some(&w))).as_deref(), Some("plinth"));
+        // Before the world's rules are compiled here, it waits instead of being kept as the marker.
+        assert_eq!(drawn_as("crib", Some(None)), None);
+        assert_eq!(drawn_as("storage", Some(None)).as_deref(), Some("storage"));
+        // Resources are drawn as themselves.
+        assert_eq!(drawn_as("berry_bush", None).as_deref(), Some("berry_bush"));
+        // Cullet's stores, from its laws.
+        let cullet = with(include_str!("../../seeds/worlds/cullet/laws.rhai"));
+        for k in ["store", "peat_barn", "yard_store", "house_store"] {
+            assert_eq!(cullet.structure(k).like, "storage", "{k}");
+            let shape = drawn_as(k, Some(Some(&cullet))).unwrap();
+            assert!(shape == "storage" || thing_mesh(k).is_some(), "{k} is drawn as {shape}");
+        }
+        assert_eq!(drawn_as("house_store", Some(Some(&cullet))).as_deref(), Some("storage"));
     }
 }

@@ -1,0 +1,7 @@
+{
+ "schema": 1,
+ "family": "place:cullet-ladder",
+ "kind": "place",
+ "title": "Cullet: the Ladder",
+ "description": "Cullet walked from fixed viewpoints (plan frame points in .local/layout2/tools/views.txt, layout-1's twenty and layout-2's thirteen): the game camera (default: 22 m, 28 degrees down, looking north), the walking camera (close: 9 m, 24 degrees) and YAW_PITCH_DISTANCE_FOV looks, at 13:00 (day-) and 18:30 (dusk-)."
+}

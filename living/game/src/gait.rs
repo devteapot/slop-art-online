@@ -1,6 +1,7 @@
 //! Locomotion by actual speed, blended at one shared phase so feet neither slide nor cross.
 //!
-//! A character's animated file comes with `<file>.clips.json` (`living/tools/blender/animate.py
+//! A character's clip file (its own, or generated people's shared one: `anim::clip_file`) comes
+//! with `<file>.clips.json` (`living/tools/blender/animate.py
 //! --library`; the wolf's from `wolf.py`), which gives every clip's length and, for the looping
 //! gaits, the baked speed (m/s at playback rate 1) and natural speed (the take's own, before
 //! `animate.py` time-scaled it). It also gives each clip's **foot-down markers**: every foot's
@@ -174,6 +175,8 @@ pub struct ClipInfo {
     pub path: Vec<(f32, f32)>,
     /// Its length (s), from the sidecar.
     pub seconds: f32,
+    /// The gait and its phase a one-shot starts from (a stop's: `start_gait` in the sidecar).
+    pub start_gait: Option<(String, f32)>,
 }
 
 impl ClipInfo {
@@ -275,19 +278,20 @@ impl Blend {
 /// "cursor", `live.rs`), by travel direction from the facing (degrees, the game's sense): a
 /// walking and a running take, the first in each list that the file has. These are the takes the
 /// clip lab's verdicts accepted (clips 2, 2026-11-11; `docs/GAME_BRIEF.md`, "Locomotion clips").
-/// Left out for a retake: `run_back` (a planted foot slides 16–19 cm), `strafe_run_left` (a 15°
-/// seam), `strafe_run_right` (1.18 m a cycle), the step-touch `strafe_walk_left`/`_right` (0.6 m a
-/// cycle) and `walk_diag_bl` (a toe 6–8 cm low at its seam), with `walk_diag_br` waiting for its
-/// mirror. A direction without a take falls back to the forward gaits along the travel with the
-/// upper body turned (`twist.rs`).
+/// Clips 3 (r2 takes, 2026-11-11) added the back diagonals' walks (`walk_diag_bl` s17 with
+/// `walk_diag_br`). Left out: `run_back` s3 (played at twice its own 1.9 m/s, its supporting foot
+/// slid 11% of the body's speed against 2% for the forward run reversed), `strafe_run_left` s17
+/// and `_right` s15 (their planted feet slide, the right one's seam closes 17°), and the
+/// step-touch `strafe_walk_left`/`_right` (0.6 m a cycle). A direction without a take falls back
+/// to the forward gaits along the travel with the upper body turned (`twist.rs`).
 pub const DIRECTIONS: [(f32, &[&str], &[&str]); 7] = [
     (180.0, &["walk_back"], &[]),
     (-90.0, &["strafe_walk_cross_left"], &[]),
     (90.0, &["strafe_walk_cross_right"], &[]),
     (-45.0, &["walk_diag_fl"], &["run_diag_fl"]),
     (45.0, &["walk_diag_fr"], &["run_diag_fr"]),
-    (-135.0, &[], &["run_diag_bl"]),
-    (135.0, &[], &["run_diag_br"]),
+    (-135.0, &["walk_diag_bl"], &["run_diag_bl"]),
+    (135.0, &["walk_diag_br"], &["run_diag_br"]),
 ];
 /// Neighbouring directions further apart than this (degrees) don't blend: the gap falls back.
 const DIR_GAP_MAX: f32 = 91.0;
@@ -320,7 +324,7 @@ impl Gaits {
 
     /// From a `clips.json` sidecar: its looping locomotion clips with a speed, and every clip's
     /// info. A character's sidecar maps clip names to clips; an animal's lists them under `clips`.
-    fn parse(json: &serde_json::Value) -> Self {
+    pub(crate) fn parse(json: &serde_json::Value) -> Self {
         let info_of = |c: &serde_json::Value, feet: &[&str]| {
             let pair = |v: &serde_json::Value| Some((v.get(0)?.as_f64()? as f32, v.get(1)?.as_f64()? as f32));
             ClipInfo {
@@ -331,6 +335,7 @@ impl Gaits {
                 hop: pair(&c["hop"]),
                 path: c["path_m"].as_array().map(|a| a.iter().filter_map(pair).collect()).unwrap_or_default(),
                 seconds: c["seconds"].as_f64().unwrap_or(0.0) as f32,
+                start_gait: c["start_gait"]["clip"].as_str().zip(c["start_gait"]["phase"].as_f64()).map(|(g, p)| (g.to_string(), p as f32)),
             }
         };
         if let Some(list) = json.get("clips").and_then(|c| c.as_array()) {
@@ -598,7 +603,9 @@ fn record(
     roam: Res<crate::envs::Roam>,
     scene: Option<NonSend<crate::world::Scene>>,
     camera: Query<&GlobalTransform, With<Camera3d>>,
+    (input, net): (Option<Res<crate::controls::Input>>, Option<NonSend<crate::net::Net>>),
     mut feet: Local<HashMap<Entity, Tracked>>,
+    mut spine: Local<HashMap<Entity, [Option<Entity>; 3]>>,
 ) {
     // The island's ground, else the look-dev environment's.
     let ground = |x: f32, z: f32| match (&island, &envs) {
@@ -639,6 +646,19 @@ fn record(
         let anim = anims.get(e).ok();
         let fwd = root.rotation() * Vec3::Z;
         let yaw = fwd.z.atan2(fwd.x).to_degrees();
+        // The hips', chest's and head's facing as drawn, in the same sense as `yaw` (VRoid bones'
+        // rest rotations are identity, so each bone's +Z is where it faces).
+        let at = *spine.entry(e).or_insert_with(|| ["J_Bip_C_Hips", "J_Bip_C_UpperChest", "J_Bip_C_Head"].map(|n| children.iter_descendants(e).find(|d| bones.get(*d).is_ok_and(|(x, _)| x.as_str() == n))));
+        let bone_yaw = |b: Option<Entity>| {
+            b.and_then(|b| bones.get(b).ok()).map(|(_, g)| {
+                let f = g.rotation() * Vec3::Z;
+                f.z.atan2(f.x).to_degrees()
+            })
+        };
+        // Where I look and travel (sim radians as degrees, counter-clockwise from east), and the
+        // authority's segment speed: connected play only.
+        let mine = net.as_ref().and_then(|n| n.my_id).and_then(|id| scene.as_ref().and_then(|s| s.shown.get(&id).copied()));
+        let look = input.as_ref().and_then(|i| i.scripted_look.or(i.look)).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x).to_degrees());
         let rest = serde_json::json!({
             "t": time.elapsed_secs_f64(),
             "root": [p.x, p.y, p.z],
@@ -649,6 +669,15 @@ fn record(
             // its upper body turns from it and whether it walks backwards (`twist.rs`, `anim.rs`).
             "yaw": yaw,
             "twist": motions.get(e).ok().map(|m| m.twist.to_degrees()),
+            "neck": motions.get(e).ok().map(|m| m.neck.to_degrees()),
+            "eyes": motions.get(e).ok().map(|m| m.eyes.to_degrees()),
+            "travel_rel": motions.get(e).ok().map(|m| m.travel.to_degrees()),
+            "hips_yaw": bone_yaw(at[0]),
+            "chest_yaw": bone_yaw(at[1]),
+            "head_yaw": bone_yaw(at[2]),
+            "look": look,
+            "heading": mine.and_then(|(_, h)| h).map(|h| h.to_degrees()),
+            "sim": mine.map(|(p, _)| [p.x, p.y]),
             "reverse": motions.get(e).ok().map(|m| m.reverse),
             "pace": motions.get(e).ok().map(|m| m.pace),
             // Connected play: the authority time my body is drawn at, and its segment then.

@@ -1,6 +1,6 @@
 ---
 name: verify-minds
-description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations, consolidation, reconnect handling, LIVING_ONLY, mind level of detail, the rethink gate (LIVING_RETHINK), the prompt frame (LIVING_FRAME), or player memory (LIVING_PLAYER_MEMORY).
+description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations (and ways of speaking, mind_say; LIVING_GREET and LIVING_PARK), consolidation, reconnect handling, LIVING_ONLY, mind level of detail, the rethink gate (LIVING_RETHINK), the prompt frame (LIVING_FRAME), or player memory (LIVING_PLAYER_MEMORY).
 ---
 
 # Verify internal minds
@@ -18,6 +18,14 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 cat ".local/living/verify/$R/results.json"
 ```
 
+Where a line's words may go (docs/COMMUNICATION.md §7) has its own driver with Neo4j, [features/privacy.md](features/privacy.md). Run it for every way of speaking on `speech_card`, and its control:
+
+```bash
+export LIVING_PRIVACY_NEO4J=slop-trials-neo4j:127.0.0.1:7699 LIVING_PRIVACY_NEO4J_ENV=<file with LIVING_NEO4J_PASSWORD=>
+.agents/skills/verify-minds/scripts/privacy.py --run minds-privacy-say-${R#minds-} --way say
+.agents/skills/verify-minds/scripts/privacy.py --run minds-privacy-ctl-${R#minds-} --way say --control
+```
+
 The command builds the release mind, runs its non-ignored tests, then launches and doctors a separate `verify-minds-*` database for each case. It drives every mind case, stops its own processes, deletes each scratch database and confirms the evidence remains. The second command proves paid-wrapper safety with inert children and no model calls. Allow several minutes for the real timing gaps. It never starts or stops the shared container.
 
 The driver imports lifecycle helpers from [`verify-llm`](../verify-llm/scripts/verify_llm.py) and invokes its [fake server](../verify-llm/scripts/fake_llm.py). Read the [fake interface](../verify-llm/references/fake-llm.md) when changing replies. Temporary profiles point only to loopback and use a dummy key. The admin token stays in process memory and `LIVING_TOKEN`; `.local/living/token` stays untouched. Every mind uses a separate `LIVING_RUN`, an explicit `LIVING_ONLY`, and `LIVING_NEO4J=off`. No tracked seed changes are needed.
@@ -29,7 +37,7 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case conversation
 ```
 
-`--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect`, `lod`, `takeover` ([features/takeover.md](features/takeover.md)), `dealings` ([features/dealings.md](features/dealings.md)), `parked` ([features/conversations.md](features/conversations.md)), `sight` and `death-names` ([features/sight.md](features/sight.md)), `drop` ([features/drop.md](features/drop.md); an island world), `resident` ([features/resident.md](features/resident.md); an island world, built in `.local/living/target-resident-island`), `animals` ([features/animals.md](features/animals.md)), `night` ([features/sleep.md](features/sleep.md)), `jev` ([features/judgments.md](features/judgments.md)) `rethink`/`rethink-llm` ([features/rethink.md](features/rethink.md)) and `reasons` ([features/deliberation.md](features/deliberation.md), a deliberation consumes the reasons its prompt contained), and `frame` (`LIVING_FRAME=player`, [features/frame.md](features/frame.md)). Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
+`--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect`, `lod`, `takeover` ([features/takeover.md](features/takeover.md)), `dealings` and `answers` ([features/dealings.md](features/dealings.md)), `parked`, `alongside` and `greet` ([features/conversations.md](features/conversations.md)), `sight`, `death-names` and `health-seen` ([features/sight.md](features/sight.md)), `fov` ([features/fov.md](features/fov.md)), `drop` ([features/drop.md](features/drop.md); an island world), `resident` ([features/resident.md](features/resident.md); an island world, built in `.local/living/target-resident-island`), `animals` ([features/animals.md](features/animals.md)), `night` ([features/sleep.md](features/sleep.md)), `jev` ([features/judgments.md](features/judgments.md)), `rethink`/`rethink-llm` ([features/rethink.md](features/rethink.md)), `frame` (`LIVING_FRAME=player`, [features/frame.md](features/frame.md)) and `reasons` ([features/deliberation.md](features/deliberation.md), a deliberation consumes the reasons its prompt contained). Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
 
 Seeded island residents (docs/SEEDED_LIVES.md) have their own driver, `scripts/lives_mind.py` ([features/lives-mind.md](features/lives-mind.md)): on an island run the mind service thinks for the named residents from the start (`LIVING_ONLY`) and a player speaks to each, with a scratch Neo4j and the fake model (free) or `--real PROFILE` (paid, only when authorized), and checks that each knows its own past and people and no one else's secrets.
 

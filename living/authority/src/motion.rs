@@ -128,7 +128,7 @@ pub fn speed_of(b: &Body) -> f32 {
 }
 
 fn fresh_steer(id: u32) -> Steer {
-    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0 }
+    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0, look_on: false, look: 0.0 }
 }
 
 fn load_steer(ctx: &ReducerContext, id: u32) -> (Steer, bool) {
@@ -212,6 +212,74 @@ fn anchor(b: &mut Body, now: u64) {
     b.t_ms = now;
     let left = (b.turn_s - dt).max(0.0);
     set_motion(b, geo::wrap(h), v, if left > 0.0 { b.turn } else { 0.0 }, left);
+    // The facing's own turn goes on from where it is (an offset from the heading, which is
+    // continuous here, so the facing is too).
+    let off = geo::face_off(b.face_off, b.face_turn, b.face_turn_s, dt);
+    let face_left = (b.face_turn_s - dt).max(0.0);
+    b.face_off = off;
+    b.face_turn = if face_left > 0.0 { b.face_turn } else { 0.0 };
+    b.face_turn_s = if b.face_turn != 0.0 { face_left } else { 0.0 };
+}
+
+/// Set the facing segment: offset `off` from the heading at `t_ms`, turning to `to` at `rate`.
+fn set_face(b: &mut Body, off: f32, to: f32, rate: f32) {
+    let (turn, turn_s) = geo::face_turn(off, to, rate);
+    b.face_off = off;
+    b.face_turn = turn;
+    b.face_turn_s = turn_s;
+}
+
+/// A standing body turns to face `want` (`steer::stand_turn`): its legs turn at `rate` the way
+/// its upper body already leans, and any facing offset comes back to 0 over the same turn, so
+/// the whole body ends facing it. Within `slack` of it, the legs stay and only the facing
+/// finishes. False when there is nothing to do. With no offset this is the plain standing turn.
+fn turn_to(b: &mut Body, want: f32, rate: f32, slack: f32) -> bool {
+    let off = geo::face_off(b.face_off, b.face_turn, b.face_turn_s, 0.0);
+    let d = geo::stand_turn(b.heading, off, want);
+    if d.abs() > slack {
+        let dur = d.abs() / rate;
+        let h = b.heading;
+        set_motion(b, h, 0.0, rate * d.signum(), dur);
+        b.face_off = off;
+        b.face_turn = if off != 0.0 { -off / dur } else { 0.0 };
+        b.face_turn_s = if off != 0.0 { dur } else { 0.0 };
+        true
+    } else if off != 0.0 {
+        set_face(b, off, d, rate);
+        true
+    } else {
+        false
+    }
+}
+
+/// After a steering update: the facing segment from where the body faced at the update
+/// (`before`, so the facing never jumps when the heading does) toward what it wants. With a
+/// held look, standing with no walk under way, the whole body turns to the look (`turn_to`);
+/// otherwise the facing turns toward the look within the `look_walk_deg` law of the travel's
+/// heading at the end of the segment's turn (`steer::walk_face`), or back to the heading with no
+/// look. Moving, the offset is kept within the law from the start. A body with no look and no
+/// offset faces its heading and has no facing segment.
+fn settle_face(b: &mut Body, st: &Steer, before: f32, had_off: bool, laws: &living_rules::script::Laws, rate: f32) {
+    if !st.look_on && !had_off {
+        b.face_off = 0.0;
+        b.face_turn = 0.0;
+        b.face_turn_s = 0.0;
+        return;
+    }
+    let limit = laws.look_walk_deg.to_radians();
+    let moving = b.vx != 0.0 || b.vy != 0.0;
+    let off = geo::wrap(before - b.heading);
+    if !moving && st.look_on && st.goal != GOAL_DIRECTION {
+        b.face_off = off;
+        b.face_turn = 0.0;
+        b.face_turn_s = 0.0;
+        turn_to(b, st.look, rate, laws.look_slack_deg.to_radians());
+        return;
+    }
+    let off = if moving { off.clamp(-limit, limit) } else { off };
+    let end = b.heading + if b.turn_s > 0.0 { b.turn * b.turn_s } else { 0.0 };
+    let to = if st.look_on { geo::walk_face(end, st.look, limit, off) } else { 0.0 };
+    set_face(b, off, to, rate);
 }
 
 fn set_motion(b: &mut Body, heading: f32, speed: f32, turn: f32, turn_s: f32) {
@@ -303,12 +371,22 @@ fn angle(from: (f32, f32), to: (f32, f32)) -> f32 {
     (to.1 - from.1).atan2(to.0 - from.0)
 }
 
-/// One steering update at `now`: writes the new segment (from `resume_at`) into `b` and
-/// possibly `st`.
+/// One steering update at `now`: writes the new segment (from `resume_at`) into `b`, travel
+/// and facing (`settle_face`), and possibly `st`.
 /// Returns an event for the driving activity and whether `st` changed.
 fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Option<Event>, bool) {
     let laws = common::laws(ctx);
     let moves = common::moves_of(ctx, b.id, now);
+    let before = common::facing_at(b, resume_at(b, now));
+    let had_off = b.face_off != 0.0 || b.face_turn != 0.0;
+    let out = steer_update(ctx, b, st, now, &laws, &moves);
+    settle_face(b, st, before, had_off, &laws, moves.turn_rate.max(0.5));
+    out
+}
+
+/// The travel part of a steering update (`update`).
+fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, laws: &living_rules::script::Laws, moves: &living_rules::script::Moves) -> (Option<Event>, bool) {
+    let (laws, moves) = (*laws, *moves);
     let tune = moves.tuning(laws.road_speed);
     let map = common::map(ctx);
     let v_cur = speed_of(b);
@@ -486,7 +564,10 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
             }
         }
         GOAL_DIRECTION => {
-            let (dir, crowded) = separate(ctx, b.id, p, st.gy.atan2(st.gx), 0, &moves, now);
+            // The way it is told to go, at full speed: a held look (`human_face`) turns only the
+            // facing (`settle_face`), never the travel.
+            let way = st.gy.atan2(st.gx);
+            let (dir, crowded) = separate(ctx, b.id, p, way, 0, &moves, now);
             let max_dt = if crowded { laws.steer_s.min(1.0 / laws.crowd_hz) } else { laws.steer_s };
             want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt });
         }
@@ -510,7 +591,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
             want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt });
         }
         _ => {
-            // No goal: finish a glide, then stand.
+            // No goal: finish a glide, then stand (turning to a held look, `human_face`).
             stand = Some(IDLE);
         }
     }
@@ -574,6 +655,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
         set_motion(b, geo::wrap(seg.heading), seg.speed, seg.turn, seg.turn_s);
         b.next_ms = if seg.speed == 0.0 && seg.turn == 0.0 { due(t0, seg.dur.max(0.25), MIN_STEP_MS) } else { due(t0, seg.dur, MIN_STEP_MS) };
     } else if let Some(until) = stand {
+        // Standing, a held look turns the body to it (`settle_face`).
         halt(b);
         b.next_ms = until;
     }
@@ -644,6 +726,11 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
         }
         _ => {}
     }
+    // A walk of any other kind (a path, a pursuit, a flight; a mind's or a command's) faces
+    // its way: a player's held look serves only its own movement keys.
+    if goal.kind != GOAL_DIRECTION {
+        st.look_on = false;
+    }
     st.goal = goal.kind;
     st.target = goal.target;
     st.gx = at.0;
@@ -683,8 +770,8 @@ pub fn stop(ctx: &ReducerContext, id: u32, now: u64) {
 }
 
 /// Turn a standing body where it stands to face `toward`, at the `turn_rate` law (one row
-/// write; observers see the turn as the segment's arc). A moving body is left alone: its
-/// steering keeps its heading.
+/// write; observers see the turn as the segment's arc, and a facing offset left from a walk
+/// coming back over it: `turn_to`). A moving body is left alone: its steering keeps its heading.
 pub fn face(ctx: &ReducerContext, id: u32, toward: (f32, f32), now: u64) {
     let Some(mut b) = ctx.db.body().id().find(id) else { return };
     if b.next_ms != IDLE || b.vx != 0.0 || b.vy != 0.0 {
@@ -693,13 +780,13 @@ pub fn face(ctx: &ReducerContext, id: u32, toward: (f32, f32), now: u64) {
     let before = b.chunk;
     anchor(&mut b, now);
     let want = (toward.1 - b.y).atan2(toward.0 - b.x);
-    let d = geo::wrap(want - b.heading);
-    if d.abs() < 0.05 || (toward.0 - b.x).hypot(toward.1 - b.y) < 0.05 {
+    if (toward.0 - b.x).hypot(toward.1 - b.y) < 0.05 {
         return;
     }
     let rate = common::moves_of(ctx, id, now).turn_rate.max(0.5);
-    let h = b.heading;
-    set_motion(&mut b, h, 0.0, rate * d.signum(), d.abs() / rate);
+    if !turn_to(&mut b, want, rate, 0.05) {
+        return;
+    }
     b.next_ms = IDLE;
     put(ctx, b, before);
 }
@@ -781,6 +868,55 @@ pub fn intent(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, run: bool,
     }
 }
 
+/// A held look (`human_face`): face `dir` (`None`: release, the facing returns to the way the
+/// body walks). Standing, the body turns where it stands at its turn rate. Walking under its
+/// movement keys, it still goes where the keys say at full speed; only its facing (`body.face_*`,
+/// `common::facing_at`) turns toward the look at the turn rate, at most the `look_walk_deg` law
+/// off its way, and when it stops the whole body finishes the turn. A look within the
+/// `look_slack_deg` law of the held one (or, standing, of where the body faces) writes nothing;
+/// any other spends a token of the movement input bucket.
+pub fn look(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, now: u64) -> Result<(), String> {
+    let (mut st, exists) = load_steer(ctx, id);
+    let laws = common::laws(ctx);
+    let slack = laws.look_slack_deg.to_radians();
+    let want = dir.and_then(|(x, y)| (x.is_finite() && y.is_finite() && x.hypot(y) > 1e-3).then(|| y.atan2(x)));
+    let Some(b) = ctx.db.body().id().find(id) else { return Err("no body".into()) };
+    let moving = b.vx != 0.0 || b.vy != 0.0;
+    let walking = st.goal == GOAL_DIRECTION;
+    match want {
+        None if !st.look_on => return Ok(()),
+        Some(w) if st.look_on && geo::wrap(w - st.look).abs() <= slack && (moving || geo::wrap(w - common::facing_at(&b, now)).abs() <= slack) => return Ok(()),
+        Some(w) if !st.look_on && !moving && geo::wrap(w - common::facing_at(&b, now)).abs() <= slack => return Ok(()),
+        _ => {}
+    }
+    let refill = now.saturating_sub(st.input_ms) as f32 / 1000.0 * laws.input_hz;
+    let tokens = if exists { (st.tokens + refill).min(laws.input_burst) } else { laws.input_burst };
+    if tokens < 1.0 {
+        return Err("too many movement inputs".into());
+    }
+    st.tokens = tokens - 1.0;
+    st.input_ms = now;
+    st.look_on = want.is_some();
+    if let Some(w) = want {
+        st.look = w;
+    }
+    let (gx, gy, flags) = (st.gx, st.gy, st.flags);
+    save_steer(ctx, st, exists);
+    if walking && moving {
+        // Steer again now: the facing toward the look or back to the way (the travel is unchanged).
+        let speed = b.speed;
+        start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: (gx, gy), keep: 0.0, speed, flags }, now).map(|_| ())
+    } else if let (Some(w), false) = (want, moving) {
+        let p = common::pos(&b, now);
+        face(ctx, id, (p.0 + w.cos(), p.1 + w.sin()), now);
+        Ok(())
+    } else {
+        // A release while standing keeps the facing; a look during a glide or a dash is taken
+        // when the body stands.
+        Ok(())
+    }
+}
+
 /// Spend one token of a player's input bucket (the `input_hz`/`input_burst` laws, shared with
 /// movement) for a skill input; false when the bucket is empty.
 pub fn spend_input(ctx: &ReducerContext, id: u32, now: u64) -> bool {
@@ -826,6 +962,9 @@ pub fn place(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Result<
     b.y = at.1;
     b.t_ms = now;
     halt(&mut b);
+    b.face_off = 0.0;
+    b.face_turn = 0.0;
+    b.face_turn_s = 0.0;
     b.path.clear();
     b.next_ms = IDLE;
     b.chunk = chunk_of(at.0, at.1);
@@ -857,5 +996,8 @@ pub fn spawn_body(ctx: &ReducerContext, id: u32, kind: &str, at: (f32, f32), now
         heading: (id as f32 * 2.399_963).rem_euclid(geo::TAU) - geo::PI,
         turn: 0.0,
         turn_s: 0.0,
+        face_off: 0.0,
+        face_turn: 0.0,
+        face_turn_s: 0.0,
     });
 }

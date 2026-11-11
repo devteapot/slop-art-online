@@ -135,7 +135,7 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
         }
         let Some(viewer) = human(ctx, c.id) else { continue };
         // The onlooker's own sight, and a clear sight line to where it happened.
-        if !crate::perception::in_sight(&map, c.pos, ev.at, c.dist, common::sight_to(ctx, common::sight_for(ctx, c.id, &w, now), ev.actor, &w, now)) {
+        if !crate::perception::in_sight(ctx, &map, c.id, c.pos, c.facing, ev.actor, ev.at, c.dist, &w, now, false) {
             continue;
         }
         told.push(c.id);
@@ -545,7 +545,7 @@ pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64
         let r = crate::perception::widest_sight(ctx, &w, now);
         let map = common::map(ctx);
         for c in common::creatures_near(ctx, at, r, now) {
-            if c.id == id || !crate::perception::in_sight(&map, c.pos, at, c.dist, common::sight_to(ctx, common::sight_for(ctx, c.id, &w, now), id, &w, now)) {
+            if c.id == id || !crate::perception::in_sight(ctx, &map, c.id, c.pos, c.facing, id, at, c.dist, &w, now, false) {
                 continue;
             }
             show_to(ctx, id, now, Seen { kind: seen::WITNESS, actor: c.id, target: id, at: c.pos, ..Default::default() });
@@ -657,7 +657,11 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
             let Some(d) = aim.or_else(|| creature(ctx, target, now).and_then(|t| rules::unit(t.at.0 - here.0, t.at.1 - here.1))) else { return refuse("aim somewhere".into()) };
             Resolved::point((here.0 + d.0 * 4.0, here.1 + d.1 * 4.0))
         }
-        Aim::Facing => Resolved::point(aim.map_or((here.0 + body.heading.cos(), here.1 + body.heading.sin()), |d| (here.0 + d.0, here.1 + d.1))),
+        Aim::Facing => {
+            // Unaimed, a guard goes up the way the body faces (its held look), not its travel.
+            let f = common::facing_at(&body, now);
+            Resolved::point(aim.map_or((here.0 + f.cos(), here.1 + f.sin()), |d| (here.0 + d.0, here.1 + d.1)))
+        }
         // A dash goes the way it is aimed, else away from what is coming.
         Aim::Dash | Aim::None => aim.map_or_else(Resolved::none, |d| Resolved::point((here.0 + d.0, here.1 + d.1))),
     };
@@ -673,7 +677,7 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
     }
     // A guard is held until let go, at most as long as the rules allow.
     let qty = shape.hold_ms;
-    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), now) {
+    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), (0, 0), now) {
         Ok(()) => Ok(()),
         Err(why) => {
             // Nothing started, so the walk under way simply goes on.

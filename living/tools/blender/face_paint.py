@@ -22,7 +22,7 @@ import zlib
 import numpy as np
 
 from head_form import ORIGIN, lerp, smooth
-from head_mesh import ATLAS, EYE_COLS, EYE_ROWS, eye_frame, skin_dirs
+from head_mesh import ATLAS, EYE_COLS, EYE_ROWS, IRIS_COL0, IRIS_FILL, IRIS_PX, IRIS_WIDE, brow_shape, eye_frame, iris_centre, skin_dirs
 
 
 def write_png(path, a):
@@ -246,56 +246,71 @@ def paint_skin(hf, look, rng):
 # -------------------------------------------------------------------------------------- eyes
 
 
-def paint_eye(hf, look, side, rng):
+def paint_white(hf, look, side):
+    """An eye's white: it greys toward the corners, and the upper lid's shadow lies across its
+    top. The iris is a layer of its own (paint_iris)."""
     mid, scale = eye_frame(hf)
     cols, rows = EYE_COLS, EYE_ROWS
     x = side * hf.eye_x + (np.arange(cols) + 0.5 - cols / 2)[None, :] / scale + np.zeros((rows, 1))
     z = hf.eye_z + mid - (np.arange(rows) + 0.5 - rows / 2)[:, None] / scale + np.zeros((1, cols))
-    c = Canvas(x, z, np.ones((rows, cols)), (0.945, 0.940, 0.930))
+    c = Canvas(x, z, np.ones((rows, cols)), (0.955, 0.950, 0.945))
     s = (side * x - hf.eye_x) / hf.eye_w
     up, lo = hf.lid(s)
     zr = z - hf.eye_z
-    # The white greys toward the corners and under the upper lid.
-    c.blend((0.78, 0.77, 0.80), 0.55 * np.clip(np.abs(s), 0, 1) ** 2.5)
+    c.blend((0.80, 0.79, 0.83), 0.50 * np.clip(np.abs(s), 0, 1) ** 2.5)
     span = np.maximum(up - lo, 1e-4)
-    c.blend(look["white_shade"], 0.80 * smooth(1 - (up - zr) / (0.34 * span)))
-    # The iris.
-    iris = look["iris"]
-    r = hf.iris_r
-    cx = side * (hf.eye_x - 0.035 * hf.eye_w)
-    up0, lo0 = hf.lid(np.array(0.0))
-    cz = hf.eye_z + min(float(up0) - 0.74 * r, float(lo0) + 0.97 * r)
-    dx, dz = (x - cx) / (0.95 * r), (z - cz) / r
+    c.blend(look["white_shade"], 0.85 * smooth(1 - (up - zr) / (0.30 * span)))
+    # A faint warmth along the lower lid.
+    c.blend(mix(look["skin"], (1, 1, 1), 0.5), 0.25 * smooth(1 - (zr - lo) / (0.12 * span)))
+    return c.img
+
+
+def paint_iris(hf, look, rng):
+    """The iris, drawn as the VRoid controls draw theirs (studied, not copied): a tall ellipse
+    with a dark rim, a shaded upper half under the lid, a ring of fine rays, a bright warm
+    crescent low down, a cool reflected arc high up, and a soft pupil. One picture for both eyes;
+    the highlights are a layer of their own (head_mesh.py)."""
+    n = IRIS_PX
+    half = n * IRIS_FILL
+    g = (np.arange(n) + 0.5 - n / 2) / half
+    dx, dz = np.meshgrid(g / IRIS_WIDE, -g)
     rr = np.hypot(dx, dz)
     ang = np.arctan2(dz, dx)
-    edge = 0.9 / (r * scale)  # one texel, in iris radii
-    disc = smooth((1 - rr) / (2 * edge) + 0.5)
-    dark = mix(iris, (0.02, 0.02, 0.05), 0.80)
-    # The lit crescent leans warm, whatever the iris's colour: it is what makes an eye look lit.
-    light = mix(mix(iris, (1.0, 0.86, 0.55), 0.38), (1.0, 0.98, 0.92), 0.30)
-    # Shaded above, lit in a crescent below.
-    t = smooth((0.50 - dz) / 1.4)
-    base = np.array(dark)[None, None, :] * (1 - t[..., None]) + np.array(mix(iris, (1, 1, 1), 0.06))[None, None, :] * t[..., None]
-    cres = smooth((-dz - 0.12) / 0.55) * smooth((0.97 - rr) / 0.22) * smooth((rr - 0.34) / 0.25)
-    base += (np.array(light) - base) * (0.88 * cres)[..., None]
-    # Fine rays from the pupil.
-    rays = value_noise((1, 512), 4, rng)[0]
+    iris = np.array(look["iris"])
+    deep = np.array(mix(look["iris"], (0.02, 0.02, 0.06), 0.82))
+    dark = np.array(mix(look["iris"], (0.03, 0.03, 0.08), 0.55))
+    pale = np.array(mix(look["iris"], (1, 1, 1), 0.30))
+    # The lit crescent leans warm whatever the iris's colour: it is what makes an eye look lit.
+    warm = np.array(mix(mix(look["iris"], (1.0, 0.80, 0.45), 0.50), (1.0, 0.97, 0.88), 0.30))
+    cool = np.array(mix(look["iris"], (0.62, 0.80, 1.0), 0.60))
+    img = np.empty((n, n, 3))
+    # Outside the ellipse the square is the dark rim's colour, so the mesh's edge never shows pale.
+    img[:] = deep
+    # Body: shaded above, the iris's own colour below.
+    t = smooth((0.45 - dz) / 1.25)[..., None]
+    body = dark * (1 - t) + (iris * 1.05) * t
+    # Rays: fine streaks from the pupil, at two scales.
+    rays = value_noise((1, 512), 3, rng)[0] * 0.6 + value_noise((1, 512), 9, rng)[0] * 0.4
     ray = rays[((ang / (2 * math.pi) + 0.5) * 511).astype(int) % 512]
-    base *= (1 + 0.26 * (ray - 0.5) * smooth((rr - 0.40) / 0.2))[..., None]
-    # A dark rim, a paler ring just inside it, and the upper lid's shadow across the top.
-    base += (np.array(mix(iris, (1, 1, 1), 0.25)) - base) * (0.30 * np.exp(-(((rr - 0.76) / 0.07) ** 2)) * smooth((0.2 - dz) / 0.6))[..., None]
-    base += (np.array(dark) - base) * (0.95 * smooth((rr - 0.82) / 0.15))[..., None]
-    base += (np.array(mix(dark, (0, 0, 0), 0.5)) - base) * (0.78 * smooth((dz - 0.22) / 0.55))[..., None]
-    # The pupil.
-    pup = smooth((0.40 - np.hypot(dx / 0.92, dz)) / (2.5 * edge) + 0.5)
-    base += (np.array((0.035, 0.030, 0.045)) - base) * pup[..., None]
-    c.img += (np.clip(base, 0, 1) - c.img) * disc[..., None]
-    # Highlights: both eyes are lit from the same side.
-    hs = look.get("light_side", 1.0)
-    for hx, hz, hrx, hrz, a in ((0.36 * hs, 0.34, 0.250, 0.200, 0.97), (-0.34 * hs, -0.44, 0.105, 0.090, 0.85)):
-        d = np.hypot((x - (cx + hx * r)) / (hrx * r), (z - (cz + hz * r)) / (hrz * r))
-        c.blend((1.0, 1.0, 0.985), a * smooth((1 - d) / (3 * edge / hrx) + 0.5))
-    return c.img
+    body = body * (1 + 0.34 * (ray - 0.5) * smooth((rr - 0.36) / 0.2))[..., None]
+    # A paler ring inside the rim, strongest low down.
+    ring = np.exp(-(((rr - 0.70) / 0.085) ** 2)) * smooth((0.30 - dz) / 0.7)
+    body += (pale - body) * (0.42 * ring)[..., None]
+    # The warm crescent along the bottom.
+    cres = smooth((-dz - 0.18) / 0.50) * smooth((0.93 - rr) / 0.20) * smooth((rr - 0.38) / 0.22)
+    body += (warm - body) * (0.92 * cres)[..., None]
+    # The lid's shadow over the top third, and a cool arc of sky just under it.
+    body += (deep - body) * (0.80 * smooth((dz - 0.20) / 0.50))[..., None]
+    arc = np.exp(-(((rr - 0.66) / 0.10) ** 2)) * smooth((dz - 0.15) / 0.25) * smooth((0.80 - dz) / 0.2) * smooth((0.75 - np.abs(dx)) / 0.3)
+    body += (cool - body) * (0.50 * arc)[..., None]
+    # The dark rim.
+    body += (deep - body) * (0.96 * smooth((rr - 0.80) / 0.14))[..., None]
+    # The pupil, soft-edged, with a faint dark halo.
+    body += (deep - body) * (0.45 * np.exp(-((rr / 0.50) ** 2)))[..., None]
+    pup = smooth((0.36 - np.hypot(dx / 0.94, dz + 0.02)) / 0.06 + 0.5)
+    body += (np.array((0.03, 0.028, 0.045)) - body) * pup[..., None]
+    disc = smooth((1.0 - rr) / 0.03 + 0.5)[..., None]
+    return img + (np.clip(body, 0, 1) - img) * disc
 
 
 def paint(hf, look):
@@ -306,5 +321,49 @@ def paint(hf, look):
     out[EYE_ROWS:] = skin
     for side in (-1, 1):
         c0 = 0 if side < 0 else EYE_COLS
-        out[:EYE_ROWS, c0 : c0 + EYE_COLS] = paint_eye(hf, look, side, rng)
+        out[:EYE_ROWS, c0 : c0 + EYE_COLS] = paint_white(hf, look, side)
+    out[:EYE_ROWS, IRIS_COL0 : IRIS_COL0 + IRIS_PX] = paint_iris(hf, look, rng)
     return (np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8)
+
+
+FAR = 256  # the far model's picture
+
+
+def paint_far(hf, look, size=FAR):
+    """The far model's picture (person.py --lod far): the atlas's layout at a quarter of its
+    size, with the eyes, the lash lines and the brows painted onto the skin, since the far head
+    has no openings and no parts standing off it. Same seed, same face as `paint`."""
+    rng = np.random.default_rng(int(look.get("seed", 0)) + 77)
+    out = np.empty((ATLAS, ATLAS, 3))
+    out[:] = look["skin"]
+    skin, where = paint_skin(hf, look, rng)
+    x, y, z = where["x"], where["y"], where["z"]
+    iris = paint_iris(hf, look, rng)
+    mid, scale = eye_frame(hf)
+    half = IRIS_PX * IRIS_FILL
+    c = Canvas(x, z, (y > 0.01).astype(float), look["skin"])
+    c.img = skin
+    for side in (-1, 1):
+        inside, _, _, _ = hf.eye_inside(x, z)
+        sel = inside & (y > 0) & (x * side > 0)
+        white = paint_white(hf, look, side)
+        col = np.clip((EYE_COLS / 2 + (x - side * hf.eye_x) * scale).astype(int), 0, EYE_COLS - 1)
+        row = np.clip((EYE_ROWS / 2 - (z - hf.eye_z - mid) * scale).astype(int), 0, EYE_ROWS - 1)
+        skin[sel] = white[row[sel], col[sel]]
+        cx, cz = iris_centre(hf, side)
+        a, b = (x - cx) / (hf.iris_r * IRIS_WIDE), (z - cz) / hf.iris_r
+        on = sel & (a * a + b * b < 1)
+        px = np.clip((IRIS_PX / 2 + a * half * IRIS_WIDE).astype(int), 0, IRIS_PX - 1)
+        py = np.clip((IRIS_PX / 2 - b * half).astype(int), 0, IRIS_PX - 1)
+        skin[on] = iris[py[on], px[on]]
+    # The lash line, heavier toward the outer corner, and the brows as one stroke each. From
+    # far off they are a texel or two wide, so they are drawn a little heavier than life.
+    ss = np.linspace(-1.0, 1.0 + look["lash_wing"], 16)
+    up = hf.lid(np.clip(ss, -1, 1))[0]
+    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0006 + 0.0013 * look["lash_k"] * smooth(t / 0.7), look["lash"], 1.0, taper=(0.0, 0.2))
+    top, bot = brow_shape(hf, 1)
+    c.stroke([(xt, (zt + zb) / 2) for (xt, zt), (_, zb) in zip(top, bot)], lambda t: np.maximum(0.62 * hf.brow_w * (1 - 0.6 * smooth((t - 0.5) / 0.5)), 0.0011), look["brow"], 0.92, taper=(0.1, 0.25))
+    out[EYE_ROWS:] = c.img
+    k = ATLAS // size
+    small = np.clip(out, 0, 1).reshape(size, k, size, k, 3).mean(axis=(1, 3))
+    return (small * 255 + 0.5).astype(np.uint8)

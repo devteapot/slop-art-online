@@ -103,7 +103,11 @@ fn carried_light_seen() { 48.0 }
 fn senses(a) {
     let eye = sight_in("night") + (sight_in("day") - sight_in("night")) * a.daylight;
     let torch = if inv(a, "torch") > 0 { sight_in("torch") } else { 0.0 };
-    #{ sight: if torch > eye { torch } else { eye }, hearing: hearing_of_people() }
+    let s = #{ sight: if torch > eye { torch } else { eye }, hearing: hearing_of_people() };
+    // Sight that depends on facing, when the world's `fov_on` law turns it on (the shipped
+    // field and its laws).
+    if law("fov_on") { s.field = sight_field(a); }
+    s
 }
 
 // A light on someone shows them farther than the onlooker's own sight in the dark: a carried
@@ -121,7 +125,7 @@ fn senses_law() {
         topic: "senses",
         covers: ["glow"],
         reach: #{ day: sight_in("day"), night: sight_in("torch"), hearing: hearing_of_people(), glow: carried_light_seen() },
-        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; in the dark ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch; sight grows and shrinks with the light at dusk and dawn. At night anyone standing in lamplight is seen from ${short(lamplight_seen())} m, and anyone carrying a light from ${short(carried_light_seen())} m. Within ${short(known_within())} m you can tell who someone is; farther off they are a figure. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.`,
+        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; in the dark ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch; sight grows and shrinks with the light at dusk and dawn. At night anyone standing in lamplight is seen from ${short(lamplight_seen())} m, and anyone carrying a light from ${short(carried_light_seen())} m. Within ${short(known_within())} m you can tell who someone is; farther off they are a figure. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`,
     }
 }
 
@@ -136,18 +140,20 @@ fn perceived_of(p) {
 }
 
 // What gives light: a campfire and the public hearths of a hall or an inn, always; a lamp, and
-// every fire that burns fuel, only while it burns (its `burns`, with the goods below).
+// every fire that burns fuel, only while it burns (its `burns`, with the goods below). The
+// town's stores are kinds of their own, each holding what it holds (below).
 fn structures() {
     let out = [];
     for k in base_structures() {
         if k.name == "campfire" || k.name == "hall" || k.name == "inn" { k.lights = 6.0; }
         if k.name != "lamp" { out.push(k); }
     }
-    out + goods_structures()
+    out + goods_structures() + store_kinds()
 }
 
 // ---- goods, fires and recipes (docs/WORLD_RULES.md, "Goods, recipes and fuel") ------------
-// Data only: the rules that read these traits are the shipped script's. The chain: kelp is
+// Data only (each item's icon, label and group are what a client shows; a recipe looks like its
+// product): the rules that read these traits are the shipped script's. The chain: kelp is
 // gathered on the Wrack Strand and burnt to ash at any fire; ash and sand are melted into glass
 // at the Cone, a furnace that burns peat; fish are smoked over peat at a smokehouse; roots are
 // baked at an oven; lamp oil is rendered from fish at a fire and burnt in lamps. The numbers are
@@ -157,19 +163,19 @@ fn structures() {
 fn items() {
     base_items() + [
         // Gathered on the shore; burnt to ash (4 to 1).
-        #{ name: "kelp" },
+        #{ name: "kelp", icon: "kelp", label: "kelp", group: "material" },
         // Ash is an alkali: glass takes any alkali.
-        #{ name: "ash", alkali: true },
-        #{ name: "sand" },
-        #{ name: "glass" },
+        #{ name: "ash", alkali: true, icon: "ash", label: "ash", group: "material" },
+        #{ name: "sand", icon: "sand", label: "sand", group: "material" },
+        #{ name: "glass", icon: "glass", label: "glass", group: "glass" },
         // The staple, eaten raw or baked.
-        #{ name: "roots", bakes_to: "baked_roots" },
-        #{ name: "baked_roots" },
-        #{ name: "greens" },
+        #{ name: "roots", bakes_to: "baked_roots", icon: "roots", label: "roots", group: "food" },
+        #{ name: "baked_roots", icon: "baked_roots", label: "baked roots", group: "food" },
+        #{ name: "greens", icon: "greens", label: "greens", group: "food" },
         // Cut on the Moss; what hearths, ovens, smokehouses and the Cone burn.
-        #{ name: "peat", fuel: 1.0 },
+        #{ name: "peat", fuel: 1.0, icon: "peat", label: "peat", group: "fuel" },
         // Rendered from fish; what lamps burn.
-        #{ name: "lamp_oil", oil: 1.0 },
+        #{ name: "lamp_oil", oil: 1.0, icon: "lamp_oil", label: "lamp oil", group: "fuel" },
     ]
 }
 
@@ -198,9 +204,26 @@ fn spoil_per_h(item) {
     }
 }
 
-// A storage holds up to 1,000 things: the town's stores are barns (the Store's six days of food,
-// the Cone's peat; living/tools/cullet_plan.py). Every storage here, a person's crate as well.
-fn storage_holds(x) { 1000 }
+// The town's stores, each a storage of its own size (`like: "storage"`: whatever looks for a
+// storage finds them; `holds`: the most things one holds in all). A crate anyone builds is the
+// shipped storage, 120 things. Sizes from the plan (living/tools/cullet_plan.py, docs/CULLET_RULES.md):
+fn store_kinds() {
+    [
+        // The Store on the quay, the common store: it starts with three of §2's six days of food
+        // for 64 (509 things) and has room for the whole six days (1,018) and a margin.
+        #{ name: "store", like: "storage", holds: 1200 },
+        // The peat barn: the homes' peat as the cutters bring it in, about four days of the 22
+        // hearths (12 a day each, 264 in all). It starts empty.
+        #{ name: "peat_barn", like: "storage", holds: 1000 },
+        // The Cone yard's store: the Cone's peat, 12 days of full firing with the furnace's own
+        // 40 (784 here at the start), and a margin.
+        #{ name: "yard_store", like: "storage", holds: 900 },
+        // A household's own store in its house: the other three days of food and of hearth peat
+        // (the largest household, 7 people, starts with 81 things); room for six days' food of
+        // seven (114) and its peat.
+        #{ name: "house_store", like: "storage", holds: 150 },
+    ]
+}
 
 // There is no small game on the Wrack: a trap catches nothing (the world does not restock).
 fn trap_every_h(x) { 0.0 }
@@ -221,15 +244,34 @@ fn goods_structures() {
     ]
 }
 
-// What the land gives, a game hour of growing time (no winter) per node, up to its max. A
-// fishing ground's spots share one stock when the plan or seed says so (a resource node's
+// What each kind regrows in winter, as a share of its rate (`regrow_by_season`; spring, summer
+// and autumn keep the full rate). The sea does not freeze: fish keep coming at most of their rate
+// (storms that keep boats in are weather, not regrowth); winter storms throw up more wrack on the
+// strand; greens under glass grow, slowly; the root plots rest (the stores carry roots); sand is
+// the sea's, whatever the season; the Moss rests as it did. docs/CULLET_RULES.md, "Winter".
+fn winter_regrowth() {
+    #{ fishing_spot: 0.75, weir: 0.75, kelp_bed: 1.25, greens_bed: 0.5, root_plot: 0.0, sand_bank: 1.0, peat_bank: 0.0 }
+}
+fn with_winter(k) {
+    let w = winter_regrowth()[k.name];
+    if w != () { k.regrow_by_season = #{ winter: w }; }
+    k
+}
+
+// What the land gives, a game hour per node (in winter its `winter_regrowth` share), up to its
+// max. A fishing ground's spots share one stock when the plan or seed says so (a resource node's
 // `pool`); the plan gives each ground its own stock and regrowth. Starting values for the soak
 // against docs/SMALL_CITY.md §2 (about 1.3 times what 64 residents and 10 players eat; fish 55%,
 // roots 30%, greens 15%; peat the tight resource), computed in living/tools/cullet_plan.py, which
 // writes each node's own values into the plan; these are a node's of each kind when nothing says
 // otherwise, and hold about two days of regrowth (docs/CULLET_RULES.md, "Cullet's goods, placed").
 fn resources() {
-    base_resources() + [
+    let out = [];
+    for k in base_resources() + cullet_resources() { out.push(with_winter(k)); }
+    out
+}
+fn cullet_resources() {
+    [
         // 12 beds on the Wrack Strand: 60 kelp a day, ash for about 12 glass and kelp for the plots.
         #{ name: "kelp_bed", yields: "kelp", regrow_per_h: 0.208, max: 10.0, ground: ["sand"], by_water: true, gather_ms: 2500 },
         // 6 banks on the Sand Spit: 24 sand a day, two to a glass.
@@ -247,7 +289,7 @@ fn resources() {
 
 fn know_how() {
     base_know_how() + [
-        #{ name: "glassmaking", help: "melt ash and sand into glass at a burning furnace", requires: ["fire"] },
+        #{ name: "glassmaking", help: "melt ash and sand into glass at a burning furnace", brief: "glass from ash and sand at the furnace", requires: ["fire"] },
     ]
 }
 

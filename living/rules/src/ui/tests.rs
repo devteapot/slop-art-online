@@ -157,6 +157,15 @@ fn plan_offers(s: &Scripts, skill: &str, aimed: Aimed) -> bool {
     if !checked && (aimed == Aimed::Thing || (wants_target && aimed != Aimed::OwnKind)) {
         return false;
     }
+    // Since rules-senses-outcomes a spec may say what its target is (`target_class`): today's
+    // client offered such a skill everywhere and had the rules refuse it.
+    if wants_target && !spec.target_class.is_empty() {
+        let creature = spec.target_class.iter().any(|c| c == "creature");
+        let thing = spec.target_class.iter().any(|c| c != "creature");
+        if (aimed == Aimed::Thing && !thing) || (aimed != Aimed::Thing && !creature) {
+            return false;
+        }
+    }
     !spec.args.iter().any(|a| a == "graph")
 }
 
@@ -174,7 +183,12 @@ fn defaults_reproduce_todays_looks() {
                 // A shown skill (tend) is drawn by how others see it (the town look), not as a blow.
                 Some(sh) => assert_eq!(u.look.clips, vec![name_in(CLIPS, &sh.look).expect("a family")], "{world}: `{skill}` plays its shown look"),
                 // A fight move (on the bar, or used against someone) looks as the client drew it.
-                None if fight => assert_eq!(as_today(&u.look), today_look(skill, shape.aim.as_str(), radius), "{world}: `{skill}` looks as the client drew it"),
+                None if fight => {
+                    // Step 2 gives the jump its own icon (today's client drew it with the dodge's).
+                    let today = today_look(skill, shape.aim.as_str(), radius);
+                    let today = if skill == "jump" { TodayLook { icon: "jump", ..today } } else { today };
+                    assert_eq!(as_today(&u.look), today, "{world}: `{skill}` looks as the client drew it")
+                }
                 // Any other combat shape (seize, yield) is no blow: no sword, no slash, no circle
                 // (the client drew them with the creature fallback only as a fighter's move,
                 // which an untimed shape never is).
@@ -211,11 +225,24 @@ fn the_three_looks_by_name_are_declared_not_coded() {
         let (u, d) = (s.ui(skill).unwrap(), s.ui_default(skill).unwrap());
         assert!(u.declared, "{skill}_ui() is shipped");
         assert_ne!(u.look, d.look, "{skill}: the declaration is what makes it look as it did");
-        // Only the look is declared: everything else is its default.
+    }
+    // Shoot and throw declare only the look: everything else is its default.
+    for skill in ["shoot", "throw"] {
+        let (u, d) = (s.ui(skill).unwrap(), s.ui_default(skill).unwrap());
         assert_eq!(UiSpec { look: d.look.clone(), declared: false, ..u.clone() }, d, "{skill}: only `look` is declared");
     }
-    let declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
-    assert_eq!(declared, ["strike", "throw", "shoot"], "the shipped script declares only these (step 2 adds the bar's)");
+    // Step 2 declares the bar's seven (where each sits, its input and its look); accept and
+    // decline (rules-offers-2) are also answers on an offer's card, with the trade icon.
+    let mut declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
+    declared.sort();
+    assert_eq!(declared, ["accept", "block", "bowshot", "decline", "dodge", "face", "firebolt", "heal", "jump", "shoot", "strike", "throw"], "the shipped script declares these");
+    // Face is in no list of a player's (play-test 5): a player faces where it looks, as the tip says.
+    let face = s.ui("face").unwrap();
+    assert!(face.on.is_empty() && face.tip.is_some() && !s.ui_default("face").unwrap().on.is_empty(), "{face:?}");
+    for skill in ["accept", "decline"] {
+        let u = s.ui(skill).unwrap();
+        assert!(u.look.icon == Some("trade") && u.is_on(On::Offer) && u.is_on(On::Person), "{skill}: {u:?}");
+    }
 }
 
 #[test]
@@ -246,7 +273,8 @@ fn defaults_reproduce_todays_bar() {
 fn bar_places_match_roles_of_for_any_bar() {
     // Every order of the shipped bar's skills, and a bar with a second of each aim.
     let s = island();
-    let mut base: Vec<BarEntry> = s.bar_entries();
+    // The oracle is today's client, which knew no declared places.
+    let mut base: Vec<BarEntry> = s.bar_entries().into_iter().map(|e| BarEntry { place: None, order: None, ..e }).collect();
     base.push(BarEntry { name: "lance".into(), aim: Aim::Creature, evades: false, radius: 0.0, place: None, order: None });
     base.push(BarEntry { name: "flare".into(), aim: Aim::Point, evades: false, radius: 0.5, place: None, order: None });
     base.push(BarEntry { name: "dart".into(), aim: Aim::Point, evades: false, radius: 0.1, place: None, order: None });
@@ -274,7 +302,8 @@ fn bar_places_match_roles_of_for_any_bar() {
 
 #[test]
 fn declared_places_come_first() {
-    let mut es = island().bar_entries();
+    // From a bar with nothing declared (the shipped one declares the places it already has).
+    let mut es: Vec<BarEntry> = island().bar_entries().into_iter().map(|e| BarEntry { place: None, order: None, ..e }).collect();
     let set = |es: &mut Vec<BarEntry>, n: &str, p: BarPlace, o: Option<i64>| {
         let e = es.iter_mut().find(|e| e.name == n).unwrap();
         e.place = Some(p);
@@ -305,7 +334,8 @@ fn defaults_reproduce_todays_aims_and_lists() {
     for (world, s) in worlds() {
         for spec in s.skills().iter() {
             let name = spec.name.as_str();
-            let u = s.ui(name).unwrap();
+            // The defaults (a declaration may move a skill: face is in no list of a player's).
+            let u = s.ui_default(name).unwrap();
             // The F and C lists: where `plan()` offered it.
             assert_eq!(u.is_on(On::Me), plan_offers(&s, name, Aimed::Me), "{world}: `{name}` toward myself");
             assert_eq!(u.is_on(On::Person), plan_offers(&s, name, Aimed::OwnKind), "{world}: `{name}` toward a person");
@@ -316,8 +346,8 @@ fn defaults_reproduce_todays_aims_and_lists() {
             // From the pack: only an item of my own, with no one else to choose (eat, drop, experiment).
             assert_eq!(u.is_on(On::Item), spec.needs_item && !spec.needs_target && u.source == Some(ItemSource::Pack) && u.is_on(On::Me), "{world}: `{name}` from the pack");
             assert_eq!(u.source.is_some(), spec.needs_item, "{world}: `{name}`'s item source");
-            // The label: the name with spaces (the client's `pretty`), capitalised.
-            assert_eq!(u.label.to_lowercase(), name.replace('_', " "));
+            // The default label: the name with spaces (the client's `pretty`), capitalised.
+            assert_eq!(s.ui_default(name).unwrap().label.to_lowercase(), name.replace('_', " "));
         }
         // How the bar aims: input, marker and the act a press is.
         for (name, shape) in s.shapes().iter().filter(|(n, _)| s.shapes().on_bar(n)) {
@@ -362,7 +392,7 @@ fn want(t: &ActTarget) -> Kind {
         ActTarget::Creature(i) => Kind::Id(*i),
         ActTarget::Thing { kind, .. } => Kind::Nearest(kind.clone()),
         ActTarget::At(_) => Kind::At,
-        ActTarget::Offer { from, .. } => Kind::Id(*from),
+        ActTarget::Offer { from, .. } | ActTarget::Record { from, .. } => Kind::Id(*from),
     }
 }
 
@@ -393,7 +423,7 @@ fn targets(on: On, spec: &crate::catalog::SkillSpec) -> Vec<ActTarget> {
         On::Me => vec![ActTarget::Me],
         On::Item if spec.needs_target => vec![ActTarget::Creature(7)],
         On::Item => vec![ActTarget::Me],
-        On::Offer => vec![ActTarget::Offer { from: 7, offer: 1 }],
+        On::Offer => vec![ActTarget::Offer { from: 7, offer: 1 }, ActTarget::Record { from: 7, record: 2 }],
         On::Bar | On::Box => vec![],
     }
 }
@@ -618,7 +648,15 @@ fn the_same_facts_allow_the_same_acts_to_both() {
 // ---- reading and install -----------------------------------------------------------------------
 
 fn with(extra: &str) -> Scripts {
-    Scripts::new(&format!("{}\n{extra}\n", include_str!("../../../scripts/skills.rhai"))).expect("compiles: declarations never fail the compile")
+    Scripts::new(&over(include_str!("../../../scripts/skills.rhai"), extra)).expect("compiles: declarations never fail the compile")
+}
+
+/// `base` with `extra` after it, where a `<name>_ui()` that `extra` declares replaces the one
+/// `base` ships (as an overlay's would; Rhai refuses a second function of the same name).
+fn over(base: &str, extra: &str) -> String {
+    let names: Vec<String> = extra.lines().filter_map(|l| l.trim_start().strip_prefix("fn ")?.split_once("_ui()").map(|(n, _)| n.to_string())).collect();
+    let kept: String = base.lines().filter(|l| !names.iter().any(|n| l.starts_with(&format!("fn {n}_ui()")))).map(|l| format!("{l}\n")).collect();
+    format!("{kept}\n{extra}\n")
 }
 
 #[test]
@@ -638,7 +676,7 @@ fn a_bad_declaration_is_logged_by_a_client_and_refused_at_install() {
         ("fn rest_ui() { #{ picks: [\"qty\"] } }", "`picks: qty` needs `qty` in the spec's args"),
         ("fn juggle_ui() { #{ label: \"Juggle\" } }", "`juggle` is not a skill"),
         ("fn attack_ui() { #{ on: \"bar\" } }", "must be in `skill_bar()`"),
-        ("fn heal_ui() { #{ place: \"primary\" } }\nfn block_ui() { #{ place: \"primary\" } }", "heal_ui: the bar place `primary` is already `block`'s"),
+        ("fn strike_ui() { #{ label: \"Strike\" } }\nfn heal_ui() { #{ place: \"primary\" } }\nfn block_ui() { #{ place: \"primary\" } }", "heal_ui: the bar place `primary` is already `block`'s"),
         ("fn build_ui() { #{ detail: \"no_such_fn\" } }", "`detail` names a function of one name"),
         ("fn build_ui() { #{ detail: \"num\" } }\nfn num(x) { 3 }", "must return words"),
         ("fn wave_ui() { #{ look: #{ clip: \"work\" } } }", "contradicts `wave_shows()`, whose look is `gesture`"),
@@ -651,7 +689,7 @@ fn a_bad_declaration_is_logged_by_a_client_and_refused_at_install() {
         // The review's rule-safety cases (findings 1 and 6): a presentation may not take a skill
         // from players only, send an act the grammar refuses, or pair an input with nothing.
         ("fn wave_ui() { #{ on: \"self\" } }", "`self` sends no target, and `wave_spec()` needs one"),
-        ("fn gather_ui() { #{ on: [] } }", "to hide a skill from both, its spec says `listed: false`"),
+        ("fn gather_ui() { #{ on: [] } }", "say in `tip` how a player does it instead"),
         ("fn gather_ui() { #{ on: \"ground\" } }", "`ground` needs a combat aim of `point`"),
         ("fn rest_ui() { #{ on: \"offer\" } }", "`offer` needs a spec with `target: true`"),
         ("fn dodge_ui() { #{ input: \"toggle\" } }", "`input: \"toggle\"` needs `toggles`"),
@@ -673,8 +711,8 @@ fn a_bad_declaration_is_logged_by_a_client_and_refused_at_install() {
         assert!(e.starts_with("install refused: ") && e.contains(want.split(':').next().unwrap()), "{src}: {e}");
     }
     // A field that is wrong keeps its default, and the rest of the declaration holds; a declared
-    // primary comes before the one placed by aim.
-    let s = with("fn heal_ui() { #{ place: \"primary\", label: \"Mend\", look: #{ icon: \"axe\" } } }");
+    // primary comes before the one placed by aim (strike's declared place is taken out here).
+    let s = with("fn strike_ui() { #{ label: \"Strike\" } }\nfn heal_ui() { #{ place: \"primary\", label: \"Mend\", look: #{ icon: \"axe\" } } }");
     let u = s.ui("heal").unwrap();
     assert_eq!((u.label.as_str(), u.look.icon, u.place), ("Mend", Some("heal"), Some(BarPlace::Primary)));
     let b = bar_places(&s);
@@ -713,12 +751,14 @@ fn declarations_place_and_present() {
 
 #[test]
 fn a_way_of_speaking_is_presented_in_the_box() {
-    let s = with("fn whisper_speech() { #{ label: \"Whisper\" } }\nfn whisper_ui() { #{ on: \"box\", alias: \"/w\", to_label: \"Whisper to {b}\", bubble: \"hushed\", rows: #{ whisper: \"line\", whispered: \"dots\" } } }");
+    // The shipped script has the ways (`whisper_speech()`, docs/COMMUNICATION.md); a declaration
+    // presents one.
+    let s = with("fn whisper_ui() { #{ on: \"box\", alias: \"/w\", to_label: \"Whisper to {b}\", bubble: \"hushed\", rows: #{ whisper: \"line\", whispered: \"dots\" } } }");
     assert!(s.ui_errors().is_empty(), "{:?}", s.ui_errors());
     let w = s.ui("whisper").unwrap();
     let way = w.way.as_ref().unwrap();
     assert_eq!((w.on.clone(), way.alias.as_deref(), way.bubble, way.rows.get("whispered").copied()), (vec![On::Box], Some("/w"), Some(Bubble::Hushed), Some(Row::Dots)));
-    let s = with("fn whisper_speech() { #{} }\nfn whisper_ui() { #{ label: \"W\", on: \"bar\" } }");
+    let s = with("fn whisper_ui() { #{ label: \"W\", on: \"bar\" } }");
     assert!(s.ui_errors().iter().any(|e| e.contains("a way's `label` is set by `whisper_speech()`")));
     assert!(s.ui_errors().iter().any(|e| e.contains("text box")));
 }
@@ -798,7 +838,9 @@ fn without_vocabulary(src: &str) -> String {
 /// And the species' signals: a body offered `signal` must have signals to make
 /// (`Species::signals`), a rule moved unchanged from `species::skills_help_of` so minds' references
 /// stay byte for byte.
-const GRAMMAR: &[&str] = &["goto", "signal"];
+/// And `offer`: the field an answer (accept, decline) names the trade offer it answers with
+/// (`{"do": "accept", "target": {"id": 4}, "offer": 9}`, rules-offers-2), spelt like the skill.
+const GRAMMAR: &[&str] = &["goto", "signal", "offer"];
 
 #[test]
 fn no_skill_is_named_in_the_rules_interface_code() {
@@ -816,7 +858,7 @@ fn no_skill_is_named_in_the_rules_interface_code() {
 /// Some are ordinary words, not skills (`clear` weather, a gate's `close`); they stay listed.
 const CLIENT_NAMES_TODAY: &[(&str, &[&str])] = &[
     ("characters.rs", &["build"]),
-    ("combat.rs", &["attack", "block", "bowshot", "dodge", "firebolt", "heal", "jump", "shoot", "strike", "throw"]),
+    ("combat.rs", &["attack", "block", "dodge", "heal", "jump", "shoot", "strike", "throw"]),
     ("envs.rs", &["close"]),
     ("jump.rs", &["jump"]),
     ("live.rs", &["dodge", "goto", "open", "wait"]),
@@ -933,15 +975,16 @@ fn the_rules_are_the_same_without_any_declaration() {
     let shipped = include_str!("../../../scripts/skills.rhai");
     let stripped = without_ui(shipped);
     assert!(stripped.len() < shipped.len() && !stripped.lines().any(|l| l.starts_with("fn ") && l.contains("_ui()")), "every declaration is taken out");
-    let heavy = format!(
-        "{shipped}\n\
+    let heavy = over(shipped, &format!(
+        "\
          fn firebolt_ui() {{ #{{ label: \"Fire bolt\", place: \"skill\", order: 0, input: \"aim_point\", refused: \"note\", look: #{{ icon: \"fire\", clip: \"cast\", effect: \"bolt\" }} }} }}\n\
+         fn strike_ui() {{ #{{ label: \"Strike\" }} }}\n\
          fn block_ui() {{ #{{ place: \"primary\" }} }}\n\
          fn give_ui() {{ #{{ on: [\"person\", \"item\"], picks: [\"target\", \"item\", \"qty\"], drag: \"person\", pin: true }} }}\n\
          fn make_ui() {{ #{{ on: \"thing\", choose: \"grid\", detail: \"made_how\" }} }}\n\
          fn graze_ui() {{ #{{ on: \"self\", label: \"Graze\" }} }}\n\
          fn rest_ui() {{ #{{ on: [\"self\"] }} }}\n"
-    );
+    ));
     let pairs = [
         ("island", Scripts::new(shipped).unwrap(), Scripts::new(&stripped).unwrap()),
         ("island, declared heavily", Scripts::new(&heavy).unwrap(), Scripts::new(&without_ui(&heavy)).unwrap()),
@@ -983,6 +1026,36 @@ fn a_bar_press_is_the_leaf_use_skill_resolves() {
             assert_eq!(leaf, want, "{aim:?} target {t:?} aim {at:?}");
         }
     }
+}
+
+#[test]
+fn appraise_is_offered_toward_creatures_not_things() {
+    // The laptop's finding: `appraise_check` refused every thing ("no one there") while the
+    // client offered "Look over" on things. Its spec now says its target is a creature.
+    let sp = species();
+    for (world, s) in worlds() {
+        let names = |class: &str| offered_toward(s.skills(), sp.get("person"), class).into_iter().map(|k| k.name.clone()).collect::<Vec<_>>();
+        assert!(names("creature").contains(&"appraise".to_string()), "{world}");
+        for class in ["resource", "structure", "place"] {
+            assert!(!names(class).contains(&"appraise".to_string()), "{world}: {class}");
+        }
+        let u = s.ui("appraise").unwrap();
+        assert!(u.is_on(On::Person) && !u.is_on(On::Thing), "{world}: {:?}", u.on);
+        // A skill that names no class is still offered toward both (give is checked).
+        assert!(names("creature").contains(&"give".to_string()) && names("structure").contains(&"give".to_string()), "{world}");
+        // Its own check still refuses anything that reaches it.
+        assert!(s.has("appraise_check"));
+    }
+}
+
+#[test]
+fn a_target_class_must_be_a_class_and_needs_a_target() {
+    let src = include_str!("../../../scripts/skills.rhai");
+    let bad = src.replace(r#"fn appraise_spec() { #{ target: true, target_class: "creature","#, r#"fn appraise_spec() { #{ target: true, target_class: "ghost","#);
+    assert_ne!(bad, src);
+    assert!(Scripts::new(&bad).err().unwrap().contains("'ghost' is not a target class"));
+    let bad = src.replace(r#"fn appraise_spec() { #{ target: true, target_class: "creature","#, r#"fn appraise_spec() { #{ target_class: "creature","#);
+    assert!(Scripts::new(&bad).err().unwrap().contains("needs `target: true`"));
 }
 
 #[test]
@@ -1151,7 +1224,15 @@ fn a_floor_overlay_restyles_a_base_declaration() {
 #[test]
 fn seventy_declarations_cost_little_to_compile() {
     // Coverage 11: the shipped script against the same with a declaration for every one of its
-    // skills (best of a few compiles each; a debug build, so the bound is loose).
+    // skills, measured in deterministic units, not wall time: under a loaded machine two timings
+    // in a parallel suite say nothing (dev-box measured +173% at load 66 on 32 cores, +12–15%
+    // alone).
+    // - The compile itself is linear in the source (Rhai's parse, the field analysis): the
+    //   declarations' share of the source bounds what they add to it.
+    // - Reading them: one script call per declaration (and per missile, per `detail` item), and
+    //   one scan of the source per declaration. The +49% of the first build was a sort that
+    //   scanned the whole source on every comparison; this bound is what would catch it.
+    // - Each declaration's own Rhai operations, as the install counts them.
     let shipped = include_str!("../../../scripts/skills.rhai");
     let bare = without_ui(shipped);
     let s = Scripts::new(&bare).unwrap();
@@ -1160,17 +1241,74 @@ fn seventy_declarations_cost_little_to_compile() {
     let n = s.ui_specs().count();
     // Every skill the island has (62 on 2026-11-11), the design's "about 70".
     assert!(n >= 60, "{n} declarations");
-    let best = |src: &str| (0..3).map(|_| { let t = std::time::Instant::now(); Scripts::new(src).unwrap(); t.elapsed() }).min().unwrap();
-    let (a, b) = (best(&bare), best(&declared));
-    println!("compile: {n} declarations {b:?}, none {a:?} (+{:.0}%)", (b.as_secs_f64() / a.as_secs_f64() - 1.0) * 100.0);
-    assert!(b.as_secs_f64() < a.as_secs_f64() * 1.6 + 0.05, "{n} declarations: {b:?} against {a:?}");
+    let grown = decls.len() as f64 / bare.len() as f64;
+    assert!(grown < 0.15, "{n} declarations are {:.0}% of the source", grown * 100.0);
+    let d = Scripts::new(&declared).unwrap();
+    let (w0, w) = (s.ui_work(), d.ui_work());
+    let missiles = s.shapes().iter().filter(|(_, sh)| sh.missile).count();
+    assert_eq!(w0, crate::script::UiWork { calls: missiles, scans: 0 }, "with no declaration, reading costs only the missiles");
+    assert_eq!(w, crate::script::UiWork { calls: missiles + n, scans: n }, "one call and one source scan per declaration");
+    let report = d.validate().unwrap();
+    let ops: Vec<(&String, &u64)> = report.ops.iter().filter(|(f, _)| f.ends_with("_ui")).collect();
+    assert_eq!(ops.len(), n, "the install runs every declaration");
+    let (most, total) = (ops.iter().map(|(_, o)| **o).max().unwrap_or(0), ops.iter().map(|(_, o)| **o).sum::<u64>());
+    assert!(most <= 40, "a declaration is a map literal; the heaviest took {most} operations");
+    // Wall time, printed only.
+    let time = |src: &str| {
+        let t = std::time::Instant::now();
+        Scripts::new(src).unwrap();
+        t.elapsed()
+    };
+    println!("compile: {n} declarations, {:.1}% more source, {} calls and {} scans to read, {total} operations in all (most {most}); wall {:?} against {:?}", grown * 100.0, w.calls, w.scans, time(&declared), time(&bare));
 }
 
 #[test]
-fn the_grammar_has_no_offer_reference_yet() {
-    // Finding 7: an act toward an incoming offer names its sender; the offer's own id joins the
-    // act when the grammar carries a reference (rules-offers-2). This fails when it does, so that
-    // `act_node` starts sending it.
-    assert!(serde_json::from_value::<graph::Action>(json!({"skill": "accept", "offer": 1})).is_err(), "the grammar carries `offer` now: send `ActTarget::Offer`'s id in `act_node`");
-    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}}));
+fn an_act_toward_an_offer_names_it() {
+    // Finding 7: an act toward an incoming offer names its sender and the offer it answers
+    // (rules-offers-2), and the grammar carries the reference; an offer of 0 names none.
+    let a: graph::Action = serde_json::from_value(json!({"skill": "accept", "offer": 1})).expect("the grammar carries `offer`");
+    assert_eq!(a.offer, Some(1));
+    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}, "offer": 9}));
+    assert_eq!(act_node("decline", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "decline", "target": {"id": 4}, "offer": 9}));
+    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 0 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}}));
+    // What it sends parses as the act it names.
+    let parsed = crate::acts::parse(act_node("decline", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), None, &Default::default()).unwrap();
+    assert_eq!((parsed.skill.as_str(), parsed.offer), ("decline", Some(9)));
+}
+
+#[test]
+fn an_act_toward_a_proposal_names_its_record() {
+    // A proposal of terms (an agreement record) is answered by its record id (rules-offers-2's
+    // `"record"`), toward its proposer; what is sent parses back as the act it names.
+    for skill in ["accept", "decline"] {
+        let node = act_node(skill, &ActTarget::Record { from: 4, record: 12 }, &Picked::default());
+        assert_eq!(node, json!({"do": skill, "target": {"id": 4}, "record": 12}));
+        let parsed = crate::acts::parse(node, None, &Default::default()).unwrap();
+        assert_eq!((parsed.skill.as_str(), parsed.record, parsed.offer), (skill, Some(12), None));
+    }
+}
+
+/// The shipped bar's declarations (ui-1 step 4, INTERFACE.md step 2): they parse with no
+/// errors, the script validates, and they place Q block, E heal and R fire bolt, LMB strike, RMB
+/// the bow shot, Space the jump and the double tap the dodge.
+#[cfg(feature = "scripting")]
+#[test]
+fn the_shipped_bar_is_declared_and_placed() {
+    let sc = crate::script::Scripts::with_day(include_str!("../../../scripts/skills.rhai"), crate::DEFAULT_DAY_MS).expect("the shipped script compiles");
+    assert!(sc.ui_errors().is_empty(), "{:?}", sc.ui_errors());
+    sc.validate().expect("the shipped script validates");
+    let bar = bar_places(&sc);
+    assert_eq!(bar.primary.as_deref(), Some("strike"));
+    assert_eq!(bar.secondary.as_deref(), Some("bowshot"));
+    assert_eq!(bar.skill[..3].iter().map(|s| s.as_deref()).collect::<Vec<_>>(), vec![Some("block"), Some("heal"), Some("firebolt")]);
+    assert_eq!(bar.jump.as_deref(), Some("jump"));
+    assert_eq!(bar.dodge.as_deref(), Some("dodge"));
+    assert!(bar.extra.is_empty(), "{:?}", bar.extra);
+    for n in ["strike", "bowshot", "block", "heal", "firebolt", "dodge", "jump"] {
+        let u = sc.ui(n).expect("a bar skill has a UiSpec");
+        assert!(u.declared, "{n} is declared");
+        assert!(u.look.icon.is_some() && !u.look.clips.is_empty(), "{n}: {:?}", u.look);
+    }
+    assert_eq!(sc.ui("strike").unwrap().look.clips, vec!["slash", "overhead", "thrust"]);
+    assert_eq!(sc.ui("firebolt").unwrap().label, "Fire bolt");
 }

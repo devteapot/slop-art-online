@@ -3,13 +3,14 @@
 
   drive.py --run RUN --name NAME --plan 'ready;dump:a;click:@menu:Settings;shot:b;quit'
            [--place ID:DX:DY ...] [--sync NAME='REDUCER|ARG|..;...'] [--size 1600x900]
-           [--client PATH] [--expect 'regex' ...]
+           [--client PATH] [--player NAME] [--token FILE] [--expect 'regex' ...]
 
 - RUN is the verify run (`verify.py launch --run RUN --seed island`); the world is
   `verify-RUN`, which must start with `verify-ui-`.
 - The client is the release build from this checkout's CARGO_TARGET_DIR (default
   `.local/target/release/living-game`), or --client. It joins as "Verifier" with its own token
-  under the evidence directory, and its settings file (bindings, Play settings) is a scratch
+  under the evidence directory (`--token FILE` plays another character, e.g. verify.py's player
+  identity: the token string in a file), and its settings file (bindings, Play settings) is a scratch
   file there too (LIVING_GAME_SETTINGS), so a run never touches the owner's.
 - Evidence: `.local/living/verify/RUN/ui/NAME/` holds the photographs and dumps the plan writes
   (`shot:`, `dump:`), `client.log`, `plan.txt` and `scene.json` (the player's id, the admin calls
@@ -18,6 +19,15 @@
   (`{"wait": 600}`) when the plan reaches `sync:scene`. `--sync NAME=...` makes admin calls when
   the plan reaches `sync:NAME`; `{me}` is the player's id and `(expr)` a Python expression of
   mx, my (the player's position) and me. Admin calls set scenes only; they are not player acts.
+- A `--sync` call `sql|QUERY` instead snapshots the authority (owner SQL through verify.py) at
+  that moment: the rows and the wall time go into scene.json under "snaps" by NAME. `{me}` is
+  the player's character id, `{ident}` its identity (hex), and `{epoch_at:HOUR}` the world
+  epoch that makes the world's hour HOUR now, keeping its day count (for a scratch fixture
+  `UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0`: the hour by day or night).
+- `--admin-link` gives the client the world admin's token in a private file
+  (LIVING_GAME_ADMIN_TOKEN_FILE, `.local/living/verify/RUN/private/`, mode 600, deleted when the
+  drive ends), as the play launcher does for a scene with `"law_toggle": true`: the client's
+  second, admin-only connection switches facing sight (`set_world_law("fov_on", …)`, F5).
 - `--expect REGEX` (repeatable) must match client.log, else the run fails (exit 1).
 
 Exit code: the client's, or 1 when an expectation fails or the client never joined.
@@ -26,6 +36,7 @@ import argparse, json, os, re, subprocess, sys, time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
 STDB = os.path.join(ROOT, "living/tools/stdb")
+V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
 
 
 def stdb(*args):
@@ -37,6 +48,32 @@ def stdb(*args):
 def call(db, reducer, *args):
     code, out = stdb("call", "-s", "local", db, reducer, *args)
     return {"reducer": reducer, "args": [str(a) for a in args], "code": code, "out": out[-400:]}
+
+
+def sql(run, q):
+    r = subprocess.run([sys.executable, V, "sql", "--run", run, q], capture_output=True, text=True)
+    i = r.stdout.find("[")
+    try:
+        return json.loads(r.stdout[i:]) if i >= 0 else []
+    except ValueError:
+        return []
+
+
+def epoch_at(run, hour):
+    """The world epoch (ms) under which `living_rules::hour_of` gives `hour` now, keeping the
+    world's day count (the world starts at 07:00)."""
+    w = sql(run, "SELECT epoch_ms, day_ms FROM world")[0]
+    day, now = int(w["day_ms"]), int(time.time() * 1000)
+    days = (now - int(w["epoch_ms"]) + day * 7 // 24) // day
+    return now + day * 7 // 24 - int(hour / 24.0 * day) - days * day
+
+
+def admin_token():
+    _, out = stdb("login", "show", "--token")
+    for line in out.splitlines():
+        if "auth token" in line and " is " in line:
+            return line.rsplit(" is ", 1)[1].strip()
+    sys.exit("could not read the admin token from `spacetime login show --token`")
 
 
 def body(db, cid):
@@ -55,7 +92,9 @@ def main():
     ap.add_argument("--size", default="1600x900")
     ap.add_argument("--client")
     ap.add_argument("--player", default="Verifier")
+    ap.add_argument("--token", help="another player's token file (default: the run's ui/player.token)")
     ap.add_argument("--expect", action="append", default=[])
+    ap.add_argument("--admin-link", action="store_true")
     ap.add_argument("--timeout", type=float, default=600)
     a = ap.parse_args()
     db = f"verify-{a.run}"
@@ -75,16 +114,38 @@ def main():
         name, calls = s.split("=", 1)
         syncs[name] = [c.split("|") for c in calls.split(";") if c]
     open(os.path.join(out, "plan.txt"), "w").write(a.plan.replace(";", ";\n") + "\n")
-    token = os.path.join(ROOT, ".local/living/verify", a.run, "ui", "player.token")
-    env = dict(os.environ, LIVING_SERVER="http://127.0.0.1:3300", LIVING_DB=db, LIVING_GAME_NAME=a.player, LIVING_GAME_TOKEN=token,
+    token = a.token or os.path.join(ROOT, ".local/living/verify", a.run, "ui", "player.token")
+    # A worker's own server (`LIVING_STDB_URL`, the verify entry point's "Your own server"), else the shared one.
+    env = dict(os.environ, LIVING_SERVER=os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300"), LIVING_DB=db, LIVING_GAME_NAME=a.player, LIVING_GAME_TOKEN=token,
                LIVING_GAME_LIVE=out, LIVING_GAME_LIVE_PLAN=a.plan, LIVING_GAME_SIZE=a.size,
                LIVING_GAME_SETTINGS=os.path.join(out, "settings.json"), RUST_LOG=os.environ.get("RUST_LOG", "info,wgpu=warn,naga=warn"))
+    secret = None
+    if a.admin_link:
+        d = os.path.join(ROOT, ".local/living/verify", a.run, "private")
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        os.chmod(d, 0o700)
+        secret = os.path.join(d, f"admin-{os.getpid()}.token")
+        if os.path.exists(secret):
+            os.remove(secret)
+        fd = os.open(secret, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(admin_token())
+        env["LIVING_GAME_ADMIN_TOKEN_FILE"] = secret
+    try:
+        run_client(a, db, out, client, env, places, syncs)
+    finally:
+        if secret and os.path.exists(secret):
+            os.remove(secret)
+            print("admin token file deleted", flush=True)
+
+
+def run_client(a, db, out, client, env, places, syncs):
     log_path = os.path.join(out, "client.log")
     log = open(log_path, "w")
     p = subprocess.Popen([client], env=env, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT)
     print(f"client pid {p.pid}; evidence {out}", flush=True)
-    scene = {"world": db, "plan": a.plan, "places": places, "calls": [], "client": client}
-    me, placed, t0 = None, False, time.time()
+    scene = {"world": db, "plan": a.plan, "places": places, "calls": [], "snaps": {}, "client": client, "admin_link": a.admin_link}
+    me, placed, t0, ident = None, False, time.time(), None
     while p.poll() is None:
         if time.time() - t0 > a.timeout:
             print(f"timeout after {a.timeout} s: stopping the client (pid {p.pid})", flush=True)
@@ -103,6 +164,9 @@ def main():
                 scene["calls"].append(call(db, "place_at", i, at[0] + float(dx), at[1] + float(dy)))
                 scene["calls"].append(call(db, "set_behavior", i, json.dumps(json.dumps({"wait": 600}))))
             time.sleep(1.0)
+            # Where each landed: `place_at` snaps to the nearest walkable tile, so two asked-for
+            # spots in a stall can share one.
+            scene["placed"] = {i: body(db, int(i)) for i, _, _ in places}
             open(os.path.join(out, "scene.go"), "w").close()
             placed = True
         for name, calls in list(syncs.items()):
@@ -110,8 +174,22 @@ def main():
                 at = body(db, me)
                 sub = lambda s: str(eval(s[1:-1], {"mx": at[0], "my": at[1], "me": me})) if s.startswith("(") else s.replace("{me}", str(me))
                 for c in calls:
+                    if c[0] == "sql":
+                        if ident is None:
+                            rows = sql(a.run, f"SELECT controller FROM character WHERE id = {me}")
+                            ident = rows[0]["controller"] if rows else ""
+                            ident = str(ident[0] if isinstance(ident, list) and ident else ident)
+                            ident = ident[2:] if ident.startswith("0x") else ident
+                        q = "|".join(c[1:]).replace("{me}", str(me)).replace("{ident}", ident)
+                        for m in re.finditer(r"\{epoch_at:([\d.]+)\}", q):
+                            q = q.replace(m.group(0), str(epoch_at(a.run, float(m.group(1)))))
+                        scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": int(time.time() * 1000), "rows": sql(a.run, q)})
+                        continue
                     scene["calls"].append(call(db, c[0], *[sub(x) for x in c[1:]]))
                 time.sleep(0.5)
+                moved = sorted({sub(c[1]) for c in calls if c[0] == "place_at"})
+                if moved:
+                    scene.setdefault("placed_at", {})[name] = {i: body(db, int(i)) for i in moved}
                 open(os.path.join(out, f"{name}.go"), "w").close()
                 del syncs[name]
         time.sleep(0.4)

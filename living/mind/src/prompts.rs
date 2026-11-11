@@ -144,6 +144,27 @@ fn compiled() -> Option<Arc<living_rules::script::Scripts>> {
     })
 }
 
+/// How far an ordinary voice (`say`) carries for a person with the world's hearing (metres).
+pub fn voice_m() -> f32 {
+    compiled().and_then(|s| s.way("say").map(|w| w.carry_for(s.reach().hearing))).unwrap_or(9.0)
+}
+
+/// The ways of speaking for a talk turn's reply, when the world has more than `say`.
+fn ways_text() -> String {
+    let Some(s) = compiled() else { return String::new() };
+    if s.ways().len() < 2 {
+        return String::new();
+    }
+    let names: Vec<String> = s.ways().iter().map(|w| format!("\"{}\"", w.name)).collect();
+    let about: Vec<String> = s.ways().iter().map(|w| format!("{} = {}", w.name, w.about.trim())).collect();
+    format!("\"way\": how you say it, {} (default \"say\"; {}), ", names.join(" or "), about.join(" "))
+}
+
+/// The ways of speaking the world's rules have (`<way>_speech()`), in their order.
+pub fn ways() -> Vec<String> {
+    compiled().map(|s| s.ways().iter().map(|w| w.name.clone()).collect()).unwrap_or_else(|| vec!["say".into()])
+}
+
 /// How a party reads one of its records, in the world's rules' words (`{id:N}` still to be
 /// named as the reader knows N).
 pub fn record_text(r: &living_rules::records::RecordFacts) -> Option<String> {
@@ -152,7 +173,7 @@ pub fn record_text(r: &living_rules::records::RecordFacts) -> Option<String> {
 
 /// The acts a conversation turn's examples show (`talk_system`); every one must appear there as
 /// `"do": "<name>"`, or the turn neither shows nor lists it (test `talk_examples_show_every_shown_act`).
-const TALK_SHOWN: [&str; 6] = ["conceive", "accept", "give", "offer", "teach", "host"];
+const TALK_SHOWN: [&str; 7] = ["conceive", "accept", "decline", "give", "offer", "teach", "host"];
 
 /// The acts a conversation turn may carry that the rules mark for it (`talk` in a skill's
 /// spec) and the turn's examples do not show already, one line each.
@@ -229,11 +250,8 @@ pub fn set_world(setting: &str, w: u32, h: u32, year_days: f32, pace: f32, life:
     let _ = SIZE.set((w, h));
     let _ = LIFE.set((year_days, pace, life));
     let season_days = year_days / 4.0;
-    let seasons = format!(
-        "a year is {} days — spring, summer, autumn, winter ({} each). In winter nothing regrows and nights are colder: store food before it.",
-        year_days.round(),
-        living_rules::describe_days(season_days)
-    );
+    // What winter does to the land is the rules' (`Scripts::seasons_words`), added per revision.
+    let seasons = format!("a year is {} days — spring, summer, autumn, winter ({} each).", year_days.round(), living_rules::describe_days(season_days));
     let world = format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}; a tile is a metre).");
     let _ = WORLD_PARTS.set((world, seasons, life_line(year_days, pace, life)));
 }
@@ -274,7 +292,7 @@ pub fn world_rules() -> Arc<str> {
             life = life_line(*year_days, *pace, s.life("person", *base));
         }
     }
-    let text = rules.map(|s| s.world_text(&[("seasons", seasons), ("life", life)])).unwrap_or_default();
+    let text = rules.map(|s| s.world_text(&[("seasons", if seasons.is_empty() { seasons.clone() } else { format!("{seasons} {}", s.seasons_words()) }), ("life", life)])).unwrap_or_default();
     let full: Arc<str> = if world.is_empty() { text.into() } else { format!("{world}\n{text}").into() };
     *RULES_TEXT.write().unwrap() = Some((rev, full.clone()));
     full
@@ -318,11 +336,11 @@ Nodes:
 Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"above\": 60}}, \"has\": {{\"item\": \"food\"}}}}, \"then\": {{\"do\": \"eat\", \"item\": \"food\"}}}}
 Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100)
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
-  {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight is (% of full)
+  {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight looks (% of full: exact for yourself or one you appraised, else as its wound looks)
   {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
-Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
+Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
   People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
@@ -358,7 +376,8 @@ the body walks to the target, does it by the same rules as anything else (checks
 While an act is under way your graph's work waits; only its reflexes (flee, dodge, block, attack, throw, yield) break it off. \
 Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happens when you both choose it toward each other within two minutes), \
 {\"do\": \"give\", \"target\": {\"id\": 4}, \"item\": \"berries\", \"qty\": 3}, \
-{\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}} (take a trade offered to you), \
+{\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}, \"offer\": 17} (take what they offered you: \"offer\" names their trade offer, \"record\" their proposed terms, by the id you were shown; without one, their terms come first, then their trade), \
+{\"do\": \"decline\", \"target\": {\"id\": 4}, \"offer\": 17} (say no to it: it ends, and they are told), \
 {\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"fire\"}, {\"do\": \"tend\", \"target\": {\"id\": 6}}, \
 {\"do\": \"host\", \"target\": {\"id\": 6}} (take someone in as your household's guest until morning: a bed in your house, food from its store), \
 {\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know\"}, {\"do\": \"read\"}, \
@@ -721,51 +740,56 @@ fn common(c: &Ctx, out: &mut Segments) {
 }
 
 /// A body's needs and health at one moment, with how they are changing (per minute).
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Body {
     pub hp: f32,
     pub max_hp: f32,
     pub hunger: f32,
     pub energy: f32,
     pub hp_rate: f32,
+    /// The vitals row's numeric fields by name as read (`vitals`: every column, so a vital a
+    /// world adds reaches the `status_of` law), and when; empty: the five numbers above, now.
+    pub row: Vec<(String, f64)>,
+    pub now_ms: u64,
+    pub kind: String,
+    pub stage: String,
+    pub night: bool,
 }
 
-/// The body as its owner feels it, in plain words: no numbers, the thresholds the authority's
-/// own bodily alarms and `body_state` law use (hungry above 55, very hungry from 80, starving
-/// from 97; exhausted below 12; badly wounded below 35% of full health, barely alive below 15%).
-pub fn felt_body(b: Body) -> String {
-    let mut parts: Vec<&str> = Vec::new();
-    parts.push(match b.hunger {
-        h if h >= 97.0 => "starving, your body wasting away",
-        h if h >= 80.0 => "very hungry",
-        h if h > 55.0 => "hungry",
-        h if h > 40.0 => "beginning to feel hungry",
-        h if h <= 15.0 => "well fed",
-        _ => "not hungry",
-    });
-    match b.energy {
-        e if e <= 0.0 => parts.push("utterly spent"),
-        e if e < 12.0 => parts.push("exhausted"),
-        e if e < 30.0 => parts.push("tired"),
-        e if e < 50.0 => parts.push("a little tired"),
-        e if e >= 85.0 => parts.push("well rested"),
-        _ => {}
+impl Body {
+    /// The body as the `status_of` law reads it.
+    pub fn facts(&self, sc: &living_rules::script::Scripts) -> living_rules::script::BodyFacts {
+        let row = if self.row.is_empty() {
+            vec![("hp".into(), self.hp as f64), ("max_hp".into(), self.max_hp as f64), ("hunger".into(), self.hunger as f64), ("energy".into(), self.energy as f64), ("hp_rate".into(), self.hp_rate as f64)]
+        } else {
+            self.row.clone()
+        };
+        let kind = if self.kind.is_empty() { "person" } else { &self.kind };
+        let stage = if self.stage.is_empty() { "adult" } else { &self.stage };
+        living_rules::script::BodyFacts::of(kind, stage, self.night, &row, sc.meters(), self.now_ms)
     }
-    let f = if b.max_hp > 0.0 { b.hp / b.max_hp } else { 1.0 };
-    parts.push(match f {
-        f if f < 0.15 => "barely alive",
-        f if f < 0.35 => "badly wounded",
-        f if f < 0.6 => "hurt",
-        f if f < 0.9 => "a little hurt",
-        _ => "unhurt",
-    });
-    let mut out = parts.join(", ");
-    if b.hp_rate < -0.01 {
-        out.push_str("; you are growing weaker");
-    } else if b.hp_rate > 0.01 && f < 0.99 {
-        out.push_str("; your wounds are mending");
-    }
-    out
+}
+
+/// The body as its owner feels it, in plain words and no numbers: the `felt` words of the
+/// world's `status_of` law, the thresholds the authority's bodily alarms and the players'
+/// screens use. Empty when the law gives none.
+pub fn felt_body(b: &Body) -> String {
+    let Some(sc) = compiled() else { return String::new() };
+    sc.felt(&b.facts(&sc)).unwrap_or_else(|e| {
+        log::warn!("felt_body: {e}");
+        String::new()
+    })
+}
+
+/// Each meter's felt word (`{"health": "unhurt", "hunger": "very hungry", …}`), from the same law.
+pub fn felt_by_meter(b: &Body) -> Vec<(String, String)> {
+    let Some(sc) = compiled() else { return Vec::new() };
+    sc.felt_by_meter(&b.facts(&sc)).unwrap_or_default()
+}
+
+/// Whether it is night at `hour` by the world's `daylight` law.
+pub fn is_night(hour: f32) -> bool {
+    compiled().is_some_and(|sc| sc.is_night(hour))
 }
 
 pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> Segments {
@@ -939,9 +963,10 @@ Real conversations are short and have a point. As soon as something is settled b
 one of you declined, someone will think it over, or there is simply nothing more to say), say so in \"settled\": that line closes \
 the conversation for now; don't restate what was already agreed or keep saying goodbye. You don't have to answer everything: \
 silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
-\"say\": \"your words\" or null, \"to\": id of who you speak to, \
+\"say\": \"your words\" or null, \"to\": id of who you speak to, {}\
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
-{{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}}} to take a trade they offered, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
+{{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to take a trade they offered (\"record\": id of their proposal, for terms), \
+{{\"do\": \"decline\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to say no to it, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
 {{\"do\": \"offer\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fire\"}}, \
 {{\"do\": \"host\", \"target\": {{\"id\": id of who you speak to}}}} to take them in as your household's guest until morning \
 (words change nothing in the world by themselves: what you agree to do now, do here; you will learn how it went), \
@@ -949,6 +974,7 @@ silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what yo
 \"until\": null or when to take it up again (\"dawn\", \"morning\", \"noon\", \"evening\", \"night\", \"tomorrow\" or an hour 0-23), \
 \"end\": true if this is your last word for now}}{}",
         opening(frame, TALK_OPENING),
+        ways_text(),
         match talk_acts() {
             a if a.is_empty() => String::new(),
             a => format!("\nOther acts you may carry the same way (\"target\": {{\"id\": id of who you speak to}}), as the world's rules describe them:\n{a}"),
@@ -973,6 +999,8 @@ pub struct TalkUser<'a> {
     pub body: &'a str,
     pub conversation: &'a [String],
     pub heard: &'a str,
+    /// How it was said, when that matters for the answer (a whisper, a call from afar).
+    pub how: &'a str,
     /// Standing proposals between the two, what one carries and knows (for acts).
     pub between: &'a [String],
 }
@@ -1012,6 +1040,9 @@ pub fn talk_user(t: &TalkUser) -> String {
         out.push(Stability::Dynamic, format!("{l}\n"));
     }
     out.push(Stability::Dynamic, format!("\n# What you are answering\n{other}: “{}”", t.heard));
+    if !t.how.is_empty() {
+        out.push(Stability::Dynamic, format!("\n{}", t.how));
+    }
     out.render()
 }
 
@@ -1030,8 +1061,8 @@ mod tests {
     #[test]
     fn the_body_is_felt_in_words() {
         use super::{felt_body, Body};
-        let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(Body { hp, max_hp: 100.0, hunger, energy, hp_rate });
-        assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, unhurt");
+        let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(&Body { hp, max_hp: 100.0, hunger, energy, hp_rate, ..Default::default() });
+        assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, rested, unhurt");
         assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded; you are growing weaker");
         assert_eq!(b(70.0, 10.0, 90.0, 0.4), "well fed, well rested, a little hurt; your wounds are mending");
         assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive; you are growing weaker");
@@ -1119,6 +1150,7 @@ mod tests {
                     body: "",
                     conversation: &["dynamic-line".into()],
                     heard: "dynamic-heard",
+                    how: "",
                     between: &["dynamic-offer".into()],
                 }),
             ),

@@ -3,6 +3,7 @@
 import argparse
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -71,23 +72,34 @@ PRIVATE = ['clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberat
            # Frames: what each player was last shown of others (docs/PERCEPTION.md, "Frames").
            'motion_seen', 'fighter_seen', 'doing_seen', 'line_seen',
            # Which character each person plays (perception.rs `current`); a player reads it through my_characters.
-           'player']
+           'player',
+           # Heard, not seen (fov-1): who each player hears, its secret salt, and every change of a
+           # world law on a running world (`set_world_law`).
+           'heard', 'hear_salt', 'law_change',
+           # Who heard each line (docs/COMMUNICATION.md §6); a speaker's person reads its own through my_heard.
+           'line_heard',
+           # What each player's character senses (the `senses` law), read through my_senses.
+           'character_senses',
+           # How each player's acts and death came out, in codes; read through my_act_outcomes.
+           'act_outcome']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_act_outcomes']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_act_outcomes']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
 # `my_combat`, so these calls succeed for any living character.
-PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block']}
+PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
+          # The player's look (fov-1): any living character may send it.
+          'human_face': [1.0, 0.0]}
 MIND = ['mind_routines', 'mind_install', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged']
 ADMIN = {
@@ -105,6 +117,8 @@ ADMIN = {
     'create_floor': ['{}'],
     # Stop a staged creation between steps, and carry it on (floor.rs, admin only).
     'stop_genesis': [], 'resume_genesis': [],
+    # Change a law on a running world (fov-1, admin only).
+    'set_world_law': ['fov_on', 'false'],
 }
 
 
@@ -123,7 +137,7 @@ def mind_args(name, actor, marker):
     return {
         'mind_routines': [actor, [{'name': 'client probe', 'graph': '{"wait":30}'}]],
         'mind_install': [actor, '{"wait":30}', marker, '', 0, 0, t],
-        'mind_say': [actor, '', 0, 0, t],
+        'mind_say': [actor, '', 0, '', 0, t],
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
         'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': '', 'ttl_ms': 1000}]],
@@ -356,7 +370,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'tick', 'housekeeping', 'genesis_step'}
+        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
@@ -412,6 +426,9 @@ class Run:
             self.call(label, token, 'human_move', [0, 0, False])
             self.call(label, token, 'human_act', ['{"wait":30}'])
             self.call(label, token, 'human_say', ['VERIFY_CLIENT_SPEECH_' + label, 0])
+            time.sleep(2.1)
+            self.call(label, token, 'human_speak', ['VERIFY_CLIENT_SPOKEN_' + label, 0, 'say'])
+            self.call(label, token, 'human_speak', ['probe', 0, 'no_such_way'], 'no way of speaking called `no_such_way`')
             for reducer, args in PLAYER.items():
                 self.call(label, token, reducer, args)
         for reducer, args in ADMIN.items():
@@ -421,7 +438,7 @@ class Run:
         for reducer in ['tick', 'housekeeping']:
             self.call('anonymous-http-no-token', None, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                       'No such procedure', expected_status=404)
-        for reducer, args in [('human_move', [0, 0, False]), ('human_act', ['{"wait":30}']), ('human_say', ['probe', 0])] + list(PLAYER.items()):
+        for reducer, args in [('human_move', [0, 0, False]), ('human_act', ['{"wait":30}']), ('human_say', ['probe', 0]), ('human_speak', ['probe', 0, 'say'])] + list(PLAYER.items()):
             self.call('anonymous-http-no-token', None, reducer, args, 'you have no living character')
         self.call('anonymous-http-no-token', None, 'join', ['AnonHttp'])
         self.check('reducer permission matrix', all(row['pass'] for row in self.matrix), 'reducers.json',
@@ -455,7 +472,7 @@ class Run:
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
             row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
-            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest', 'rhythm', 'player']:
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest', 'rhythm', 'player', 'heard', 'law_change']:
                 as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
                 code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
                 okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200
@@ -545,6 +562,9 @@ class Run:
         self.check('act_card and weather are public' + ('' if scoped else ', and doing (open build)'), town['status'] == 'applied' and
                    town['final']['counts']['act_card'] >= 5 and town['final']['counts']['weather'] == 1, 'town-public.json',
                    f"act_card {town['final']['counts']['act_card']}, doing {town['final']['counts']['doing']}, weather {town['final']['counts']['weather']}")
+        speech = self.probe('speech-card-public', ['SELECT * FROM speech_card'])
+        self.check('speech_card is public (the ways of speaking)', speech['status'] == 'applied' and speech['final']['counts']['speech_card'] >= 1,
+                   'speech-card-public.json', f"speech_card {speech['final']['counts']['speech_card']}")
         public = self.probe('combat-public', ['SELECT * FROM skill_card'] + ([] if scoped else ['SELECT * FROM fighter']))
         self.check('skill_card is public' + ('' if scoped else ', and fighter (open build)'), public['status'] == 'applied' and
                    public['final']['counts']['skill_card'] >= 6, 'combat-public.json',
@@ -600,6 +620,8 @@ class Run:
         spots = {}
         for y in range(2, h - 2):
             for x in range(2, w - 32):
+                if 'field' not in spots and all(walk(x + i, y + d) for i in range(6) for d in (-1, 0, 1)):
+                    spots['field'] = [(x + .5, y + .5), (x + 5.5, y + .5)]
                 if 'open' not in spots and all(walk(x + i, y) for i in range(4)):
                     far = next((x + d for d in range(20, 31) if walk(x + d, y)), None)
                     if far is not None:
@@ -615,7 +637,7 @@ class Run:
                                 break
                         if 'wall' in spots:
                             break
-                if 'open' in spots and 'wall' in spots:
+                if 'open' in spots and 'wall' in spots and 'field' in spots:
                     return spots
         raise RuntimeError(f'no sight-check geometry on this map: found {sorted(spots)}')
 
@@ -639,8 +661,17 @@ class Run:
                     and all(e['controller'].lower().removeprefix('0x') in (v['identity'].lower().removeprefix('0x'), admin_identity) for e in p['my_experience'])
                     and set(p['my_places']) <= mine and set(p['my_inventory']) <= mine and set(p['my_know_how']) <= mine
                     # Offers to or from my character; incoming exactly when addressed to me.
-                    and all((o['to'] in mine) == o['incoming'] and (o['from'] in mine or o['to'] in mine) for o in p['my_offers']))
+                    and all((o['to'] in mine) == o['incoming'] and (o['from'] in mine or o['to'] in mine) for o in p['my_offers'])
+                    # Who heard my lines: only my own lines (docs/COMMUNICATION.md §6).
+                    and {h['speaker'] for h in p['my_heard']} <= mine
+                    # My senses: exactly one row, my character's, with the law's sight and hearing.
+                    and [s['id'] for s in p['my_senses']] == sorted(mine) and all(s['sight'] > 0 and s['hearing'] > 0 for s in p['my_senses'])
+                    # My outcomes: only my character's, each keyed by a line of my_experience.
+                    and {o['observer'] for o in p['my_act_outcomes']} <= mine)
         anonymous = own['anonymous']['final']['perception']
+        spoke = {l: v['final']['perception']['my_heard'] for l, v in own.items() if l != 'anonymous'}
+        self.check('my_heard holds each player\'s own lines, and none for an anonymous client', all(spoke.values()) and not anonymous['my_heard'], 'own-*.json',
+                   ', '.join(f"{l}: {len(v)} lines" for l, v in spoke.items()))
         self.check('own-state views return only my characters\' rows', all(scoped_to_self(l, v) for l, v in own.items() if l != 'anonymous') and
                    own['anonymous']['status'] == 'applied' and not any(anonymous[k] for k in OWN + SEEN), 'own-*.json',
                    ', '.join(f"{l}: {len(v['final']['perception']['my_experience'])} experiences, {len(v['final']['perception']['my_inventory'])} items"
@@ -691,6 +722,8 @@ class Run:
         self.check('behind a wall or rock: no body, character, fighter or doing row', gone(hidden, me, other) and gone(hidden, other, me), 'sight.json',
                    f"{abs(spots['wall'][1][0] - spots['wall'][0][0]) + abs(spots['wall'][1][1] - spots['wall'][0][1]):.0f} tiles apart across tiles {spots['wall_tiles']}")
 
+        self.field_of_view(spots, admin_token, (me, t1), (other, t2))
+
     def offers(self, identities, admin_token, me, other, t1, t2):
         """`my_offers`: an offer reaches its addressee (incoming) and its maker (outgoing) and
         no one else; anonymous receives none; `trade_offer` itself stays private."""
@@ -713,6 +746,57 @@ class Run:
                    and rows['anonymous-connected'] == [] and rows['anonymous'] == []
                    and all(o['until_ms'] > 0 for o in rows['player-1'] + rows['player-2']),
                    'offers.json', f"player-1 {mine}, player-2 {theirs}, ClientAnon {rows['anonymous-connected']}, anonymous {rows['anonymous']}")
+
+    def field_of_view(self, spots, admin_token, mine, theirs):
+        """Sight that depends on facing (docs/PERCEPTION.md, "The field of view"), switched on by
+        the admin's `set_world_law`: two players 5 m apart on open ground. Facing away, the
+        other is not in my perceived set and comes as a `heard_sounds` row with no id; facing it,
+        it is seen; at the field's edge it is kept by the margin once seen, not taken afresh."""
+        (me, t1), (other, t2) = mine, theirs
+        a, b = spots['field']
+        steps = []
+
+        def face(token, at, deg):
+            """Turn so that the other (east of me) lies `deg` degrees off facing."""
+            h = math.radians(-deg)
+            self.call('player-face', token, 'human_act', [json.dumps({'do': 'face', 'target': {'at': [at[0] + 4 * math.cos(h), at[1] + 4 * math.sin(h)]}})])
+            time.sleep(1.6)
+
+        def look(step):
+            v = self.probe(f'field-{step}', ['SELECT * FROM ' + t for t in SEEN + ['heard_sounds']], t1, seconds=0)
+            got = v['final']['perception']
+            steps.append({'step': step, 'seen': got})
+            write(self.directory / 'field.json', {'spots': spots['field'], 'steps': steps, 'players': [me, other]})
+            return got
+
+        for who, at in [(me, a), (other, b)]:
+            self.call('admin-place', admin_token, 'place_at', [who, at[0], at[1]])
+        try:
+            switched = self.call('admin-law', admin_token, 'set_world_law', ['fov_on', 'true'])
+            face(t1, a, 180)
+            away = look('facing-away')
+            heard = [h for h in away['heard_sounds'] if h['bearing'] == 2]
+            self.check('field on, facing away: the other is not in my perceived set', switched and other not in away['seen_bodies'] and other not in away['seen_characters'],
+                       'field.json', f"5 m behind; seen {away['seen_bodies']}")
+            self.check('heard_sounds: the other as a sound to the east, near, with no id', len(heard) == 1 and heard[0]['kind'] == 'person' and heard[0]['band'] == 0
+                       and set(heard[0]) == {'key', 'kind', 'bearing', 'band'} and int(heard[0]['key']) not in (me, other), 'field.json', f'{away["heard_sounds"]}')
+            face(t1, a, 0)
+            ahead = look('facing')
+            self.check('field on, facing it: seen, and no longer heard', other in ahead['seen_bodies'] and other in ahead['seen_characters'] and not [h for h in ahead['heard_sounds'] if h['bearing'] == 2],
+                       'field.json', f"seen {ahead['seen_bodies']}; heard {ahead['heard_sounds']}")
+            face(t1, a, 45)
+            face(t1, a, 75)
+            kept = look('edge-kept')
+            face(t1, a, 100)
+            face(t1, a, 75)
+            fresh = look('edge-fresh')
+            self.check('the field\'s edge: kept at 75 degrees once seen (margin), not seen afresh there', other in kept['seen_bodies'] and other not in fresh['seen_bodies'],
+                       'field.json', f"kept {other in kept['seen_bodies']}, fresh {other in fresh['seen_bodies']}")
+        finally:
+            self.call('admin-law', admin_token, 'set_world_law', ['fov_on', 'false'])
+        time.sleep(2.5)  # heard rows linger `heard_linger_s` (2 s)
+        off = look('off-again')
+        self.check('field off again: seen all round, nothing heard', other in off['seen_bodies'] and not off['heard_sounds'], 'field.json', f"seen {off['seen_bodies']}")
 
     def sql_admin(self, q):
         code, body = V.http(f"/v1/database/{self.state['db']}/sql", q, V.admin_token(), raw=True)

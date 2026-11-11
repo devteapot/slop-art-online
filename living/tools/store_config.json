@@ -1,0 +1,60 @@
+{
+  "_doc": [
+    "Repository defaults for living/tools/store.py (docs/STORE.md).",
+    "Machine-local settings live in ~/.config/slop-store/config.json (or $STORE_CONFIG) and override these.",
+    "publish_enabled is read ONLY from the machine-local file; a value here is refused, so no commit can switch publishing on.",
+    "Owner identity (name, email, logins, hostnames) is never written here: the scrubber reads it at run time."
+  ],
+  "never_touch": {
+    "spark": [
+      "~/dev/slop-art-online",
+      "~/slop-lab",
+      "~/ComfyUI",
+      "~/.local/share/docker",
+      "/var/lib/docker"
+    ],
+    "laptop": [],
+    "dev-box": []
+  },
+  "never_touch_names": [
+    "sao-living"
+  ],
+  "read_only": [
+    "~/kimodo-test"
+  ],
+  "decisions": {
+    "_doc": "The owner's decisions (2026-11-11, relayed by the coordinator). Values: include, exclude/redact (replaced), hold (not published, the unit still is), undecided (the unit waits).",
+    "model_exchanges": "include",
+    "owner_lines": "exclude",
+    "owner_first_name": "redact",
+    "owner_notes": "hold",
+    "session_media": "hold"
+  },
+  "repos": {
+    "runs": "slop-art-online-runs",
+    "assets": "slop-art-online-assets"
+  },
+  "backends": {
+    "local": {
+      "root": "~/store-local"
+    },
+    "hf": {
+      "namespace": null,
+      "private": false,
+      "repo_type": "dataset"
+    }
+  },
+  "models": {
+    "_doc": "Models whose terms were read. A batch or session with any call from a model not under 'verified' is held (store.py check_models).",
+    "verified": {
+      "zai-glm-5-3-flash": "Z.ai GLM-5.3-Flash served by Mistral: open weights MIT (huggingface.co/zai-org/GLM-5.3-Flash, LICENSE read 2026-11-11; Mistral's id matched to it by name); Mistral Commercial Terms s.3.1: the customer owns Output",
+      "deepseek-v4-1-flash-1017": "DeepSeek-V4.1-Flash-1017 served by Mistral: MIT (huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017, card and LICENSE read 2026-11-11); Mistral Commercial Terms s.3.1",
+      "fake-*": "the verification fake model server: no provider, no model output"
+    },
+    "unverified": {
+      "ministral-*-latest": "which Ministral release '-latest' serves was not established (Ministral 3 is Apache-2.0; Ministral-8B-2410 is the Mistral Research License)",
+      "mistral-small-latest": "the release and licence behind Mistral's '-latest' alias were not read",
+      "gpt-6-luna": "a private endpoint's model; its provider terms were not read"
+    }
+  }
+}

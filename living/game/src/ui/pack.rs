@@ -17,7 +17,7 @@ use super::icons::{item_mark, Glyph, Icons};
 use super::kit::{self, Lit};
 use super::model::HudModel;
 use super::theme::Fonts;
-use super::win::{Win, WinBody, WinFrame, Windows, Z_DRAG};
+use super::win::{Win, WinBody, WinFrame, Z_DRAG};
 use super::{label, set_text, show, wood, HudRoot};
 use bevy::prelude::*;
 use bevy::ui::{BackgroundGradient, GlobalZIndex, ScrollPosition};
@@ -61,7 +61,7 @@ pub struct Carrying {
     pub used: bool,
 }
 
-pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<WinBody>>, fonts: Res<Fonts>, icons: Res<Icons>, ghost: Query<(), With<Ghost>>) {
+pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<WinBody>>, fonts: Res<Fonts>, ghost: Query<(), With<Ghost>>) {
     let f = &*fonts;
     if ghost.is_empty() {
         commands
@@ -172,10 +172,10 @@ pub fn update(
     icons: Res<Icons>,
     ui: Res<UiPointer>,
     carrying: Res<Carrying>,
-    looks: Res<crate::looks::Looks>,
+    (looks, rules): (Res<crate::looks::Looks>, NonSend<crate::verbs::Rules>),
     mut cells: Query<(Entity, &Cell, &mut BackgroundColor, &mut BorderColor, &mut bevy::ui::Outline, &mut Tag), (Without<Ghost>, Without<Lit>)>,
     mut cell_icons: Query<(&CellIcon, &mut Node, &mut ImageNode), (Without<Ghost>, Without<GhostIcon>)>,
-    mut texts: ParamSet<(Query<(&CellCount, &mut Text)>, Query<&mut Text, With<Carry>>, Query<&mut Text, With<GhostLabel>>, Query<&mut Text, With<KnowTech>>, Query<(&KnowRowText, &mut Text)>, Query<(&KnowDetail, &mut Text)>)>,
+    mut texts: ParamSet<(Query<(&CellCount, &mut Text)>, Query<(&mut Text, &mut TextColor), With<Carry>>, Query<&mut Text, With<GhostLabel>>, Query<&mut Text, With<KnowTech>>, Query<(&KnowRowText, &mut Text)>, Query<(&KnowDetail, &mut Text)>)>,
     mut ghost: Query<&mut Node, (With<Ghost>, Without<CellIcon>, Without<KnowRow>, Without<GhostLabelBox>)>,
     mut ghost_icon: Query<&mut ImageNode, (With<GhostIcon>, Without<CellIcon>)>,
     mut ghost_box: Query<&mut Node, (With<GhostLabelBox>, Without<Ghost>, Without<CellIcon>, Without<KnowRow>)>,
@@ -216,7 +216,8 @@ pub fn update(
             let item = inv.rows.get(c.0).map(|r| r.0.as_str());
             show(&mut n, item.is_some());
             if let Some(it) = item {
-                let h = icons.get(Glyph::Item(item_mark(it)));
+                // The item's icon id from the rules (goods-2), drawn by this client's marks.
+                let h = icons.get(Glyph::Item(item_mark(&rules.item_look(it).0)));
                 if img.image != h {
                     img.image = h;
                 }
@@ -226,9 +227,14 @@ pub fn update(
             let s = inv.rows.get(c.0).filter(|r| r.1 > 1).map_or(String::new(), |r| r.1.to_string());
             set_text(&mut t, &s);
         }
-        for mut t in &mut texts.p1() {
-            let s = if inv.limit > 0 { format!("{} / {}", inv.carried, inv.limit) } else { inv.carried.to_string() };
+        // Over the rules' limit (gifts and grants can put one there): the count in the warning
+        // rose, and said.
+        let over = inv.limit > 0.0 && inv.carried > inv.limit + 1e-3;
+        for (mut t, mut c) in &mut texts.p1() {
+            let s = if inv.limit > 0.0 { format!("{} / {}", amount(inv.carried), amount(inv.limit)) } else { amount(inv.carried) };
+            let s = if over { format!("{s}  · over") } else { s };
             set_text(&mut t, &s);
+            super::set_color(&mut c, if over { wood::over_limit() } else { wood::muted() });
         }
     }
     // The ghost of a carried item.
@@ -243,7 +249,7 @@ pub fn update(
     }
     if let Some(item) = &carrying.item {
         for mut img in &mut ghost_icon {
-            let h = icons.get(Glyph::Item(item_mark(item)));
+            let h = icons.get(Glyph::Item(item_mark(&rules.item_look(item).0)));
             if img.image != h {
                 img.image = h;
             }
@@ -253,7 +259,7 @@ pub fn update(
         }
         if let Some(id) = carrying.onto {
             for mut t in &mut texts.p2() {
-                set_text(&mut t, &format!("Give {} to {}", item.replace('_', " "), looks.of(id).unwrap_or("them")));
+                set_text(&mut t, &format!("Give {} to {}", rules.item_look(item).1, looks.of(id).unwrap_or("them")));
             }
         }
     }
@@ -282,5 +288,29 @@ pub fn update(
         }
         let sel = k.selected;
         kit::light(&mut lit, |t| t.strip_prefix("skill:").map(|i| i.parse::<usize>().ok() == Some(sel)));
+    }
+}
+
+/// A carried amount as the pack's header shows it: whole numbers bare, others to one decimal
+/// ("8", "7.5"), never "8.0" or "7.4999".
+fn amount(v: f32) -> String {
+    let tenths = (v * 10.0).round();
+    if tenths % 10.0 == 0.0 {
+        format!("{}", (tenths / 10.0) as i64)
+    } else {
+        format!("{:.1}", tenths / 10.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn amounts_show_one_decimal_only_when_not_whole() {
+        assert_eq!(super::amount(8.0), "8");
+        assert_eq!(super::amount(7.5), "7.5");
+        assert_eq!(super::amount(7.4999), "7.5");
+        assert_eq!(super::amount(39.96), "40");
+        assert_eq!(super::amount(0.1 * 3.0), "0.3");
+        assert_eq!(super::amount(0.0), "0");
     }
 }

@@ -284,7 +284,9 @@ pub fn setup(
         });
         let file = &recipe.as_ref().map_or(token.clone(), |r| crate::lookdev::animated(&r.base));
         let json = glb_json(file);
-        let clips = json.as_ref().map(clip_list).unwrap_or_default();
+        // A generated person's clips may come from the shared clip file (`anim::clip_file`).
+        let clip_src = crate::anim::clip_file(file);
+        let clips = if clip_src == *file { json.as_ref().map(clip_list) } else { glb_json(&clip_src).as_ref().map(clip_list) }.unwrap_or_default();
         let is_vrm = file.ends_with(".vrm") || file.contains("vroid-") || json.as_ref().is_some_and(|j| j["extensions"]["VRM"].is_object() || j["extensions"]["VRMC_vrm"].is_object());
         // VRM 0.x models face −Z; turn them to face the camera. Models with clips aren't given
         // the procedural rig (`vrm: false`), so their own animation plays.
@@ -296,7 +298,7 @@ pub fn setup(
         let spec = std::env::var("LIVING_GAME_VIEW_SHOTS").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "views,clips".into());
         let shots = parse_shots(&spec, &clips, &shown, file);
         let first_clip = shown.first().copied().unwrap_or(0);
-        let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(file.clone()), vec![], Entity::PLACEHOLDER));
+        let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(clip_src.clone()), vec![], Entity::PLACEHOLDER));
         let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph, turn }, WorldAssetRoot(handle), Transform::from_rotation(turn), Visibility::Hidden));
         if let Some(r) = recipe {
             // A recipe's character: rigged for its face, shaped, recoloured and sprung.
@@ -576,6 +578,7 @@ pub fn batch(
 /// How the game turns and moves a body for `clip` at `t` s (see [`ViewState::shift`]), facing
 /// +Z: its left is +X, and a turn to the right (the game's sense) turns it clockwise from above.
 fn shift_of(file: &str, clip: &str, t: f32) -> (f32, Vec3) {
+    let file = &crate::anim::clip_file(file);
     let gaits = crate::gait::of(file);
     let Some(info) = gaits.info(clip) else { return (0.0, Vec3::ZERO) };
     let len = info.seconds.max(1e-3);

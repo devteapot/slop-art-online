@@ -56,6 +56,68 @@ pub fn wrap(a: f32) -> f32 {
     a
 }
 
+// ---- facing ----------------------------------------------------------------------------
+//
+// A body's facing (where its head and chest point: what facing sight, a guard's default and
+// "you face" read) is its travel heading plus an offset that turns on a segment of its own:
+// `off` at the segment's start, changing at `turn` rad/s for the first `turn_s` seconds, then
+// held. The offset is not wrapped; the authority keeps it within the `look_walk_deg` law while
+// the body moves. A body with no held look has offset 0 and faces its heading. The authority
+// and the clients evaluate it with these functions on the same `body` fields
+// (`face_off`, `face_turn`, `face_turn_s`, from `t_ms`), so there is one definition.
+
+/// The facing offset `dt` seconds into its segment.
+pub fn face_off(off: f32, turn: f32, turn_s: f32, dt: f32) -> f32 {
+    if turn == 0.0 || turn_s <= 0.0 {
+        return off;
+    }
+    off + turn * dt.clamp(0.0, turn_s)
+}
+
+/// Which way a body faces `dt` seconds into its segment, its travel heading then being
+/// `heading_now` (`pose`'s third value at the same `dt`).
+pub fn facing(heading_now: f32, off: f32, turn: f32, turn_s: f32, dt: f32) -> f32 {
+    wrap(heading_now + face_off(off, turn, turn_s, dt))
+}
+
+/// The facing segment `(turn, turn_s)` that takes the offset from `from` to `to` at `rate`
+/// rad/s (none when they are equal).
+pub fn face_turn(from: f32, to: f32, rate: f32) -> (f32, f32) {
+    let d = to - from;
+    if d.abs() < 1e-4 || rate <= 0.0 {
+        return (0.0, 0.0);
+    }
+    (rate * d.signum(), d.abs() / rate)
+}
+
+/// A look within this of straight behind the way keeps the side the facing is already turned
+/// to (radians): looking back over one shoulder does not swing the head across the front when
+/// the look, or the way, wavers across the line behind.
+pub const BEHIND_BAND: f32 = 15.0 * PI / 180.0;
+
+/// The facing offset a body walking along `way` wants while it holds a look at `look`: the
+/// look's angle from the way, clamped to `limit` radians either side (the `look_walk_deg`
+/// law); within [`BEHIND_BAND`] of straight behind, on the side of the offset it has now
+/// (`current`). The travel itself does not bend: the body goes where it is told, at full speed.
+pub fn walk_face(way: f32, look: f32, limit: f32, current: f32) -> f32 {
+    let limit = limit.clamp(0.0, PI);
+    let mut d = wrap(look - way);
+    if d.abs() > limit && d.abs() >= PI - BEHIND_BAND && current != 0.0 && current.signum() != d.signum() {
+        d = current.signum() * d.abs();
+    }
+    d.clamp(-limit, limit)
+}
+
+/// A standing turn to face `want`, from travel heading `heading` and facing offset `off`:
+/// the legs' turn `d_legs` (radians, signed; the way the upper body turns, so a body that faces
+/// part way round already finishes that way) and the offset's end (0: the whole body faces it).
+/// With no offset it is the plain shortest turn of the heading, as a standing body always
+/// turned.
+pub fn stand_turn(heading: f32, off: f32, want: f32) -> f32 {
+    let d_face = wrap(want - wrap(heading + off));
+    d_face + off
+}
+
 /// Steering constants (world laws; see `Laws`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Tuning {
@@ -259,6 +321,73 @@ mod tests {
         // From rest: turn on the spot and set off facing the way.
         let s = plan(&m, (20.0, 20.0), 0.0, 0.0, want, &t);
         assert!((s.speed - 2.6).abs() < 1e-6 && s.turn == 0.0 && (s.heading - PI / 2.0).abs() < 1e-6);
+    }
+
+    /// Walking under the keys with a look held off them: the travel is the keys' way at full
+    /// speed (no bend, no sideways drift), and only the facing turns toward the look, at most
+    /// the limit off the way (`look_walk_deg`, 75 shipped).
+    #[test]
+    fn a_held_look_turns_the_facing_and_not_the_walk() {
+        let m = open(64, 64);
+        let t = Tuning::default();
+        let limit = 75f32.to_radians();
+        let way = 0.0;
+        for (look_deg, want_deg) in [(45.0f32, 45.0f32), (90.0, 75.0), (135.0, 75.0), (180.0, 75.0), (-90.0, -75.0), (-30.0, -30.0)] {
+            let look = look_deg.to_radians();
+            // The travel the authority asks for is the keys' way whatever the look.
+            let s = plan(&m, (20.0, 20.5), way, 2.6, Want { dir: way, speed: 2.6, agile: false, max_dt: 1.0 }, &t);
+            let (x, y, h) = s.at((20.0, 20.5), 1.0);
+            assert!((s.speed - 2.6).abs() < 1e-6 && h.abs() < 1e-6, "look {look_deg}: {s:?}");
+            assert!((x - 22.6).abs() < 1e-4 && (y - 20.5).abs() < 1e-6, "full speed along the keys, no drift: ({x},{y})");
+            let off = walk_face(way, look, limit, 0.0);
+            assert!((off.abs() - want_deg.abs().to_radians()).abs() < 1e-5 && off.signum() == want_deg.signum(), "look {look_deg}: facing {}", off.to_degrees());
+            assert!((facing(h, off, 0.0, 0.0, 0.0) - want_deg.to_radians()).abs() < 1e-5);
+        }
+        // Looking straight back clamps to one side and keeps the shoulder it is over: a look
+        // swung round past 180 degrees, or a way that wavers, does not swing it across the front.
+        let back = walk_face(0.3, 0.3 + PI, limit, 0.0);
+        assert!((back.abs() - limit).abs() < 1e-5);
+        assert!((walk_face(0.0, PI, limit, -limit) + limit).abs() < 1e-6, "over the right shoulder, it stays there");
+        assert!((walk_face(0.0, -PI + 0.1, limit, limit) - limit).abs() < 1e-6, "over the left, a look just past behind stays left");
+        assert!((walk_face(0.0, 2.6, limit, -limit) - limit).abs() < 1e-6, "well round to the left (149 degrees), it turns left");
+        // A limit of 180 lets the facing go all the way round; 0 keeps it on the way.
+        assert!((walk_face(0.0, 2.5, PI, 0.0) - 2.5).abs() < 1e-6);
+        assert_eq!(walk_face(0.0, 2.5, 0.0, 0.0), 0.0);
+    }
+
+    /// The facing turns toward its wanted offset at the body's turn rate on a segment of its
+    /// own, then holds; a body facing its way (offset 0) faces its heading on any segment.
+    #[test]
+    fn the_facing_turns_at_the_turn_rate() {
+        let rate = 6.0;
+        let to = 75f32.to_radians();
+        let (turn, turn_s) = face_turn(0.0, to, rate);
+        assert_eq!(turn, rate);
+        assert!((turn_s - to / rate).abs() < 1e-6);
+        assert!((face_off(0.0, turn, turn_s, 0.1) - 0.6).abs() < 1e-6, "0.1 s at 6 rad/s");
+        assert!((face_off(0.0, turn, turn_s, 5.0) - to).abs() < 1e-6, "then held");
+        assert_eq!(face_off(0.0, turn, turn_s, -1.0), 0.0, "not before the segment");
+        // Back toward the way when the look is let go.
+        let (back, back_s) = face_turn(to, 0.0, rate);
+        assert!(back < 0.0 && (face_off(to, back, back_s, back_s) - 0.0).abs() < 1e-6);
+        assert_eq!(face_turn(0.4, 0.4, rate), (0.0, 0.0));
+        // With no offset the facing is the travel heading along the segment, turn included.
+        let (_, _, h) = pose(0.0, 0.0, 0.2, 2.6, 1.5, 0.4, 0.3);
+        assert!((facing(h, 0.0, 0.0, 0.0, 0.3) - h).abs() < 1e-6);
+    }
+
+    /// Standing, a body turns to a look as it always did: the shortest turn of its heading
+    /// when it faces its heading. One that faces part way round already (stopped from a walk
+    /// with its head turned) finishes that way, its legs coming round after it.
+    #[test]
+    fn a_standing_turn_is_the_heading_s_shortest_turn() {
+        for (h, want) in [(0.0f32, 1.0f32), (0.0, -2.0), (3.0, -3.0), (-2.5, 2.5), (1.0, 1.0)] {
+            assert!((stand_turn(h, 0.0, want) - wrap(want - h)).abs() < 1e-6, "{h} -> {want}");
+        }
+        let off = 75f32.to_radians();
+        assert!((stand_turn(0.0, off, PI) - PI).abs() < 1e-5, "the side the head already turned");
+        assert!((stand_turn(0.0, off, (-170f32).to_radians()) - 190f32.to_radians()).abs() < 1e-5);
+        assert!((stand_turn(0.0, -off, (-170f32).to_radians()) - (-170f32).to_radians()).abs() < 1e-5);
     }
 
     #[test]

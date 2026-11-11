@@ -57,12 +57,17 @@ pub struct Edges {
     /// Where my sight lines reach (`sightfield.rs`): xy the world x, z of the field texture's
     /// corner, z one over its side (m), w 1 when it holds a field.
     pub sight_field: Vec4,
+    /// x: how "not seen now" is drawn (`sightedge::Look`: 0 grey, 1 wash, 2 lantern, 3 shadows,
+    /// 4 hatch, 5 memory); y: how light the scene is (0 night, 1 day); z: 1 when the memory
+    /// texture is current.
+    pub sight_extra: Vec4,
 }
 
-/// The sight field's texture (`sightfield.rs`), on the camera beside its [`Edges`].
+/// The sight field's texture and the memory of it (`sightfield.rs`), on the camera beside its
+/// [`Edges`].
 #[derive(Component, Clone, ExtractComponent)]
 #[extract_app(RenderApp)]
-pub struct SightTexture(pub Handle<Image>);
+pub struct SightTexture(pub Handle<Image>, pub Handle<Image>);
 
 /// Feed the finishing pass from the style profile, the sun and the camera.
 #[allow(clippy::type_complexity)]
@@ -108,7 +113,8 @@ pub fn update(
         params: Vec4::new(s.depth_threshold, s.normal_threshold, s.line_width * scale, near),
         fade: Vec4::new(s.line_fade[0], s.line_fade[1], s.screen_rim_width * scale, if on { s.screen_rim } else { 0.0 }),
         rim: Vec4::new(rr, rg, rb, 0.0),
-        sun: screen_sun.extend(0.0).extend(0.0),
+        // z: the smallest step a crease line marks (`Style::crease_step`).
+        sun: screen_sun.extend(s.crease_step).extend(0.0),
         grade: Vec4::new(gr, gg, gb, if on { s.grade } else { 0.0 }),
         screen: Vec4::new(w, h, 1.0 / w, 1.0 / h),
         world_from_clip: gtf.to_matrix() * camera.clip_from_view().inverse(),
@@ -168,6 +174,7 @@ fn init_pipeline(mut commands: Commands, render_device: Res<RenderDevice>, asset
                 uniform_buffer::<Edges>(true),
                 texture_2d(TextureSampleType::Float { filterable: true }),
                 sampler(SamplerBindingType::Filtering),
+                texture_2d(TextureSampleType::Float { filterable: true }),
             ),
         ),
     );
@@ -205,6 +212,7 @@ fn draw(
     let (target, prepass, index, field) = view.into_inner();
     // The sight field, or a white texel until it is uploaded (the pass reads it only when
     // `sight_field.w` says it holds one).
+    let memory = field.and_then(|f| images.get(&f.1)).unwrap_or(&fallback.d2);
     let field = field.and_then(|f| images.get(&f.0)).unwrap_or(&fallback.d2);
     let id = if target.main_texture_format() == TextureFormat::Rgba16Float { pipeline.hdr } else { pipeline.ldr };
     let Some(render_pipeline) = pipeline_cache.get_render_pipeline(id) else { return };
@@ -213,7 +221,7 @@ fn draw(
     let bind_group = render_device.create_bind_group(
         "edges_bind_group",
         &pipeline_cache.get_bind_group_layout(&pipeline.layout),
-        &BindGroupEntries::sequential((post.source, &pipeline.sampler, depth, normal, binding.clone(), &field.texture_view, &field.sampler)),
+        &BindGroupEntries::sequential((post.source, &pipeline.sampler, depth, normal, binding.clone(), &field.texture_view, &field.sampler, &memory.texture_view)),
     );
     let mut pass = ctx.command_encoder().begin_render_pass(&RenderPassDescriptor {
         label: Some("edges_pass"),

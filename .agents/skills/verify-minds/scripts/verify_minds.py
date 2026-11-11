@@ -20,8 +20,8 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
-         'death-names', 'reasons', 'frame')
+         'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
+         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -187,20 +187,32 @@ def run_case(run, case):
         return takeover_case(run)
     if case == 'dealings':
         return dealings_case(run)
+    if case == 'answers':
+        return answers_case(run)
     if case == 'sight':
         return sight_case(run)
+    if case == 'fov':
+        return fov_case(run)
     if case == 'drop':
         return drop_case(run)
     if case == 'death-names':
         return death_names_case(run)
+    if case == 'health-seen':
+        return health_seen_case(run)
     if case == 'resident':
         return resident_case(run)
     if case == 'parked':
         return parked_case(run)
-    if case == 'reasons':
-        return reasons_case(run)
+    if case == 'alongside':
+        return alongside_case(run)
+    if case == 'greet':
+        return greet_case(run)
+    if case == 'speech':
+        return speech_case(run)
     if case == 'frame':
         return frame_case(run)
+    if case == 'reasons':
+        return reasons_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -291,6 +303,12 @@ def run_case(run, case):
         sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
         felt = [m.split('How your body feels: ', 1)[1].split('\n', 1)[0] for e in sent for m in [json.dumps(e, ensure_ascii=False).replace('\\n', '\n')] if 'How your body feels: ' in m]
         assert felt and not any(ch.isdigit() for ch in felt[0]), felt[:2]
+        # The words are the world's `status_of` law's (since rules-senses-outcomes): one word per
+        # meter, the health and energy ones always there (the shipped law's `felt`).
+        health = ('unhurt', 'a little hurt', 'hurt', 'badly wounded', 'barely alive')
+        energy = ('well rested', 'rested', 'a little tired', 'tired', 'exhausted', 'utterly spent')
+        parts = [p.strip() for p in felt[0].split(';')[0].split(',')]
+        assert any(p in health for p in parts) and any(p in energy for p in parts), felt[:2]
         # The world's rules are told from the laws' own descriptions (docs/WORLD_RULES.md, since
         # laws-2): the sections and the numbers the script's laws give, the same in every prompt.
         told = [json.dumps(e, ensure_ascii=False).replace('\\n', '\n') for e in sent]
@@ -560,8 +578,11 @@ def dealings_case(run):
     # mind would decide.
     run.admin('set_behavior', other, json.dumps({'wait': 120}))
     run.admin('mind_act', other, [json.dumps({'do': 'demand', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'text': 'verify dealing'})], 'verify-minds')
-    demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 60)[0]
-    run.private(f'SELECT * FROM experience WHERE observer = {other}', 'demander-experiences')
+    try:
+        demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 60)[0]
+    finally:
+        # What the demander was told of its act (an outcome or a refusal), kept either way.
+        run.private(f'SELECT * FROM experience WHERE observer = {other}', 'demander-experiences')
     told = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'told') if e['kind'] == 'record' and 'demands 1 stone of you' in e['text']], 'told the demand', 30)
     # The rules' `ask` goes through the authority's thinking cadence (`think_min_s`): a mind that
     # thought moments ago is not asked again. Its next thought sees the demand among its dealings.
@@ -577,6 +598,47 @@ def dealings_case(run):
     assert inv.get('stone') == 1, inv
     return {'status': 'pass', 'told': told[0]['text'], 'record': met[0]['status'], 'demander_told': paid[0]['text'],
             'deliberations_with_dealings': len(shown), 'thoughts_before': accepted_before, 'asked_by_the_rules': asked}
+
+
+def answers_case(run):
+    """A mind answers by id (docs/WORLD_RULES.md, "Answering"): another character proposes terms
+    to it and offers it a trade. Its deliberation shows the trade's id in "asked of you" and the
+    proposal's record id among its dealings; the (fake) model's acts accept the trade by its id
+    (though terms stand) and decline the terms by their record id. The goods move, the record is
+    declined and the proposer is told."""
+    people = prepare(run)
+    actor, other = [p['id'] for p in people]
+    run.admin('set_behavior', other, json.dumps({'wait': 120}))
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', other, actor)
+    run.admin('grant_items', actor, 'berries', 3)
+    run.admin('grant_items', other, 'wood', 4)
+    run.admin('mind_act', other, [json.dumps({'do': 'offer_terms', 'target': {'id': actor}, 'item': 'wood', 'qty': 2, 'want': 'berries', 'want_qty': 2})], 'verify-minds')
+    rec = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-offered') if r['kind'] == 'agreement' and r['status'] == 'offered'], 'proposal', 60)[0]
+    run.admin('mind_act', other, [json.dumps({'do': 'offer', 'target': {'id': actor}, 'item': 'wood', 'qty': 2, 'want': 'berries', 'want_qty': 1})], 'verify-minds')
+    offer = run.wait(lambda: [o for o in run.private('SELECT * FROM trade_offer', 'trade-offer') if o['to'] == actor], 'trade offer', 60)[0]
+    answer = basic_reply(acts=[{'do': 'accept', 'target': {'id': other}, 'offer': offer['id']},
+                               {'do': 'decline', 'target': {'id': other}, 'record': rec['id']}])
+    script = {'replies': {'think': {'thought': 'I am asked to trade.', 'intend': ['answer them'], 'say': None},
+                          'deliberate': basic_reply()},
+              'rules': [{'purpose': 'deliberate', 'contains': f"toward them, record {rec['id']})", 'reply': answer, 'times': 1}]}
+    models = model(run, script)
+    wood0 = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {actor}', 'inventory-before')}.get('wood', 0)
+    run.start(models, [actor])
+    if not run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'asked'):
+        run.request(actor, 'answers')
+    declined = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-declined') if r['id'] == rec['id'] and r['status'] == 'declined'], 'proposal declined', 120)
+    inv = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {actor}', 'inventory-after')}
+    assert inv.get('wood', 0) == wood0 + 2, ('the named trade was taken', wood0, inv)
+    assert not [o for o in run.private('SELECT * FROM trade_offer', 'trade-offer-after') if o['id'] == offer['id']], 'the accepted offer is gone'
+    told = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {other}', 'proposer-told') if e['kind'] == 'record' and 'declined your terms' in e['text']], 'proposer told', 30)
+    sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
+    blob = [json.dumps(e) for e in sent]
+    with_ids = [b for b in blob if f"record {rec['id']})" in b and re.search(r'\\"offer\\": ?%d\b' % offer['id'], b)]
+    assert with_ids, 'the deliberation showed the offer id in asked-of-you and the record id in the dealings'
+    outcomes = [e['text'] for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'actor-experiences') if e['kind'] == 'act']
+    return {'status': 'pass', 'offer': offer['id'], 'record': rec['id'], 'record_status': declined[0]['status'],
+            'proposer_told': told[0]['text'], 'outcomes': outcomes[-4:], 'deliberations_with_ids': len(with_ids)}
 
 
 def sight_case(run):
@@ -620,6 +682,77 @@ def sight_case(run):
             'hidden': names.get(other), 'open': names.get(third)}
 
 
+def fov_case(run):
+    """Sight that depends on facing (docs/PERCEPTION.md, "Heard, not seen"), on by the admin's
+    `set_world_law fov_on`: a resident faces away from another standing 4.5 m behind it. The
+    scene its mind is sent lists the other not among the creatures but under "you hear (out of
+    sight)", in a person's words (what it sounds like, where from the way it faces and by the
+    compass, how far) and with no id; its own facing is in `you`. Its body notices the sound
+    ("You hear a person near, behind you, ..."). Given the shipped person instinct
+    (`instincts.json`), whose "turn to a sound" branch the character owns, it turns to face the
+    sound."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    spots = wall_spots(run)
+    e = spots['open']
+    # The eye on open ground facing west, the other 4.5 m east of it (behind).
+    # Both held still first (a resident's own graph would walk it to company meanwhile).
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 4.5, e[1])
+    run.admin('set_behavior', eye, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': [e[0] - 4.0, e[1]]}}}, {'wait': 300}]}))
+    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['outcome']], 'the eye turned away', 20)
+    time.sleep(1.0)
+    # Then short waits, so its graph is evaluated (and what it notices taken in) every second;
+    # a body in a long wait is looked at again only when the wait ends.
+    run.admin('set_behavior', eye, json.dumps({'wait': 1}))
+    run.admin('set_world_law', 'fov_on', 'true')
+    try:
+        # Its body notices the sound (read before the mind connects: the service prunes the
+        # experiences it has taken in).
+        told = run.wait(lambda: [x for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'experience-eye') if x['kind'] == 'signal' and x['text'].startswith('You hear a person near, behind you')], 'the sound noticed', 20)
+        assert all(x['subject'] == 0 for x in told), told
+        script = {'replies': {'think': {'thought': 'Something behind me.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+        models = model(run, script)
+        pending = run.request(eye, 'fov')
+        run.start(models, [eye])
+        request = run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] in ('think', 'deliberate')], 'scene sent to the model', 40)[0]
+        sent = '\n'.join(str(m.get('content', '')) for m in request['body'].get('messages', []))
+        (run.directory / 'sent-prompt.txt').write_text(sent)
+        scene = json.loads(pending[0]['scene']) if pending else {}
+        (run.directory / 'scene.json').write_text(json.dumps(scene, indent=2))
+        heard = scene.get('you hear (out of sight)', [])
+        ids = [c['id'] for c in scene.get('creatures', [])]
+        assert other not in ids, ids
+        assert any(h.get('what') == 'a person' and h.get('where', '').startswith('behind you') and h.get('how far') == 'near' for h in heard), heard
+        assert all(set(h) == {'what', 'where', 'how far'} for h in heard), heard
+        assert scene.get('you', {}).get('facing') == 'west', scene.get('you')
+        assert 'you hear (out of sight)' in sent and 'behind you, to the east' in sent, 'the model is sent what is heard in words'
+        assert re.search(r'"id":\s*%d\b' % other, sent) is None, 'the model is not sent the heard one\'s id'
+        # The starting habit (`instincts.json`, a person's instinct graph, which the character
+        # owns): standing with a sound within 5 m, it turns to face it. The eye is put back facing
+        # away and given the shipped person instinct.
+        instinct = json.loads((ROOT / 'living/seeds/instincts.json').read_text())['person']
+        habit = 'turn to a sound' in json.dumps(instinct) and '"sound"' in json.dumps(instinct)
+        assert habit, 'the person instinct carries the habit'
+        run.admin('place_at', eye, *e)
+        run.admin('place_at', other, e[0] + 4.5, e[1])
+        run.admin('set_behavior', eye, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': [e[0] - 4.0, e[1]]}}}, {'wait': 2}]}))
+        time.sleep(3.0)
+        since = max([u['at_ms'] for u in run.private('SELECT * FROM skill_use', 'uses-before')] + [0])
+        run.admin('set_behavior', eye, json.dumps(instinct))
+        # The branch is a continuous guard: once the sound is in view it is no longer heard and the
+        # turn may stop there ("broken off"), the other already seen.
+        turned = run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-after') if u['actor'] == eye and u['skill'] == 'face' and u['at_ms'] > since and u['outcome'] in ('done', 'broken off')], 'the habit turns the body to the sound', 30)
+        # Toward the sound: the turn's aim is where the other stands (the eye may walk on after,
+        # its instinct's next branch, so its heading later is not the test).
+        aim = (turned[0]['aim_x'] - e[0], turned[0]['aim_y'] - e[1])
+        facing = math.atan2(aim[1], aim[0])
+        assert abs(facing) < 0.6 and math.hypot(*aim) > 3.0, f'the turn is toward the sound to the east: {aim}'
+    finally:
+        run.admin('set_world_law', 'fov_on', 'false')
+    return {'status': 'pass', 'heard': heard, 'facing': scene.get('you', {}).get('facing'), 'noticed': [x['text'] for x in told], 'habit_turned': turned[:1], 'facing_after': round(facing, 2)}
 def death_names_case(run):
     """A community member killed in view of a mind's character, who shares the community and
     feels something for them: the experience the authority gives that mind names the dead, and
@@ -704,6 +837,69 @@ def death_names_case(run):
     (run.directory / 'death-names.json').write_text(json.dumps(texts, indent=2))
     assert all(checks.values()), checks
     return {'status': 'pass', **texts}
+
+
+def health_seen_case(run):
+    """A mind in a fight is told its opponent's health as the band everyone sees, never as a
+    number, except while its own appraisal of them holds (`act::fight_report`,
+    `perception::health_seen`, docs/PERCEPTION.md). Two strangers fight: A is thought for by
+    the real mind service (the fake model's plans keep A attacking), B by a guarding graph. The fight
+    reports reach A's prompts; after A appraises B, a report inside the 20 s reveal gives B's
+    exact health. B only holds its guard toward A (blocked blows count toward a report and B
+    takes a quarter of each), so A is never hurt into yielding, which would break the
+    appraisal off. Before 2026-11-11 the report read "theirs looks about 70%"."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 2, True)
+    a, b = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    for who in (a, b):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    run.admin('place_near', b, a)
+    attack = lambda target: {'first': [{'do': {'skill': 'attack', 'target': {'id': target}}}, {'wait': 1}]}
+    script = {'replies': {'think': {'thought': 'I fight on.', 'intend': ['attack'], 'say': None},
+                          'deliberate': {'graph': attack(b), 'weight': 1.5, 'plan': 'verify minds fight'}}}
+    models = model(run, script)
+    run.start(models, [a])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    reports = lambda: [l for e in requests() for l in sent_text(e).split('\n') if 'The fight with' in l]
+    guard = {'first': [{'do': {'skill': 'block', 'target': {'id': a}, 'qty': 8000}}, {'wait': 0.2}]}
+    run.admin('set_behavior', a, json.dumps(attack(b)))
+    run.admin('set_behavior', b, json.dumps(guard))
+    banded = run.wait(lambda: reports(), 'a fight report in a prompt', 90)
+    words = ('unhurt', 'scratched', 'hurt', 'badly hurt', 'barely standing')
+    exact = re.compile(r'they have \d+ of \d+ health\.')
+    band_only = lambda l: any(f'they look {w}.' in l for w in words) and not exact.search(l) and 'theirs looks about' not in l and '%' not in l
+    n_before = len(banded)
+    # A pause, and A looks B over (a deliberate act, as a mind or a player would; a reflex
+    # under attack would break it off). Then the fight goes on.
+    for who in (a, b):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    time.sleep(2.0)
+    run.admin('mind_act', a, [json.dumps({'do': 'appraise', 'target': {'id': b}})], 'verify-minds')
+    try:
+        reveal = run.wait(lambda: run.private(f'SELECT * FROM reveal WHERE observer = {a} AND target = {b}', 'reveal'), 'the appraisal reveals', 20)[0]
+    finally:
+        run.private(f'SELECT * FROM experience WHERE observer = {a}', 'experiences-a')
+        run.private(f'SELECT * FROM activity WHERE id = {a}', 'activity-a')
+        run.private(f'SELECT * FROM act_queue WHERE actor = {a}', 'act-queue-a')
+        run.private(f'SELECT * FROM brain WHERE id = {a}', 'brain-a')
+    run.admin('set_behavior', a, json.dumps(attack(b)))
+    run.admin('set_behavior', b, json.dumps(guard))
+    max_b = round(run.private(f'SELECT * FROM vitals WHERE id = {b}', 'vitals-b')[0]['max_hp'])
+    appraised = run.wait(lambda: [l for l in reports()[n_before:] if exact.search(l)], 'a report with exact health inside the reveal', 25)
+    for who in (a, b):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    out = {'band_reports': banded, 'appraised_reports': appraised, 'all_reports': reports(), 'reveal_until_ms': reveal['until_ms'], 'max_hp_b': max_b}
+    (run.directory / 'health-seen.json').write_text(json.dumps(out, indent=2))
+    checks = {'band_reports_have_band_words': all(band_only(l) for l in banded),
+              'appraised_report_has_exact_health': any(f'of {max_b} health.' in l for l in appraised),
+              'no_percentage_anywhere': not any('theirs looks about' in l for l in reports())}
+    out['checks'] = checks
+    (run.directory / 'health-seen.json').write_text(json.dumps(out, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **out}
 
 
 def animals_case(run):
@@ -1006,7 +1202,8 @@ def parked_case(run):
     talks = lambda: [e for e in requests() if e['purpose'] == 'talk']
     # 1. The deliberation says nothing to the player: the line gets its turn when it ends.
     run.request(actor, 'first')
-    run.start(models, [actor])
+    # The old rule, selected explicitly (`concurrent` is the default since 2026-11-11; `alongside` covers it).
+    run.start(models, [actor], extra_env={'LIVING_PARK': 'wait'})
     run.wait(lambda: any(e['purpose'] == 'deliberate' for e in requests()), 'first deliberation running', 60)
     run.harness('player', 'say', 'Will you answer me once you have thought it over?', '--to', str(actor))
     time.sleep(3)
@@ -1029,6 +1226,168 @@ def parked_case(run):
     assert len(talks()) == after_first, 'a talk turn repeated what the deliberation answered'
     assert 'in its deliberation' in run.log()
     return {'status': 'pass', 'talk_turns': len(talks())}
+
+
+def alongside_case(run):
+    """LIVING_PARK=concurrent (talk.rs `turn_alongside`, `deliberation_decided`, `unanswered_say`):
+    (1) a line heard just after a deliberation's prompt was built gets its turn while the think
+    step is still running; (2) a line heard later waits for the think step, and gets its turn as
+    soon as the decision says nothing to the speaker, while the compile step still runs; (3) when
+    the decision would speak to the speaker that a turn alongside already answered, the
+    deliberation's words are not said."""
+    people = prepare(run)
+    actor = people[0]['id']
+    run.harness('player', 'join', 'MindsAlongside')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsAlongside'", 'player')[0]['id']
+
+    def say_now(text):
+        # Straight over HTTP with the player's token (from the run's state.json): a line that must
+        # land within 2 s of a deliberation's prompt cannot wait for a harness subprocess under load.
+        token = json.loads((run.directory / 'state.json').read_text())['token']
+        req = urllib.request.Request(f"{shared.STDB_URL}/v1/database/{run.db}/call/human_say", data=json.dumps([text, actor]).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'}, method='POST')
+        with urllib.request.urlopen(req, timeout=10) as r:
+            assert r.status == 200
+        with (run.directory / 'actions.log').open('a') as log:
+            log.write(f"{time.strftime('%H:%M:%S')} player human_say{json.dumps([text, actor])} -> 200 (HTTP, fast)\n")
+    run.admin('place_near', player, actor)
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'Answering alongside my thinking.', 'say': 'verify minds alongside answer', 'end': True}},
+              # Think requests carry the graph's 'verify' words: the warm-up's and the next two take
+              # 8 s, the third case's 6 s and speaks to the player.
+              'rules': [{'purpose': 'think', 'contains': 'verify', 'delay_s': 8, 'times': 3},
+                        {'purpose': 'think', 'contains': 'verify', 'delay_s': 6, 'times': 1,
+                         'reply': {'thought': 'I tell them while I think.', 'intend': ['wait'],
+                                   'say': {'text': 'verify minds deliberation words', 'to': player}}},
+                        {'purpose': 'deliberate', 'contains': 'verify', 'delay_s': 8, 'times': -1}]}
+    models = model(run, script)
+    requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    talks = lambda: [e for e in requests() if e['purpose'] == 'talk']
+    thinks = lambda: [e for e in requests() if e['purpose'] == 'think' and 'verify' in json.dumps(e['body'])]
+    run.start(models, [actor], extra_env={'LIVING_PARK': 'concurrent'})
+    run.wait(lambda: 'conversation switches' in run.log(), 'switches logged')
+    # A first plan, so that each case below starts from an accepted one.
+    run.request(actor, 'warmup')
+    accepted(run, actor)
+    time.sleep(3)
+    spoken = lambda text: [c for c in run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', 'alongside-speech') if text in c['text']]
+    # 1. Fresh: the line comes within 2 s of the prompt; the think step has 8 s to go.
+    compiles = lambda: [e for e in requests() if e['purpose'] == 'deliberate' and 'verify' in json.dumps(e['body'])]
+    c0, t0 = len(compiles()), len(thinks())
+    run.request(actor, 'first')
+    run.wait(lambda: len(thinks()) >= t0 + 1, 'first think running', 60)
+    say_now('Hello, do you have a moment?')
+    run.wait(lambda: talks(), 'a turn alongside the running think step', 5)
+    assert len(compiles()) == c0, 'the turn waited for the think step'
+    run.wait(lambda: spoken('verify minds alongside answer'), 'alongside answer spoken', 10)
+    assert 'gets its turn alongside' in run.log()
+    deliberated = lambda n: len([t for t in run.thoughts(actor, 'thoughts') if t['kind'] == 'deliberate']) >= n
+    base = len([t for t in run.thoughts(actor, 'thoughts-before') if t['kind'] == 'deliberate'])
+    run.wait(lambda: deliberated(base + 1), 'first deliberation done', 40)
+    time.sleep(3)
+    first = len(talks())
+    # 2. Late: the line comes 4 s into the think step; it waits for the decision, which says
+    # nothing to the player, and gets its turn before the compile step ends.
+    run.request(actor, 'second')
+    run.wait(lambda: len(thinks()) >= t0 + 2, 'second think running', 60)
+    time.sleep(4)
+    run.harness('player', 'say', 'Another matter entirely: where does the river bend north?', '--to', str(actor))
+    time.sleep(2)
+    assert len(talks()) == first, 'a late line got its turn before the decision'
+    run.wait(lambda: len(talks()) > first, 'the turn after the decision', 15)
+    assert len(compiles()) == c0 + 2 and not deliberated(base + 2), 'the deliberation ended first'
+    assert 'has decided, and not to speak to' in run.log()
+    run.wait(lambda: deliberated(base + 2), 'second deliberation done', 40)
+    time.sleep(3)
+    # 3. The decision would speak to the player, whom a turn alongside already answered.
+    run.request(actor, 'third')
+    run.wait(lambda: len(thinks()) >= t0 + 3, 'third think running', 60)
+    say_now('Something new: are the fish running today?')
+    run.wait(lambda: 'already answered' in run.log(), "the deliberation's words withheld", 40)
+    time.sleep(10)
+    assert not spoken('verify minds deliberation words'), 'the deliberation spoke to someone already answered'
+    return {'status': 'pass', 'talk_turns': len(talks())}
+
+
+def greet_case(run):
+    """LIVING_GREET (talk.rs `Facts::drawn`, `faced`): with the world keeping who heard each line
+    (`speech_audience`), a stranger's line to no one, said with two residents within 6 m, draws
+    no turn under `off`, one turn from the nearest under `nearest`, and under `facing` a turn
+    from the resident the speaker faces (here the farther one) and none from the nearer."""
+    people = prepare(run)
+    a, b = [p['id'] for p in people]
+    run.harness('player', 'join', 'MindsStranger')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsStranger'", 'player')[0]['id']
+    # a, the player 1 m east of a, b 3 m east of the player (both within the 6 m address distance).
+    body = run.sql(f'SELECT * FROM body WHERE id = {a}', 'body-a')[0]
+
+    def place():
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            try:
+                run.admin('place_at', a, body['x'], body['y'])
+                run.admin('place_at', player, body['x'] + dx, body['y'] + dy)
+                run.admin('place_at', b, body['x'] + 4 * dx, body['y'] + 4 * dy)
+                return
+            except Exception:
+                continue
+    place()
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'A stranger speaks.', 'say': 'verify minds greet answer', 'end': True}}}
+    models = model(run, script)
+    talks = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'talk']
+    # Answers by their talk-turn thought rows (the chronicle merges a line repeated word for word
+    # into its earlier row, so a second identical fake answer adds no row there).
+    answers = lambda: sorted((t for t in run.sql(f'SELECT * FROM thought WHERE kind = \'talk\'', 'greet-answers')
+                              if json.loads(t.get('detail') or '{}').get('with') == player and 'verify minds greet answer' in t['summary']), key=lambda t: t['id'])
+    results = {}
+    for arm, text in (('off', 'Hello there!'), ('nearest', 'Good day to you all.'), ('facing', 'Fine weather today.')):
+        if run.mind:
+            shared.stop(run.mind)
+            time.sleep(2)
+        subscribed = run.log().count('world subscribed:')
+        if run.mind is None:
+            run.start(models, [a, b], extra_env={'LIVING_GREET': arm})
+            # The shipped rules keep who heard each line (`speech_audience`, on by default).
+            assert (ROOT / 'living/scripts/skills.rhai').read_text().count('speech_audience: true,') == 1
+        else:
+            run.env['LIVING_GREET'] = arm
+            run.launch_mind()
+        run.wait(lambda: run.log().count('world subscribed:') > subscribed, f'{arm}: subscribed')
+        for who in (a, b):
+            run.request(who, f'{arm}-{who}')
+        run.wait(lambda: not run.private(f'SELECT * FROM deliberation WHERE actor = {a} OR actor = {b}', f'pending-{arm}'), f'{arm}: deliberations done', 60)
+        time.sleep(3)
+        # Residents wander on their own ways between arms: everyone back in place for each line.
+        place()
+        time.sleep(1)
+        if arm == 'facing':
+            run.harness('player', 'act', json.dumps({'do': 'face', 'target': {'id': b}}))
+            time.sleep(2)
+        before, heard = len(answers()), len(talks())
+        run.harness('player', 'say', text)
+        time.sleep(8)
+        new = answers()[before:]
+        aud = [r for r in run.sql(f'SELECT * FROM audience WHERE speaker = {player}', f'audience-{arm}')]
+        assert aud, f'{arm}: no audience row for the line'
+        row = max(aud, key=lambda r: r['at_ms'])
+        hs = [h if isinstance(h, list) else [h['id'], h['d'], h['off']] for h in row['hearers']]
+        # The rule's own reading of the row: the nearest, and the one within 6 m and 0.6 rad of the facing.
+        # The nearest of the hearers this service thinks for (other residents may stand nearer).
+        nearest = min((h for h in hs if h[0] in (a, b)), key=lambda h: h[1])[0]
+        cone = [h for h in hs if h[1] <= 6.0 and h[2] <= 0.6]
+        faced = min(cone, key=lambda h: (h[2], h[1]))[0] if cone else None
+        results[arm] = {'answers_by': [t['actor'] for t in new], 'talk_requests': len(talks()) - heard, 'hearers': hs, 'nearest': nearest, 'faced': faced}
+        # A restarted service replays speech under 30 s old (talk.rs STALE_MS): let this line age out.
+        time.sleep(25)
+    (run.directory / 'greet.json').write_text(json.dumps(results, indent=2))
+    assert results['off']['answers_by'] == [] and results['off']['talk_requests'] == 0, results
+    assert results['nearest']['answers_by'] == [a] and results['nearest']['nearest'] == a, results
+    assert results['facing']['faced'] == b and results['facing']['nearest'] != b and results['facing']['answers_by'] == [b], results
+    log = run.log()
+    assert 'is drawn in by' in log and 'is faced by' in log
+    return {'status': 'pass', **results}
 
 
 def reasons_case(run):
@@ -1094,6 +1453,8 @@ def reasons_case(run):
     # on install and kept the feeling instead, so this count is 0 there).
     assert plan_finished_during_calls >= 2, f'no plan churn to test against: {out}'
     return {'status': 'pass', **out}
+
+
 def system_text(body):
     return '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'system')
 
@@ -1150,6 +1511,97 @@ def frame_case(run):
     assert any(f for p, f in journaled if p == 'talk') and any(f for p, f in journaled if p == 'think'), journaled[:6]
     return {'status': 'pass', 'framed': {k: f'{sum(v)}/{len(v)}' for k, v in framed.items()},
             'journaled_framed': sum(f for _, f in journaled), 'journaled': len(journaled), 'bad_value_exit': bad.returncode}
+
+
+def speech_case(run):
+    """Speech through a mind (docs/COMMUNICATION.md): a talk reply's `way` reaches `mind_say`
+    (a way the world does not have is said aloud), a name that is news reaches the mind as an
+    `introduced` row its consolidation sees tagged with the person (`{Name=#id}`, the anchor
+    `person:<id>`), and the mind's own line reads as heard by those it saw (`heard`)."""
+    people = prepare(run)
+    actor = people[0]['id']
+    run.harness('player', 'join', 'MindsTeller')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsTeller'", 'player')[0]['id']
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', player, actor)
+    gist = '$EXPTEXT:told you their name'
+    script = {'replies': {'think': {'thought': 'I wait.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'I answer, aloud.', 'say': 'verify minds spoken in a way', 'way': 'say', 'end': False},
+                          'consolidate': {'summary': 'verify minds names', 'remember': [{'exp': '$EXP:told you their name', 'gist': gist, 'salience': 0.6, 'involves': ['$PERSON']}],
+                                          'nodes': [], 'edges': [], 'retract': [], 'merge': [], 'identity': None, 'relations': [], 'judgments': [], 'places': []}},
+              # A turn's prompt holds the conversation so far: the latest line's rule comes first.
+              'rules': [{'purpose': 'talk', 'contains': 'over here', 'times': -1,
+                         'reply': {'thought': 'I call back.', 'say': 'verify minds called back', 'way': 'call', 'end': True}},
+                        # A whisper is answered in kind when the reply names no way.
+                        {'purpose': 'talk', 'contains': 'a secret', 'times': -1,
+                         'reply': {'thought': 'I answer quietly.', 'say': 'verify minds whispered back', 'end': False}},
+                        {'purpose': 'talk', 'contains': 'shout it', 'times': -1,
+                         'reply': {'thought': 'I shout back.', 'say': 'verify minds shouted back', 'way': 'shout', 'end': False}},
+                        {'purpose': 'consolidate', 'cite': True, 'times': -1}]}
+    models = model(run, script)
+    # As in `conversation`: the mind's first deliberation is in before anyone speaks to it.
+    run.request(actor, 'speech')
+    run.start(models, [actor])
+    accepted(run, actor)
+    # The deliberation installs the fake's plan, which runs the resident's own routine: hold it
+    # where it is, and bring the player beside it again.
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', player, actor)
+    time.sleep(2)
+    requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    text_of = lambda e: json.dumps(e, ensure_ascii=False).replace('\\"', '"')
+    spoken = lambda words: any(words in c['text'] and c['b'] == player for c in run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', 'mind-speech'))
+    # A question: a remark that asks nothing is answered only by chance (talk.rs, 0.3 + 0.65 x
+    # sociability), which is what left minds-speech3, -4b and -6 without a turn.
+    run.harness('player', 'say', 'I am MindsTeller. How are you today?', '--to', str(actor))
+    run.wait(lambda: spoken('verify minds spoken in a way'), 'a talk reply with "way": "say" is spoken through mind_say', 60)
+    intro = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'introduced') if e['kind'] == 'introduced']
+    assert len(intro) == 1 and intro[0]['subject'] == player and intro[0]['text'] == 'MindsTeller told you their name.', intro
+    heard = run.private(f'SELECT * FROM line_heard WHERE speaker = {actor}', 'mind-heard')
+    assert heard and all(player in h['hearers'] and h['way'] == 'say' for h in heard), heard
+    time.sleep(2.2)
+    run.harness('player', 'say', 'Can you shout it so the square hears?', '--to', str(actor))
+    run.wait(lambda: spoken('verify minds shouted back'), 'a reply in a way the world lacks is said aloud', 60)
+    talks = [e for e in requests() if e['purpose'] == 'talk']
+    assert any(re.search(r'verify minds spoken in a way” \(heard by [^)]*MindsTeller', text_of(e)) for e in talks[1:]), 'the second talk turn does not read the mind\'s own line as heard'
+    run.wait(lambda: any(e['purpose'] == 'consolidate' and 'MindsTeller told you their name.' in text_of(e) for e in requests()),
+             'consolidation sees the introduction', 150)
+    consolidation = next(e for e in requests() if e['purpose'] == 'consolidate' and 'MindsTeller told you their name.' in text_of(e))
+    tagged = f'MindsTeller told you their name. {{MindsTeller=#{player}}}' in text_of(consolidation)
+    assert tagged, 'the introduction is not tagged with the person (its anchor)'
+    run.wait(lambda: any(t['kind'] == 'consolidate' for t in run.thoughts(actor, 'thoughts-consolidated')), 'consolidation applied', 60)
+    ways = {c['name'] for c in run.sql('SELECT * FROM speech_card', 'speech-card')}
+    whispered = called = None
+    chronicle = lambda: run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', 'mind-speech-ways')
+    if 'whisper' in ways:
+        # Beside the mind, the player whispers: the turn is told it was whispered, and the reply
+        # (naming no way) is whispered back.
+        body = run.private(f'SELECT * FROM body WHERE id = {actor}', 'actor-body')[0]
+        run.admin('place_at', player, body['x'] + 1.0, body['y'])
+        time.sleep(2.2)
+        run.harness('call', 'human_speak', json.dumps(['verify minds: may I tell you a secret?', actor, 'whisper']), '--as-player')
+        run.wait(lambda: any('verify minds whispered back' in c['text'] for c in chronicle()), 'a whisper answered', 60)
+        whispered = next(c['text'] for c in chronicle() if 'verify minds whispered back' in c['text'])
+        assert '(whisper)' in whispered, whispered
+        talk = next(e for e in requests() if e['purpose'] == 'talk' and 'a secret' in text_of(e))
+        assert 'They whispered this to you' in text_of(talk), 'the turn is not told the line was whispered'
+    if 'call' in ways:
+        # From 15 m the player calls: the turn is told the distance, and the reply calls back.
+        body = run.private(f'SELECT * FROM body WHERE id = {actor}', 'actor-body')[0]
+        run.admin('place_at', player, body['x'] + 15.0, body['y'])
+        # A listener takes at most its stamina's turns in one exchange (talk.rs), and an
+        # exchange starts afresh after 90 s of quiet: this one has had three turns already.
+        time.sleep(92)
+        run.harness('call', 'human_speak', json.dumps(['verify minds: can you hear me over here?', actor, 'call']), '--as-player')
+        run.wait(lambda: any('verify minds called back' in c['text'] for c in chronicle()), 'a call answered', 60)
+        called = next(c['text'] for c in chronicle() if 'verify minds called back' in c['text'])
+        talk = next(e for e in requests() if e['purpose'] == 'talk' and 'over here' in text_of(e))
+        assert '(call)' in called and re.search(r'calls out to you from about 1[3-7] m', text_of(talk)) and 'An ordinary voice carries 9 m' in text_of(talk), (called, 'distance and voice in the prompt')
+        assert '\\"way\\": how you say it' in json.dumps(talk) or '"way": how you say it' in text_of(talk), 'the talk turn does not list the ways'
+    replies = [json.loads(t['detail']).get('reply', {}) for t in run.thoughts(actor, 'thoughts-talk') if t['kind'] == 'talk']
+    return {'status': 'pass', 'talk_turns': len(talks), 'reply_ways': [r.get('way') for r in replies], 'introduced': intro[0]['text'],
+            'heard_rows': len(heard), 'consolidation_tagged': tagged, 'whispered_back': whispered, 'called_back': called}
 
 
 def main():

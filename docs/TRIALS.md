@@ -22,13 +22,13 @@ A trial is a JSON file in [`living/trials/`](../living/trials/). Fields:
 | `timeline` | Steps. `"at": "prepare"` runs right after publishing, `"at": "start"` at the start hour before the mind starts, `"at": <minutes>` during the run, and `"when": {…}` on a trigger. An entry is one step or has `steps`, each with an optional `after` (seconds). |
 | `probes` | Probes the trial is about (all probes are computed for every trial). |
 | `minds` | Who the mind service thinks for. Default: the subject (`LIVING_ONLY`). `"only": "all"`: every person and animal. With `"max": N` as well, at most N at a time: those already thinking who are alive, then the earliest-born of the rest past infancy. A death frees a place, and a newborn takes one when it becomes a child. The runner restarts the mind with the new `LIVING_ONLY` when someone joins the set, at most every 2 minutes (a `reslot` event; planned restarts do not count toward the runaway watchdog's restarts). A death alone only drops the dead from the set. `concurrency`: how many model calls the trial's mind service runs at once (`LIVING_CONCURRENCY`); default 64 where many think (`only: "all"` or `max`) and 4 for a single thinker, recorded in `mind-env.json` and the summary (`concurrency`). Every trial ran at 4 before 2026-11-11 (see below). |
-| `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. A world seed with its own laws (`laws`/`laws_file`) has them composed over the file first (`compose_laws`, as `floors::compose` does at creation), and the runner checks its composition against the world's. |
+| `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. A world seed with its own laws (`laws`/`laws_file`) has them composed over the file first (`compose_laws` in `living/tools/install_script.py`, as `floors::compose` does at creation). The runner's laws guard then refuses to start the instance (the **laws guard**, under [the hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11), Cullet's day and laws). |
 | `census_s` | Every so many seconds, every character of the world goes to `census.jsonl`: stage, alive, cause and time of death, parents, position, hunger, activity, and who the mind thinks for. This is meant for small worlds (four whole-table reads per census). |
 | `life.stop_on_death` | `false`: a life run goes on to its duration after the subject dies, and the mind keeps running (default `true`: it stops 20 s after the death). |
 | `subject.join` | A human player joins as the subject through the real `join` reducer with its own identity (`Player` in trials.py): `name`, and `after_s`, how long the world lives first. |
-| `human` | The joined player's script, played with the player reducers only: `script: arrive` for [the arrival trial](#arrivals-a-stranger-who-says-nothing-2026-11-11) (`settle_s`, `walk_s`, `within_m`, `stand_s`, `stands`, and `answer`: one line said back to the first resident who addresses it); without `script` it plays the takeover session. The player approaches and answers only residents the trial's minds think for (`Player.is_mind`: past infancy, in `LIVING_ONLY` or the `minds.max` thinkers), never one who lives by its graph and could not answer. |
+| `human` | A scripted human player for a `subject.join` trial (`Player` in trials.py), played with the player reducers only: `minutes`, and `script: greet` for the greeting trial (`wait_s`, `listen_s`, `earshot_m`, `greetings`, `addressed`; [the greeting trial](#the-greeting-trial-2026-11-11)) or `script: arrive` for [the arrival trial](#arrivals-a-stranger-who-says-nothing-2026-11-11) (`settle_s`, `walk_s`, `within_m`, `stand_s`, `stands`, and `answer`: one line said back to the first resident who addresses it). Without `script` it plays the takeover session. The arrival player approaches and answers only residents the trial's minds think for (`Player.is_mind`: past infancy, in `LIVING_ONLY` or the `minds.max` thinkers), never one who lives by its graph and could not answer. |
 | `variants` | The only variants the trial runs with; others named on the command line are skipped for it (`arrive-answer` runs with the control and `arrive-all`). |
-| `record` | Small-world evidence, whole-table reads each sample: `speech` (every line said, `speech.jsonl`), `talk` (every conversation turn, `talk.jsonl`), `experiences` (every character's experience rows before minds integrate them, `experiences_all.jsonl`), `gestures` (wave, nod, face, appraise uses, `gestures.jsonl`), `positions` (every person's position, heading and activity target, `positions.jsonl`). |
+| `record` | Small-world evidence, whole-table reads each sample: `speech` (every line said, `speech.jsonl`), `talk` (every conversation turn, `talk.jsonl`), `audience` (the `audience` rows where the world keeps them, `audience.jsonl`), `experiences` (every character's experience rows before minds integrate them, `experiences_all.jsonl`), `gestures` (wave, nod, face, appraise uses, `gestures.jsonl`), `positions` (every person's position, heading and activity target, `positions.jsonl`), `thoughts` (every thought row, with `detail.reasons`, `thoughts_all.jsonl`). |
 
 Steps (`do`): `place` (`to`: an anchor), `graph` (a graph, `instinct:<name>` from `instincts.json`, or `original`: the graph the character had before the trial changed it), `items`, `know`, `say` (`text`, `to`), `act` (`act` or `acts`: `do` nodes), `structure`, `background`, `kill`, `clear_routines`, `clear_items`, `call` (any admin reducer), `note`.
 
@@ -70,7 +70,11 @@ python3 living/tools/trials.py down                      # stop the containers (
 
 **Mind concurrency (2026-11-11).** The runner gave every trial's mind `LIVING_CONCURRENCY=4`. In the hamlet's greeting batches (12 minds), the queue, not the model, then set the pace: talk turns waited a median 2–7 s in the queue (p90 15–25 s, at most 78 s) for 0.8 s of model time, and deliberations 6–13 s (p90 up to 41 s), by the resident inspector's reading. Play-test 2 ran at 192 and waited under 0.2 s. It is now the trial's `minds.concurrency`, by default 64 where many think and 4 for one thinker, so one-mind batches stay comparable with earlier ones. Batches of many minds before this date ran queued: their latencies are not the model's.
 
-Two runner behaviours from `exp-greet`, ported with the arrival trial (2026-11-11): `run --fake --fake-script FILE` gives the fake server a rules file (`living/trials/fake/latency.json`: model latencies near the real ones, open talk replies), and run from a git worktree `build` copies each module into the container's `/wasm` mount (another checkout's) as `<module>-wt<hash>` (`served_name`), which `run` publishes, so a worktree never overwrites another checkout's modules. Remove the tagged files from the mount when done.
+Three runner behaviours since 2026-11-11 (branch `exp-greet`):
+
+- `run --fake --fake-script FILE` gives the fake server a rules file. `living/trials/fake/latency.json` sets model latencies near the real ones and open-ended talk replies.
+- A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) keeps them: the runner composes the overlay over the skills file as the authority did at creation (`compose_laws`), checks the result against the world's own script, applies any `skills_patch` and installs that (docs/CULLET_RULES.md). Main's runner did this first; `exp-greet`'s earlier way, skipping the install, was dropped in the merge.
+- Run from a git worktree, `build` copies each module into the container's `/wasm` mount (another checkout's) under a tagged name, `<module>-wt<hash>` (`served_name`), and `run` publishes that name, so a worktree never overwrites another checkout's modules. Remove the tagged files from the mount when done.
 
 Each instance is a database `verify-trial-<batch>-<trial>-<variant>-r<k>` on the trial service and one `living-mind` process. Its evidence directory, `.local/living/trials/<batch>/<trial>-<variant>-r<k>/`, holds:
 
@@ -82,6 +86,10 @@ Each instance is a database `verify-trial-<batch>-<trial>-<variant>-r<k>` on the
 - `final.json`: the subject's rows at the end; `summary.json`: the probes.
 
 The run stops at `minutes`, at a token cap if the trial or `TRIALS_TOTAL_TOKENS` sets one (none does by default), when the runaway watchdog fires (below), 20 s after the subject dies, or when the mind exits (a life run restarts it instead). Deleted databases leave their replica directories in the volume (about 0.4 GB each for an island world); run `trials.py reclaim` after large batches.
+
+**Runaways and provider outages (since 2026-11-11).** The watchdog stops a mind running away: the same failed call 15 times in 5 minutes or 30 failed calls (for `minds.only: "all"`, as a share of the calls: 40% and half), a call rate above 60 a minute for one mind (or `budget.runaway_calls_per_min`), or more than 5 unplanned mind restarts in 30 minutes. Only failures the provider did not cause count (`failure_kind` = `mind`: a refused request, a missing key, a reply that is not the provider's envelope). Capacity or rate 429s, 5xx and connection errors are the provider's: they count toward no failure limit while a fallback or a later retry answers (ar1 stopped 7 of its 28 instances on consolidation's capacity 429s; replayed under these rules, none stops). They still count as calls, so a storm against a failing provider trips the rate rule. When no call on any route has succeeded for 30 s, the runner records an outage (`outage` and `outage_ended` events, `outages` in `summary.json`). It stops the run (`stopped_by`: `provider outage: …`) only when nothing has answered for 10 minutes while calls still fail, the last within 3 minutes. `call_failures` in `summary.json` counts failed calls by kind. `python3 living/tools/trials_runaway_selftest.py` covers both cases.
+
+**Consolidation accounting.** The mind writes one line per consolidation that called a model, failed, or found experiences lost to `<journal>/outcomes/consolidations.jsonl` (`Llm::outcome`): outcome, route (primary or fallback), model, attempt, experiences, the failure, and the retry delay. `summary.json` `consolidations` (`consolidation_table`) counts, per character and in total: attempted, integrated on the primary or on the fallback, failed and retried later, failed with no later attempt (lost: never integrated before the stop), experiences of failed ones that left the 400-row inbox before integration (trimmed), and failures that were capacity 429s. `trials.py report` adds the per-instance and per-character tables, and any outages, to `report.md`. Both files are published by `store.py pack`, while the journals, these outcome lines included, stay held with `model_exchanges`. Minds from before 2026-11-11 wrote no outcomes, and their table is `null`.
 
 ### Probes
 
@@ -498,7 +506,7 @@ Food is plentiful. Within 24 m of the two squares there are 31 and 22 berry bush
 The tensions are in the sheets and none is scripted. Oren's debt to Teodor and the secret of the sold seed grain come from `authored-test`. Teodor has no apprentice, and Mara wants a house of her own rather than his trade. Brisk and Cal are rivals. Sefa wants to leave her mother's house.
 
 - **Minds.** `hamlet` thinks for every person past infancy, at most 12 at a time (`minds.max`, above): 11 at the start, 12 once Tobin is a child. In a stable population every person thinks. If the hamlet grows past 12 people old enough to think, the youngest live on their seeded ways until a death frees a place. Each time someone joins the thinking set, the runner restarts the mind service (at most every 2 minutes), which breaks off model calls and conversations in progress for all of them. A death alone does not restart it. `hamlet-solo` thinks only for the subject (`LIVING_ONLY` = 11). The other eleven run their behaviour graphs, as the island's residents do in a scripted trial, and graph adults do not conceive. Both runs go on to their full duration after the subject's death (`life.stop_on_death` false). The solo run then has no mind at all and costs nothing more.
-- **Cullet's day and laws.** The seed sets them, and the world composes the overlay when it is created. Cullet's laws give needs per game hour, so 48 hunger a game day is the same 1.2 a real minute awake as before. They also give eased dusk and dawn, and Cullet's senses: sight 48 m by day and 14 m in the dark, 20 m with a torch, someone in lamplight seen from 28 m, names within 24 m, and speech carrying 12 m. Night is 20:00–06:00, 20 real minutes of the 48. The runner installs the skills file after publishing, and installing the bare file would drop the overlay. So the runner composes the seed's `laws`/`laws_file` over that file first, the way `floors::compose` does (`trials.compose_laws`), then applies any `skills_patch`. Before installing it compares its composition with the one the world made at creation and logs `seed laws composed as the world composed them: True` (an `error` event otherwise). The hamlet's earlier sight `skills_patch` is gone.
+- **Cullet's day and laws.** The seed sets them, and the world composes the overlay when it is created. Cullet's laws give needs per game hour, so 48 hunger a game day is the same 1.2 a real minute awake as before. They also give eased dusk and dawn, and Cullet's senses: sight 48 m by day and 14 m in the dark, 20 m with a torch, someone in lamplight seen from 28 m, names within 24 m, and speech carrying 12 m. Night is 20:00–06:00, 20 real minutes of the 48. The runner installs the skills file after publishing, and installing the bare file would drop the overlay. So the runner composes the seed's `laws`/`laws_file` over that file first, the way `floors::compose` does (`compose_laws`, shared with verify.py through `living/tools/install_script.py`), then applies any `skills_patch`. The **laws guard** (`laws_problems`) then fails the instance before any mind starts, logging each reason as `laws guard: …` in `actions.log` and as an `error` event, when: the `script` row read back after `install_script` is not the source the runner sent; for a seed with laws, the world's creation-time script is not the runner's composition of those laws over the tree's `skills.rhai` (for a `wasm_tag` module, built on another branch, the row must at least end with the laws); or `world.day_ms` is not the seed's `day_minutes` (12 minutes without one). A variant with `"keep_laws": true` installs nothing and keeps the script the world was created with; its row is checked against the composition the same way, and it may not carry `skills` or `skills_patch`. A passing instance logs `laws guard passed: …`. `python3 living/tools/trials_laws_selftest.py` plants each mismatch (on the hamlet's real composition, against a fake database) and checks that it is refused. The hamlet's earlier sight `skills_patch` is gone.
 - **What the runner records** besides the subject's samples: `census.jsonl` every 30 s (every character's stage, life and death, parents, position, hunger and activity, and the thinkers), hourly snapshots, and every resident's journal.
 
 ```bash
@@ -622,6 +630,93 @@ These are upper bounds. Fewer think when deaths outrun births, and only the cap 
 - Cullet's laws were written for Cullet's town (lamplight, hearths, coats). The hamlet's houses and campfires are what the authored-test layout gives: no lamps and no coats in the stores.
 - The arms' values are derived from the arithmetic, not tuned. How often a pair actually carries 8 food, so whether the provided arm's gate binds, is not known until real minds run.
 - The `family_laws` scene proves each law's gate on a scratch world. It does not prove what minds do with them.
+
+## The greeting trial (2026-11-11)
+
+Branch `exp-greet`. Status: fake proof (`gf4`, `gf5`, below) and paid batches [gr1/gr2](#greeting-batches-gr1gr2-2026-11-11). `nearest` + `concurrent` is the default since 2026-11-11; the `greet-control` variant runs the old rules (`off`, `wait`).
+
+**What it is for.** The owner played 7 minutes in a town of 17 minds and found that "people didn't seem very interactive when talking to them". The session journals showed two causes. A newcomer's "hi" to no one, with two or more people within 6 m, drew no conversation turn, because nobody cared about a stranger. A line could also wait out a whole deliberation whose prompt was built 0.6 s before it: 12.7 s from 1 m away. The conversation switches `LIVING_GREET` and `LIVING_PARK` (docs/LIVING_CORE.md, Conversations; both off by default) address these. This trial measures them as the owner met them.
+
+**The world.** [`greet`](../living/trials/greet.json) is the hamlet (12 people in four households, everyone past infancy thought for, at most 12 at a time; [the hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11)) under Cullet's laws: the seed's `day_minutes` 48 and `laws_file` `worlds/cullet/laws.rhai`, so speech carries 12 m and sight 48 m by day. It is meant to carry over to Cullet, where the owner will play. The world keeps who heard each line (`rules.speech_audience`) in every arm, so arms differ only in the mind's environment.
+
+**The player.** A scripted human (`Player.greet_session` in trials.py) joins with its own identity and plays only through `join`, `human_act` and `human_say`. It plays in cycles of about six minutes:
+
+1. It walks to the densest group of residents, re-chosen every 15 s, with a `goto` act to the group's centre (`{"at": [x, y]}`, as click-to-walk does), until two residents are within 5 m. A short step toward them then turns it to face into the group.
+2. It says a greeting to no one ("Hello there!", "Good day to you all.", …).
+3. After 50 s it says a line addressed (`to`) to the nearest resident within earshot, 12 m: the game client's rule (`talk-1`) when no one is under the cursor.
+4. After another 50 s it stands among them saying nothing for 150 s, while residents talk among themselves.
+
+Its lines name nobody, and it never says its own name, so it stays a stranger to those it has not met. It calls at least every 10 s, so its character is never taken over during the run.
+
+**What is recorded** besides the usual evidence: `record.speech` writes every line said in the world (`speech.jsonl`), `record.talk` every conversation turn with the line it answered (`talk.jsonl`), and `record.audience` the `audience` rows (`audience.jsonl`). Each line of the player is a `human_line` event with the residents within 12 m and their distances. All of these are small-world options: one indexed read each per sample.
+
+**Measures** ([`greet_report.py`](../living/tools/greet_report.py), read-only, no model calls). For the player's unaddressed and addressed lines separately:
+
+- `crowded`: lines said with two or more residents within 6 m. These are the owner's case: the authority then marks no one addressed.
+- `answered`: a resident spoke to the player within 60 s and before its next line, or a talk turn answering that very line spoke. The second form is needed because the chronicle merges a repeated line into its earlier row. Also `answered_5s`, the latency median and p90, and who answered: `by_nearest`, `by_addressed`, and `by_turn` (a conversation turn rather than a deliberation).
+- `false_replies`: talk turns that answered a resident's line meant for someone else, meaning addressed to another, or said to no one while its speaker was in an exchange with another (a line between them within 60 s before). `listen_false` counts those within the player's listening windows. `overheard_turns` counts all turns on residents' lines said to no one.
+- Cost: residents' talk turns per minute, talk tokens and all tokens per minute, and estimated dollars per hour.
+
+```bash
+python3 living/tools/trials.py build greet
+python3 living/tools/trials.py run --batch gf4 greet --variants greet-control,greet-nearest,greet-curious,greet-facing,park-concurrent,greet-nearest-concurrent \
+    --replicates 1 --minutes 15 --fake --fake-script living/trials/fake/latency.json --parallel 6 --stagger 15
+python3 living/tools/greet_report.py gf4 --examples 3
+python3 living/tools/trials.py clean --batch gf4
+```
+
+Variants: `greet-control` (`LIVING_GREET=off`, `LIVING_PARK=wait`), `greet-nearest`, `greet-curious`, `greet-facing`, `park-concurrent` (greet off), `greet-nearest-concurrent` and `greet-facing-concurrent`. All think with `default`.
+
+### Fake proof (`gf4`)
+
+`gf4`: 2026-11-11 15:21–15:37, fake model with `living/trials/fake/latency.json`, 15 minutes, one run per arm. The script delays think 5 s, compile 4 s, talk 1.5 s and consolidate 2 s, as in the owner's journals. Its talk replies leave the exchange open: the fake's default reply settles every exchange at its first turn, which silenced each later line from the same stranger in `gf3`. The trial service also carried batches `l9` and `pf2` (load about 35 on 20 cores).
+
+The fake's words are canned, so these numbers prove the mechanics, not what minds say. Each arm had four lines of each kind, and every unaddressed line was crowded.
+
+| Arm | Unaddressed answered | Latency med / p90 (s) | Addressed answered | Latency med / p90 (s) | False replies | Talk turns/min | Model calls/min |
+| --- | ---: | --- | ---: | --- | ---: | ---: | ---: |
+| `greet-control` | 0 of 4 | – | 3 of 4 | 2.3 / 4.3 | 2 | 2.6 | 27.9 |
+| `greet-nearest` | 4 of 4 | 1.6 / 3.0 | 4 of 4 | 2.5 / 4.3 | 2 | 4.1 | 22.1 |
+| `greet-curious` | 1 of 4 | 1.5 / 1.5 | 2 of 3 | 2.2 / 2.6 | 0 | 2.0 | 26.9 |
+| `greet-facing` | 3 of 4 | 1.7 / 3.0 | 3 of 4 | 4.3 / 12.7 | 3 | 6.3 | 24.3 |
+| `park-concurrent` | 0 of 4 | – | 3 of 4 | 2.6 / 4.3 | 1 | 3.4 | 21.4 |
+| `greet-nearest-concurrent` | 4 of 4 | 2.3 / 3.6 | 3 of 4 | 2.6 / 4.3 | 2 | 2.9 | 19.7 |
+
+What the fake run shows:
+
+- Under the shipped rules no crowded greeting was answered (0 of 4). Under `nearest` all were (4 of 4), by the nearest resident free to talk, 1.5–3 s later.
+- `facing` answers whoever the player faces. It also addresses residents' own lines to whoever they face, which tripled the talk turns (6.3 a minute against 2.6) and gave the most false replies.
+- `curious` draws in a stranger's listener by chance, and the first drawn takes the turn. One of four greetings drew someone.
+- The addressed line that went unanswered under the shipped rules was a remark that asked nothing. It lost the remark draw that the switches skip for strangers.
+- The addressed p90 of 12.7 s under `facing` (parked) is a line parked while the addressee deliberated, as in the owner's session.
+- False replies are mostly a child answering a parent's line said while the parent was in an exchange with someone else (Pim answering Ilsa). The shipped rule does this too: family cares.
+- Model calls per minute vary between arms with how often the fake's plans finish. Talk turns are 2–6 of 20–28 calls a minute.
+
+`gf5` (2026-11-11 15:40–15:53, 12 minutes; control, nearest+concurrent, facing) repeats the proof on the branch after merging main's `talk-1` (the client's addressed speech). Crowded greetings were answered 0 of 3 (control), 3 of 3 (nearest+concurrent, median 1.7 s) and 2 of 3 (facing); addressed lines 2 of 3, 3 of 3 and 2 of 3; false replies 3, 1 and 7.
+
+### The paid batch, planned
+
+```bash
+cd <a checkout of exp-greet with .env (MISTRAL_API_KEY, CARLID_NPC_API_KEY)>; . ~/slop-sysroot/env.sh
+export CARGO_TARGET_DIR=$HOME/slop-greet-target
+python3 living/tools/trials.py build greet
+python3 living/tools/trials.py run --batch gr1 greet \
+    --variants greet-control,greet-nearest,greet-curious,greet-facing,park-concurrent,greet-nearest-concurrent \
+    --replicates 4 --parallel 8 --sample-s 5 --stagger 15
+python3 living/tools/greet_report.py gr1 --examples 3
+python3 living/tools/trials.py clean --batch gr1
+```
+
+The planned design is six arms × 4 replicates × 25 minutes, with 11 minds thinking (12 once Tobin is a child). It is not a full factorial: `LIVING_PARK` is crossed only with the control and with `nearest`.
+
+The cost is an estimate, not a measurement. It uses the island figure of about $0.10 per thinking person per hour on glm-flash ([births](#planned-batch-and-its-cost)). A run is about 12 × 25/60 = 5 person-hours, about $0.50, so the batch is about 120 person-hours, $12–15. The upper end allows for the switches' extra talk turns (at most 4 more a minute, about 1–2k tokens each) and for 48 m sight putting more people in each scene. At `--parallel 8`, three waves take about 85 minutes, about $9–11 an hour.
+
+### Not covered
+
+- No real model has answered a greeting here. Whether residents' answers read as interactive to the owner is for the paid batch and the owner's own play.
+- A single fake run per arm gives no spread.
+- `verify-client` was not run for the new private `audience` table. Its scripts assume the shared server on 3300, which this machine leaves to other work. Privacy was checked through `verify-player`: a player's SQL is refused the table.
+- The game client's cursor addressing is emulated only by its fallback, the nearest person in earshot.
 
 ## Arrivals: a stranger who says nothing (2026-11-11)
 
@@ -970,6 +1065,146 @@ Coverage: the instances with evidence at 18:15. gr1a: control ×4, nearest-concu
 - **The script's addressed statements meet the remark draw.** "You look like you know this place well." and "That looks like hard work." ask nothing, so a resident who passes the gate can still let them pass. The recomputed draw refused 4 of 22 addressed lines in control.
 - **The script addressed characters who are not minds.** Tobin is not in `LIVING_ONLY`: 2 of 22 addressed lines in control and 5 of 23 in curious went to him and could never be answered.
 - **Hearers do not answer each other's turns.** With curious and nearest, one hearer is drawn in and the others' verdicts read "another took it": a line to no one draws one hearer.
+
+The full result for all three gr1 batches and gr2 is the next section.
+
+## Greeting batches gr1/gr2 (2026-11-11)
+
+Paid runs of the greeting trial on branch `exp-greet`: the switches `LIVING_GREET` and `LIVING_PARK` ([COMMUNICATION.md §5](COMMUNICATION.md#5-how-minds-take-turns)), all off by default when these batches ran. `nearest` + `concurrent` is the default since (the override and acceptance are under Recommendation, below). The world is the [hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11): 12 people on Cullet's laws (speech carries 12 m), of whom 11 think (`LIVING_ONLY` leaves out the child Tobin), on the `people` model mix: talk turns and on-stage deliberation on deepseek-flash, everything else on glm-flash (gr2's journals: 1,607 and 2,304 calls). A scripted player joins and repeats a cycle for 25 minutes. It walks into a group and says a greeting to no one. 50 s later it says a line to the nearest resident within 12 m. It then stands among them for 150 s, saying nothing, while they talk. Six cycles make a run. The player never says its own name and never answers.
+
+Evidence: the run checkout `~/dev/slop-runs-greet` (branch `runs-greet`, exp-greet 3383026 plus 709770a), `.local/living/trials/{gr1a,gr1b,gr1c,gr2}/`.
+
+| Batch | Arms × replicates | Mind queue (`LIVING_CONCURRENCY`) | Instances kept |
+| --- | --- | --- | --- |
+| gr1a | control, nearest-concurrent, nearest × 4 | 4 for 11 minds | 9 of 12 (nearest r1–r3 failed) |
+| gr1b | curious, facing, park-concurrent × 4 | 4 | 7 of 12 (facing r3–r4, park r1, r2, r4 failed) |
+| gr1c | nearest, facing, park-concurrent × 3 (reruns) | 4 | 9 of 9 |
+| gr2 | control, nearest-concurrent × 4 | **64** (`mind-env.json`) | 8 of 8 (finished 19:33) |
+
+**Excluded instances.** Seven instances failed at publish or soon after. The trial service hit SQL and identity timeouts, and gr1b park r4 hit "Too many open files". Their `summary.json` says `stopped_by: error …`, and none has a `final.json`. They are left out of every figure here, not counted as unanswered.
+
+**Method.** The headline counts an answer only when the [resident inspector](#resident-inspector) (main's `inspector.py`) attributes it to that very line. A hearer's fate must be a talk turn on the line that said something, an answer from the deliberation it was parked behind, or a parked line whose following turn answered this line, not a newer one. A deliberation that later saw the line and spoke to the player is not counted. Those are listed apart, 0–7 per arm. `greet_report.py` (exp-greet) gives the raw share for the same lines: any resident line to the player within 60 s and before the player's next line. Lines that went to Tobin are left out. Addressed questions and addressed statements are counted separately, because a statement can be let pass by the remark draw. A greeting is crowded when two or more characters stood within 6 m of the player (the audience row). Every greeting in these runs was crowded. The join was a script in the session's scratch space, not committed, that loads `inspector.Run` and `greet_report.run` per instance.
+
+**The inspector's accuracy.** Its turn/no-turn verdicts were re-sampled at random (60 verdicts from gr1a–gr1c and play-test 2): 0 of 60 wrong, 95% interval 0–6.0% (0–8.8% for the player's 40 lines).
+- The sample checks the page against the evidence. It does not cover what the evidence does not record: stamina, the off-stage hold, the greet modes' own reasons (curiosity draw, "free", "settled with"), which are not logged.
+- gr2 was not in the sample, and parking is rare at concurrency 64.
+- Classifying fates as answered is this report's own step, as is pairing an answer with its words (`spoken_after`). Both were checked by hand on the examples below, not sampled.
+
+### Per arm: answers attributed to the line
+
+gr1 pools gr1a, gr1b and gr1c by arm. **gr1 latency is queue-limited (concurrency 4).** Talk turns waited a median 0.7–12.8 s per run (p90 10–32 s) and deliberations 3.4–37 s, against a model time of 0.7–0.9 s for talk. gr2's queue wait was 0.0 s for every call (talk model time median 0.7–0.9 s, p90 1.2–4.0 s), so **gr2 latency is the figure for play**.
+
+| Batch | Arm | Runs | Crowded greetings answered (inspector) | greet_report raw | Latency median / p90 | Answered by the nearest mind | Addressed questions answered | Addressed statements answered | Addressed, raw | Addressed latency median / p90 | Answered by the addressee | Addressed to Tobin (left out) |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| gr1 | control | 4 | **3/24** | 8/24 | 7.0 / 64.1 s | 1 of 3 | 9/10 | 6/10 | 16/20 | 4.3 / 57.6 s | 15 of 15 | 2 |
+| gr1 | `nearest` | 4 | **17/24** | 14/24 | 3.0 / 57.0 s | 11 of 17 | 10/11 | 9/11 | 18/22 | 4.3 / 43.3 s | 19 of 19 | 2 |
+| gr1 | `nearest` + `concurrent` | 4 | **17/24** | 17/24 | 3.0 / 5.4 s | 11 of 17 | 10/10 | 9/10 | 19/20 | 4.3 / 6.0 s | 19 of 19 | 0 |
+| gr1 | `curious` | 4 | **15/24** | 17/24 | 1.7 / 9.0 s | 5 of 15 | 9/9 | 8/9 | 17/18 | 2.6 / 11.4 s | 17 of 17 | 5 |
+| gr1 | `facing` | 5 | **17/30** | 22/30 | 1.7 / 3.4 s | 2 of 17 | 12/12 | 13/14 | 22/26 | 4.9 / 66.7 s | 25 of 25 | 2 |
+| gr1 | `concurrent` only | 4 | **1/24** | 4/24 | 1.5 s (one) | 0 of 1 | 11/11 | 5/9 | 17/20 | 4.3 / 4.4 s | 16 of 16 | 2 |
+| **gr2** | control | 4 | **2/24** | 11/24 | 3.4 / 3.8 s | 0 of 2 | 8/8 | 5/11 | 16/19 | 4.3 / 8.3 s | 13 of 13 | 2 |
+| **gr2** | `nearest` + `concurrent` | 4 | **19/24** | 20/24 | **1.7 / 3.0 s** | 11 of 19 | 9/10 | 11/11 | 20/21 | **2.6 / 4.3 s** | 20 of 20 | 1 |
+
+**Why the raw share differs.**
+- In control it overstates: 9 of gr2 control's 11 raw answers and 6 of gr1's 8 were lines that nothing in the greeting caused. They were deliberations already under way, or catching up on an earlier greeting: "You hailed me on the road this morning. I'm Brisk Marrow…" (gr2 control-r4), and "Morning, neighbor — you greeted me earlier and I never gave it back" (gr2 nearest-concurrent-r3).
+- Under `nearest` + `concurrent` the two agree: 17 = 17 in gr1, and gr2 differs by one.
+- In gr1 the inspector also finds answers that the 60 s window misses. These are queue-delayed turns and deliberations at 57–123 s, which is why `nearest` (with parking left on `wait`) reaches 17 against a raw 14.
+
+**Reading.**
+1. **Control: a stranger's greeting to a group is almost never answered** (3/24, 2/24). The hearers' verdicts read "not addressed, and X does not care about Arlen (not among the people they know): nothing in the gate gives a turn". The control answers came only once a hearer had come to care about the player, through the shipped overheard path.
+2. **`nearest` + `concurrent` answers 7 to 8 greetings in 10, in under 2 s for half of them at play concurrency** (gr2 19/24, median 1.7 s, p90 3.0 s). It answers addressed lines 20 of 21, statements included, because a stranger's addressed line skips the remark draw (control: 5 of 11 statements). gr2 agrees with gr1 on the leading arm. Its greeting share is a little higher (19 against 17 of 24) and its latency lower (gr1 p90 5.4 s with the queue).
+3. **Parking decides latency only when the queue is saturated.** At concurrency 4, `nearest` with parking on `wait` answered as often as with `concurrent` but with a p90 of 57 s against 5.4 s. `concurrent` alone (greet off) does nothing for greetings (1/24). gr2 did not run `nearest` alone, so the two are not separated at play concurrency.
+4. **The first greeting is the one that lands.** Cycle 0 was answered in every run of every greet arm (nearest-concurrent gr1 4/4, gr2 4/4). Later greetings were answered 13 of 20 and 15 of 20. The unanswered ones read "LIVING_GREET=nearest did not draw them in", or the hearer was in another exchange. Per the mode's code, the nearest hearer is passed over when in another exchange, when drawn in within the last minute, or when it has settled an exchange with the speaker. Which of these applied is not logged.
+5. **`facing` answers whoever happens to be ahead.** The scripted player faced its direction of walking, so the faced hearer was the nearest mind in only 2 of 17 answers. It also addresses residents' lines, so it made the only pile-ons (below).
+6. **`curious` is the slowest to reach the nearest** (5 of 15) and answers the fewest greetings (15/24).
+7. **Conversation.** The player never answers, so no arm can show a long exchange. What varies is whether the answerer comes back. The answerer of a greeting spoke to the player again within 180 s (unprompted, or answering the next scripted line) in gr2 7 of 19 under `nearest` + `concurrent` against 1 of 2 in control, and in gr1 3 of 17 against 0 of 3. Lines to the player per minute: gr2 0.67 against 0.55, gr1 0.48 against 0.35. In control, a larger share of those lines asks the silent stranger's name: gr2 19 of 55 against 8 of 67.
+
+### Costs: false replies and pile-ons
+
+A false reply, as `greet_report` defines it, is a turn that answered a resident's line meant for someone else: a line addressed to another, or one said to no one while its speaker was in an exchange with another. The table counts those the inspector attributes to the line. Pile-ons are lines answered by two or more.
+
+| Batch | Arm | Minutes | False replies (inspector) | per min | greet_report false | per min | Resident lines answered by 2+ | Player lines answered by 2+ |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gr1 | control | 100 | 1 | 0.010 | 1 | 0.010 | 0 of 787 | 0 |
+| gr1 | `nearest` | 99 | 2 | 0.020 | 4 | 0.040 | 0 of 800 | 0 |
+| gr1 | `nearest` + `concurrent` | 100 | 1 | 0.010 | 1 | 0.010 | 0 of 778 | 0 |
+| gr1 | `curious` | 99 | 1 | 0.010 | 1 | 0.010 | 0 of 877 | 0 |
+| gr1 | `facing` | 124 | 3 | 0.024 | 3 | 0.024 | **2 of 991** | **3** |
+| gr1 | `concurrent` only | 100 | 2 | 0.020 | 1 | 0.010 | 0 of 784 | 0 |
+| gr2 | control | 99 | 11 | **0.111** | 10 | 0.101 | 1 of 917 | 0 |
+| gr2 | `nearest` + `concurrent` | 100 | 4 | **0.040** | 3 | 0.030 | 0 of 902 | 0 |
+
+**Reading the false replies.**
+1. **They come from the residents' own path, not from the switches.** `nearest` + `concurrent` never drew a resident into another resident's line: the mind log's "is drawn in by" names only the player, in all 8 runs. `nearest` with parking on `wait` did so 2 times in 4 runs, and `curious` once. Most flagged replies are family members answering a relative's line to the group, through the shipped "cares" path.
+2. **Some are not false.** The line named the one who answered: "Uncle Cal — …" (gr1 control-r1), "Oren — plain words…" (gr1 nearest-concurrent-r4), "Sefa Reed — you asked for letters…" (gr2 control-r3). Others answer an open line: "Come to the fire if you're hungry, any of you" (gr1 nearest-r4).
+3. **The genuine ones are few.** One cuts across a line to the player (gr2 nearest-concurrent-r2, example 3 below). The others are `facing`'s chorus, Mara's "Mother? I'm Mara" (gr2 control-r1) and one in `curious` (gr1 curious-r1).
+4. **gr2 control's 11 is mostly one run.** Run r4 gave 8, from a busy family evening at the fire. With the queue gone, residents simply talk more (control talk turns 2.4 a minute against 1.9 in gr1).
+5. **No arm except `facing` piled on.** Under `facing`, two residents answered the same line twice: "First light, then…" and "First light it is, then…" (gr1b facing-r2). The player's greetings were answered twice 3 times.
+
+### The guarded proxy-tuned score (PROXY, circular)
+
+`feel_tune.py score` used the proxy fit (`tune_result_proxy.json` in the `tool-feel-tune` worktree). Its header says: **PROXY RATINGS (general coordinator, rating for the owner); not the owner's judgement. CIRCULARITY: the proxy said being answered mattered most**, so a score resting on heard/answered shows the rubric applied consistently, not the owner's judgement. gr1 is scored pooled, through a scratch directory of links with batch-unique replicate numbers, so that every arm is judged against the one control arm (gr1a). gr2 is scored on its own. It scores the residents' whole lives in 10-minute windows, not the greetings alone.
+
+| Batch | Arm | Score | Windows | False replies/min | Repeated lines | Talk that led to something | Placebo (6 min earlier) | Verdict |
+| --- | --- | ---: | ---: | ---: | --- | --- | ---: | --- |
+| gr1 | control | 4.11 | 77 | 0.010 | 0.11 of 802 | 0.67 of 725 | 0.51 | baseline |
+| gr1 | `curious` | 4.17 | 80 | 0.010 | 0.12 of 903 | 0.71 of 823 | 0.54 | LOST (false replies and repeats "worse": 1 in 99 min against 1 in 100, 0.12 against 0.11; noise) |
+| gr1 | `facing` | 4.07 | 101 | 0.024 | 0.07 of 1001 | 0.62 of 937 | 0.45 | no score gain |
+| gr1 | `nearest` | 4.07 | 78 | 0.040 | 0.08 of 804 | 0.70 of 748 | 0.58 | no score gain |
+| gr1 | `nearest` + `concurrent` | 4.08 | 78 | 0.010 | 0.10 of 791 | 0.63 of 722 | 0.50 | no score gain |
+| gr1 | `concurrent` only | 4.21 | 81 | 0.010 | 0.04 of 785 | 0.65 of 752 | 0.54 | LOST (talk that led to something 0.65 against 0.67) |
+| gr2 | control | 4.10 | 80 | 0.101 | 0.09 of 934 | 0.66 of 850 | 0.52 | baseline |
+| gr2 | `nearest` + `concurrent` | **4.33** | 81 | 0.030 | 0.08 of 913 | 0.61 of 848 | 0.51 | **LOST** (talk that led to something 0.61 against 0.66) |
+
+The proxy score does not separate the arms in gr1 (4.07–4.21). In gr2 it rises for `nearest` + `concurrent`, which is reported `LOST` because talk that led to something fell. Against the placebo, that lift is 0.10 against 0.14. False replies and repeated lines both fell. The proxy score therefore gives no support for any arm, and the guards give one small cost for the leading arm. It is unknown whether the owner would see this: the owner has not rated these runs.
+
+### Cost per world-hour
+
+US dollars per hour of a run, for 11 thinking minds, from the journals at `trials.py` prices (`greet_report.py` `usd_h`), mean (range) per arm. gr1: control 1.82 (1.64–2.02); `nearest` 1.74 (1.62–1.80); `nearest` + `concurrent` 1.64 (1.54–1.74); `curious` 1.92 (1.81–2.00); `facing` 1.77 (1.63–1.93); `concurrent` only 1.78 (1.72–1.85). gr2: control 2.16 (1.91–2.48); `nearest` + `concurrent` 1.88 (1.75–2.11). The switches do not raise cost. The queue capped spending in gr1, so gr2 is the figure for play. Tokens per batch (ledger): gr1a 35.5 M, gr1b 30.9 M, gr1c 34.2 M, gr2 33.6 M.
+
+### Recommendation
+
+**Turn on `LIVING_GREET=nearest` with `LIVING_PARK=concurrent`**, the owner's accepted choice 3 ([COMMUNICATION.md §11](COMMUNICATION.md#11-open-choices-for-the-owner)). gr1 and gr2 agree.
+- It answers a stranger's crowded greeting 19 of 24 times against 2 of 24, in 1.7 s median and 3.0 s at p90 at play concurrency.
+- It answers addressed lines 20 of 21, statements included.
+- Its false-reply cost: none added that these runs can see. In gr1 it was 0.010 a minute in both arms, and in gr2 0.040 against control's 0.111. It never drew a resident into another resident's line, and it made no pile-ons.
+- The guarded proxy score reports it `LOST` in gr2 on talk that led to something (0.61 against 0.66, placebo-adjusted 0.10 against 0.14). That is a small cost on a circular measure, and it is recorded.
+
+**The override.** The guarded proxy score marked nearest + concurrent LOST in gr2 (talk that led to something 0.10 vs 0.14 above placebo over four runs each). The general coordinator, who set that rule, overrode it on 2026-11-11: false replies and repeated lines were no worse, the dip is small over four runs, and the change fixes what the owner complained about directly. The measure keeps being reported in the next hamlet batches to see whether it was noise.
+
+**Accepted and on by default.** The owner accepted it as communication choice 3 ([COMMUNICATION.md §11](COMMUNICATION.md#11-open-choices-for-the-owner)), and since 2026-11-11 (branch `exp-greet`, commit "Greeting switches on by default") it is the default: `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`, and the `speech_audience` law on, which `nearest` reads. `off` and `wait` remain selectable (the old rules). `facing` remains available and off (below).
+
+**What it does not fix.**
+- **Known shortfall:** later greetings to a group that has already spoken with the stranger often go unanswered (5 of 24 in gr2). It is queued behind the arrival experiment.
+- The trial's silent player makes residents ask its name again and again, and finally press: Ilsa's "give your name and your road now, or walk on before dark" (example 5).
+
+**`facing` is not ready for a player.** As built, it addresses every speaker's lines, residents' included. That made the only choruses (2 resident lines, 3 player lines) and the most genuine false replies (3). It answered the nearest mind only 2 times in 17, because the scripted body faced its walking direction. Before it could be on for a player:
+1. dev-box's `human_face(dx, dy)` must be on main and the bindings regenerated. Until then the client's `look()` (`living/game/src/controls.rs`) sends nothing.
+2. In the default "travel" scheme the client sends `None`, so the body faces its travel, and a player who walks into a group and stops faces wherever they walked. The client would need to send a look toward the person under the cursor, or the camera's direction, when a line is said to the room, in both schemes. The audience row's `off` must come from that heading at the line's time.
+3. The mind would need to apply facing to players' lines only, or use it only as a tie-break between equally near hearers. COMMUNICATION.md §5 already proposes the tie-break.
+
+### Examples (verbatim)
+
+Paths are relative to `~/dev/slop-runs-greet/.local/living/trials/`. Lines are from each instance's `speech.jsonl`, and fates from the inspector over the instance.
+
+**Control.**
+1. *A greeting answered* (gr2 `greet-greet-control-r1`, cycle 4, four within 6 m): "Good day to you all." Ilsa Hale, overheard turn, 3.8 s: "Good day to you, friend. You've come at a good hour — there's a fire and something warm in the pot, if you've a hunger on you." The others: "Ilsa Hale took an overheard turn on it first". Ilsa had come to care about the player by then.
+2. *A greeting unanswered* (gr2 `greet-greet-control-r3`, cycle 0, five within 6 m): "Hello there!" All six hearers: "no turn: not addressed, and … does not care about Arlen (not among the people they know): nothing in the gate gives a turn."
+3. *A false reply* (gr2 `greet-greet-control-r1`): Sefa Reed, in an exchange with Brisk, says "Mother — what do you know of the mill town? The folk there, and whether a body could make a life in it?" Mara Vane, 7.6 s: "Mother? I'm Mara — we met at the fishing spot at dawn. As for the mill town, I know it the way I know any place: by its walls. Never lived there, so I won't pretend to advise you on making a life in it."
+4. *A conversation that followed* (gr2 `greet-greet-control-r3`, addressed): "What do people here do for work?" Mara Vane, 5.1 s: "Whatever the day needs — I'm a carpenter, and today that's stone and wood both. What's your trade, stranger? You've cooked at our fire twice and I still don't know what to call you." 27 s later: "Brisk went to mark the rise — I'm resting an hour by the fire, then the store goes up at the west grounds. You're welcome to haul wood with me if your hands want work."
+5. *An awkward one* (gr1a `greet-greet-control-r2`): the greetings got no turn, and Brisk Marrow's deliberations caught up minutes later, three times. "You hailed me on the road and I never got your name. I'm Brisk Marrow, of Millbrook — what do they call you?" (+768 s), "Twice you've hailed me and twice I've been slow. What do folk call you?" (+804 s), "Friend, we've traded good days twice now and I still can't call you anything." (+1225 s).
+
+**`nearest` + `concurrent` (gr2).**
+1. *A greeting answered* (`greet-greet-nearest-concurrent-r1`, cycle 1, three within 6 m; the nearest, Oren, was passed over): "Good day to you all." Ilsa Hale, drawn in (Nearest), 1.7 s: "Good day to you too. Come in out of the morning — there's bread still warm and I've a pot on. What brings you up this way?"
+2. *A greeting unanswered* (`greet-greet-nearest-concurrent-r2`, cycle 5, three within 6 m): "Hello, everyone. I've only just come down the road." Mara and Oren: "not addressed, and … does not care about Arlen: nothing in the gate gives a turn; LIVING_GREET=nearest did not draw them in". Pim: "cares about Arlen, but was in another exchange". Oren had told the player twice that afternoon to "come round the mill another day".
+3. *A false reply* (`greet-greet-nearest-concurrent-r2`): Ilsa to the player, "Here — take this, it's cooked proper, and I'll not have you a stranger at my fire. Your name?" Her son Pim, 6.3 s: "Ma, after the bushes can I go down to the fishing bank? Da said the bank, never the millrace." This is the shipped overheard path (Pim cares about his mother), not the switch.
+4. *A conversation that followed, and led to something* (`greet-greet-nearest-concurrent-r3`, addressed): "What do people here do for work?" Ilsa Hale, 2.3 s: "Whatever's in front of them — fish the river, smoke what they catch, keep a fire, mill grain, mind goats. There's always a hand wanted at the mill house if you're hungry for work." Then, unprompted: "Wait there, friend — I'm just carrying these into the store, then you'll have food in your hands and honest work at the mill if you want it." (+86 s). Then "Here, friend — berries in your hands as promised. Eat your fill…" (+126 s). The chronicle has "Ilsa Hale gave 6 berries to Arlen" and "… 12 berries …" (`chronicle.jsonl` ids 141, 147).
+5. *An awkward one* (`greet-greet-nearest-concurrent-r4`, Ilsa Hale, over three cycles):
+   - "Hello there!" → 1.5 s: "Hello yourself. You've had a bite and a warm fire — now tell me, what road did you come down, and who'd vouch for you on it?"
+   - The script's next line, "That looks like hard work." → "It's work, and it's honest. But I asked you a question and got a comment about my pot — so once more, friend: what road, and who vouches for you?"
+   - A cycle later: "Traveller — you've had my bread twice and my question three times. Sun's going down; give your name and your road now, or walk on before dark."
+   - Earlier in the same run she took the player for Sefa: "Sefa, is it? I'm Ilsa Hale — I cook at the mill house…"
+   - This is the right reaction to a stranger who never answers. It is awkward because the script never answers.
 
 ## Results
 

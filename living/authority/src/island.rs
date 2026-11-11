@@ -79,6 +79,9 @@ pub struct PlannedLot {
     pub key: String,
     /// Its named spots (seats, a stall's sides), walkable points on the land.
     pub spots: Vec<(String, (f32, f32))>,
+    /// The structure kind at its door: a planned lot's own (`LotSpec::structure`), else its lot
+    /// kind's ([`structure_kind`]); none: nothing stands there.
+    pub structure: Option<String>,
 }
 
 /// The structure that stands at a lot's door: what the building does in the rules.
@@ -218,10 +221,10 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
         });
     }
     // Planned lots' ids and spots, by lot index.
-    let mut keyed: std::collections::HashMap<u32, (&str, &[(String, (f32, f32))])> = std::collections::HashMap::new();
+    let mut keyed: std::collections::HashMap<u32, (&str, &[(String, (f32, f32))], Option<&str>)> = std::collections::HashMap::new();
     for p in &land.plans {
         for l in &p.lots {
-            keyed.insert(l.lot, (l.key.as_str(), l.spots.as_slice()));
+            keyed.insert(l.lot, (l.key.as_str(), l.spots.as_slice(), l.structure.as_deref()));
         }
     }
     let lots = land
@@ -241,6 +244,7 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
             door: near(host::door(l)),
             key: keyed.get(&(i as u32)).map_or(String::new(), |k| k.0.to_string()),
             spots: keyed.get(&(i as u32)).map_or(Vec::new(), |k| k.1.iter().map(|(n, q)| (n.clone(), near(*q))).collect()),
+            structure: keyed.get(&(i as u32)).and_then(|k| k.2).or_else(|| structure_kind(l.kind)).map(String::from),
         })
         .collect();
     // Newcomers arrive on the first town's square, where its people are (`host::arrival`).
@@ -259,7 +263,8 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
     // Built by the planner's last step; a land made otherwise (none today) builds it here.
     let ways = land.ways.clone().unwrap_or_else(|| living_rules::ways::Ways::of(land));
     let resources = land.plans.iter().flat_map(|p| p.resources.iter().cloned()).collect();
-    let structures = land.plans.iter().flat_map(|p| p.structures.iter().cloned()).collect();
+    // A household's own structures stand inside its lot, within reach of where one can stand.
+    let structures = living_rules::settle::placed_structures(land, &map, &hosted.reachable).map_err(|e| format!("map.params.plans: {e}"))?;
     Ok(Hosted { map, info, settlements, lots, ways, resources, structures })
 }
 
@@ -319,7 +324,7 @@ pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
 /// batches; ids follow the order either way).
 pub fn build_lots(ctx: &ReducerContext, h: &Hosted, range: std::ops::Range<usize>, now: u64) {
     for (i, l) in h.lots.iter().enumerate().skip(range.start).take(range.len()) {
-        let structure = structure_kind(l.kind).map_or(0, |k| {
+        let structure = l.structure.as_deref().map_or(0, |k| {
             common::invalidate_structures(ctx);
             ctx.db.structure().insert(Structure { id: 0, kind: k.into(), x: l.door.0, y: l.door.1, chunk: chunk_of(l.door.0, l.door.1), owner: 0, built_ms: now, lit_until_ms: 0 }).id
         });

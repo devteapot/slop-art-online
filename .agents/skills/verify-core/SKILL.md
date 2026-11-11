@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, the body's meters and statuses (the meters and status_of laws, bodily alarms), life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -31,6 +31,7 @@ Stop driving if launch or doctor fails. Run cleanup and retain the error. The sc
 python3 "$C/cargo_checks.py" --run "$R"
 python3 "$C/scenes.py" tick --run "$R" > "$E/tick.txt" 2>&1
 python3 "$C/scenes.py" needs --run "$R" > "$E/needs.txt" 2>&1
+python3 "$C/scenes.py" alarms --run "$R" > "$E/alarms.txt" 2>&1
 python3 "$C/scenes.py" food --run "$R" > "$E/food.txt" 2>&1
 python3 "$C/scenes.py" refusal --run "$R" > "$E/refusal.txt" 2>&1
 python3 "$C/scenes.py" teach --run "$R" > "$E/teach.txt" 2>&1
@@ -40,8 +41,25 @@ python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
 python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
+# Another's health in fight reports and health_of: the band, exact only while appraised (features/combat.md).
+python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
+# Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
+python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
+# Admin placement on free walkable tiles (features/steering.md#admin-placement); last: its bodies stay.
+python3 "$C/scenes.py" placement --run "$R" > "$E/placement.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
+
+# Speech (features/speech.md): each scene on its own launched run (they spawn people named
+# Walker1..4, and a second spawn would repeat the names).
+for S in regress ways channels crowd; do
+  P=$R-$S; mkdir -p ".local/living/verify/$P"
+  python3 "$V" launch --run "$P" > ".local/living/verify/$P/launch.txt" 2>&1
+  python3 "$C/speech.py" $S --run "$P" > ".local/living/verify/$P/speech-$S.txt" 2>&1
+  python3 "$V" cleanup --run "$P" > ".local/living/verify/$P/cleanup.txt" 2>&1
+done
+# The regression proof: `regress --baseline` (and `crowd --baseline`) from a worktree at the
+# base commit, then `speech.py diff <base-run> $R-regress`.
 
 # The starter combat skills under graphs use the island seed (its newcomer kit, pack and
 # skill cards); see features/combat.md.
@@ -69,6 +87,14 @@ python3 "$V" launch --run "$D" --seed island > ".local/living/verify/$D/launch.t
 python3 "$C/scenes.py" dealings --run "$D" > ".local/living/verify/$D/dealings.txt" 2>&1
 python3 "$V" cleanup --run "$D" > ".local/living/verify/$D/cleanup.txt" 2>&1
 
+# Answers by id (about 1 min, any seed): accept/decline naming a trade offer or a proposal,
+# refusals, decline told and witnessed, the unnamed order (features/dealings.md).
+A=$R-answers
+mkdir -p ".local/living/verify/$A"
+python3 "$V" launch --run "$A" > ".local/living/verify/$A/launch.txt" 2>&1
+python3 "$C/scenes.py" answers --run "$A" > ".local/living/verify/$A/answers.txt" 2>&1
+python3 "$V" cleanup --run "$A" > ".local/living/verify/$A/cleanup.txt" 2>&1
+
 # Town life on an island world: the daily rhythm by the world's own hours (about 14 min),
 # rain, a wolf in town, gestures and making way (features/town.md, docs/TOWN_LIFE.md).
 T=$R-town
@@ -79,7 +105,9 @@ python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
 
 # Rhythms at any hour and Cullet's trades (about 17 min): a night stoker rising at 14:00 and
 # working the night, the day watch feeding the furnace and making glass, a baker's second sleep,
-# Cullet's life stages (features/town.md, features/laws.md, docs/SEEDED_LIVES.md).
+# Cullet's life stages, five trades at the places of the plan's open lots in their hours, and
+# two households cooking at their own hearth and using their own store inside the house (hearth-1)
+# (features/town.md, features/laws.md, docs/SEEDED_LIVES.md, docs/CULLET_LAYOUT.md pass 2).
 Y=$R-rhythm
 mkdir -p ".local/living/verify/$Y"
 python3 "$C/rhythm.py" seed --run "$Y" > ".local/living/verify/$Y/seed.txt" 2>&1
@@ -128,6 +156,15 @@ Y=$R-decay
 mkdir -p ".local/living/verify/$Y"
 python3 "$V" launch --run "$Y" --seed cullet-laws > ".local/living/verify/$Y/launch.txt" 2>&1
 python3 "$C/scenes.py" decay --run "$Y" > ".local/living/verify/$Y/decay.txt" 2>&1
+python3 "$V" cleanup --run "$Y" > ".local/living/verify/$Y/cleanup.txt" 2>&1
+
+# Regrowth by season (features/laws.md#winter; about 14 min, it waits for the world's own
+# winter): Cullet's laws on a 4-minute day and 4-day year; a fishing spot regrows at its winter
+# share, a root plot rests.
+Y=$R-winter
+mkdir -p ".local/living/verify/$Y"
+python3 "$V" launch --run "$Y" --seed "$PWD/$C/winter" > ".local/living/verify/$Y/launch.txt" 2>&1
+python3 "$C/scenes.py" winter --run "$Y" > ".local/living/verify/$Y/winter.txt" 2>&1
 python3 "$V" cleanup --run "$Y" > ".local/living/verify/$Y/cleanup.txt" 2>&1
 
 # Infant assertions use their own small, long-lived family fixture.

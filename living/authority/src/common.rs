@@ -64,6 +64,31 @@ pub fn set_profiling(on: bool) {
     PROFILE.with(|p| p.set(on));
 }
 
+thread_local! {
+    /// While profiling: graph scenes built since the last report, the creatures they saw in
+    /// all, and the most one saw.
+    static SCENES: std::cell::Cell<(u64, u64, u64)> = const { std::cell::Cell::new((0, 0, 0)) };
+}
+
+/// While profiling: a behaviour graph's scene saw `n` creatures (`tools/bench.py` reports the
+/// mean per scene).
+pub fn note_scene(n: usize) {
+    if PROFILE.with(|p| p.get()) {
+        SCENES.with(|s| {
+            let (b, t, m) = s.get();
+            s.set((b + 1, t + n as u64, m.max(n as u64)));
+        });
+    }
+}
+
+/// While profiling, once a second: what graph scenes saw since the last report, one log line.
+pub fn report_scenes() {
+    if PROFILE.with(|p| p.get()) {
+        let (b, t, m) = SCENES.with(|s| s.replace((0, 0, 0)));
+        log::info!("scene seen: builds={b} seen={t} max={m}");
+    }
+}
+
 /// A named timing span logged by the host while profiling is on (see `tools/bench.py`).
 /// Whether spans are being logged (a profiling window is open).
 pub fn profiling() -> bool {
@@ -536,6 +561,16 @@ pub fn stage_of(ctx: &ReducerContext, c: &Character, w: &World, now: u64) -> liv
     life_of(ctx, &c.kind).stage(age_days(c, w, now), pace(w))
 }
 
+/// A life stage's name from its code (`stage_code`).
+pub fn stage_name(code: u8) -> &'static str {
+    match code {
+        0 => "infant",
+        1 => "child",
+        3 => "elder",
+        _ => "adult",
+    }
+}
+
 pub fn stage_code(s: living_rules::life::Stage) -> u8 {
     match s {
         living_rules::life::Stage::Infant => 0,
@@ -573,6 +608,26 @@ pub fn pos(b: &Body, now: u64) -> (f32, f32) {
     }
     let (x, y, _) = living_rules::steer::pose(b.x, b.y, b.heading, (b.vx * b.vx + b.vy * b.vy).sqrt(), b.turn, b.turn_s, t);
     (x, y)
+}
+
+/// Which way a body travels at `now` (`body.heading` along its segment: a turn under way,
+/// standing or walking; `steer::pose`): where its legs go. Steering, separation and the pose
+/// read it. Where the body looks is [`facing_at`].
+pub fn heading_at(b: &Body, now: u64) -> f32 {
+    if b.turn == 0.0 || b.turn_s <= 0.0 {
+        return b.heading;
+    }
+    let t = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
+    living_rules::steer::wrap(b.heading + b.turn * t.min(b.turn_s))
+}
+
+/// Which way a body faces at `now`: its travel heading plus its facing offset
+/// (`body.face_*`, `steer::facing`), the one facing that facing sight (`fov_on`), what is heard
+/// from which side, "you face", a guard's default and an aim at the facing read. A held look
+/// (`human_face`) turns it; with none it is the heading. Clients evaluate it the same way.
+pub fn facing_at(b: &Body, now: u64) -> f32 {
+    let t = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
+    living_rules::steer::facing(heading_at(b, now), b.face_off, b.face_turn, b.face_turn_s, t)
 }
 
 pub fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
@@ -741,9 +796,12 @@ pub fn stock_of(ctx: &ReducerContext, r: &ResourceNode) -> ResourceNode {
     ctx.db.resource_node().id().find(r.pool).unwrap_or_else(|| r.clone())
 }
 
+/// A node's amount now: what it held at `at_ms` and its regrowth since, at its kind's share of
+/// the rate in each season (`regrow_by_season`; none: full, and none in winter, as before).
 pub fn amount_now(ctx: &ReducerContext, r: &ResourceNode, now: u64) -> f32 {
     let (epoch, day, year) = calendar(ctx);
-    (r.amount + r.regen * living_rules::growing_ms(r.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(r.max)
+    let by = scripts(ctx).regrow_seasons(&r.kind);
+    (r.amount + r.regen * living_rules::regrowth_ms(r.at_ms, now, epoch, day, year, &by) / 60_000.0).min(r.max)
 }
 
 thread_local! {
@@ -834,7 +892,7 @@ pub fn senses_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> living_r
         sc.senses(c).unwrap_or_else(|e| {
             log::warn!("senses for {id}: {e}");
             let r = sc.reach();
-            living_rules::script::Senses { sight: r.sight(c.dark), hearing: r.hearing }
+            living_rules::script::Senses { sight: r.sight(c.dark), hearing: r.hearing, field: None }
         })
     })
 }
@@ -851,12 +909,6 @@ pub fn glow_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
             0.0
         })
     })
-}
-
-/// How far an observer with sight `sight` sees creature `target`: its sight, or farther when a
-/// light shows the target (`glow_of`).
-pub fn sight_to(ctx: &ReducerContext, sight: f32, target: u32, w: &World, now: u64) -> f32 {
-    sight.max(glow_of(ctx, target, w, now))
 }
 
 /// The radius to gather creatures an observer with sight `sight` may see: its sight, widened to
@@ -919,14 +971,19 @@ pub struct NearCreature {
     pub kind: Rc<str>,
     pub pos: (f32, f32),
     pub dist: f32,
+    /// Which way it faces at the instant (`facing_at`: where it looks, not where it goes).
+    pub facing: f32,
 }
+
+/// A body in the per-tick chunk cache: id, kind, where it is and which way it faces then.
+type CachedBody = (u32, Rc<str>, (f32, f32), f32);
 
 thread_local! {
     /// Bodies per chunk at one instant, shared by every evaluation in the same tick.
-    static CHUNK_BODIES: RefCell<((u64, u64), HashMap<u32, Rc<Vec<(u32, Rc<str>, (f32, f32))>>>)> = RefCell::new(((0, 0), HashMap::new()));
+    static CHUNK_BODIES: RefCell<((u64, u64), HashMap<u32, Rc<Vec<CachedBody>>>)> = RefCell::new(((0, 0), HashMap::new()));
 }
 
-fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<(u32, Rc<str>, (f32, f32))>> {
+fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<CachedBody>> {
     CHUNK_BODIES.with(|c| {
         let mut c = c.borrow_mut();
         let key = (tx_seq(), now);
@@ -937,7 +994,7 @@ fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<(u32, Rc<s
         if let Some(v) = c.1.get(&chunk) {
             return v.clone();
         }
-        let v: Rc<Vec<_>> = Rc::new(ctx.db.body().chunk().filter(chunk).map(|b| (b.id, Rc::from(b.kind.as_str()), pos(&b, now))).collect());
+        let v: Rc<Vec<_>> = Rc::new(ctx.db.body().chunk().filter(chunk).map(|b| (b.id, Rc::from(b.kind.as_str()), pos(&b, now), facing_at(&b, now))).collect());
         c.1.insert(chunk, v.clone());
         v
     })
@@ -951,10 +1008,10 @@ pub fn invalidate_bodies() {
 pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<NearCreature> {
     let mut out = Vec::new();
     for c in chunks_around(at.0, at.1, r) {
-        for (id, kind, p) in chunk_bodies(ctx, c, now).iter() {
+        for (id, kind, p, h) in chunk_bodies(ctx, c, now).iter() {
             let d = dist(at, *p);
             if d <= r {
-                out.push(NearCreature { id: *id, kind: kind.clone(), pos: *p, dist: d });
+                out.push(NearCreature { id: *id, kind: kind.clone(), pos: *p, dist: d, facing: *h });
             }
         }
     }
@@ -987,9 +1044,9 @@ pub fn smelled_near(ctx: &ReducerContext, who: u32, kind: &str, at: (f32, f32), 
         let _t = span("scent.read");
         let mut all = Vec::new();
         for c in chunks_around(at.0, at.1, scent.radius) {
-            for (id, k, p) in chunk_bodies(ctx, c, now).iter() {
+            for (id, k, p, h) in chunk_bodies(ctx, c, now).iter() {
                 if *id != who && scent.kinds.iter().any(|x| **x == **k) && dist(at, *p) <= scent.radius + SCENT_MOVE {
-                    all.push(NearCreature { id: *id, kind: k.clone(), pos: *p, dist: 0.0 });
+                    all.push(NearCreature { id: *id, kind: k.clone(), pos: *p, dist: 0.0, facing: *h });
                 }
             }
         }

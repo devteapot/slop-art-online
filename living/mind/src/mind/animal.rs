@@ -300,7 +300,7 @@ impl super::Minds {
         let Some(graph) = option.graph.clone() else {
             log::info!("{} the {} feels: {feeling} → carries on", c.name, c.kind);
             let (tx, rx) = tokio::sync::oneshot::channel();
-            self.conn.reducers.mind_say_then(actor, String::new(), 0, d.updated_ms, t(format!("{feeling} → {impulse}"), detail), move |_, r| {
+            self.conn.reducers.mind_say_then(actor, String::new(), 0, String::new(), d.updated_ms, t(format!("{feeling} → {impulse}"), detail), move |_, r| {
                 let _ = tx.send(super::flatten(r));
             })?;
             return rx.await?.map_err(|e| anyhow::anyhow!("mind_say: {e}"));

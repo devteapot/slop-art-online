@@ -16,7 +16,7 @@ use std::collections::BTreeSet;
 
 /// Function names an overlay defines (its Rhai `fn` items), in order of name.
 pub fn overlay_functions(overlay: &str) -> Result<BTreeSet<String>, String> {
-    let engine = rhai::Engine::new_raw();
+    let engine = crate::script::new_engine();
     let ast = engine.compile(overlay).map_err(|e| format!("floor overlay: {e}"))?;
     Ok(ast.iter_functions().map(|f| f.name.to_string()).collect())
 }

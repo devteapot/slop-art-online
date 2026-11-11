@@ -1,5 +1,43 @@
 # Client protocol validation
 
+## 2026-11-11 look-2 (dev-box)
+
+Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d609819d`) on the dev-box, own container `look2-stdb` (2.14.1, port 3330, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Evidence under the worktree's `.local/living/verify/`.
+
+- `seen_bodies` and `my_body` return `Moving` (the facing fields added) and `motion_seen` gains three columns; bindings regenerated. `run.py` `client-look2-m` (merged build, `scoped`): 39 of 39. `LIVING_PERCEPTION=open` `client-look2-open`: 39 of 39.
+- Migration: `origin/main`'s module published on a scratch world with a player joined, then this module over it without deleting data: accepted in place, rows kept; the server reported that all clients are disconnected (the views' row type changed).
+
+## 2026-11-11 rules-senses-outcomes: my_senses, my_act_outcomes (Spark)
+
+Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change (perception and visibility; the inventories and own-state check), without the per-feature reader fan-out.
+
+- `run.py` `client-sso-214657`: every check passes (39). `my_senses` gives each player one row, its own (sight 11, hearing 9), anonymous none; `my_act_outcomes` only the caller's character's rows (the reducer matrix's `human_act` calls left `act`/`unreadable` rows); `character_senses` and `act_outcome` refused to subscribers (`visibility.json`).
+- In-place update (`client-migrate-214519`): origin/main `7c6a92b6`'s module published fresh, a player joined and acted, then this branch's module published with `--keep-data`: 265 characters kept, the player's character kept and ticking, `my_senses` and `my_act_outcomes` rows written after it (`before-*.json`, `after-*.json`).
+
+## 2026-11-11 speech-2 (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `run.py` `client-speech4`: every check passes (33), with three `speech_card` rows. `client-speech2` ran on a module rebuilt in the middle of the refusal refactor and is superseded.
+- After merging origin/main (`93019a3`): `client-speech6`, every check passes (34, `my_offers` and `my_heard` both in the own-state views).
+- After merging origin/main (`48cd022`, fov-1): `client-speech9`, every check passes (39); `heard` (fov-1's) and `line_heard` (who heard a line) both private, `heard_sounds` and `my_heard` both scoped.
+
+## 2026-11-11 speech-1: heard, my_heard, speech_card (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `run.py` (`client-speech1`): every check passes, including the new "speech_card is public (the ways of speaking)" and "my_heard holds each player's own lines, and none for an anonymous client" (each identity 2 lines). The reducer matrix had 221 calls, 0 mismatches: `human_speak` is accepted for a joined identity, refused for an unknown way, and refused for an anonymous one. Private table visibility covers 71 tables, `heard` among them. The probe's target dir was linked to the worker's own (`.local/living/verify/target-client` → `$CARGO_TARGET_DIR/client`).
+
+## 2026-11-11 fov-1: the field of view (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `client-face1-a` (`human_face` added to the player reducers, `PLAYER` in `drive.py`): 36 of 36. Each player's `human_face` is accepted, and an anonymous caller's is refused ("you have no living character").
+- `client-fov1-m` (after merging `origin/main` `accf27c8`): 36 of 36, presence included (eye-2's probe fix).
+- `client-fov1-a` (`run.py`, scoped build, before the merge): 35 of 36. New and passing: the private inventory with `heard`, `hear_salt` and `law_change` (refused to anonymous clients; `heard` and `law_change` refused to the player), `heard_sounds` in the views, `set_world_law` refused to players and anonymous callers ("admin only"), and five field-of-view checks over real subscriptions (`field.json`).
+- One failure: presence counts each open connection (`presence.json`: 1 → 2 → 0). The "one closed" step read 0 connections, as if the held connection had already timed out on the loaded host. The change touches nothing in presence. Not rerun.
+- Not run: the `LIVING_PERCEPTION=open` build; `game-client`.
+
 ## 2026-11-11 lives-3: four `rhythm` columns (dev-box)
 
 Branch `lives-3` (four columns appended with defaults to the private `rhythm` table; bindings regenerated), own container `lives3-stdb` (2.14.1, port 3321), scoped build. `client-l3-180756`: private table visibility passes (70 tables; `rhythm` refused to an anonymous subscription and to SQL), the reducer matrix 214 calls with no mismatch; "combat feed scoped to its viewer" failed (player-2 received no row) while two other island scenes and builds loaded the machine. `client-l3b-182752` on a quiet machine: that check passed, and "presence counts each open connection of the person" failed (`1 → 2 → 0`); 30 checks pass. Neither failing check touches this change (combat feed and presence timing); each passed in the other run. Not rerun further.

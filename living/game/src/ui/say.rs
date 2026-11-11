@@ -33,7 +33,7 @@ pub struct Typing {
 /// Enter opens the box; typing edits it; Tab speaks to someone else; Enter says it to whom it
 /// addresses (`talk.rs`). Esc is `win.rs`'s.
 #[allow(clippy::too_many_arguments)]
-pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Res<crate::keys::Binds>, mut events: MessageReader<KeyboardInput>, mut out: ResMut<Outbox>, wants: Option<Res<crate::hud::UiWants>>, model: Res<HudModel>, mut talk: Option<ResMut<crate::talk::Talk>>, (ws, cam): (Res<Windows>, Res<crate::camera::Cam>)) {
+pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Res<crate::keys::Binds>, mut events: MessageReader<KeyboardInput>, mut out: ResMut<Outbox>, wants: Option<Res<crate::hud::UiWants>>, model: Res<HudModel>, mut talk: Option<ResMut<crate::talk::Talk>>, (ws, pick): (Res<Windows>, Res<crate::pick::Pick>)) {
     if model.death.is_some() {
         events.clear();
         return;
@@ -51,17 +51,22 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Re
         if binds.just_pressed(crate::keys::Act::Talk, &keys) && !egui_typing {
             input.chat_open = true;
             input.chat.clear();
-            // The person under the cursor is whom Enter speaks to; nobody there, the room.
+            // The person under the cursor is whom Enter speaks to; nobody there, the room. The
+            // same pick as the hover and the nameplate (`pick.rs`), so Enter never speaks to
+            // someone other than the one named under the cursor.
             if let Some(t) = talk.as_mut() {
-                // The hovered person nearest the cursor's ground point (not nearest me).
-                let at = cam.cursor_ground.map(|c| Vec2::new(c.x, c.z));
-                let off = |a: &super::model::Actor| at.map_or(a.distance, |c| c.distance(Vec2::new(a.head.x, a.head.z)));
-                t.prefer = model.actors.iter().filter(|a| a.hovered && a.kind_person).min_by(|a, b| off(a).total_cmp(&off(b))).map(|a| a.id as u32);
+                t.prefer = pick.under.filter(|id| model.actors.iter().any(|a| a.id == *id as u64 && a.kind_person));
             }
             let _ = &ws;
         }
         events.clear();
         return;
+    }
+    // Changing whom: its binding if not Tab (a letter would also type).
+    if binds.keys(crate::keys::Act::Address).any(|k| k != KeyCode::Tab && keys.just_pressed(k) && !crate::keys::types(k)) {
+        if let Some(t) = talk.as_mut() {
+            t.cycle = true;
+        }
     }
     for ev in events.read() {
         if ev.state != ButtonState::Pressed {
@@ -82,7 +87,7 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Re
             LogicalKey::Backspace => {
                 input.chat.pop();
             }
-            LogicalKey::Tab => {
+            LogicalKey::Tab if binds.keys(crate::keys::Act::Address).any(|k| k == KeyCode::Tab) => {
                 if let Some(t) = talk.as_mut() {
                     t.cycle = true;
                 }

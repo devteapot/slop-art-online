@@ -2,14 +2,15 @@
 """Personal rhythms and Cullet's trades on a scratch world (docs/SEEDED_LIVES.md, docs/CULLET_RULES.md).
 
     rhythm.py seed --run RUN            # writes RUN/cullet-rhythm.json; launch with --seed RUN/cullet-rhythm
-    rhythm.py drive --run RUN           # about 15 minutes
+    rhythm.py drive --run RUN           # about 17 minutes
 
-The seed is `living/seeds/cullet.json` (its plan, laws, starting ways and town life) with eight of
+The seed is `living/seeds/cullet.json` (its plan, laws, starting ways and town life) with thirteen of
 its residents as `author_world.py` compiled them (their sheets, and the rhythm and places of
 `cast.json`; without residents in the seed, `compile_residents` without sheets), on a 12-minute day (Cullet's own is 48)
 so one game day passes in the scene. A few goods are added to their packs, the scene's own and
 not the cast's: peat for the stokers, ash and sand for the blower, roots for the baker, and food
-for everyone (the seed has no stores yet, so hunger would otherwise send them foraging).
+for everyone (so hunger does not send them to the stores or foraging in the middle of a trade's
+hours; the households' own stores are kept for the scene's households).
 
 Who and why:
 - Thessaly Marl, stoker: rises 14:00, works the night watch 22:00-06:00 (a rising after noon).
@@ -18,6 +19,17 @@ Who and why:
 - Anselm Faro, lamp keeper: rises 13:00, works 19:30-06:00.
 - Tobiah Dunmore (16, stoker) and Col Roon (15): adults under Cullet's life law (a child until 15).
 - Halvard Dunmore (70): an elder, alive (old age from 75).
+- Since layout-2, five whose trade spends named hours at one of the plan's open lots (a named
+  place of `town_life.places`, reached through a gate in a wall that blocks): Otto Brandt at the
+  clay pit, Benedikt Orme and Edda Hollin (12) in the Readers' yard, Greta Dunmore on the Bleach,
+  Bram Calloway in the boatyard.
+
+Since hearth-1 each household's hearth and store stand inside its house (docs/AUTHORED_PLANS.md,
+"A household's own things stand inside its lot"). After the night the driver stands two of them
+(Halvard Dunmore of High Row, Bram Calloway of Low Row) at their doors and has each, by deliberate
+acts (`mind_act`), feed and cook at the nearest hearth, take food from and store peat in the
+nearest storage, and eat: each act must reach that household's own hearth and store from the
+street (`household_things`).
 
 The driver places a furnace beside Fenn at the Cone once he is there (the plan places none yet)
 and watches, at the world's own hours: rows (`rhythm`, `routine`, `place`), what each does and
@@ -40,7 +52,21 @@ T = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(T)
 V = T.V
 
-PEOPLE = ["Thessaly Marl", "Fenn Brandt", "Corvin Hollin", "Pieter Achterberg", "Anselm Faro", "Tobiah Dunmore", "Col Roon", "Halvard Dunmore"]
+PEOPLE = ["Thessaly Marl", "Fenn Brandt", "Corvin Hollin", "Pieter Achterberg", "Anselm Faro", "Tobiah Dunmore", "Col Roon", "Halvard Dunmore",
+          "Otto Brandt", "Benedikt Orme", "Edda Hollin", "Greta Dunmore", "Bram Calloway"]
+# A trade's hours at a named place (ways.json, layout-2): who, the place, the part of those hours
+# in which they must be there on this 12-minute day (a game hour is 30 s, so the walk takes one
+# or two of them), and within how many metres.
+HABITS = {
+    "Otto Brandt": ("the clay pit", 9.2, 9.95, 8.0),
+    "Benedikt Orme": ("the Readers' yard", 9.4, 11.9, 7.0),
+    # Edda follows her father down to the Cone before 09:00 and sets out from there: 230 m of
+    # wynds, about three of this day's 30 s hours. So she is checked on the way and at the end
+    # (`child_at_lessons`), not by a share of the lesson hours.
+    "Edda Hollin": ("the Readers' yard", 9.2, 12.75, 7.0),
+    "Greta Dunmore": ("the Bleach", 12.4, 12.95, 9.0),
+    "Bram Calloway": ("the boatyard", 15.1, 15.9, 9.0),
+}
 # The scene's own goods (Cullet's seed has no stores yet, and the cast's packs no food): a watch's
 # peat for each stoker (a furnace burns 3 units a game hour), melt for the blower, and food for
 # everyone so that hunger does not send them foraging (a person carries at most 40 things).
@@ -68,9 +94,14 @@ def make_seed(run):
     t = seed["towns"][0]
     t["residents"] = residents
     t["homes"] = {k: v for k, v in town["homes"].items() if k in houses}
+    # The plan's household stores belong to households (`owner: "household:<key>"`); a seed that
+    # names a household with nobody in it is refused, so keep only the scene's (their hearths
+    # too: since hearth-1 a home's hearth is its household's).
+    for p in seed["map"]["params"]["plans"]:
+        p["structures"] = [st for st in p.get("structures", []) if not st.get("owner") or st["owner"].removeprefix("household:") in houses]
     seed["run"] = "cullet-rhythm"
     seed["day_minutes"] = 12
-    seed["setting"] = "A scene world: Cullet's plan, laws and ways with eight of its cast on a 12-minute day (verify-core rhythm.py)."
+    seed["setting"] = "A scene world: Cullet's plan, laws and ways with thirteen of its cast on a 12-minute day (verify-core rhythm.py)."
     out = V.run_dir(run) / "cullet-rhythm.json"
     out.write_text(json.dumps(seed, indent=1, ensure_ascii=False) + "\n")
     print(out)
@@ -88,7 +119,8 @@ class Scene(T.Town):
         row = {"ms": self.now_ms(), "hour": round(self.hour(), 2), "furnace": f[0] if f else None,
                "people": {n: {"at": [round(p["at"][0], 1), round(p["at"][1], 1)], "skill": p["skill"], "stage": p["stage"],
                               "home_m": round(dist(p["at"], p["home"]), 1),
-                              "work_m": round(dist(p["at"], p["places"]["work"]), 1) if "work" in p["places"] else None} for n, p in by.items()}}
+                              "work_m": round(dist(p["at"], p["places"]["work"]), 1) if "work" in p["places"] else None,
+                              "habit_m": round(dist(p["at"], p["places"][HABITS[n][0]]), 1) if n in HABITS and HABITS[n][0] in p["places"] else None} for n, p in by.items()}}
         log.write(json.dumps(row) + "\n")
         log.flush()
         return row
@@ -106,9 +138,93 @@ def window(s, log, lo, hi, every=4.0):
         time.sleep(every)
 
 
+def child_at_lessons(rows, name):
+    """A child's morning on this short day: by the end of the lesson hours she has come most of
+    the way to the place (within 25 m, having started more than 100 m off), and she stands in
+    the yard (within its habit distance) by 12:45."""
+    place, _, by, within = HABITS[name]
+    xs = [(r["hour"], r["people"][name]["habit_m"]) for r in rows if name in r["people"] and r["people"][name]["habit_m"] is not None]
+    lessons = [d for h, d in xs if 9.0 <= h < 12.0]
+    after = [d for h, d in xs if 12.0 <= h <= by]
+    ok = bool(lessons) and max(lessons) > 100.0 and lessons[-1] < 25.0 and any(d < within for d in lessons[-2:] + after)
+    return ok, {"place": place, "farthest_m": max(lessons) if lessons else None, "at_noon_m": lessons[-1] if lessons else None, "nearest_by_12_45_m": min(lessons[-2:] + after) if lessons else None}
+
+
 def share(rows, name, pred):
     xs = [pred(r["people"][name]) for r in rows if name in r["people"]]
     return (sum(xs) / len(xs) if xs else 0.0), len(xs)
+
+
+# Two households whose own hearth and store the scene uses at the end (hearth-1): who, and why.
+AT_HOME = {"Halvard Dunmore": "High Row (a Kiln house, 5.2 m court)", "Bram Calloway": "Low Row (a Strand house)"}
+STRUCTURE_BIT = 1 << 40
+
+
+def household_things(s, ids):
+    """Each of AT_HOME's households has its hearth and its store inside its house: each a few
+    metres from the door it lives at, not standing at the door or in the street (since hearth-1).
+    Stood at that door, its resident feeds and cooks at the nearest hearth, takes food from and
+    stores peat in the nearest storage, and eats, by deliberate acts: each act reaches that
+    household's own hearth and store and none fails."""
+    lots = s.sql("SELECT id, structure, door_x, door_y FROM lot")
+    structures = {r["id"]: r for r in s.sql("SELECT id, kind, x, y, owner, lit_until_ms FROM structure")}
+
+    def held(sid):
+        return {r["item"]: r["qty"] for r in s.sql(f"SELECT item, qty FROM inventory WHERE owner = {STRUCTURE_BIT | sid}")}
+
+    def pack(cid):
+        return {r["item"]: r["qty"] for r in s.sql(f"SELECT item, qty FROM inventory WHERE owner = {cid}")}
+
+    def heard(cid, since):
+        return [r["text"] for r in s.sql(f"SELECT text, at_ms FROM experience WHERE observer = {cid}") if r["at_ms"] >= since]
+
+    def wait(pred, seconds):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            if pred():
+                return True
+            time.sleep(1.0)
+        return False
+
+    for name, where in AT_HOME.items():
+        cid = ids[name]
+        me = s.sql(f"SELECT home_x, home_y FROM character WHERE id = {cid}")[0]
+        home = (me["home_x"], me["home_y"])
+        lot = min(lots, key=lambda l: dist(home, (l["door_x"], l["door_y"])))
+        owner = structures.get(lot["structure"], {}).get("owner")
+        mine = lambda kind: [r for r in structures.values() if r["kind"] == kind and r["owner"] == owner and owner]
+        hearth, store = (mine("hearth") or [None])[0], (mine("house_store") or [None])[0]
+        off = lambda r: r and 0.6 <= dist(home, (r["x"], r["y"])) <= 2.6
+        s.check(f"{name}'s household ({where}) has its hearth and store inside its house, behind the door", off(hearth) and off(store),
+                {"door": home, "hearth": hearth and [hearth["x"], hearth["y"], round(dist(home, (hearth["x"], hearth["y"])), 2)], "store": store and [store["x"], store["y"], round(dist(home, (store["x"], store["y"])), 2)]})
+        if not (hearth and store):
+            continue
+        s.call("place_at", [cid, home[0], home[1]])
+        s.call("grant_know_how", [cid, "cooking"])
+        s.call("grant_items", [cid, "fish", 1])
+        s.call("grant_items", [cid, "peat", 2])
+        before = {"hearth": structures[hearth["id"]]["lit_until_ms"], "store": held(store["id"]), "pack": pack(cid)}
+        t0 = s.now_ms()
+        acts = [{"do": "feed", "item": "peat", "qty": 1, "target": {"nearest": "hearth"}}, {"do": "cook", "item": "fish", "target": {"nearest": "hearth"}},
+                {"do": "take", "item": "food", "target": {"nearest": "storage"}}, {"do": "store", "item": "peat", "qty": 1, "target": {"nearest": "storage"}}]
+        s.call("mind_act", [cid, [json.dumps(a) for a in acts], "verify-core rhythm"])
+        done = wait(lambda: pack(cid).get("cooked_fish", 0) >= 1 and pack(cid).get("peat", 0) == 0, 60)
+        after_store = held(store["id"])
+        lit = s.sql(f"SELECT lit_until_ms FROM structure WHERE id = {hearth['id']}")[0]["lit_until_ms"]
+        body = s.people().get(cid, {}).get("at")
+        failed = [t for t in heard(cid, t0) if any(w in t for w in ("did not work out", "could not get there", "never got to"))]
+        took = {k: before["store"].get(k, 0) - after_store.get(k, 0) for k in before["store"] if after_store.get(k, 0) < before["store"].get(k, 0)}
+        s.check(f"{name} feeds and cooks at his own hearth inside the house, from the street",
+                done and lit > before["hearth"] and pack(cid).get("cooked_fish", 0) >= 1 and not failed,
+                {"lit_until_ms": [before["hearth"], lit], "pack": pack(cid), "stood_at": body, "hearth_m": body and round(dist(body, (hearth["x"], hearth["y"])), 2), "failed": failed})
+        s.check(f"{name} takes food from and stores peat in his household's own store",
+                sum(took.values()) >= 1 and after_store.get("peat", 0) == before["store"].get("peat", 0) + 1 and not failed,
+                {"store_before": before["store"], "store_after": after_store, "took": took, "store_m": body and round(dist(body, (store["x"], store["y"])), 2)})
+        t1 = s.now_ms()
+        food = sum(v for k, v in pack(cid).items() if k in ("cooked_fish", "smoked_fish", "roots", "baked_roots"))
+        s.call("mind_act", [cid, [json.dumps({"do": "eat", "item": "cooked_fish"})], "verify-core rhythm"])
+        ate = wait(lambda: sum(v for k, v in pack(cid).items() if k in ("cooked_fish", "smoked_fish", "roots", "baked_roots")) < food, 30)
+        s.check(f"{name} eats what he cooked at home", ate and not [t for t in heard(cid, t1) if "did not work out" in t], {"pack": pack(cid)})
 
 
 def drive(run):
@@ -134,6 +250,8 @@ def drive(run):
             {n: routines.get(ids.get(n)) for n in ("Fenn Brandt", "Thessaly Marl", "Corvin Hollin", "Pieter Achterberg")})
     places = {p["name"]: (p["x"], p["y"]) for p in s.sql(f"SELECT name, x, y FROM place WHERE actor = {ids['Fenn Brandt']}")}
     s.check("the stoker knows a workplace (his cast's lot:cone)", "work" in places, {"places": places})
+    named = ["the Bleach", "the Readers' yard", "the clay pit", "the ropewalk", "the wrack stance", "the boatyard"]
+    s.check("everyone knows the six places of the plan's open lots (town_life.places, layout-2)", all(n in places for n in named), sorted(places))
 
     # Morning: the day watch works at the Cone; the night stoker sleeps at home.
     window(s, log, 8.0, 9.0)
@@ -152,8 +270,24 @@ def drive(run):
     asleep, n = share(morning, "Thessaly Marl", lambda p: p["skill"] in ("sleep", "rest", "") and p["home_m"] < 4)
     s.check("the night stoker is in bed at home in the morning (asleep or resting)", asleep >= 0.6, {"share": round(asleep, 2), "samples": n})
 
+    # The trades' hours at a place of the plan's open lots (layout-2), each reached on foot
+    # through the gate of a wall that blocks.
+    def at_habit(rows, name):
+        place, lo, hi, within = HABITS[name]
+        xs = [r["people"][name]["habit_m"] for r in rows if name in r["people"] and lo <= r["hour"] <= hi and r["people"][name]["habit_m"] is not None]
+        there = sum(1 for d in xs if d < within)
+        return there >= 0.5 * max(1, len(xs)) and len(xs) >= 3, {"place": place, "hours": [lo, hi], "there": there, "samples": len(xs), "nearest_m": min(xs) if xs else None}
+    for name, words in (("Otto Brandt", "the pot-maker is at the clay pit in the morning"), ("Benedikt Orme", "the reader teaches in the Readers' yard"),
+                        ("Greta Dunmore", "the washer is on the Bleach before 13:00")):
+        ok, detail = at_habit(morning, name)
+        s.check(words, ok, detail)
+    ok, detail = child_at_lessons(morning, "Edda Hollin")
+    s.check("a child walks up to lessons in the Readers' yard", ok, detail)
+
     # Afternoon: the night stoker is up (not at work, not asleep); the baker sleeps again.
     noon = window(s, log, 15.0, 18.5)
+    ok, detail = at_habit(noon, "Bram Calloway")
+    s.check("the boatwright is in the boatyard in the afternoon", ok, detail)
     up, n = share(noon, "Thessaly Marl", lambda p: p["skill"] != "sleep")
     s.check("the night stoker rises in the afternoon (15:00-18:30 awake)", up >= 0.8, {"share": round(up, 2), "samples": n})
     off, _ = share(noon, "Thessaly Marl", lambda p: p["skill"] not in ("feed", "keep"))
@@ -172,6 +306,7 @@ def drive(run):
     s.check("the day stoker is in bed at home at night (asleep or resting)", asleep >= 0.6, {"share": round(asleep, 2), "samples": n})
     lamp, n = share(night, "Anselm Faro", lambda p: p["work_m"] is not None and p["work_m"] < 8)
     s.check("the lamp keeper is at the Watchglass at night", lamp >= 0.5, {"share": round(lamp, 2), "samples": n})
+    household_things(s, ids)
     alive = {c["name"] for c in s.sql("SELECT name, alive FROM character") if c["alive"]}
     s.check("nobody died of old age (Halvard, 70, lives on)", set(PEOPLE) <= alive, sorted(set(PEOPLE) - alive))
     (out / "rhythm.json").write_text(json.dumps(s.results, indent=1) + "\n")

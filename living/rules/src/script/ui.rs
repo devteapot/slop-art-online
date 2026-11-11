@@ -20,6 +20,17 @@ pub(super) struct UiRead {
     pub order: Vec<String>,
     pub errors: Vec<String>,
     pub missiles: BTreeMap<String, MissileSpec>,
+    /// The work reading took, in deterministic units (a cost test bounds it).
+    pub work: UiWork,
+}
+
+/// What reading the declarations took: script calls, and scans of the script's source.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UiWork {
+    /// Calls into the script: each `_ui()`, each `detail` check, each newcomer missile.
+    pub calls: usize,
+    /// Scans of the whole source (to order the declarations as the script does).
+    pub scans: usize,
 }
 
 /// A text, or a list of texts given as one text or a list.
@@ -74,6 +85,9 @@ impl Scripts {
     pub(super) fn read_ui(&self) -> UiRead {
         let mut r = UiRead::default();
         for s in self.shapes.names() {
+            if self.shapes.get(s).is_some_and(|sh| sh.missile) {
+                r.work.calls += 1;
+            }
             if let Some(m) = self.newcomer_missile(s) {
                 r.missiles.insert(s.to_string(), m);
             }
@@ -86,8 +100,13 @@ impl Scripts {
         }
         // Declarations: functions of no parameter named `<name>_ui`, in the script's order.
         let mut decls: Vec<&String> = self.nullary.iter().filter(|f| f.ends_with("_ui") && f.len() > 3).collect();
-        let at = |f: &str| self.source.rfind(&format!("fn {f}(")).unwrap_or(usize::MAX);
+        let scans = std::cell::Cell::new(0usize);
+        let at = |f: &str| {
+            scans.set(scans.get() + 1);
+            self.source.rfind(&format!("fn {f}(")).unwrap_or(usize::MAX)
+        };
         decls.sort_by_cached_key(|f| (at(f), (*f).clone()));
+        r.work.scans = scans.get();
         for f in decls {
             let Some(name) = f.strip_suffix("_ui") else { continue };
             let skill = self.skills.get(name).is_some() || self.shapes.get(name).is_some();
@@ -100,6 +119,7 @@ impl Scripts {
                 r.errors.push(format!("{f}: `{name}` is not a skill (no `{name}_spec()`) nor a way of speaking (no `{name}_speech()`): a declaration only presents what the rules have"));
                 continue;
             }
+            r.work.calls += 1;
             let m = match self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}")).and_then(|d| d.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))) {
                 Ok(m) => m,
                 Err(e) => {
@@ -109,6 +129,9 @@ impl Scripts {
             };
             let base = if way { UiSpec { on: vec![On::Box], way: Some(WayUi::default()), ..ui::defaults(&ui::Source { name, spec: None, shape: None, missile: None, on_bar: false, checked: false, shows: None }) } } else { r.specs[name].clone() };
             let spec = self.declared(f, name, way, &m, base, &mut r.errors);
+            if m.contains_key("detail") {
+                r.work.calls += self.skills.get(name).map_or(0, |k| k.items.len());
+            }
             if !names.iter().any(|n| n == name) {
                 names.push(name.to_string());
             }
@@ -214,9 +237,10 @@ impl Scripts {
                     None => {}
                 }
             }
-            // A presentation may move a skill, not take it from players only.
-            if ok && on.is_empty() && !u.on.is_empty() {
-                err(format!("{f}: `on` is empty, which would take `{name}` from players while minds keep it; to hide a skill from both, its spec says `listed: false`"));
+            // A presentation may move a skill, not take it from players only: an empty `on` says in
+            // its `tip` how a player does it instead (face: the look, `human_face`).
+            if ok && on.is_empty() && !u.on.is_empty() && !m.contains_key("tip") {
+                err(format!("{f}: `on` is empty, which would take `{name}` from players while minds keep it; say in `tip` how a player does it instead, or to hide a skill from both, its spec says `listed: false`"));
                 ok = false;
             }
             if ok {
@@ -428,6 +452,11 @@ impl Scripts {
             }
         }
         None
+    }
+
+    /// The work reading the declarations took (deterministic units, for the cost test).
+    pub fn ui_work(&self) -> UiWork {
+        self.ui.work
     }
 
     /// How a skill (or way of speaking) is presented: its `<name>_ui()` over its defaults. None

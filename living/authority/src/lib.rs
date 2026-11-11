@@ -13,7 +13,9 @@ mod frame;
 mod island;
 mod mind;
 mod motion;
+mod outcomes;
 mod perceive;
+mod speech;
 mod perception;
 mod presence;
 mod records;
@@ -71,6 +73,7 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
+    speech::cards(ctx, &sc);
     ctx.db.script().insert(Script { name: "skills".into(), source: seed::SKILLS.into(), revision: 1, updated_ms: now });
     for kind in ["person", "deer", "wolf"] {
         living_rules::graph::parse(&seed::instinct(kind)).map_err(|e| format!("{kind} instinct: {e}"))?;
@@ -121,6 +124,10 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
 /// Install a skill script: compiled and validated on the world's day, then written with a new
 /// revision. `install_script` (the admin) and a seed's laws overlay (`floor::begin`) go through it.
 pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(), String> {
+    // The world's own law values (`world_law`: a seed's `rules`, `set_world_law`) are written
+    // at the end of the installed source, so every client that compiles the `script` row reads
+    // the laws in force (`living_rules::script::with_world_laws`).
+    let source = installed_source(&source, &world_law_values(ctx));
     let mut sc = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
         living_rules::script::Scripts::with_day(&source, common::world(ctx).day_ms)?
@@ -131,10 +138,15 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
         sc.validate()?
     };
     log::info!("install_script: {}", checked.summary());
+    // The body's meters name fields of this world's vitals row.
+    if let Some(e) = sc.meters_unknown(&Vitals::FIELDS).first() {
+        return Err(format!("install refused: {e}"));
+    }
     rename_techniques(ctx);
     codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
+    speech::cards(ctx, &sc);
     let now = common::now_ms(ctx);
     // Past the clock's too: writing a world's own laws moves it without a new script.
     let rev = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision).unwrap_or(0).max(common::clock(ctx).scripts_rev) + 1;
@@ -146,6 +158,50 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     common::invalidate_scripts_rev();
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
+    Ok(())
+}
+
+/// The text a script is kept as in the `script` row: `source` with the world's own law values
+/// written at its end, replacing any it carried. `install_source` and a seed's `rules`
+/// (`floor::world_laws`) write the row through it.
+pub(crate) fn installed_source(source: &str, values: &[(String, serde_json::Value)]) -> String {
+    living_rules::script::with_world_laws(living_rules::script::without_world_laws(source), values)
+}
+
+/// The world's own law values (`world_law` rows), by name.
+pub(crate) fn world_law_values(ctx: &ReducerContext) -> Vec<(String, serde_json::Value)> {
+    let mut v: Vec<(String, serde_json::Value)> = ctx.db.world_law().iter().filter_map(|w| serde_json::from_str(&w.value).ok().map(|v| (w.name, v))).collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0));
+    v
+}
+
+/// Change a law on a running world (admin): `name` is any constant of the script's `laws()`
+/// (`fov_on`, `fire_warmth`, …), `value` its new value as JSON (`true`, `1.5`), of the law's
+/// own kind. The value is kept as the world's own (`world_law`, like a seed's `rules`) and
+/// written into the installed script (`world_law_values()`), which is installed again with a
+/// new revision: the authority's caches, the mind service and every client that compiles the
+/// `script` row take the law in force, so `senses(a)` returns the field at once when `fov_on`
+/// turns on. Every change is kept in `law_change` (name, old, new, when, who, the revision) and
+/// in the chronicle. Refused, with nothing written, for a name that is not a law, a value of
+/// another kind, or a script that then fails its install checks.
+#[spacetimedb::reducer]
+pub fn set_world_law(ctx: &ReducerContext, name: String, value: String) -> Result<(), String> {
+    require_admin(ctx)?;
+    let v: serde_json::Value = serde_json::from_str(value.trim()).map_err(|_| format!("`{value}` is not a value: give a number or true or false"))?;
+    let sc = common::scripts(ctx);
+    sc.laws_with(&[(name.clone(), v.clone())])?;
+    let old = sc.law_value(&name).map(|o| o.to_string()).unwrap_or_default();
+    let new = v.to_string();
+    ctx.db.world_law().name().delete(name.clone());
+    ctx.db.world_law().insert(WorldLaw { name: name.clone(), value: new.clone() });
+    let source = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).ok_or("no script installed")?;
+    // Its install refuses a value the laws cannot run with; the reducer's error rolls the row back.
+    install_source(ctx, source)?;
+    let now = common::now_ms(ctx);
+    let revision = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision).unwrap_or(0);
+    ctx.db.law_change().insert(LawChange { id: 0, name: name.clone(), old: old.clone(), new: new.clone(), at_ms: now, by: ctx.sender(), revision });
+    common::chronicle(ctx, now, "law", 0, 0, (0.0, 0.0), format!("the world's law {name} changed from {old} to {new} (script revision {revision})"));
+    log::info!("set_world_law: {name} {old} -> {new} (revision {revision})");
     Ok(())
 }
 
@@ -295,7 +351,7 @@ pub fn purge_dead(ctx: &ReducerContext) -> Result<(), String> {
 #[spacetimedb::reducer]
 pub fn kill(ctx: &ReducerContext, id: u32, cause: String) -> Result<(), String> {
     require_admin(ctx)?;
-    act::die(ctx, id, &cause, common::now_ms(ctx), 0);
+    act::die(ctx, id, &cause, common::now_ms(ctx), 0, living_rules::outcome::death::OTHER);
     Ok(())
 }
 
@@ -363,23 +419,43 @@ pub fn set_behavior(ctx: &ReducerContext, id: u32, graph: String) -> Result<(), 
     mind::set_graph(ctx, id, &graph, "test", "test", common::now_ms(ctx)).map(|_| ())
 }
 
-/// Test support: move a character next to another.
+/// How far (tiles) `place_near` and `place_at` look for a free walkable tile.
+const PLACE_RADIUS: f32 = 6.0;
+
+/// The nearest walkable tile within [`PLACE_RADIUS`] of `want` that no other body stands on
+/// (bodies of the chunks around it, through the `body.chunk` index), or a refusal.
+fn free_spot(ctx: &ReducerContext, id: u32, want: (f32, f32), exact: bool, from: Option<(f32, f32)>, now: u64) -> Result<(f32, f32), String> {
+    let taken: std::collections::HashSet<(i32, i32)> = common::creatures_near(ctx, want, PLACE_RADIUS + 1.5, now)
+        .into_iter()
+        .filter(|c| c.id != id)
+        .map(|c| (c.pos.0.floor() as i32, c.pos.1.floor() as i32))
+        .collect();
+    common::map(ctx)
+        .nearest_free(want.0, want.1, PLACE_RADIUS, exact, from, |x, y| taken.contains(&(x, y)))
+        .ok_or_else(|| format!("no free walkable tile within {PLACE_RADIUS} m of ({:.1}, {:.1})", want.0, want.1))
+}
+
+/// Test support: move a character next to another: 1 tile east of it when that tile is
+/// walkable and no one stands there, else the nearest free tile of the ground walkable from
+/// the target within [`PLACE_RADIUS`].
 #[spacetimedb::reducer]
 pub fn place_near(ctx: &ReducerContext, id: u32, near: u32) -> Result<(), String> {
     require_admin(ctx)?;
     let now = common::now_ms(ctx);
     let t = ctx.db.body().id().find(near).ok_or("no such body")?;
     let p = common::pos(&t, now);
-    motion::place(ctx, id, (p.0 + 1.0, p.1), now)
+    let at = free_spot(ctx, id, (p.0 + 1.0, p.1), true, Some(p), now)?;
+    motion::place(ctx, id, at, now)
 }
 
-/// Test support: put a character at rest at a point (tiles).
+/// Test support: put a character at rest on the centre of the nearest walkable tile to a
+/// point (tiles) that no other body stands on, within [`PLACE_RADIUS`].
 #[spacetimedb::reducer]
 pub fn place_at(ctx: &ReducerContext, id: u32, x: f32, y: f32) -> Result<(), String> {
     require_admin(ctx)?;
-    let map = common::map(ctx);
-    let at = map.nearest_walkable(x, y).ok_or("no room there")?;
-    motion::place(ctx, id, at, common::now_ms(ctx))
+    let now = common::now_ms(ctx);
+    let at = free_spot(ctx, id, (x, y), false, None, now)?;
+    motion::place(ctx, id, at, now)
 }
 
 /// Create the seed's communities (if missing) and their members, on a running world.
@@ -572,6 +648,26 @@ pub(crate) fn command_done(ctx: &ReducerContext, id: u32, now: u64) {
     }
 }
 
+/// Face a direction (screen axes: +x east, +y south; any length), or release the look (`0, 0`):
+/// the player's look. It turns the body's facing (`body.face_*` over `body.heading`,
+/// `common::facing_at`): what facing sight, hearing's sides and a guard read. Standing, the body
+/// turns where it stands at its turn rate. Walking (`human_move`), the travel is untouched (the
+/// keys' way at full speed) and the facing turns toward the look at most the `look_walk_deg` law
+/// off the way; when the body stops it finishes the turn. Released, facing returns to the way
+/// it walks. A look within the
+/// `look_slack_deg` law of the one held is free; any other change spends a token of the movement
+/// input bucket (the `input_hz`/`input_burst` laws, shared with `human_move`), so a client
+/// that follows the cursor sends looks freely and only changes write rows.
+#[spacetimedb::reducer]
+pub fn human_face(ctx: &ReducerContext, dx: f32, dy: f32) -> Result<(), String> {
+    let me = my_character(ctx)?;
+    if !dx.is_finite() || !dy.is_finite() {
+        return Err("direction must be finite".into());
+    }
+    let dir = (dx != 0.0 || dy != 0.0).then_some((dx, dy));
+    motion::look(ctx, me.id, dir, common::now_ms(ctx))
+}
+
 /// Move in a direction (screen axes: +x east, +y south; any length) or stop (`0, 0`), at a
 /// walk or a run. Steering carries it out with the same physics as everyone's movement;
 /// it replaces whatever the character was doing. Send it when the intent changes (a key
@@ -617,8 +713,18 @@ pub(crate) fn player_controls(ctx: &ReducerContext, id: u32, now: u64) -> Result
     Ok(())
 }
 
+/// Say a line aloud (the `say` way): to `to`, or to the room with 0. Kept for clients from
+/// before `human_speak`.
 #[spacetimedb::reducer]
 pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), String> {
     let me = my_character(ctx)?;
-    perceive::speak(ctx, me.id, &text, to, common::now_ms(ctx))
+    speech::speak(ctx, me.id, &text, to, "say", common::now_ms(ctx))
+}
+
+/// Say a line in a way of speaking (`speech_card.name`; "" is `say`): to `to`, or to the room
+/// with 0. A line the way refuses comes back as the reducer's error, in the world's words.
+#[spacetimedb::reducer]
+pub fn human_speak(ctx: &ReducerContext, text: String, to: u32, way: String) -> Result<(), String> {
+    let me = my_character(ctx)?;
+    speech::speak(ctx, me.id, &text, to, &way, common::now_ms(ctx))
 }

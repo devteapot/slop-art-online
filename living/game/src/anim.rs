@@ -47,6 +47,15 @@
 //! **For foot IK** (`ik.rs`) this module also gives each foot's contact (0–1) from the markers of
 //! the clips the legs show, weighted as they are, and how much of the legs' pose comes from clips
 //! where IK applies ([`Anim::ik`]; `ik: false` in the sidecar for sitting and lying).
+//!
+//! **Shared clips.** A body's clips come from its [`clip_file`]: its own file, or for generated
+//! people (`own-*` bases, who all have the same skeleton) the one shared clip file
+//! [`SHARED_CLIPS`] when it is there, so 64 people hold one copy of each clip and one graph
+//! (`Sets` is keyed by the clip file). Clips bind to bones by their name path from the scene's
+//! root (`AnimationTargetId`), which is the same in every generated file. A file without clips of
+//! its own gets no `AnimationPlayer` or targets from Bevy's loader; [`bind`] adds them as the
+//! loader would. The clip file's sidecar (`gait::of`) times the gaits, and `Character::stride` is
+//! measured against the clip file's figure (`characters::shape`).
 
 use crate::combat::Action;
 use crate::gait::{self, Gaits};
@@ -103,6 +112,15 @@ pub struct Motion {
     /// How far the upper body turns from the legs toward where the body looks (radians, sim
     /// sense: counter-clockwise seen from above is positive), spread over the spine (`twist.rs`).
     pub twist: f32,
+    /// The part of [`Motion::twist`] the neck and head take (head first, `twist::LookWalk`); the
+    /// spine and chest take the rest.
+    pub neck: f32,
+    /// How far the eyes turn beyond the head (radians, sim sense), where the file has eye bones.
+    pub eyes: f32,
+    /// Looking at something: the neck and head hold the look ([`Motion::neck`] from the chest)
+    /// instead of adding it to the clip's own turn of the head (a diagonal take's head turns
+    /// about 30° by itself).
+    pub aim: bool,
     /// How much faster than its own pace the ground makes the body go (the rules' road speed on
     /// a road; 1 elsewhere). The gait is chosen at `speed / pace`, so a walk on a road stays a
     /// walk, and steps at the body's real speed, so its feet stay planted.
@@ -118,11 +136,104 @@ pub struct Motion {
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, pace: 1.0, freeze: false, travel: 0.0 }
+        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, neck: 0.0, eyes: 0.0, aim: false, pace: 1.0, freeze: false, travel: 0.0 }
     }
 }
 
-/// One file's graph and what each node plays.
+/// Generated people's shared clip file: the library baked once on one figure (gen_person.sh).
+pub const SHARED_CLIPS: &str = "lookdev/anim/own-clips.glb";
+
+/// The file a character file's clips come from (paths under the asset folder): the shared
+/// clip file for a generated person (an `own-*` file, or a character type under
+/// `lookdev/types/`, docs/CHARACTERS.md "The client format") when it exists and
+/// `LIVING_GAME_SHARED_CLIPS` is not `0`, else the file itself.
+pub fn clip_file(file: &str) -> String {
+    use std::sync::OnceLock;
+    static SHARED: OnceLock<bool> = OnceLock::new();
+    let shared = *SHARED.get_or_init(|| {
+        let on = std::env::var("LIVING_GAME_SHARED_CLIPS").map_or(true, |v| v != "0");
+        let there = std::path::Path::new(&crate::lookdev::asset_root()).join(SHARED_CLIPS).exists();
+        if on && there {
+            info!("anim: generated people take their clips from {SHARED_CLIPS}");
+        }
+        on && there
+    });
+    let own = file.starts_with("lookdev/types/") || std::path::Path::new(file).file_name().is_some_and(|n| n.to_string_lossy().starts_with("own-"));
+    if shared && own && file != SHARED_CLIPS {
+        SHARED_CLIPS.to_string()
+    } else {
+        file.to_string()
+    }
+}
+
+/// Whether a character file's clips exist: its [`clip_file`] has animations (cached).
+pub fn has_clips(file: &str) -> bool {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+    let clips = clip_file(file);
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(&clips) {
+        return *v;
+    }
+    let v = crate::lookdev::glb_json(&clips).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty()));
+    cache.lock().unwrap().insert(clips, v);
+    v
+}
+
+/// The name of a clip file's animation root: the first node of its scene (`Armature` in a
+/// generated person).
+fn clip_root(clips: &str) -> Option<String> {
+    let j = crate::lookdev::glb_json(clips)?;
+    let scene = j["scene"].as_u64().unwrap_or(0) as usize;
+    let root = j["scenes"][scene]["nodes"][0].as_u64()? as usize;
+    j["nodes"][root]["name"].as_str().map(String::from)
+}
+
+/// A character checked by [`bind`] (given a player, needing none, or warned that it can't be).
+#[derive(Component)]
+pub struct Bound;
+
+/// Give a character whose clips come from another file, and whose own file brought no
+/// `AnimationPlayer`, the player and targets Bevy's loader gives a file with clips: the player on
+/// the node named as the clip file's animation root, and on that node and every node below it its
+/// name path from there and the player that animates it.
+#[allow(clippy::type_complexity)]
+fn bind(
+    mut commands: Commands,
+    new: Query<(Entity, &Model), (With<crate::characters::Character>, With<Fitted>, Without<Bound>)>,
+    children: Query<&Children>,
+    names: Query<&Name>,
+    players: Query<(), With<AnimationPlayer>>,
+) {
+    for (e, model) in &new {
+        let clips = clip_file(&model.file);
+        if clips == model.file || children.iter_descendants(e).any(|d| players.contains(d)) {
+            commands.entity(e).insert(Bound);
+            continue;
+        }
+        let root = clip_root(&clips).and_then(|r| children.iter_descendants(e).find(|d| names.get(*d).is_ok_and(|n| n.as_str() == r)));
+        let Some(root) = root else {
+            warn!("anim: {} has no node named as {clips}'s root; it does not play the shared clips", model.file);
+            commands.entity(e).insert(Bound);
+            continue;
+        };
+        fn tag(commands: &mut Commands, at: Entity, root: Entity, path: &mut Vec<Name>, children: &Query<&Children>, names: &Query<&Name>) {
+            let Ok(n) = names.get(at) else { return };
+            path.push(n.clone());
+            commands.entity(at).insert((AnimationTargetId::from_names(path.iter()), bevy::animation::AnimatedBy(root)));
+            for c in children.get(at).into_iter().flatten() {
+                tag(commands, *c, root, path, children, names);
+            }
+            path.pop();
+        }
+        tag(&mut commands, root, root, &mut Vec::new(), &children, &names);
+        commands.entity(root).insert(AnimationPlayer::default());
+        commands.entity(e).insert(Bound);
+        debug!("anim: {} bound to {clips}", model.file);
+    }
+}
+
+/// One clip file's graph and what each node plays.
 struct Set {
     graph: Handle<AnimationGraph>,
     full: HashMap<String, AnimationNodeIndex>,
@@ -227,7 +338,7 @@ impl Anim {
     }
 }
 
-/// The glTF file a body's clips come from, held so the load isn't dropped.
+/// The glTF file a body's clips come from ([`clip_file`]), held so the load isn't dropped.
 #[derive(Component)]
 struct ClipFile(Handle<Gltf>);
 
@@ -237,7 +348,7 @@ impl Plugin for AnimPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Sets>()
             .init_resource::<Cost>()
-            .add_systems(PostUpdate, (build, play, sampling).chain().before(bevy::app::AnimationSystems))
+            .add_systems(PostUpdate, (bind, build, play, sampling).chain().before(bevy::app::AnimationSystems))
             .add_systems(PostUpdate, sampled.after(bevy::app::AnimationSystems))
             .add_systems(Last, report);
     }
@@ -296,7 +407,7 @@ fn report(mut cost: ResMut<Cost>, time: Res<Time>, ik: Option<Res<crate::ik::IkS
     }
 }
 
-/// Give each new animated body its file's graph (built once per file) and its state.
+/// Give each new animated body its clip file's graph (built once per clip file) and its state.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn build(
     mut commands: Commands,
@@ -313,23 +424,25 @@ fn build(
     mut has: Local<HashMap<String, bool>>,
 ) {
     for (e, model, motion, file) in &new {
-        let any = *has.entry(model.file.clone()).or_insert_with(|| crate::lookdev::glb_json(&model.file).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty())));
+        let any = *has.entry(model.file.clone()).or_insert_with(|| has_clips(&model.file));
         if !any {
             continue;
         }
+        let clip_file = clip_file(&model.file);
         let Some(file) = file else {
-            commands.entity(e).insert(ClipFile(assets.load::<Gltf>(model.file.clone())));
+            commands.entity(e).insert(ClipFile(crate::characters::kept(&assets, &clip_file)));
             continue;
         };
         let Some(gltf) = gltfs.get(&file.0) else { continue };
+        // Its own file's player, or the one `bind` gave it.
         let Some(p) = children.iter_descendants(e).find(|d| players.contains(*d)) else { continue };
-        let set = match sets.0.get(&model.file) {
+        let set = match sets.0.get(&clip_file) {
             Some(s) => s.clone(),
             None => {
                 // Every clip's length; wait until all are loaded.
                 let lens: Option<HashMap<String, f32>> = gltf.named_animations.iter().map(|(n, h)| clips.get(h).map(|a| (n.to_string(), a.duration()))).collect();
                 let Some(lens) = lens else { continue };
-                let gaits = gait::of(&model.file);
+                let gaits = gait::of(&clip_file);
                 // The upper body: the spine and everything below it.
                 let spine = children.iter_descendants(p).find(|d| names.get(*d).is_ok_and(|n| n.as_str() == "J_Bip_C_Spine"));
                 let upper_bones: HashSet<Entity> = spine.map(|s| std::iter::once(s).chain(children.iter_descendants(s)).collect()).unwrap_or_default();
@@ -353,9 +466,9 @@ fn build(
                     }
                 }
                 let gait_nodes = gaits.gaits().iter().map(|g| full.get(g.clip).map(|&n| (n, g.seconds.unwrap_or_else(|| lens.get(g.clip).copied().unwrap_or(1.0))))).collect();
-                debug!("anim: {}: {} clips, {} upper, {} lower bones masked", model.file, full.len(), upper.len(), graph.mask_groups.len());
+                debug!("anim: {clip_file}: {} clips, {} upper, {} lower bones masked", full.len(), upper.len(), graph.mask_groups.len());
                 let set = Arc::new(Set { graph: graphs.add(graph), full, upper, lens, gaits, gait_nodes });
-                sets.0.insert(model.file.clone(), set.clone());
+                sets.0.insert(clip_file.clone(), set.clone());
                 set
             }
         };
@@ -418,8 +531,9 @@ fn play(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &Motion, 
     let dt = time.delta_secs().min(0.1);
     for (e, m, mut a) in &mut q {
         let Ok(mut player) = players.get_mut(a.player) else {
-            // The scene was rebuilt: find its player again.
-            commands.entity(e).remove::<Anim>();
+            // The scene was rebuilt: find its player again (a file without clips of its own is
+            // given one again by `bind`).
+            commands.entity(e).remove::<(Anim, Bound)>();
             continue;
         };
         let set = a.set.clone();

@@ -1,6 +1,7 @@
 //! Measurement switches (`LIVING_GAME_PERF=<flag>,…`) that turn one rendering cost off at a time,
 //! to find where frame time goes. They are for measurement only:
 //! - `noedges`: the finishing pass's edge lines and rim;
+//! - `slivers`: crease lines on every step, however small (the old rule, `Style::crease_step` 0);
 //! - `nooutlines`: shell outlines (characters);
 //! - `noshadows`: the sun's shadow maps;
 //! - `noprepass`: depth and normal prepasses (also disables edges, which need them);
@@ -74,6 +75,9 @@ pub fn apply(
     if (has("noedges") || has("noprepass")) && style.edges {
         style.edges = false;
     }
+    if has("slivers") && style.crease_step != 0.0 {
+        style.crease_step = 0.0;
+    }
     if has("nooutlines") && style.outlines {
         style.outlines = false;
     }
@@ -115,7 +119,53 @@ pub fn diagnostics(app: &mut App) {
     if !has("diag") {
         return;
     }
-    app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin).add_systems(Last, (log_diagnostics, log_views));
+    app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin).add_systems(Last, (log_diagnostics, log_views, log_assets));
+}
+
+/// `diag`: what the loaded assets hold, every 10 s: meshes (their vertex, index and morph-target
+/// data in the main world), images (their pixels), animation clips (and their curves), graphs and
+/// glTF files. Counts and sizes, not the process's memory: they don't move with the machine's
+/// load, so two builds or two sets of files compare exactly (crowd-1: clips stored once).
+fn log_assets(
+    time: Res<Time>,
+    mut since: Local<f32>,
+    meshes: Res<Assets<Mesh>>,
+    images: Res<Assets<Image>>,
+    clips: Res<Assets<AnimationClip>>,
+    graphs: Res<Assets<AnimationGraph>>,
+    gltfs: Res<Assets<bevy::gltf::Gltf>>,
+) {
+    *since += time.delta_secs();
+    if *since < 10.0 {
+        return;
+    }
+    *since = 0.0;
+    let mib = |b: usize| b as f32 / (1024.0 * 1024.0);
+    let (mut vb, mut ib, mut mb) = (0usize, 0usize, 0usize);
+    for (_, m) in meshes.iter() {
+        // Meshes whose data went to the render world alone hold none here.
+        if m.try_indices_option().is_err() {
+            continue;
+        }
+        vb += m.get_vertex_buffer_size();
+        ib += m.get_index_buffer_bytes().map_or(0, |b| b.len());
+        mb += m.morph_targets().map_or(0, |t| t.len() * std::mem::size_of::<bevy::mesh::morph::MorphAttributes>());
+    }
+    let px: usize = images.iter().map(|(_, i)| i.data.as_ref().map_or(0, |d| d.len())).sum();
+    let curves: usize = clips.iter().map(|(_, c)| c.curves().values().map(|v| v.len()).sum::<usize>()).sum();
+    info!(
+        "assets: {} meshes {:.1} MiB (vertices {:.1}, indices {:.1}, morph targets {:.1}); {} images {:.1} MiB; {} clips ({curves} curves); {} graphs; {} glTF files",
+        meshes.len(),
+        mib(vb + ib + mb),
+        mib(vb),
+        mib(ib),
+        mib(mb),
+        images.len(),
+        mib(px),
+        clips.len(),
+        graphs.len(),
+        gltfs.len()
+    );
 }
 
 /// What entered the world in one frame: entities (net), meshes, models, characters, conversions.

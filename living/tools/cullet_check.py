@@ -28,7 +28,8 @@ WALK = 2.6
 EYE = 1.6
 # The game camera: 22 m from the character, 28 degrees down (camera.rs), so about 12 m above it.
 CAMERA = 1.6 + 22 * math.sin(math.radians(28))
-COL = {0: (128, 126, 84), 1: (70, 96, 60), 2: (40, 78, 128), 3: (214, 204, 176), 4: (96, 94, 96), 5: (120, 96, 72), 6: (66, 66, 72), 7: (40, 40, 44)}
+COL = {0: (128, 126, 84), 1: (70, 96, 60), 2: (40, 78, 128), 3: (214, 204, 176), 4: (96, 94, 96), 5: (120, 96, 72), 6: (66, 66, 72), 7: (40, 40, 44),
+       8: (150, 120, 60), 9: (196, 70, 150)}  # a drop; a low thing (blocks the foot, not the eye): since layout-2, a plan's walls below the eye
 
 
 def png(path, w, h, rgb):
@@ -52,7 +53,8 @@ class Land:
         return self.tiles[y * self.n + x] if 0 <= x < self.n and 0 <= y < self.n else 2
 
     def walk(self, x, y):
-        return self.t(x, y) not in (2, 4, 7)
+        # Water, Rock, Wall, and since drop-1 Drop and Low: `Terrain::walkable` (living/rules/src/map.rs).
+        return self.t(x, y) not in (2, 4, 7, 8, 9)
 
     def ht(self, x, y):
         x = min(max(int(x), 0), self.n - 1)
@@ -216,6 +218,40 @@ def main():
         routes[f"the Fish Steps to {nm}"] = {"m": round(v, 1) if v else None, "s": round(v / WALK) if v else None, "straight_m": round(math.dist(fish, q), 1)}
     dq = dijkstra(L, quay_w, [quay_e]).get(quay_e)
     routes["the quay, end to end"] = {"m": round(dq, 1) if dq else None, "s": round(dq / WALK) if dq else None, "straight_m": round(math.dist(quay_w, quay_e), 1)}
+    # Since layout-2 (walls block): every place one is sent to can be walked to from the Fish
+    # Steps. A lot's spots are stood on as written (`town::seat` takes them as they are), so each
+    # must be a walkable tile; a door or an authored resource is reached at the nearest walkable
+    # tile, within 2 m.
+    every, todo = {(int(fish[0]), int(fish[1]))}, [(int(fish[0]), int(fish[1]))]
+    while todo:  # the ground one can walk to: 4-connected, as `host::reach`
+        x, y = todo.pop()
+        for q in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if q not in every and L.walk(*q):
+                every.add(q)
+                todo.append(q)
+    cut = {"spots": [], "doors": [], "resources": []}
+    spots = 0
+    for l in lots:
+        if not l["key"]:
+            continue
+        for name, q in l["spots"]:
+            spots += 1
+            t = (int(q[0]), int(q[1]))
+            if not L.walk(*t) or t not in every:
+                cut["spots"].append(f'{l["key"]}: {name}')
+        if l["height_m"] > 0 and l["kind"] not in ("lamp", "garden", "field", "well", "market_stall"):
+            t = nearest_walk(L, l["door"])
+            if t not in every or math.dist((t[0] + 0.5, t[1] + 0.5), l["door"]) > 2.0:
+                cut["doors"].append(l["key"])
+    for r in L.lay["resources"]:
+        t = nearest_walk(L, r["at"])
+        if t not in every and r["kind"] not in ("fishing_spot", "weir"):
+            cut["resources"].append(f'{r["kind"]} at {r["at"][0] - O[0]:.1f}, {O[1] - r["at"][1]:.1f}')
+    reach = {"spots": spots, "unreachable": cut}
+    # A fixture that stands off the plan's levels (on the beach) carries the land's own height
+    # as its floor: more than 0.3 m from the ground there, it floats or is buried.
+    reach["off_level_fixtures"] = [{"id": f["id"], "floor_m": f["floor_m"], "ground_m": round(L.ht(*to_land(f["at"])), 2)} for f in plan.get("fixtures", []) if "level" in f and f["level"] is None]
+    reach["off_level_wrong"] = [f["id"] for f in reach["off_level_fixtures"] if abs(f["floor_m"] - f["ground_m"]) > 0.3]
 
     # ---- sight
     town_roads = [r for r in L.lay["roads"] if r["settlement"] is not None and r["class"] != "Path"]
@@ -273,7 +309,7 @@ def main():
                 s2.append(f'<circle cx="{p[0]:.1f}" cy="{p[1]:.1f}" r="1.6" fill="{"#1a9a40" if ok else "#d03030"}"/>')
         s2.append(f'<circle cx="{c[0]:.1f}" cy="{c[1]:.1f}" r="4" fill="none" stroke="#000" stroke-width="1.2"/></svg>')
         (out / f"sight-{key}.svg").write_text("\n".join(s2))
-    res = {"digests": L.lay["digests"], "stranded": L.lay["stranded"], "blocked_tiles": L.lay["blocked_tiles"], "cut_off_tiles": L.lay["cut_off_tiles"], "walking_m_s": WALK, "routes": routes, "landmarks": sight}
+    res = {"digests": L.lay["digests"], "stranded": L.lay["stranded"], "blocked_tiles": L.lay["blocked_tiles"], "cut_off_tiles": L.lay["cut_off_tiles"], "walking_m_s": WALK, "routes": routes, "reach": reach, "landmarks": sight}
     (out / "check.json").write_text(json.dumps(res, indent=1))
     print(json.dumps(res, indent=1))
 

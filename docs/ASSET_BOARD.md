@@ -176,6 +176,9 @@ The version is a full id or a unique part of one. Use the id on the page the own
 | `character:adult-woman`, `character:elder-man`, `character:youth`, `character:boy`, `character:heavy-man` | `woman`, `elder`, `youth`, `boy`, `heavy`; control `vroid` | same | same |
 | `character:cast-64` | `cast` (`lineup`, `faces`) | same, `cast.py` seed 64 | same |
 
+| `place:cullet-strand`, `place:cullet-rows`, `place:cullet-ladder`, `place:cullet-crown-and-views` | Viewpoints of a walk through Cullet (`yard`, `quay_fish`, `low_tally`, `mid_row`, `ladder_mid`, `crown`, `overview` and others) | Kit pass 1 on main (`a078b5f8`), before [layout pass 1](CULLET_LAYOUT.md) | none |
+
+- **Places** (kind `place`, since `layout-1`): stills of a whole place, not of a model. They are taken by the game's look-dev tour from fixed points and imported (`board.py import`), so a layout pass shows beside the one before it, shot by shot. Each member is a viewpoint; each shot is `day-` or `dusk-` followed by the camera (`default` is the game camera, `close` the walking camera, else yaw, pitch, distance and field of view).
 - **The building kit:** the Fable arm's GLBs were photographed by the board in the game. Fable's own Blender renders and notes are kept with each version as delivered media.
 - **The character families:** their target is the VRoid control's quality close up (docs/SMALL_CITY.md decision 2).
 - **The building kit's acceptance** is a general preference after the Fable/Opus A/B (decision 12), not a sheet-by-sheet judgement.

@@ -28,10 +28,23 @@ Start it right after launch: the day checks need the world's morning, then the s
 
 - The player is an HTTP identity: after the `takeover_s` law (30 s) without a call the world's minds take its character over and nobody is swept for it (the first attempt's night checks saw nothing). The scene makes a player call (`move 0 0`) before each snapshot, which hands the character back.
 - Started at night (a rerun on the same database), the scene skips the day checks and says so; launch afresh for them. The mirrored dark spot is skipped when it is not open ground with a clear line.
-- `launch` does not install the plain `skills.rhai` on a seed with its own laws (it would drop them); `state.json` records `seed_laws`.
+- `launch` does not install the plain `skills.rhai` on a seed with its own laws (it would drop them); `state.json` records `seed_laws`. It reads the `script` row back against `install_script.py`'s `seed_script` (the seed's laws composed over the shipped script) and stops on a difference, and `doctor` checks the laws (verify skill, Launch and Doctor).
 - `install_script` installs a whole script: installing the shipped one on such a world removes its laws until it is created again.
 - The scene needs the seed's lamp (`structure` kind `lamp`) with an open line from it; without one it fails "the seed has a lamp with an open line of sight from it". Since `goods-1` the lamp burns oil and lights only while lit: the seed gives it 8 units (32 game hours, past the scene's night at 21:00); a lamp seeded without fuel is dark and the lamplight check fails.
 - These checks do not measure cost: longer sight and re-projection every sweep cost more per player (docs/CULLET_RULES.md, "Costs").
+
+## Who heard a line (`speech_audience`, 2026-11-11, branch `exp-greet`)
+
+A shipped law, on by default since 2026-11-11 (the minds' default `LIVING_GREET=nearest` reads it; a seed may turn it off in its `rules`). With it on, `speak` (`living/authority/src/perceive.rs`) writes one row per line to the private `audience` table (`tables.rs` `Audience`, `Hearer`). The row lists each person who heard the line (the speaker's hearers within hearing), the distance to each and how far each stood off the speaker's facing (`common::heading`, radians, 0 straight ahead). Rows older than 60 s are deleted by the next line (range on the `at_ms` index). Nothing reads it but the mind service under `LIVING_GREET` (verify-minds `greet`). With the law off nothing is written; the laws are read for `address_m` anyway, so the cost is one more flag test per line. Expired rows are deleted only by a line said while the law is on: rows written before the law was turned off stay until it is on again. With it on, a line costs one insert, the distance and angle per hearer, and the expired rows' deletes, and the only subscriber is the mind service.
+
+```bash
+R=core-audience-$(date +%H%M%S)
+python3 "$V" launch --run "$R" && python3 "$V" doctor --run "$R"
+python3 .agents/skills/verify-core/scripts/scenes.py audience --run "$R" > ".local/living/verify/$R/audience.txt" 2>&1
+python3 "$V" cleanup --run "$R"
+```
+
+The scene places a speaker, a person 1 m east, one 4 m east and one 13 m east (beyond the shipped 9 m hearing), turns the speaker east (`face`) and speaks through `mind_say` (way `""`, that is `say`). Checks: law off (the shipped script with `speech_audience: false`, installed with `install_script`), no row. Law on (the shipped script again): one row, said to no one, with the two within hearing and not the third, distances about 1 and 4 m, both under 0.35 rad off the facing. A line 61 s later deletes the first row. The shipped script is installed again at the end. Evidence: `audience-line.json`, `audience-audience-off.json`, `audience-audience-on.json`, `audience-audience-later.json`, `audience-results.json`.
 
 ## Decay
 
@@ -58,5 +71,33 @@ A whole game day (the default) is 48 real minutes on Cullet's day; `--game-hours
 ### Gotchas
 
 - Person `a` holds the 1,000 fish, so its pack is full and it cannot gather: person `b` stores its fish first and does the gathering.
-- Regrowth happens only in growing time (not winter): a watch across winter fails the regrowth check, which reads the elapsed time, not the season.
+- Regrowth follows the kind's share in each season (rules-3): Cullet's greens bed grows at half its rate in winter, so a watch across winter fails the regrowth check, which reads the elapsed time at the full rate. A `cullet-laws` world reaches winter after about five real hours.
+- The storage the fish go into is the shipped `storage` (`holds: 120`); the 100 stored fit.
 - The two people are held on `wait` for an hour; they grow hungry over a whole Cullet day but do not starve, and nobody eats the fish.
+
+## Winter
+
+Since `rules-3` (docs/CULLET_RULES.md, "Storage, household stores and winter"): a resource kind's `regrow_by_season` gives the share of its `regrow_per_h` in each season (none: the shipped full, full, full, none). The authority weights the time since a node was written by season (`living_rules::regrowth_ms`); minds are told what winter does from the same table (`Scripts::seasons_words`, the script's `seasons_text()`).
+
+### Sub-features
+
+- On the winter fixture (`scripts/winter.json`: Cullet's laws on a 4-minute day and a 4-day year, no wild nodes), in the world's own winter (the year's last quarter, from day 4's midnight; about 11 real minutes after creation): a placed fishing spot, emptied in winter and gathered once about 45 s later, held its `regen` × Cullet's winter share (0.75) over the time since, within 0.01 (the full-rate figure is in the detail); a placed root plot, emptied first and gathered once its full rate would have grown at least a unit (about 150 s), is refused ("no nearest root_plot": a node under one unit is not `nearest`) with its row unchanged (share 0).
+- Unit checks: `rules3_check::rules3_is_bit_identical` (ignored; `LIVING_OLD_SKILLS=<main's script before rules-3>`): store and take answers for every structure kind, every skill's and law's words, the minds' world text and 52,920 node amounts across the seasons are bit-identical for the shipped kinds. `script::tests::a_store_holds_what_its_kind_holds`, `script::tests::regrowth_by_season_is_a_value_on_each_kind`, `season_tests::seasons_split_time_on_growings_quarters`.
+
+### Driving it
+
+```bash
+R=core-winter-$(date +%H%M%S)
+python3 "$V" launch --run "$R" --seed "$PWD/.agents/skills/verify-core/scripts/winter" > ".local/living/verify/$R/launch.txt" 2>&1
+python3 .agents/skills/verify-core/scripts/scenes.py winter --run "$R" > ".local/living/verify/$R/winter.txt" 2>&1
+python3 "$V" cleanup --run "$R"
+```
+
+Start the scene right after launch: the world's clock runs from creation and winter lasts 4 real minutes (the scene needs about 2 of them). No clock is changed.
+
+### Gotchas
+
+- Launch must keep the seed's own laws (`seed_laws` in `state.json`, "kept as installed at creation"); a harness that installs the plain script over them leaves the world without Cullet's laws, and the scene's first check fails.
+- The CLI reads a negative number as a flag: `place_resource` offsets are positive (`spacetime call ... -1.0` is refused as "unexpected argument").
+- Every person is held on `wait`: the fixture's band runs instinct graphs and, hungry, forages from the placed nodes (a stranger's harvest moved the fishing spot's row in `core-r3-winter3`).
+- The people grow hungry on the 4-minute day (hunger 2.4 a game hour is about 14 a real minute) and start starving after about 7 minutes; at Cullet's −0.5 a game hour they are far from death when the scene ends.

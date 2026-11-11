@@ -64,8 +64,10 @@ pub struct MenuRowView {
 pub struct InventoryView {
     /// Item, how many, and a short note from the rules (food value).
     pub rows: Vec<(String, u32, String)>,
-    pub carried: u32,
-    pub limit: u32,
+    /// How much is carried against the rules' limit (fractional once goods count by their own
+    /// weight); a limit of 0 is none.
+    pub carried: f32,
+    pub limit: f32,
 }
 
 pub struct KnowHowView {
@@ -158,6 +160,7 @@ pub enum SkillIcon {
     Shield,
     Dodge,
     Heal,
+    Jump,
     Empty,
 }
 
@@ -177,6 +180,11 @@ pub struct Skill {
     pub key: Key,
     pub icon: SkillIcon,
     pub state: SkillState,
+    /// The rules' skill on this place of the bar, its energy cost, and how many of what it
+    /// spends I carry (arrows), if it spends something.
+    pub name: String,
+    pub cost: f32,
+    pub count: Option<u32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

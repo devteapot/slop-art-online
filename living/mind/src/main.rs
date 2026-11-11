@@ -141,6 +141,15 @@ async fn main() -> Result<()> {
                 queries.push(lived);
                 queries.push("SELECT * FROM settlement".into());
             }
+            // Who heard each line and how they stood (private, kept a minute), for the
+            // conversation switches that need it (`LIVING_GREET`, `nearest` by default): its own
+            // subscription, so that a world whose module has no such table (built before it)
+            // still starts; `LIVING_GREET` then falls back to the old rule there (talk.rs).
+            if mind::greet_audience() {
+                c.subscription_builder()
+                    .on_error(|_, e| log::warn!("no `audience` subscription ({e:?}): this world does not keep who heard a line; LIVING_GREET falls back to `off` here"))
+                    .subscribe(["SELECT * FROM audience".to_string()]);
+            }
             c.subscription_builder()
                 .on_applied(move |_| {
                     if let Some(tx) = ready.lock().unwrap().take() {
@@ -180,6 +189,9 @@ async fn main() -> Result<()> {
                     "SELECT * FROM rhythm",
                     // Who told whom their name (private): prompts name people only when known.
                     "SELECT * FROM acquaintance",
+                    // Who heard each line (private, one row per line in its speaker's window): a
+                    // speaker's own line reads as heard by those it saw (docs/COMMUNICATION.md §6).
+                    "SELECT * FROM line_heard",
                 ].map(String::from)).collect::<Vec<String>>());
         })
         .on_disconnect(|_, e| {
@@ -208,7 +220,8 @@ async fn main() -> Result<()> {
             if rethink {
                 let _ = tx.send(mind::Event::Percept(e.clone()));
             }
-            if e.kind == "speech" || e.kind == "silence" {
+            // A whisper to me carries words too; noticing one (`whispered`) does not.
+            if e.kind == "speech" || e.kind == "whisper" || e.kind == "silence" {
                 let _ = tx.send(mind::Event::Speech(e.clone()));
             }
         });

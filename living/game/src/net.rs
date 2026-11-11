@@ -80,6 +80,12 @@ const PERCEIVED: &[&str] = &[
     "SELECT * FROM my_know_how",
     "SELECT * FROM my_combat",
     "SELECT * FROM my_readiness",
+    // Offers to me and mine (a few rows, each gone when taken, withdrawn or out of time), and my
+    // records (an agreement proposed to me changes what Accept does): `ui/people.rs`.
+    "SELECT * FROM my_offers",
+    "SELECT * FROM my_records",
+    // What I hear but don't see (rows only while the world's `fov_on` law is on): `heardmark.rs`.
+    "SELECT * FROM heard_sounds",
     "SELECT * FROM skill_card",
     // What residents are seen doing is named by `act_card` (17 rows); `weather` is one row.
     "SELECT * FROM act_card",
@@ -188,6 +194,8 @@ pub struct Net {
     pub attempts: u32,
     pub ever_live: bool,
     join_sent: bool,
+    /// The call `on_reply` just logged, for `report` (`actions.rs`).
+    last_call: std::cell::Cell<Option<crate::actions::Sent>>,
     base: Option<SubscriptionHandle>,
     near: Window,
     far: Window,
@@ -217,6 +225,7 @@ impl Default for Net {
             attempts: 0,
             ever_live: false,
             join_sent: false,
+            last_call: Default::default(),
             base: None,
             near: Window::default(),
             far: Window::default(),
@@ -241,7 +250,7 @@ pub fn chunk_ranges(col: &str, (cx0, cx1): (u32, u32), (cy0, cy1): (u32, u32)) -
 /// A perceived body as the drawing code takes it: its motion row (`seen_bodies`, which carries
 /// no path, chunk or kind), with the creature's kind from its `seen_characters` row (both views
 /// hold the same creatures).
-pub fn body_of(conn: &DbConnection, m: Motion) -> Body {
+pub fn body_of(conn: &DbConnection, m: Moving) -> Body {
     let kind = conn.db.seen_characters().id().find(&m.id).map(|c| c.kind).unwrap_or_default();
     Body {
         id: m.id,
@@ -258,12 +267,15 @@ pub fn body_of(conn: &DbConnection, m: Motion) -> Body {
         heading: m.heading,
         turn: m.turn,
         turn_s: m.turn_s,
+        face_off: m.face_off,
+        face_turn: m.face_turn,
+        face_turn_s: m.face_turn_s,
     }
 }
 
 /// Every body my character perceives, mine included (`my_body` and `seen_bodies`).
 pub fn bodies(conn: &DbConnection) -> impl Iterator<Item = Body> + '_ {
-    let rows: Vec<Motion> = conn.db.my_body().iter().chain(conn.db.seen_bodies().iter()).collect();
+    let rows: Vec<Moving> = conn.db.my_body().iter().chain(conn.db.seen_bodies().iter()).collect();
     rows.into_iter().map(move |m| body_of(conn, m))
 }
 
@@ -272,7 +284,7 @@ pub fn find_body(conn: &DbConnection, id: u32) -> Option<Body> {
 }
 
 /// A perceived body's motion row, mine included.
-pub fn find_motion(conn: &DbConnection, id: u32) -> Option<Motion> {
+pub fn find_motion(conn: &DbConnection, id: u32) -> Option<Moving> {
     conn.db.my_body().id().find(&id).or_else(|| conn.db.seen_bodies().id().find(&id))
 }
 
@@ -292,16 +304,41 @@ pub fn find_doing(conn: &DbConnection, id: u32) -> Option<Doing> {
 }
 
 impl Net {
+    /// After a reducer call: the SDK's own refusal to queue it (it was not sent), for the HUD
+    /// and the action log. Every call goes out as `on_reply` then the call then this.
     pub fn report(&self, what: &str, r: Result<(), spacetimedb_sdk::Error>) {
+        let sent = self.last_call.take();
         if let Err(e) = r {
+            if let Some(s) = sent {
+                crate::actions::not_sent(s, e.to_string());
+            }
             self.errors.lock().unwrap().push(format!("{what}: {e}"));
         }
     }
 
-    /// Record a reducer's refusal (the authority's error text) for the HUD.
-    pub fn on_reply(&self, what: &'static str) -> impl FnOnce(&ReducerEventContext, Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) + Send + 'static {
+    /// The callback for a reducer call about to go out: `reducer` by its name, `args` by the
+    /// bindings' argument names (built only while the action log is on, `actions.rs`), `what`
+    /// the feature sending it. It logs the call and its reply (`actions.rs`), records the reply
+    /// for the session report (`record.rs`) and a refusal (the authority's error text) for the
+    /// HUD. Every reducer call this client sends goes through here.
+    pub fn on_reply(
+        &self,
+        what: &'static str,
+        reducer: &'static str,
+        args: impl FnOnce() -> serde_json::Value,
+    ) -> impl FnOnce(&ReducerEventContext, Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) + Send + 'static {
         let errors = self.errors.clone();
+        let sent = crate::actions::sent(reducer, what, args);
+        self.last_call.set(sent);
         move |ctx, r| {
+            if let Some(s) = sent {
+                let reply = match &r {
+                    Ok(Ok(())) => crate::actions::Reply::Ok,
+                    Ok(Err(e)) => crate::actions::Reply::Refused(e.clone()),
+                    Err(e) => crate::actions::Reply::Failed(e.to_string()),
+                };
+                crate::actions::replied(s, reply, Some(ctx.event.timestamp.to_micros_since_unix_epoch()));
+            }
             if let Ok(o) = &r {
                 crate::record::reply(what, &ctx.event.reducer, o.clone(), ctx.event.timestamp.to_micros_since_unix_epoch());
             }
@@ -430,7 +467,8 @@ impl Net {
             self.join_sent = true;
             if let Some(conn) = &self.conn {
                 info!("joining as {}", self.name);
-                let r = conn.reducers.join_then(self.name.clone(), self.on_reply("join"));
+                let name = self.name.clone();
+                let r = conn.reducers.join_then(self.name.clone(), self.on_reply("join", "join", || serde_json::json!({ "name": name })));
                 self.report("join", r);
             }
         }
@@ -575,6 +613,8 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
             }
             Signal::Disconnected(e) => {
                 warn!("offline: {e}");
+                // Calls still waiting will not be answered (the SDK drops their callbacks).
+                crate::actions::lost();
                 if let Some(c) = net.conn.take() {
                     let _ = c.disconnect();
                 }
