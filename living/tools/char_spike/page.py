@@ -181,11 +181,12 @@ def main():
 <tr><td>13:45</td><td><b>Attempt 5.</b> The beard rebuilt from the face's own quads; the boot's folded top as its own band.</td></tr>
 <tr><td>13:50–13:58</td><td>Variants: woman, elder, lad, and recipes for a boy and a heavy man.</td></tr>
 <tr><td>14:00</td><td><b>Attempt 6.</b> Broader shoulders, calmer eyes, blink and mouth morph targets.</td></tr>
-<tr><td>14:20</td><td><b>Attempt 7</b> (the one shown). Shade painted into the vertex colours and a mottle on cloth, because the clothes were flat.</td></tr>
+<tr><td>14:20</td><td><b>Attempt 7.</b> Shade painted into the vertex colours and a mottle on cloth, because the clothes were flat.</td></tr>
 <tr><td>14:21–14:27</td><td>Seeded residents: 64 files built, animated and photographed in 3 minutes on six cores, then re-photographed twice to fix the sheets.</td></tr>
+<tr><td>14:30</td><td><b>Attempt 8</b> (the one shown). One pass on the faces after seeing the 64 together: the upper lid over the top of the iris (a full disc stares), a second highlight, larger and lower eyes for women and children, an upper lip where lips are tinted. Then everything was built and photographed again.</td></tr>
 <tr><td>{a.finished or '…'}</td><td>Captures, this page.</td></tr>
 </table>
-<p><b>About 50 minutes from the first run to the man shown, in seven attempts, by one agent session</b>; half an hour of that got him to within a pass of what you see. The whole spike, reading and page included, took well under the half day allowed. That speed is the main finding besides the pictures: a new person or garment is a change to a script and a 7-second rebuild, judged in the game's renderer. What it does not buy is taste. The remaining weaknesses are not bugs to grind through; they need someone to say what a Cullet face should look like.</p>
+<p><b>About an hour from the first run to the man shown, in eight attempts, by one agent session</b>; the first half hour got him most of the way, and much of the rest went to the variants and the cast. The whole spike, reading and page included, took well under the half day allowed. That speed is the main finding besides the pictures: a new person or garment is a change to a script and a 7-second rebuild, judged in the game's renderer. What it does not buy is taste. The remaining weaknesses are not bugs to grind through; they need someone to say what a Cullet face should look like.</p>
 
 <h2>7. How 64 residents would vary</h2>
 <p>Three levers, all exercised in this spike. Each figure below is at its recipe's height.</p>

@@ -123,6 +123,7 @@ STUBBLE_K = 1.0  # how strongly stubble shades the jaw
 LINES = 0.0  # age lines (0 none, 1 an old face)
 RECEDE = 0.0  # how far the front hairline has moved back, m
 LASH_K, BROW_W, BROW_UP, LIP_TINT = 1.0, 0.0074, 0.0, 0.5
+NOSE_LINE = 1.0  # how strongly the nose's side is drawn
 LIMB_K = 1.0  # girth of arms and legs
 GIRTH = 1.0  # girth of the torso
 LONG = 0.07  # how far a bob hangs below the hairline, m
@@ -1148,7 +1149,8 @@ def face_parts(sh, beard=False):
         sh.strip(MAT["eye_white"], mid, bot, (0.88, 0.88, 0.87), 0, (0.84, 0.83, 0.82), blink=(shut, bot))
         # The iris: a disc cut by the lids, darker at the top; pupil above it.
         r = IRIS_R
-        cx, cz = side * (EYE_X - 0.0008), EYE_Z + 0.0008
+        # The upper lid covers the iris's top fifth: a full disc stares.
+        cx, cz = side * (EYE_X - 0.0008), EYE_Z + EYE_UP - 0.78 * r
 
         def cut(x, z, margin=0.0002):
             s = max(min((abs(x) - EYE_X) / EYE_W, 0.999), -0.999)
@@ -1177,9 +1179,9 @@ def face_parts(sh, beard=False):
         pts = [cut(cx, cz)] + [cut(cx + pr * math.cos(2 * PI * k / 12), cz + pr * math.sin(2 * PI * k / 12)) for k in range(12)]
         sh.add(MAT["iris"], pts, [(0, 1 + k, 1 + (k + 1) % 12) for k in range(12)], [(0.03, 0.03, 0.04)] * 13, 2, blink=closed(pts))
         # A highlight, up and toward the light (the same side in both eyes).
-        hx, hz, hr = cx - 0.0034, cz + 0.0036, 0.0023
-        pts = [cut(hx, hz)] + [cut(hx + hr * math.cos(2 * PI * k / 8), hz + hr * 0.85 * math.sin(2 * PI * k / 8)) for k in range(8)]
-        sh.add(MAT["highlight"], pts, [(0, 1 + k, 1 + (k + 1) % 8) for k in range(8)], [(1.0, 1.0, 0.98)] * 9, 3, blink=closed(pts))
+        for hx, hz, hr in ((cx - 0.36 * r, cz + 0.22 * r, 0.25 * r), (cx + 0.40 * r, cz - 0.46 * r, 0.11 * r)):
+            pts = [cut(hx, hz)] + [cut(hx + hr * math.cos(2 * PI * k / 8), hz + hr * 0.85 * math.sin(2 * PI * k / 8)) for k in range(8)]
+            sh.add(MAT["highlight"], pts, [(0, 1 + k, 1 + (k + 1) % 8) for k in range(8)], [(1.0, 1.0, 0.98)] * 9, 3, blink=closed(pts))
         # The upper lash line, thickest toward the outer corner, with a short wing.
         s2 = [-1.02 + 2.2 * i / (n - 1) for i in range(n)]
 
@@ -1224,6 +1226,14 @@ def face_parts(sh, beard=False):
         top.append((x, -0.0755 - 0.0006 * t * t))
         bot.append((x, -0.0755 - 0.0006 * t * t - w))
     sh.strip(MAT["face"], top, bot, mix(SKIN, SKIN_WARM, LIP_TINT), 0, mix(SKIN, SKIN_WARM, 0.45 * LIP_TINT), name="Lip")
+    if LIP_TINT > 0.6:
+        top, bot = [], []
+        for i in range(mn):
+            t = -1 + 2 * i / (mn - 1)
+            bow = 0.0030 * (1 - abs(t) ** 1.5) - 0.0009 * math.exp(-((t / 0.2) ** 2))
+            top.append((0.0155 * t, -0.0748 + bow))
+            bot.append((0.0155 * t, -0.0752))
+        sh.strip(MAT["face"], top, bot, mix(SKIN, SKIN_WARM, 0.75 * LIP_TINT), 0, mix(SKIN, SKIN_WARM, 0.9 * LIP_TINT), name="Lip")
     top, bot = [], []
     for i in range(mn):
         t = -1 + 2 * i / (mn - 1)
@@ -1256,7 +1266,7 @@ def face_parts(sh, beard=False):
         t = i / 7
         x = lerp(0.0068, 0.0105, t ** 1.5) * ns
         z = nz(lerp(-0.006, -0.043, t))
-        w = 0.0011 * math.sin(PI * (0.15 + 0.85 * t)) + 0.0002
+        w = (0.0011 * math.sin(PI * (0.15 + 0.85 * t)) + 0.0002) * NOSE_LINE
         top.append((x - w, z))
         bot.append((x + w, z))
     sh.strip(MAT["face"], top, bot, SKIN_SHADE, 0)
@@ -1812,7 +1822,7 @@ VARIANTS = {
     # game's recipe, as for the small folk).
     "youth": dict(
         beard=False, coat=None, STUBBLE_K=0.0, seed=11, FACE=dict(jaw=0.88, chin=0.86, brow=0.35, nose=0.78, lips=1.0),
-        EYE=(0.0200, 0.0128, 0.0074, 0.0112), BROW_W=0.0052, HAIR=(0.30, 0.20, 0.12), HAIR_TIP=(0.46, 0.33, 0.20),
+        EYE=(0.0204, 0.0134, 0.0076, 0.0116), EYE_Z=-0.003, NOSE_LINE=0.5, BROW_W=0.0052, HAIR=(0.30, 0.20, 0.12), HAIR_TIP=(0.46, 0.33, 0.20),
         jersey=mix(PAL["old_lime"], PAL["driftwood"], 0.25),
     ),
     # An old man: a receded hairline, lines, grey hair and beard, a flat cap, a tarred coat.
@@ -1826,7 +1836,7 @@ VARIANTS = {
     # with an apron over the jersey.
     "woman": dict(
         beard=False, STUBBLE_K=0.0, seed=8, TORSO=WOMAN_TORSO, LIMB_K=0.86, FACE=dict(jaw=0.80, chin=0.78, brow=0.25, nose=0.80, lips=1.25),
-        EYE=(0.0200, 0.0122, 0.0072, 0.0108), LASH_K=1.45, BROW_W=0.0044, BROW_UP=0.0020, LIP_TINT=0.85, HAIR=(0.36, 0.17, 0.10),
+        EYE=(0.0206, 0.0130, 0.0074, 0.0114), EYE_Z=-0.002, NOSE_LINE=0.45, LASH_K=1.45, BROW_W=0.0044, BROW_UP=0.0020, LIP_TINT=0.85, HAIR=(0.36, 0.17, 0.10),
         HAIR_TIP=(0.55, 0.30, 0.16), IRIS=(0.36, 0.46, 0.34), hair="kerchief", head="kerchief", coat="smock",
         coat_colour=mix(PAL["slate"], PAL["chalk_blue"], 0.35), jersey=mix(PAL["old_lime"], PAL["driftwood"], 0.2), SKIN=(0.88, 0.69, 0.58),
         headwear=mix(PAL["oxblood"], PAL["rust"], 0.3),
@@ -1866,8 +1876,8 @@ def resident(seed, kind):
     spec.update(HAIR=hair, HAIR_TIP=mix(hair, (0.92, 0.86, 0.74), u(0.12, 0.22)))
     spec.update(jersey=pick(("green", "cream", "blue", "red", "navy", "olive")), patches=(cloth["canvas"], cloth["olive"], cloth["red"]))
     if child:
-        spec.update(FACE=dict(jaw=u(0.84, 0.90), chin=u(0.80, 0.90), brow=0.3, nose=u(0.70, 0.80), lips=u(1.0, 1.15)), EYE=(0.0200, u(0.0124, 0.0134), 0.0074, 0.0112),
-                    BROW_W=0.0050, LIMB_K=0.92, GIRTH=u(0.94, 1.02))
+        spec.update(FACE=dict(jaw=u(0.84, 0.90), chin=u(0.80, 0.90), brow=0.3, nose=u(0.70, 0.80), lips=u(1.0, 1.15)), EYE=(u(0.0200, 0.0208), u(0.0130, 0.0140), 0.0076, u(0.0114, 0.0120)),
+                    EYE_Z=u(-0.005, -0.002), NOSE_LINE=0.4, BROW_W=0.0050, LIMB_K=0.92, GIRTH=u(0.94, 1.02))
         if kind == "boy":
             spec.update(hair=r.choice(("tousled", "tousled", "short")), coat=r.choice((None, None, "smock")), hem=0.74, apron=False, coat_colour=pick(("canvas", "olive", "blue", "oilskin")))
         else:
@@ -1875,7 +1885,7 @@ def resident(seed, kind):
                         LASH_K=1.25, LIP_TINT=0.65)
     elif male:
         spec.update(FACE=dict(jaw=u(0.93, 1.06), chin=u(0.90, 1.10), brow=u(0.80, 1.15), nose=u(0.90, 1.16), lips=u(0.85, 1.05)),
-                    EYE=(u(0.0172, 0.0186), u(0.0086, 0.0104), 0.0060, u(0.0090, 0.0098)), BROW_W=u(0.0064, 0.0090), LIMB_K=u(0.95, 1.08))
+                    EYE=(u(0.0172, 0.0190), u(0.0086, 0.0106), 0.0060, u(0.0090, 0.0100)), EYE_Z=u(0.000, 0.004), NOSE_LINE=u(0.8, 1.1), BROW_W=u(0.0064, 0.0090), LIMB_K=u(0.95, 1.08))
         spec.update(beard=r.random() < (0.7 if old else 0.45), RECEDE=u(0.010, 0.022) if old else u(0.0, 0.007), LINES=u(0.8, 1.1) if old else r.choice((0.0, 0.0, 0.0, 0.35, 0.5)))
         spec["STUBBLE_K"] = 0.0 if spec["beard"] else u(0.2, 1.0)
         spec["hair"] = r.choices(("tousled", "short", "sides"), weights=(2, 3, 5) if old else (5, 4, 1))[0]
@@ -1886,7 +1896,7 @@ def resident(seed, kind):
         spec.update(coat=r.choices(("coat", "smock", None), weights=(5, 3, 2))[0], hem=0.74, apron=False, coat_colour=pick(("oilskin", "oilskin", "tarred", "olive", "canvas", "navy")))
     else:
         spec.update(TORSO=WOMAN_TORSO, LIMB_K=u(0.82, 0.90), FACE=dict(jaw=u(0.78, 0.87), chin=u(0.74, 0.86), brow=u(0.2, 0.4), nose=u(0.76, 0.90), lips=u(1.10, 1.35)),
-                    EYE=(u(0.0192, 0.0204), u(0.0112, 0.0126), 0.0070, u(0.0102, 0.0110)), LASH_K=u(1.3, 1.6), BROW_W=u(0.0040, 0.0050), BROW_UP=u(0.001, 0.003), LIP_TINT=u(0.7, 0.9))
+                    EYE=(u(0.0198, 0.0210), u(0.0122, 0.0136), 0.0074, u(0.0108, 0.0118)), EYE_Z=u(-0.004, 0.0), NOSE_LINE=u(0.35, 0.6), LASH_K=u(1.3, 1.6), BROW_W=u(0.0040, 0.0050), BROW_UP=u(0.001, 0.003), LIP_TINT=u(0.7, 0.9))
         spec["LINES"] = u(0.7, 1.0) if old else r.choice((0.0, 0.0, 0.0, 0.3))
         spec["hair"] = r.choices(("kerchief", "bob", "bob_parted"), weights=(6, 2, 2) if old else (4, 3, 3))[0]
         spec["head"] = "kerchief" if spec["hair"] == "kerchief" else None
