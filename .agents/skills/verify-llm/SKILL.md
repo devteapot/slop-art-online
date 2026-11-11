@@ -15,7 +15,7 @@ Preconditions: run from the repository root. If SpacetimeDB is down, run `docker
 .agents/skills/verify-llm/scripts/verify_llm.py --run llm-$(date +%Y%m%d-%H%M%S)
 ```
 
-The command builds with `cargo build --manifest-path living/Cargo.toml -p living-mind --release`, checks all nine fake-server scenarios, runs the `llm::tests` checks, including pacing, priority and a direct fake HTTP exchange, then launches one fresh `verify-llm-*` database per case through `verify.py`. Each launch passes `doctor` before any mind starts. It drives every local feature in [features/README.md](features/README.md). The first `think` node waits for the authority's 45-second settling period. The timeout case deliberately waits for the real 180-second HTTP timeout.
+The command builds with `cargo build --manifest-path living/Cargo.toml -p living-mind --release`, checks all ten fake-server scenarios, runs the `llm::tests` checks, including pacing, priority and a direct fake HTTP exchange, then launches one fresh `verify-llm-*` database per case through `verify.py`. Each launch passes `doctor` before any mind starts. It drives every local feature in [features/README.md](features/README.md). The first `think` node waits for the authority's 45-second settling period. The timeout case deliberately waits for the real 180-second HTTP timeout.
 
 To repeat a specific case on a new database:
 
@@ -45,7 +45,7 @@ Never use a reference world or a broad process-name kill. Use a new run name for
 
 ## Reuse the fake server
 
-[references/fake-llm.md](references/fake-llm.md) documents the interface shared with `verify-minds` and `verify-knowledge`, including scripted replies, 429 and 500, delay, timeout, malformed JSON, content arrays and a closed listening port.
+[references/fake-llm.md](references/fake-llm.md) documents the interface shared with `verify-minds` and `verify-knowledge`, including scripted replies, 429 (a rate limit or Mistral's out-of-capacity body) and 500, delay, timeout, malformed JSON, content arrays and a closed listening port.
 
 ```bash
 .agents/skills/verify-llm/scripts/fake_llm.py --port 18181 --log .local/living/verify/llm-manual/requests.jsonl --scenario valid

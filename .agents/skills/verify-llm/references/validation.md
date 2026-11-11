@@ -1,6 +1,14 @@
 # Model integration validation
 
 
+## 2026-11-11 consolidation on a model out of capacity (fix-consolidation-429, DGX Spark)
+
+Branch `fix-consolidation-429`, trial service `slop-trials-stdb` (`LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake provider only. Play-test 5 logged 41 HTTP 429 "Not enough capacity available" (`backend_out_of_capacity`, code 3505) on `zai-glm-5-3-flash` consolidation in 6 minutes; the Spark's `ar1` trial journals hold 865 such 429s in 2,468 GLM consolidations (and 400 in 1,368 GLM thinks, which already overflowed), none on DeepSeek. Background work did not overflow by design, and its paced same-model retry mostly failed again. A profile's `capacity_overflow` now lists background purposes that go to its overflow on a capacity 429; `glm-flash` lists `consolidate`.
+
+- `llm-cap-20261111-205903`: `capacity-overflow` (2 primary capacity 429s, each followed by one successful alternate consolidation at the alternate's effort; think and deliberate stayed on the primary; the consolidation thought was accepted; no consolidation failure logged), `overflow` and `basic` pass; 10 fake-contract scenarios pass (new: `capacity`).
+- Cargo: `a_model_out_of_capacity_sends_listed_memory_work_to_the_overflow` (real fake server: listed consolidate goes a → b with no effort sent; unlisted reorganize and a rate-limit 429 keep a → a; a `capacity_overflow` without overflow or with an unknown purpose is refused; the overflow's effort gap is reported). The other 30 `llm::` tests pass.
+- Not covered: the paid live tier, and the other 13 cases (unchanged paths).
+
 ## 2026-11-11 the prompt frame (exp-player-frame, DGX Spark)
 
 Branch `exp-player-frame` in a worktree, against the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake provider only, while a paid trial batch ran on the same service (its databases untouched). `llm-pf2-20261111-131444`: 16 of 16 cases and the 9 fake-contract scenarios pass. The first attempt (`llm-pf-20261111-131339`) created no database: `verify.py` accepted only a port published on `127.0.0.1`, and the trial service is published on `0.0.0.0:3320` for LAN watchers; the helper now accepts both. The change itself (`LIVING_FRAME`) does not touch `llm.rs`; this run shows routing, overflow, repair and journaling are unchanged under the new build.

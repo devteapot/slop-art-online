@@ -29,6 +29,15 @@ pub struct Profile {
     /// Optional alternate for legacy configs. Every alternate uses its own pacing.
     #[serde(default)]
     pub overflow: Option<String>,
+    /// Background purposes (memory work, which otherwise never overflows) that go to
+    /// `overflow` when this profile's provider answers 429 "out of capacity" for its model
+    /// (Mistral's `backend_out_of_capacity`, code 3505): a shortage of the model, not this
+    /// mind's rate, which a paced retry on the same model rarely outlasts. A rate-limit 429
+    /// keeps its one paced retry here. Listed purposes only, at the overflow's own effort:
+    /// person consolidation on DeepSeek Flash with thinking off was judged 8/8 (MODEL_COST),
+    /// reorganization 4/21, so `reorganize` is not listed.
+    #[serde(default)]
+    pub capacity_overflow: Vec<String>,
     #[serde(default)]
     pub requests_per_minute: Option<f64>,
     #[serde(default)]
@@ -202,6 +211,16 @@ impl ModelsFile {
             }
         };
         route("default", &self.default)?;
+        for (name, p) in &self.profiles {
+            for purpose in &p.capacity_overflow {
+                if !PURPOSES.contains(&purpose.as_str()) {
+                    return Err(anyhow!("profile {name}: capacity_overflow names unknown purpose {purpose} (one of {})", PURPOSES.join(", ")));
+                }
+            }
+            if !p.capacity_overflow.is_empty() && !p.overflow.as_ref().is_some_and(|o| o != name && self.profiles.contains_key(o)) {
+                return Err(anyhow!("profile {name} has a capacity_overflow but no overflow profile to send it to"));
+            }
+        }
         for (k, v) in self.assign.iter().chain(&self.stages).chain(&self.groups) {
             route(k, v)?;
         }
@@ -221,7 +240,7 @@ impl ModelsFile {
     /// profile's map has no entry for it (`null` is an entry). GLM Flash without an entry
     /// thinks as at `max` and runs out of tokens (MODEL_COST Part 1: 69% of compiles came back
     /// empty that way). An overflow profile is reached for the routine and interactive
-    /// purposes (background ones do not overflow).
+    /// purposes (background ones only when listed in the profile's `capacity_overflow`).
     pub fn effort_gaps(&self) -> Vec<String> {
         let mut out = std::collections::BTreeSet::new();
         self.gaps_for("default", &self.default, &PERSON_PURPOSES, &mut out);
@@ -253,7 +272,7 @@ impl ModelsFile {
                 if written.is_none() && p.effort_entry(purpose).is_none() {
                     out.insert(format!("profile {name} has no reasoning_effort for {purpose} (reached by {what} → {route})"));
                 }
-                let overflows = Lane::for_purpose(purpose) != Lane::Background;
+                let overflows = Lane::for_purpose(purpose) != Lane::Background || p.capacity_overflow.iter().any(|c| c == purpose);
                 if let Some(o) = p.overflow.as_deref().filter(|o| overflows && *o != name).and_then(|o| self.profiles.get(o).map(|q| (o, q))) {
                     if o.1.effort_entry(purpose).is_none() {
                         out.insert(format!("profile {} has no reasoning_effort for {purpose} (the overflow of {name}, reached by {what} → {route})", o.0));
@@ -471,6 +490,14 @@ impl Rate {
         self.last_limit_log = Some(now);
         Some(limits)
     }
+}
+
+/// A 429 that says the provider has no capacity for the model (Mistral: `"type":
+/// "backend_out_of_capacity"`, code 3505, "Not enough capacity available for this request"),
+/// as opposed to a rate limit on this caller.
+fn out_of_capacity(e: &anyhow::Error) -> bool {
+    let text = format!("{e:#}");
+    text.contains("HTTP 429") && (text.contains("backend_out_of_capacity") || text.contains("Not enough capacity"))
 }
 
 fn retry_after(headers: &reqwest::header::HeaderMap, now: std::time::SystemTime) -> Option<Duration> {
@@ -851,21 +878,20 @@ impl Llm {
             // a backoff (consolidation's `retry_after`, a sleep's, an integration's next turn)
             // on the model it chose. An overflow model would answer with its own settings for
             // the purpose: DeepSeek with thinking off reorganized acceptably 4 times in 21.
-            if result.is_err() && limited {
-                result = self.chat_once(&pick, purpose, actor, messages, lane).await;
+            // Only a model out of capacity sends the purposes its profile lists in
+            // `capacity_overflow` there (play-test 5: 41 consolidation 429s in 6 minutes).
+            if let Err(e) = &result {
+                let short = out_of_capacity(e) && self.models.profiles.get(&pick.profile).is_some_and(|p| p.capacity_overflow.iter().any(|c| c == purpose));
+                if let Some(alternate) = self.overflow_pick(&pick, purpose).filter(|_| short) {
+                    result = self.chat_once(&alternate, purpose, actor, messages, lane).await;
+                } else if limited {
+                    result = self.chat_once(&pick, purpose, actor, messages, lane).await;
+                }
             }
             return result;
         }
         let default = self.pick(&self.models.default, purpose, at);
-        // The overflow profile is called with its own effort for the purpose.
-        let alternate = self
-            .models
-            .profiles
-            .get(&pick.profile)
-            .and_then(|p| p.overflow.as_ref())
-            .filter(|p| **p != pick.profile && self.keys.contains_key(*p))
-            .map(|p| Pick { profile: p.clone(), effort: self.models.profiles[p].effort(purpose).cloned(), mix: pick.mix.clone(), attention: pick.attention })
-            .or_else(|| (default.profile != pick.profile).then_some(default));
+        let alternate = self.overflow_pick(&pick, purpose).or_else(|| (default.profile != pick.profile).then_some(default));
         if result.is_err() {
             if let Some(alternate) = alternate {
                 result = self.chat_once(&alternate, purpose, actor, messages, lane).await;
@@ -875,6 +901,16 @@ impl Llm {
             }
         }
         result
+    }
+
+    /// The picked profile's keyed overflow, called with its own effort for the purpose.
+    fn overflow_pick(&self, pick: &Pick, purpose: &str) -> Option<Pick> {
+        self.models
+            .profiles
+            .get(&pick.profile)
+            .and_then(|p| p.overflow.as_ref())
+            .filter(|p| **p != pick.profile && self.keys.contains_key(*p))
+            .map(|p| Pick { profile: p.clone(), effort: self.models.profiles[p].effort(purpose).cloned(), mix: pick.mix.clone(), attention: pick.attention })
     }
 
     async fn chat_once(&self, pick: &Pick, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
@@ -2181,6 +2217,93 @@ mod tests {
         assert_eq!(profiles("reorganize"), ["a"]);
         assert_eq!(profiles("think"), ["a", "b"], "a routine call overflows");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A model out of capacity (a 429 with Mistral's `backend_out_of_capacity` body) sends the
+    /// background purposes its profile lists in `capacity_overflow` to the overflow, at the
+    /// overflow's effort; an unlisted purpose and a rate-limit 429 keep their one paced retry
+    /// on the same profile. A capacity_overflow without an overflow is refused.
+    #[tokio::test]
+    async fn a_model_out_of_capacity_sends_listed_memory_work_to_the_overflow() {
+        struct Fake(std::process::Child);
+        impl Drop for Fake {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let directory = std::env::temp_dir().join(format!("living-capacity-{}", now_ms()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = socket.local_addr().unwrap().port();
+        drop(socket);
+        let script = directory.join("script.json");
+        std::fs::write(&script, json!({"rules": [
+            {"model": "a", "contains": "CAPACITY", "capacity": true, "times": -1},
+            {"model": "a", "contains": "RATE", "status": 429, "headers": {"Retry-After": "0.1"}, "times": -1}]}).to_string()).unwrap();
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let log = directory.join("requests.jsonl");
+        let mut fake = Fake(
+            std::process::Command::new("python3")
+                .arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py"))
+                .args(["--port", &port.to_string(), "--log"])
+                .arg(&log)
+                .arg("--script")
+                .arg(script)
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let http = reqwest::Client::new();
+        for _ in 0..100 {
+            if http.get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
+                break;
+            }
+            assert!(fake.0.try_wait().unwrap().is_none());
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        std::env::set_var("LIVING_TEST_CAPACITY_KEY", "dummy-only");
+        let base = format!("http://127.0.0.1:{port}/v1");
+        let file = |capacity_overflow: Value, overflow: Value| {
+            json!({"default": "a", "profiles": {
+                "a": {"base_url": base, "model": "a", "key_env": "LIVING_TEST_CAPACITY_KEY", "requests_per_minute": 6000, "overflow": overflow,
+                      "capacity_overflow": capacity_overflow, "reasoning_effort": {"consolidate": "high", "reorganize": "high"}},
+                "b": {"base_url": base, "model": "b", "key_env": "LIVING_TEST_CAPACITY_KEY", "requests_per_minute": 6000,
+                      "reasoning_effort": {"consolidate": null, "reorganize": null}}}})
+        };
+        let refused: ModelsFile = serde_json::from_value(file(json!(["consolidate"]), Value::Null)).unwrap();
+        assert!(refused.check().unwrap_err().to_string().contains("no overflow"));
+        let unknown: ModelsFile = serde_json::from_value(file(json!(["remember"]), json!("b"))).unwrap();
+        assert!(unknown.check().unwrap_err().to_string().contains("unknown purpose remember"));
+        let models: ModelsFile = serde_json::from_value(file(json!(["consolidate"]), json!("b"))).unwrap();
+        models.check().unwrap();
+        let llm = Llm::new(models, directory.join("journal")).unwrap();
+        let say = |marker: &str| [Msg { role: "user", content: marker.into() }];
+        let reply = llm.chat("a", Attention::OnStage, "consolidate", "capacity", &say("CAPACITY")).await.unwrap();
+        assert_eq!(reply.model, "b");
+        assert!(llm.chat("a", Attention::OnStage, "reorganize", "unlisted", &say("CAPACITY")).await.is_err());
+        assert!(llm.chat("a", Attention::OnStage, "consolidate", "rate", &say("RATE")).await.is_err());
+        let journal = |actor: &str| -> Vec<Value> {
+            std::fs::read_to_string(directory.join(format!("journal/{actor}.jsonl"))).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect()
+        };
+        let capacity = journal("capacity");
+        assert_eq!(capacity.iter().map(|e| e["profile"].as_str().unwrap()).collect::<Vec<_>>(), ["a", "b"]);
+        assert!(capacity[0]["error"].as_str().unwrap().contains("backend_out_of_capacity"));
+        assert!(capacity[1]["error"].is_null() && capacity[1]["effort"].is_null() && capacity[1]["lane"] == "background");
+        assert!(capacity[1]["request"].get("reasoning_effort").is_none(), "the overflow's own effort: none");
+        for actor in ["unlisted", "rate"] {
+            let entries = journal(actor);
+            assert_eq!(entries.iter().map(|e| e["profile"].as_str().unwrap()).collect::<Vec<_>>(), ["a", "a"], "{actor}: one paced retry on its own model");
+            assert!(entries.iter().all(|e| e["error"].as_str().unwrap().contains("HTTP 429")));
+        }
+        let gaps = |b_efforts: Value| {
+            let mut f = file(json!(["consolidate"]), json!("b"));
+            f["profiles"]["b"]["reasoning_effort"] = b_efforts;
+            serde_json::from_value::<ModelsFile>(f).unwrap().effort_gaps()
+        };
+        assert!(gaps(json!({"reorganize": null})).iter().any(|g| g.contains("profile b has no reasoning_effort for consolidate (the overflow of a")));
+        assert!(gaps(json!({"consolidate": null})).iter().all(|g| !g.contains("reorganize")), "unlisted reorganize does not overflow");
+        let _ = std::fs::remove_dir_all(directory);
     }
 
     /// A runaway generation stops near what the purpose needs (measured p99 output on

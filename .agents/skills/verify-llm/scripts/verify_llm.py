@@ -25,7 +25,7 @@ STDB_URL = os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/'
 STDB_CONTAINER = os.environ.get('LIVING_STDB_CONTAINER', 'sao-living_spacetimedb_1')
 FAKE = Path(__file__).with_name('fake_llm.py')
 CASES = ('basic', 'routing-group', 'routing-assign', 'routing-rotate', 'routing-child',
-         'routing-default', 'overflow', 'retry-fallback', 'error-overflow', 'outage',
+         'routing-default', 'overflow', 'capacity-overflow', 'retry-fallback', 'error-overflow', 'outage',
          'repair', 'deliberation-retry', 'retry-exhausted', 'timeout', 'missing-default-key', 'mix')
 FIELDS = {'at_ms', 'actor', 'purpose', 'profile', 'model', 'latency_ms', 'request', 'reply', 'tokens', 'error', 'lane', 'queue_wait_ms', 'prompt_tokens', 'completion_tokens', 'cached_tokens', 'effort', 'mix', 'attention'}
 
@@ -269,6 +269,11 @@ def run_case(run, case):
     elif case in ('overflow', 'error-overflow'):
         models['profiles']['primary']['overflow'] = 'alternate'
         script = {'rules': [{'purpose': 'think', 'status': 429 if case == 'overflow' else 500, 'times': -1}]}
+    elif case == 'capacity-overflow':
+        # The provider has no capacity for the primary's model (Mistral's 429 body): listed
+        # memory work goes to the overflow at the overflow's effort.
+        models['profiles']['primary'].update(overflow='alternate', capacity_overflow=['consolidate'])
+        script = {'rules': [{'purpose': 'consolidate', 'capacity': True, 'times': -1}]}
     elif case in ('retry-fallback', 'timeout'):
         models['assign'] = {adults[0]['name']: 'alternate'}
     elif case == 'repair':
@@ -367,6 +372,13 @@ def run_case(run, case):
             recovery = re.search(r'reachable again after .*?; (\d+) calls were held meanwhile', log)
             assert recovery and int(recovery[1]) > 0, 'recovery must report held callers'
             assert len(run.exchanges()) > before
+        if case == 'capacity-overflow':
+            run.harness('player', 'join', 'LlmCapacityVerifier')
+            player = run.sql("SELECT id FROM character WHERE name = 'LlmCapacityVerifier'", 'capacity-player')[0]['id']
+            run.admin('place_near', player, ids[0])
+            run.harness('player', 'say', 'Hello, can you hear me?', '--to', str(ids[0]))
+            run.wait(lambda: any(t['kind'] == 'consolidate' and t['summary'] == 'I remember this moment.'
+                                 for t in run.sql(f'SELECT * FROM thought WHERE actor = {ids[0]}', 'capacity-thoughts')), 'accepted consolidation', 180)
         if case == 'basic':
             run.harness('player', 'join', 'LlmVerifier')
             player = run.sql("SELECT id FROM character WHERE name = 'LlmVerifier'", 'player')[0]['id']
@@ -387,6 +399,17 @@ def run_case(run, case):
         failure = next(e for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'primary' and e['error'])
         assert ('HTTP 429' if case == 'overflow' else 'HTTP 500') in failure['error']
         assert any(e['purpose'] == 'think' and e['profile'] == 'alternate' and not e['error'] for e in exchanges)
+    elif case == 'capacity-overflow':
+        memory = sorted([e for e in exchanges if e['purpose'] == 'consolidate'], key=lambda e: e['at_ms'])
+        short = [e for e in memory if e['profile'] == 'primary']
+        assert short and all('HTTP 429' in e['error'] and 'backend_out_of_capacity' in e['error'] for e in short), short
+        moved = [e for e in memory if e['profile'] == 'alternate']
+        assert moved and all(e['error'] is None and e['lane'] == 'background' and e['effort'] == 'consolidate' for e in moved), moved
+        # Each capacity failure goes straight to the overflow: no paced retry on the short model.
+        assert len(short) == len(moved), (len(short), len(moved))
+        assert all(e['profile'] == 'primary' for e in exchanges if e['purpose'] in ('think', 'deliberate')), 'only listed memory work moves'
+        assert not re.search(r'consolidation for .* failed', (run.directory / 'mind.log').read_text()), 'no consolidation failed'
+        expected = {'consolidate': {'primary_capacity_429': len(short), 'alternate_ok': len(moved)}}
     elif case == 'retry-fallback':
         failed = sorted([e for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'alternate' and e['error']], key=lambda e: e['at_ms'])
         fallback = min(e['at_ms'] for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'primary' and not e['error'])
