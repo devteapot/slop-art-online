@@ -162,6 +162,15 @@ python3 "$V" doctor --run "$L" > ".local/living/verify/$L/doctor.txt" 2>&1
 python3 "$C/scenes.py" lifecycle --run "$L" > ".local/living/verify/$L/lifecycle.txt" 2>&1
 python3 "$V" cleanup --run "$L"
 
+# The laws of starting a family and of the longing for a child (about 2 min, longer if it
+# must wait for day): conceive_roof, conceive_food, longing_after_min, longing_food.
+F=$R-family-laws
+mkdir -p ".local/living/verify/$F"
+python3 "$V" launch --run "$F" --seed stage1-acts > ".local/living/verify/$F/launch.txt" 2>&1
+python3 "$V" doctor --run "$F" > ".local/living/verify/$F/doctor.txt" 2>&1
+python3 "$C/scenes.py" family_laws --run "$F" > ".local/living/verify/$F/family_laws.txt" 2>&1
+python3 "$V" cleanup --run "$F"
+
 W=$R-wildlife
 mkdir -p ".local/living/verify/$W"
 python3 "$V" launch --run "$W" --seed stage1-acts > ".local/living/verify/$W/launch.txt" 2>&1

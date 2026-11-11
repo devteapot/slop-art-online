@@ -10,6 +10,13 @@ Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container 
 - First `drop` (plan-test) and `low` (island) runs in `core-drop1-20261111-153740-drop`/`-island`: sight across both passed; the walk check failed on a harness defect, not a rule: it compared CLI samples about 2 s apart (a 2.8 m "jump" was a walk round the drop's end), and the geometry picked the obstacle's very end. The check now walks the route the authority keeps (`body.path`) and the geometry keeps away from the ends.
 - `core-drop1b-20261111-154703-drop` (plan-test): `drop` 5 of 5. `core-drop1b-20261111-154703-island`: `low` 5 of 5 (a cart's tiles; the watcher across it waves and witnesses; the walker's route never crosses it).
 - Not run on this change: tick, needs, food, refusal, seize, skirmish, dealings, town, lives, laws, infant; mechanics.
+## 2026-11-11 the laws of starting a family and of the longing for a child (exp-hamlet-births, Spark)
+
+Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`. New scene `family_laws` (`core-family-20261111-142152`, stage1-acts): 9 of 9. Its first attempt (`core-hamlet-20261111-141837-family-laws`) passed the conceive checks and then failed for two scene bugs. One was a `str.format` on the script. The other came after it was fixed (`core-family-20261111-141949`): the empty-handed adult dropped its food only after the law was installed, so it had felt the longing for a moment with food in hand. The scene now empties hands first. `lifecycle` 6 of 6 (`core-hamlet-20261111-141837-lifecycle`). Baseline `core-hamlet-20261111-141837`: tick, needs, food, refusal, seize, sight, senses and moves pass (42 checks). `cargo_checks.py`: rules (the new `laws_with` longing values, `longing_wait_ms` equal to the old `20 − nurture/6`, and the `deathline` values `births_report.py` ports), authority 12, mind 82 and viewer sync 5 pass. `just living-check` exits 0. Not run: skirmish, dealings, town, lives, infant (about 2 h; cry routing is untouched), mechanics, steering, wildlife.
+
+After merging main `fd2030c` (rules-1: a seed's day and laws; only the night call in `brain.rs` conflicted): `family_laws` 9 of 9 (`core-family-20261111-150942`), `lifecycle` 6 of 6 (`core-life-20261111-151946`), `just living-check` exits 0 (rules 145), authority lib tests 12 of 12.
+
+After merging main `7837320` (fix-death-labels, fix-perceived-moving, plan-2; only the verify skills conflicted): `family_laws` 9 of 9 (`core-family-20261111-155914`), `lifecycle` 6 of 6 (`core-life-20261111-160034`), `just living-check` exits 0.
 
 ## 2026-11-11 fix-death-labels (Spark)
 

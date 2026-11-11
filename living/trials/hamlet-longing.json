@@ -1,0 +1,12 @@
+{
+ "extends": "hamlet",
+ "title": "The hamlet, a later longing for a child",
+ "about": "`hamlet` with the world's own values of two laws (world.rules): `longing_after_min` 120 (shipped 20) and `longing_food` 4 (shipped 0). The longing for a child is then felt 120 real minutes after one's own birth or one's youngest child's, shortened by nurture (70 minutes at nurture 50, 35 at nurture 85, 20 at 100), and only while carrying at least 4 food. What a body can do is unchanged: anyone may still choose to start a family when asked or on their own; only the felt drive changes.",
+ "world": {
+  "seed": "hamlet",
+  "rules": {
+   "longing_after_min": 120,
+   "longing_food": 4
+  }
+ }
+}
