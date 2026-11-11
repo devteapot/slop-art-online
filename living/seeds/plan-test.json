@@ -37,7 +37,8 @@
           ],
           "structures": [
             {"kind": "lamp", "lot": "hall", "note": "at the hall's door"},
-            {"kind": "storage", "lot": "inn", "spot": "seat 1", "contents": {"fish": 2}, "note": "a crate by the inn's first seat"}
+            {"kind": "storage", "lot": "inn", "spot": "seat 1", "contents": {"fish": 2}, "note": "a crate by the inn's first seat"},
+            {"kind": "storage", "lot": "house_a", "owner": "household:hollis", "contents": {"berries": 4}, "note": "the Hollis household's own store, at its house (rules-3)"}
           ],
           "lots": [
             {"id": "store", "kind": "workshop", "name": "the Store", "at": [-30, 14], "size": [8, 9], "facing": "south", "level": "quay", "model": "cullet/workshop/store.glb", "height_m": 7.5, "wear": {"salt": 0.7}},

@@ -20,6 +20,7 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 ```
 
 - The island seed's newcomer arrives on Brackenford's square among residents. No mind service runs and no model is called: residents never answer, and the free tier is all there is.
+- In a fresh worktree, link `living/game/assets/{lookdev,textures,view}` from the main checkout (`for d in lookdev textures view; do ln -s /Users/carlid/dev/slop-art-online/living/game/assets/$d living/game/assets/$d; done`). They are generated and git-ignored; without them the client draws no character models or textures, and `ready` can wait for a fitted character until `drive.py` times out.
 - On the laptop, heavy builds go through `build-slot` (at most three at once).
 - The client is ready when its log says `live script: ready after …`; `drive.py` waits for it.
 

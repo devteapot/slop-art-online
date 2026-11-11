@@ -156,6 +156,11 @@ fn plan_kinds(s: &Seed, sc: &living_rules::script::Scripts) -> Result<(), String
                 bad.insert(format!("structure `{}`", st.kind));
             }
         }
+        for l in &p.lots {
+            if let Some(k) = l.structure.as_deref().filter(|k| !has("structures", k)) {
+                bad.insert(format!("structure `{k}` (at lot {})", l.id));
+            }
+        }
         let contents = p.structures.iter().flat_map(|st| st.contents.keys()).chain(p.lots.iter().flat_map(|l| l.contents.keys()));
         for item in contents {
             if !has("items", item) {
@@ -165,6 +170,16 @@ fn plan_kinds(s: &Seed, sc: &living_rules::script::Scripts) -> Result<(), String
         if !bad.is_empty() {
             let v: Vec<String> = bad.into_iter().collect();
             return Err(format!("map.params.plans: plan {} names kinds this world's tables do not have: {} (resources are {}; structures are {})", p.id, v.join(", "), t.names("resources").join(", "), t.names("structures").join(", ")));
+        }
+        // A structure a household owns names a household of the seed's residents.
+        let households: std::collections::BTreeSet<&str> = s.towns.iter().chain(&s.villages).flat_map(|t| t.residents.iter().map(crate::seed::household_of)).collect();
+        for (i, st) in p.structures.iter().enumerate() {
+            let Some(o) = st.owner.as_deref() else { continue };
+            let key = o.strip_prefix("household:").unwrap_or("");
+            if key.is_empty() || !households.contains(key) {
+                let known: Vec<&str> = households.iter().copied().collect();
+                return Err(format!("map.params.plans: plan {} structures[{i}] ({}) belongs to {o:?}, which is no household of the seed's residents (an owner is \"household:<key>\"; the households are {})", p.id, st.kind, if known.is_empty() { "none".to_string() } else { known.join(", ") }));
+            }
         }
     }
     Ok(())
@@ -204,7 +219,7 @@ fn world_laws(ctx: &ReducerContext, s: &Seed) {
     // already run them (`check`).
     let mut k = common::clock(ctx);
     if let Some(mut row) = ctx.db.script().name().find("skills".to_string()) {
-        row.source = living_rules::script::with_world_laws(living_rules::script::without_world_laws(&row.source), &crate::world_law_values(ctx));
+        row.source = crate::installed_source(&row.source, &crate::world_law_values(ctx));
         row.revision = row.revision.max(k.scripts_rev) + 1;
         k.scripts_rev = row.revision;
         ctx.db.script().name().update(row);

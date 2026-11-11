@@ -1,0 +1,44 @@
+{
+ "run": "verify-winter",
+ "seed": 12,
+ "map": {
+  "kind": "valley"
+ },
+ "day_minutes": 4,
+ "year_days": 4,
+ "life_pace": 1.0,
+ "laws_file": "worlds/cullet/laws.rhai",
+ "setting": "A scene world: Cullet's laws on a 4-minute day and a 4-day year, so that winter comes about 11 real minutes after creation (verify-core scenes.py winter).",
+ "resource_scale": {
+  "tree": 0.0,
+  "fishing_spot": 0.0,
+  "berry_bush": 0.0,
+  "clay_bank": 0.0,
+  "boulder": 0.0,
+  "reeds": 0.0,
+  "kelp_bed": 0.0,
+  "sand_bank": 0.0,
+  "peat_bank": 0.0,
+  "root_plot": 0.0,
+  "greens_bed": 0.0,
+  "weir": 0.0
+ },
+ "bands": [
+  {
+   "name": "winter fixture",
+   "family": [
+    {
+     "stage": "adult"
+    },
+    {
+     "stage": "adult"
+    }
+   ],
+   "camp": []
+  }
+ ],
+ "animals": {
+  "deer": 0,
+  "wolf": 0
+ }
+}

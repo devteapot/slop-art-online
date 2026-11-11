@@ -2259,7 +2259,7 @@
    "height_m": 6.4,
    "district": "the Strand",
    "building": true,
-   "model": "cullet/smokehouse/smokehouse_1.glb",
+   "model": "cullet/smoke_shed/smokehouse_1.glb",
    "seed": 35824,
    "wear": {
     "salt": 1.0,
@@ -2289,7 +2289,7 @@
    "height_m": 6.4,
    "district": "the Strand",
    "building": true,
-   "model": "cullet/smokehouse/smokehouse_2.glb",
+   "model": "cullet/smoke_shed/smokehouse_2.glb",
    "seed": 27434,
    "wear": {
     "salt": 1.0,
@@ -2334,7 +2334,8 @@
    "contents": {
     "smoked_fish": 212,
     "roots": 297
-   }
+   },
+   "structure": "store"
   },
   {
    "id": "boatshed",
@@ -2394,7 +2395,9 @@
     "empty": 0.0,
     "cause": "+2 m above the sea; 261 m from the Cone at bearing 267; front faces 180"
    },
-   "note": "the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings"
+   "note": "the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings",
+   "stage": 0.4,
+   "stage_cause": "the hull's stage of building, 0 to 1: in frame, planked four strakes of ten"
   },
   {
    "id": "slip",
@@ -2467,7 +2470,7 @@
     {
      "name": "Halvard's bench at the mouth",
      "at": [
-      3.0,
+      -3.0,
       9.2
      ]
     }
@@ -2506,14 +2509,14 @@
     {
      "name": "the cullet heaps",
      "at": [
-      6,
+      -6,
       2
      ]
     },
     {
      "name": "the trough",
      "at": [
-      -8,
+      8,
       2
      ]
     }
@@ -2748,7 +2751,14 @@
    "people": 2,
    "door_colour": "sea_green",
    "keepsake": "a lamp-oil drum and a coil of wick",
-   "address": "the lamp house on the mole"
+   "address": "the lamp house on the mole",
+   "lit": {
+    "windows": [
+     "g",
+     "u0"
+    ],
+    "cause": "Anselm Faro keeps the Watchglass: the lamp house is awake all night, below and above"
+   }
   },
   {
    "id": "watchglass",
@@ -2842,7 +2852,11 @@
    "family": "strand",
    "people": 2,
    "door_colour": "chalk_blue",
-   "keepsake": "a lamp hook and a creel"
+   "keepsake": "a lamp hook and a creel",
+   "lit": {
+    "windows": [],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 16841)"
+   }
   },
   {
    "id": "low_2",
@@ -2882,7 +2896,13 @@
    "family": "strand",
    "people": 4,
    "door_colour": "sea_green",
-   "keepsake": "a ship's knee of timber propped by the door"
+   "keepsake": "a ship's knee of timber propped by the door",
+   "lit": {
+    "windows": [
+     "u1"
+    ],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 33811); a full house (4): someone is still up above"
+   }
   },
   {
    "id": "low_3",
@@ -2918,7 +2938,11 @@
    "terrace": "Low Row east",
    "front_cause": "an original 5 m plot, empty",
    "state": "empty, sound",
-   "door_colour": "faded"
+   "door_colour": "faded",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "low_4",
@@ -2958,7 +2982,11 @@
    "family": "strand",
    "people": 7,
    "door_colour": "oxblood",
-   "keepsake": "a row of glass floats; the Tarns have always painted their door so"
+   "keepsake": "a row of glass floats; the Tarns have always painted their door so",
+   "lit": {
+    "windows": [],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 28134); a full house (7), all abed (seed 28134)"
+   }
   },
   {
    "id": "low_5",
@@ -2998,7 +3026,14 @@
    "family": "strand",
    "people": 4,
    "door_colour": "mustard",
-   "keepsake": "a string of sea-glass, each colour from a known wreck"
+   "keepsake": "a string of sea-glass, each colour from a known wreck",
+   "lit": {
+    "windows": [
+     "g",
+     "u0"
+    ],
+    "cause": "a Strand house, one in four (seed 14192): someone mends by lamplight; a full house (4): someone is still up above"
+   }
   },
   {
    "id": "batch",
@@ -3092,7 +3127,11 @@
    "family": "strand",
    "people": 2,
    "door_colour": "chalk_blue",
-   "keepsake": "a counters board chalked on the step"
+   "keepsake": "a counters board chalked on the step",
+   "lit": {
+    "windows": [],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 32458)"
+   }
   },
   {
    "id": "low_7",
@@ -3132,7 +3171,13 @@
    "family": "strand",
    "people": 2,
    "door_colour": "oxblood",
-   "keepsake": "a caged gull"
+   "keepsake": "a caged gull",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Strand house, one in four (seed 23388): someone mends by lamplight"
+   }
   },
   {
    "id": "low_8",
@@ -3172,7 +3217,11 @@
    "family": "strand",
    "people": 3,
    "door_colour": "sea_green",
-   "keepsake": "a sack of kelp ash and a smoke-grey line of washing"
+   "keepsake": "a sack of kelp ash and a smoke-grey line of washing",
+   "lit": {
+    "windows": [],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 3949)"
+   }
   },
   {
    "id": "low_9",
@@ -3209,7 +3258,11 @@
    "front_cause": "an original plot, its roof stripped for fuel in the lean years",
    "state": "roofless shell",
    "door_colour": "none",
-   "note": "a tree grows inside the walls"
+   "note": "a tree grows inside the walls",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "low_10",
@@ -3249,7 +3302,14 @@
    "family": "kiln",
    "people": 2,
    "door_colour": "mustard",
-   "keepsake": "wind chimes of cullet"
+   "keepsake": "wind chimes of cullet",
+   "lit": {
+    "windows": [
+     "g",
+     "u1"
+    ],
+    "cause": "Thessaly Marl stokes the Cone by night: the kitchen lamp is left for her, and a night light burns above for Wick, who is five"
+   }
   },
   {
    "id": "marver",
@@ -3303,7 +3363,13 @@
    "keepsake": "a ship's figurehead over the door",
    "address": "over the Marver, Mid Row",
    "note": "the cookshop: open front, figurehead over the door; the Achterbergs live over it",
-   "terrace": "Mid Row east"
+   "terrace": "Mid Row east",
+   "lit": {
+    "windows": [
+     "u1"
+    ],
+    "cause": "Pieter Achterberg rises at 02:30 to fire the Batch: one window over the hearth"
+   }
   },
   {
    "id": "marver_terrace",
@@ -3416,7 +3482,14 @@
    "family": "ladder",
    "people": 4,
    "door_colour": "sea_green",
-   "keepsake": "seedling trays on the sill"
+   "keepsake": "seedling trays on the sill",
+   "lit": {
+    "windows": [
+     "g",
+     "u0"
+    ],
+    "cause": "a Ladder house, every second one (seed 19180): done at 16:00, they sit up; a full house (4): someone is still up above"
+   }
   },
   {
    "id": "mid_2",
@@ -3456,7 +3529,13 @@
    "family": "ladder",
    "people": 4,
    "door_colour": "mustard",
-   "keepsake": "a rain gauge on a post"
+   "keepsake": "a rain gauge on a post",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Ladder house, every second one (seed 82518): done at 16:00, they sit up; a full house (4), all abed (seed 82518)"
+   }
   },
   {
    "id": "mid_3",
@@ -3492,7 +3571,11 @@
    "terrace": "Mid Row east",
    "front_cause": "an original plot, its roof stripped for fuel in the lean years",
    "state": "roofless shell",
-   "door_colour": "none"
+   "door_colour": "none",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "mid_4",
@@ -3532,7 +3615,11 @@
    "family": "ladder",
    "people": 2,
    "door_colour": "oxblood",
-   "keepsake": "a stack of odd slates"
+   "keepsake": "a stack of odd slates",
+   "lit": {
+    "windows": [],
+    "cause": "a Ladder house: early to bed (seed 83427)"
+   }
   },
   {
    "id": "mid_5",
@@ -3572,7 +3659,13 @@
    "family": "kiln",
    "people": 2,
    "door_colour": "chalk_blue",
-   "keepsake": "a pontil rod hung over the door"
+   "keepsake": "a pontil rod hung over the door",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Kiln house, two in three (seed 55189): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+   }
   },
   {
    "id": "mid_6",
@@ -3608,7 +3701,11 @@
    "terrace": "Mid Row west",
    "front_cause": "an original 5 m plot, empty",
    "state": "empty, sound",
-   "door_colour": "faded"
+   "door_colour": "faded",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "mid_7",
@@ -3648,7 +3745,13 @@
    "family": "kiln",
    "people": 3,
    "door_colour": "sea_green",
-   "keepsake": "a hen coop against the front"
+   "keepsake": "a hen coop against the front",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Kiln house, two in three (seed 93433): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+   }
   },
   {
    "id": "high_1",
@@ -3688,7 +3791,11 @@
    "family": "kiln",
    "people": 3,
    "door_colour": "chalk_blue",
-   "keepsake": "a sill of cullet, one piece of every colour Ode has kept"
+   "keepsake": "a sill of cullet, one piece of every colour Ode has kept",
+   "lit": {
+    "windows": [],
+    "cause": "a Kiln house off the watch tonight (seed 53250): dark"
+   }
   },
   {
    "id": "high_2",
@@ -3728,7 +3835,14 @@
    "family": "kiln",
    "people": 4,
    "door_colour": "sea_green",
-   "keepsake": "a bucket of off-cuts the children play with by the step"
+   "keepsake": "a bucket of off-cuts the children play with by the step",
+   "lit": {
+    "windows": [
+     "g",
+     "u0"
+    ],
+    "cause": "a Kiln house, two in three (seed 52568): someone is on the evening watch at the Cone, and the kitchen lamp waits; a full house (4): someone is still up above"
+   }
   },
   {
    "id": "high_3",
@@ -3768,7 +3882,13 @@
    "family": "kiln",
    "people": 3,
    "door_colour": "mustard",
-   "keepsake": "a slate tally board by the door"
+   "keepsake": "a slate tally board by the door",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Kiln house, two in three (seed 93998): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+   }
   },
   {
    "id": "high_4",
@@ -3804,7 +3924,11 @@
    "terrace": "High Row east",
    "front_cause": "an original 5 m plot, empty",
    "state": "empty, sound",
-   "door_colour": "faded"
+   "door_colour": "faded",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "high_5",
@@ -3844,7 +3968,13 @@
    "family": "kiln",
    "people": 3,
    "door_colour": "chalk_blue",
-   "keepsake": "a bench made from a boat's thwart"
+   "keepsake": "a bench made from a boat's thwart",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Kiln house, two in three (seed 76987): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+   }
   },
   {
    "id": "high_6",
@@ -3880,7 +4010,11 @@
    "terrace": "High Row west",
    "front_cause": "an original 5 m plot, empty",
    "state": "empty, sound",
-   "door_colour": "faded"
+   "door_colour": "faded",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "high_7",
@@ -3916,7 +4050,11 @@
    "terrace": "High Row west",
    "front_cause": "an original plot, its roof stripped for fuel in the lean years",
    "state": "roofless shell",
-   "door_colour": "none"
+   "door_colour": "none",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "glasshouse_1",
@@ -4649,6 +4787,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_1.glb",
    "seed": 20736,
    "wear": {
     "salt": 0.12,
@@ -4679,6 +4818,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_2.glb",
    "seed": 6138,
    "wear": {
     "salt": 0.12,
@@ -4709,6 +4849,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_3.glb",
    "seed": 51756,
    "wear": {
     "salt": 0.12,
@@ -4739,6 +4880,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_4.glb",
    "seed": 93839,
    "wear": {
     "salt": 0.0,
@@ -4769,6 +4911,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_5.glb",
    "seed": 78041,
    "wear": {
     "salt": 0.0,
@@ -4799,6 +4942,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_6.glb",
    "seed": 62083,
    "wear": {
     "salt": 0.0,
@@ -4829,6 +4973,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_7.glb",
    "seed": 26389,
    "wear": {
     "salt": 0.0,
@@ -4859,6 +5004,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_8.glb",
    "seed": 3300,
    "wear": {
     "salt": 0.0,
@@ -4889,6 +5035,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_9.glb",
    "seed": 95218,
    "wear": {
     "salt": 0.0,
@@ -4919,6 +5066,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_10.glb",
    "seed": 5295,
    "wear": {
     "salt": 0.0,
@@ -4949,6 +5097,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_11.glb",
    "seed": 22329,
    "wear": {
     "salt": 0.0,
@@ -4979,6 +5128,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_12.glb",
    "seed": 21763,
    "wear": {
     "salt": 0.0,
@@ -5009,6 +5159,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_13.glb",
    "seed": 56789,
    "wear": {
     "salt": 0.0,
@@ -5039,6 +5190,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_14.glb",
    "seed": 99830,
    "wear": {
     "salt": 0.0,
@@ -5069,6 +5221,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_15.glb",
    "seed": 32,
    "wear": {
     "salt": 0.0,
@@ -5099,6 +5252,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_16.glb",
    "seed": 95354,
    "wear": {
     "salt": 0.0,
@@ -5129,6 +5283,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_17.glb",
    "seed": 18156,
    "wear": {
     "salt": 0.0,
@@ -5159,6 +5314,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_18.glb",
    "seed": 40861,
    "wear": {
     "salt": 0.0,
@@ -5292,7 +5448,13 @@
    "door_colour": "chalk_blue",
    "keepsake": "a shelf of ship-day tablets in the window",
    "address": "the Readers' House",
-   "note": "the school and the ship-day tablets; Benedikt Orme lives here"
+   "note": "the school and the ship-day tablets; Benedikt Orme lives here",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "Benedikt Orme reads the ship-day tablets by lamp: the window with the shelf"
+   }
   },
   {
    "id": "graveyard",
@@ -5533,7 +5695,8 @@
     "empty": 0.0,
     "cause": "+20 m above the sea; 183 m from the Cone at bearing 326; front faces 270"
    },
-   "note": "at the top of the Moss road; peat comes down here"
+   "note": "at the top of the Moss road; peat comes down here",
+   "structure": "peat_barn"
   },
   {
    "id": "turf_house",
@@ -5569,7 +5732,11 @@
    "people": 3,
    "door_colour": "oxblood",
    "keepsake": "a stack of drying peat by the door",
-   "address": "the turf house on the Moss"
+   "address": "the turf house on the Moss",
+   "lit": {
+    "windows": [],
+    "cause": "asleep"
+   }
   },
   {
    "id": "hanger_cottage",
@@ -5605,7 +5772,11 @@
    "people": 1,
    "door_colour": "sea_green",
    "keepsake": "a seedling bed of thorn and rowan",
-   "address": "the Hanger cottage"
+   "address": "the Hanger cottage",
+   "lit": {
+    "windows": [],
+    "cause": "asleep"
+   }
   },
   {
    "id": "lintel",
@@ -12729,7 +12900,7 @@
    "note": "the Cone's furnace, full (13 game hours at full firing)"
   },
   {
-   "kind": "storage",
+   "kind": "yard_store",
    "lot": "cone_yard",
    "contents": {
     "peat": 824
@@ -12946,10 +13117,252 @@
    "spot": "Rafe's place by the light",
    "fuel": 8.0,
    "note": "at the Watchglass, where Rafe fishes by the light"
+  },
+  {
+   "kind": "house_store",
+   "lot": "lamp_house",
+   "owner": "household:faro",
+   "contents": {
+    "smoked_fish": 7,
+    "roots": 10,
+    "peat": 24
+   },
+   "note": "the faro household's own store: 3 days of food for 2 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "low_1",
+   "owner": "household:dunlin",
+   "contents": {
+    "smoked_fish": 7,
+    "roots": 10,
+    "peat": 24
+   },
+   "note": "the dunlin household's own store: 3 days of food for 2 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "low_2",
+   "owner": "household:calloway",
+   "contents": {
+    "smoked_fish": 14,
+    "roots": 19,
+    "peat": 24
+   },
+   "note": "the calloway household's own store: 3 days of food for 4 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "low_4",
+   "owner": "household:tarn",
+   "contents": {
+    "smoked_fish": 24,
+    "roots": 33,
+    "peat": 24
+   },
+   "note": "the tarn household's own store: 3 days of food for 7 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "low_5",
+   "owner": "household:okoro",
+   "contents": {
+    "smoked_fish": 14,
+    "roots": 19,
+    "peat": 24
+   },
+   "note": "the okoro household's own store: 3 days of food for 4 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "low_6",
+   "owner": "household:vane",
+   "contents": {
+    "smoked_fish": 7,
+    "roots": 10,
+    "peat": 24
+   },
+   "note": "the vane household's own store: 3 days of food for 2 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "low_7",
+   "owner": "household:morrow",
+   "contents": {
+    "smoked_fish": 7,
+    "roots": 10,
+    "peat": 24
+   },
+   "note": "the morrow household's own store: 3 days of food for 2 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "low_8",
+   "owner": "household:sato",
+   "contents": {
+    "smoked_fish": 10,
+    "roots": 14,
+    "peat": 24
+   },
+   "note": "the sato household's own store: 3 days of food for 3 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "low_10",
+   "owner": "household:marl",
+   "contents": {
+    "smoked_fish": 7,
+    "roots": 10,
+    "peat": 24
+   },
+   "note": "the marl household's own store: 3 days of food for 2 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "marver",
+   "owner": "household:achterberg",
+   "contents": {
+    "smoked_fish": 10,
+    "roots": 14,
+    "peat": 24
+   },
+   "note": "the achterberg household's own store: 3 days of food for 3 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "mid_1",
+   "owner": "household:greave",
+   "contents": {
+    "smoked_fish": 14,
+    "roots": 19,
+    "peat": 24
+   },
+   "note": "the greave household's own store: 3 days of food for 4 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "mid_2",
+   "owner": "household:fenwick",
+   "contents": {
+    "smoked_fish": 14,
+    "roots": 19,
+    "peat": 24
+   },
+   "note": "the fenwick household's own store: 3 days of food for 4 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "mid_4",
+   "owner": "household:stannard",
+   "contents": {
+    "smoked_fish": 7,
+    "roots": 10,
+    "peat": 24
+   },
+   "note": "the stannard household's own store: 3 days of food for 2 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "mid_5",
+   "owner": "household:sarro",
+   "contents": {
+    "smoked_fish": 7,
+    "roots": 10,
+    "peat": 24
+   },
+   "note": "the sarro household's own store: 3 days of food for 2 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "mid_7",
+   "owner": "household:brandt",
+   "contents": {
+    "smoked_fish": 10,
+    "roots": 14,
+    "peat": 24
+   },
+   "note": "the brandt household's own store: 3 days of food for 3 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "high_1",
+   "owner": "household:pontil",
+   "contents": {
+    "smoked_fish": 10,
+    "roots": 14,
+    "peat": 24
+   },
+   "note": "the pontil household's own store: 3 days of food for 3 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "high_2",
+   "owner": "household:hollin",
+   "contents": {
+    "smoked_fish": 14,
+    "roots": 19,
+    "peat": 24
+   },
+   "note": "the hollin household's own store: 3 days of food for 4 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "high_3",
+   "owner": "household:quill",
+   "contents": {
+    "smoked_fish": 10,
+    "roots": 14,
+    "peat": 24
+   },
+   "note": "the quill household's own store: 3 days of food for 3 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "high_5",
+   "owner": "household:dunmore",
+   "contents": {
+    "smoked_fish": 10,
+    "roots": 14,
+    "peat": 24
+   },
+   "note": "the dunmore household's own store: 3 days of food for 3 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "readers_house",
+   "owner": "household:orme",
+   "contents": {
+    "smoked_fish": 4,
+    "roots": 5,
+    "peat": 24
+   },
+   "note": "the orme household's own store: 3 days of food for 1 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "turf_house",
+   "owner": "household:roon",
+   "contents": {
+    "smoked_fish": 10,
+    "roots": 14,
+    "peat": 24
+   },
+   "note": "the roon household's own store: 3 days of food for 3 and 24 hearth peat"
+  },
+  {
+   "kind": "house_store",
+   "lot": "hanger_cottage",
+   "owner": "household:sedge",
+   "contents": {
+    "smoked_fish": 4,
+    "roots": 5,
+    "peat": 24
+   },
+   "note": "the sedge household's own store: 3 days of food for 1 and 24 hearth peat"
   }
  ],
  "household_stores": {
-  "note": "Not placed yet. Each household's home holds the other 3 days of food for its people, and peat for its hearth beyond the hearth's first fill; with the Store's 3 days that is the 6 days of §2. The cast exists (towns[].residents, homes), but a household's store must be its own (the theft law reads a store's owner), and a plan's structures have no owner yet: a general `owner` (a household key) on `structures[]` would place these.",
+  "note": "Placed (structures[], kind house_store, owner household:<key>): each household's store in its home holds the other 3 days of food for its people and 24 peat, its hearth's 3 days beyond the first fill; with the Store's 3 days that is the 6 days of §2. It is the household's own: the world gives it to the owner of the household's house when it is created (the theft law reads a store's owner).",
   "per_person": {
    "smoked_fish": 4,
    "roots": 5
@@ -12959,133 +13372,155 @@
     "lot": "lamp_house",
     "people": 2,
     "smoked_fish": 7,
-    "roots": 10
+    "roots": 10,
+    "peat": 24
    },
    "dunlin": {
     "lot": "low_1",
     "people": 2,
     "smoked_fish": 7,
-    "roots": 10
+    "roots": 10,
+    "peat": 24
    },
    "calloway": {
     "lot": "low_2",
     "people": 4,
     "smoked_fish": 14,
-    "roots": 19
+    "roots": 19,
+    "peat": 24
    },
    "tarn": {
     "lot": "low_4",
     "people": 7,
     "smoked_fish": 24,
-    "roots": 33
+    "roots": 33,
+    "peat": 24
    },
    "okoro": {
     "lot": "low_5",
     "people": 4,
     "smoked_fish": 14,
-    "roots": 19
+    "roots": 19,
+    "peat": 24
    },
    "vane": {
     "lot": "low_6",
     "people": 2,
     "smoked_fish": 7,
-    "roots": 10
+    "roots": 10,
+    "peat": 24
    },
    "morrow": {
     "lot": "low_7",
     "people": 2,
     "smoked_fish": 7,
-    "roots": 10
+    "roots": 10,
+    "peat": 24
    },
    "sato": {
     "lot": "low_8",
     "people": 3,
     "smoked_fish": 10,
-    "roots": 14
+    "roots": 14,
+    "peat": 24
    },
    "marl": {
     "lot": "low_10",
     "people": 2,
     "smoked_fish": 7,
-    "roots": 10
+    "roots": 10,
+    "peat": 24
    },
    "achterberg": {
     "lot": "marver",
     "people": 3,
     "smoked_fish": 10,
-    "roots": 14
+    "roots": 14,
+    "peat": 24
    },
    "greave": {
     "lot": "mid_1",
     "people": 4,
     "smoked_fish": 14,
-    "roots": 19
+    "roots": 19,
+    "peat": 24
    },
    "fenwick": {
     "lot": "mid_2",
     "people": 4,
     "smoked_fish": 14,
-    "roots": 19
+    "roots": 19,
+    "peat": 24
    },
    "stannard": {
     "lot": "mid_4",
     "people": 2,
     "smoked_fish": 7,
-    "roots": 10
+    "roots": 10,
+    "peat": 24
    },
    "sarro": {
     "lot": "mid_5",
     "people": 2,
     "smoked_fish": 7,
-    "roots": 10
+    "roots": 10,
+    "peat": 24
    },
    "brandt": {
     "lot": "mid_7",
     "people": 3,
     "smoked_fish": 10,
-    "roots": 14
+    "roots": 14,
+    "peat": 24
    },
    "pontil": {
     "lot": "high_1",
     "people": 3,
     "smoked_fish": 10,
-    "roots": 14
+    "roots": 14,
+    "peat": 24
    },
    "hollin": {
     "lot": "high_2",
     "people": 4,
     "smoked_fish": 14,
-    "roots": 19
+    "roots": 19,
+    "peat": 24
    },
    "quill": {
     "lot": "high_3",
     "people": 3,
     "smoked_fish": 10,
-    "roots": 14
+    "roots": 14,
+    "peat": 24
    },
    "dunmore": {
     "lot": "high_5",
     "people": 3,
     "smoked_fish": 10,
-    "roots": 14
+    "roots": 14,
+    "peat": 24
    },
    "orme": {
     "lot": "readers_house",
     "people": 1,
     "smoked_fish": 4,
-    "roots": 5
+    "roots": 5,
+    "peat": 24
    },
    "roon": {
     "lot": "turf_house",
     "people": 3,
     "smoked_fish": 10,
-    "roots": 14
+    "roots": 14,
+    "peat": 24
    },
    "sedge": {
     "lot": "hanger_cottage",
     "people": 1,
     "smoked_fish": 4,
-    "roots": 5
+    "roots": 5,
+    "peat": 24
    }
   }
  },
@@ -14140,7 +14575,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 48021,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14153,7 +14588,8 @@
     "cause": "+2 m above the sea; 226 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row walk runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14175,7 +14611,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 2159,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14188,7 +14624,8 @@
     "cause": "+2 m above the sea; 216 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row walk runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14210,7 +14647,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 80633,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14223,7 +14660,8 @@
     "cause": "+2 m above the sea; 206 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row walk runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14245,7 +14683,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 82298,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14258,7 +14696,8 @@
     "cause": "+2 m above the sea; 192 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row walk runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14280,7 +14719,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 74092,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14293,7 +14732,8 @@
     "cause": "+2 m above the sea; 182 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row walk runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14315,7 +14755,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 67414,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14328,7 +14768,8 @@
     "cause": "+2 m above the sea; 171 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row walk runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14350,7 +14791,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 73376,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14363,7 +14804,8 @@
     "cause": "+2 m above the sea; 158 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14385,7 +14827,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 16369,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14398,7 +14840,8 @@
     "cause": "+2 m above the sea; 148 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14420,7 +14863,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 24743,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14433,7 +14876,8 @@
     "cause": "+2 m above the sea; 139 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14455,7 +14899,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 35682,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14468,7 +14912,8 @@
     "cause": "+2 m above the sea; 129 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14490,7 +14935,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 78964,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14503,7 +14948,8 @@
     "cause": "+2 m above the sea; 117 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14525,7 +14971,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 89966,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14538,7 +14984,8 @@
     "cause": "+2 m above the sea; 107 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14560,7 +15007,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 2712,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14573,7 +15020,8 @@
     "cause": "+2 m above the sea; 97 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14595,7 +15043,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 61243,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14608,7 +15056,8 @@
     "cause": "+2 m above the sea; 87 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14630,7 +15079,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 76973,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14643,7 +15092,8 @@
     "cause": "+2 m above the sea; 76 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14665,7 +15115,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 83287,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14678,7 +15128,8 @@
     "cause": "+2 m above the sea; 70 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14714,6 +15165,7 @@
    },
    "fall_m": 3.5,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14735,7 +15187,7 @@
    ],
    "facing": "east",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 54992,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -14748,7 +15200,8 @@
     "cause": "+2 m above the sea; 68 m from the Cone at bearing 280; front faces 90"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Cinder Steps' head runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14784,6 +15237,7 @@
    },
    "fall_m": 3.5,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -14819,6 +15273,7 @@
    },
    "fall_m": 7.5,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "strand",
    "upper": "mid",
    "ends": [
@@ -14840,7 +15295,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 19223,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -14853,7 +15308,8 @@
     "cause": "+5.5 m above the sea; 168 m from the Cone at bearing 279; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -14875,7 +15331,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 69933,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -14888,7 +15344,8 @@
     "cause": "+5.5 m above the sea; 160 m from the Cone at bearing 280; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -14910,7 +15367,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 72571,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -14923,7 +15380,8 @@
     "cause": "+5.5 m above the sea; 150 m from the Cone at bearing 280; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -14945,7 +15403,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 76120,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -14958,7 +15416,8 @@
     "cause": "+5.5 m above the sea; 141 m from the Cone at bearing 281; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -14980,7 +15439,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 51374,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -14993,7 +15452,8 @@
     "cause": "+5.5 m above the sea; 131 m from the Cone at bearing 282; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -15015,7 +15475,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 6804,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -15028,7 +15488,8 @@
     "cause": "+5.5 m above the sea; 122 m from the Cone at bearing 283; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -15050,7 +15511,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 70626,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -15063,7 +15524,8 @@
     "cause": "+5.5 m above the sea; 109 m from the Cone at bearing 284; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -15085,7 +15547,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 2259,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -15098,7 +15560,8 @@
     "cause": "+5.5 m above the sea; 100 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -15120,7 +15583,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 69797,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -15133,7 +15596,8 @@
     "cause": "+5.5 m above the sea; 91 m from the Cone at bearing 287; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -15169,6 +15633,7 @@
    },
    "fall_m": 4.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping: the Marver's terrace has its own rail here",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -15204,6 +15669,7 @@
    },
    "fall_m": 4.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping: the Marver's terrace has its own rail here",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -15225,7 +15691,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 10028,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -15238,7 +15704,8 @@
     "cause": "+9.5 m above the sea; 175 m from the Cone at bearing 289; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15260,7 +15727,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 48058,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -15273,7 +15740,8 @@
     "cause": "+9.5 m above the sea; 168 m from the Cone at bearing 290; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15295,7 +15763,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 50297,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -15308,7 +15776,8 @@
     "cause": "+9.5 m above the sea; 161 m from the Cone at bearing 291; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15330,7 +15799,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 64719,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -15343,7 +15812,8 @@
     "cause": "+9.5 m above the sea; 149 m from the Cone at bearing 292; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15365,7 +15835,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 74965,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -15378,7 +15848,8 @@
     "cause": "+9.5 m above the sea; 140 m from the Cone at bearing 294; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15400,7 +15871,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 20899,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -15413,7 +15884,8 @@
     "cause": "+9.5 m above the sea; 131 m from the Cone at bearing 296; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15435,7 +15907,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 54706,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -15448,7 +15920,8 @@
     "cause": "+9.5 m above the sea; 122 m from the Cone at bearing 298; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15470,7 +15943,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 28260,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -15483,7 +15956,8 @@
     "cause": "+9.5 m above the sea; 113 m from the Cone at bearing 300; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15505,7 +15979,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 45511,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -15518,7 +15992,8 @@
     "cause": "+9.5 m above the sea; 104 m from the Cone at bearing 303; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15554,6 +16029,7 @@
    },
    "fall_m": 4.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -15575,7 +16051,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 80811,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -15588,7 +16064,8 @@
     "cause": "+13.5 m above the sea; 183 m from the Cone at bearing 298; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -15610,7 +16087,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 59485,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -15623,7 +16100,8 @@
     "cause": "+13.5 m above the sea; 173 m from the Cone at bearing 300; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -15645,7 +16123,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 77438,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -15658,7 +16136,8 @@
     "cause": "+13.5 m above the sea; 163 m from the Cone at bearing 302; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -15680,7 +16159,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 53064,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -15693,7 +16172,8 @@
     "cause": "+13.5 m above the sea; 153 m from the Cone at bearing 305; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -15715,7 +16195,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 30066,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -15728,7 +16208,8 @@
     "cause": "+13.5 m above the sea; 144 m from the Cone at bearing 307; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -15750,7 +16231,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 52196,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -15763,7 +16244,8 @@
     "cause": "+13.5 m above the sea; 134 m from the Cone at bearing 310; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -15799,6 +16281,7 @@
    },
    "fall_m": 3.5,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -15834,6 +16317,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -15869,6 +16353,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -15904,6 +16389,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -15939,6 +16425,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -15974,6 +16461,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -16009,6 +16497,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -16030,7 +16519,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 6857,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -16043,7 +16532,8 @@
     "cause": "+17 m above the sea; 184 m from the Cone at bearing 303; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -16079,6 +16569,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -16100,7 +16591,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 21619,
    "cause": "the drop from the lad_1 level to the low level (2 m)",
    "wear": {
@@ -16113,7 +16604,8 @@
     "cause": "+5.5 m above the sea; 226 m from the Cone at bearing 273; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's second walk runs along the top",
    "lower": "low",
    "upper": "lad_1",
    "ends": [
@@ -16135,7 +16627,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 53161,
    "cause": "the drop from the lad_1 level to the low level (2 m)",
    "wear": {
@@ -16148,7 +16640,8 @@
     "cause": "+5.5 m above the sea; 216 m from the Cone at bearing 274; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's second walk runs along the top",
    "lower": "low",
    "upper": "lad_1",
    "ends": [
@@ -16170,7 +16663,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 23775,
    "cause": "the drop from the lad_1 level to the low level (2 m)",
    "wear": {
@@ -16183,7 +16676,8 @@
     "cause": "+5.5 m above the sea; 206 m from the Cone at bearing 274; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's second walk runs along the top",
    "lower": "low",
    "upper": "lad_1",
    "ends": [
@@ -16205,7 +16699,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 80796,
    "cause": "the drop from the lad_1 level to the low level (2 m)",
    "wear": {
@@ -16218,7 +16712,8 @@
     "cause": "+5.5 m above the sea; 193 m from the Cone at bearing 274; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's second walk runs along the top",
    "lower": "low",
    "upper": "lad_1",
    "ends": [
@@ -16240,7 +16735,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 74954,
    "cause": "the drop from the lad_1 level to the low level (2 m)",
    "wear": {
@@ -16253,7 +16748,8 @@
     "cause": "+5.5 m above the sea; 183 m from the Cone at bearing 274; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's second walk runs along the top",
    "lower": "low",
    "upper": "lad_1",
    "ends": [
@@ -16275,7 +16771,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 48528,
    "cause": "the drop from the lad_1 level to the low level (2 m)",
    "wear": {
@@ -16288,7 +16784,8 @@
     "cause": "+5.5 m above the sea; 172 m from the Cone at bearing 275; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's second walk runs along the top",
    "lower": "low",
    "upper": "lad_1",
    "ends": [
@@ -16310,7 +16807,7 @@
    ],
    "facing": "south",
    "floor_m": 7.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 93446,
    "cause": "the drop from the mid level to the lad_1 level (2 m)",
    "wear": {
@@ -16323,7 +16820,8 @@
     "cause": "+7.5 m above the sea; 227 m from the Cone at bearing 277; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "lad_1",
    "upper": "mid",
    "ends": [
@@ -16345,7 +16843,7 @@
    ],
    "facing": "south",
    "floor_m": 7.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 57623,
    "cause": "the drop from the mid level to the lad_1 level (2 m)",
    "wear": {
@@ -16358,7 +16856,8 @@
     "cause": "+7.5 m above the sea; 217 m from the Cone at bearing 277; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "lad_1",
    "upper": "mid",
    "ends": [
@@ -16380,7 +16879,7 @@
    ],
    "facing": "south",
    "floor_m": 7.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 92641,
    "cause": "the drop from the mid level to the lad_1 level (2 m)",
    "wear": {
@@ -16393,7 +16892,8 @@
     "cause": "+7.5 m above the sea; 207 m from the Cone at bearing 277; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "lad_1",
    "upper": "mid",
    "ends": [
@@ -16415,7 +16915,7 @@
    ],
    "facing": "south",
    "floor_m": 7.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 3396,
    "cause": "the drop from the mid level to the lad_1 level (2 m)",
    "wear": {
@@ -16428,7 +16928,8 @@
     "cause": "+7.5 m above the sea; 194 m from the Cone at bearing 278; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "lad_1",
    "upper": "mid",
    "ends": [
@@ -16450,7 +16951,7 @@
    ],
    "facing": "south",
    "floor_m": 7.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 11090,
    "cause": "the drop from the mid level to the lad_1 level (2 m)",
    "wear": {
@@ -16463,7 +16964,8 @@
     "cause": "+7.5 m above the sea; 184 m from the Cone at bearing 278; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "lad_1",
    "upper": "mid",
    "ends": [
@@ -16485,7 +16987,7 @@
    ],
    "facing": "south",
    "floor_m": 7.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 45192,
    "cause": "the drop from the mid level to the lad_1 level (2 m)",
    "wear": {
@@ -16498,7 +17000,8 @@
     "cause": "+7.5 m above the sea; 174 m from the Cone at bearing 279; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "lad_1",
    "upper": "mid",
    "ends": [
@@ -16520,7 +17023,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 51198,
    "cause": "the drop from the lad_2 level to the mid level (2 m)",
    "wear": {
@@ -16533,7 +17036,8 @@
     "cause": "+9.5 m above the sea; 230 m from the Cone at bearing 280; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's fourth walk runs along the top",
    "lower": "mid",
    "upper": "lad_2",
    "ends": [
@@ -16555,7 +17059,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 5885,
    "cause": "the drop from the lad_2 level to the mid level (2 m)",
    "wear": {
@@ -16568,7 +17072,8 @@
     "cause": "+9.5 m above the sea; 220 m from the Cone at bearing 281; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's fourth walk runs along the top",
    "lower": "mid",
    "upper": "lad_2",
    "ends": [
@@ -16590,7 +17095,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 39211,
    "cause": "the drop from the lad_2 level to the mid level (2 m)",
    "wear": {
@@ -16603,7 +17108,8 @@
     "cause": "+9.5 m above the sea; 210 m from the Cone at bearing 281; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's fourth walk runs along the top",
    "lower": "mid",
    "upper": "lad_2",
    "ends": [
@@ -16625,7 +17131,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 65777,
    "cause": "the drop from the lad_2 level to the mid level (2 m)",
    "wear": {
@@ -16638,7 +17144,8 @@
     "cause": "+9.5 m above the sea; 197 m from the Cone at bearing 282; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's fourth walk runs along the top",
    "lower": "mid",
    "upper": "lad_2",
    "ends": [
@@ -16660,7 +17167,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 92807,
    "cause": "the drop from the lad_2 level to the mid level (2 m)",
    "wear": {
@@ -16673,7 +17180,8 @@
     "cause": "+9.5 m above the sea; 187 m from the Cone at bearing 283; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's fourth walk runs along the top",
    "lower": "mid",
    "upper": "lad_2",
    "ends": [
@@ -16695,7 +17203,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 60982,
    "cause": "the drop from the lad_2 level to the mid level (2 m)",
    "wear": {
@@ -16708,7 +17216,8 @@
     "cause": "+9.5 m above the sea; 177 m from the Cone at bearing 284; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's fourth walk runs along the top",
    "lower": "mid",
    "upper": "lad_2",
    "ends": [
@@ -16730,7 +17239,7 @@
    ],
    "facing": "south",
    "floor_m": 11.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 2016,
    "cause": "the drop from the high level to the lad_2 level (2 m)",
    "wear": {
@@ -16743,7 +17252,8 @@
     "cause": "+11.5 m above the sea; 233 m from the Cone at bearing 284; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "lad_2",
    "upper": "high",
    "ends": [
@@ -16765,7 +17275,7 @@
    ],
    "facing": "south",
    "floor_m": 11.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 97067,
    "cause": "the drop from the high level to the lad_2 level (2 m)",
    "wear": {
@@ -16778,7 +17288,8 @@
     "cause": "+11.5 m above the sea; 223 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "lad_2",
    "upper": "high",
    "ends": [
@@ -16800,7 +17311,7 @@
    ],
    "facing": "south",
    "floor_m": 11.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 77853,
    "cause": "the drop from the high level to the lad_2 level (2 m)",
    "wear": {
@@ -16813,7 +17324,8 @@
     "cause": "+11.5 m above the sea; 213 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "lad_2",
    "upper": "high",
    "ends": [
@@ -16835,7 +17347,7 @@
    ],
    "facing": "south",
    "floor_m": 11.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 81319,
    "cause": "the drop from the high level to the lad_2 level (2 m)",
    "wear": {
@@ -16848,7 +17360,8 @@
     "cause": "+11.5 m above the sea; 201 m from the Cone at bearing 286; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "lad_2",
    "upper": "high",
    "ends": [
@@ -16870,7 +17383,7 @@
    ],
    "facing": "south",
    "floor_m": 11.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 7217,
    "cause": "the drop from the high level to the lad_2 level (2 m)",
    "wear": {
@@ -16883,7 +17396,8 @@
     "cause": "+11.5 m above the sea; 191 m from the Cone at bearing 287; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "lad_2",
    "upper": "high",
    "ends": [
@@ -16905,7 +17419,7 @@
    ],
    "facing": "south",
    "floor_m": 11.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 31186,
    "cause": "the drop from the high level to the lad_2 level (2 m)",
    "wear": {
@@ -16918,7 +17432,8 @@
     "cause": "+11.5 m above the sea; 181 m from the Cone at bearing 288; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "lad_2",
    "upper": "high",
    "ends": [
@@ -16940,7 +17455,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 75556,
    "cause": "the drop from the lad_3 level to the high level (2 m)",
    "wear": {
@@ -16953,7 +17468,8 @@
     "cause": "+13.5 m above the sea; 237 m from the Cone at bearing 288; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's sixth walk runs along the top",
    "lower": "high",
    "upper": "lad_3",
    "ends": [
@@ -16975,7 +17491,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 83230,
    "cause": "the drop from the lad_3 level to the high level (2 m)",
    "wear": {
@@ -16988,7 +17504,8 @@
     "cause": "+13.5 m above the sea; 227 m from the Cone at bearing 288; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's sixth walk runs along the top",
    "lower": "high",
    "upper": "lad_3",
    "ends": [
@@ -17010,7 +17527,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 74472,
    "cause": "the drop from the lad_3 level to the high level (2 m)",
    "wear": {
@@ -17023,7 +17540,8 @@
     "cause": "+13.5 m above the sea; 218 m from the Cone at bearing 289; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's sixth walk runs along the top",
    "lower": "high",
    "upper": "lad_3",
    "ends": [
@@ -17045,7 +17563,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 51353,
    "cause": "the drop from the lad_3 level to the high level (2 m)",
    "wear": {
@@ -17058,7 +17576,8 @@
     "cause": "+13.5 m above the sea; 205 m from the Cone at bearing 290; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's sixth walk runs along the top",
    "lower": "high",
    "upper": "lad_3",
    "ends": [
@@ -17080,7 +17599,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 12303,
    "cause": "the drop from the lad_3 level to the high level (2 m)",
    "wear": {
@@ -17093,7 +17612,8 @@
     "cause": "+13.5 m above the sea; 196 m from the Cone at bearing 292; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's sixth walk runs along the top",
    "lower": "high",
    "upper": "lad_3",
    "ends": [
@@ -17115,7 +17635,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 2.4,
+   "height_m": 3.0,
    "seed": 97834,
    "cause": "the drop from the lad_3 level to the high level (2 m)",
    "wear": {
@@ -17128,7 +17648,8 @@
     "cause": "+13.5 m above the sea; 186 m from the Cone at bearing 293; front faces 180"
    },
    "fall_m": 2.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Ladder's sixth walk runs along the top",
    "lower": "high",
    "upper": "lad_3",
    "ends": [
@@ -17150,7 +17671,7 @@
    ],
    "facing": "south",
    "floor_m": 15.5,
-   "height_m": 1.9,
+   "height_m": 2.5,
    "seed": 93692,
    "cause": "the drop from the upper level to the lad_3 level (1.5 m)",
    "wear": {
@@ -17163,7 +17684,8 @@
     "cause": "+15.5 m above the sea; 242 m from the Cone at bearing 291; front faces 180"
    },
    "fall_m": 1.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "lad_3",
    "upper": "upper",
    "ends": [
@@ -17185,7 +17707,7 @@
    ],
    "facing": "south",
    "floor_m": 15.5,
-   "height_m": 1.9,
+   "height_m": 2.5,
    "seed": 89926,
    "cause": "the drop from the upper level to the lad_3 level (1.5 m)",
    "wear": {
@@ -17198,7 +17720,8 @@
     "cause": "+15.5 m above the sea; 233 m from the Cone at bearing 292; front faces 180"
    },
    "fall_m": 1.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "lad_3",
    "upper": "upper",
    "ends": [
@@ -17220,7 +17743,7 @@
    ],
    "facing": "south",
    "floor_m": 15.5,
-   "height_m": 1.9,
+   "height_m": 2.5,
    "seed": 87952,
    "cause": "the drop from the upper level to the lad_3 level (1.5 m)",
    "wear": {
@@ -17233,7 +17756,8 @@
     "cause": "+15.5 m above the sea; 223 m from the Cone at bearing 293; front faces 180"
    },
    "fall_m": 1.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "lad_3",
    "upper": "upper",
    "ends": [
@@ -17255,7 +17779,7 @@
    ],
    "facing": "south",
    "floor_m": 15.5,
-   "height_m": 1.9,
+   "height_m": 2.5,
    "seed": 97875,
    "cause": "the drop from the upper level to the lad_3 level (1.5 m)",
    "wear": {
@@ -17268,7 +17792,8 @@
     "cause": "+15.5 m above the sea; 211 m from the Cone at bearing 294; front faces 180"
    },
    "fall_m": 1.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "lad_3",
    "upper": "upper",
    "ends": [
@@ -17290,7 +17815,7 @@
    ],
    "facing": "south",
    "floor_m": 15.5,
-   "height_m": 1.9,
+   "height_m": 2.5,
    "seed": 28325,
    "cause": "the drop from the upper level to the lad_3 level (1.5 m)",
    "wear": {
@@ -17303,7 +17828,8 @@
     "cause": "+15.5 m above the sea; 202 m from the Cone at bearing 295; front faces 180"
    },
    "fall_m": 1.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "lad_3",
    "upper": "upper",
    "ends": [
@@ -17325,7 +17851,7 @@
    ],
    "facing": "south",
    "floor_m": 15.5,
-   "height_m": 1.9,
+   "height_m": 2.5,
    "seed": 54911,
    "cause": "the drop from the upper level to the lad_3 level (1.5 m)",
    "wear": {
@@ -17338,7 +17864,8 @@
     "cause": "+15.5 m above the sea; 192 m from the Cone at bearing 297; front faces 180"
    },
    "fall_m": 1.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "lad_3",
    "upper": "upper",
    "ends": [
@@ -17374,6 +17901,7 @@
    },
    "fall_m": 2.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "low",
    "upper": "lad_1",
    "ends": [
@@ -17409,6 +17937,7 @@
    },
    "fall_m": 2.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "low",
    "upper": "lad_1",
    "ends": [
@@ -17444,6 +17973,7 @@
    },
    "fall_m": 2.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "mid",
    "upper": "lad_2",
    "ends": [
@@ -17479,6 +18009,7 @@
    },
    "fall_m": 2.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "mid",
    "upper": "lad_2",
    "ends": [
@@ -17514,6 +18045,7 @@
    },
    "fall_m": 2.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "high",
    "upper": "lad_3",
    "ends": [
@@ -17549,6 +18081,7 @@
    },
    "fall_m": 2.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "high",
    "upper": "lad_3",
    "ends": [
@@ -18200,6 +18733,38 @@
     "cause": "+9.5 m above the sea; 79 m from the Cone at bearing 293; front faces 180"
    },
    "lot": "marver_terrace"
+  },
+  {
+   "id": "heron_jib",
+   "kind": "heron_jib",
+   "model": "cullet/heron_jib/heron_jib.glb",
+   "at": [
+    -17.0,
+    -9.51
+   ],
+   "size": [
+    1.6,
+    9.0
+   ],
+   "facing": "north",
+   "floor_m": 2.0,
+   "height_m": 13.0,
+   "seed": 15236,
+   "cause": "the Heron's jib, like a beak: 9 m out over the water from the king post, fixed; it still lifts boats and kelp loads",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.03,
+    "age": 1.0,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 169 m from the Cone at bearing 255; front faces 0"
+   },
+   "lot": "heron",
+   "pivot_z": 8.3,
+   "tip_z": 12.2,
+   "head_z": 12.87,
+   "load_z": 2.4
   },
   {
    "id": "plot_wall_1",
@@ -19260,34 +19825,6 @@
    "kind": "quay_lamp",
    "model": "cullet/quay_lamp/quay_lamp_4.glb",
    "at": [
-    5.3,
-    0.9
-   ],
-   "size": [
-    0.6,
-    0.6
-   ],
-   "facing": "south",
-   "floor_m": 2.0,
-   "height_m": 3.2,
-   "seed": 45322,
-   "cause": "the quay lamp at the Fish Steps, east",
-   "wear": {
-    "salt": 1.0,
-    "soot": 0.0,
-    "wind": 0.42,
-    "age": 0.6,
-    "repair": 0.5,
-    "empty": 0.0,
-    "cause": "+2 m above the sea; 145 m from the Cone at bearing 257; front faces 180"
-   },
-   "dressing": true
-  },
-  {
-   "id": "quay_lamp_5",
-   "kind": "quay_lamp",
-   "model": "cullet/quay_lamp/quay_lamp_5.glb",
-   "at": [
     24.0,
     0.9
    ],
@@ -19298,7 +19835,7 @@
    "facing": "south",
    "floor_m": 2.0,
    "height_m": 3.2,
-   "seed": 80380,
+   "seed": 45322,
    "cause": "the quay lamp at the foot of the Tally Wynd",
    "wear": {
     "salt": 1.0,
@@ -19312,9 +19849,9 @@
    "dressing": true
   },
   {
-   "id": "quay_lamp_6",
+   "id": "quay_lamp_5",
    "kind": "quay_lamp",
-   "model": "cullet/quay_lamp/quay_lamp_6.glb",
+   "model": "cullet/quay_lamp/quay_lamp_5.glb",
    "at": [
     66.0,
     0.9
@@ -19326,7 +19863,7 @@
    "facing": "south",
    "floor_m": 2.0,
    "height_m": 3.2,
-   "seed": 96038,
+   "seed": 80380,
    "cause": "the quay lamp at the foot of the Store Wynd",
    "wear": {
     "salt": 1.0,
@@ -19340,9 +19877,9 @@
    "dressing": true
   },
   {
-   "id": "quay_lamp_7",
+   "id": "quay_lamp_6",
    "kind": "quay_lamp",
-   "model": "cullet/quay_lamp/quay_lamp_7.glb",
+   "model": "cullet/quay_lamp/quay_lamp_6.glb",
    "at": [
     127.2,
     -1.2
@@ -19354,7 +19891,7 @@
    "facing": "south",
    "floor_m": 2.0,
    "height_m": 3.2,
-   "seed": 13040,
+   "seed": 96038,
    "cause": "the quay lamp at the root of the mole",
    "wear": {
     "salt": 1.0,
@@ -29023,6 +29560,611 @@
    ]
   },
   {
+   "id": "cone_bench_1",
+   "kind": "cone_bench",
+   "model": "cullet/cone_bench/cone_bench_1.glb",
+   "at": [
+    144.0,
+    23.4
+   ],
+   "size": [
+    1.9,
+    0.7
+   ],
+   "facing": "north",
+   "floor_m": 2.0,
+   "height_m": 0.95,
+   "seed": 89411,
+   "cause": "Halvard Dunmore's bench at the Cone's mouth, where the heat reaches (the plan's spot)",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.25,
+    "wind": 0.03,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 10 m from the Cone at bearing 197; front faces 0"
+   },
+   "dressing": true
+  },
+  {
+   "id": "cullet_heap_green",
+   "kind": "cullet_heap",
+   "model": "cullet/cullet_heap/cullet_heap_green.glb",
+   "at": [
+    140.4,
+    13.5
+   ],
+   "size": [
+    2.2,
+    1.9
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.75,
+   "seed": 99656,
+   "cause": "the yard's heap of green cullet (the plan's spot): sorted, waiting for the melt",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 21 m from the Cone at bearing 199; front faces 180"
+   },
+   "dressing": true,
+   "colour": "green",
+   "shovel": false
+  },
+  {
+   "id": "cullet_heap_amber",
+   "kind": "cullet_heap",
+   "model": "cullet/cullet_heap/cullet_heap_amber.glb",
+   "at": [
+    142.8,
+    13.5
+   ],
+   "size": [
+    2.2,
+    1.9
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.3,
+   "seed": 1643,
+   "cause": "the yard's heap of amber cullet (the plan's spot): nearly out, amber is the rarest",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 20 m from the Cone at bearing 192; front faces 180"
+   },
+   "dressing": true,
+   "colour": "amber",
+   "shovel": false
+  },
+  {
+   "id": "cullet_heap_aqua",
+   "kind": "cullet_heap",
+   "model": "cullet/cullet_heap/cullet_heap_aqua.glb",
+   "at": [
+    145.2,
+    13.5
+   ],
+   "size": [
+    2.2,
+    1.9
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.9,
+   "seed": 70490,
+   "cause": "the yard's heap of aqua cullet (the plan's spot): the most there is, every window's glass",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.01,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 20 m from the Cone at bearing 185; front faces 180"
+   },
+   "dressing": true,
+   "colour": "aqua",
+   "shovel": true
+  },
+  {
+   "id": "cullet_heap_smoke",
+   "kind": "cullet_heap",
+   "model": "cullet/cullet_heap/cullet_heap_smoke.glb",
+   "at": [
+    147.6,
+    13.5
+   ],
+   "size": [
+    2.2,
+    1.9
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.6,
+   "seed": 50995,
+   "cause": "the yard's heap of smoke cullet (the plan's spot): sorted, waiting for the melt",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.01,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 20 m from the Cone at bearing 178; front faces 180"
+   },
+   "dressing": true,
+   "colour": "smoke",
+   "shovel": false
+  },
+  {
+   "id": "trough_1",
+   "kind": "trough",
+   "model": "cullet/trough/trough_1.glb",
+   "at": [
+    158.0,
+    13.5
+   ],
+   "size": [
+    2.4,
+    0.8
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.63,
+   "seed": 56630,
+   "cause": "the Cone yard's water trough (the plan's spot)",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 22 m from the Cone at bearing 151; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "blowpipe_rack_1",
+   "kind": "blowpipe_rack",
+   "model": "cullet/blowpipe_rack/blowpipe_rack_1.glb",
+   "at": [
+    150.1,
+    24.1
+   ],
+   "size": [
+    2.2,
+    0.6
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 1.5,
+   "seed": 75212,
+   "cause": "the blowpipe rack between the front and the east mouths, a pipe's length from the heat",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.26,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 9 m from the Cone at bearing 161; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "crucible_stack_1",
+   "kind": "crucible_stack",
+   "model": "cullet/crucible_stack/crucible_stack_1.glb",
+   "at": [
+    117.0,
+    11.25
+   ],
+   "size": [
+    1.7,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 1.4,
+   "seed": 67214,
+   "cause": "fired pots stacked before the pot house, waiting for the Cone",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 37 m from the Cone at bearing 234; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "crucible_stack_2",
+   "kind": "crucible_stack",
+   "model": "cullet/crucible_stack/crucible_stack_2.glb",
+   "at": [
+    141.2,
+    21.2
+   ],
+   "size": [
+    1.7,
+    1.1
+   ],
+   "facing": 150,
+   "floor_m": 2.0,
+   "height_m": 1.4,
+   "seed": 71604,
+   "cause": "pots brought to the Cone's pot room door for the next setting",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.17,
+    "wind": 0.17,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 13 m from the Cone at bearing 206; front faces 150"
+   },
+   "dressing": true
+  },
+  {
+   "id": "ash_sacks_1",
+   "kind": "ash_sacks",
+   "model": "cullet/ash_sacks/ash_sacks_1.glb",
+   "at": [
+    92.6,
+    31.3
+   ],
+   "size": [
+    1.7,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.7,
+   "seed": 74640,
+   "cause": "kelp ash come from the kilns, not yet carried into the ash house",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 54 m from the Cone at bearing 268; front faces 180"
+   },
+   "dressing": true
+  },
+  {
+   "id": "ash_sacks_2",
+   "kind": "ash_sacks",
+   "model": "cullet/ash_sacks/ash_sacks_2.glb",
+   "at": [
+    161.0,
+    20.0
+   ],
+   "size": [
+    1.7,
+    1.1
+   ],
+   "facing": 200,
+   "floor_m": 2.0,
+   "height_m": 0.7,
+   "seed": 61898,
+   "cause": "ash for the day's batch, set down in the yard by the mixing floor",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.05,
+    "wind": 0.52,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 19 m from the Cone at bearing 133; front faces 200"
+   },
+   "dressing": true
+  },
+  {
+   "id": "handcart_1",
+   "kind": "handcart",
+   "model": "cullet/handcart/handcart_1.glb",
+   "at": [
+    137.6,
+    12.3
+   ],
+   "size": [
+    1.3,
+    2.6
+   ],
+   "facing": 115,
+   "floor_m": 2.0,
+   "height_m": 0.95,
+   "seed": 75402,
+   "cause": "the yard's handcart by the heaps: cullet comes down from the Rows on it",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.03,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 23 m from the Cone at bearing 204; front faces 115"
+   },
+   "dressing": true
+  },
+  {
+   "id": "hanger_tree_1",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_1.glb",
+   "at": [
+    198.5,
+    211.5
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 13722,
+   "cause": "the Hanger's wind-bent tree, form 1 of six, leaning north-east: at the edge of the woodward's yard",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 186 m from the Cone at bearing 16; front faces 180"
+   },
+   "form": 1,
+   "natural": true
+  },
+  {
+   "id": "hanger_tree_2",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_2.glb",
+   "at": [
+    215.8,
+    211.8
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 70848,
+   "cause": "the Hanger's wind-bent tree, form 2 of six, leaning north-east: at the edge of the woodward's yard",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 192 m from the Cone at bearing 21; front faces 180"
+   },
+   "form": 2,
+   "natural": true
+  },
+  {
+   "id": "hanger_tree_3",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_3.glb",
+   "at": [
+    199.0,
+    199.0
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 6582,
+   "cause": "the Hanger's wind-bent tree, form 3 of six, leaning north-east: at the edge of the woodward's yard",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 174 m from the Cone at bearing 17; front faces 180"
+   },
+   "form": 3,
+   "natural": true
+  },
+  {
+   "id": "hanger_tree_4",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_4.glb",
+   "at": [
+    215.5,
+    198.8
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 27189,
+   "cause": "the Hanger's wind-bent tree, form 4 of six, leaning north-east: at the edge of the woodward's yard",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 179 m from the Cone at bearing 22; front faces 180"
+   },
+   "form": 4,
+   "natural": true
+  },
+  {
+   "id": "hanger_tree_5",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_5.glb",
+   "at": [
+    207.5,
+    198.0
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 28035,
+   "cause": "the Hanger's wind-bent tree, form 5 of six, leaning north-east: at the edge of the woodward's yard",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 176 m from the Cone at bearing 20; front faces 180"
+   },
+   "form": 5,
+   "natural": true
+  },
+  {
+   "id": "hanger_tree_6",
+   "kind": "hanger_tree",
+   "model": "cullet/hanger_tree/hanger_tree_6.glb",
+   "at": [
+    197.8,
+    205.3
+   ],
+   "size": [
+    9.0,
+    9.0
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 8.0,
+   "seed": 18361,
+   "cause": "the Hanger's wind-bent tree, form 6 of six, leaning north-east: at the edge of the woodward's yard",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 0.4,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 180 m from the Cone at bearing 16; front faces 180"
+   },
+   "form": 6,
+   "natural": true
+  },
+  {
+   "id": "stump_1",
+   "kind": "stump",
+   "model": "cullet/stump/stump_1.glb",
+   "at": [
+    202.5,
+    200.5
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.5,
+   "seed": 84701,
+   "cause": "a stump of the old wood in the woodward's yard, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 176 m from the Cone at bearing 18; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_2",
+   "kind": "stump",
+   "model": "cullet/stump/stump_2.glb",
+   "at": [
+    212.0,
+    212.5
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.6,
+   "seed": 6823,
+   "cause": "a stump of the old wood in the woodward's yard, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 191 m from the Cone at bearing 20; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
+   "id": "stump_3",
+   "kind": "stump",
+   "model": "cullet/stump/stump_3.glb",
+   "at": [
+    216.5,
+    205.0
+   ],
+   "size": [
+    1.1,
+    1.1
+   ],
+   "facing": "south",
+   "floor_m": 14.0,
+   "height_m": 0.7,
+   "seed": 83057,
+   "cause": "a stump of the old wood in the woodward's yard, cut for fuel in the lean years",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.57,
+    "age": 1.0,
+    "repair": 0.0,
+    "empty": 0.0,
+    "cause": "+14 m above the sea; 186 m from the Cone at bearing 22; front faces 180"
+   },
+   "dressing": true,
+   "natural": true
+  },
+  {
    "id": "graveyard",
    "kind": "graveyard",
    "model": "cullet/graveyard/graveyard.glb",
@@ -37182,6 +38324,3850 @@
    ]
   }
  ],
+ "grounds": [
+  {
+   "id": "the quay",
+   "surface": "quay_flags",
+   "area": [
+    [
+     -125,
+     0
+    ],
+    [
+     -21.5,
+     0
+    ],
+    [
+     -21.5,
+     -6.0
+    ],
+    [
+     -12.5,
+     -6.0
+    ],
+    [
+     -12.5,
+     0
+    ],
+    [
+     -4,
+     0
+    ],
+    [
+     -4,
+     -3
+    ],
+    [
+     4,
+     -3
+    ],
+    [
+     4,
+     0
+    ],
+    [
+     80,
+     0
+    ],
+    [
+     80,
+     32
+    ],
+    [
+     -125,
+     32
+    ]
+   ],
+   "cause": "the ship-day quay: flags from the edge to the wall behind the strand's buildings"
+  },
+  {
+   "id": "the slip and the dock yard",
+   "surface": "setts",
+   "area": [
+    [
+     -125,
+     0
+    ],
+    [
+     -99,
+     0
+    ],
+    [
+     -99,
+     32
+    ],
+    [
+     -125,
+     32
+    ]
+   ],
+   "cause": "where hulls are hauled: setts for the grip, not flags"
+  },
+  {
+   "id": "Cinder Row",
+   "surface": "cinders",
+   "area": [
+    [
+     80,
+     0
+    ],
+    [
+     175,
+     0
+    ],
+    [
+     175,
+     62
+    ],
+    [
+     80,
+     62
+    ]
+   ],
+   "cause": "the Cone's cinders, spread over the whole yard since the ship days"
+  },
+  {
+   "id": "the mole",
+   "surface": "quay_flags",
+   "area": [
+    [
+     126,
+     0
+    ],
+    [
+     126,
+     -14
+    ],
+    [
+     132,
+     -14
+    ],
+    [
+     132,
+     -54
+    ],
+    [
+     129,
+     -54
+    ],
+    [
+     129,
+     -67
+    ],
+    [
+     142,
+     -67
+    ],
+    [
+     142,
+     -54
+    ],
+    [
+     139,
+     -54
+    ],
+    [
+     139,
+     -14
+    ],
+    [
+     146,
+     -14
+    ],
+    [
+     146,
+     0
+    ]
+   ],
+   "cause": "the ship-day mole"
+  },
+  {
+   "id": "Low Row's sill",
+   "surface": "setts",
+   "area": [
+    [
+     -17.0,
+     32
+    ],
+    [
+     77.5,
+     32
+    ],
+    [
+     77.5,
+     34.0
+    ],
+    [
+     -17.0,
+     34.0
+    ]
+   ],
+   "cause": "Low Row: the sill between the street and the parapet over the drop"
+  },
+  {
+   "id": "Low Row's kerb",
+   "surface": "setts",
+   "area": [
+    [
+     -17.0,
+     39.0
+    ],
+    [
+     77.5,
+     39.0
+    ],
+    [
+     77.5,
+     39.6
+    ],
+    [
+     -17.0,
+     39.6
+    ]
+   ],
+   "cause": "Low Row: the strip before the doors"
+  },
+  {
+   "id": "Mid Row's sill",
+   "surface": "setts",
+   "area": [
+    [
+     -17.0,
+     60
+    ],
+    [
+     65.5,
+     60
+    ],
+    [
+     65.5,
+     62.0
+    ],
+    [
+     -17.0,
+     62.0
+    ]
+   ],
+   "cause": "Mid Row: the sill between the street and the parapet over the drop"
+  },
+  {
+   "id": "Mid Row's kerb",
+   "surface": "setts",
+   "area": [
+    [
+     -17.0,
+     67.0
+    ],
+    [
+     65.5,
+     67.0
+    ],
+    [
+     65.5,
+     67.6
+    ],
+    [
+     -17.0,
+     67.6
+    ]
+   ],
+   "cause": "Mid Row: the strip before the doors"
+  },
+  {
+   "id": "High Row's sill",
+   "surface": "setts",
+   "area": [
+    [
+     -17.0,
+     90
+    ],
+    [
+     66.0,
+     90
+    ],
+    [
+     66.0,
+     92.0
+    ],
+    [
+     -17.0,
+     92.0
+    ]
+   ],
+   "cause": "High Row: the sill between the street and the parapet over the drop"
+  },
+  {
+   "id": "High Row's kerb",
+   "surface": "setts",
+   "area": [
+    [
+     -17.0,
+     97.0
+    ],
+    [
+     66.0,
+     97.0
+    ],
+    [
+     66.0,
+     97.6
+    ],
+    [
+     -17.0,
+     97.6
+    ]
+   ],
+   "cause": "High Row: the strip before the doors"
+  },
+  {
+   "id": "court_low_1",
+   "surface": "setts",
+   "area": [
+    [
+     59.1,
+     46.8
+    ],
+    [
+     64.0,
+     46.8
+    ],
+    [
+     64.0,
+     51.2
+    ],
+    [
+     59.1,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 1: Rafe Dunlin fishes from the mole by lamplight: his boat is up on trestles, his creels in the court"
+  },
+  {
+   "id": "plot_low_1",
+   "surface": "earth",
+   "area": [
+    [
+     59.1,
+     53.7
+    ],
+    [
+     64.0,
+     53.7
+    ],
+    [
+     64.0,
+     59.4
+    ],
+    [
+     59.1,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 1, across the back lane under the wall of the row above: Rafe Dunlin fishes from the mole by lamplight: his boat is up on trestles, his creels in the court"
+  },
+  {
+   "id": "court_low_2",
+   "surface": "setts",
+   "area": [
+    [
+     53.4,
+     46.8
+    ],
+    [
+     59.1,
+     46.8
+    ],
+    [
+     59.1,
+     51.2
+    ],
+    [
+     53.4,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 2: Bram Calloway is building the Second Thought: planks and ship's knees season under the wall, his tools in a lean-to"
+  },
+  {
+   "id": "plot_low_2",
+   "surface": "earth",
+   "area": [
+    [
+     53.4,
+     53.7
+    ],
+    [
+     59.1,
+     53.7
+    ],
+    [
+     59.1,
+     59.4
+    ],
+    [
+     53.4,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 2, across the back lane under the wall of the row above: Bram Calloway is building the Second Thought: planks and ship's knees season under the wall, his tools in a lean-to"
+  },
+  {
+   "id": "court_low_3",
+   "surface": "earth",
+   "area": [
+    [
+     48.4,
+     46.8
+    ],
+    [
+     53.4,
+     46.8
+    ],
+    [
+     53.4,
+     51.2
+    ],
+    [
+     48.4,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 3: Low Row 3 stands empty: its court and plot have gone to weed, the wall's top is down"
+  },
+  {
+   "id": "plot_low_3",
+   "surface": "earth",
+   "area": [
+    [
+     48.4,
+     53.7
+    ],
+    [
+     53.4,
+     53.7
+    ],
+    [
+     53.4,
+     59.4
+    ],
+    [
+     48.4,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 3, across the back lane under the wall of the row above: Low Row 3 stands empty: its court and plot have gone to weed, the wall's top is down"
+  },
+  {
+   "id": "court_low_4",
+   "surface": "setts",
+   "area": [
+    [
+     41.9,
+     46.8
+    ],
+    [
+     48.4,
+     46.8
+    ],
+    [
+     48.4,
+     51.2
+    ],
+    [
+     41.9,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 4: seven Tarns: a line of washing never down in the court, the family's nets drying on poles in the plot"
+  },
+  {
+   "id": "plot_low_4",
+   "surface": "earth",
+   "area": [
+    [
+     41.9,
+     53.7
+    ],
+    [
+     48.4,
+     53.7
+    ],
+    [
+     48.4,
+     59.4
+    ],
+    [
+     41.9,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 4, across the back lane under the wall of the row above: seven Tarns: a line of washing never down in the court, the family's nets drying on poles in the plot"
+  },
+  {
+   "id": "court_low_5",
+   "surface": "setts",
+   "area": [
+    [
+     36.2,
+     46.8
+    ],
+    [
+     41.9,
+     46.8
+    ],
+    [
+     41.9,
+     51.2
+    ],
+    [
+     36.2,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 5: Chidi Okoro keeps his line in a shed roofed with an upturned boat; Amara dries her wrack on racks"
+  },
+  {
+   "id": "plot_low_5",
+   "surface": "earth",
+   "area": [
+    [
+     36.2,
+     53.7
+    ],
+    [
+     41.9,
+     53.7
+    ],
+    [
+     41.9,
+     59.4
+    ],
+    [
+     36.2,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 5, across the back lane under the wall of the row above: Chidi Okoro keeps his line in a shed roofed with an upturned boat; Amara dries her wrack on racks"
+  },
+  {
+   "id": "court_batch",
+   "surface": "setts",
+   "area": [
+    [
+     9.8,
+     46.8
+    ],
+    [
+     17.8,
+     46.8
+    ],
+    [
+     17.8,
+     51.2
+    ],
+    [
+     9.8,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of the Batch: the Batch's fuel: peat for the common oven, stacked under tarred cloth in its court and its plot"
+  },
+  {
+   "id": "plot_batch",
+   "surface": "earth",
+   "area": [
+    [
+     9.8,
+     53.7
+    ],
+    [
+     17.8,
+     53.7
+    ],
+    [
+     17.8,
+     59.4
+    ],
+    [
+     9.8,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of the Batch, across the back lane under the wall of the row above: the Batch's fuel: peat for the common oven, stacked under tarred cloth in its court and its plot"
+  },
+  {
+   "id": "court_low_6",
+   "surface": "setts",
+   "area": [
+    [
+     4.9,
+     46.8
+    ],
+    [
+     9.8,
+     46.8
+    ],
+    [
+     9.8,
+     51.2
+    ],
+    [
+     4.9,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 6: Davin Vane's handcart stands in the court; a few rows of roots, poorly kept"
+  },
+  {
+   "id": "plot_low_6",
+   "surface": "worked_soil",
+   "area": [
+    [
+     4.9,
+     53.7
+    ],
+    [
+     9.8,
+     53.7
+    ],
+    [
+     9.8,
+     59.4
+    ],
+    [
+     4.9,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 6, across the back lane under the wall of the row above: Davin Vane's handcart stands in the court; a few rows of roots, poorly kept"
+  },
+  {
+   "id": "court_low_7",
+   "surface": "setts",
+   "area": [
+    [
+     0.0,
+     46.8
+    ],
+    [
+     4.9,
+     46.8
+    ],
+    [
+     4.9,
+     51.2
+    ],
+    [
+     0.0,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 7: Ingrid Morrow mends nets where the sun is: her frame and poles in the plot, a bench she carries about"
+  },
+  {
+   "id": "plot_low_7",
+   "surface": "earth",
+   "area": [
+    [
+     0.0,
+     53.7
+    ],
+    [
+     4.9,
+     53.7
+    ],
+    [
+     4.9,
+     59.4
+    ],
+    [
+     0.0,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 7, across the back lane under the wall of the row above: Ingrid Morrow mends nets where the sun is: her frame and poles in the plot, a bench she carries about"
+  },
+  {
+   "id": "court_low_8",
+   "surface": "setts",
+   "area": [
+    [
+     -5.3,
+     46.8
+    ],
+    [
+     0.0,
+     46.8
+    ],
+    [
+     0.0,
+     51.2
+    ],
+    [
+     -5.3,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 8: Kenji Sato's ash sacks under the eave and the smoke-grey washing; Hana's wrack drying"
+  },
+  {
+   "id": "plot_low_8",
+   "surface": "earth",
+   "area": [
+    [
+     -5.3,
+     53.7
+    ],
+    [
+     0.0,
+     53.7
+    ],
+    [
+     0.0,
+     59.4
+    ],
+    [
+     -5.3,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 8, across the back lane under the wall of the row above: Kenji Sato's ash sacks under the eave and the smoke-grey washing; Hana's wrack drying"
+  },
+  {
+   "id": "court_low_9",
+   "surface": "earth",
+   "area": [
+    [
+     -10.1,
+     46.8
+    ],
+    [
+     -5.3,
+     46.8
+    ],
+    [
+     -5.3,
+     51.2
+    ],
+    [
+     -10.1,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 9: Low Row 9 is a roofless shell: its roof went for fuel in the lean years, and what fell lies in the court"
+  },
+  {
+   "id": "plot_low_9",
+   "surface": "earth",
+   "area": [
+    [
+     -10.1,
+     53.7
+    ],
+    [
+     -5.3,
+     53.7
+    ],
+    [
+     -5.3,
+     59.4
+    ],
+    [
+     -10.1,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 9, across the back lane under the wall of the row above: Low Row 9 is a roofless shell: its roof went for fuel in the lean years, and what fell lies in the court"
+  },
+  {
+   "id": "court_low_10",
+   "surface": "setts",
+   "area": [
+    [
+     -15.5,
+     46.8
+    ],
+    [
+     -10.1,
+     46.8
+    ],
+    [
+     -10.1,
+     51.2
+    ],
+    [
+     -15.5,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the back court of Low Row 10: Thessaly Marl works nights: a child's washing, and a bed of roots she digs at dusk"
+  },
+  {
+   "id": "plot_low_10",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -15.5,
+     53.7
+    ],
+    [
+     -10.1,
+     53.7
+    ],
+    [
+     -10.1,
+     59.4
+    ],
+    [
+     -15.5,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Low Row 10, across the back lane under the wall of the row above: Thessaly Marl works nights: a child's washing, and a bed of roots she digs at dusk"
+  },
+  {
+   "id": "court_marver",
+   "surface": "setts",
+   "area": [
+    [
+     52.0,
+     75.8
+    ],
+    [
+     64.0,
+     75.8
+    ],
+    [
+     64.0,
+     80.0
+    ],
+    [
+     52.0,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of the Marver: the Marver's kitchen court: fish barrels (Petra Tarn's, unpaid) and the cookshop's hens"
+  },
+  {
+   "id": "plot_marver",
+   "surface": "earth",
+   "area": [
+    [
+     52.0,
+     82.5
+    ],
+    [
+     64.0,
+     82.5
+    ],
+    [
+     64.0,
+     89.4
+    ],
+    [
+     52.0,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of the Marver, across the back lane under the wall of the row above: the Marver's kitchen court: fish barrels (Petra Tarn's, unpaid) and the cookshop's hens"
+  },
+  {
+   "id": "court_mid_1",
+   "surface": "setts",
+   "area": [
+    [
+     46.3,
+     74.8
+    ],
+    [
+     52.0,
+     74.8
+    ],
+    [
+     52.0,
+     80.0
+    ],
+    [
+     46.3,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of Mid Row 1: four growers: seedlings hardening in cold frames before they go up to the Ladder"
+  },
+  {
+   "id": "plot_mid_1",
+   "surface": "worked_soil",
+   "area": [
+    [
+     46.3,
+     82.5
+    ],
+    [
+     52.0,
+     82.5
+    ],
+    [
+     52.0,
+     89.4
+    ],
+    [
+     46.3,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Mid Row 1, across the back lane under the wall of the row above: four growers: seedlings hardening in cold frames before they go up to the Ladder"
+  },
+  {
+   "id": "court_mid_2",
+   "surface": "setts",
+   "area": [
+    [
+     40.6,
+     74.8
+    ],
+    [
+     46.3,
+     74.8
+    ],
+    [
+     46.3,
+     80.0
+    ],
+    [
+     40.6,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of Mid Row 2: Hobb Fenwick keeps the cistern and catches every drop at home too; Nan's roots"
+  },
+  {
+   "id": "plot_mid_2",
+   "surface": "worked_soil",
+   "area": [
+    [
+     40.6,
+     82.5
+    ],
+    [
+     46.3,
+     82.5
+    ],
+    [
+     46.3,
+     89.4
+    ],
+    [
+     40.6,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Mid Row 2, across the back lane under the wall of the row above: Hobb Fenwick keeps the cistern and catches every drop at home too; Nan's roots"
+  },
+  {
+   "id": "court_mid_3",
+   "surface": "earth",
+   "area": [
+    [
+     35.8,
+     74.8
+    ],
+    [
+     40.6,
+     74.8
+    ],
+    [
+     40.6,
+     80.0
+    ],
+    [
+     35.8,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of Mid Row 3: Mid Row 3 is a roofless shell: its roof went for fuel in the lean years, and what fell lies in the court"
+  },
+  {
+   "id": "plot_mid_3",
+   "surface": "earth",
+   "area": [
+    [
+     35.8,
+     82.5
+    ],
+    [
+     40.6,
+     82.5
+    ],
+    [
+     40.6,
+     89.4
+    ],
+    [
+     35.8,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Mid Row 3, across the back lane under the wall of the row above: Mid Row 3 is a roofless shell: its roof went for fuel in the lean years, and what fell lies in the court"
+  },
+  {
+   "id": "court_mid_4",
+   "surface": "setts",
+   "area": [
+    [
+     30.9,
+     74.8
+    ],
+    [
+     35.8,
+     74.8
+    ],
+    [
+     35.8,
+     80.0
+    ],
+    [
+     30.9,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of Mid Row 4: Gwil Stannard's odd slates, sorted by size; Cora's flowers, which Oswin wants off the Ladder"
+  },
+  {
+   "id": "plot_mid_4",
+   "surface": "worked_soil",
+   "area": [
+    [
+     30.9,
+     82.5
+    ],
+    [
+     35.8,
+     82.5
+    ],
+    [
+     35.8,
+     89.4
+    ],
+    [
+     30.9,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Mid Row 4, across the back lane under the wall of the row above: Gwil Stannard's odd slates, sorted by size; Cora's flowers, which Oswin wants off the Ladder"
+  },
+  {
+   "id": "court_mid_5",
+   "surface": "setts",
+   "area": [
+    [
+     -4.7,
+     74.8
+    ],
+    [
+     0.7,
+     74.8
+    ],
+    [
+     0.7,
+     80.0
+    ],
+    [
+     -4.7,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of Mid Row 5: the Sarros: a bench in the evening sun, roots"
+  },
+  {
+   "id": "plot_mid_5",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -4.7,
+     82.5
+    ],
+    [
+     0.7,
+     82.5
+    ],
+    [
+     0.7,
+     89.4
+    ],
+    [
+     -4.7,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Mid Row 5, across the back lane under the wall of the row above: the Sarros: a bench in the evening sun, roots"
+  },
+  {
+   "id": "court_mid_6",
+   "surface": "earth",
+   "area": [
+    [
+     -9.7,
+     74.8
+    ],
+    [
+     -4.7,
+     74.8
+    ],
+    [
+     -4.7,
+     80.0
+    ],
+    [
+     -9.7,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of Mid Row 6: Mid Row 6 stands empty: its court and plot have gone to weed, the wall's top is down"
+  },
+  {
+   "id": "plot_mid_6",
+   "surface": "earth",
+   "area": [
+    [
+     -9.7,
+     82.5
+    ],
+    [
+     -4.7,
+     82.5
+    ],
+    [
+     -4.7,
+     89.4
+    ],
+    [
+     -9.7,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Mid Row 6, across the back lane under the wall of the row above: Mid Row 6 stands empty: its court and plot have gone to weed, the wall's top is down"
+  },
+  {
+   "id": "court_mid_7",
+   "surface": "setts",
+   "area": [
+    [
+     -15.5,
+     74.8
+    ],
+    [
+     -9.7,
+     74.8
+    ],
+    [
+     -9.7,
+     80.0
+    ],
+    [
+     -15.5,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of Mid Row 7: Otto Brandt's crucibles drying on planks; Fenn's hens, each named after someone"
+  },
+  {
+   "id": "plot_mid_7",
+   "surface": "earth",
+   "area": [
+    [
+     -15.5,
+     82.5
+    ],
+    [
+     -9.7,
+     82.5
+    ],
+    [
+     -9.7,
+     89.4
+    ],
+    [
+     -15.5,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of Mid Row 7, across the back lane under the wall of the row above: Otto Brandt's crucibles drying on planks; Fenn's hens, each named after someone"
+  },
+  {
+   "id": "court_high_1",
+   "surface": "setts",
+   "area": [
+    [
+     58.2,
+     104.8
+    ],
+    [
+     64.0,
+     104.8
+    ],
+    [
+     64.0,
+     110.0
+    ],
+    [
+     58.2,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of High Row 1: Ode Pontil's cullet, one crate a colour; roots Lumi waters"
+  },
+  {
+   "id": "plot_high_1",
+   "surface": "worked_soil",
+   "area": [
+    [
+     58.2,
+     112.5
+    ],
+    [
+     64.0,
+     112.5
+    ],
+    [
+     64.0,
+     119.4
+    ],
+    [
+     58.2,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of High Row 1, across the back lane under the wall of the row above: Ode Pontil's cullet, one crate a colour; roots Lumi waters"
+  },
+  {
+   "id": "court_high_2",
+   "surface": "setts",
+   "area": [
+    [
+     52.0,
+     104.8
+    ],
+    [
+     58.2,
+     104.8
+    ],
+    [
+     58.2,
+     110.0
+    ],
+    [
+     52.0,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of High Row 2: Tamsin Hollin's pane crates and a frame glazed with her offcuts; four people's washing"
+  },
+  {
+   "id": "plot_high_2",
+   "surface": "earth",
+   "area": [
+    [
+     52.0,
+     112.5
+    ],
+    [
+     58.2,
+     112.5
+    ],
+    [
+     58.2,
+     119.4
+    ],
+    [
+     52.0,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of High Row 2, across the back lane under the wall of the row above: Tamsin Hollin's pane crates and a frame glazed with her offcuts; four people's washing"
+  },
+  {
+   "id": "court_high_3",
+   "surface": "setts",
+   "area": [
+    [
+     46.2,
+     104.8
+    ],
+    [
+     52.0,
+     104.8
+    ],
+    [
+     52.0,
+     110.0
+    ],
+    [
+     46.2,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of High Row 3: Mirren Quill's physic garden: the healer's herbs in beds edged with slate"
+  },
+  {
+   "id": "plot_high_3",
+   "surface": "worked_soil",
+   "area": [
+    [
+     46.2,
+     112.5
+    ],
+    [
+     52.0,
+     112.5
+    ],
+    [
+     52.0,
+     119.4
+    ],
+    [
+     46.2,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of High Row 3, across the back lane under the wall of the row above: Mirren Quill's physic garden: the healer's herbs in beds edged with slate"
+  },
+  {
+   "id": "court_high_4",
+   "surface": "earth",
+   "area": [
+    [
+     41.2,
+     104.8
+    ],
+    [
+     46.2,
+     104.8
+    ],
+    [
+     46.2,
+     110.0
+    ],
+    [
+     41.2,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of High Row 4: High Row 4 stands empty: its court and plot have gone to weed, the wall's top is down"
+  },
+  {
+   "id": "plot_high_4",
+   "surface": "earth",
+   "area": [
+    [
+     41.2,
+     112.5
+    ],
+    [
+     46.2,
+     112.5
+    ],
+    [
+     46.2,
+     119.4
+    ],
+    [
+     41.2,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of High Row 4, across the back lane under the wall of the row above: High Row 4 stands empty: its court and plot have gone to weed, the wall's top is down"
+  },
+  {
+   "id": "court_high_5",
+   "surface": "setts",
+   "area": [
+    [
+     -5.7,
+     104.8
+    ],
+    [
+     0.1,
+     104.8
+    ],
+    [
+     0.1,
+     110.0
+    ],
+    [
+     -5.7,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of High Row 5: the Dunmores: Tobiah's fishing lines hidden in the lean-to; roots"
+  },
+  {
+   "id": "plot_high_5",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -5.7,
+     112.5
+    ],
+    [
+     0.1,
+     112.5
+    ],
+    [
+     0.1,
+     119.4
+    ],
+    [
+     -5.7,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of High Row 5, across the back lane under the wall of the row above: the Dunmores: Tobiah's fishing lines hidden in the lean-to; roots"
+  },
+  {
+   "id": "court_high_6",
+   "surface": "earth",
+   "area": [
+    [
+     -10.7,
+     104.8
+    ],
+    [
+     -5.7,
+     104.8
+    ],
+    [
+     -5.7,
+     110.0
+    ],
+    [
+     -10.7,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of High Row 6: High Row 6 stands empty: its court and plot have gone to weed, the wall's top is down"
+  },
+  {
+   "id": "plot_high_6",
+   "surface": "earth",
+   "area": [
+    [
+     -10.7,
+     112.5
+    ],
+    [
+     -5.7,
+     112.5
+    ],
+    [
+     -5.7,
+     119.4
+    ],
+    [
+     -10.7,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of High Row 6, across the back lane under the wall of the row above: High Row 6 stands empty: its court and plot have gone to weed, the wall's top is down"
+  },
+  {
+   "id": "court_high_7",
+   "surface": "earth",
+   "area": [
+    [
+     -15.5,
+     104.8
+    ],
+    [
+     -10.7,
+     104.8
+    ],
+    [
+     -10.7,
+     110.0
+    ],
+    [
+     -15.5,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: the back court of High Row 7: High Row 7 is a roofless shell: its roof went for fuel in the lean years, and what fell lies in the court"
+  },
+  {
+   "id": "plot_high_7",
+   "surface": "earth",
+   "area": [
+    [
+     -15.5,
+     112.5
+    ],
+    [
+     -10.7,
+     112.5
+    ],
+    [
+     -10.7,
+     119.4
+    ],
+    [
+     -15.5,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: the plot of High Row 7, across the back lane under the wall of the row above: High Row 7 is a roofless shell: its roof went for fuel in the lean years, and what fell lies in the court"
+  },
+  {
+   "id": "oven_court",
+   "surface": "setts",
+   "area": [
+    [
+     17.8,
+     39.3
+    ],
+    [
+     33.2,
+     39.3
+    ],
+    [
+     33.2,
+     51.2
+    ],
+    [
+     17.8,
+     51.2
+    ]
+   ],
+   "cause": "inside its walls: the oven court before the Batch: the factors' plots on Low Row, cleared to the setts; the town meets here each morning while its roots bake, and the Tally Wynd comes up into it"
+  },
+  {
+   "id": "plot_oven_court",
+   "surface": "earth",
+   "area": [
+    [
+     17.8,
+     53.7
+    ],
+    [
+     33.2,
+     53.7
+    ],
+    [
+     33.2,
+     59.4
+    ],
+    [
+     17.8,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: under the wall behind the oven court: the town's drying green on Low Row, poles and lines anyone may use (the factors' back plots)"
+  },
+  {
+   "id": "toft_1",
+   "surface": "worked_soil",
+   "area": [
+    [
+     3.7,
+     67.3
+    ],
+    [
+     9.14,
+     67.3
+    ],
+    [
+     9.14,
+     80.0
+    ],
+    [
+     3.7,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: toft 1 on Mid Row, a factor's house pulled down in the lean years (the Sarros): dug for roots inside the old walls; the door's step is the way in"
+  },
+  {
+   "id": "plot_toft_1",
+   "surface": "worked_soil",
+   "area": [
+    [
+     3.7,
+     82.5
+    ],
+    [
+     9.14,
+     82.5
+    ],
+    [
+     9.14,
+     89.4
+    ],
+    [
+     3.7,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the old back plot of toft 1: the Sarros dig it too"
+  },
+  {
+   "id": "toft_2",
+   "surface": "worked_soil",
+   "area": [
+    [
+     9.14,
+     67.3
+    ],
+    [
+     14.58,
+     67.3
+    ],
+    [
+     14.58,
+     80.0
+    ],
+    [
+     9.14,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: toft 2 on Mid Row, a factor's house pulled down in the lean years (the Greaves): cold frames glazed with broken panes, in the lee of the old gable: seedlings for the Ladder"
+  },
+  {
+   "id": "plot_toft_2",
+   "surface": "worked_soil",
+   "area": [
+    [
+     9.14,
+     82.5
+    ],
+    [
+     14.58,
+     82.5
+    ],
+    [
+     14.58,
+     89.4
+    ],
+    [
+     9.14,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the old back plot of toft 2: the Greaves dig it too"
+  },
+  {
+   "id": "toft_3",
+   "surface": "earth",
+   "area": [
+    [
+     14.58,
+     67.3
+    ],
+    [
+     20.02,
+     67.3
+    ],
+    [
+     20.02,
+     80.0
+    ],
+    [
+     14.58,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: toft 3 on Mid Row, a factor's house pulled down in the lean years (nobody): nobody's: the back wall has fallen in, the hearth stands in nettles"
+  },
+  {
+   "id": "plot_toft_3",
+   "surface": "earth",
+   "area": [
+    [
+     14.58,
+     82.5
+    ],
+    [
+     20.02,
+     82.5
+    ],
+    [
+     20.02,
+     89.4
+    ],
+    [
+     14.58,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the old back plot of toft 3: gone to weed under the wall"
+  },
+  {
+   "id": "toft_4",
+   "surface": "earth",
+   "area": [
+    [
+     20.02,
+     67.3
+    ],
+    [
+     25.46,
+     67.3
+    ],
+    [
+     25.46,
+     80.0
+    ],
+    [
+     20.02,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: toft 4 on Mid Row, a factor's house pulled down in the lean years (the Row): Mid Row's drying green: lines strung between the old party walls"
+  },
+  {
+   "id": "plot_toft_4",
+   "surface": "earth",
+   "area": [
+    [
+     20.02,
+     82.5
+    ],
+    [
+     25.46,
+     82.5
+    ],
+    [
+     25.46,
+     89.4
+    ],
+    [
+     20.02,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the old back plot of toft 4: gone to weed under the wall"
+  },
+  {
+   "id": "toft_5",
+   "surface": "earth",
+   "area": [
+    [
+     25.46,
+     67.3
+    ],
+    [
+     30.9,
+     67.3
+    ],
+    [
+     30.9,
+     80.0
+    ],
+    [
+     25.46,
+     80.0
+    ]
+   ],
+   "cause": "inside its walls: toft 5 on Mid Row, a factor's house pulled down in the lean years (Gwil Stannard): the mason's yard: slates stripped from the empty houses, sorted, and stone for mending"
+  },
+  {
+   "id": "plot_toft_5",
+   "surface": "earth",
+   "area": [
+    [
+     25.46,
+     82.5
+    ],
+    [
+     30.9,
+     82.5
+    ],
+    [
+     30.9,
+     89.4
+    ],
+    [
+     25.46,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the old back plot of toft 5: gone to weed under the wall"
+  },
+  {
+   "id": "garden_1",
+   "surface": "worked_soil",
+   "area": [
+    [
+     0.1,
+     97.3
+    ],
+    [
+     5.54,
+     97.3
+    ],
+    [
+     5.54,
+     110.0
+    ],
+    [
+     0.1,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: walled garden 1 on High Row, a shipmaster's plot (the Dunmores): roots in straight rows; Greta sits here out of the wash-house steam"
+  },
+  {
+   "id": "plot_garden_1",
+   "surface": "earth",
+   "area": [
+    [
+     0.1,
+     112.5
+    ],
+    [
+     5.54,
+     112.5
+    ],
+    [
+     5.54,
+     119.4
+    ],
+    [
+     0.1,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: under the quarry face behind garden 1: stone that was cut and never carried down"
+  },
+  {
+   "id": "garden_2",
+   "surface": "worked_soil",
+   "area": [
+    [
+     5.54,
+     97.3
+    ],
+    [
+     10.98,
+     97.3
+    ],
+    [
+     10.98,
+     110.0
+    ],
+    [
+     5.54,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: walled garden 2 on High Row, a shipmaster's plot (the Hollins): Tamsin Hollin's frames, glazed whole: the glazier's own panes"
+  },
+  {
+   "id": "plot_garden_2",
+   "surface": "earth",
+   "area": [
+    [
+     5.54,
+     112.5
+    ],
+    [
+     10.98,
+     112.5
+    ],
+    [
+     10.98,
+     119.4
+    ],
+    [
+     5.54,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: under the quarry face behind garden 2: stone that was cut and never carried down"
+  },
+  {
+   "id": "garden_3",
+   "surface": "earth",
+   "area": [
+    [
+     10.99,
+     97.3
+    ],
+    [
+     16.43,
+     97.3
+    ],
+    [
+     16.43,
+     110.0
+    ],
+    [
+     10.99,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: walled garden 3 on High Row, a shipmaster's plot (nobody since the fever winter): locked: the family that kept it died six winters ago, and no one has asked for it"
+  },
+  {
+   "id": "plot_garden_3",
+   "surface": "earth",
+   "area": [
+    [
+     10.99,
+     112.5
+    ],
+    [
+     16.43,
+     112.5
+    ],
+    [
+     16.43,
+     119.4
+    ],
+    [
+     10.99,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: under the quarry face behind garden 3: stone that was cut and never carried down"
+  },
+  {
+   "id": "garden_4",
+   "surface": "worked_soil",
+   "area": [
+    [
+     16.43,
+     97.3
+    ],
+    [
+     21.87,
+     97.3
+    ],
+    [
+     21.87,
+     110.0
+    ],
+    [
+     16.43,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: walled garden 4 on High Row, a shipmaster's plot (Mirren Quill): the healer's second garden: what will not grow in her plot's shade"
+  },
+  {
+   "id": "plot_garden_4",
+   "surface": "earth",
+   "area": [
+    [
+     16.43,
+     112.5
+    ],
+    [
+     21.87,
+     112.5
+    ],
+    [
+     21.87,
+     119.4
+    ],
+    [
+     16.43,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: under the quarry face behind garden 4: stone that was cut and never carried down"
+  },
+  {
+   "id": "garden_5",
+   "surface": "worked_soil",
+   "area": [
+    [
+     21.87,
+     97.3
+    ],
+    [
+     27.31,
+     97.3
+    ],
+    [
+     27.31,
+     110.0
+    ],
+    [
+     21.87,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: walled garden 5 on High Row, a shipmaster's plot (Ode Pontil): Ode Pontil's colours: a bed edged with one lump of every glass the Cone has made"
+  },
+  {
+   "id": "plot_garden_5",
+   "surface": "earth",
+   "area": [
+    [
+     21.87,
+     112.5
+    ],
+    [
+     27.31,
+     112.5
+    ],
+    [
+     27.31,
+     119.4
+    ],
+    [
+     21.87,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: under the quarry face behind garden 5: stone that was cut and never carried down"
+  },
+  {
+   "id": "garden_6",
+   "surface": "worked_soil",
+   "area": [
+    [
+     27.32,
+     97.3
+    ],
+    [
+     32.76,
+     97.3
+    ],
+    [
+     32.76,
+     110.0
+    ],
+    [
+     27.32,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: walled garden 6 on High Row, a shipmaster's plot (the Quills): roots, and a bench where Aldous Quill reads the ledger"
+  },
+  {
+   "id": "plot_garden_6",
+   "surface": "earth",
+   "area": [
+    [
+     27.32,
+     112.5
+    ],
+    [
+     32.76,
+     112.5
+    ],
+    [
+     32.76,
+     119.4
+    ],
+    [
+     27.32,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: under the quarry face behind garden 6: stone that was cut and never carried down"
+  },
+  {
+   "id": "garden_7",
+   "surface": "earth",
+   "area": [
+    [
+     32.76,
+     97.3
+    ],
+    [
+     38.2,
+     97.3
+    ],
+    [
+     38.2,
+     110.0
+    ],
+    [
+     32.76,
+     110.0
+    ]
+   ],
+   "cause": "inside its walls: walled garden 7 on High Row, a shipmaster's plot (the Pontils): the Kiln's hens, behind a wall no hawk-gull stoops over"
+  },
+  {
+   "id": "plot_garden_7",
+   "surface": "earth",
+   "area": [
+    [
+     32.76,
+     112.5
+    ],
+    [
+     38.2,
+     112.5
+    ],
+    [
+     38.2,
+     119.4
+    ],
+    [
+     32.76,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: under the quarry face behind garden 7: stone that was cut and never carried down"
+  },
+  {
+   "id": "the_bleach",
+   "surface": "earth",
+   "area": [
+    [
+     68.2,
+     39.9
+    ],
+    [
+     75.5,
+     39.9
+    ],
+    [
+     75.5,
+     59.0
+    ],
+    [
+     68.2,
+     59.0
+    ]
+   ],
+   "cause": "inside its walls: the Bleach: the wash-house's drying green on the corner over Cinder Row, up the Cinder Steps from the Cone's warm wall and upwind of its soot (Greta Dunmore wants the smoke kept off the washing)"
+  },
+  {
+   "id": "marver_yard",
+   "surface": "worked_soil",
+   "area": [
+    [
+     68.2,
+     67.31
+    ],
+    [
+     79.2,
+     67.31
+    ],
+    [
+     79.2,
+     79.25
+    ],
+    [
+     68.2,
+     79.25
+    ]
+   ],
+   "cause": "inside its walls: the Marver's kitchen garden, behind its terrace on the corner bastion: roots and greens for the pot, kelp to feed them"
+  },
+  {
+   "id": "ladder_corner_1",
+   "surface": "earth",
+   "area": [
+    [
+     -24.3,
+     39.4
+    ],
+    [
+     -20.0,
+     39.4
+    ],
+    [
+     -20.0,
+     46.4
+    ],
+    [
+     -24.3,
+     46.4
+    ]
+   ],
+   "cause": "inside its walls: the working corner of the Ladder's rank 1: a kelp heap and fork for the beds, cold frames, canes"
+  },
+  {
+   "id": "ladder_corner_2",
+   "surface": "earth",
+   "area": [
+    [
+     -27.3,
+     52.4
+    ],
+    [
+     -20.0,
+     52.4
+    ],
+    [
+     -20.0,
+     59.4
+    ],
+    [
+     -27.3,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the working corner of the Ladder's rank 2: a kelp heap and fork for the beds, cold frames, canes"
+  },
+  {
+   "id": "ladder_corner_2w",
+   "surface": "earth",
+   "area": [
+    [
+     -83.1,
+     52.4
+    ],
+    [
+     -76.6,
+     52.4
+    ],
+    [
+     -76.6,
+     59.4
+    ],
+    [
+     -83.1,
+     59.4
+    ]
+   ],
+   "cause": "inside its walls: the west corner of the Ladder's rank 2, under the wind wall: canes and a second kelp heap"
+  },
+  {
+   "id": "ladder_corner_3",
+   "surface": "earth",
+   "area": [
+    [
+     -83.1,
+     67.4
+    ],
+    [
+     -79.7,
+     67.4
+    ],
+    [
+     -79.7,
+     74.4
+    ],
+    [
+     -83.1,
+     74.4
+    ]
+   ],
+   "cause": "inside its walls: the working corner of the Ladder's rank 3: a kelp heap and fork for the beds, cold frames, canes"
+  },
+  {
+   "id": "ladder_corner_4",
+   "surface": "earth",
+   "area": [
+    [
+     -27.3,
+     82.4
+    ],
+    [
+     -20.0,
+     82.4
+    ],
+    [
+     -20.0,
+     89.4
+    ],
+    [
+     -27.3,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the working corner of the Ladder's rank 4: a kelp heap and fork for the beds, cold frames, canes"
+  },
+  {
+   "id": "ladder_corner_4w",
+   "surface": "earth",
+   "area": [
+    [
+     -83.1,
+     82.4
+    ],
+    [
+     -76.6,
+     82.4
+    ],
+    [
+     -76.6,
+     89.4
+    ],
+    [
+     -83.1,
+     89.4
+    ]
+   ],
+   "cause": "inside its walls: the west corner of the Ladder's rank 4, under the wind wall: canes and a second kelp heap"
+  },
+  {
+   "id": "ladder_corner_5",
+   "surface": "earth",
+   "area": [
+    [
+     -24.3,
+     97.4
+    ],
+    [
+     -20.0,
+     97.4
+    ],
+    [
+     -20.0,
+     104.4
+    ],
+    [
+     -24.3,
+     104.4
+    ]
+   ],
+   "cause": "inside its walls: the working corner of the Ladder's rank 5: a kelp heap and fork for the beds, cold frames, canes"
+  },
+  {
+   "id": "ladder_corner_6",
+   "surface": "earth",
+   "area": [
+    [
+     -27.3,
+     112.4
+    ],
+    [
+     -20.0,
+     112.4
+    ],
+    [
+     -20.0,
+     119.4
+    ],
+    [
+     -27.3,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: the working corner of the Ladder's rank 6: a kelp heap and fork for the beds, cold frames, canes"
+  },
+  {
+   "id": "ladder_corner_6w",
+   "surface": "earth",
+   "area": [
+    [
+     -83.1,
+     112.4
+    ],
+    [
+     -76.6,
+     112.4
+    ],
+    [
+     -76.6,
+     119.4
+    ],
+    [
+     -83.1,
+     119.4
+    ]
+   ],
+   "cause": "inside its walls: the west corner of the Ladder's rank 6, under the wind wall: canes and a second kelp heap"
+  },
+  {
+   "id": "ladder_corner_7",
+   "surface": "earth",
+   "area": [
+    [
+     -83.1,
+     126.4
+    ],
+    [
+     -79.7,
+     126.4
+    ],
+    [
+     -79.7,
+     133.4
+    ],
+    [
+     -83.1,
+     133.4
+    ]
+   ],
+   "cause": "inside its walls: the working corner of the Ladder's rank 7: a kelp heap and fork for the beds, cold frames, canes"
+  },
+  {
+   "id": "ropewalk",
+   "surface": "earth",
+   "area": [
+    [
+     -49.0,
+     29.0
+    ],
+    [
+     -19.5,
+     29.0
+    ],
+    [
+     -19.5,
+     31.4
+    ],
+    [
+     -49.0,
+     31.4
+    ]
+   ],
+   "cause": "inside its walls: Chidi Okoro's ropewalk, under Low Row's wall behind the smokehouses: 29 m, the longest straight, sheltered run in town, which a line-maker needs"
+  },
+  {
+   "id": "net_green",
+   "surface": "earth",
+   "area": [
+    [
+     -75.0,
+     19.0
+    ],
+    [
+     -54.4,
+     19.0
+    ],
+    [
+     -54.4,
+     31.1
+    ],
+    [
+     -75.0,
+     31.1
+    ]
+   ],
+   "cause": "inside its walls: the net green behind the lofts: the six lofts' nets dry here out of the spray, on poles; a boat laid up against the wall"
+  },
+  {
+   "id": "smoke_yard",
+   "surface": "earth",
+   "area": [
+    [
+     -49.0,
+     16.3
+    ],
+    [
+     -38.0,
+     16.3
+    ],
+    [
+     -38.0,
+     28.2
+    ],
+    [
+     -49.0,
+     28.2
+    ]
+   ],
+   "cause": "inside its walls: the smokehouses' yard: peat and driftwood for the smoke, fish barrels waiting on the Marver's drops (Petra Tarn)"
+  },
+  {
+   "id": "tally_court",
+   "surface": "quay_flags",
+   "area": [
+    [
+     -14.0,
+     22.3
+    ],
+    [
+     14.0,
+     22.3
+    ],
+    [
+     14.0,
+     31.1
+    ],
+    [
+     -14.0,
+     31.1
+    ]
+   ],
+   "cause": "inside its walls: the Counting House's back court: the ship days' bonded yard, its wall still coped; the porter's cart and the Store's empties stand in it now"
+  },
+  {
+   "id": "store_yard",
+   "surface": "earth",
+   "area": [
+    [
+     48.0,
+     20.3
+    ],
+    [
+     60.0,
+     20.3
+    ],
+    [
+     60.0,
+     31.1
+    ],
+    [
+     48.0,
+     31.1
+    ]
+   ],
+   "cause": "inside its walls: the Store's yard: the town's peat, counted in by the tally keeper, and the barrels going back to the smokehouses"
+  },
+  {
+   "id": "readers_yard",
+   "surface": "setts",
+   "area": [
+    [
+     16.6,
+     153.6
+    ],
+    [
+     28.4,
+     153.6
+    ],
+    [
+     28.4,
+     161.9
+    ],
+    [
+     16.6,
+     161.9
+    ]
+   ],
+   "cause": "inside its walls: the Readers' House's yard: the school's forecourt in the morning sun, the tablets' bench under the window, eight stones for the children, a tray of white sand to write in"
+  },
+  {
+   "id": "quarry_old",
+   "surface": "earth",
+   "area": [
+    [
+     -18.5,
+     126.2
+    ],
+    [
+     -3.0,
+     126.2
+    ],
+    [
+     -3.0,
+     133.1
+    ],
+    [
+     -18.5,
+     133.1
+    ]
+   ],
+   "cause": "inside its walls: the oldest working, west of the wynd: a spoil heap gone to grass, two blocks nobody wanted"
+  },
+  {
+   "id": "quarry_bay",
+   "surface": "earth",
+   "area": [
+    [
+     8.9,
+     126.2
+    ],
+    [
+     25.1,
+     126.2
+    ],
+    [
+     25.1,
+     139.1
+    ],
+    [
+     8.9,
+     139.1
+    ]
+   ],
+   "cause": "inside its walls: the bay and its floor: squared stones waiting on bearers under a timber crane (a ship's spar for its mast, a hand winch), cut in the ship days for a quay that needed no more; Gwil Stannard takes one when a wall wants it. A block lies half split, the wedges still in it"
+  },
+  {
+   "id": "quarry_spoil",
+   "surface": "earth",
+   "area": [
+    [
+     27.0,
+     126.2
+    ],
+    [
+     40.1,
+     126.2
+    ],
+    [
+     40.1,
+     133.1
+    ],
+    [
+     27.0,
+     133.1
+    ]
+   ],
+   "cause": "inside its walls: the spoil: what the face gave that would not square, tipped where the barrow run ended; the Tally Wynd's flight comes up beside it"
+  },
+  {
+   "id": "clay_pit",
+   "surface": "earth",
+   "area": [
+    [
+     41.2,
+     126.2
+    ],
+    [
+     54.8,
+     126.2
+    ],
+    [
+     54.8,
+     133.1
+    ],
+    [
+     41.2,
+     133.1
+    ]
+   ],
+   "cause": "inside its walls: the clay pit: its floor is stony till, wet in the middle; one bank of good clay is left in the north-east corner, under the graveyard's wall. Otto Brandt's boards of dug clay under sacking, his plank run up the bank, his spade"
+  },
+  {
+   "id": "boatyard",
+   "surface": "earth",
+   "area": [
+    [
+     -103.6,
+     9.6
+    ],
+    [
+     -75.4,
+     9.6
+    ],
+    [
+     -75.4,
+     31.2
+    ],
+    [
+     -103.6,
+     31.2
+    ]
+   ],
+   "cause": "inside its walls: the boatyard: the timber for the Second Thought stacked by sort behind the boatshed, the steaming box beside the dry dock, the working floor east of the shed. Bram Calloway needs fourteen trees more than this"
+  },
+  {
+   "id": "kelp_stance",
+   "surface": "earth",
+   "area": [
+    [
+     -37.4,
+     11.0
+    ],
+    [
+     -19.6,
+     11.0
+    ],
+    [
+     -19.6,
+     28.4
+    ],
+    [
+     -37.4,
+     28.4
+    ]
+   ],
+   "cause": "inside its walls: the wrack stance behind the Heron: kelp landed wet at the crane dries on nine racks set across the south-westerly, then goes west to the kilns on the handcart; two wet heaps wait"
+  },
+  {
+   "id": "peat_stance",
+   "surface": "earth",
+   "area": [
+    [
+     26.2,
+     24.9
+    ],
+    [
+     47.4,
+     24.9
+    ],
+    [
+     47.4,
+     31.2
+    ],
+    [
+     26.2,
+     31.2
+    ]
+   ],
+   "cause": "inside its walls: the peat stance between the Tally Wynd and the Store's yard: five bearers under Low Row's wall, two ricks full under tarred cloth, one half gone, two bare. The tally keeper's slate stands at its end"
+  },
+  {
+   "id": "creel_stand",
+   "surface": "earth",
+   "area": [
+    [
+     68.4,
+     11.0
+    ],
+    [
+     79.4,
+     11.0
+    ],
+    [
+     79.4,
+     25.6
+    ],
+    [
+     68.4,
+     25.6
+    ]
+   ],
+   "cause": "inside its walls: the creel stand at the foot of the Store Wynd: a stone bank at cart height where the peat creels are tipped into Davin Vane's handcart for the Cone (a cart cannot use the wynds)"
+  },
+  {
+   "id": "root plot 1",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -61.25,
+     40.25
+    ],
+    [
+     -54.15,
+     40.25
+    ],
+    [
+     -54.15,
+     45.35
+    ],
+    [
+     -61.25,
+     45.35
+    ]
+   ],
+   "cause": "root plot 1: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 2",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -71.25,
+     40.25
+    ],
+    [
+     -64.15,
+     40.25
+    ],
+    [
+     -64.15,
+     45.35
+    ],
+    [
+     -71.25,
+     45.35
+    ]
+   ],
+   "cause": "root plot 2: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 3",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -81.25,
+     40.25
+    ],
+    [
+     -74.15,
+     40.25
+    ],
+    [
+     -74.15,
+     45.35
+    ],
+    [
+     -81.25,
+     45.35
+    ]
+   ],
+   "cause": "root plot 3: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 4",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -35.85,
+     53.25
+    ],
+    [
+     -28.75,
+     53.25
+    ],
+    [
+     -28.75,
+     58.35
+    ],
+    [
+     -35.85,
+     58.35
+    ]
+   ],
+   "cause": "root plot 4: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 5",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -75.25,
+     53.25
+    ],
+    [
+     -68.15,
+     53.25
+    ],
+    [
+     -68.15,
+     58.35
+    ],
+    [
+     -75.25,
+     58.35
+    ]
+   ],
+   "cause": "root plot 5: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 6",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -48.05,
+     68.25
+    ],
+    [
+     -40.95,
+     68.25
+    ],
+    [
+     -40.95,
+     73.35
+    ],
+    [
+     -48.05,
+     73.35
+    ]
+   ],
+   "cause": "root plot 6: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 7",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -38.05,
+     68.25
+    ],
+    [
+     -30.95,
+     68.25
+    ],
+    [
+     -30.95,
+     73.35
+    ],
+    [
+     -38.05,
+     73.35
+    ]
+   ],
+   "cause": "root plot 7: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 8",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -28.05,
+     68.25
+    ],
+    [
+     -20.95,
+     68.25
+    ],
+    [
+     -20.95,
+     73.35
+    ],
+    [
+     -28.05,
+     73.35
+    ]
+   ],
+   "cause": "root plot 8: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 9",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -35.85,
+     83.25
+    ],
+    [
+     -28.75,
+     83.25
+    ],
+    [
+     -28.75,
+     88.35
+    ],
+    [
+     -35.85,
+     88.35
+    ]
+   ],
+   "cause": "root plot 9: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 10",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -75.25,
+     83.25
+    ],
+    [
+     -68.15,
+     83.25
+    ],
+    [
+     -68.15,
+     88.35
+    ],
+    [
+     -75.25,
+     88.35
+    ]
+   ],
+   "cause": "root plot 10: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 11",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -61.25,
+     98.25
+    ],
+    [
+     -54.15,
+     98.25
+    ],
+    [
+     -54.15,
+     103.35
+    ],
+    [
+     -61.25,
+     103.35
+    ]
+   ],
+   "cause": "root plot 11: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 12",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -71.25,
+     98.25
+    ],
+    [
+     -64.15,
+     98.25
+    ],
+    [
+     -64.15,
+     103.35
+    ],
+    [
+     -71.25,
+     103.35
+    ]
+   ],
+   "cause": "root plot 12: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 13",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -81.25,
+     98.25
+    ],
+    [
+     -74.15,
+     98.25
+    ],
+    [
+     -74.15,
+     103.35
+    ],
+    [
+     -81.25,
+     103.35
+    ]
+   ],
+   "cause": "root plot 13: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 14",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -35.85,
+     113.25
+    ],
+    [
+     -28.75,
+     113.25
+    ],
+    [
+     -28.75,
+     118.35
+    ],
+    [
+     -35.85,
+     118.35
+    ]
+   ],
+   "cause": "root plot 14: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 15",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -75.25,
+     113.25
+    ],
+    [
+     -68.15,
+     113.25
+    ],
+    [
+     -68.15,
+     118.35
+    ],
+    [
+     -75.25,
+     118.35
+    ]
+   ],
+   "cause": "root plot 15: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 16",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -48.05,
+     127.25
+    ],
+    [
+     -40.95,
+     127.25
+    ],
+    [
+     -40.95,
+     132.35
+    ],
+    [
+     -48.05,
+     132.35
+    ]
+   ],
+   "cause": "root plot 16: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 17",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -38.05,
+     127.25
+    ],
+    [
+     -30.95,
+     127.25
+    ],
+    [
+     -30.95,
+     132.35
+    ],
+    [
+     -38.05,
+     132.35
+    ]
+   ],
+   "cause": "root plot 17: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 18",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -28.05,
+     127.25
+    ],
+    [
+     -20.95,
+     127.25
+    ],
+    [
+     -20.95,
+     132.35
+    ],
+    [
+     -28.05,
+     132.35
+    ]
+   ],
+   "cause": "root plot 18: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "the Sand Spit",
+   "surface": "white_sand",
+   "area": [
+    [
+     346,
+     92
+    ],
+    [
+     384,
+     110
+    ],
+    [
+     390,
+     210
+    ],
+    [
+     352,
+     212
+    ],
+    [
+     342,
+     150
+    ]
+   ],
+   "cause": "white sand for the glass"
+  },
+  {
+   "id": "the wrack line",
+   "surface": "kelp_shingle",
+   "area": [
+    [
+     -128,
+     4
+    ],
+    [
+     -200,
+     2
+    ],
+    [
+     -258,
+     24
+    ],
+    [
+     -312,
+     46
+    ],
+    [
+     -309,
+     55
+    ],
+    [
+     -255,
+     33
+    ],
+    [
+     -197,
+     11
+    ],
+    [
+     -125,
+     13
+    ]
+   ],
+   "cause": "the tide's wrack line along the Wrack Strand: kelp to gather"
+  },
+  {
+   "id": "a peat cutting at -150, 360",
+   "surface": "peat",
+   "area": [
+    [
+     -156,
+     357.8
+    ],
+    [
+     -144,
+     357.8
+    ],
+    [
+     -144,
+     362.2
+    ],
+    [
+     -156,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -90, 360",
+   "surface": "peat",
+   "area": [
+    [
+     -96,
+     357.8
+    ],
+    [
+     -84,
+     357.8
+    ],
+    [
+     -84,
+     362.2
+    ],
+    [
+     -96,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -30, 360",
+   "surface": "peat",
+   "area": [
+    [
+     -36,
+     357.8
+    ],
+    [
+     -24,
+     357.8
+    ],
+    [
+     -24,
+     362.2
+    ],
+    [
+     -36,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 30, 360",
+   "surface": "peat",
+   "area": [
+    [
+     24,
+     357.8
+    ],
+    [
+     36,
+     357.8
+    ],
+    [
+     36,
+     362.2
+    ],
+    [
+     24,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 90, 360",
+   "surface": "peat",
+   "area": [
+    [
+     84,
+     357.8
+    ],
+    [
+     96,
+     357.8
+    ],
+    [
+     96,
+     362.2
+    ],
+    [
+     84,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 150, 360",
+   "surface": "peat",
+   "area": [
+    [
+     144,
+     357.8
+    ],
+    [
+     156,
+     357.8
+    ],
+    [
+     156,
+     362.2
+    ],
+    [
+     144,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -150, 400",
+   "surface": "peat",
+   "area": [
+    [
+     -156,
+     397.8
+    ],
+    [
+     -144,
+     397.8
+    ],
+    [
+     -144,
+     402.2
+    ],
+    [
+     -156,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -90, 400",
+   "surface": "peat",
+   "area": [
+    [
+     -96,
+     397.8
+    ],
+    [
+     -84,
+     397.8
+    ],
+    [
+     -84,
+     402.2
+    ],
+    [
+     -96,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -30, 400",
+   "surface": "peat",
+   "area": [
+    [
+     -36,
+     397.8
+    ],
+    [
+     -24,
+     397.8
+    ],
+    [
+     -24,
+     402.2
+    ],
+    [
+     -36,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 30, 400",
+   "surface": "peat",
+   "area": [
+    [
+     24,
+     397.8
+    ],
+    [
+     36,
+     397.8
+    ],
+    [
+     36,
+     402.2
+    ],
+    [
+     24,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 90, 400",
+   "surface": "peat",
+   "area": [
+    [
+     84,
+     397.8
+    ],
+    [
+     96,
+     397.8
+    ],
+    [
+     96,
+     402.2
+    ],
+    [
+     84,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 150, 400",
+   "surface": "peat",
+   "area": [
+    [
+     144,
+     397.8
+    ],
+    [
+     156,
+     397.8
+    ],
+    [
+     156,
+     402.2
+    ],
+    [
+     144,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -150, 440",
+   "surface": "peat",
+   "area": [
+    [
+     -156,
+     437.8
+    ],
+    [
+     -144,
+     437.8
+    ],
+    [
+     -144,
+     442.2
+    ],
+    [
+     -156,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -90, 440",
+   "surface": "peat",
+   "area": [
+    [
+     -96,
+     437.8
+    ],
+    [
+     -84,
+     437.8
+    ],
+    [
+     -84,
+     442.2
+    ],
+    [
+     -96,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -30, 440",
+   "surface": "peat",
+   "area": [
+    [
+     -36,
+     437.8
+    ],
+    [
+     -24,
+     437.8
+    ],
+    [
+     -24,
+     442.2
+    ],
+    [
+     -36,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 30, 440",
+   "surface": "peat",
+   "area": [
+    [
+     24,
+     437.8
+    ],
+    [
+     36,
+     437.8
+    ],
+    [
+     36,
+     442.2
+    ],
+    [
+     24,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 90, 440",
+   "surface": "peat",
+   "area": [
+    [
+     84,
+     437.8
+    ],
+    [
+     96,
+     437.8
+    ],
+    [
+     96,
+     442.2
+    ],
+    [
+     84,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 150, 440",
+   "surface": "peat",
+   "area": [
+    [
+     144,
+     437.8
+    ],
+    [
+     156,
+     437.8
+    ],
+    [
+     156,
+     442.2
+    ],
+    [
+     144,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  }
+ ],
+ "structure_models": [
+  {
+   "id": "sign",
+   "kind": "sign",
+   "model": "cullet/sign/sign.glb",
+   "size": [
+    0.5,
+    1.2
+   ],
+   "height_m": 2.75,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 58365,
+   "cause": "the engine's sign at a named building's door: a painted board on an iron bracket and a spar at the kerb, its back to the building",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 150 m from the Cone at bearing 259; front faces 180"
+   }
+  },
+  {
+   "id": "storage",
+   "kind": "storage",
+   "model": "cullet/storage/storage.glb",
+   "size": [
+    3.2,
+    2.9
+   ],
+   "height_m": 1.35,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 46182,
+   "cause": "the engine's common store in the Counting House yard: a covered handcart, crates and barrels, in tarred timber",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "campfire",
+   "kind": "campfire",
+   "model": "cullet/campfire/campfire.glb",
+   "size": [
+    1.0,
+    1.0
+   ],
+   "height_m": 0.7,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 27516,
+   "cause": "the engine's fire in the yard: an iron fire basket on three stones, peat in it",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "hearth",
+   "kind": "hearth",
+   "model": "cullet/hearth/hearth.glb",
+   "size": [
+    1.3,
+    0.8
+   ],
+   "height_m": 0.9,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 83488,
+   "cause": "a household's hearth, which the engine stands at its door: a basalt fire box with a pot on it, peat beside it",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "lamp",
+   "kind": "lamp",
+   "model": "cullet/lamp/lamp.glb",
+   "size": [
+    0.6,
+    0.6
+   ],
+   "height_m": 3.2,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 40229,
+   "cause": "one of the plan's seven lamps: the quay lamp, iron on a basalt block, odd panes",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "house_store",
+   "kind": "house_store",
+   "model": "cullet/house_store/house_store.glb",
+   "size": [
+    1.2,
+    1.2
+   ],
+   "height_m": 0.95,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 50232,
+   "cause": "a household's store (rules-3), which the engine stands at its home: a tarred sea chest with a creel on it",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "yard_store",
+   "kind": "yard_store",
+   "model": "cullet/yard_store/yard_store.glb",
+   "size": [
+    3.2,
+    2.9
+   ],
+   "height_m": 1.35,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 96035,
+   "cause": "the Cone yard's peat store (rules-3): the covered handcart, crates and barrels of the common store",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "furnace",
+   "kind": "furnace",
+   "model": "cullet/furnace/furnace.glb",
+   "size": [
+    2.8,
+    1.2
+   ],
+   "height_m": 1.5,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 21466,
+   "cause": "the Cone's furnace, which the engine stands at the front mouth: the stoker's rake and shovel in their stand, a barrow of peat",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "oven",
+   "kind": "oven",
+   "model": "cullet/oven/oven.glb",
+   "size": [
+    1.5,
+    0.8
+   ],
+   "height_m": 1.0,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 97237,
+   "cause": "the Batch's oven, which the engine stands at the oven mouth: the cooling trestle with the morning's loaves, the ember pan",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "smokehouse",
+   "kind": "smokehouse",
+   "model": "cullet/smokehouse/smokehouse.glb",
+   "size": [
+    1.6,
+    0.8
+   ],
+   "height_m": 1.7,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 45644,
+   "cause": "a smokehouse's fire, which the engine stands at its door: the smoulder pot and a rack of split fish",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  }
+ ],
  "features": {
   "kelp_kilns": {
    "note": "four round stone pits on the Wrack Strand, upwind (south-west) of Low Row; built since layout pass 2 as the fixtures kelp_kiln_1..4",
@@ -37279,21 +42265,29 @@
   "working": 20,
   "open_lots": 138,
   "fixtures": {
+   "ash_sacks": 2,
    "back_plot": 39,
    "barrels": 2,
+   "blowpipe_rack": 1,
    "boat": 1,
    "boatyard": 1,
    "bollard": 9,
    "clay_pit": 1,
+   "cone_bench": 1,
    "creel_stand": 1,
    "creels": 2,
    "crown_ground": 3,
+   "crucible_stack": 2,
+   "cullet_heap": 4,
    "drying_green": 2,
    "dyke": 10,
    "fish_quay": 2,
    "fish_steps": 1,
    "floats": 2,
    "graveyard": 3,
+   "handcart": 1,
+   "hanger_tree": 6,
+   "heron_jib": 1,
    "kelp_kiln": 4,
    "kelp_stance": 1,
    "kiln_road": 1,
@@ -37309,13 +42303,15 @@
    "quarry_crane": 1,
    "quarry_face": 8,
    "quay": 28,
-   "quay_lamp": 7,
+   "quay_lamp": 6,
    "readers_yard": 1,
    "retaining_wall": 102,
    "ropewalk": 1,
    "sill": 5,
    "stairs": 19,
+   "stump": 3,
    "toft": 5,
+   "trough": 1,
    "walled_garden": 7,
    "wind_wall": 7,
    "wynd_washing": 2,

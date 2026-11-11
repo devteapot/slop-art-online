@@ -41,7 +41,9 @@ def cite(value, body):
     carried (`- [id] time text {Name=#id}`): `$EXP:<word>` becomes the id of the first line
     whose text contains <word> (0 if none), `$EXPS` all ids, `$PERSON` `person:<id>` of the
     first person tagged, `$PERSON_ID` that id. `$EXPSTR:<word>` and `$PERSON_IDSTR` give the
-    same ids as strings, the way GLM Flash writes them (docs/MODEL_COST.md, Part 2)."""
+    same ids as strings, the way GLM Flash writes them (docs/MODEL_COST.md, Part 2).
+    `$EXPTEXT:<word>` gives that line's text (its time kept, its {Name=#id} tags dropped; '' if no line has the
+    word): a reply that repeats what it was told, for privacy checks."""
     user = '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'user')
     lines = re.findall(r'^- \[(\d+)\] (.*)$', user, re.M)
     people = re.findall(r'=#(\d+)', user)
@@ -59,6 +61,10 @@ def cite(value, body):
             return int(people[0]) if people else 0
         if v == '$PERSON_IDSTR':
             return people[0] if people else '0'
+        if isinstance(v, str) and v.startswith('$EXPTEXT:'):
+            # What the experience said (a model repeating what it was told); '' if none did.
+            word = v[9:].lower()
+            return next((re.sub(r' \{[^}]*\}$', '', t) for _, t in lines if word in t.lower()), '')
         if isinstance(v, str) and v.startswith('$EXPSTR:'):
             word = v[8:].lower()
             return next((i for i, t in lines if word in t.lower()), '0')

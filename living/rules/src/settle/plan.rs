@@ -163,6 +163,10 @@ pub struct StructureSpec {
     /// Items it holds at the start.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub contents: std::collections::BTreeMap<String, u32>,
+    /// Whose it is: `household:<key>`, a household of the seed's residents, resolved when the
+    /// world is created to the owner of that household's house (none: nobody's, as before).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
 }
 
 /// A ground level: a polygon at an exact height.
@@ -254,6 +258,10 @@ pub struct LotSpec {
     /// with no structure has nowhere to keep them, and they are left out and logged.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub contents: std::collections::BTreeMap<String, u32>,
+    /// The kind of structure at its door, when not its lot kind's (a barn's is a `storage`; a
+    /// world's own kind of store, `store`, here).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -356,6 +364,7 @@ pub(crate) struct PlanLot {
     pub(crate) height: f32,
     pub(crate) landmark: bool,
     pub(crate) spots: Vec<(String, V2)>,
+    pub(crate) structure: Option<String>,
 }
 
 /// A plan converted to the land's axes, its names resolved to indices.
@@ -566,7 +575,7 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
             }
             spots.push((sp.name.clone(), add(rect.c, add(mul(right, sp.at[0]), mul(front, sp.at[1])))));
         }
-        lots.push(PlanLot { id: l.id.clone(), kind: l.kind, name: l.name.clone(), rect, level: li, model: l.model.clone().filter(|m| !m.is_empty()), height, landmark: l.landmark, spots });
+        lots.push(PlanLot { id: l.id.clone(), kind: l.kind, name: l.name.clone(), rect, level: li, model: l.model.clone().filter(|m| !m.is_empty()), height, landmark: l.landmark, spots, structure: l.structure.clone().filter(|k| !k.is_empty()) });
     }
     let mut resources = Vec::new();
     for (i, rs) in s.resources.iter().enumerate() {
@@ -598,11 +607,18 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
             }
             _ => return Err(format!("plan {id}: {name} needs either `at` or a `lot` (with an optional `spot`)")),
         };
-        structures.push(LaidStructure { kind: st.kind.clone(), lot: String::new(), at, fuel: st.fuel, contents: st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect() });
+        let owner = match &st.owner {
+            None => String::new(),
+            Some(o) => match o.strip_prefix("household:") {
+                Some(k) if !k.is_empty() => k.to_string(),
+                _ => return Err(format!("plan {id}: {name} has owner {o:?}; an owner is \"household:<key>\", a household of the seed's residents")),
+            },
+        };
+        structures.push(LaidStructure { kind: st.kind.clone(), lot: String::new(), at, fuel: st.fuel, contents: st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect(), household: owner });
     }
     for (l, spec) in lots.iter().zip(&s.lots) {
         if !spec.contents.is_empty() {
-            structures.push(LaidStructure { kind: String::new(), lot: l.id.clone(), at: door(l), fuel: 0.0, contents: spec.contents.iter().map(|(k, v)| (k.clone(), *v)).collect() });
+            structures.push(LaidStructure { kind: String::new(), lot: l.id.clone(), at: door(l), fuel: 0.0, contents: spec.contents.iter().map(|(k, v)| (k.clone(), *v)).collect(), household: String::new() });
         }
     }
     // Fixtures that block: their tiles on the land. The others are not the rules' business.
@@ -1062,6 +1078,9 @@ pub struct LaidStructure {
     pub at: V2,
     pub fuel: f32,
     pub contents: Vec<(String, u32)>,
+    /// The household whose it is ([`StructureSpec::owner`] without `household:`); empty:
+    /// nobody's.
+    pub household: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -1071,6 +1090,8 @@ pub struct LaidLot {
     pub key: String,
     pub name: Option<String>,
     pub spots: Vec<(String, V2)>,
+    /// The structure kind at its door, when not its lot kind's ([`LotSpec::structure`]).
+    pub structure: Option<String>,
 }
 
 /// A plan laid out by the planner's `Plan` step, handed through the later steps.
@@ -1155,7 +1176,7 @@ pub(crate) fn build(land: &Land, r: Resolved, idx: u16, site: u16, first_road: u
             model_file: l.model.clone(),
             height_m: l.height,
         });
-        laid.lots.push(LaidLot { lot: 0, key: l.id.clone(), name: l.name.clone(), spots: l.spots.clone() });
+        laid.lots.push(LaidLot { lot: 0, key: l.id.clone(), name: l.name.clone(), spots: l.spots.clone(), structure: l.structure.clone() });
     }
     let k = r.scale.max(0.3);
     let mut props = Vec::new();
@@ -1471,17 +1492,18 @@ mod tests {
         let mut s = spec();
         let f = Frame::of(&s);
         let spot = |id: &str, n: usize| s.lots.iter().find(|l| l.id == id).unwrap().spots[n].name.clone();
-        let st = |kind: &str| StructureSpec { kind: kind.into(), at: None, lot: None, spot: None, fuel: 0.0, contents: Default::default() };
+        let st = |kind: &str| StructureSpec { kind: kind.into(), at: None, lot: None, spot: None, fuel: 0.0, contents: Default::default(), owner: None };
         let (inn_seat, hall_door) = (spot("inn", 0), "hall".to_string());
         s.structures = vec![
             StructureSpec { at: Some([1.0, 2.0]), fuel: 4.0, ..st("lamp") },
             StructureSpec { lot: Some(hall_door.clone()), fuel: 6.0, ..st("hearth") },
-            StructureSpec { lot: Some("inn".into()), spot: Some(inn_seat.clone()), contents: [("peat".to_string(), 9)].into(), ..st("storage") },
+            StructureSpec { lot: Some("inn".into()), spot: Some(inn_seat.clone()), contents: [("peat".to_string(), 9)].into(), owner: Some("household:hollis".into()), ..st("storage") },
         ];
         for l in &mut s.lots {
             l.contents.clear();
         }
         s.lots.iter_mut().find(|l| l.id == "store").unwrap().contents = [("fish".to_string(), 3)].into();
+        s.lots.iter_mut().find(|l| l.id == "store").unwrap().structure = Some("barn_store".into());
         let r = resolve(&s).unwrap();
         let lot = |id: &str| r.lots.iter().find(|l| l.id == id).unwrap().clone();
         let door = |l: &PlanLot| add(l.rect.c, mul(l.rect.f, l.rect.hd + 0.5));
@@ -1490,6 +1512,10 @@ mod tests {
         assert!(dist(r.structures[1].at, door(&lot("hall"))) < 1e-4 && r.structures[1].kind == "hearth");
         let seat = lot("inn").spots.iter().find(|(n, _)| *n == inn_seat).unwrap().1;
         assert!(dist(r.structures[2].at, seat) < 1e-4 && r.structures[2].contents == vec![("peat".to_string(), 9)]);
+        // Owned by a household (resolved when the world is created), and nobody's otherwise.
+        assert_eq!((r.structures[2].household.as_str(), r.structures[0].household.as_str(), r.structures[3].household.as_str()), ("hollis", "", ""));
+        // A lot may say what stands at its door.
+        assert_eq!((lot("store").structure.as_deref(), lot("hall").structure.as_deref()), (Some("barn_store"), None));
         assert!(r.structures[3].kind.is_empty() && r.structures[3].lot == "store" && dist(r.structures[3].at, door(&lot("store"))) < 1e-4);
         assert!(validate(&s, 1024).is_ok());
         let refused = |change: &dyn Fn(&mut PlanSpec), words: &str| {
@@ -1504,6 +1530,8 @@ mod tests {
         refused(&|b| b.structures[0].fuel = -1.0, "fuel of at least 0");
         refused(&|b| b.structures[0].at = Some([0.0, 5000.0]), "structures[0]");
         refused(&|b| b.resources[0].regrow_per_h = Some(f32::NAN), "regrow_per_h");
+        refused(&|b| b.structures[2].owner = Some("hollis".into()), "an owner is \"household:<key>\"");
+        refused(&|b| b.structures[2].owner = Some("household:".into()), "an owner is \"household:<key>\"");
     }
 
     /// The test plan stands as written: its site and id, lots on their levels at exact

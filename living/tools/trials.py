@@ -195,26 +195,36 @@ def journal_file(name):
     return "".join(c if c.isalnum() else "_" for c in name) + ".jsonl"
 
 
-DEF = re.compile(r"^(\s*)(private\s+)?fn\s+([A-Za-z0-9_]+)(\s*\()", re.M)
+# A seed's laws (`laws`/`laws_file`) composed over the shipped script as the authority composes
+# them at creation (`living_rules::floors::compose`): one Python copy, in install_script.py.
+from install_script import OVERLAY_MARK, compose_laws, same_script, seed_laws, without_world_laws  # noqa: E402
+
+DEFAULT_DAY_MS = 12 * 60 * 1000  # living_rules::DEFAULT_DAY_MS: a seed without `day_minutes`
 
 
-def compose_laws(base, overlay):
-    """`living_rules::floors::compose` in Python: each function the overlay defines replaces the
-    base's (`fn NAME(` at the start of a base line becomes `fn base_NAME(`), and the overlay is
-    appended. The authority composes a seed's `laws`/`laws_file` when the world is created; the
-    runner installs the skills file after publishing, so it composes the same overlay first."""
-    names = {m.group(3) for m in DEF.finditer(overlay)}
-    renamed = DEF.sub(lambda m: f"{m.group(1)}{m.group(2) or ''}fn base_{m.group(3)}{m.group(4)}" if m.group(3) in names else m.group(0), base)
-    return renamed + ("" if renamed.endswith("\n") else "\n") + "\n// ---- floor overlay ----\n" + overlay
+def laws_problems(seed, overlay, built, creation, sent, readback, day_ms):
+    """Why an instance must not start with the script its world runs; [] when it may.
 
-
-def seed_laws(seed):
-    """A seed's laws overlay: `laws`, or the file `laws_file` names under living/seeds."""
-    if str(seed.get("laws") or "").strip():
-        return seed["laws"]
-    if seed.get("laws_file"):
-        return (ROOT / "living/seeds" / seed["laws_file"]).read_text()
-    return ""
+    `seed` is the parsed world seed and `overlay` its laws ("" without). `built` is the runner's
+    composition of the script the world was created with (its laws over the tree's skills.rhai;
+    None for a module built elsewhere, a variant's `wasm_tag`, whose overlay is then looked for
+    at the row's end). `creation` is the `script` row before any install, `sent` the source
+    installed (None for a variant that keeps the world's own laws), `readback` the row after,
+    and `day_ms` the world's day."""
+    bad = []
+    if sent is not None and not same_script(readback, sent):
+        bad.append("the `script` row read back after install_script is not the source the runner sent")
+    if sent is None and built is not None and not same_script(readback, built):
+        bad.append("the world keeps its own laws (no install), but its `script` row is not the seed's laws composed over skills.rhai")
+    if overlay:
+        if built is not None and not same_script(creation, built):
+            bad.append("the world's creation-time composition of the seed's laws differs from the runner's")
+        if built is None and not without_world_laws(creation or "").rstrip("\n").endswith(OVERLAY_MARK + overlay.rstrip("\n")):
+            bad.append("the world's creation-time script does not end with the seed's laws")
+        want = round(float(seed["day_minutes"]) * 60000) if seed.get("day_minutes") is not None else DEFAULT_DAY_MS
+        if day_ms != want:
+            bad.append(f"world.day_ms is {day_ms}, not the seed's day_minutes ({want})")
+    return bad
 
 
 def patch_skills(text, trial, variant):
@@ -586,29 +596,50 @@ class Instance:
         sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
         self.published = True
         self.save()
+        variant = self.shared["variants"][self.variant]
         # A variant may name another skills file (a rules change under test); the default is the tree's.
-        skills = ROOT / self.shared["variants"][self.variant].get("skills", "living/scripts/skills.rhai")
+        skills = ROOT / variant.get("skills", "living/scripts/skills.rhai")
         # The trial's and then the variant's `skills_patch` change law values in that file
         # (name -> [old text, new text]; each old text must occur exactly once).
         # A seed's own laws (`laws`/`laws_file`, docs/CULLET_RULES.md) are composed over it first, as
         # the authority did at creation: installing the bare file would drop them.
-        overlay = seed_laws(world_seed(worlds_of(self.trial)[world_key(self.trial, self.rep)])[2])
+        seed = world_seed(worlds_of(self.trial)[world_key(self.trial, self.rep)])[2]
+        overlay = seed_laws(seed)
         base = compose_laws(skills.read_text(), overlay) if overlay else skills.read_text()
-        if overlay and not self.shared["variants"][self.variant].get("skills"):
-            # The world's own composition, from its creation, is the check on this one.
-            made = next(iter(self.rows("SELECT * FROM script WHERE name = 'skills'")), {}).get("source")
-            self.log(f"seed laws composed as the world composed them: {made == base}")
-            if made != base:
-                self.emit("events", {"t": self.t(), "error": "the runner's composition of the seed's laws differs from the world's"})
-        source, patched = patch_skills(base, self.trial, self.shared["variants"][self.variant])
-        if overlay:
-            patched = ["seed laws"] + patched
-        code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
-        if code != 200:
-            raise RuntimeError(f"install_script {code}: {body[:300]}")
-        (self.dir / "skills.sha256").write_text(hashlib.sha256(source.encode()).hexdigest() + "\n")
-        self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)}"
-                 f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(source.encode()).hexdigest()[:12]})")
+        # What the world was created with: its laws over the tree's skills.rhai, which the module
+        # compiled in. A module built on another branch (`wasm_tag`) compiled that branch's.
+        tree = (ROOT / "living/scripts/skills.rhai").read_text()
+        built = None if tag else (compose_laws(tree, overlay) if overlay else tree)
+        script_row = lambda: next(iter(self.rows("SELECT * FROM script WHERE name = 'skills'")), {}).get("source")
+        creation = script_row()
+        if variant.get("keep_laws"):
+            # The world keeps the script it was created with (its seed's laws), uninstalled.
+            if variant.get("skills") or variant.get("skills_patch") or self.trial.get("skills_patch"):
+                raise RuntimeError("a keep_laws variant installs nothing, so it takes no `skills` or `skills_patch`")
+            source, patched, readback = None, [], creation
+        else:
+            source, patched = patch_skills(base, self.trial, variant)
+            if overlay:
+                patched = ["seed laws"] + patched
+            code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
+            if code != 200:
+                raise RuntimeError(f"install_script {code}: {body[:300]}")
+            readback = script_row()
+        day_ms = (next(iter(self.rows("SELECT day_ms FROM world")), {}) or {}).get("day_ms")
+        problems = laws_problems(seed, overlay, built, creation, source, readback, day_ms)
+        # The instance does not start (no mind, no timeline) on a world whose laws are not its seed's.
+        for why in problems:
+            self.log(f"laws guard: {why}")
+            self.emit("events", {"t": self.t(), "error": f"laws guard: {why}"})
+        if problems:
+            raise RuntimeError("laws guard: " + "; ".join(problems))
+        ran = source if source is not None else readback
+        (self.dir / "skills.sha256").write_text(hashlib.sha256(ran.encode()).hexdigest() + "\n")
+        self.log(f"laws guard passed: the `script` row read back is the {'source sent' if source is not None else 'creation-time script, kept'}"
+                 f"{'; the seed laws are composed as the world composed them' + (' (overlay found; module from ' + tag + ')' if built is None else '') + f'; day_ms {day_ms}' if overlay else ''}")
+        how = "kept the world's own laws (keep_laws, no install)" if source is None else f"skills installed from {skills.relative_to(ROOT)}"
+        self.log(f"published {self.db} from {wasm}.wasm; {how}"
+                 f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(ran.encode()).hexdigest()[:12]})")
         end = time.time() + 60
         while time.time() < end:
             st = self.rows("SELECT * FROM stats")
@@ -830,7 +861,7 @@ class Instance:
                     self.call("grant_know_how", actor, t)
             elif kind == "say":
                 to = self.ids(s.get("to"))[0] if s.get("to") else 0
-                self.call("mind_say", actor, s["text"], to, 0, {"kind": "trial", "summary": f"scripted line (trial fixture): {s['text'][:200]}",
+                self.call("mind_say", actor, s["text"], to, s.get("way", ""), 0, {"kind": "trial", "summary": f"scripted line (trial fixture): {s['text'][:200]}",
                           "detail": "", "latency_ms": 0, "tokens": 0, "model": "", "reference": f"trial:{self.trial['name']}"})
             elif kind == "act":
                 acts = s["acts"] if "acts" in s else [s["act"]]
