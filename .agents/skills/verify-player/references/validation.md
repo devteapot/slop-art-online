@@ -2,9 +2,9 @@
 
 ## 2026-11-11 goods-2: making glass at a furnace that burns fuel (dev-box)
 
-Branch `goods-2` (from main `62d861f0`, merged with main twice, last at `28498151`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+Branch `goods-2` (from main `62d861f0`, merged with main three times, last with `6caebe20` at `b0fb1792`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
 
-- `workplace.py` (new) on cullet-laws: `player-goods2-glass` 15 of 15, merged `player-goods2m-glass` 15 of 15. Out: refused "the furnace is out: feed it first", nothing taken. Fed one peat: lit for 40 s (one unit at 3 a game hour on the 48-minute day), the feed seen as `doing` (code `feed`) at the furnace; glass refused "has too little fuel left for it (it takes 1, it has 0.99)". Fed three more: glass made from 1 ash and 2 sand, the furnace's `lit_until_ms` 40,001 ms earlier than before, `doing` (code `make`) at the furnace while it lasts and gone after; "You did what you had decided: make glass → furnace (+1 glass)." in `my_experience`.
+- `workplace.py` (new) on cullet-laws: `player-goods2-glass` 15 of 15, merged `player-goods2m-glass` 15 of 15, third merge `player-goods2f-glass` 15 of 15. Out: refused "the furnace is out: feed it first", nothing taken. Fed one peat: lit for 40 s (one unit at 3 a game hour on the 48-minute day), the feed seen as `doing` (code `feed`) at the furnace; glass refused "has too little fuel left for it (it takes 1, it has 0.99)". Fed three more: glass made from 1 ash and 2 sand, the furnace's `lit_until_ms` 40,001 ms earlier than before, `doing` (code `make`) at the furnace while it lasts and gone after; "You did what you had decided: make glass → furnace (+1 glass)." in `my_experience`.
 - The authority has no offered-acts list; the client's F list is the client's own `_check` on its facts (features/workplace.md).
 
 

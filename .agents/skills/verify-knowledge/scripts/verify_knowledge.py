@@ -643,6 +643,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['run', 'world-know-how', 'cleanup'])
     parser.add_argument('--run', required=True)
+    parser.add_argument('--target-dir', help='world-know-how: build the module here (the shared harness\'s --target-dir)')
     args = parser.parse_args()
     run = Run(args.run, existing=args.action == 'cleanup')
     if args.action == 'cleanup':
@@ -652,7 +653,7 @@ def main():
     if args.action == 'world-know-how':
         # Authority only (no Neo4j, no mind): a world made with Cullet's laws.
         try:
-            run.harness('launch', '--seed', 'cullet-laws')
+            run.harness('launch', '--seed', 'cullet-laws', *(['--target-dir', args.target_dir] if args.target_dir else []))
             run.harness('doctor')
             run.world_know_how()
         except BaseException as caught:
