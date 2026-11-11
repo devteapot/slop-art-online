@@ -18,7 +18,9 @@ The living core (`living/`, see `docs/LIVING_CORE.md`) is verified surface by su
 | Internal agents (minds) | `verify-minds` | the mind service turns requests into installed behavior, speech and consolidated memory; trials (one mind in a scripted or open-ended world, `living/tools/trials.py`) | real mind service against a fake model server; `trials.py run --fake` | real models: a short smoke check, and trial batches |
 | LLM integration | `verify-llm` | model routing, overflow, outage gate, JSON repair, journaling | fake provider scenarios | one live check per provider |
 | Knowledge | `verify-knowledge` | know-how, tablets, teaching, learning; the personal memory graph, recall and fading | scripted scenes, scratch Neo4j runs | – |
-The browser observer (`living/viewer`) has no verification skill. It is a simple developer client that a proper game UI will replace. When that UI is integrated, create a UI skill with `create-verification-skill` that clicks through it and matches the screen to the authority. Until then, `verify-core` covers the viewer's display sync (`living/viewer/src/sync.rs` tests), and `$V observer shot` takes a screenshot of a scratch world.
+| Game interface | `verify-ui` | the game client's interface D: windows (anchors, drag and snap, close, the Esc order, Menu), talking (whom you address, the person window, the log and people), items on people (the pack, dragging onto someone, hold F › Give ›) | the real client headless on `verify-ui-*` worlds, `check.py` scenarios | – |
+
+The browser observer (`living/viewer`) has no verification skill: it is a simple developer client that the game's interface replaces. Until then, `verify-core` covers the viewer's display sync (`living/viewer/src/sync.rs` tests), and `$V observer shot` takes a screenshot of a scratch world.
 
 External agents (a provider-agnostic connector) are not implemented yet. When the connector exists, `verify-agent-external` gets a scripted tier and a real-agent tier.
 
@@ -31,7 +33,7 @@ Opt-in tiers make paid model calls. Run them only after the user authorizes that
   - A rule that minds rely on also touches `verify-minds`.
   - Viewer display sync touches `verify-core`. Viewer controls and panels have no skill until the proper UI exists; check them by hand with `$V observer start` and a browser.
 - **For a symptom, find the lowest layer that still reproduces it.** Do not stop at the first layer that shows the failure; an authority defect shows in the observer too. At each boundary, check that layer's input and output, and keep going down while the failure persists:
-  1. **Screen.** Does the observer show something other than the rows the client receives? Check by hand or with `$V observer shot`; there is no UI skill yet.
+  1. **Screen.** Does the game client show something other than the rows it receives? `verify-ui` drives it and dumps its state; the observer by hand or with `$V observer shot`.
   2. **Client.** Does a real client fail to receive or call what it should? Subscribe to the exact rows with `.agents/skills/verify-client/scripts/drive.py --run <run> --query "<SQL>" --seconds 10 --save <name>` (add `--as-player` for the player's view); see `verify-client` "Check one query during triage".
   3. **Who acted.** For something a player did, `verify-player`. For something an AI character did or said, `verify-minds`, then `verify-llm` for what the model was sent and returned, and `verify-knowledge` when it concerns what a character knows or remembers.
   4. **Rules.** `verify-core` for the rule's effect, and `verify-generation` when the world was built wrong.

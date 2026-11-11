@@ -60,6 +60,15 @@ impl Mode {
         }
     }
 
+    /// Its name in the settings file and `LIVING_SIGHT_EDGE`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Mode::Fade => "fade",
+            Mode::Unseen => "unseen",
+            Mode::Limited => "limited",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Mode::Fade => "Edge of sight: fade",
@@ -184,10 +193,14 @@ pub fn update(
     loading: Option<Res<crate::loading::Loading>>,
     mut verbs: Option<ResMut<crate::verbs::Verbs>>,
     mut tips: Option<ResMut<crate::ui::tips::Tips>>,
-    time: Res<Time>,
+    (time, mut prefs): (Res<Time>, Option<ResMut<crate::keys::Prefs>>),
 ) {
     if keys.just_pressed(KeyCode::F2) {
         edge.mode = edge.mode.next();
+        if let Some(p) = prefs.as_deref_mut() {
+            p.sight_edge = Some(edge.mode.name().into());
+            p.dirty = true;
+        }
         info!("sight edge: {:?} (radius {:.1} m)", edge.mode, edge.radius);
         if let Some(v) = verbs.as_deref_mut() {
             v.toasts.retain(|t| !t.text.starts_with("Edge of sight:"));
