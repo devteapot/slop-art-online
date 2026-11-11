@@ -38,6 +38,7 @@ python3 "$C/scenes.py" sight --run "$R" > "$E/sight.txt" 2>&1
 python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
 python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
+python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
 # The starter combat skills under graphs use the island seed (its newcomer kit, pack and

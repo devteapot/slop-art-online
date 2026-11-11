@@ -11,6 +11,19 @@ Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container 
 - `core-drop1b-20261111-154703-drop` (plan-test): `drop` 5 of 5. `core-drop1b-20261111-154703-island`: `low` 5 of 5 (a cart's tiles; the watcher across it waves and witnesses; the walker's route never crosses it).
 - Not run on this change: tick, needs, food, refusal, seize, skirmish, dealings, town, lives, laws, infant; mechanics.
 
+## 2026-11-11 fix-death-labels (Spark)
+
+Branch `fix-death-labels` (rebased on main `6a905c3`, then on `a8d95fc`), the trials stack's container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; `verify.py` now accepts its `0.0.0.0` binding), private `CARGO_TARGET_DIR` and `--target-dir` per seed, no minds.
+
+- **Reproduced before the fix** (`core-deathnames-before`, main `4df9a89`, new scene `death-names`): the member who saw it read "A stranger was killed by a stranger" and "the remains of a stranger"; the killer read "A stranger was killed by Walker3" (his own name). 2 of 6 checks passed.
+- After the fix: `death-names` 8 of 8 on `4df9a89` + change (`core-deathnames-after`, with and without the victim yielding) and on the rebased `2cd7fa0` (`core-deathnames-rebased`): member "Walker1 was killed by a stranger after yielding" and "the remains of Walker1", killer "A stranger was killed by you after yielding", bystander strangers; one `acquaintance` row (the member's).
+- `cargo_checks.py` pass (rules 145, authority 13 with `the_one_an_event_was_done_to_reads_it_as_done_to_them`, mind 82, viewer-sync 5); tick, needs, food, refusal, seize, sight, senses, moves pass; `skirmish` 8/8 (island).
+- `remains` (stage1-acts): `core-deathnames-rb-remains` failed "a wander keeps its heading between waits" (4 of 6 turns within 1.6 rad; fatal, so the expiry check did not run); a fresh world `core-deathnames-rb-remains2` passed 10/10, as did the pre-rebase `core-deathnames-remains`. Wander is not touched by this change; six turns is a small sample.
+- `laws` (cullet-laws, `core-deathnames-rb-laws`): all pass, including names only within 24 m; one SKIP (the mirrored dark spot is not open ground, a fixture limit).
+- `just living-check` exit 0.
+- On `a8d95fc` + this change (`core-deathnames-head`, `core-deathnames-head-laws`): `cargo_checks.py` pass (rules 145, authority 15, mind 82, viewer-sync 5); death-names 8/8 with the same texts; doing, tick, needs, food, refusal, seize, sight, senses, moves pass; `laws` pass (the same SKIP); `just living-check` exit 0. `remains` and `skirmish` were not rerun on this base (last run on `6a905c3`).
+- Not run: town, lives, infant, lifecycle, wildlife, mechanics, steering, dealings.
+
 ## 2026-11-11 rules-1: a world's own day and laws (dev-box)
 
 Branch `rules-1`, own container `rules1-stdb` (2.14.1, port 3312), private `CARGO_TARGET_DIR`, no minds. Baseline `core-rules1-base` (default seed): cargo checks (rules 138, authority 12, mind 82, viewer sync 5) and tick, needs, food, refusal, seize, sight, senses, moves: 45 of 45. New `laws` scene on `cullet-laws` (`core-rules1-cullet`): day and rates, 48 m by day, names within 24 m pass; the first night attempt saw nothing (`laws-attempt3.txt`: the HTTP player had been taken over by the world's minds after `takeover_s`), fixed by a player call before each snapshot; the night rerun passed (14 m, a torch at 44 m, lamplight at 21 m, no cold harm). Two earlier attempts failed on the scene itself (a regex for `sight_in`'s `_` arm; no 54-tile east-west line on the 96 m map, replaced by `open_ray`).

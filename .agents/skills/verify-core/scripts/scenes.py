@@ -253,6 +253,61 @@ def seize(s):
              "after yielding" in dead["cause"] and bool(s.story("killing", a, "killing")) and bool(news))
 
 
+def death_names(s):
+    """A community member killed by an outsider in front of another member and a bystander.
+
+    Who knew the dead by name when they died still names them in the death percept and at
+    the remains; the killer reads the death as done by "you"; the bystander, who never knew
+    either, reads strangers (`die`, `witnessed`, `perception::knows_name`)."""
+    victim, member, killer, bystander = s.people(4)
+    names = {c["id"]: c["name"] for c in s.rows("SELECT id, name FROM character")}
+    vname, kname = names[victim], names[killer]
+    community = f"Verify Hollow {victim}"
+    s.act(victim, {"do": "found", "text": community})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {victim}"))
+    s.call("place_near", member, victim)
+    s.act(member, {"do": "join", "target": {"id": victim}})
+    s.wait(lambda: s.rows(f"SELECT * FROM join_request WHERE asker = {member}"))
+    s.act(victim, {"do": "welcome", "target": {"id": member}})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {member}"))
+    s.rows(f"SELECT * FROM membership WHERE member = {victim} OR member = {member}", "membership-before")
+    s.expect("the two share a community and the others belong to none",
+             len({m["community"] for m in s.rows(f"SELECT community FROM membership WHERE member = {victim} OR member = {member}")}) == 1
+             and not s.rows(f"SELECT * FROM membership WHERE member = {killer} OR member = {bystander}"))
+    for w in (killer, bystander):
+        s.call("place_near", w, victim)
+    s.call("grant_items", killer, "spear", 1)
+    # As in the play-test: the victim gives in, and the blows go on to death.
+    s.graph(victim, {"seq": [{"do": "yield", "target": {"id": killer}}, {"wait": 120}]})
+    s.wait(lambda: s.story("yield", victim))
+    s.graph(killer, {"first": [{"do": {"skill": "attack", "target": {"id": victim}}}, {"wait": 1}]})
+    s.wait(lambda: not s.rows(f"SELECT alive FROM character WHERE id = {victim}")[0]["alive"], seconds=90)
+    s.graph(killer, {"wait": 120})
+    dead = s.rows(f"SELECT * FROM character WHERE id = {victim}", "killed")[0]
+    s.rows(f"SELECT * FROM membership WHERE member = {victim} OR member = {member}", "membership-after")
+    known = s.rows(f"SELECT * FROM acquaintance WHERE known = {victim}", "acquaintance-after")
+    s.expect("the surviving member keeps the dead's name as an acquaintance, and no one else gains it",
+             sorted(r["observer"] for r in known) == [member], known, fatal=False)
+    deaths = {w: s.wait(lambda w=w: [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {w}") if r["kind"] == "death"], seconds=20)
+              for w in (member, killer, bystander)}
+    # The remains are noticed when each mind next looks round (`brain.rs`, structures).
+    remains = {w: s.wait(lambda w=w: [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {w}") if r["kind"] == "saw" and "remains of" in r["text"]], seconds=60)
+               for w in (member, bystander)}
+    texts = {"victim": vname, "killer": kname, "death": {names[w]: t for w, t in deaths.items()}, "remains": {names[w]: t for w, t in remains.items()}}
+    (s.out / f"{s.name}-texts.json").write_text(json.dumps(texts, indent=2) + "\n")
+    print(json.dumps(texts, indent=2), flush=True)
+    s.expect("the victim yielded before the killing blow", "after yielding" in dead["cause"], dead["cause"], fatal=False)
+    s.expect("a member who saw it names the dead in the death percept",
+             any(t.startswith(vname + " was killed by a stranger") for t in deaths[member]), deaths[member], fatal=False)
+    s.expect("a member names the dead at the remains", any(f"the remains of {vname}" in t for t in remains[member]), remains[member], fatal=False)
+    s.expect("the killer reads the death as done by you",
+             any(t.endswith("was killed by you") or "was killed by you after yielding" in t for t in deaths[killer]) and not any(kname in t for t in deaths[killer]),
+             deaths[killer], fatal=False)
+    s.expect("a bystander who knew neither reads strangers",
+             any(t.startswith("A stranger was killed by a stranger") for t in deaths[bystander]) and any("the remains of a stranger" in t for t in remains[bystander]),
+             {"death": deaths[bystander], "remains": remains[bystander]}, fatal=False)
+
+
 def lifecycle(s):
     w = s.rows("SELECT * FROM world", "world")[0]
     s.expect("compressed lifecycle seed selected", w["run"] == "s1-acts" and w["life_pace"] < 0.1)
@@ -1477,7 +1532,7 @@ def laws(s):
     s.expect("an ordinary night outside costs no health", night["hp_rate"] >= 0, night)
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "drop": drop, "low": drop}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop}
 
 
 def main():
