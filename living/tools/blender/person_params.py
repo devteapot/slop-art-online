@@ -20,8 +20,12 @@ girth, the hair and the clothes, and the game recipe's height and proportions.
 import argparse
 import copy
 import json
+import os
 import random
 import sys
+
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "characters"))
+import face_types  # noqa: E402  (the face types and the identity rig: living/tools/characters/types.json)
 
 # Cullet's palette (docs/SMALL_CITY.md §1, sRGB).
 PAL = dict(
@@ -108,17 +112,17 @@ FACE_KEYS = [k for k, _, _ in FACE]
 
 # Presets: named people (person.py --variant).
 PRESETS = {
-    "man": dict(seed=3, sex="male", age=36, build=dict(height=1.80, weight=0.1, muscle=0.4), beard=dict(style="full"), hair=dict(style="tousled", colour="dark_brown"),
+    "man": dict(type="adult-m-b", identity=dict(), seed=3, sex="male", age=36, build=dict(height=1.80, weight=0.1, muscle=0.4), beard=dict(style="full"), hair=dict(style="tousled", colour="dark_brown"),
                 eyes=dict(colour="blue"), skin=dict(tone=0.30), outfit=dict(coat="coat", coat_colour="oilskin", jersey_colour="green", headwear="none")),
-    "woman": dict(seed=8, sex="female", age=29, build=dict(height=1.66), hair=dict(style="long", colour="chestnut", length=0.30, parting=0.0, fringe=0.95, fringe_style="straight", volume=0.55, curl=0.1), eyes=dict(colour="green"), skin=dict(tone=0.22),
+    "woman": dict(type="adult-f-b", identity=dict(), seed=8, sex="female", age=29, build=dict(height=1.66), hair=dict(style="long", colour="chestnut", length=0.30, parting=0.0, fringe=0.95, fringe_style="straight", volume=0.55, curl=0.1), eyes=dict(colour="green"), skin=dict(tone=0.22),
                   outfit=dict(coat="smock", coat_colour="blue", jersey_colour="cream", headwear="none", apron=True)),
-    "elder": dict(seed=5, sex="male", age=70, build=dict(height=1.72), beard=dict(style="short"), hair=dict(style="sides"), eyes=dict(colour="grey"), skin=dict(tone=0.30),
+    "elder": dict(type="elder-m-b", identity=dict(), seed=5, sex="male", age=70, build=dict(height=1.72), beard=dict(style="short"), hair=dict(style="sides"), eyes=dict(colour="grey"), skin=dict(tone=0.30),
                   outfit=dict(coat="coat", coat_colour="tarred", jersey_colour="red", headwear="cap")),
-    "youth": dict(seed=11, sex="male", age=15, hair=dict(style="tousled", colour="sandy"), outfit=dict(coat="none", jersey_colour="cream", headwear="none")),
-    "heavy": dict(seed=31, sex="male", age=44, build=dict(height=1.88, weight=0.9, muscle=0.6), beard=dict(style="short"), hair=dict(style="short", colour="auburn"), skin=dict(tone=0.45),
+    "youth": dict(type="youth-m-b", identity=dict(), seed=11, sex="male", age=15, hair=dict(style="tousled", colour="sandy"), outfit=dict(coat="none", jersey_colour="cream", headwear="none")),
+    "heavy": dict(type="adult-m-a", identity=dict(), seed=31, sex="male", age=44, build=dict(height=1.88, weight=0.9, muscle=0.6), beard=dict(style="short"), hair=dict(style="short", colour="auburn"), skin=dict(tone=0.45),
                   outfit=dict(coat="smock", coat_colour="canvas", jersey_colour="navy", headwear="none")),
-    "boy": dict(seed=21, sex="male", age=8, hair=dict(style="tousled", colour="chestnut"), outfit=dict(coat="none", jersey_colour="blue")),
-    "girl": dict(seed=22, sex="female", age=6, hair=dict(style="bob", colour="brown"), outfit=dict(coat="smock", coat_colour="red", apron=False)),
+    "boy": dict(type="child-u-b", identity=dict(), seed=21, sex="male", age=8, hair=dict(style="tousled", colour="chestnut"), outfit=dict(coat="none", jersey_colour="blue")),
+    "girl": dict(type="child-u-a", identity=dict(), seed=22, sex="female", age=6, hair=dict(style="bob", colour="brown"), outfit=dict(coat="smock", coat_colour="red", apron=False)),
 }
 KINDS = dict(man=("male", 19, 58), woman=("female", 19, 58), elder_man=("male", 62, 76), elder_woman=("female", 62, 76), boy=("male", 4, 15), girl=("female", 4, 15))
 
@@ -249,6 +253,13 @@ def draw(given=None):
         apron=bool(not male and rnd(seed, "outfit.apron").random() < (0.5 if child else 0.7)),
         hem=0.74 if male else (0.58 if child else pick("outfit.hem", (0.50, 0.50, 0.58))),
     )
+    # The face: a type for the person's sex and age band on their family's line, and values
+    # bounded by their distance from it (face_types; docs/CHARACTERS.md, "Types and rig"). The
+    # 34 values above are pass 2's and make the head only with `head: "loft"`.
+    p["head"] = given.get("head", "cage")
+    p["type"] = given.get("type") or face_types.type_for(seed, p["sex"], age, fam)
+    if given.get("identity") is None:
+        p["identity"] = face_types.draw_valid(face_types.load()["types"][p["type"]], seed, fam)
     deep_update(p, {k: v for k, v in given.items() if k not in ("seed", "family")})
     # A style that needs its headwear, and the other way round.
     if p["hair"]["style"] == "kerchief":
@@ -352,7 +363,13 @@ def resolve(p):
         a, k = name.split(".")
         if p[a][k] not in options:
             raise SystemExit(f"{name}: {p[a][k]!r} is not one of {options}")
+    typed = p.get("head", "cage") == "cage" and p.get("type")
+    if typed:
+        # Height changes the head's proportion and not only the scale (face_types.head_scale).
+        body = face_types.load()["types"][p["type"]]["body"]
+        recipe["proportions"]["head"] = round(recipe["proportions"].get("head", 1.0) * face_types.head_scale(body, b["height"]) / face_types.head_scale(body, child_height(age, male) if age < 18 else body["height_m"][1]), 3)
     return dict(
+        type=p["type"] if typed else None, identity=dict(p.get("identity") or {}),
         seed=seed, masc=masc, child=child, elder=elder, face=face, look=look, style=drawn, head_scale=1.08 * (1 + STYLE["head"] * drawn), girth=girth, limb=limb, belly=belly, chest=chest, woman_torso=bool(not male and age >= 13),
         hair_style=hair_p["style"], hair_length=hair_p.get("length", 0.07), recede=0.024 * clip(hair_p.get("recede", 0.0), 0, 1),
         hair=dict(style=hair_p["style"], length=float(hair_p.get("length", 0.07)), parting=float(hair_p.get("parting", 0.0)), fringe=float(hair_p.get("fringe", 0.7)), volume=float(hair_p.get("volume", 0.5)),
@@ -365,8 +382,25 @@ def resolve(p):
     )
 
 
+def from_type(tid):
+    """The figure a face type's own file is built on (`type:<id>`): the type with every identity
+    value at 0, at the usual age, height and build of its band, with nothing a person adds (no
+    freckles, stubble or weathering). A type for either sex takes line b's as male, a and c's as
+    female; children's builds do not differ."""
+    types = face_types.load()["types"]
+    if tid not in types:
+        raise SystemExit(f"type {tid!r}: not one of {sorted(types)}")
+    t = types[tid]
+    sex = t["sex"] if t["sex"] in ("male", "female") else ("male" if t["line"] == "b" else "female")
+    body = t["body"]
+    return dict(type=tid, identity=dict(), seed=1000 + sorted(types).index(tid), sex=sex, age=dict(child=8, youth=15, adult=32, elder=68)[t["band"]],
+                build=dict(height=body["height_m"][1], weight=body.get("weight", 0.0), muscle=body.get("muscle", 0.0)), skin=dict(tone=0.25, freckles=0.0, weathered=0.0), beard=dict(style="none", stubble=0.0))
+
+
 def from_variant(name):
-    """A preset's name, or `<seed>:<kind>` (man, woman, elder_man, elder_woman, boy, girl)."""
+    """A preset's name, `type:<face type>` (the type's own figure) or `<seed>:<kind>` (man, woman, elder_man, elder_woman, boy, girl)."""
+    if name.startswith("type:"):
+        return from_type(name[5:])
     if ":" in name:
         seed, kind = name.split(":")
         sex, lo, hi = KINDS[kind]
