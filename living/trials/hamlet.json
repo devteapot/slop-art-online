@@ -1,7 +1,7 @@
 {
  "kind": "life",
  "title": "A hamlet where everyone thinks",
- "about": "Twelve people of the `hamlet` seed (a mill town and a fishing village of the authored test valley, docs/AUTHORED_WORLDS.md): 8 adults, 2 children, an infant and an elder in four households, with houses, stores, planted fields, berry bushes and fishing spots, and no animals. Lives are compressed (year_days 4, life_pace 0.1428: a life of 70 years is 40 game days, 8 real hours), so a six-hour run sees most of the seeded adults die of old age and their children grow up. Every person past infancy is thought for by the mind service, at most 12 at a time (`minds.max`; a death frees a place, a newborn takes one when it becomes a child). Cullet's sight is law here (48 m by day, 14 m in the dark, 20 m with a torch; docs/SMALL_CITY.md, decision 6). Cullet's 48-minute day is not: a seed cannot set the day length (`World.day_ms` is the default 12 minutes). Nothing is scripted and nothing is restocked: lives, tensions (a debt, a succession, a rivalry) and trade come from the authored sheets and the general rules. The subject (sampled every few seconds) is the youngest adult; a census of every character is kept every 30 s for births_report.py.",
+ "about": "Twelve people of the `hamlet` seed (a mill town and a fishing village of the authored test valley, docs/AUTHORED_WORLDS.md): 8 adults, 2 children, an infant and an elder in four households, with houses, stores, planted fields, berry bushes and fishing spots, and no animals. The day is Cullet's (`day_minutes` 48) and so are its laws (`laws_file` worlds/cullet/laws.rhai: needs per game hour, sight 48 m by day, 14 m in the dark, 20 m with a torch, lamplight 28 m, names within 24 m, speech 12 m). Lives are compressed (year_days 4, life_pace 0.0357: a life of 70 years is 10 game days, 8 real hours), so a six-hour run sees most of the seeded adults die of old age and their children grow up. Every person past infancy is thought for by the mind service, at most 12 at a time (`minds.max`; a death frees a place, a newborn takes one when it becomes a child). Nothing is scripted and nothing is restocked: lives, tensions (a debt, a succession, a rivalry) and trade come from the authored sheets and the general rules. The subject (sampled every few seconds) is the youngest adult; a census of every character is kept every 30 s for births_report.py.",
  "gradient": "Population: do births keep up with deaths from old age, and what do grown people spend their days on when everyone around them thinks? (docs/TRIALS.md, \"Births that keep a settlement's numbers\")",
  "world": {
   "seed": "hamlet"
@@ -25,12 +25,6 @@
  "life": {
   "snapshot_min": 60,
   "stop_on_death": false
- },
- "skills_patch": {
-  "sight": [
-   "fn sight_in(light) { switch light { \"day\" => 11.0, \"torch\" => 9.0, _ => 6.0 } }",
-   "fn sight_in(light) { switch light { \"day\" => 48.0, \"torch\" => 20.0, _ => 14.0 } }"
-  ]
  },
  "cast": {},
  "timeline": [],

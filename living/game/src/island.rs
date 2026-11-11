@@ -47,6 +47,13 @@ use std::sync::Arc;
 const CHUNK: i32 = 64;
 const FAR: f32 = 170.0;
 const NEAR: f32 = 60.0;
+/// Past [`FAR`], out to where the mood's fog is complete (`world::Draw::landmark_reach`: 600 m
+/// on Cullet, where landmarks are drawn), the ground and the sea are drawn coarse: a vertex
+/// every [`COARSE_STEP`] m, with no scatter or props, a few chunks a frame.
+const COARSE_STEP: usize = 4;
+const COARSE_PER_FRAME: usize = 8;
+/// Things drawn to a distance (`envs::Reach`) fade out over this band before it (m).
+pub const REACH_BAND: f32 = 25.0;
 /// Things at most this tall count as small.
 const SMALL: f32 = 1.6;
 /// Chunk builds per frame, so walking doesn't hitch.
@@ -85,19 +92,39 @@ struct Item {
     /// A plain box (width, height, depth) instead of a model: a lot or a planned settlement's
     /// stair tread or retaining wall whose model is not on disk ([`GreyBox`]).
     size: Option<Vec3>,
+    /// A box that is a building: the camera keeps out of it (`envs::Solid`).
+    solid: bool,
+    /// A box that marks an open lot's footprint ([`MARKER`]) rather than a grey building.
+    marker: bool,
+    /// A kit's fixture: the camera keeps out of it once fitted, if it is large
+    /// (`envs::SolidIfLarge`).
+    fixture: bool,
+    /// A landmark lot (`Lot::landmark`): it never fades for hiding you (`envs::Landmark`).
+    landmark: bool,
+    /// A building's or a fixture's glow is people's light, out by day (`lookdev::NightGlow`).
+    night_glow: bool,
 }
 
-/// A plain box standing for a model not on disk yet (a hand-authored settlement before its
-/// kit, docs/AUTHORED_PLANS.md): its footprint × its height, in one pale stone grey. The mesh
-/// and material are added by [`grey_boxes`]; the entity's scale is the box's size.
-#[derive(Component)]
-pub struct GreyBox;
+/// A planned settlement's open lot of no height (steps, a slip, a yard, root plots) with no
+/// model on disk: a slab of its footprint this high (m), in a muted stone, so the plan reads in
+/// the grey city. Buildings' boxes are [`GREY`].
+pub const MARKER_H: f32 = 0.025;
+const MARKER: [u8; 3] = [132, 128, 120];
+const GREY: [u8; 3] = [168, 168, 172];
 
-/// Give new grey boxes the shared unit cube and grey toon material.
-pub fn grey_boxes(mut commands: Commands, q: Query<Entity, (With<GreyBox>, Without<Mesh3d>)>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>, mut toons: ResMut<Assets<crate::style::Toon>>, style: Res<crate::style::Style>, mut unit: Local<Option<Handle<Mesh>>>) {
-    for e in &q {
+/// A plain box standing for a model not on disk yet (a hand-authored settlement before its
+/// kit, docs/AUTHORED_PLANS.md): its footprint × its height, in one pale stone grey, or an open
+/// lot's footprint slab in a darker stone ([`MARKER_H`]). The mesh and material are added by
+/// [`grey_boxes`]; the entity's scale is the box's size. It carries its box as `Fitted`, as a
+/// fitted model does, so the camera's "keep out of buildings" and the cut-away see it.
+#[derive(Component)]
+pub struct GreyBox(pub [u8; 3]);
+
+/// Give new grey boxes the shared unit cube and their toon material.
+pub fn grey_boxes(mut commands: Commands, q: Query<(Entity, &GreyBox), Without<Mesh3d>>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>, mut toons: ResMut<Assets<crate::style::Toon>>, style: Res<crate::style::Style>, mut unit: Local<Option<Handle<Mesh>>>) {
+    for (e, b) in &q {
         let mesh = unit.get_or_insert_with(|| meshes.add(Cuboid::new(1.0, 1.0, 1.0))).clone();
-        let mat = palette.color(&mut toons, &style, [168, 168, 172], false);
+        let mat = palette.color(&mut toons, &style, b.0, false);
         commands.entity(e).insert((Mesh3d(mesh), MeshMaterial3d(mat)));
     }
 }
@@ -150,6 +177,9 @@ pub struct Island {
     /// Loaded chunks: ground (with water) and big things; small things separately.
     ground: HashMap<(i32, i32), Vec<Entity>>,
     small: HashMap<(i32, i32), Vec<Entity>>,
+    /// Coarse far chunks (ground and sea only), and whether the sea round the map is placed.
+    coarse: HashMap<(i32, i32), Vec<Entity>>,
+    ocean: Vec<Entity>,
     /// Things waiting to spawn, by chunk and tier ([`SPAWN_BUDGET`]).
     queue: Vec<Queued>,
     /// The files of a loaded chunk's small things and people, held from its ground's build.
@@ -159,6 +189,8 @@ pub struct Island {
     settled: bool,
     /// Flights of stairs, by 16 m cell, for where feet stand ([`Island::foot_height`]).
     flights: HashMap<(i32, i32), Vec<Flight>>,
+    /// The current environment's ground map (`ground.rs`); empty on the island.
+    surfaces: Arc<crate::ground::Ground>,
 }
 
 /// A flight of stairs: `treads` treads rising `rise` m over `run` m from its front (down the
@@ -236,7 +268,7 @@ impl Island {
     }
 
     /// Look-dev: place the planner's buildings and people on a generated land.
-    pub fn new(generated: Generated, defs: &[EnvDef]) -> Self {
+    pub fn new(generated: Generated, defs: &[EnvDef], env: Option<&EnvDef>) -> Self {
         let Generated { land, secs: generated_s, params, from } = generated;
         let t0 = std::time::Instant::now();
         let world = WorldDef { seed: land.seed, size: land.size };
@@ -249,7 +281,7 @@ impl Island {
             })
             .or(town)
             .unwrap_or(Vec2::splat(world.size as f32 / 2.0));
-        let island = Self::build(land, defs, start, true, &params);
+        let island = Self::build(land, defs, env, start, true, &params);
         info!(
             "island: seed {} {} m from {from} ({:?}): land in {generated_s:.2} s (worker thread), placed in {:.3} s; {} regions, {} sites, start ({:.0}, {:.0})",
             world.seed,
@@ -266,49 +298,24 @@ impl Island {
 
     /// Connected: the land the authority hosts, regenerated from its `land` row. Buildings come
     /// from `lot` rows ([`Island::spawn_lot`]) and people from bodies, so none are planned here.
-    pub fn hosted(land: Arc<Land>, defs: &[EnvDef], arrive: Vec2, params: &LandParams) -> Self {
-        Self::build(land, defs, arrive, false, params)
+    /// `env` is the environment whose mood lights it, and whose ground map paints it.
+    pub fn hosted(land: Arc<Land>, defs: &[EnvDef], env: Option<&EnvDef>, arrive: Vec2, params: &LandParams) -> Self {
+        Self::build(land, defs, env, arrive, false, params)
     }
 
-    fn build(land: Arc<Land>, defs: &[EnvDef], start: Vec2, planned: bool, params: &LandParams) -> Self {
+    fn build(land: Arc<Land>, defs: &[EnvDef], env: Option<&EnvDef>, start: Vec2, planned: bool, params: &LandParams) -> Self {
         let climate = Climate::of(params);
+        let surfaces = Arc::new(env.map_or_else(crate::ground::Ground::default, |d| crate::ground::Ground::new(&d.id, crate::ground::GroundMap::parse(&d.id, &d.ground.keys), &land, params)));
         let world = WorldDef { seed: land.seed, size: land.size };
         let envs: HashMap<String, EnvDef> = defs.iter().map(|d| (d.id.clone(), d.clone())).collect();
         let mut site_items: HashMap<(i32, i32), Vec<Item>> = HashMap::new();
         let mut put = |it: Item| site_items.entry(chunk_of(it.at)).or_default().push(it);
         let pick = |files: &[String], n: usize, salt: u32| files[(hash(n as u32, salt) * files.len() as f32) as usize % files.len()].clone();
-        // Buildings on the planner's lots.
-        for (li, lot) in land.lots.iter().enumerate().filter(|_| planned) {
-            let st = &land.settlements[lot.settlement as usize];
-            let Some(kind) = lot.kind.model() else { continue };
-            // By style (a steampunk town is steampunk_city), and the kind folder its model is in.
-            let env = living_rules::settle::env_of(&st.style);
-            let kind = lot.model_file.as_deref().and_then(living_rules::settle::asset_kind).unwrap_or(kind);
-            let files = crate::envs::assets_for(env, kind);
-            if files.is_empty() {
-                // No model of its kind on disk (a planned settlement before its kit): a box.
-                if lot.height_m > 0.0 {
-                    put(Item { kind: kind.to_string(), at: Vec2::new(lot.centre.0, lot.centre.1), yaw: lot.yaw, height: lot.height_m, k: li, floor: Some(lot.floor_m), size: Some(Vec3::new(lot.width_m, lot.height_m, lot.depth_m)), ..default() });
-                }
-                continue;
+        // Buildings on the planner's lots, by the same rule as the authority's lot rows.
+        for li in (0..land.lots.len()).filter(|_| planned) {
+            if let Some(it) = LotRow::of_land(&land, li as u32).and_then(|row| lot_item(&envs, &land, &row)) {
+                put(it);
             }
-            let slot = envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == kind));
-            // The exact model the planner sized the lot for, when it is on disk.
-            let exact = lot.model_file.as_ref().map(|f| format!("envs/{f}")).filter(|f| files.contains(f));
-            let height = if exact.is_some() { lot.height_m } else { slot.map_or(6.0, |s| s.height[1]) };
-            put(Item {
-                kind: kind.to_string(),
-                file: exact.unwrap_or_else(|| pick(&files, li, 11)),
-                at: Vec2::new(lot.centre.0, lot.centre.1),
-                yaw: lot.yaw,
-                height,
-                glow: slot.and_then(|s| s.glow),
-                k: li,
-                floor: Some(lot.floor_m),
-                native: true,
-                person: None,
-                size: None,
-            });
         }
         // Street props, stairs and retaining walls: derived from the layout on both sides, not
         // stored by the authority, so connected mode places them too.
@@ -320,8 +327,9 @@ impl Island {
             let Some(file) = exact.or_else(|| (!files.is_empty()).then(|| pick(&files, pi, 17))) else {
                 // A planned settlement's stairs and retaining walls without models: grey
                 // treads and walls, so the grey city can be walked and read.
+                // A kit that lists its fixtures (below) brings its own flights and walls.
                 use living_rules::settle::PropKind;
-                if pr.model_file.is_none() && land.settlements[pr.settlement as usize].planned {
+                if pr.model_file.is_none() && land.settlements[pr.settlement as usize].planned && crate::envs::fixtures(env).is_empty() {
                     let (c, f) = (Vec2::new(pr.centre.0, pr.centre.1), Vec2::new(pr.front.0, pr.front.1).normalize_or(Vec2::X));
                     match pr.kind {
                         PropKind::Stairs => {
@@ -340,6 +348,21 @@ impl Island {
                 continue;
             };
             put(Item { kind: pr.kind.id().to_string(), file, at: Vec2::new(pr.centre.0, pr.centre.1), yaw: pr.yaw, height: pr.height_m, k: pi, floor: Some(pr.floor_m), native: true, ..default() });
+        }
+        // A planned settlement's fixtures: what its kit builds for places that are not lots (a
+        // quay's wall, the walls and flights of its drops, street dressing), listed by the kit's
+        // generator in `envs/<env>/fixtures.json` (docs/AUTHORED_PLANS.md). Presentation only:
+        // the rules know none of them. They replace the grey stand-ins above.
+        let mut kits: Vec<&str> = land.settlements.iter().filter(|s| s.planned).map(|s| living_rules::settle::env_of(&s.style)).collect();
+        kits.sort_unstable();
+        kits.dedup();
+        for env in kits {
+            for (fi, fx) in crate::envs::fixtures(env).iter().enumerate() {
+                let kind = fx.light.clone().unwrap_or_else(|| fx.kind.clone());
+                // Flights are walked over, not walled: their box is not one the eye must leave.
+                let fixture = fx.kind != living_rules::settle::PropKind::Stairs.id();
+                put(Item { kind, file: fx.file.clone(), at: Vec2::new(fx.at[0], fx.at[1]), yaw: fx.front[0].atan2(fx.front[1]), height: fx.height, glow: fx.glow, k: 100_000 + fi, floor: Some(fx.floor), native: true, fixture, night_glow: true, ..default() });
+            }
         }
         for (si, st) in land.settlements.iter().enumerate() {
             let env = living_rules::settle::env_of(&st.style);
@@ -399,43 +422,15 @@ impl Island {
                 }
             }
         }
-        Self { land, climate, envs, site_items, ground: HashMap::new(), small: HashMap::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false, flights }
+        Self { land, climate, envs, site_items, ground: HashMap::new(), small: HashMap::new(), coarse: HashMap::new(), ocean: Vec::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false, flights, surfaces }
     }
 
-    /// A building on an authority `lot` row (connected): the row's model file when it is on
-    /// disk, else one of its kind from the settlement's environment. The model's origin stands
-    /// on the lot's floor, facing its yaw. Returns the entities to despawn with it.
+    /// A building on an authority `lot` row (connected), by [`lot_item`]: its model, a grey
+    /// box, or an open lot's footprint marker. Returns the entities to despawn with it.
     pub fn spawn_lot(&self, commands: &mut Commands, assets: &AssetServer, lot: &LotRow) -> Vec<Entity> {
-        let Some(kind) = lot.kind.model() else { return Vec::new() };
-        // The row's model names its folder (`steampunk_city/clocktower/...`): a town in its own
-        // style uses its own assets.
-        let env = lot.model.split('/').next().filter(|_| !lot.model.is_empty()).unwrap_or(lot.env);
-        let kind = living_rules::settle::asset_kind(&lot.model).unwrap_or(kind);
-        let files = crate::envs::assets_for(env, kind);
-        let exact = Some(format!("envs/{}", lot.model)).filter(|f| !lot.model.is_empty() && files.contains(f));
-        if exact.is_none() && files.is_empty() {
-            // No model of its kind on disk (a planned settlement before its kit): a box of its
-            // footprint and height.
-            if lot.height_m <= 0.0 {
-                return Vec::new();
-            }
-            let it = Item { kind: kind.to_string(), at: lot.at, yaw: lot.yaw, height: lot.height_m, k: lot.id as usize, floor: Some(lot.floor_m), size: Some(Vec3::new(lot.width_m, lot.height_m, lot.depth_m)), ..default() };
-            let es = spawn_item(commands, assets, &self.land, &it);
-            if let Some(&root) = es.first() {
-                commands.entity(root).insert(crate::envs::Solid);
-            }
-            return es;
-        }
-        if exact.is_none() && !lot.model.is_empty() {
-            warn!("lot {}: model {} is not on disk; using another {kind}", lot.id, lot.model);
-        }
-        let slot = self.envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == kind));
-        let height = if exact.is_some() { lot.height_m } else { slot.map_or(6.0, |s| s.height[1]) };
-        let file = exact.unwrap_or_else(|| files[(hash(lot.id, 11) * files.len() as f32) as usize % files.len()].clone());
-        let it = Item { kind: kind.to_string(), file, at: lot.at, yaw: lot.yaw, height, glow: slot.and_then(|s| s.glow), k: lot.id as usize, floor: Some(lot.floor_m), native: true, person: None, size: None };
+        let Some(it) = lot_item(&self.envs, &self.land, lot) else { return Vec::new() };
         let es = spawn_item(commands, assets, &self.land, &it);
-        if let Some(&root) = es.first() {
-            commands.entity(root).insert(crate::envs::Solid);
+        if let (Some(&root), true) = (es.first(), it.size.is_none()) {
             // Low buildings too (market stalls, wells): a newcomer arrives among the stalls, and
             // their awnings hid them (play-test 1). Taller ones are occluders already.
             if it.height < 3.0 {
@@ -561,6 +556,67 @@ fn seed_land(path: &str) -> Result<(u64, u32, LandParams), String> {
     Ok((seed, size, params))
 }
 
+/// A structure's model (`world::things`, connected): from the kit of the planned settlement it
+/// stands in (`envs/<env>/<kind>/`, the environment `settle::env_of` names for the settlement's
+/// style, the folder alone, not `shared/`), at its real size, with its origin on the ground and its
+/// front (+Z) toward the street; a sign's front faces away from the lot at whose door it stands.
+/// None elsewhere (generated towns' structures keep their drawn shapes: their environments'
+/// models are sized for look-dev slots, not to real size), or when the kit has no such model.
+pub fn structure_model(land: &Land, kind: &str, at: Vec2) -> Option<(String, f32)> {
+    let env = structure_env(land, at)?;
+    let own = format!("envs/{env}/{kind}/");
+    let files: Vec<String> = crate::envs::assets_for(env, kind).into_iter().filter(|f| f.starts_with(&own)).collect();
+    if files.is_empty() {
+        return None;
+    }
+    let file = files[(hash(at.x.to_bits(), at.y.to_bits()) * files.len() as f32) as usize % files.len()].clone();
+    let yaw = structure_front(land, kind, at).map_or_else(|| hash(at.x.to_bits(), at.y.to_bits()) * std::f32::consts::TAU, |f| f.x.atan2(f.y));
+    Some((file, yaw))
+}
+
+/// The environment of the planned settlement a point is in (within 1.15 of its radius, the
+/// nearest such settlement).
+fn structure_env(land: &Land, at: Vec2) -> Option<&'static str> {
+    land.settlements
+        .iter()
+        .filter(|s| s.planned)
+        .map(|s| (Vec2::new(s.centre.0, s.centre.1).distance(at), s))
+        .filter(|(d, s)| *d <= s.radius_m * 1.15)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, s)| living_rules::settle::env_of(&s.style))
+}
+
+/// Which way a structure's front faces on the land: a sign away from the nearest lot within
+/// [`SIGN_LOT`] (it stands at its door); anything else toward the nearest street point within
+/// [`STRUCTURE_STREET`].
+fn structure_front(land: &Land, kind: &str, at: Vec2) -> Option<Vec2> {
+    if kind == "sign" {
+        let lot = land.lots.iter().map(|l| Vec2::new(l.centre.0, l.centre.1)).filter(|c| c.distance(at) <= SIGN_LOT).min_by(|a, b| a.distance(at).total_cmp(&b.distance(at)));
+        if let Some(c) = lot {
+            return (at - c).try_normalize();
+        }
+    }
+    let mut best: Option<(f32, Vec2)> = None;
+    for r in &land.roads {
+        for w in r.points.windows(2) {
+            let (a, b) = (Vec2::new(w[0].0, w[0].1), Vec2::new(w[1].0, w[1].1));
+            let d = b - a;
+            let t = if d.length_squared() > 1e-9 { ((at - a).dot(d) / d.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+            let q = a + d * t;
+            let dist = q.distance(at);
+            if dist <= STRUCTURE_STREET && best.is_none_or(|(bd, _)| dist < bd) {
+                best = Some((dist, q));
+            }
+        }
+    }
+    best.and_then(|(_, q)| (q - at).try_normalize())
+}
+
+/// A sign stands at a lot's door: the lot it belongs to is within this (m, to its centre).
+const SIGN_LOT: f32 = 14.0;
+/// How far a structure looks for its street (m).
+const STRUCTURE_STREET: f32 = 40.0;
+
 /// What the client draws of an authority `lot` row (connected mode).
 #[derive(Clone, Debug)]
 pub struct LotRow {
@@ -581,6 +637,28 @@ pub struct LotRow {
     /// The environment of its settlement's style (`living_rules::settle::env_of`), for lots
     /// without a model path.
     pub env: &'static str,
+}
+
+impl LotRow {
+    /// A lot of the regenerated land (the same as the authority's `lot` row of that id: the
+    /// authority writes the land's lots in order).
+    pub fn of_land(land: &Land, id: u32) -> Option<Self> {
+        let l = land.lots.get(id as usize)?;
+        let st = land.settlements.get(l.settlement as usize)?;
+        Some(Self {
+            id,
+            site: st.kind,
+            kind: l.kind,
+            at: Vec2::new(l.centre.0, l.centre.1),
+            yaw: l.yaw,
+            floor_m: l.floor_m,
+            height_m: l.height_m,
+            width_m: l.width_m,
+            depth_m: l.depth_m,
+            model: l.model_file.clone().unwrap_or_default(),
+            env: living_rules::settle::env_of(&st.style),
+        })
+    }
 }
 
 /// A settlement kind from its id (`settlement.kind`).
@@ -626,7 +704,8 @@ fn ground_colour(t: Terrain, kind: RegionKind, v: f32, climate: Climate) -> [f32
         Terrain::Rock => rgb(128, 122, 116),
         Terrain::Dirt => rgb(132, 112, 80),
         Terrain::Road => rgb(178, 160, 120),
-        Terrain::Wall => rgb(110, 100, 90),
+        // A drop is drawn as its wall was: the bank under a retaining wall.
+        Terrain::Wall | Terrain::Drop | Terrain::Low => rgb(110, 100, 90),
         Terrain::Forest => match kind {
             RegionKind::SpiritGrove => rgb(40, 70, 80),
             RegionKind::OldForest => rgb(62, 98, 56),
@@ -653,7 +732,7 @@ fn arid_colour(t: Terrain, kind: RegionKind) -> [f32; 4] {
         Terrain::Rock => rgb(148, 130, 114),
         Terrain::Dirt => rgb(164, 140, 108),
         Terrain::Road => rgb(168, 152, 124),
-        Terrain::Wall => rgb(110, 100, 90),
+        Terrain::Wall | Terrain::Drop | Terrain::Low => rgb(110, 100, 90),
         Terrain::Forest => rgb(130, 124, 92),
         Terrain::Grass => match kind {
             RegionKind::Forest | RegionKind::OldForest | RegionKind::SpiritGrove => rgb(156, 146, 108),
@@ -673,7 +752,7 @@ fn arid_layers(t: Terrain, kind: RegionKind) -> [(Layer, f32); 2] {
         // An oasis's bed is mud; the sea's floor and shallows are sand.
         Terrain::Water => one(if matches!(kind, RegionKind::Sea | RegionKind::Beach) { Layer::Sand } else { Layer::Mud }),
         Terrain::Sand => one(Layer::Sand),
-        Terrain::Rock | Terrain::Wall => one(Layer::Rock),
+        Terrain::Rock | Terrain::Wall | Terrain::Drop | Terrain::Low => one(Layer::Rock),
         Terrain::Dirt => match kind {
             RegionKind::Highland | RegionKind::Peaks => one(Layer::Gravel),
             RegionKind::Wetland | RegionKind::Beach => one(Layer::CrackedMud),
@@ -704,7 +783,7 @@ fn ground_layers(t: Terrain, kind: RegionKind, climate: Climate) -> [(Layer, f32
         // Lake and river beds are mud; the sea's floor and shallows are sand.
         Terrain::Water => one(if matches!(kind, RegionKind::Sea | RegionKind::Beach) { Layer::Sand } else { Layer::Mud }),
         Terrain::Sand => one(Layer::Sand),
-        Terrain::Rock | Terrain::Wall => one(Layer::Rock),
+        Terrain::Rock | Terrain::Wall | Terrain::Drop | Terrain::Low => one(Layer::Rock),
         Terrain::Dirt => one(Layer::Dirt),
         Terrain::Road => one(Layer::Cobble),
         Terrain::Forest => one(if kind == RegionKind::SpiritGrove { Layer::SpiritMoss } else { Layer::ForestFloor }),
@@ -749,12 +828,22 @@ fn road_layer(land: &Land, x: f32, z: f32, climate: Climate) -> Layer {
 }
 
 /// Ground colour and detail layers averaged over a few metres, so region borders and single
-/// tiles blend instead of switching along straight polygon edges.
-fn blended_ground(land: &Land, x: f32, z: f32, v: f32, climate: Climate) -> ([f32; 4], Blend) {
+/// tiles blend instead of switching along straight polygon edges. Where the environment's ground
+/// map (`ground.rs`) has a key for a sample, it gives that sample's colour and layer.
+fn blended_ground(land: &Land, x: f32, z: f32, v: f32, climate: Climate, map: &crate::ground::Ground) -> ([f32; 4], Blend) {
+    let mapped = !map.is_empty();
+    let p = Vec2::new(x, z);
     // Roads and paved squares stay crisp, and don't bleed into the blend around them.
     let here = land.map.at(x + 0.01, z + 0.01);
     if here == Terrain::Road {
+        if let Some(s) = map.road(p + 0.01, land.kind_at(x, z)).filter(|_| mapped) {
+            return (s.colour_at(p, v), Blend::one(s.layer));
+        }
         return (ground_colour(here, land.kind_at(x, z), v, climate), Blend::one(road_layer(land, x, z, climate)));
+    }
+    // So do a map's areas (a yard of cinders, a quay's flags).
+    if let Some(s) = map.area(p + 0.01).filter(|_| mapped) {
+        return (s.colour_at(p, v), Blend::one(s.layer));
     }
     const RING: [(f32, f32); 9] = [(0.0, 0.0), (6.0, 0.0), (-6.0, 0.0), (0.0, 6.0), (0.0, -6.0), (13.0, 9.0), (-13.0, -9.0), (9.0, -13.0), (-9.0, 13.0)];
     let mut acc = [0.0f32; 4];
@@ -768,6 +857,14 @@ fn blended_ground(land: &Land, x: f32, z: f32, v: f32, climate: Climate) -> ([f3
             t => t,
         };
         let kind = land.kind_at(px, pz);
+        if let Some(s) = map.open(Vec2::new(px, pz) + 0.01, t, kind).filter(|_| mapped) {
+            let c = s.colour_at(Vec2::new(px, pz), v);
+            for i in 0..4 {
+                acc[i] += c[i] * w;
+            }
+            blend.add(s.layer, w);
+            continue;
+        }
         let c = ground_colour(t, kind, v, climate);
         for i in 0..4 {
             acc[i] += c[i] * w;
@@ -779,19 +876,33 @@ fn blended_ground(land: &Land, x: f32, z: f32, v: f32, climate: Climate) -> ([f3
     (acc.map(|c| c / 11.0), blend)
 }
 
-/// A chunk's ground (indexed 1 m grid, smooth normals) and its water surface.
-fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate) -> (Mesh, Option<Mesh>) {
-    let n = CHUNK as usize;
+/// A chunk's ground (an indexed grid, a vertex every `step` m: 1 near, [`COARSE_STEP`] far;
+/// smooth normals) and its water surface.
+fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate, step: usize, map: &crate::ground::Ground) -> (Mesh, Option<Mesh>) {
+    let n = CHUNK as usize / step;
+    let st = step as i32;
     let (x0, z0) = (c.0 * CHUNK, c.1 * CHUNK);
     let mut pos = Vec::with_capacity((n + 1) * (n + 1));
     let mut col = Vec::with_capacity((n + 1) * (n + 1));
     let mut blends = Vec::with_capacity((n + 1) * (n + 1));
     for j in 0..=n {
         for i in 0..=n {
-            let (x, z) = ((x0 + i as i32) as f32, (z0 + j as i32) as f32);
+            let (x, z) = ((x0 + i as i32 * st) as f32, (z0 + j as i32 * st) as f32);
             pos.push([x, land.height(x, z), z]);
-            let v = hash((x0 + i as i32) as u32, (z0 + j as i32) as u32);
-            let (mut c, b) = blended_ground(land, x, z, v, climate);
+            let v = hash((x0 + i as i32 * st) as u32, (z0 + j as i32 * st) as u32);
+            let (mut c, b) = blended_ground(land, x, z, v, climate, map);
+            // A face: the ground steps more than about a metre per metre to a neighbour (a quay
+            // standing out of the sea, an authored drop). The mesh's smoothed normals round such
+            // a step into a slope that the shader's slope test leaves as grass, so the stone is
+            // chosen here from the heights themselves ([`face_share`]).
+            let face = face_share(land, x, z, step as f32);
+            let b = if face > 0.0 { b.toward(Layer::Rock, face) } else { b };
+            if face > 0.0 {
+                let stone = ground_colour(Terrain::Rock, RegionKind::Meadow, v, climate);
+                for k in 0..3 {
+                    c[k] += (stone[k] - c[k]) * face;
+                }
+            }
             // The rules' blocking rock, crisp per tile (not blended): the share of the four tiles
             // round this vertex, for the shader's cliff (terrain.rs `BLOCKED_ALPHA`).
             let rock = [(-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)].iter().filter(|(dx, dz)| land.map.at(x + dx, z + dz) == Terrain::Rock).count();
@@ -819,12 +930,14 @@ fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate) -> (Mesh, Option<M
     // above dry ground well away from it.
     let mut wpos: Vec<[f32; 3]> = Vec::new();
     let mut widx: Vec<u32> = Vec::new();
+    let k = step as f32;
     for j in 0..n {
         for i in 0..n {
-            let (x, z) = ((x0 + i as i32) as f32, (z0 + j as i32) as f32);
-            let corners = [(x, z), (x + 1.0, z), (x, z + 1.0), (x + 1.0, z + 1.0)];
-            let water = |dx: f32, dz: f32| land.map.at(x + 0.5 + dx, z + 0.5 + dz) == Terrain::Water;
-            let wet = water(0.0, 0.0) || water(1.0, 0.0) || water(-1.0, 0.0) || water(0.0, 1.0) || water(0.0, -1.0);
+            let (x, z) = ((x0 + i as i32 * st) as f32, (z0 + j as i32 * st) as f32);
+            let corners = [(x, z), (x + k, z), (x, z + k), (x + k, z + k)];
+            let water = |dx: f32, dz: f32| land.map.at(x + 0.5 * k + dx, z + 0.5 * k + dz) == Terrain::Water;
+            let h = 0.5 * k;
+            let wet = water(0.0, 0.0) || water(k, 0.0) || water(-k, 0.0) || water(0.0, k) || water(0.0, -k) || (step > 1 && (water(-h, -h) || water(h, -h) || water(-h, h) || water(h, h)));
             if !wet {
                 continue;
             }
@@ -843,6 +956,16 @@ fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate) -> (Mesh, Option<M
             .with_inserted_indices(Indices::U32(widx))
     });
     (ground, water)
+}
+
+/// How much of a face the ground is at a vertex (0–1): its steepest step to a neighbour `step`
+/// m away, from about 45° (a rise of 0.9 m per metre: stairs climb 0.55, generated hills
+/// rarely more) to 1.6 m per metre.
+fn face_share(land: &Land, x: f32, z: f32, step: f32) -> f32 {
+    let y = land.height(x, z);
+    let drop = [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)].iter().map(|(dx, dz)| (land.height(x + dx, z + dz) - y).abs()).fold(0.0f32, f32::max) / step;
+    let t = ((drop - 0.9) / 0.7).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// The scene file a thing spawns from (a person's: its recipe's animated base).
@@ -864,6 +987,44 @@ fn ready(assets: &AssetServer, scene: &Handle<WorldAsset>) -> bool {
     matches!(assets.recursive_dependency_load_state(scene), S::Loaded | S::Failed(_))
 }
 
+/// What is drawn on a lot, connected or in look-dev:
+/// - its model file (`model`, under `envs/`) when it is on disk;
+/// - in a **planned** settlement (an authored plan, docs/AUTHORED_PLANS.md), otherwise a grey box
+///   of its footprint and height, or for an open lot of no height a footprint marker
+///   ([`MARKER_H`]). A planned lot is never given another lot's model: its plan sized it for its
+///   own, and a terrace of borrowed houses would overlap. Its environment's folder may be empty
+///   or missing (Cullet's before its kit is generated);
+/// - elsewhere, a model of its kind from its environment (a generated town's buildings are
+///   sampled, `settle::env_of`), else a grey box when it has height; gardens and fields nothing.
+fn lot_item(envs: &HashMap<String, EnvDef>, land: &Land, lot: &LotRow) -> Option<Item> {
+    let planned = land.lots.get(lot.id as usize).and_then(|l| land.settlements.get(l.settlement as usize)).is_some_and(|s| s.planned);
+    let landmark = land.lots.get(lot.id as usize).is_some_and(|l| l.landmark);
+    let base = Item { kind: lot.kind.id().to_string(), at: lot.at, yaw: lot.yaw, height: lot.height_m, k: lot.id as usize, floor: Some(lot.floor_m), solid: true, landmark, night_glow: true, ..default() };
+    // The row's model names its folder (`steampunk_city/clocktower/...`): a town in its own
+    // style uses its own assets.
+    let env = lot.model.split('/').next().filter(|_| !lot.model.is_empty()).unwrap_or(lot.env);
+    let kind = living_rules::settle::asset_kind(&lot.model).or(lot.kind.model());
+    let files = kind.map(|k| crate::envs::assets_for(env, k)).unwrap_or_default();
+    let exact = Some(format!("envs/{}", lot.model)).filter(|f| !lot.model.is_empty() && files.contains(f));
+    let slot = kind.and_then(|k| envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == k)));
+    if let Some(file) = exact {
+        return Some(Item { kind: kind.unwrap_or("").to_string(), file, glow: slot.and_then(|s| s.glow), native: true, ..base });
+    }
+    if planned || files.is_empty() {
+        let (w, d) = (lot.width_m.max(0.1), lot.depth_m.max(0.1));
+        if lot.height_m > 0.0 {
+            return Some(Item { size: Some(Vec3::new(w, lot.height_m, d)), ..base });
+        }
+        return planned.then(|| Item { size: Some(Vec3::new(w, MARKER_H, d)), height: MARKER_H, marker: true, solid: false, ..base });
+    }
+    if !lot.model.is_empty() {
+        warn!("lot {}: model {} is not on disk; using another {}", lot.id, lot.model, kind.unwrap_or(""));
+    }
+    let height = slot.map_or(6.0, |s| s.height[1]);
+    let file = files[(hash(lot.id, 11) * files.len() as f32) as usize % files.len()].clone();
+    Some(Item { kind: kind.unwrap_or("").to_string(), file, height, glow: slot.and_then(|s| s.glow), native: true, ..base })
+}
+
 fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &Item) -> Vec<Entity> {
     let y = it.floor.unwrap_or_else(|| land.height(it.at.x, it.at.y));
     let at = Vec3::new(it.at.x, y, it.at.y);
@@ -876,9 +1037,20 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     }
     if let Some(size) = it.size {
         let c = at + Vec3::Y * size.y * 0.5;
-        let mut e = commands.spawn((EnvPart, GreyBox, Transform::from_translation(c).with_rotation(Quat::from_rotation_y(it.yaw)).with_scale(size)));
+        let colour = if it.marker { MARKER } else { GREY };
+        let fitted = crate::lookdev::Fitted { y_off: 0.0, size, center: Vec3::ZERO };
+        let mut e = commands.spawn((EnvPart, GreyBox(colour), fitted, Transform::from_translation(c).with_rotation(Quat::from_rotation_y(it.yaw)).with_scale(size)));
         if it.height >= 3.0 {
             e.insert((Occluder { height: it.height }, crate::fade::Fade::shown()));
+        }
+        if it.solid {
+            e.insert(crate::envs::Solid);
+        }
+        if it.landmark {
+            e.insert(crate::envs::Landmark);
+        }
+        if it.marker {
+            e.insert(bevy::light::NotShadowCaster);
         }
         return vec![e.id()];
     }
@@ -892,6 +1064,18 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     if it.height <= SMALL {
         e.insert(crate::lookdev::NoShadow);
     }
+    if it.solid {
+        e.insert(crate::envs::Solid);
+    }
+    if it.fixture {
+        e.insert(crate::envs::SolidIfLarge);
+    }
+    if it.night_glow {
+        e.insert(crate::lookdev::NightGlow);
+    }
+    if it.landmark {
+        e.insert(crate::envs::Landmark);
+    }
     let mut out = vec![e.id()];
     if let Some((light, tf)) = crate::envs::local_light(&it.kind, it.glow, it.height, it.k) {
         out.push(commands.spawn((EnvPart, light, Transform::from_translation(at + tf.translation))).id());
@@ -899,8 +1083,10 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     out
 }
 
-/// Every 2 s: frame times (mean and worst), what is loaded, and where you are.
-pub fn report(island: Option<Res<Island>>, time: Res<Time>, roam: Res<crate::envs::Roam>, models: Query<(), With<Model>>, meshes: Query<(), With<Mesh3d>>, mut acc: Local<(f32, f32, u32, f32)>) {
+/// Every 2 s: frame times (mean and worst), what is loaded, the ground meshes' size, and where
+/// you are.
+#[allow(clippy::too_many_arguments)]
+pub fn report(island: Option<Res<Island>>, time: Res<Time>, roam: Res<crate::envs::Roam>, models: Query<(), With<Model>>, meshes: Query<(), With<Mesh3d>>, handles: Query<&Mesh3d>, assets: Res<Assets<Mesh>>, mut acc: Local<(f32, f32, u32, f32)>) {
     let Some(island) = island else { return };
     let dt = time.delta_secs();
     acc.0 += dt;
@@ -911,16 +1097,26 @@ pub fn report(island: Option<Res<Island>>, time: Res<Time>, roam: Res<crate::env
         return;
     }
     let small: usize = island.small.values().map(Vec::len).sum();
+    // The ground meshes' vertex and index data (each chunk's first entity is its ground).
+    let (mut bytes, mut vertex) = (0usize, 0usize);
+    for es in island.ground.values().chain(island.coarse.values()) {
+        if let Some(m) = es.first().and_then(|e| handles.get(*e).ok()).and_then(|h| assets.get(&h.0)) {
+            vertex = m.get_vertex_size() as usize;
+            bytes += m.count_vertices() * vertex + m.indices().map_or(0, |i| i.len() * 4);
+        }
+    }
     info!(
-        "island perf: mean {:.1} ms ({:.0} fps), worst {:.1} ms; chunks {} ground / {} near ({} small things); {} models, {} meshes; at ({:.0}, {:.0}) {}",
+        "island perf: mean {:.1} ms ({:.0} fps), worst {:.1} ms; chunks {} ground / {} coarse / {} near ({} small things); {} models, {} meshes; ground meshes {:.2} MB ({vertex} B a vertex); at ({:.0}, {:.0}) {}",
         acc.0 / acc.2 as f32 * 1000.0,
         acc.2 as f32 / acc.0,
         acc.1 * 1000.0,
         island.ground.len(),
+        island.coarse.len(),
         island.small.len(),
         small,
         models.iter().count(),
         meshes.iter().count(),
+        bytes as f32 / 1e6,
         roam.pos.x,
         roam.pos.y,
         island.land.kind_at(roam.pos.x, roam.pos.y).id()
@@ -928,8 +1124,49 @@ pub fn report(island: Option<Res<Island>>, time: Res<Time>, roam: Res<crate::env
     *acc = (0.0, 0.0, 0, 0.0);
 }
 
+/// A chunk's ground and water entities, a vertex every `step` m.
+#[allow(clippy::too_many_arguments)]
+fn spawn_ground(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Palette, ground_mat: &GroundMat, land: &Land, c: (i32, i32), climate: Climate, step: usize, map: &crate::ground::Ground) -> Vec<Entity> {
+    let (g, w) = chunk_meshes(land, c, climate, step, map);
+    // The painted ground material (terrain.rs); `noterrain` for A/B with the plain toon.
+    let mut ground = commands.spawn((EnvPart, Mesh3d(meshes.add(g)), Transform::default()));
+    if crate::perf::has("noterrain") {
+        ground.insert(MeshMaterial3d(palette.vertex.clone()));
+    } else {
+        ground.insert(MeshMaterial3d(ground_mat.0.clone()));
+    }
+    let mut es = vec![ground.id()];
+    if !crate::perf::has("nostencil") {
+        commands.entity(es[0]).insert(crate::style::ground_stencil());
+    }
+    if let Some(w) = w {
+        es.push(commands.spawn((EnvPart, Mesh3d(meshes.add(w)), MeshMaterial3d(palette.water.clone()), Transform::default())).id());
+    }
+    es
+}
+
+/// The sea beyond the land's square, at sea level, out past `reach`: four quads round the map,
+/// so a long view over the water ends in fog, not at the map's edge.
+fn spawn_ocean(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Palette, size: f32, reach: f32) -> Vec<Entity> {
+    let (lo, hi) = (-reach - 200.0, size + reach + 200.0);
+    let quads = [(lo, lo, hi, 0.0), (lo, size, hi, hi), (lo, 0.0, 0.0, size), (size, 0.0, hi, size)];
+    quads
+        .iter()
+        .map(|&(x0, z0, x1, z1)| {
+            let pos = vec![[x0, -0.05, z0], [x1, -0.05, z0], [x0, -0.05, z1], [x1, -0.05, z1]];
+            let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; 4])
+                .with_inserted_indices(Indices::U32(vec![0, 2, 1, 1, 2, 3]));
+            commands.spawn((EnvPart, Mesh3d(meshes.add(mesh)), MeshMaterial3d(palette.water.clone()), Transform::default())).id()
+        })
+        .collect()
+}
+
 /// Stream the island around you: build near chunks (nearest first, a few per frame), drop far
-/// ones; small things only within `NEAR`.
+/// ones; small things only within `NEAR`. Past [`FAR`], out to the mood's landmark reach, coarse
+/// chunks of ground and sea, and the sea round the map.
+#[allow(clippy::too_many_arguments)]
 pub fn stream(
     mut commands: Commands,
     island: Option<ResMut<Island>>,
@@ -939,18 +1176,38 @@ pub fn stream(
     assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     alive: Query<(), With<EnvPart>>,
+    draw: Res<crate::world::Draw>,
 ) {
     let Some(mut island) = island else { return };
     let me = roam.pos;
     let size = island.land.size as i32 / CHUNK;
-    let r = (FAR / CHUNK as f32).ceil() as i32 + 1;
+    // How far coarse ground goes: where the mood's fog is complete, if that is past FAR.
+    // `LIVING_GAME_PERF=nofar` leaves the coarse ring and the far landmarks out (measurement only).
+    let reach = if crate::perf::has("nofar") { FAR } else { draw.landmark_reach().max(FAR) };
+    let coarse_on = reach > FAR + 1.0;
+    let r = (reach / CHUNK as f32).ceil() as i32 + 1;
     let (cx, cz) = chunk_of(me);
-    // Drop chunks the environment switch already despawned, then far ones.
+    // Drop chunks the environment switch already despawned, then far ones. A detailed chunk
+    // going out of FAR stays until its coarse one is built, so no hole opens.
     island.ground.retain(|_, es| es.first().is_some_and(|e| alive.contains(*e)));
+    island.coarse.retain(|_, es| es.first().is_some_and(|e| alive.contains(*e)));
     island.small.retain(|_, es| es.iter().all(|e| alive.contains(*e)) || es.is_empty());
-    let far: Vec<_> = island.ground.keys().copied().filter(|c| chunk_distance(*c, me) > FAR + 32.0).collect();
+    let far: Vec<_> = island.ground.keys().copied().filter(|c| {
+        let d = chunk_distance(*c, me);
+        d > FAR + 32.0 && (!coarse_on || d > reach + 32.0 || island.coarse.contains_key(c))
+    }).collect();
     for c in far {
         for e in island.ground.remove(&c).unwrap_or_default() {
+            commands.entity(e).despawn();
+        }
+    }
+    // A coarse chunk goes past the reach, or where the detailed one stays (within FAR + 32 m).
+    let gone: Vec<_> = island.coarse.keys().copied().filter(|c| {
+        let d = chunk_distance(*c, me);
+        !coarse_on || d > reach + 32.0 || (d <= FAR + 32.0 && island.ground.contains_key(c))
+    }).collect();
+    for c in gone {
+        for e in island.coarse.remove(&c).unwrap_or_default() {
             commands.entity(e).despawn();
         }
     }
@@ -964,34 +1221,34 @@ pub fn stream(
     for j in (cz - r).max(0)..=(cz + r).min(size - 1) {
         for i in (cx - r).max(0)..=(cx + r).min(size - 1) {
             let d = chunk_distance((i, j), me);
-            if d <= FAR {
+            if d <= reach {
                 want.push(((i, j), d));
             }
         }
     }
     want.sort_by(|a, b| a.1.total_cmp(&b.1));
     let land = island.land.clone();
+    let climate = island.climate;
+    let surfaces = island.surfaces.clone();
     let mut built = 0;
+    let mut coarse_built = 0;
     for &(c, d) in &want {
+        if d > FAR {
+            // Coarse: ground and sea only, a few a frame.
+            // A detailed chunk in the band just past FAR stays; farther out its coarse one replaces it.
+            let detailed = island.ground.contains_key(&c) && d <= FAR + 32.0;
+            if coarse_built < COARSE_PER_FRAME && !detailed && !island.coarse.contains_key(&c) {
+                let es = spawn_ground(&mut commands, &mut meshes, &palette, &ground_mat, &land, c, climate, COARSE_STEP, &surfaces);
+                island.coarse.insert(c, es);
+                coarse_built += 1;
+            }
+            continue;
+        }
         if built >= BUILDS_PER_FRAME {
-            break;
+            continue;
         }
         if !island.ground.contains_key(&c) {
-            let (g, w) = chunk_meshes(&land, c, island.climate);
-            // The painted ground material (terrain.rs); `noterrain` for A/B with the plain toon.
-            let mut ground = commands.spawn((EnvPart, Mesh3d(meshes.add(g)), Transform::default()));
-            if crate::perf::has("noterrain") {
-                ground.insert(MeshMaterial3d(palette.vertex.clone()));
-            } else {
-                ground.insert(MeshMaterial3d(ground_mat.0.clone()));
-            }
-            let mut es = vec![ground.id()];
-            if !crate::perf::has("nostencil") {
-                commands.entity(es[0]).insert(crate::style::ground_stencil());
-            }
-            if let Some(w) = w {
-                es.push(commands.spawn((EnvPart, Mesh3d(meshes.add(w)), MeshMaterial3d(palette.water.clone()), Transform::default())).id());
-            }
+            let es = spawn_ground(&mut commands, &mut meshes, &palette, &ground_mat, &land, c, climate, 1, &surfaces);
             // Big things queue now; the small things' and people's files start loading.
             let (big, small): (Vec<Item>, Vec<Item>) = island.site_items.get(&c).cloned().unwrap_or_default().into_iter().chain(island.wild_items(c)).partition(|it| it.height > SMALL && it.person.is_none());
             let fetch = small.iter().map(|it| scene_of(&assets, it).untyped()).collect();
@@ -1001,6 +1258,10 @@ pub fn stream(
                 island.queue.push(Queued { chunk: c, small: false, item, scene });
             }
             island.ground.insert(c, es);
+            // Its coarse stand-in goes now that the detailed ground is there.
+            for e in island.coarse.remove(&c).unwrap_or_default() {
+                commands.entity(e).despawn();
+            }
             built += 1;
         }
         if d <= NEAR && !island.small.contains_key(&c) && island.ground.contains_key(&c) {
@@ -1014,8 +1275,15 @@ pub fn stream(
             built += 1;
         }
     }
+    if coarse_on && island.ocean.is_empty() {
+        island.ocean = spawn_ocean(&mut commands, &mut meshes, &palette, land.size as f32, reach);
+    } else if !coarse_on && !island.ocean.is_empty() {
+        for e in std::mem::take(&mut island.ocean) {
+            commands.entity(e).despawn();
+        }
+    }
     spawn_queued(&mut commands, &assets, &mut island, me);
-    island.settled = built == 0 && island.queue.is_empty();
+    island.settled = built == 0 && coarse_built == 0 && island.queue.is_empty();
 }
 
 /// Spawn queued things, nearest first, within [`SPAWN_BUDGET`]; drop those whose chunk went.
@@ -1042,6 +1310,12 @@ fn spawn_queued(commands: &mut Commands, assets: &AssetServer, island: &mut Isla
             continue;
         }
         let es = spawn_item(commands, assets, land, &q.item);
+        // Drawn out to its tier's distance, fading over the last few metres (`envs::reach`):
+        // past the mood's fog start (Cullet's 180 m) the fog no longer hides where streaming stops.
+        if let (Some(&root), None) = (es.first(), &q.item.person) {
+            let r = if q.small { NEAR } else { FAR };
+            commands.entity(root).insert((crate::envs::Reach(r), crate::envs::Reach::fade_at(r, q.item.at.distance(me))));
+        }
         let list = if q.small { small.get_mut(&q.chunk) } else { ground.get_mut(&q.chunk) };
         if let Some(list) = list {
             list.extend(es);
@@ -1049,4 +1323,174 @@ fn spawn_queued(commands: &mut Commands, assets: &AssetServer, island: &mut Isla
         spent += cost;
     }
     queue.extend(waiting);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ground::{Areas, Ground, GroundMap, Streets, Surface};
+
+    /// `blended_ground` as it was before environments had ground maps (ground-1), verbatim.
+    fn legacy_blended_ground(land: &Land, x: f32, z: f32, v: f32, climate: Climate) -> ([f32; 4], Blend) {
+        let here = land.map.at(x + 0.01, z + 0.01);
+        if here == Terrain::Road {
+            return (ground_colour(here, land.kind_at(x, z), v, climate), Blend::one(road_layer(land, x, z, climate)));
+        }
+        const RING: [(f32, f32); 9] = [(0.0, 0.0), (6.0, 0.0), (-6.0, 0.0), (0.0, 6.0), (0.0, -6.0), (13.0, 9.0), (-13.0, -9.0), (9.0, -13.0), (-9.0, 13.0)];
+        let mut acc = [0.0f32; 4];
+        let mut blend = Blend::default();
+        for (k, (dx, dz)) in RING.iter().enumerate() {
+            let w = if k == 0 { 3.0 } else { 1.0 };
+            let (px, pz) = (x + dx, z + dz);
+            let t = match land.map.at(px + 0.01, pz + 0.01) {
+                Terrain::Road => Terrain::Grass,
+                t => t,
+            };
+            let kind = land.kind_at(px, pz);
+            let c = ground_colour(t, kind, v, climate);
+            for i in 0..4 {
+                acc[i] += c[i] * w;
+            }
+            for (layer, share) in ground_layers(t, kind, climate) {
+                blend.add(layer, share * w);
+            }
+        }
+        (acc.map(|c| c / 11.0), blend)
+    }
+
+    fn cullet() -> (Land, LandParams) {
+        let (seed, size, params) = seed_land(concat!(env!("CARGO_MANIFEST_DIR"), "/../seeds/cullet.json")).expect("the Cullet seed");
+        (living_rules::land::generate(seed, size, &params), params)
+    }
+
+    fn top(b: &Blend) -> Layer {
+        let k = b.0.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).unwrap().0;
+        Layer::ALL[k]
+    }
+
+    #[test]
+    fn structures_take_their_planned_settlements_kit_and_face_the_street() {
+        let (land, _) = cullet();
+        let town = land.settlements.iter().find(|s| s.planned).expect("Cullet is planned");
+        let c = Vec2::new(town.centre.0, town.centre.1);
+        assert_eq!(structure_env(&land, c), Some("cullet"));
+        assert_eq!(structure_env(&land, Vec2::new(5.0, 5.0)), None, "outside any settlement");
+        // A sign at a lot's door faces away from the lot, out of its front.
+        let centre = |l: &living_rules::settle::Lot| Vec2::new(l.centre.0, l.centre.1);
+        let mut tried = 0;
+        for lot in &land.lots {
+            let (lc, lf) = (centre(lot), Vec2::new(lot.front.0, lot.front.1));
+            let sign = lc + lf * (lot.depth_m * 0.5 + 0.6);
+            let nearest = land.lots.iter().map(|l| centre(l).distance(sign)).fold(f32::MAX, f32::min);
+            if nearest < lc.distance(sign) || lc.distance(sign) > SIGN_LOT {
+                continue;
+            }
+            let f = structure_front(&land, "sign", sign).expect("a front");
+            assert!(f.dot(lf) > 0.99, "sign at {sign} faces {f}, its lot's front {lf}");
+            tried += 1;
+        }
+        assert!(tried > 20, "{tried} lots");
+        // Anything else turns toward the nearest street within reach.
+        let road = land.roads.iter().find(|r| r.points.len() >= 2).expect("a street");
+        let (a, b) = (Vec2::new(road.points[0].0, road.points[0].1), Vec2::new(road.points[1].0, road.points[1].1));
+        let side = (b - a).perp().normalize() * 0.5;
+        let near = (a + b) * 0.5 + side;
+        let f = structure_front(&land, "storage", near).expect("a street nearby");
+        assert!(f.dot(-side.normalize()) > 0.99, "faces {f}, the street is toward {}", -side);
+        // A generated land's towns are not planned: their structures keep their drawn shapes.
+        let gen = living_rules::land::generate(7, 512, &LandParams::default());
+        for s in &gen.settlements {
+            assert_eq!(structure_model(&gen, "sign", Vec2::new(s.centre.0, s.centre.1)), None);
+        }
+    }
+
+    #[test]
+    fn without_a_map_the_ground_is_drawn_as_before() {
+        let (land, params) = cullet();
+        // An environment with no map (the island's, and Cullet's until kit-2 writes one) builds an
+        // empty ground: no areas, streets or stamps are even gathered.
+        let none = Ground::new("cullet", GroundMap::default(), &land, &params);
+        assert!(none.is_empty());
+        let mut n = 0;
+        for climate in [Climate::Temperate, Climate::Arid] {
+            for j in (0..land.size).step_by(3) {
+                for i in (0..land.size).step_by(3) {
+                    let (x, z) = (i as f32, j as f32);
+                    let v = hash(i, j);
+                    let (c0, b0) = legacy_blended_ground(&land, x, z, v, climate);
+                    let (c1, b1) = blended_ground(&land, x, z, v, climate, &none);
+                    assert_eq!(c0.map(f32::to_bits), c1.map(f32::to_bits), "colour at {x}, {z}");
+                    assert_eq!(b0.0.map(f32::to_bits), b1.0.map(f32::to_bits), "blend at {x}, {z}");
+                    // The old layers keep the first four attributes' bytes; the new two are zero.
+                    assert_eq!(b1.pack()[4..], [[0u8; 4]; 2]);
+                    n += 1;
+                }
+            }
+        }
+        assert!(n > 200_000);
+        // A whole chunk's mesh, quay faces and blocking rock included.
+        let (g, _) = chunk_meshes(&land, (7, 12), Climate::Temperate, 1, &none);
+        assert_eq!(g.attribute(crate::terrain::ATTRIBUTE_BLEND[5].id).map(|a| a.len()), Some(65 * 65));
+    }
+
+    #[test]
+    fn a_map_paints_streets_areas_stamps_classes_and_regions() {
+        let (land, params) = cullet();
+        let mut map = GroundMap::default();
+        let key = |m: &mut GroundMap, k: &str, l: Layer| m.insert(k, Surface::new(l, [100, 100, 100], None)).unwrap();
+        key(&mut map, "street:quay_flags", Layer::QuayFlags);
+        key(&mut map, "street:setts", Layer::SlateSetts);
+        key(&mut map, "street:cinders", Layer::Cinders);
+        key(&mut map, "class:Road", Layer::Flagstone);
+        key(&mut map, "stamp:sand", Layer::WetSand);
+        key(&mut map, "region:meadow", Layer::ThinTurf);
+        key(&mut map, "area:worked_soil", Layer::WorkedSoil);
+        // The root plots, as kit-2's ground.json would draw them.
+        let (areas, _) = Areas::parse(r#"[{"id": "roots", "surface": "worked_soil", "area": [[268, 618], [330, 618], [330, 645], [268, 645]]}]"#).unwrap();
+        let g = Ground::of(map, areas, &land, &params);
+        let streets = Streets::of_land(&land);
+        let mut seen: HashMap<&str, usize> = HashMap::new();
+        for j in 600..800 {
+            for i in 250..720 {
+                let (x, z) = (i as f32, j as f32);
+                let tile = land.map.at(x + 0.01, z + 0.01);
+                let (_, b) = blended_ground(&land, x, z, 0.5, Climate::Temperate, &g);
+                let p = Vec2::new(x, z) + 0.01;
+                let want = if tile == Terrain::Road {
+                    match streets.at(p) {
+                        Some("quay_flags") => Some((Layer::QuayFlags, "street:quay_flags")),
+                        Some("setts") => Some((Layer::SlateSetts, "street:setts")),
+                        Some("cinders") => Some((Layer::Cinders, "street:cinders")),
+                        _ => Some((Layer::Flagstone, "class:Road")),
+                    }
+                } else if (268.5..329.5).contains(&p.x) && (618.5..644.5).contains(&p.y) {
+                    Some((Layer::WorkedSoil, "area:worked_soil"))
+                } else {
+                    None
+                };
+                if let Some((layer, k)) = want {
+                    // Roads and areas are crisp: one layer alone.
+                    assert_eq!(b.0.iter().filter(|w| **w > 0.0).count(), 1, "{k} at {x}, {z}: {b:?}");
+                    assert_eq!(top(&b), layer, "{k} at {x}, {z}");
+                    *seen.entry(k).or_default() += 1;
+                }
+            }
+        }
+        for k in ["street:quay_flags", "street:setts", "street:cinders", "class:Road", "area:worked_soil"] {
+            assert!(seen.get(k).is_some_and(|n| *n > 20), "{k}: {seen:?}");
+        }
+        // The Wrack Strand's sand stamp, and the moor's meadow, blend in from their tiles.
+        let (mut stamp, mut meadow) = (0, 0);
+        for j in (0..land.size).step_by(4) {
+            for i in (0..land.size).step_by(4) {
+                let (x, z) = (i as f32, j as f32);
+                let (_, b) = blended_ground(&land, x, z, 0.5, Climate::Temperate, &g);
+                stamp += usize::from(b.0[Layer::WetSand as usize] > 0.0);
+                meadow += usize::from(b.0[Layer::ThinTurf as usize] > 0.0);
+                // Whatever the map leaves unmapped keeps the island's own layers.
+                assert_eq!(b.0[Layer::Heather as usize], 0.0);
+            }
+        }
+        assert!(stamp > 50 && meadow > 1000, "stamp {stamp}, meadow {meadow}");
+    }
 }

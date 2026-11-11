@@ -18,7 +18,9 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
-SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "floor-megacity-2k", "floor-megacity-4k", "cullet-laws", "cullet-laws-floor")
+SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "cullet", "floor-megacity-2k", "floor-megacity-4k", "cullet-laws", "cullet-laws-floor")
+# An inventory row held by a structure (`tables::STRUCTURE_BIT`).
+STRUCTURE_BIT = 1 << 40
 # Seeds derived from a tracked seed in the run's directory (published through `--seed` with an
 # absolute path): the megacity floor (docs/FLOORS.md) at 2048 m, created inside `init` from a
 # compiled seed, and at 4096 m as a floor: a module built without a seed (`--seed none`) given
@@ -31,7 +33,7 @@ FLOORS = ("floor-megacity-4k", "cullet-laws-floor")
 LAWS_FLOORS = {"cullet-laws-floor": "cullet-laws"}
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
-          "place", "routine", "relation", "acquaintance", "world_law", "script")
+          "place", "routine", "relation", "acquaintance", "world_law", "script", "rhythm")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
@@ -114,6 +116,15 @@ def create_floor(run, d, seed):
     bad["map"].setdefault("params", {})["plans"] = [plan]
     code = harness("call", run, d / "create-floor-bad-plan.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", "rises 3 m")
     checks.append({"check": "create_floor refuses a plan whose stair disagrees with its levels", "pass": code == 0})
+    # A plan naming a resource or structure kind the world's tables lack (here the shipped
+    # script, which has no `kelp` resource and no `furnace`) is refused, not silently left out.
+    plan = json.loads((ROOT / "living/seeds/plan-test.json").read_text())["map"]["params"]["plans"][0]
+    plan["resources"] = plan.get("resources", []) + [{"kind": "kelp", "at": plan["resources"][0]["at"]}]
+    plan["structures"] = [{"kind": "furnace", "at": plan["resources"][0]["at"], "fuel": 4}]
+    bad = json.loads(json.dumps(seed))
+    bad["map"].setdefault("params", {})["plans"] = [plan]
+    code = harness("call", run, d / "create-floor-unknown-kinds.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", "names kinds this world's tables do not have")
+    checks.append({"check": "create_floor refuses a plan naming a resource or structure kind the world does not have", "pass": code == 0})
     code = harness("call", run, d / "resume-none.log", "resume_genesis", "[]", "--as-admin", "--expect-refusal", "no staged creation")
     checks.append({"check": "resume_genesis is refused before any creation", "pass": code == 0})
     started = time.time()
@@ -222,7 +233,11 @@ def check_seed(seed, rows):
     equal("all terrain chunk ids", sorted(r["id"] for r in rows["terrain_chunk"]), ids)
     # SpacetimeDB JSON encodes Vec<u8> as a hex string.
     tiles = [bytes.fromhex(r["tiles"]) if isinstance(r["tiles"], str) else bytes(r["tiles"]) for r in rows["terrain_chunk"]]
-    present("terrain chunks contain 256 valid tiles", all(len(t) == 256 and max(t) <= 7 for t in tiles))
+    # Classes 0..9 (living_rules::map::Terrain): 7 wall (buildings, town walls), 8 drop (a
+    # terrace's or a plan's edge), 9 low (a thing below eye height: a cart); 8 and 9 are
+    # unwalkable and see-through.
+    counts = {k: sum(t.count(k) for t in tiles) for k in range(10)}
+    present("terrain chunks contain 256 valid tiles", all(len(t) == 256 and max(t) <= 9 for t in tiles), {"wall": counts[7], "drop": counts[8], "low": counts[9], "rock": counts[4]})
     chars = {r["id"]: r for r in rows["character"]}
     by_name = {r["name"]: r for r in chars.values() if r["kind"] == "person"}
     bgs = {r["id"]: json.loads(r["text"]) for r in rows["background"]}
@@ -246,13 +261,19 @@ def check_seed(seed, rows):
         # A founder may die in the seconds the world ticks before the snapshot, and death ends
         # membership: compare the living.
         equal(f"{t['name']} memberships of the living", sorted(r["member"] for r in rows["membership"] if r["community"] == com.get("id")), sorted(i for i in ids if chars[i]["alive"]))
-        present(f"{t['name']} settlement backgrounds", bool(ids) and all(bg.get("town_center") is not None and bg.get("walled") == t.get("walled", True) for i, bg in bgs.items() if i in ids))
+        # A town seeded with no people (Cullet's grey city, before its residents are written)
+        # has no backgrounds or places to check; its buildings' signs are checked at their lots.
+        peopled = bool(residents or t.get("occupations"))
+        present(f"{t['name']} settlement backgrounds", (bool(ids) or not peopled) and all(bg.get("town_center") is not None and bg.get("walled") == t.get("walled", True) for i, bg in bgs.items() if i in ids))
         if t.get("ledger"):
             present(f"{t['name']} ledger", any(a["text"] == t["ledger"] for a in artifacts))
         for building in t.get("buildings", []):
             places = [p for i in ids for p in bgs[i].get("places", []) if p["name"] == building["name"] and p["kind"] == building["kind"]]
             present(f"building {building['name']} place", len(places) == len(ids))
-            present(f"building {building['name']} structure", bool(places) and any(s["kind"] == building["kind"] and abs(s["x"] - places[0]["at"][0]) <= 0.51 and abs(s["y"] - places[0]["at"][1]) <= 0.51 for s in structures))
+            if not peopled:
+                present(f"building {building['name']} structure (a town with no people: a {building['kind']} structure stands)", any(s["kind"] == building["kind"] for s in structures))
+            else:
+                present(f"building {building['name']} structure", bool(places) and any(s["kind"] == building["kind"] and abs(s["x"] - places[0]["at"][0]) <= 0.51 and abs(s["y"] - places[0]["at"][1]) <= 0.51 for s in structures))
             present(f"building {building['name']} sign", any(a["topic"] == building["name"] and a["text"] == building["name"] + (". " + building["about"] if building.get("about") else "") for a in artifacts))
         for kind, count in t.get("resources", {}).items():
             count_near = sum(r["kind"] == kind and (r["x"] - com.get("home_x", -10000)) ** 2 + (r["y"] - com.get("home_y", -10000)) ** 2 <= 24 ** 2 for r in rows["resource_node"])
@@ -311,6 +332,34 @@ def check_seed(seed, rows):
         c = communities.get(community["name"], {})
         equal(f"{community['name']} home", [c.get("home_x"), c.get("home_y")], community["home"])
         equal(f"{community['name']} members", sorted(chars[m["member"]]["name"] for m in rows["membership"] if m["community"] == c.get("id")), sorted(community["members"]))
+    # People's rhythms (docs/SEEDED_LIVES.md): a person without one from the seed has a drawn one
+    # (rising 04:00-09:00, to bed 19:30-02:30, an evening of 1.5-4.5 hours, no working hours and
+    # no second sleep: what every seed before lives-3 gives); one the seed gives is as given.
+    people = [c for c in rows["character"] if c["kind"] == "person"]
+    rhythm = {r["id"]: r for r in rows.get("rhythm", [])}
+    given = {r["name"]: r["rhythm"] for t in seed.get("towns", []) + seed.get("villages", []) for r in t.get("residents", []) if r.get("rhythm")}
+    drawn_ok = lambda r: 4.0 <= r["rise_h"] <= 9.0 and 19.5 <= r["bed_h"] <= 26.5 and 1.5 <= r["evening_h"] <= 4.5 and (r.get("work_from_h", 0), r.get("work_to_h", 0), r.get("nap_from_h", 0), r.get("nap_to_h", 0)) == (0, 0, 0, 0)
+    adults = [c for c in people if c.get("stage", 2) >= 1]
+    unseeded = [c for c in adults if c["name"] not in given]
+    bad = [(c["name"], rhythm.get(c["id"])) for c in unseeded if c["id"] in rhythm and not drawn_ok(rhythm[c["id"]])]
+    present("people without a seeded rhythm have a drawn one (no working hours, no second sleep)" + ("" if unseeded else " (none)"), not bad and sum(c["id"] in rhythm for c in unseeded) >= 0.9 * len(unseeded), {"people": len(unseeded), "with_row": sum(c["id"] in rhythm for c in unseeded), "wrong": bad[:10]})
+    def span(x):
+        # A seed's [from, to] as stored: from in 0..24, to after it within a day; empty is none.
+        if not x or (x[1] - x[0]) % 24 == 0:
+            return (0.0, 0.0)
+        return (x[0] % 24, x[0] % 24 + (x[1] - x[0]) % 24)
+
+    def as_given(r, g):
+        close = lambda a, b: abs(a - b) < 1e-3
+        rise = g["rises"] % 24 if "rises" in g else r["rise_h"]
+        work, nap = span(g.get("works")), span(g.get("second_sleep"))
+        awake = r["bed_h"] - r["rise_h"]
+        bed = "sleeps" not in g or close((r["bed_h"] - g["sleeps"]) % 24, 0) or close((r["bed_h"] - g["sleeps"]) % 24, 24) or close(awake, 8) or close(awake, 22)
+        return close(r["rise_h"], rise) and bed and close(r.get("work_from_h", 0), work[0]) and close(r.get("work_to_h", 0), work[1]) and close(r.get("nap_from_h", 0), nap[0]) and close(r.get("nap_to_h", 0), nap[1])
+
+    seeded = [(c["name"], c["id"]) for c in people if c["name"] in given]
+    wrong = [(n, given[n], rhythm.get(i)) for n, i in seeded if i not in rhythm or not as_given(rhythm[i], given[n])]
+    present("seeded rhythms are as given (any rising hour, working hours, a second sleep)" + ("" if seeded else " (none: the seed gives none)"), not wrong, {"seeded": len(seeded), "wrong": wrong[:10]})
     if m.get("kind") == "land":
         checks.extend(check_land(seed, rows, size[0], tiles))
     return checks
@@ -390,19 +439,28 @@ def check_land(seed, rows, side, tiles):
     present("no structure on open lots", all(l["structure"] == 0 for l in lots if l["kind"] not in DOOR_KINDS))
     present("doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in lots if l["structure"]), [l["id"] for l in lots if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE][:20])
     blocking = [l for l in lots if l["kind"] in BLOCKING]
-    walled = [l["id"] for l in blocking if tile(l["x"], l["y"]) == 7]
-    present("blocking lots stand on wall tiles", len(walled) == len(blocking), {"blocking": len(blocking), "wall_at_centre": len(walled), "open": [l["id"] for l in blocking if l["id"] not in walled][:20]})
+    # Wall where a model is solid at eye height, low (9) where it is not (`LandParams.sight`,
+    # the table's `eye_cells`; eye-2); over a drop's edge, a part that does not hide stays a
+    # drop (8). Never walkable.
+    walled = [l["id"] for l in blocking if tile(l["x"], l["y"]) in (7, 8, 9)]
+    present("blocking lots stand on wall, low or drop tiles", len(walled) == len(blocking), {"blocking": len(blocking), "unwalkable_at_centre": len(walled), "wall_at_centre": sum(tile(l["x"], l["y"]) == 7 for l in blocking), "open": [l["id"] for l in blocking if l["id"] not in walled][:20]})
+    # Drops between ground levels are `drop` (8), not `wall` (7): people see across them
+    # (docs/PERCEPTION.md). A planned settlement always has some; terraced towns usually do.
+    drops = sum(t.count(8) for t in tiles)
+    if plans:
+        present("a planned settlement's drops are drop tiles", drops > 0, {"drop_tiles": drops})
     present("open lots stay walkable", all(tile(l["x"], l["y"]) in WALKABLE | {2} for l in lots if l["kind"] in ("garden", "field", "lamp")))
     houses = {s["id"] for s in structures.values() if s["kind"] == "house"}
     lot_houses = {l["structure"] for l in lots if l["kind"] in ("house", "townhouse")}
     present("houses are lot houses", houses == lot_houses, {"houses": len(houses), "lot_houses": len(lot_houses)})
     owners = {structures[i]["owner"] for i in lot_houses if structures[i]["owner"]}
-    present("households own lot houses", len(owners) > 0, len(owners))
+    peopled = any(t.get("residents") or t.get("occupations") for t in seed.get("towns", []) + seed.get("villages", []))
+    present("households own lot houses" + ("" if peopled else " (none: the seed has no people)"), len(owners) > 0 if peopled else not owners, len(owners))
     bgs = {r["id"]: json.loads(r["text"]) for r in rows["background"]}
     folk = {s["community"]: s for s in settlements}
     members = {m["member"]: m["community"] for m in rows["membership"]}
     wrong = [i for i, c in members.items() if c in folk and (bgs.get(i, {}).get("folk") != folk[c]["kind"] or abs((bgs.get(i, {}).get("body_scale") or -1) - folk[c]["scale"]) > 1e-3)]
-    present("residents' backgrounds name their folk and scale", members and not wrong, wrong[:20])
+    present("residents' backgrounds name their folk and scale" + ("" if peopled else " (none: the seed has no people)"), (members if peopled else True) and not wrong, wrong[:20])
     # Town life (docs/TOWN_LIFE.md): residents know their places, found from their own
     # settlement's lots, and start on the seed's own ways.
     life = seed.get("town_life", {})
@@ -544,6 +602,87 @@ def check_plans(seed, rows, plans, tile):
             if not ok:
                 wrong.append({"lot": spec["id"], "row": {k: row[k] for k in ("kind", "model", "height_m", "width_m", "depth_m", "floor_m")}})
         present(f"plan {pid}: lots have their kinds, sizes, models, heights and level floors", not wrong, wrong[:10])
+        # Authored resources (`plans[].resources`): every one has a node of its kind at its point
+        # (the nearest walkable tile); a kind the world's tables lack refuses the seed
+        # (`floor::check`, checked in `guards`). Each node holds and regrows what the plan says
+        # (`max`; `regrow_per_h` in game hours, kept per real minute for the world's day), and the
+        # nodes naming one `pool` draw on the first one's stock.
+        r = math.radians(plan.get("rotation_deg", 0.0))
+        o, e, nv = plan["origin"], (math.cos(r), math.sin(r)), (math.sin(r), -math.cos(r))
+        land_pt = lambda q: (o[0] + e[0] * q[0] + nv[0] * q[1], o[1] + e[1] * q[0] + nv[1] * q[1])
+        hour_ms = rows["world"][0]["day_ms"] / 24.0
+        nodes = {}
+        for nd in rows["resource_node"]:
+            nodes.setdefault(nd["kind"], []).append(nd)
+        missing, wrong, pools = [], [], {}
+        for rs in plan.get("resources", []):
+            at = land_pt(rs["at"])
+            nd = min(nodes.get(rs["kind"], []), key=lambda n: math.dist(at, (n["x"], n["y"])), default=None)
+            if nd is None or math.dist(at, (nd["x"], nd["y"])) >= 2.5:
+                missing.append({"kind": rs["kind"], "at": [round(at[0], 1), round(at[1], 1)]})
+                continue
+            if rs.get("pool"):
+                pools.setdefault(rs["pool"], []).append(nd)
+            if "max" in rs and abs(nd["max"] - rs["max"]) > 1e-3 or "regrow_per_h" in rs and abs(nd["regen"] - rs["regrow_per_h"] * 60000.0 / hour_ms) > 1e-5:
+                wrong.append({"kind": rs["kind"], "node": {k: nd[k] for k in ("id", "max", "regen")}, "plan": {k: rs.get(k) for k in ("max", "regrow_per_h")}})
+        if plan.get("resources"):
+            kinds = Counter(rs["kind"] for rs in plan["resources"])
+            present(f"plan {pid}: its {len(plan['resources'])} authored resources stand where written ({dict(kinds)})", not missing, missing[:10])
+            present(f"plan {pid}: authored resources hold and regrow what the plan says, per real minute for the day", not wrong, wrong[:10])
+            shared = {k: sorted({n["pool"] for n in v}) for k, v in pools.items()}
+            heads = {k: v[0]["id"] for k, v in pools.items()}
+            present(f"plan {pid}: each of its {len(pools)} pools is one stock its spots share", all(len(v) == 1 and v[0] == heads[k] and v[0] != 0 for k, v in shared.items()), {k: {"spots": len(pools[k]), "pool": v} for k, v in shared.items()})
+        # Authored structures (`plans[].structures`) at their point, lot door or lot spot, lit for
+        # the time their fuel lasts at their kind's burning rate (the seed's laws), with their
+        # contents; and each lot's `contents` in the structure at its door.
+        lot_of = {spec["id"]: row for spec, row in zip(want, rows_of)}
+        spots = {spec["id"]: {sp["name"]: sp["at"] for sp in spec.get("spots", [])} for spec in want}
+
+        def lot_pt(lid, spot=None):
+            row = lot_of[lid]
+            c, d = (row["x"], row["y"]), (row["door_x"], row["door_y"])
+            k = row["depth_m"] * 0.5 + 0.5
+            f = ((d[0] - c[0]) / k, (d[1] - c[1]) / k)
+            if spot is None:
+                return d
+            q = spots[lid][spot]
+            return (c[0] + f[1] * q[0] + f[0] * q[1], c[1] - f[0] * q[0] + f[1] * q[1])
+
+        laws_src = seed.get("laws") or ((ROOT / "living/seeds" / seed["laws_file"]).read_text() if seed.get("laws_file") else "")
+        rate = {m.group(1): float(m.group(2)) for m in re.finditer(r'name:\s*"(\w+)"[^\n]*?burns:\s*#\{[^}]*?rate:\s*([\d.]+)', laws_src)}
+        held = {}
+        for iv in rows["inventory"]:
+            if iv["owner"] & STRUCTURE_BIT:
+                held.setdefault(iv["owner"] & ~STRUCTURE_BIT, {})[iv["item"]] = held.get(iv["owner"] & ~STRUCTURE_BIT, {}).get(iv["item"], 0) + iv["qty"]
+        by_kind = {}
+        for st in rows["structure"]:
+            by_kind.setdefault(st["kind"], []).append(st)
+        absent, unlit, unstocked, taken = [], [], [], set()
+        for st in plan.get("structures", []):
+            at = land_pt(st["at"]) if "at" in st else lot_pt(st["lot"], st.get("spot"))
+            near = [x for x in by_kind.get(st["kind"], []) if x["id"] not in taken and math.dist(at, (x["x"], x["y"])) < 2.5]
+            if not near:
+                absent.append({"kind": st["kind"], "at": [round(at[0], 1), round(at[1], 1)], "lot": st.get("lot")})
+                continue
+            x = min(near, key=lambda x: math.dist(at, (x["x"], x["y"])))
+            taken.add(x["id"])
+            fuel = st.get("fuel", 0.0)
+            want_ms = fuel / rate[st["kind"]] * hour_ms if fuel > 0 and st["kind"] in rate else 0.0
+            if abs((x["lit_until_ms"] - x["built_ms"] if x["lit_until_ms"] else 0) - want_ms) > 2.0:
+                unlit.append({"kind": st["kind"], "lot": st.get("lot"), "fuel": fuel, "lit_ms": x["lit_until_ms"] - x["built_ms"] if x["lit_until_ms"] else 0, "want_ms": want_ms})
+            if held.get(x["id"], {}) != st.get("contents", {}):
+                unstocked.append({"kind": st["kind"], "holds": held.get(x["id"], {}), "plan": st.get("contents", {})})
+        for spec in want:
+            if spec.get("contents"):
+                row = lot_of[spec["id"]]
+                if held.get(row["structure"], {}) != spec["contents"]:
+                    unstocked.append({"lot": spec["id"], "holds": held.get(row["structure"], {}), "plan": spec["contents"]})
+        if plan.get("structures"):
+            kinds = Counter(st["kind"] for st in plan["structures"])
+            present(f"plan {pid}: its {len(plan['structures'])} authored structures stand where written ({dict(kinds)})", not absent, absent[:10])
+            present(f"plan {pid}: authored fires are lit for as long as their fuel lasts at their burning rate", not unlit, unlit[:10])
+        if plan.get("structures") or any(spec.get("contents") for spec in want):
+            present(f"plan {pid}: authored structures and lot stores hold what the plan says", not unstocked, unstocked[:10])
         present(f"plan {pid}: doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in rows_of if l["structure"]), [l["id"] for l in rows_of if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE])
         key = {spec["id"]: row for spec, row in zip(want, rows_of)}
         if not town:

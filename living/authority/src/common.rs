@@ -65,6 +65,11 @@ pub fn set_profiling(on: bool) {
 }
 
 /// A named timing span logged by the host while profiling is on (see `tools/bench.py`).
+/// Whether spans are being logged (a profiling window is open).
+pub fn profiling() -> bool {
+    PROFILE.with(|p| p.get())
+}
+
 pub fn span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
     PROFILE.with(|p| p.get()).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
 }
@@ -491,25 +496,34 @@ pub fn hashed_draws(id: u32, salt: u64) -> impl FnMut() -> f32 {
     }
 }
 
-/// Where a body is in its own day at `hour`: (its bedtime, its evening). A person's rhythm
-/// row says when it rises and goes to bed and how long its evening is; without one, bedtime
-/// is the world's night and the evening 18:00 to 22:00.
-pub fn day_phase(ctx: &ReducerContext, id: u32, hour: f32) -> (bool, bool) {
+/// A rhythm row's hours (`living_rules::rhythm`).
+pub fn hours_of(r: &Rhythm) -> living_rules::rhythm::Hours {
+    living_rules::rhythm::Hours { rise_h: r.rise_h, bed_h: r.bed_h, evening_h: r.evening_h, work_from_h: r.work_from_h, work_to_h: r.work_to_h, nap_from_h: r.nap_from_h, nap_to_h: r.nap_to_h }
+}
+
+/// Where a body is in its own day at `hour`: its bedtime, its evening and its working hours. A
+/// person's rhythm row says when it rises and goes to bed, how long its evening is, its working
+/// hours and any second sleep (`living_rules::rhythm`); without one, bedtime is the world's
+/// night, the evening 18:00 to 22:00 and working hours the rest of the day.
+pub fn day_phase(ctx: &ReducerContext, id: u32, hour: f32) -> living_rules::rhythm::Phase {
     match ctx.db.rhythm().id().find(id) {
-        Some(r) => {
-            // Hours after noon run 12..36, so a bedtime past midnight compares in one range.
-            let h = if hour < 12.0 { hour + 24.0 } else { hour };
-            let bedtime = h >= r.bed_h && h < r.rise_h + 24.0;
-            let evening = h >= r.bed_h - r.evening_h && h < r.bed_h;
-            (bedtime, evening)
+        Some(r) => hours_of(&r).phase(hour),
+        None => {
+            let (bedtime, evening) = (scripts(ctx).is_night(hour), (18.0..22.0).contains(&hour));
+            living_rules::rhythm::Phase { bedtime, evening, work: !bedtime && !evening }
         }
-        None => (scripts(ctx).is_night(hour), (18.0..22.0).contains(&hour)),
     }
 }
 
-/// A species' life table (lifespan and stages).
-pub fn life_of(kind: &str) -> living_rules::life::Life {
+/// A species' life table as `species.json` gives it.
+pub fn species_life(kind: &str) -> living_rules::life::Life {
     species(kind).map(|s| s.life).unwrap_or_default()
+}
+
+/// A species' life table (lifespan and stages) under the world's rules: its species data, as a
+/// world's `life_years` law changes it (docs/CULLET_RULES.md); without the law, the data.
+pub fn life_of(ctx: &ReducerContext, kind: &str) -> living_rules::life::Life {
+    scripts(ctx).life(kind, species_life(kind))
 }
 
 /// The world's time for lives: days per year and pace.
@@ -518,8 +532,8 @@ pub fn pace(w: &World) -> living_rules::life::Pace {
 }
 
 /// Life stage of a character now, at the world's pace.
-pub fn stage_of(c: &Character, w: &World, now: u64) -> living_rules::life::Stage {
-    life_of(&c.kind).stage(age_days(c, w, now), pace(w))
+pub fn stage_of(ctx: &ReducerContext, c: &Character, w: &World, now: u64) -> living_rules::life::Stage {
+    life_of(ctx, &c.kind).stage(age_days(c, w, now), pace(w))
 }
 
 pub fn stage_code(s: living_rules::life::Stage) -> u8 {
@@ -729,6 +743,15 @@ pub fn graze_pasture(ctx: &ReducerContext, chunk: u32, now: u64) {
     }
 }
 
+/// The node whose stock a resource node draws on: its pool's (a fishing ground's spots share
+/// one limit), or itself.
+pub fn stock_of(ctx: &ReducerContext, r: &ResourceNode) -> ResourceNode {
+    if r.pool == 0 || r.pool == r.id {
+        return r.clone();
+    }
+    ctx.db.resource_node().id().find(r.pool).unwrap_or_else(|| r.clone())
+}
+
 pub fn amount_now(ctx: &ReducerContext, r: &ResourceNode, now: u64) -> f32 {
     let (epoch, day, year) = calendar(ctx);
     (r.amount + r.regen * living_rules::growing_ms(r.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(r.max)
@@ -853,17 +876,21 @@ pub fn gather_radius(ctx: &ReducerContext, sight: f32) -> f32 {
     sight.max(scripts(ctx).reach().glow)
 }
 
-/// Whether a spot is in lamplight: within the `lights` radius of a structure that gives light
-/// (`structure_traits()`); false at once when no kind gives light.
+/// Whether a spot is in lamplight: within the light of a structure that gives it (its kind's
+/// `lights`, or a fire's `burns.light`). A kind that `burns` gives light only while it is lit
+/// (`lit_until_ms` ahead of now): a lamp out of oil is dark. False at once when no kind gives
+/// light.
 pub fn lit_at(ctx: &ReducerContext, at: (f32, f32)) -> bool {
     let sc = scripts(ctx);
     let widest = sc.widest_light();
     if widest <= 0.0 {
         return false;
     }
+    let now = now_ms(ctx);
     structures_near(ctx, at, widest).into_iter().any(|(s, d)| {
-        let l = sc.structure(&s.kind).lights;
-        l > 0.0 && d <= l
+        let t = sc.structure(&s.kind);
+        let l = t.light();
+        l > 0.0 && d <= l && (t.burns.is_none() || living_rules::fire::lit(s.lit_until_ms, now))
     })
 }
 
@@ -1220,7 +1247,7 @@ pub fn same_routine(a: &str, b: &str) -> bool {
 /// holds). `built_ms` marks the last catch counted.
 pub fn trap_catch(ctx: &ReducerContext, s: &Structure, now: u64) {
     let sc = scripts(ctx);
-    let every = (sc.num_of("trap_every_s", "meat", 240.0) * 1000.0) as u64;
+    let every = sc.trap_every_ms() as u64;
     if every == 0 {
         return;
     }

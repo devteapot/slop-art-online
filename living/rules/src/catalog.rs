@@ -63,6 +63,11 @@ pub struct Skills {
     list: Vec<SkillSpec>,
     /// The world's items (`items()`), in the script's order.
     pub items: Vec<ItemSpec>,
+    /// Its kinds of resources and structures (`resources()`, `structures()`) and its techniques
+    /// (`know_how()`), in the script's order.
+    pub resources: Vec<KindSpec>,
+    pub structures: Vec<KindSpec>,
+    pub techniques: Vec<TechniqueSpec>,
     /// Indexes into `list` by name.
     by_name: Vec<(String, usize)>,
     /// The world's skills are not known here (a build without the script runtime, such as the
@@ -75,7 +80,7 @@ impl Skills {
     pub fn new(list: Vec<SkillSpec>) -> Self {
         let mut by_name: Vec<(String, usize)> = list.iter().enumerate().map(|(i, s)| (s.name.clone(), i)).collect();
         by_name.sort();
-        Self { list, by_name, items: Vec::new(), open: false }
+        Self { list, by_name, open: false, ..Default::default() }
     }
 
     /// Whether a name is a skill here (any name, when the skills are not known).
@@ -167,42 +172,38 @@ pub struct ItemSpec {
     pub traits: std::collections::BTreeMap<String, String>,
 }
 
-/// Practical techniques: must be known (world state, not belief) before use.
+/// A practical technique, as the world's script declares it (`know_how()`): must be known
+/// (world state, not belief) before use. What it takes to learn and use is the rules' to say
+/// (`requires(t)`, the skills' checks); `help` is what someone is told it is.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TechniqueSpec {
-    pub name: &'static str,
-    pub help: &'static str,
-    pub requires: &'static [&'static str],
+    pub name: String,
+    pub help: String,
 }
 
-pub const TECHNIQUES: &[TechniqueSpec] = &[
-    TechniqueSpec { name: "fire", help: "build a campfire (3 wood)", requires: &[] },
-    TechniqueSpec { name: "cooking", help: "cook raw fish or meat at a campfire", requires: &["fire"] },
-    TechniqueSpec { name: "spear", help: "craft a spear (2 wood, 1 stone)", requires: &[] },
-    TechniqueSpec { name: "shelter", help: "build a shelter (6 wood, 3 fiber)", requires: &[] },
-    TechniqueSpec { name: "storage", help: "build a storage (4 wood)", requires: &[] },
-    TechniqueSpec { name: "cloak", help: "craft a warm cloak (2 hide, 1 fiber) that keeps the night cold off", requires: &[] },
-    TechniqueSpec { name: "torch", help: "craft a torch (1 wood, 1 fiber) that lights the night", requires: &["fire"] },
-    TechniqueSpec { name: "planting", help: "plant berries to grow new berry bushes", requires: &[] },
-    TechniqueSpec { name: "writing", help: "write and read tablets and signs", requires: &[] },
-    TechniqueSpec { name: "masonry", help: "build walls (2 stone per tile)", requires: &[] },
-    TechniqueSpec { name: "carpentry", help: "build houses (6 wood, 4 clay, 2 stone; warm like a shelter and a fire) and gates (4 wood)", requires: &["shelter"] },
-    TechniqueSpec { name: "fishing", help: "craft a net (3 fiber) that brings in two fish at a time", requires: &[] },
-    TechniqueSpec { name: "smoking", help: "smoke raw fish or meat at a campfire so it keeps for weeks", requires: &["fire"] },
-    TechniqueSpec { name: "basketry", help: "craft a basket (2 fiber, 1 wood) to carry 20 more", requires: &[] },
-    TechniqueSpec { name: "archery", help: "craft a bow (2 wood, 1 fiber) and arrows (1 wood, 1 stone for 3) and shoot from afar", requires: &[] },
-    TechniqueSpec { name: "tanning", help: "craft leather from hide, and armor (3 leather, 1 fiber) that softens blows", requires: &[] },
-    TechniqueSpec { name: "medicine", help: "craft a salve (2 berries, 1 fiber); tending with a salve heals far more", requires: &[] },
-    TechniqueSpec { name: "trapping", help: "build a trap (2 wood, 2 fiber) that catches small game over time", requires: &[] },
-    TechniqueSpec { name: "bridging", help: "build a bridge (4 wood, 2 stone) over water beside you", requires: &["carpentry"] },
-    TechniqueSpec { name: "fire_bolt", help: "hurl a bolt of fire (firebolt) that burns the first creature in its path", requires: &["fire"] },
-    TechniqueSpec { name: "wound_tending", help: "close wounds quickly with your hands (the heal skill), your own or an ally's, even in a fight; not mending things", requires: &[] },
-    TechniqueSpec { name: "toolmaking", help: "craft an axe (2 wood, 1 stone; cuts wood twice as fast) or a pick (2 wood, 2 stone; breaks stone twice as fast)", requires: &[] },
-];
+/// A kind of resource or structure, as the script declares it (`resources()`, `structures()`):
+/// its name and its traits, as words (`yields: berries`). What the traits do is the rules' to
+/// say; the engine reads the few it runs (a structure's `warms`, `roof` and `burns`,
+/// `script::StructureTraits`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct KindSpec {
+    pub name: String,
+    pub traits: std::collections::BTreeMap<String, String>,
+}
 
 /// A technique by its name (a renamed technique by its old name too, see [`RENAMED`]).
-pub fn technique(name: &str) -> Option<&'static TechniqueSpec> {
+pub fn technique(name: &str) -> Option<TechniqueSpec> {
     let name = technique_name(name);
-    TECHNIQUES.iter().find(|t| t.name == name)
+    let w = skills();
+    if w.open {
+        return Some(TechniqueSpec { name: name.to_string(), ..Default::default() });
+    }
+    w.techniques.iter().find(|t| t.name == name).cloned()
+}
+
+/// The names of the world's techniques, in the script's order.
+pub fn technique_names() -> Vec<String> {
+    skills().techniques.iter().map(|t| t.name.clone()).collect()
 }
 
 /// Techniques that were renamed, old name first: seeds, stored know-how and written topics
@@ -230,24 +231,56 @@ pub fn item_names() -> Vec<String> {
     skills().items.iter().map(|i| i.name.clone()).collect()
 }
 
-pub const RESOURCES: &[(&str, &str)] = &[
-    ("berry_bush", "berries"),
-    ("tree", "wood"),
-    ("boulder", "stone"),
-    ("reeds", "fiber"),
-    ("fishing_spot", "fish"),
-    ("clay_bank", "clay"),
-];
-
-pub const STRUCTURES: &[&str] = &["campfire", "shelter", "storage", "remains", "sign", "bush_patch", "house", "gate", "trap", "hall", "workshop", "market", "inn", "lamp"];
 pub const CREATURES: &[&str] = &["person", "deer", "wolf"];
 /// Things built into the terrain itself rather than as structures.
 pub const TERRAIN_BUILDS: &[&str] = &["wall", "road", "bridge"];
 
+/// The kinds a build without the script runtime (the lab viewer) takes as resources and
+/// structures: the shipped script's before kinds became its data (2026-11-11). Every other
+/// process reads the world's kinds from its script.
+const OPEN_RESOURCES: &[&str] = &["berry_bush", "tree", "boulder", "reeds", "fishing_spot", "clay_bank"];
+const OPEN_STRUCTURES: &[&str] = &["campfire", "shelter", "storage", "remains", "sign", "bush_patch", "house", "gate", "trap", "hall", "workshop", "market", "inn"];
+
+/// Whether the world has this kind of resource.
+pub fn is_resource(kind: &str) -> bool {
+    let w = skills();
+    if w.open {
+        return OPEN_RESOURCES.contains(&kind);
+    }
+    w.resources.iter().any(|k| k.name == kind)
+}
+
+/// Whether the world has this kind of structure.
+pub fn is_structure(kind: &str) -> bool {
+    let w = skills();
+    if w.open {
+        return OPEN_STRUCTURES.contains(&kind);
+    }
+    w.structures.iter().any(|k| k.name == kind)
+}
+
+/// The names of the world's resource kinds, in the script's order.
+pub fn resource_names() -> Vec<String> {
+    let w = skills();
+    if w.open {
+        return OPEN_RESOURCES.iter().map(|k| k.to_string()).collect();
+    }
+    w.resources.iter().map(|k| k.name.clone()).collect()
+}
+
+/// The names of the world's structure kinds, in the script's order.
+pub fn structure_names() -> Vec<String> {
+    let w = skills();
+    if w.open {
+        return OPEN_STRUCTURES.iter().map(|k| k.to_string()).collect();
+    }
+    w.structures.iter().map(|k| k.name.clone()).collect()
+}
+
 pub fn kind_class(kind: &str) -> Option<KindClass> {
-    if RESOURCES.iter().any(|(k, _)| *k == kind) {
+    if is_resource(kind) {
         Some(KindClass::Resource)
-    } else if STRUCTURES.contains(&kind) {
+    } else if is_structure(kind) {
         Some(KindClass::Structure)
     } else if CREATURES.contains(&kind) || kind == "creature" {
         Some(KindClass::Creature)
@@ -258,8 +291,9 @@ pub fn kind_class(kind: &str) -> Option<KindClass> {
     }
 }
 
-pub fn resource_yield(kind: &str) -> Option<&'static str> {
-    RESOURCES.iter().find(|(k, _)| *k == kind).map(|(_, y)| *y)
+/// What gathering at a kind of resource yields (its `yields` trait).
+pub fn resource_yield(kind: &str) -> Option<String> {
+    skills().resources.iter().find(|k| k.name == kind).and_then(|k| k.traits.get("yields").cloned())
 }
 
 /// Compact skill reference for prompts.
@@ -293,7 +327,8 @@ pub fn skill_line(s: &SkillSpec) -> String {
     line
 }
 
-/// Skill reference with each skill's inputs and outputs, for people.
+/// Skill reference with each skill's inputs and outputs, for people: the skills a person is
+/// offered (`ui::offered`, the filter the player's interface uses too).
 pub fn skills_help_of(skills: &Skills) -> String {
-    skills.iter().filter(|s| s.listed).map(skill_line).collect::<Vec<_>>().join("\n")
+    crate::ui::offered(skills, None).into_iter().map(skill_line).collect::<Vec<_>>().join("\n")
 }

@@ -1,0 +1,383 @@
+{
+  "Lorcan Vane": {
+    "narrative": "I'm a Vane of Low Row, and I fish the Fish Steps at first light like my father did before the fever took him. The mornings are honest; it's the nights that cost me. Under the arcade, with the counters warm in my hand, I can feel a run coming — and then Roos or old Aldous takes it off me and I owe a little more. I mean to win it all back one night. Davin doesn't say much about it, which is worse than if he shouted.",
+    "values": [
+      "family",
+      "a fair catch",
+      "the next game",
+      "keeping face among the Strand"
+    ],
+    "goals": [
+      "Win back everything I owe in one good night at counters",
+      "Pay off the nine drops written in Aldous Quill's ledger",
+      "Settle with Dolly at the Marver before she stops serving me",
+      "See Wick grow up knowing his father's brothers"
+    ],
+    "pastimes": [
+      "Counters under the arcade every night",
+      "Sitting on the quay edge mending a line at dusk",
+      "A mug at the Marver with Eamon Tarn"
+    ],
+    "calling": "Line fishing at first light is the work I was made for; I'd be content if the nights didn't undo it.",
+    "mood": "hopeful and a little frayed",
+    "traits": {
+      "caution": 30,
+      "sociability": 72,
+      "empathy": 55,
+      "curiosity": 35,
+      "ambition": 45,
+      "introspection": 40,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Davin Vane",
+        "trust": 80,
+        "affinity": 75,
+        "label": "brother",
+        "note": "Steady as a stone, and he never once scolds me for the counters. I'd do the same for him."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 75,
+        "affinity": 70,
+        "label": "sister",
+        "note": "She runs the smokehouse and a house of five and still asks after me. She got the better of the three of us."
+      },
+      {
+        "name": "Wick Marl",
+        "trust": 90,
+        "affinity": 85,
+        "label": "nephew",
+        "note": "Sander's boy. I owe it to Sander to be something Wick can look at."
+      },
+      {
+        "name": "Thessaly Marl",
+        "trust": 65,
+        "affinity": 55,
+        "label": "Wick's mother",
+        "note": "Night watch at the Cone, and she never asks me for a drop. I respect that more than I say."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 40,
+        "affinity": 20,
+        "label": "tally keeper",
+        "note": "He writes my losses neat as a grave marker and never loses himself. Nine drops, in his book, in his hand."
+      },
+      {
+        "name": "Roos Achterberg",
+        "trust": 55,
+        "affinity": 45,
+        "label": "counters rival",
+        "note": "She takes my drops most nights and smiles doing it. One night the board will turn."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 50,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "Good cook, sharp eye. She's kept my tab open longer than she should have."
+      },
+      {
+        "name": "Chidi Okoro",
+        "trust": 60,
+        "affinity": 50,
+        "label": "line-maker",
+        "note": "Best line on the island and he knows it. I owe him for the last spool and he hasn't pressed me."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 70,
+        "affinity": 65,
+        "label": "drinking friend",
+        "note": "My sister's good-brother. We put the town to rights at the Marver most evenings."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 60,
+        "affinity": 40,
+        "label": "fellow fisher",
+        "note": "Fishes beside me at the Steps and outs me every time. Sharp tongue, good hand."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 65,
+        "affinity": 55,
+        "label": "catch divider",
+        "note": "She divides fair, even to a Vane who owes everybody. I'd not cross her."
+      },
+      {
+        "name": "Rafe Dunlin",
+        "trust": 50,
+        "affinity": 35,
+        "label": "night fisher",
+        "note": "Fishes the mole by the lamp while I'm losing at counters. Sensible man."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: Sander went out to the mole in the cold and never came back, and Wick was born the next winter without him.",
+        "salience": 1.0,
+        "about": [
+          "Davin Vane",
+          "Petra Tarn",
+          "Wick Marl",
+          "Thessaly Marl"
+        ]
+      },
+      {
+        "gist": "The night I won four drops straight off Roos and felt like the best player in Cullet — then gave them all back before the arcade emptied.",
+        "salience": 0.7,
+        "about": [
+          "Roos Achterberg",
+          "Aldous Quill"
+        ]
+      },
+      {
+        "gist": "Aldous Quill reading my name out of the ledger in front of the arches, and the nine drops going in the book in his neat hand.",
+        "salience": 0.8,
+        "about": [
+          "Aldous Quill"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm took the end rail of the mole; I helped Davin and the others haul the broken timber up before the sea got it.",
+        "salience": 0.5,
+        "about": [
+          "Davin Vane"
+        ]
+      },
+      {
+        "gist": "A morning at the Fish Steps when the fish came so thick Magda gave me a double share, and I carried half of it to Petra's smokehouse.",
+        "salience": 0.6,
+        "about": [
+          "Magda Tarn",
+          "Petra Tarn"
+        ]
+      },
+      {
+        "gist": "Davin pushing the handcart up the wynd with a load of peat, and me thinking he works harder than any of us and gets no notice for it.",
+        "salience": 0.5,
+        "about": [
+          "Davin Vane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "one_good_night_will_set_it_right",
+        "value": 0.85,
+        "why": "Every loss is just the board waiting to turn; I've felt the run coming."
+      },
+      {
+        "key": "family_before_pride",
+        "value": 0.8,
+        "why": "Sander's gone and Wick's here; whatever I owe, the Vanes stand together."
+      },
+      {
+        "key": "a_written_debt_is_a_public_shame",
+        "value": 0.7,
+        "why": "The book is open to anyone who asks, and my name's in it in Aldous's hand."
+      },
+      {
+        "key": "the_fish_steps_are_honest_work",
+        "value": 0.75,
+        "why": "Whatever the night takes, the morning catch is clean and mine."
+      },
+      {
+        "key": "dont_ask_davin_about_money",
+        "value": 0.6,
+        "why": "He's never once mentioned my debts and I'd rather not hear him start."
+      }
+    ],
+    "secret": ""
+  },
+  "Davin Vane": {
+    "narrative": "I push the handcart and walk the Heron's wheel, and the town pays me a drop here and there for it. It's not a trade, whatever anyone says — a man wants something he can hand down. Lorcan's my brother and he's drowning in drops a little at a time, so I've been paying a bit of it off quiet, through Dolly, with Aldous writing it. He mustn't know. He'd take it as pity, and it isn't that.",
+    "values": [
+      "keeping quiet",
+      "family",
+      "an honest day's haul",
+      "a trade to call my own"
+    ],
+    "goals": [
+      "Find work that is mine, not just carrying for others",
+      "Clear the rest of Lorcan's Marver debt without him finding out",
+      "Save enough drops to set up properly one day",
+      "Keep Wick and Petra from ever needing to worry about the brothers"
+    ],
+    "pastimes": [
+      "Walking the strand at low tide looking at what the sea's left",
+      "A quiet mug at the Marver after the cart's put away",
+      "Riding Wick on the handcart when the load's light"
+    ],
+    "calling": "I'd be a boatwright or a smith if the island had room for another — something where the work stays made after the day's done.",
+    "mood": "quiet and a little worn",
+    "traits": {
+      "caution": 70,
+      "sociability": 45,
+      "empathy": 75,
+      "curiosity": 40,
+      "ambition": 55,
+      "introspection": 65,
+      "temper": 25,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Lorcan Vane",
+        "trust": 70,
+        "affinity": 80,
+        "label": "brother",
+        "note": "He'd give me his last drop if I asked, which is exactly why he's in the book and I'm not."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 80,
+        "affinity": 70,
+        "label": "sister",
+        "note": "She's got a head for the smokehouse and a heart for all of us. I'd tell her anything but this."
+      },
+      {
+        "name": "Wick Marl",
+        "trust": 90,
+        "affinity": 85,
+        "label": "nephew",
+        "note": "Sander's boy. When I put him on the cart he laughs the whole length of Low Row."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 65,
+        "affinity": 50,
+        "label": "keeper of my secret",
+        "note": "She took the six drops without a word and put it against Lorcan's tab. She's never breathed it."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 60,
+        "affinity": 40,
+        "label": "tally keeper",
+        "note": "He wrote it in the book as I asked and said nothing more. A careful man."
+      },
+      {
+        "name": "Thessaly Marl",
+        "trust": 65,
+        "affinity": 55,
+        "label": "Wick's mother",
+        "note": "She works the night watch and trusts me with her boy's name. I'd not let her down."
+      },
+      {
+        "name": "Bram Calloway",
+        "trust": 55,
+        "affinity": 50,
+        "label": "the boatwright",
+        "note": "I walk his wheel when he lifts a load. He builds a ship and I carry for it; I'd like to build something."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 50,
+        "affinity": 45,
+        "label": "peat man",
+        "note": "I cart his peat down and he pays fair. He grumbles about the Cone's price and I listen."
+      },
+      {
+        "name": "Nan Fenwick",
+        "trust": 50,
+        "affinity": 40,
+        "label": "customer",
+        "note": "She pays me to cart kelp up the wynds and always wants more than the gatherers bring."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend",
+        "note": "He drinks with Lorcan at the Marver. I keep my mouth shut and drink with them."
+      },
+      {
+        "name": "Kit Calloway",
+        "trust": 55,
+        "affinity": 60,
+        "label": "young friend",
+        "note": "A boy who wants to be something. I know how that feels and I've told him so."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: Sander drowned off the mole in the cold, and I carried his body up with Lorcan and could not speak.",
+        "salience": 1.0,
+        "about": [
+          "Lorcan Vane",
+          "Petra Tarn",
+          "Thessaly Marl"
+        ]
+      },
+      {
+        "gist": "Dolly counting six drops into her palm at the Marver's back door and saying she'd put it on Lorcan's tab and tell no one.",
+        "salience": 0.9,
+        "about": [
+          "Dolly Achterberg"
+        ]
+      },
+      {
+        "gist": "Aldous Quill writing the six drops in the ledger in his neat hand and asking me once, only once, if I was sure.",
+        "salience": 0.8,
+        "about": [
+          "Aldous Quill",
+          "Dolly Achterberg"
+        ]
+      },
+      {
+        "gist": "Walking the Heron's wheel all afternoon while Bram lifted the new frame timber into the dry dock, and my legs shaking after.",
+        "salience": 0.6,
+        "about": [
+          "Bram Calloway"
+        ]
+      },
+      {
+        "gist": "The storm last autumn took slates off Low Row and I spent two days hauling them down to Gwil Stannard's cart.",
+        "salience": 0.5,
+        "about": [
+          "Gwil Stannard"
+        ]
+      },
+      {
+        "gist": "Putting Wick on the empty handcart and running him along the quay, and him shouting for more.",
+        "salience": 0.7,
+        "about": [
+          "Wick Marl"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_man_pays_his_brothers_debts_quietly",
+        "value": 0.9,
+        "why": "If Lorcan knew, he'd never take another drop from me, and he'd sink."
+      },
+      {
+        "key": "carrying_is_not_a_trade",
+        "value": 0.7,
+        "why": "Anyone with a back can push a cart; I want work that leaves something standing."
+      },
+      {
+        "key": "keep_your_business_to_yourself",
+        "value": 0.8,
+        "why": "The whole town talks at the wash-house wall and I'd rather not be talked about."
+      },
+      {
+        "key": "the_ledger_is_the_ledger",
+        "value": 0.6,
+        "why": "Aldous keeps it straight; better a written debt than a remembered one."
+      },
+      {
+        "key": "help_the_young_ones_find_a_way",
+        "value": 0.65,
+        "why": "Kit and Wick will need someone to tell them the truth and not laugh at them."
+      }
+    ],
+    "secret": "I have paid six drops of Lorcan's debt to the Marver without telling him. Dolly knows, and Aldous wrote it."
+  }
+}

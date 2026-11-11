@@ -25,15 +25,33 @@ const CHUNKS_PER_FRAME: usize = 3;
 /// Ground samples per metre.
 const RES: u32 = 2;
 
-/// How far (metres) terrain is drawn.
+/// How far (metres) terrain is drawn on a tile world, and the current environment's fog.
 #[derive(Resource)]
 pub struct Draw {
     pub radius: f32,
+    /// The current environment's mood fog (start, end), metres for an ordinary adult: the camera
+    /// fogs by it (`camera::follow`), and landmarks and the ground under them are drawn out to its
+    /// end ([`Draw::landmark_reach`]). None (tile worlds, the character line-up): the camera's own
+    /// fog round its draw radius.
+    pub fog: Option<(f32, f32)>,
 }
 
 impl Default for Draw {
     fn default() -> Self {
-        Self { radius: 110.0 }
+        Self { radius: 110.0, fog: None }
+    }
+}
+
+impl Draw {
+    /// Take an environment's mood: its fog distances.
+    pub fn mood(&mut self, md: &crate::envs::Mood) {
+        self.fog = Some((md.fog_start.max(0.0), md.fog_end.max(md.fog_start + 1.0)));
+    }
+
+    /// How far landmarks, and the coarse ground and sea under them, are drawn (m): where the
+    /// mood's fog is complete, so nothing appears at that distance. 0 without a mood.
+    pub fn landmark_reach(&self) -> f32 {
+        self.fog.map_or(0.0, |f| f.1)
     }
 }
 
@@ -379,6 +397,10 @@ fn ground_color(t: Terrain) -> [f32; 4] {
         Terrain::Dirt => rgb(150, 118, 82),
         Terrain::Road => rgb(176, 156, 120),
         Terrain::Wall => rgb(140, 120, 90),
+        // A drop between levels: a bank, open to the eye (no block is raised on it).
+        Terrain::Drop => rgb(132, 112, 84),
+        // Under a low thing (a cart, a low well): drawn as wall ground, with no block raised.
+        Terrain::Low => rgb(140, 120, 90),
     }
 }
 
@@ -591,7 +613,7 @@ const LAND_DRAWS: &[&str] = &["tree", "house", "hall", "inn", "workshop", "marke
 /// ground under them is known): on tile worlds all of them; on a land world (the island) what it
 /// does not draw itself, standing on its ground (what `verbs.rs` lets F act on).
 #[allow(clippy::too_many_arguments)]
-pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>, island: Option<Res<crate::island::Island>>) {
+pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>, island: Option<Res<crate::island::Island>>, assets: Res<AssetServer>) {
     let Some(conn) = &net.conn else { return };
     let mut seen: HashSet<(u8, u64)> = HashSet::new();
     let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
@@ -617,6 +639,23 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
             })
             .clone();
         let at = island.as_ref().map_or_else(|| scene.at3(x, y), |i| Vec3::new(x, i.height(x, y), y));
+        // A planned settlement's kit may model the structure (`island::structure_model`): drawn
+        // at its real size, fitted and converted like a lot's model. A fire keeps its flame
+        // unless the model glows itself.
+        if let Some((file, yaw)) = island.as_ref().filter(|_| key.0 == 1).and_then(|i| crate::island::structure_model(&i.land, &kind, Vec2::new(x, y))) {
+            let model = crate::lookdev::Model { vrm: false, file: file.clone(), height: 0.0, ground_y: at.y, glow: None };
+            let root = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
+            let e = commands.spawn((Thing(Vec2::new(x, y)), model, bevy::world_serialization::WorldAssetRoot(root), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)), Visibility::Hidden)).id();
+            if let (Some((g, color)), false) = (glow, crate::lookdev::has_glow(&file)) {
+                let mat = palette.color(&mut mats, &style, color, true);
+                commands.entity(e).with_children(|c| {
+                    c.spawn((Mesh3d(g), MeshMaterial3d(mat), Transform::default()));
+                });
+            }
+            debug!("things: {kind} #{} drawn as {file}", key.1);
+            scene.things.insert(key, e);
+            continue;
+        }
         let turn = Quat::from_rotation_y(hash(x.to_bits(), y.to_bits()) * std::f32::consts::TAU);
         let e = commands
             .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill)), crate::style::stencil()))

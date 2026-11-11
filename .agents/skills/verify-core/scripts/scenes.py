@@ -5,7 +5,10 @@ import json
 import math
 import re
 import subprocess
+import os
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -36,8 +39,31 @@ class Scene:
         return r
 
     def call(self, reducer, *args, check=True):
-        return self.command("call", "-s", "local", self.db, reducer,
-                            *(json.dumps(a) for a in args), check=check)
+        enc = [json.dumps(a) for a in args]
+        if sum(map(len, enc)) > 64_000:
+            return self.http_call(reducer, list(args), check)
+        return self.command("call", "-s", "local", self.db, reducer, *enc, check=check)
+
+    def http_call(self, reducer, args, check=True):
+        """A call too big for the command line (a script is past the 128 KiB one argument may
+        hold), over HTTP as the world admin (the CLI's identity)."""
+        if not getattr(self, "token", None):
+            out = self.command("login", "show", "--token").stdout
+            self.token = next(line.rsplit(" is ", 1)[1].strip() for line in out.splitlines() if "auth token" in line and " is " in line)
+        url = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
+        req = urllib.request.Request(f"{url}/v1/database/{self.db}/call/{reducer}", data=json.dumps(args).encode(), method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", f"Bearer {self.token}")
+        try:
+            with urllib.request.urlopen(req, timeout=180) as r:
+                code, body = r.status, r.read().decode()
+        except urllib.error.HTTPError as e:
+            code, body = e.code, e.read().decode()
+        with self.log.open("a") as f:
+            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": ["call (http)", self.db, reducer, f"{len(json.dumps(args))} bytes"], "exit": 0 if code == 200 else 1, "stdout": body, "stderr": ""}) + "\n")
+        if check and code != 200:
+            raise RuntimeError(f"{reducer} over HTTP failed: {code} {body[-500:]}")
+        return subprocess.CompletedProcess([reducer], 0 if code == 200 else 1, body, "")
 
     def rows(self, query, label=None):
         r = self.command("sql", "--format", "json", "-s", "local", self.db, query)
@@ -186,7 +212,9 @@ def needs(s):
     s.expect("actor is exposed to night cold", not cold["rate_key"] & (64 | 128))
     s.call("grant_items", a, "cloak", 1)
     s.graph(a, {"first": [{"do": "rest"}]})
-    s.wait(lambda: s.vitals(a)["rate_key"] != cold["rate_key"])
+    # The new rest resets the key to 0 before the needs are next read; wait for the key that
+    # holds the cloak (bit 10) while still resting (bit 9) at night (bit 1), not that reset.
+    s.wait(lambda: (s.vitals(a)["rate_key"] & (1024 | 512 | 2)) == (1024 | 512 | 2))
     warm = s.vitals(a, "cloaked")
     # An ordinary night's cold tires (1.5 a minute times `person_pace`, divided by the body's
     # hardiness gene) and does not hurt; only winter nights and nights in the rain do
@@ -251,6 +279,61 @@ def seize(s):
     news = [r for r in s.story("attack", a, "struck-yielded") if "had yielded" in r["text"]]
     s.expect("a blow can kill someone who yielded, and striking them is news",
              "after yielding" in dead["cause"] and bool(s.story("killing", a, "killing")) and bool(news))
+
+
+def death_names(s):
+    """A community member killed by an outsider in front of another member and a bystander.
+
+    Who knew the dead by name when they died still names them in the death percept and at
+    the remains; the killer reads the death as done by "you"; the bystander, who never knew
+    either, reads strangers (`die`, `witnessed`, `perception::knows_name`)."""
+    victim, member, killer, bystander = s.people(4)
+    names = {c["id"]: c["name"] for c in s.rows("SELECT id, name FROM character")}
+    vname, kname = names[victim], names[killer]
+    community = f"Verify Hollow {victim}"
+    s.act(victim, {"do": "found", "text": community})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {victim}"))
+    s.call("place_near", member, victim)
+    s.act(member, {"do": "join", "target": {"id": victim}})
+    s.wait(lambda: s.rows(f"SELECT * FROM join_request WHERE asker = {member}"))
+    s.act(victim, {"do": "welcome", "target": {"id": member}})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {member}"))
+    s.rows(f"SELECT * FROM membership WHERE member = {victim} OR member = {member}", "membership-before")
+    s.expect("the two share a community and the others belong to none",
+             len({m["community"] for m in s.rows(f"SELECT community FROM membership WHERE member = {victim} OR member = {member}")}) == 1
+             and not s.rows(f"SELECT * FROM membership WHERE member = {killer} OR member = {bystander}"))
+    for w in (killer, bystander):
+        s.call("place_near", w, victim)
+    s.call("grant_items", killer, "spear", 1)
+    # As in the play-test: the victim gives in, and the blows go on to death.
+    s.graph(victim, {"seq": [{"do": "yield", "target": {"id": killer}}, {"wait": 120}]})
+    s.wait(lambda: s.story("yield", victim))
+    s.graph(killer, {"first": [{"do": {"skill": "attack", "target": {"id": victim}}}, {"wait": 1}]})
+    s.wait(lambda: not s.rows(f"SELECT alive FROM character WHERE id = {victim}")[0]["alive"], seconds=90)
+    s.graph(killer, {"wait": 120})
+    dead = s.rows(f"SELECT * FROM character WHERE id = {victim}", "killed")[0]
+    s.rows(f"SELECT * FROM membership WHERE member = {victim} OR member = {member}", "membership-after")
+    known = s.rows(f"SELECT * FROM acquaintance WHERE known = {victim}", "acquaintance-after")
+    s.expect("the surviving member keeps the dead's name as an acquaintance, and no one else gains it",
+             sorted(r["observer"] for r in known) == [member], known, fatal=False)
+    deaths = {w: s.wait(lambda w=w: [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {w}") if r["kind"] == "death"], seconds=20)
+              for w in (member, killer, bystander)}
+    # The remains are noticed when each mind next looks round (`brain.rs`, structures).
+    remains = {w: s.wait(lambda w=w: [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {w}") if r["kind"] == "saw" and "remains of" in r["text"]], seconds=60)
+               for w in (member, bystander)}
+    texts = {"victim": vname, "killer": kname, "death": {names[w]: t for w, t in deaths.items()}, "remains": {names[w]: t for w, t in remains.items()}}
+    (s.out / f"{s.name}-texts.json").write_text(json.dumps(texts, indent=2) + "\n")
+    print(json.dumps(texts, indent=2), flush=True)
+    s.expect("the victim yielded before the killing blow", "after yielding" in dead["cause"], dead["cause"], fatal=False)
+    s.expect("a member who saw it names the dead in the death percept",
+             any(t.startswith(vname + " was killed by a stranger") for t in deaths[member]), deaths[member], fatal=False)
+    s.expect("a member names the dead at the remains", any(f"the remains of {vname}" in t for t in remains[member]), remains[member], fatal=False)
+    s.expect("the killer reads the death as done by you",
+             any(t.endswith("was killed by you") or "was killed by you after yielding" in t for t in deaths[killer]) and not any(kname in t for t in deaths[killer]),
+             deaths[killer], fatal=False)
+    s.expect("a bystander who knew neither reads strangers",
+             any(t.startswith("A stranger was killed by a stranger") for t in deaths[bystander]) and any("the remains of a stranger" in t for t in remains[bystander]),
+             {"death": deaths[bystander], "remains": remains[bystander]}, fatal=False)
 
 
 def lifecycle(s):
@@ -625,7 +708,7 @@ def wall_geometry(s):
             if x < W and y < H:
                 tiles[y * W + x] = t
     at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
-    walk = lambda x, y: at(x, y) not in (2, 4, 7)
+    walk = lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
     for y in range(4, H - 4):
         for x in range(4, W - 4):
             if not walk(x, y):
@@ -672,6 +755,98 @@ def sight(s):
 
 
 
+def drop_geometry(s, cls=8):
+    """On this world's own map: an `eye` tile and an `across` one on one axis with only tiles of
+    class `cls` (8 a drop, 9 a low thing; 1 to 3 of them) between and walkable ground behind each
+    for 3 tiles, away from the obstacle's ends (it runs on across the line for 2 tiles each way, 1
+    for a low thing), so the way round is not a step past its end. Returns the spots and a tile
+    lookup."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray([4]) * (W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
+    walk = lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
+    for y in range(4, H - 4):
+        for x in range(4, W - 4):
+            if at(x, y) != cls:
+                continue
+            ext = 2 if cls == 8 else 1
+            for dx, dy in [(1, 0), (0, 1)]:
+                if not walk(x - dx, y - dy) or not all(at(x + k * dy, y + k * dx) == cls for k in range(-ext, ext + 1)):
+                    continue
+                for gap in (1, 2, 3):
+                    bx, by = x + gap * dx, y + gap * dy
+                    if walk(bx, by) and all(at(x + i * dx, y + i * dy) == cls for i in range(gap)) \
+                            and all(walk(x - i * dx, y - i * dy) and walk(bx + i * dx, by + i * dy) for i in range(1, 4)):
+                        return {"eye": (x - 2 * dx + .5, y - 2 * dy + .5), "across": (bx + 2 * dx + .5, by + 2 * dy + .5), "drop": [(x + i * dx, y + i * dy) for i in range(gap)]}, at
+    raise RuntimeError(f"no {'drop' if cls == 8 else 'low'} geometry on this map")
+
+
+def drop(s):
+    """A drop between two ground levels (tile 8, `Terrain::Drop`) blocks the foot, not the eye
+    (docs/PERCEPTION.md). A fight on one side is watched from the other: the watcher's graph sees
+    the attacker and waves at it, and it witnesses the fight. Then a person on the far side is
+    sent (`goto`) to the fight's spot: its body never stands on a drop tile, and the route the
+    authority keeps for it (`body.path`, from where it is) never crosses one; it goes round (by a
+    stair or the drop's end) or is refused. On a world with
+    drops (`--seed plan-test` or `island`). Admin `place_at` and `set_behavior` set the scene.
+    As the `low` scene the same is driven over low tiles (9: a cart, an open stall, a well, a
+    building's overhang: open at eye height, `LandParams.sight` and the table's `eye_cells`) on
+    an `island` run."""
+    what = "drop" if s.name == "drop" else "low thing"
+    spots, at = drop_geometry(s, 8 if s.name == "drop" else 9)
+    (s.out / f"{s.name}-spots.json").write_text(json.dumps(spots, indent=2) + "\n")
+    attacker, victim, watcher, walker = s.people(4)
+    fight = spots["eye"]
+    s.call("place_at", attacker, *fight)
+    s.call("place_at", victim, *fight)
+    s.call("place_at", watcher, *spots["across"])
+    s.call("place_at", walker, spots["across"][0] + 1.0, spots["across"][1])
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(watcher, {"first": {"label": "watch", "children": [
+        {"if": {"cond": {"sees": {"id": attacker}}, "then": {"do": {"skill": "wave", "target": {"id": attacker}}}}},
+        {"wait": 3}]}})
+    s.graph(attacker, {"do": {"skill": "attack", "target": {"id": victim}}})
+    time.sleep(8)
+    uses = [u for u in s.rows("SELECT * FROM skill_use", "uses") if u["at_ms"] >= t0 and u["skill"] == "wave"]
+    s.expect(f"a graph across the {what} sees the attacker (waves at it)", any(u["actor"] == watcher and u["target"] == attacker for u in uses), uses, fatal=False)
+    fights = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {watcher}", "experience-watcher") if r["kind"] == "fight" and r["at_ms"] >= t0]
+    s.expect(f"the resident across the {what} witnesses the fight", fights, fights[:2], fatal=False)
+    s.expect("the fight happened (chronicle)", s.rows(f"SELECT * FROM chronicle WHERE kind = 'attack' AND a = {attacker}", "attack-story"))
+    s.graph(attacker, {"wait": 120})
+    # The walker is sent across: steering and routing keep it off the drop.
+    start = body_at(s, walker)
+    s.graph(walker, {"seq": [{"do": {"skill": "goto", "target": {"at": list(fight)}}}, {"wait": 300}]})
+    pts, routes = [], []
+    end = time.monotonic() + 12
+    while time.monotonic() < end:
+        row = s.rows(f"SELECT x, y, t_ms, vx, vy, next_ms, path FROM body WHERE id = {walker}")[0]
+        here = body_at(s, walker, row=row)
+        pts.append(here)
+        corners = [(w["x"], w["y"]) if isinstance(w, dict) else (w[0], w[1]) for w in row["path"]]
+        routes.append([here] + corners)
+        time.sleep(0.25)
+    is_blocked = lambda q: at(math.floor(q[0]), math.floor(q[1])) in (2, 4, 7, 8, 9)
+    blocked = [q for q in pts if is_blocked(q)]
+    # The route ahead, walked in 0.1 m steps: no leg crosses a blocked tile.
+    def crosses(a, b):
+        n = max(1, math.ceil(math.dist(a, b) / 0.1))
+        return any(is_blocked((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) for i in range(n + 1))
+    jumps = [(r[i], r[i + 1]) for r in routes for i in range(len(r) - 1) if crosses(r[i], r[i + 1])]
+    goto = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {walker}", "walker-uses") if u["skill"] == "goto" and u["at_ms"] >= t0]
+    (s.out / f"{s.name}-walk.json").write_text(json.dumps({"start": start, "trail": pts, "routes": routes, "uses": goto}, indent=1) + "\n")
+    s.expect(f"a walk across the {what} never stands on it, and its route never crosses it", pts and not blocked and not jumps,
+             {"start": start, "end": pts[-1] if pts else None, "walked_m": round(sum(math.dist(a, b) for a, b in zip(pts, pts[1:])), 1), "goto": [u["outcome"] for u in goto][-1:], "route_corners": max((len(r) - 1 for r in routes), default=0), "blocked": blocked[:5], "crossing_legs": jumps[:3]})
+
+
 def open_line(s, length=16, avoid=()):
     """A row of `length` walkable tiles on this world's map, west to east, with nothing that
     blocks sight on it: the tile centres from its west end. With `avoid`, the row starts more
@@ -687,7 +862,7 @@ def open_line(s, length=16, avoid=()):
             x, y = cx * 16 + k % 16, cy * 16 + k // 16
             if x < W and y < H:
                 tiles[y * W + x] = t
-    walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7)
+    walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7, 8, 9)
     for y in range(8, H - 8, 3):
         for x in range(8, W - length - 8, 2):
             if all(walk(x + i, y + d) for i in range(length) for d in (-1, 0, 1)) and all(math.dist((x + .5, y + .5), q) > 10 for q in avoid):
@@ -984,6 +1159,32 @@ def food(s):
              and after.get("berries", 0) == held.get("berries", 0), {"before": held, "after": after})
 
 
+def teach(s):
+    """Every know-how can be taught, not only what experimenting can reveal: a person who
+    knows fire_bolt and wound_tending teaches each to a learner (before 2026-11-11
+    `teach_check` checked `techniques()`, the materials' discoveries, and refused both as "no
+    technique called …"). A thing is still refused, with what makes it."""
+    a, b = s.people(2)
+    s.call("place_near", b, a)
+    for t in ("fire_bolt", "wound_tending"):
+        s.call("grant_know_how", a, t)
+    for t in ("fire_bolt", "wound_tending"):
+        s.act(a, {"do": "teach", "item": t, "target": {"id": b}})
+        known = lambda: [k for k in s.rows(f"SELECT * FROM know_how WHERE actor = {b}") if k["technique"] == t]
+        try:
+            row = s.wait(known, seconds=40)
+        except TimeoutError:
+            row = []
+        s.expect(f"a knower teaches {t}", row and "taught by" in row[0]["source"], {"learner": s.rows(f"SELECT * FROM know_how WHERE actor = {b}", f"learner-{t}"), "teacher told": [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {a}") if t in r["text"]]}, fatal=False)
+        s.expect(f"the learner is told it was taught {t}", s.told(b, f"taught you {t}", "learned"), [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {b}") if t in r["text"]], fatal=False)
+    s.act(a, {"do": "teach", "item": "leather", "target": {"id": b}})
+    try:
+        why = s.wait(lambda: [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {a}") if "leather is a thing, not a technique" in r["text"]], seconds=15)
+    except TimeoutError:
+        why = []
+    s.expect("a thing is refused with what makes it", why, why, fatal=False)
+
+
 def refusal(s):
     """A routine whose action is refused as it would start is counted and told like any
     failure: its `routine_stat` counts it with the reason, the character is told once (not
@@ -1118,7 +1319,9 @@ def dealings(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-REMAINS_S = 90
+# Remains lie 3 game hours here: 90 real seconds on the 12-minute day (`remains_h`, turned into
+# real time for the world's day by the engine).
+REMAINS_H = 3
 
 
 def carcass_law(kind):
@@ -1131,9 +1334,9 @@ def carcass_law(kind):
 
 def remains(s):
     """Every death leaves remains with the `carcass` law's items; a kill feeds nobody by itself;
-    any creature beside the remains takes from them; they are gone after `remains_s`; a wander
+    any creature beside the remains takes from them; they are gone after `remains_h` (game hours); a wander
     keeps its heading (the `motion` law's `wander_turn`, `wander_keep_s`). Needs a world with deer and wolves (stage1-acts)."""
-    src = compose((ROOT / "living/scripts/skills.rhai").read_text(), {"remains_s": f"fn remains_s(kind) {{ {REMAINS_S} }}"})
+    src = compose((ROOT / "living/scripts/skills.rhai").read_text(), {"remains_h": f"fn remains_h(kind) {{ {REMAINS_H}.0 }}"})
     s.call("install_script", src)
     for c in s.rows("SELECT id FROM character WHERE alive = true"):
         s.graph(c["id"], {"wait": 600})
@@ -1156,7 +1359,7 @@ def remains(s):
     r_a = s.wait(lambda: remains_of(a, "admin-death-remains"), seconds=10)
     s.expect("a deer's death leaves remains holding the carcass law's items", held(r_a["id"]) == law, held(r_a["id"]))
     rot = s.rows(f"SELECT * FROM rot WHERE structure = {r_a['id']}", "admin-death-rot")
-    s.expect("its remains are due after the remains_s law", len(rot) == 1 and rot[0]["due_ms"] - r_a["built_ms"] == REMAINS_S * 1000, rot)
+    s.expect("its remains are due after the remains_h law, in real time for the day", len(rot) == 1 and rot[0]["due_ms"] - r_a["built_ms"] == REMAINS_H * s.rows("SELECT day_ms FROM world")[0]["day_ms"] // 24, rot)
 
     # A wolf's kill: the carcass goes into the remains, not into the killer's pack.
     b, killer, other, walker = deer[1], wolves[0], wolves[1], wolves[2]
@@ -1286,7 +1489,7 @@ def tile_grid(s):
             x, y = cx * 16 + k % 16, cy * 16 + k // 16
             if x < W and y < H:
                 tiles[y * W + x] = t
-    return W, H, lambda x, y: 0 <= x < W and 0 <= y < H and tiles[int(y) * W + int(x)] not in (2, 4, 7)
+    return W, H, lambda x, y: 0 <= x < W and 0 <= y < H and tiles[int(y) * W + int(x)] not in (2, 4, 7, 8, 9)
 
 
 def open_ray(s, length):
@@ -1491,7 +1694,401 @@ def audience(s):
         s.call("install_script", shipped)
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "family_laws": family_laws, "audience": audience}
+THOUGHT = {"kind": "deliberate", "summary": "verify-core say scene", "detail": "", "latency_ms": 0, "tokens": 0, "model": "fake", "reference": ""}
+
+
+def say(s):
+    """A graph's `say` to a person by id speaks, in every written form and through both install
+    paths (admin `set_behavior`, and `mind_install` as a mind delivers it), like a `do` to the
+    same id. A line that cannot be said yet waits for the speaker's turn instead of being lost:
+    two installs back to back, or two lines in one sequence, are both spoken (before
+    fix-graph-say-id the 2 s speaking limit refused the second, and the node's 45 s mark, set
+    before speaking, then skipped it silently). A say that cannot be spoken (its listener out of
+    sight) tells the speaker why, as other failed leaves do. A say node repeated in a looping
+    graph is still paced to once per 45 s."""
+    a, b, far = s.people(3)
+    line = open_line(s)
+    s.call("place_at", a, *line[4])
+    s.call("place_at", b, *line[7])
+    s.call("place_at", far, line[0][0] + 80, line[0][1])
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"speaker": a, "listener": b, "far": far, "hour": world_hour(s)}, indent=2) + "\n")
+    hold = {"wait": 60}
+    n = [0]
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def lines(t0, label=None):
+        return [r for r in s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {a}", label) if r["at_ms"] >= t0]
+
+    def install(path, node):
+        if path == "set_behavior":
+            s.graph(a, node)
+        else:
+            s.call("mind_install", a, json.dumps(node), "verify say", "", 0, 0, THOUGHT)
+            s.rows(f"SELECT * FROM brain WHERE id = {a}", f"installed-graph-{a}-{time.time_ns()}")
+
+    def heard(text, t0, seconds=8):
+        try:
+            return s.wait(lambda: [r for r in lines(t0) if text in r["text"]], seconds=seconds)
+        except TimeoutError:
+            return []
+
+    forms = {
+        "canonical": lambda t, to: {"say": {"text": t, "to": to}},
+        "flat": lambda t, to: {"say": t, "to": to},
+        "do": lambda t, to: {"do": "say", "text": t, "target": to},
+        "do-object": lambda t, to: {"do": {"skill": "say", "text": t, "to": to}},
+    }
+    targets = {"id": {"id": b}, "bare-id": b, "nearest": {"nearest": {"kind": "person"}}}
+    for path in ("set_behavior", "mind_install"):
+        for form, make in forms.items():
+            for tname, to in targets.items():
+                n[0] += 1
+                text = f"Morning, line {n[0]} ({form}, {tname}, {path})."
+                t0 = now()
+                install(path, {"seq": [make(text, to), hold]})
+                got = heard(text, t0)
+                want_b = b if tname != "nearest" else None
+                s.expect(f"{path} {form} to {tname} speaks", got and (want_b is None or got[0]["b"] == want_b), got[:1], fatal=False)
+                time.sleep(2.5)
+
+    # A do to the same id (the comparison in the report): wave, and strike where the seed has it.
+    t0 = now()
+    s.graph(a, {"seq": [{"do": "wave", "target": {"id": b}}, hold]})
+    time.sleep(4)
+    uses = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "wave-uses") if u["at_ms"] >= t0]
+    s.expect("do wave to the same id acts", any(u["skill"] == "wave" and u["target"] == b for u in uses), uses[:2], fatal=False)
+
+    # Two installs back to back: the second line comes within the speaking limit.
+    first, second = "Back to back, first.", "Back to back, second."
+    t0 = now()
+    s.graph(a, {"seq": [{"say": {"text": first, "to": {"id": b}}}, hold]})
+    s.graph(a, {"seq": [{"say": {"text": second, "to": {"id": b}}}, hold]})
+    s.expect("back-to-back installs: the first line is spoken", heard(first, t0), lines(t0)[:2], fatal=False)
+    s.expect("back-to-back installs: the second line is spoken too", heard(second, t0, 10), lines(t0, "back-to-back")[:3], fatal=False)
+    time.sleep(2.5)
+
+    # Two lines in one sequence.
+    one, two = "Two lines: hello.", "Two lines: welcome to town."
+    t0 = now()
+    s.graph(a, {"seq": [{"say": {"text": one, "to": {"id": b}}}, {"say": {"text": two, "to": {"id": b}}}, hold]})
+    s.expect("a sequence of two lines speaks the first", heard(one, t0), lines(t0)[:2], fatal=False)
+    s.expect("a sequence of two lines speaks the second", heard(two, t0, 10), lines(t0, "two-lines")[:3], fatal=False)
+    time.sleep(2.5)
+
+    # Out of sight: not spoken, and the speaker is told why.
+    lost = "Can you hear me over there?"
+    t0 = now()
+    s.graph(a, {"seq": [{"say": {"text": lost, "to": {"id": far}}}, hold]})
+    time.sleep(5)
+    s.expect("a line to someone out of sight is not spoken", not [r for r in lines(t0) if lost in r["text"]], lines(t0)[:2], fatal=False)
+    told = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}", "out-of-sight-feedback") if r["kind"] == "own" and r["at_ms"] >= t0 and lost in r["text"]]
+    s.expect("the speaker is told the line could not be said", len(told) == 1, told, fatal=False)
+    time.sleep(2.5)
+
+    # Pacing: a say in a looping graph speaks once per 45 s, not every pass.
+    paced = "Still here, still here."
+    t0 = now()
+    s.graph(a, {"first": [{"seq": [{"say": {"text": paced, "to": {"id": b}}}, {"wait": 2}]}]})
+    time.sleep(12)
+    said = [r for r in lines(t0, "paced") if paced in r["text"]]
+    s.expect("a looping say is paced (spoken once in 12 s)", len(said) == 1 and " (×" not in said[0]["text"], said, fatal=False)
+
+    if any(c["skill"] == "strike" for c in s.rows("SELECT skill FROM skill_card")):
+        t0 = now()
+        s.graph(a, {"seq": [{"do": "strike", "target": {"id": b}}, hold]})
+        time.sleep(4)
+        uses = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "strike-uses") if u["at_ms"] >= t0]
+        s.expect("do strike to the same id acts", any(u["skill"] == "strike" and u["target"] == b for u in uses), uses[:2], fatal=False)
+    s.graph(a, {"wait": 120})
+    s.rows(f"SELECT * FROM experience WHERE observer = {a}", "speaker-experience")
+    s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {a}", "speech")
+    # Off the shared open line: later scenes (doing) count who stands near its west end.
+    for k, who in enumerate((a, b)):
+        s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40)
+
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "audience": audience}
+
+
+def goods(s):
+    """Goods are script data matched by trait, and fires eat fuel (docs/WORLD_RULES.md, "Goods,
+    recipes and fuel"), on the goods fixture: Cullet's goods (living/scripts/cullet_goods.rhai)
+    installed over the shipped rules; kelp, peat and sand gathered from nodes placed beside a
+    person; kelp burnt to ash at a hearth fed with peat; ash and sand melted to glass at a
+    furnace, drawing a unit of its fuel; the hearth going out on its own, refusing what needs it
+    burning, and lit again only by someone who knows fire; warmth only while it burns; a seeded
+    fishing ground whose three spots share one stock."""
+    # The fixture names Cullet's laws (`laws_file`), its goods among them: composed over the
+    # shipped script and installed when the world was created, with the seed's own hearth (12
+    # units of peat, lit from creation) and a kelp bed among its resource nodes.
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    s.expect("the world was made with Cullet's laws and goods", "fn goods_structures()" in src and "fn recipes()" in src.split("---- floor overlay ----")[-1])
+    hour_ms = s.rows("SELECT day_ms FROM world")[0]["day_ms"] / 24
+    seeded = [r for r in s.rows("SELECT * FROM structure", "seeded-structures") if r["kind"] == "hearth"]
+    clock = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.expect("the seed's hearth with fuel is lit from creation, for its fuel's burn", len(seeded) == 1 and clock < seeded[0]["lit_until_ms"] <= clock + 12 * 2 * hour_ms + 1000, {"hearth": seeded, "now": clock})
+    s.expect("the seed placed a node of a kind its laws add (a kelp bed)", any(r["kind"] == "kelp_bed" for r in s.rows("SELECT kind FROM resource_node")))
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def structure(kind, owner):
+        return max((r for r in s.rows(f"SELECT * FROM structure WHERE owner = {owner}") if r["kind"] == kind), key=lambda r: r["id"])
+
+    def node(kind):
+        return max((r for r in s.rows("SELECT * FROM resource_node") if r["kind"] == kind), key=lambda r: r["id"])
+
+    def acts(actor, *nodes):
+        s.call("mind_act", actor, [json.dumps(n) for n in nodes], "verify-core")
+
+    def heard(actor, words, since):
+        return [r["text"] for r in s.rows(f"SELECT text, at_ms FROM experience WHERE observer = {actor}") if r["at_ms"] >= since and words in r["text"]]
+
+    def near_fire(actor):
+        # The needs' state key keeps whether the body is warmed by a fire (brain.rs, bit 6).
+        return bool(s.vitals(actor)["rate_key"] & (1 << 6))
+
+    people = [c["id"] for c in s.rows("SELECT id, kind FROM character") if c["kind"] == "person"]
+    s.expect("the fixture's three people", len(people) == 3, people)
+    knows = {p: [k["technique"] for k in s.rows(f"SELECT technique FROM know_how WHERE actor = {p}")] for p in people}
+    unlit = [p for p in people if "fire" not in knows[p]]
+    s.expect("someone who does not know fire", unlit, knows)
+    b = unlit[0]
+    a, c = [p for p in people if p != b][:2]
+    for p in people:
+        s.graph(p, {"wait": 120})
+    # A clear spot by the seeded fishing ground; the furnace stands 9 m off, in sight, beyond the
+    # reach of its warmth (6 m) from the one warmed by the hearth.
+    s.call("place_at", a, 42.5, 42.0)
+    s.call("place_near", c, a)
+    s.call("place_structure", a, "hearth")
+    ax, ay = body_at(s, a)
+    s.call("place_at", b, ax + 9.0, ay)
+    s.call("place_structure", b, "furnace")
+    s.call("place_near", b, a)
+    hearth, furnace = structure("hearth", a), structure("furnace", b)
+    s.expect("a placed fire that burns fuel starts out", hearth["lit_until_ms"] == 0 and furnace["lit_until_ms"] == 0, [hearth, furnace])
+    for kind, dx, dy in (("kelp_bed", 0.0, 1.0), ("peat_bank", 1.0, 1.0), ("sand_bank", 0.0, 2.0)):
+        s.call("place_resource", a, kind, dx, dy, 0.0, 0)
+    s.call("grant_know_how", a, "fire")
+    s.call("grant_know_how", a, "glassmaking")
+    s.call("grant_know_how", a, "cooking")
+
+    # Gather: each node gives what its kind yields.
+    # At most four acts wait at a time (rules::acts::MAX_QUEUED).
+    for kind, item, n in (("kelp_bed", "kelp", 4), ("peat_bank", "peat", 4), ("peat_bank", "peat", 8), ("sand_bank", "sand", 2)):
+        have = s.inventory(a).get(item, 0)
+        acts(a, *[{"do": "gather", "target": {"nearest": kind}}] * (n - have))
+        s.wait(lambda: s.inventory(a).get(item, 0) >= n, seconds=60, every=1)
+    inv = s.inventory(a, "gathered")
+    s.expect("kelp, peat and sand are gathered from their nodes", inv.get("kelp") == 4 and inv.get("peat") == 8 and inv.get("sand") == 2, inv)
+    kelp = node("kelp_bed")
+    s.expect("the kelp bed holds what was taken less", kelp["amount"] <= kelp["max"] - 4 + 0.5, kelp)
+
+    # The hearth is out: what needs it burning is refused, and nobody is warmed by it.
+    t0 = now()
+    acts(a, {"do": "make", "item": "ash", "target": {"nearest": "hearth"}})
+    s.wait(lambda: heard(a, "did not work out", t0), seconds=20)
+    s.expect("making ash at an out hearth is refused", heard(a, "is out: feed it first", t0), heard(a, "", t0))
+    time.sleep(3)
+    s.expect("an out hearth warms nobody", not near_fire(c), s.vitals(c, "cold-before"))
+
+    # Fed one peat, it is lit for one unit at its rate (0.5 a game hour: two game hours).
+    t0 = now()
+    acts(a, {"do": "feed", "item": "peat", "qty": 1, "target": {"nearest": "hearth"}})
+    s.wait(lambda: structure("hearth", a)["lit_until_ms"] > 0, seconds=20)
+    lit = structure("hearth", a)
+    expect_ms = 2 * hour_ms
+    s.expect("feeding lights the hearth: lit_until_ms is one unit's burn ahead", abs(lit["lit_until_ms"] - t0 - expect_ms) < 6000, {"lit_until_ms": lit["lit_until_ms"], "fed_after": t0, "unit_ms": expect_ms})
+    s.expect("the peat fed is gone from the pack", s.inventory(a, "after-feed").get("peat") == 7)
+    s.expect("lighting it is seen", [r for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {c}", "lit-witness") if "lit the hearth" in r["text"]])
+    s.expect("a lit hearth warms those beside it", s.wait(lambda: near_fire(c), seconds=20, every=1), s.vitals(c, "warm-lit"))
+    s.rows(f"SELECT id, kind, lit_until_ms FROM structure WHERE id = {lit['id']}", "hearth-lit")
+
+    # Kelp burnt to ash at the burning hearth.
+    acts(a, {"do": "make", "item": "ash", "target": {"nearest": "hearth"}})
+    s.wait(lambda: s.inventory(a).get("ash", 0) == 1, seconds=30)
+    inv = s.inventory(a, "after-ash")
+    s.expect("four kelp burnt to one ash at the hearth", inv.get("ash") == 1 and inv.get("kelp", 0) == 0, inv)
+
+    # Ash and sand melted into glass at the furnace, with a unit of its fuel.
+    acts(a, {"do": "feed", "item": "peat", "qty": 5, "target": {"nearest": "furnace"}})
+    s.wait(lambda: structure("furnace", b)["lit_until_ms"] > 0, seconds=60)
+    fed = structure("furnace", b)["lit_until_ms"]
+    acts(a, {"do": "make", "item": "glass", "target": {"nearest": "furnace"}})
+    s.wait(lambda: s.inventory(a).get("glass", 0) == 1, seconds=60)
+    inv = s.inventory(a, "after-glass")
+    after = structure("furnace", b)
+    unit = hour_ms / 3
+    s.expect("an alkali and two sand make glass at the burning furnace", inv.get("glass") == 1 and inv.get("ash", 0) == 0 and inv.get("sand", 0) == 0, inv)
+    s.expect("the glass took one unit of the furnace's fuel", abs((fed - after["lit_until_ms"]) - unit) < 1500, {"fed_until": fed, "after_until": after["lit_until_ms"], "unit_ms": unit})
+
+    # The hearth burns down on its own: nothing is written until someone feeds it again.
+    until = structure("hearth", a)["lit_until_ms"]
+    s.wait(lambda: now() > until + 1000, seconds=int(expect_ms / 1000) + 60, every=2)
+    out = structure("hearth", a)
+    s.expect("the hearth is out once its fuel is spent (its row unchanged)", out["lit_until_ms"] == until and now() > until, out)
+    s.expect("an out hearth warms nobody again", s.wait(lambda: not near_fire(c), seconds=30, every=1), s.vitals(c, "cold-after"))
+    t0 = now()
+    acts(a, {"do": "give", "item": "peat", "qty": 1, "target": {"id": b}})
+    s.wait(lambda: s.inventory(b).get("peat", 0) == 1, seconds=20)
+    acts(b, {"do": "feed", "item": "peat", "qty": 1, "target": {"nearest": "hearth"}})
+    s.wait(lambda: heard(b, "did not work out", t0), seconds=20)
+    s.expect("someone who does not know fire cannot light it", heard(b, "you don't know how to light a fire", t0), heard(b, "", t0))
+    s.expect("and the hearth stays out", structure("hearth", a)["lit_until_ms"] == until)
+    acts(a, {"do": "feed", "item": "peat", "qty": 1, "target": {"nearest": "hearth"}})
+    s.wait(lambda: structure("hearth", a)["lit_until_ms"] > until, seconds=20)
+    s.expect("someone who knows fire lights it again", structure("hearth", a)["lit_until_ms"] > now())
+
+
+def stock(s):
+    """A seeded fishing ground (the goods fixture's `resource_nodes`): three spots share one
+    stock of 3 fish, held by the first; fishing one spot empties the others."""
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def heard(actor, words, since):
+        return [r["text"] for r in s.rows(f"SELECT text, at_ms FROM experience WHERE observer = {actor}") if r["at_ms"] >= since and words in r["text"]]
+
+    def acts(actor, *nodes):
+        s.call("mind_act", actor, [json.dumps(n) for n in nodes], "verify-core")
+
+    c, = s.people(1)
+    # The valley grows wild fishing spots of its own (pool 0); the seeded ground's are pooled.
+    spots = sorted((r for r in s.rows("SELECT * FROM resource_node", "fishing-ground") if r["kind"] == "fishing_spot" and r["pool"] != 0), key=lambda r: r["id"])
+    head = spots[0]
+    s.expect("the seed's pooled spots draw on the first one's stock", len(spots) == 3 and head["pool"] == head["id"] and all(r["pool"] == head["id"] for r in spots[1:]) and head["max"] == 3, spots)
+    s.call("place_at", c, spots[1]["x"], spots[1]["y"] + 1.0)
+    # Node ids and creature ids are separate sequences: aim at the nearest spot, not an id.
+    acts(c, *[{"do": "gather", "target": {"nearest": "fishing_spot"}}] * 3)
+    s.wait(lambda: s.inventory(c).get("fish", 0) >= 3, seconds=60)
+    s.call("place_at", c, spots[2]["x"], spots[2]["y"] + 1.0)
+    t0 = now()
+    acts(c, {"do": "gather", "target": {"nearest": "fishing_spot"}})
+    s.wait(lambda: heard(c, "did not work out", t0), seconds=30)
+    stock = s.rows(f"SELECT * FROM resource_node WHERE id = {head['id']}", "stock-after")[0]
+    s.expect("three fish from one spot empty the shared stock", s.inventory(c, "fisher").get("fish") == 3 and stock["amount"] < 1.0, stock)
+    s.expect("another spot of the same ground is depleted too", heard(c, "depleted", t0), heard(c, "", t0))
+
+
+# How long the decay scene watches, in game hours (`--game-hours`; a whole day by default).
+DECAY_HOURS = 24.0
+
+
+def decay(s):
+    """Rates written in game time run in real time for the world's day (docs/CULLET_RULES.md,
+    rates-2), on a world with its own day and laws (`cullet-laws`: a 48-minute day): raw fish in a
+    pack and in a storage spoils at the laws' `spoil_per_h` turned into real minutes, once a real
+    minute (a storage at its `kept_spoil` share), and an emptied greens bed regrows its kind's
+    `regrow_per_h` a game hour, kept per real minute in the node's `regen`. Watches for
+    `--game-hours` (default a whole game day, 48 real minutes on Cullet); no clock is changed."""
+    w = s.rows("SELECT * FROM world", "world")[0]
+    hour_ms = w["day_ms"] / 24
+    seed = json.loads((ROOT / "living/seeds" / f"{json.loads((s.out / 'state.json').read_text())['seed']}.json").read_text())
+    src = (ROOT / "living/seeds" / seed["laws_file"]).read_text()
+    per_min = 60000 / hour_ms
+    fish_min = law_number(src, "spoil_per_h", "fish") * per_min
+    kept = 1.0 / 3.0  # the shipped `kept_spoil` (Cullet keeps it)
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def heard(actor, words, since):
+        return [r["text"] for r in s.rows(f"SELECT text, at_ms FROM experience WHERE observer = {actor}") if r["at_ms"] >= since and words in r["text"]]
+
+    def acts(actor, *nodes):
+        s.call("mind_act", actor, [json.dumps(n) for n in nodes], "verify-core")
+
+    def empty(actor, kind):
+        """Gather from the nearest node of a kind until it is depleted; how many were taken."""
+        got = 0
+        for _ in range(12):
+            t0, before = now(), sum(s.inventory(actor).values())
+            acts(actor, *[{"do": "gather", "target": {"nearest": kind}}] * 4)
+            try:
+                s.wait(lambda: heard(actor, "depleted", t0) or sum(s.inventory(actor).values()) >= before + 4, seconds=60, every=1)
+            except TimeoutError:
+                pass
+            time.sleep(2)
+            got += sum(s.inventory(actor).values()) - before
+            if heard(actor, "depleted", t0):
+                return got
+        return got
+
+    a, b = s.people(2)
+    for p in (a, b):
+        s.graph(p, {"wait": 3600})
+    s.call("place_near", b, a)
+    # Raw fish: 1,000 in a pack, 100 put in a storage beside it (a storage holds `storage_holds`;
+    # a `{"id": n}` target names a creature, so the storage is aimed at as the nearest).
+    s.call("place_structure", b, "storage")
+    store = max((r for r in s.rows(f"SELECT * FROM structure WHERE owner = {b}") if r["kind"] == "storage"), key=lambda r: r["id"])
+    s.call("grant_items", b, "fish", 100)
+    t0 = now()
+    acts(b, {"do": "store", "item": "fish", "qty": 100, "target": {"nearest": "storage"}})
+    owner = (1 << 40) | store["id"]
+    held = lambda: {r["item"]: r["qty"] for r in s.rows(f"SELECT item, qty FROM inventory WHERE owner = {owner}")}
+    try:
+        s.wait(lambda: held().get("fish", 0) >= 90, seconds=60, every=1)
+    except TimeoutError:
+        s.expect("the fish are stored", False, heard(b, "", t0))
+    s.call("grant_items", a, "fish", 1000)
+    t_fish = now()
+    stored0 = held().get("fish", 0)
+    # A greens bed placed beside the pair, emptied, to regrow.
+    s.call("place_resource", a, "greens_bed", 2.0, 0.0, 0.0, 0)
+    bed = max((r for r in s.rows("SELECT * FROM resource_node") if r["kind"] == "greens_bed"), key=lambda r: r["id"])
+    regrow_h = float(re.search(r'name:\s*"greens_bed"[^\n]*?regrow_per_h:\s*([\d.]+)', src).group(1))
+    s.expect("a node's regen is its kind's regrow_per_h in real minutes for the day", abs(bed["regen"] - regrow_h * per_min) < 1e-6, {"regen": bed["regen"], "regrow_per_h": regrow_h, "per_real_minute": regrow_h * per_min})
+    took = empty(b, "greens_bed")
+    t_empty = now()
+    left = s.rows(f"SELECT * FROM resource_node WHERE id = {bed['id']}", "bed-emptied")[0]
+    s.expect("the bed is emptied by gathering", took >= int(bed["max"]) and left["amount"] < 1.0, {"took": took, "row": left})
+
+    # Watch, sampling the stacks every few real minutes.
+    watch_ms = DECAY_HOURS * hour_ms
+    samples = []
+    while now() < t_fish + watch_ms:
+        samples.append({"at_ms": now(), "carried": s.inventory(a).get("fish", 0), "stored": held().get("fish", 0)})
+        time.sleep(min(180, max(5, (t_fish + watch_ms - now()) / 1000)))
+    t1 = now()
+    carried, stored = s.inventory(a, "fish-after").get("fish", 0), held().get("fish", 0)
+    samples.append({"at_ms": t1, "carried": carried, "stored": stored})
+    (s.out / "decay-samples.json").write_text(json.dumps(samples, indent=1) + "\n")
+    # Once a real minute each stack loses its share in expectation (the fraction by chance):
+    # after k sweeps a stack holds about q (1 - r)^k; k is the real minutes passed, give or take
+    # one, and each sweep's chance adds at most one.
+    mins = (t1 - t_fish) / 60000
+
+    def band(q, r):
+        ks = [max(0, int(mins) - 1), int(mins) + 1]
+        return min(q * (1 - r) ** k for k in ks) - mins - 2, max(q * (1 - r) ** k for k in ks) + mins + 2
+
+    lo, hi = band(1000, fish_min)
+    s.expect(f"raw fish carried over {DECAY_HOURS:g} game hours spoils at spoil_per_h in real time ({fish_min:.4f} a real minute)", lo <= carried <= hi, {"carried": carried, "band": [round(lo, 1), round(hi, 1)], "real_minutes": round(mins, 2), "share_left": carried / 1000})
+    lo, hi = band(stored0, fish_min * kept)
+    s.expect("raw fish in a storage spoils at a third of that", lo <= stored <= hi, {"stored": stored, "from": stored0, "band": [round(lo, 1), round(hi, 1)], "share_left": stored / max(1, stored0)})
+
+    # Regrowth, read from the bed's own row: one gathering beside it takes one unit and writes
+    # what it held then less one (`Effect::Harvest`), so what it had regrown is the new amount
+    # plus one, against its regen times the real minutes since it was emptied (growing time:
+    # not winter). Gathering more would count other beds too (`nearest` walks on to the wild
+    # ones once this one is spent).
+    t0 = now()
+    acts(b, {"do": "gather", "target": {"nearest": "greens_bed"}})
+    s.wait(lambda: s.rows(f"SELECT at_ms FROM resource_node WHERE id = {bed['id']}")[0]["at_ms"] > left["at_ms"] or heard(b, "did not work out", t0), seconds=60, every=1)
+    row = s.rows(f"SELECT * FROM resource_node WHERE id = {bed['id']}", "bed-regrown")[0]
+    had = row["amount"] + 1.0
+    grown = left["amount"] + left["regen"] * (row["at_ms"] - left["at_ms"]) / 60000
+    s.expect(f"the emptied bed regrew regrow_per_h a game hour over {DECAY_HOURS:g} game hours (growing time)", row["at_ms"] > left["at_ms"] and abs(had - min(grown, left["max"])) < 0.01,
+             {"had": round(had, 4), "expected": round(grown, 4), "game_hours": round((row["at_ms"] - left["at_ms"]) / hour_ms, 3), "row": row})
+
+
+SCENES["goods"] = goods
+SCENES["stock"] = stock
+SCENES["decay"] = decay
 
 
 def main():
@@ -1500,7 +2097,9 @@ def main():
     ap.add_argument("--run", required=True)
     ap.add_argument("--baseline", action="store_true", help="measure pre-change infant authority without new-policy assertions")
     ap.add_argument("--resume-infant", action="store_true", help="rerun cry checks from the retained thermal checkpoint")
+    ap.add_argument("--game-hours", type=float, default=DECAY_HOURS, help="decay: game hours to watch (default a whole game day)")
     a = ap.parse_args()
+    globals()["DECAY_HOURS"] = a.game_hours
     s = Scene(a.run, a.scene)
     s.baseline = a.baseline
     s.resume_infant = a.resume_infant

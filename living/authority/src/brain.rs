@@ -152,7 +152,10 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let night = common::night(ctx, w, now);
     // How dark it is matters to the key only when the rates law reads it (an eased dusk).
     let dark = if common::scripts(ctx).reads("rates", "daylight") { common::dark(ctx, w, now) } else if night { 1.0 } else { 0.0 };
-    let (near_fire, near_shelter) = act::warmth(ctx, at);
+    // A fire that goes out changes this on the next look (its `lit_until_ms` passes): nothing
+    // has to be told when it burns down.
+    let warm = act::warmth(ctx, at, now);
+    let (near_fire, near_shelter) = (warm.fire, warm.shelter);
     let cloak = common::inv_count(ctx, me.id as u64, "cloak") > 0;
     let season = common::season(ctx, now);
     let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
@@ -185,7 +188,11 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let hour = common::hour(w, now);
     let sctx = living_rules::script::SkillCtx { actor: facts, night, dark, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
+    // Profiled apart: the law itself, asked only for a state no body has been in since the
+    // script revision (the rest are answers kept per state, finished per body).
+    let _law_timer = if common::profiling() && !sc.need_law_kept(&sctx) { common::span("needs.rates.law") } else { None };
     let law = sc.need_law(&sctx);
+    drop(_law_timer);
     let mut key = key;
     if let Ok(c) = law.as_ref().map(|l| l.cuts().unwrap_or([f32::INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::NEG_INFINITY])) {
         NEED_CUTS.with(|m| m.borrow_mut().insert(me.id, c));
@@ -206,6 +213,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
 impl<'a> Ev<'a> {
     fn scene(&mut self) -> &Scene {
         if self.scene.is_none() {
+            let _span = common::span("brain.scene");
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             // What the body sees: within its sight and with a clear sight line (the rule every
             // observer perceives by, `perception::in_sight`).
@@ -258,12 +266,13 @@ impl<'a> Ev<'a> {
         let night = common::dark(self.ctx, &self.w, self.now);
         let me = self.me.id;
         let now = self.now;
-        // The body's own day (its rhythm): its bedtime and its evening.
-        let (bedtime, evening) = if ds.iter().any(|d| d.weight.bedtime != 0.0 || d.weight.evening != 0.0) {
-            let (b, e) = common::day_phase(self.ctx, me, common::hour(&self.w, now));
-            (if b { 1.0 } else { 0.0 }, if e { 1.0 } else { 0.0 })
+        // The body's own day (its rhythm): its bedtime, its evening and its working hours.
+        let (bedtime, evening, work_hours) = if ds.iter().any(|d| d.weight.bedtime != 0.0 || d.weight.evening != 0.0 || d.weight.work_hours != 0.0) {
+            let p = common::day_phase(self.ctx, me, common::hour(&self.w, now));
+            let one = |b: bool| if b { 1.0 } else { 0.0 };
+            (one(p.bedtime), one(p.evening), one(p.work))
         } else {
-            (0.0, 0.0)
+            (0.0, 0.0, 0.0)
         };
         // An attack or a threat aimed at me right now.
         let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
@@ -301,7 +310,7 @@ impl<'a> Ev<'a> {
                 let w = &d.weight;
                 let last = self.st.marks.iter().find(|m| m.node == DESIRE_MARK | ids[i]).map(|m| m.at_ms);
                 let longing = last.map_or(1.0, |t| (now.saturating_sub(t) as f32 / 3_600_000.0).min(1.0));
-                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted + w.rain * rain + w.hailed * hailed + w.commotion * commotion + w.bedtime * bedtime + w.evening * evening;
+                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted + w.rain * rain + w.hailed * hailed + w.commotion * commotion + w.bedtime * bedtime + w.evening * evening + w.work_hours * work_hours;
                 for (k, v) in &w.believes {
                     let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
                     s += v * j;
@@ -454,20 +463,31 @@ impl<'a> Ev<'a> {
             }
             Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, "", "", graph::describe(n)),
             Node::Say(s) => {
+                // Pacing: a say node speaks at most once per 45 s, so a looping graph does not
+                // chatter. The mark is set only when the line is actually spoken.
                 if self.mark_recent(id, 45_000) {
                     return St::Ok;
                 }
                 let to = match &s.to {
                     Some(t) => match self.resolve(t) {
                         Some(r) if r.class == 3 => r.id as u32,
-                        _ => return St::Fail,
+                        Some(_) => return self.say_failed(id, n, &format!("{} is not someone to speak to", graph::describe_target(t))),
+                        None => return self.say_failed(id, n, &format!("no {} in sight", graph::describe_target(t))),
                     },
                     None => 0,
                 };
-                self.set_mark(id);
+                // Within the speaking limit the line waits its turn (a second line right after
+                // the first, or a graph installed just after one spoke) instead of being lost.
+                if perceive::too_soon_to_speak(self.ctx, self.me.id, self.now) {
+                    self.status = format!("about to {}", graph::describe(n));
+                    return St::Run;
+                }
                 match perceive::speak(self.ctx, self.me.id, &s.text, to, self.now) {
-                    Ok(()) => St::Ok,
-                    Err(_) => St::Fail,
+                    Ok(()) => {
+                        self.set_mark(id);
+                        St::Ok
+                    }
+                    Err(why) => self.say_failed(id, n, &why),
                 }
             }
             Node::Think(reason) => {
@@ -481,6 +501,17 @@ impl<'a> Ev<'a> {
                 St::Ok
             }
         }
+    }
+
+    /// A say that cannot be spoken is a failure the body is told about, like a refused leaf
+    /// (once per repeat window for the same line and reason), not a silent skip.
+    fn say_failed(&mut self, id: u16, n: &Node, why: &str) -> St {
+        let desc = graph::describe(n);
+        if act::refused(self.ctx, self.me.id, id, self.st.revision, &desc, why, self.now) {
+            self.st.fails = self.st.fails.saturating_add(1);
+        }
+        self.last_fail = format!("say: {why}");
+        St::Fail
     }
 
     fn leaf_fail(&mut self, id: u16, why: &str) -> St {
@@ -781,8 +812,9 @@ impl<'a> Ev<'a> {
             Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
             Cond::HeardWithin(s) => self.st.heard_ms != 0 && self.now.saturating_sub(self.st.heard_ms) as f32 <= s * 1000.0,
             Cond::Night(b) => common::night(self.ctx, &self.w, self.now) == *b,
-            Cond::Bedtime(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).0 == *b,
-            Cond::Evening(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).1 == *b,
+            Cond::Bedtime(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).bedtime == *b,
+            Cond::Evening(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).evening == *b,
+            Cond::WorkHours(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).work == *b,
             Cond::Raining(b) => crate::town::raining(self.ctx) == *b,
             Cond::Hailed(s) => self.hailed((s * 1000.0) as u64),
             Cond::Moving(b) => {
@@ -918,7 +950,7 @@ impl<'a> Ev<'a> {
                 let hour = common::hour(&self.w, self.now);
                 let since = (hour - r.rise_h).rem_euclid(24.0);
                 let day = living_rules::day_of(self.now, self.w.epoch_ms, self.w.day_ms) as u32;
-                if since < 3.0 && r.last_day < day && !common::day_phase(self.ctx, self.me.id, hour).0 {
+                if since < 3.0 && r.last_day < day && !common::day_phase(self.ctx, self.me.id, hour).bedtime {
                     r.last_day = day;
                     self.ctx.db.rhythm().id().update(r);
                     let season = common::season(self.ctx, self.now);

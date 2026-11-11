@@ -328,7 +328,31 @@ pub fn place_structure(ctx: &ReducerContext, near: u32, kind: String) -> Result<
     let b = ctx.db.body().id().find(near).ok_or("no such body")?;
     let p = common::pos(&b, now);
     common::invalidate_structures(ctx);
-    ctx.db.structure().insert(Structure { id: 0, kind, x: p.0 + 0.8, y: p.1, chunk: living_rules::map::chunk_of(p.0 + 0.8, p.1), owner: near, built_ms: now });
+    ctx.db.structure().insert(Structure { id: 0, kind, x: p.0 + 0.8, y: p.1, chunk: living_rules::map::chunk_of(p.0 + 0.8, p.1), owner: near, built_ms: now, lit_until_ms: 0 });
+    Ok(())
+}
+
+/// Test support: place a resource node of a kind the world's script has (`resources()`) beside
+/// a character, `dx` tiles east and `dy` south of it, holding `max` (0: the kind's own `max`).
+/// `pool` names the node whose stock it shares (0: its own).
+#[spacetimedb::reducer]
+pub fn place_resource(ctx: &ReducerContext, near: u32, kind: String, dx: f32, dy: f32, max: f32, pool: u64) -> Result<(), String> {
+    require_admin(ctx)?;
+    if !living_rules::catalog::is_resource(&kind) {
+        return Err(format!("no resource kind {kind}"));
+    }
+    if pool != 0 && ctx.db.resource_node().id().find(pool).is_none() {
+        return Err(format!("no resource node {pool}"));
+    }
+    let now = common::now_ms(ctx);
+    let b = ctx.db.body().id().find(near).ok_or("no such body")?;
+    let p = common::pos(&b, now);
+    let (x, y) = (p.0 + dx, p.1 + dy);
+    let sc = common::scripts(ctx);
+    let max = if max > 0.0 { max } else { sc.tables().number("resources", &kind, "max").unwrap_or(5.0) as f32 };
+    let regen = sc.regrow_per_min(&kind, 0.5) as f32;
+    common::invalidate_resources(ctx, None);
+    ctx.db.resource_node().insert(ResourceNode { id: 0, kind, x, y, chunk: living_rules::map::chunk_of(x, y), amount: max, max, regen, at_ms: now, pool });
     Ok(())
 }
 

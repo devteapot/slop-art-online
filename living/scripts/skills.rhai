@@ -18,9 +18,10 @@ fn laws() {
         // How often a body smells afresh; between reads it keeps what it last smelled.
         scent_hz: 1.0,
         input_hz: 30.0, input_burst: 15.0,
-        // Grass regrowth per grassy tile per growing minute: about one grazer per 300 grassy
-        // tiles (it was one per 70, and the wilds filled with deer).
-        pasture_regen: 0.0015,
+        // Grass regrowth per grassy tile per growing game hour (0.0015 a real minute on the
+        // 12-minute day): about one grazer per 300 grassy tiles (it was one per 70, and the
+        // wilds filled with deer).
+        pasture_regen_per_h: 0.00075,
         // Someone with no other person within this many tiles is alone (predators dare more).
         alone_within: 6.0,
         // A body within this many radians of facing something already faces it.
@@ -133,18 +134,36 @@ fn inv(a, item) {
     if n == () { 0 } else { n }
 }
 
-// What each kind of structure does for those near it (read once when the script compiles):
-//   warms   a hearth: near it counts as near a fire (fire_warmth applies to campfires and
-//           hearths alike, shelter_warmth to the rest of a building)
-//   roof    a roof: near it counts as sheltered
-fn structure_traits() {
-    #{
-        campfire: #{ warms: true },
-        shelter: #{ roof: true },
-        house: #{ warms: true, roof: true }, hall: #{ warms: true, roof: true }, inn: #{ warms: true, roof: true },
-        workshop: #{ roof: true },
-    }
+// Every kind of structure, in order, with what it does for those near it (read once when the
+// script compiles; docs/WORLD_RULES.md, "Goods, recipes and fuel"):
+//   warms   a fire that needs no feeding: near it counts as near a fire (within fire_warmth; a
+//           building that warms, a house with its hearth, within shelter_warmth)
+//   roof    a roof: near it counts as sheltered (within shelter_warmth)
+//   lights  how far it lights the dark (metres: lamplight, `a.actor.lit`); a kind that burns
+//           lights only while lit, within the larger of this and its `burns.light`
+//   burns   a fire that eats fuel: #{ fuel: the item trait it burns (its number is the units one
+//           item gives), rate: units a game hour while lit, warmth and light: metres while lit,
+//           holds: the most units it takes }. It is lit only while it holds fuel, warms and
+//           lights only while lit, goes out when its fuel is spent and is lit again by feeding
+//           it (feed). Its fuel is not an item to take back.
+// Other traits are the rules' own data.
+fn structures() {
+    [
+        #{ name: "campfire", warms: true },
+        #{ name: "shelter", roof: true },
+        #{ name: "storage" }, #{ name: "remains" }, #{ name: "sign" }, #{ name: "bush_patch" },
+        #{ name: "house", warms: true, roof: true }, #{ name: "gate" }, #{ name: "trap" },
+        #{ name: "hall", warms: true, roof: true }, #{ name: "workshop", roof: true }, #{ name: "market" },
+        #{ name: "inn", warms: true, roof: true },
+        // Gives no light in the shipped world; a world's laws say what it burns and lights.
+        #{ name: "lamp" },
+    ]
 }
+fn structure_trait(kind, t) { let k = entry_of("structures", kind); if k == () { () } else { k[t] } }
+// A fire: one that needs no feeding (a campfire), or one that burns fuel (a hearth).
+fn fire_kind(kind) { let k = entry_of("structures", kind); k != () && (k.burns != () || (k.warms == true && k.roof != true)) }
+// The fire in reach burns now (a campfire always does; a hearth while it holds fuel).
+fn burning(a) { a.target.class == "structure" && fire_kind(a.target.kind) && (burns_of(a.target.kind) == () || a.target.lit) }
 
 // Share of the spoiling rate for food kept in a structure of a kind (a storage, remains): kept
 // food lasts three times longer.
@@ -178,14 +197,17 @@ fn theft(a) {
 
 // ---- what things and creatures are (read once when the script compiles) -------------------
 // Every item of the world, in order, with its traits. Rules read traits instead of naming items:
-//   cooks_to, smokes_to   what cooking or smoking it at a campfire makes (`cook`, `smoke`)
+//   cooks_to, smokes_to   what cooking or smoking it at a fire makes (`cook`, `smoke`)
+//   fuel                  units of fuel one gives a fire that burns `fuel` (`feed`)
+// A recipe (`recipes()`) may ask for an item by name or for anything with a trait; a world adds
+// traits of its own (`bakes_to`, `alkali`, `oil`) and the recipes and fires that read them.
 fn items() {
     [
         #{ name: "berries" },
         #{ name: "fish", cooks_to: "cooked_fish", smokes_to: "smoked_fish" },
         #{ name: "meat", cooks_to: "cooked_meat", smokes_to: "smoked_meat" },
         #{ name: "cooked_fish" }, #{ name: "cooked_meat" },
-        #{ name: "wood" }, #{ name: "stone" }, #{ name: "fiber" }, #{ name: "spear" }, #{ name: "hide" },
+        #{ name: "wood", fuel: 1.0 }, #{ name: "stone" }, #{ name: "fiber" }, #{ name: "spear" }, #{ name: "hide" },
         #{ name: "cloak" }, #{ name: "torch" }, #{ name: "tablet" }, #{ name: "clay" }, #{ name: "axe" },
         #{ name: "pick" }, #{ name: "smoked_fish" }, #{ name: "smoked_meat" }, #{ name: "net" },
         #{ name: "basket" }, #{ name: "bow" }, #{ name: "arrow" }, #{ name: "salve" }, #{ name: "leather" },
@@ -194,8 +216,8 @@ fn items() {
         #{ name: "mark" },
     ]
 }
-fn item_trait(item, t) { for i in items() { if i.name == item { return i[t]; } } () }
-fn items_with(t) { let out = []; for i in items() { if i[t] != () { out.push(i.name); } } out }
+fn item_trait(item, t) { let i = entry_of("items", item); if i == () { () } else { i[t] } }
+fn items_with(t) { having("items", t) }
 
 // Every kind of creature, with what the rules ask of a kind (a kind the table does not name is
 // taken as the first):
@@ -205,12 +227,12 @@ fn items_with(t) { let out = []; for i in items() { if i[t] != () { out.push(i.n
 //   blow                        the damage of its bare attack, before strength and skill
 //   dodge_dist, dodge_speed     its dodge: a dash of so many metres at so many metres a second
 //   carcass                     what its body leaves in its remains (items and amounts)
-//   remains_s                   seconds its remains lie before they are gone
+//   remains_h                   game hours its remains lie before they are gone
 fn kinds() {
     [
-        #{ name: "person", max_hp: 100.0, lunge: 0.6, blow: 7.0, dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_s: 3600 },
-        #{ name: "deer", grazes: true, max_hp: 40.0, lunge: 0.6, blow: 4.0, dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_s: 1800 },
-        #{ name: "wolf", max_hp: 55.0, lunge: 1.8, blow: 13.0, dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_s: 1800 },
+        #{ name: "person", max_hp: 100.0, lunge: 0.6, blow: 7.0, dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_h: 120.0 },
+        #{ name: "deer", grazes: true, max_hp: 40.0, lunge: 0.6, blow: 4.0, dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_h: 60.0 },
+        #{ name: "wolf", max_hp: 55.0, lunge: 1.8, blow: 13.0, dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_h: 60.0 },
     ]
 }
 fn kind_of(kind) { let all = kinds(); for k in all { if k.name == kind { return k; } } all[0] }
@@ -232,19 +254,20 @@ fn carried(a) {
 }
 // A basket carries 20 more.
 fn pack_full(a) { carried(a) >= carry_limit(a.actor.kind) + if inv(a, "basket") > 0 { 20.0 } else { 0.0 } }
-// Share of a food that spoils per real minute (a lab day is 12 minutes): raw meat and fish
-// within about a day, berries in a few days, cooked food more slowly. A storage keeps food
-// three times longer.
-fn spoil_rate(item) {
+// Share of a food that spoils in a game hour (the engine turns it into real time for the
+// world's day; on the 12-minute day a game hour is half a real minute): raw meat and fish within
+// about a day, berries in a few days, cooked food more slowly. A storage keeps food three times
+// longer.
+fn spoil_per_h(item) {
     switch item {
-        "meat" => 0.05,
-        "fish" => 0.05,
-        "berries" => 0.02,
-        "cooked_meat" => 0.012,
-        "cooked_fish" => 0.012,
+        "meat" => 0.025,
+        "fish" => 0.025,
+        "berries" => 0.01,
+        "cooked_meat" => 0.006,
+        "cooked_fish" => 0.006,
         // Smoked food keeps for weeks: something to carry to another town.
-        "smoked_meat" => 0.002,
-        "smoked_fish" => 0.002,
+        "smoked_meat" => 0.001,
+        "smoked_fish" => 0.001,
         _ => 0.0,
     }
 }
@@ -335,6 +358,10 @@ fn rates(a) {
     }
     // A suckling animal lives mostly on its mother's milk (not modelled on the mother).
     if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
+    // Asked once each: a law called with `a` gets its own copy of the whole context, so asking
+    // `cold(a)` three times cost three copies (the fuel budget, docs/LIVING_CORE.md).
+    let is_cold = cold(a);
+    let is_wet = wet(a);
     let r = #{
         per: "hour",
         hunger: hunger, energy: energy,
@@ -347,10 +374,10 @@ fn rates(a) {
         tiring_gene: "endurance", healing_gene: "vitality", appetite_gene: "appetite", hardiness_gene: "hardiness",
         // Exposure tires: rain soaks people out from under a roof (a cloak keeps some of it
         // off), and a cold night without a fire, shelter or warm cloak is uncomfortable.
-        wet_energy: (if wet(a) { if inv(a, "cloak") > 0 { -0.5 } else { -1.25 } } else { 0.0 })
-            + (if cold(a) { -0.75 } else { 0.0 }),
+        wet_energy: (if is_wet { if inv(a, "cloak") > 0 { -0.5 } else { -1.25 } } else { 0.0 })
+            + (if is_cold { -0.75 } else { 0.0 }),
         // A cold night hurts only in winter or in the rain (a storm night).
-        cold_hp: if cold(a) && freezing(a) { if a.season == "winter" { -1.5 } else { -0.75 } } else { 0.0 },
+        cold_hp: if is_cold && freezing(a) { if a.season == "winter" { -1.5 } else { -0.75 } } else { 0.0 },
     };
     if a.actor.kind == "person" {
         let k = person_pace(0);
@@ -384,21 +411,28 @@ fn gather_duration(a) {
         "boulder" => if inv(a, "pick") > 0 { 2500 } else { 5000 },
         "clay_bank" => 3000,
         "fishing_spot" => if inv(a, "spear") > 0 { 3000 } else { 6500 },
-        _ => 3000,
+        _ => { let r = entry_of("resources", a.target.kind); if r == () || r.gather_ms == () { 3000 } else { r.gather_ms } },
     }
+}
+// Every kind of resource, in order (read once when the script compiles):
+//   yields      what one gathering gives
+//   regrow_per_h  units it regrows a game hour of growing time, up to its max
+//   max         units a node of it holds when full
+//   ground      the ground a settlement's promised nodes of it are placed on (`resources` in a
+//               town of the seed), and by_water: only beside water
+//   gather_ms   how long one gathering takes without a tool (`gather_duration`)
+fn resources() {
+    [
+        #{ name: "berry_bush", yields: "berries", regrow_per_h: 0.6, max: 5.0, ground: ["grass"], gather_ms: 2000 },
+        #{ name: "tree", yields: "wood", regrow_per_h: 0.25, max: 8.0, ground: ["forest", "grass"], gather_ms: 4000 },
+        #{ name: "boulder", yields: "stone", regrow_per_h: 0.1, max: 6.0, ground: ["grass", "dirt"], gather_ms: 5000 },
+        #{ name: "reeds", yields: "fiber", regrow_per_h: 0.5, max: 4.0, ground: ["sand", "grass"], by_water: true, gather_ms: 2500 },
+        #{ name: "fishing_spot", yields: "fish", regrow_per_h: 0.7, max: 5.0, ground: ["sand", "grass"], by_water: true, gather_ms: 6500 },
+        #{ name: "clay_bank", yields: "clay", regrow_per_h: 0.3, max: 6.0, ground: ["grass"], by_water: true, gather_ms: 3000 },
+    ]
 }
 // What one gathering at each resource yields.
-fn yield_of(kind) {
-    switch kind {
-        "berry_bush" => "berries",
-        "tree" => "wood",
-        "boulder" => "stone",
-        "reeds" => "fiber",
-        "fishing_spot" => "fish",
-        "clay_bank" => "clay",
-        _ => "",
-    }
-}
+fn yield_of(kind) { let r = entry_of("resources", kind); if r == () || r.yields == () { "" } else { r.yields } }
 fn gather_done(a) {
     // A net brings in two fish at a time.
     let n = if a.target.kind == "fishing_spot" && inv(a, "net") > 0 { 2 } else { 1 };
@@ -428,7 +462,8 @@ fn eat_done(a) {
 
 fn cook_check(a) {
     if !knows(a, "cooking") { return "you don't know how to cook" + learn_how("cooking"); }
-    if a.target.kind != "campfire" { return "cooking needs a campfire"; }
+    if a.target.kind != "campfire" && !(a.target.class == "structure" && structure_trait(a.target.kind, "burns") != ()) { return "cooking needs a campfire"; }
+    if !burning(a) { return `the ${a.target.kind} is out: feed it first`; }
     if item_trait(a.item, "cooks_to") == () { return `only raw ${or_list(items_with("cooks_to"))} can be cooked`; }
     if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
     ""
@@ -440,7 +475,8 @@ fn cook_done(a) {
 
 fn smoke_check(a) {
     if !knows(a, "smoking") { return "you don't know how to smoke food" + learn_how("smoking"); }
-    if a.target.kind != "campfire" { return "smoking needs a campfire"; }
+    if a.target.kind != "campfire" && !(a.target.class == "structure" && structure_trait(a.target.kind, "burns") != ()) { return "smoking needs a campfire"; }
+    if !burning(a) { return `the ${a.target.kind} is out: feed it first`; }
     if item_trait(a.item, "smokes_to") == () { return `only raw ${or_list(items_with("smokes_to"))} can be smoked`; }
     if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
     ""
@@ -551,8 +587,9 @@ fn build_check(a) {
 }
 fn build_duration(a) { switch a.item { "campfire" => 6000, "shelter" => 20000, "house" => 40000, "wall" => 6000, "gate" => 15000, "trap" => 8000, "bridge" => 20000, _ => 10000 } }
 
-// A trap catches small game over time: one meat about every 4 minutes, holding at most 3.
-fn trap_every_s(x) { 240.0 }
+// A trap catches small game over time: one meat about every 8 game hours (4 real minutes on the
+// 12-minute day), holding at most 3.
+fn trap_every_h(x) { 8.0 }
 fn trap_holds(x) { 3.0 }
 fn build_done(a) {
     // Place first: if the spot turns out unusable, nothing is spent.
@@ -586,6 +623,117 @@ fn craft_done(a) {
     let fx = pay(a.item);
     // Arrows come three at a time.
     fx.push(#{ op: "add", item: a.item, qty: if a.item == "arrow" { 3 } else { 1 } });
+    fx
+}
+
+// ---- fires and recipes (docs/WORLD_RULES.md, "Goods, recipes and fuel") -----------------
+// A fire that burns fuel (a structure whose kind `burns`) is fed from the pack: each item worth
+// its fuel trait in units. It burns them at its rate while lit and goes out when they are
+// spent; feeding an out fire lights it again, which takes knowing fire. What a fire burns is
+// whatever has its fuel trait, not a list.
+
+fn burns_of(kind) { structure_trait(kind, "burns") }
+// The item fed: the one named, or for "fuel" the first in the pack that burns here.
+fn fuel_item(a, b) {
+    if a.item != "fuel" { return a.item; }
+    for k in having("items", b.fuel) { if inv(a, k) > 0 { return k; } }
+    ""
+}
+fn feed_check(a) {
+    if a.target.class != "structure" { return "feed a fire beside you that burns fuel"; }
+    let b = burns_of(a.target.kind);
+    if b == () { return `the ${a.target.kind} burns no fuel`; }
+    let item = fuel_item(a, b);
+    if item == "" { return `no fuel for the ${a.target.kind} in your pack (it burns ${or_list(having("items", b.fuel))})`; }
+    let worth = item_trait(item, b.fuel);
+    if worth == () { return `${item} is not fuel for the ${a.target.kind} (it burns ${or_list(having("items", b.fuel))})`; }
+    if inv(a, item) < amount(a) { return `not enough ${item} (${item}: ${source_of(item)})`; }
+    if b.holds != () && a.target.fuel + worth * amount(a) > b.holds + 0.001 { return `the ${a.target.kind} holds at most ${short(b.holds)} units of fuel; it has ${short(a.target.fuel)}`; }
+    if !a.target.lit && !knows(a, "fire") { return `the ${a.target.kind} is out, and you don't know how to light a fire` + learn_how("fire"); }
+    ""
+}
+fn feed_duration(a) { 1500 }
+fn feed_done(a) { [#{ op: "fuel", item: fuel_item(a, burns_of(a.target.kind)), qty: amount(a) }] }
+
+// What a world can make at its workplaces (read once when the script compiles). Each recipe:
+//   gives, makes   the item made (the recipe's name by default) and how many (1)
+//   takes          what it uses from the pack: #{ name or trait: qty }; a name is that item,
+//                  a trait is anything carrying it (`alkali: 1` takes ash, or any other alkali)
+//   turns          instead of gives and takes: an item trait naming what an item becomes
+//                  (`smokes_to`): the item made is that trait's value, and one of the item is used
+//   at             the structure kind it is made at, or "fire" for any fire (none: anywhere)
+//   lit            the fire must be burning
+//   fuel           units of fuel the heat takes from the fire it is made at (a fire that needs no
+//                  feeding gives its heat for nothing)
+//   knows          the technique it needs;  ms  how long it takes (8000)
+// The shipped world has none: a world adds them with the goods they read.
+fn recipes() { [] }
+
+fn gives_of(r) { if r.gives == () { r.name } else { r.gives } }
+// The recipe that makes an item, and the item it turns (for a recipe that `turns`).
+fn recipe_for(product) {
+    for n in names_of("recipes") {
+        let r = entry_of("recipes", n);
+        if r.turns == () {
+            if gives_of(r) == product { return #{ r: r, input: () }; }
+        } else {
+            for i in having("items", r.turns) { if item_trait(i, r.turns) == product { return #{ r: r, input: i }; } }
+        }
+    }
+    ()
+}
+fn products() {
+    let out = [];
+    for n in names_of("recipes") {
+        let r = entry_of("recipes", n);
+        if r.turns == () { out.push(gives_of(r)); } else { for i in having("items", r.turns) { out.push(item_trait(i, r.turns)); } }
+    }
+    out
+}
+// What the pack holds of a recipe's input: the item of that name, or everything with that trait.
+fn holding(a, k) {
+    if entry_of("items", k) != () { return inv(a, k); }
+    let n = 0;
+    for i in having("items", k) { n += inv(a, i); }
+    n
+}
+fn takes_of(m) { let t = m.r.takes; if m.input != () { t = #{}; t[m.input] = 1; } else if t == () { t = #{}; } t }
+fn make_check(a) {
+    if a.actor.kind != "person" || young(a) { return "you cannot make things"; }
+    let m = recipe_for(a.item);
+    if m == () { return if products().len() == 0 { "nothing is made here" } else { `no one makes ${a.item} here (what is made: ${or_list(products())})` }; }
+    let r = m.r;
+    if r.knows != () && !knows(a, r.knows) { return `you don't know how to make ${a.item}` + learn_how(r.knows); }
+    if r.at != () {
+        let here = a.target.class == "structure" && (a.target.kind == r.at || (r.at == "fire" && fire_kind(a.target.kind)));
+        if !here { return if r.at == "fire" { `${a.item} is made at a fire` } else { `${a.item} is made at a ${r.at}` }; }
+        if (r.lit == true || r.fuel != ()) && !burning(a) { return `the ${a.target.kind} is out: feed it first`; }
+        if r.fuel != () && burns_of(a.target.kind) != () && a.target.fuel + 0.001 < r.fuel { return `the ${a.target.kind} has too little fuel left for it (it takes ${short(r.fuel)}, it has ${short(a.target.fuel)}): feed it first`; }
+    }
+    let t = takes_of(m);
+    for k in t.keys() {
+        if holding(a, k) < t[k] { return `${a.item} takes ${t[k]} ${k} (${k}: ${source_of(k)})`; }
+    }
+    ""
+}
+fn make_duration(a) { let m = recipe_for(a.item); if m == () || m.r.ms == () { 8000 } else { m.r.ms } }
+fn make_done(a) {
+    let m = recipe_for(a.item);
+    let fx = [];
+    let t = takes_of(m);
+    for k in t.keys() {
+        let left = t[k];
+        if entry_of("items", k) != () { fx.push(#{ op: "remove", item: k, qty: left }); continue; }
+        for i in having("items", k) {
+            if left <= 0 { break; }
+            let n = inv(a, i);
+            if n > left { n = left; }
+            if n > 0 { fx.push(#{ op: "remove", item: i, qty: n }); left -= n; }
+        }
+    }
+    if m.r.fuel != () && a.target.class == "structure" && burns_of(a.target.kind) != () { fx.push(#{ op: "burn", units: m.r.fuel }); }
+    fx.push(#{ op: "add", item: a.item, qty: if m.r.makes == () { 1 } else { m.r.makes } });
+    fx.push(#{ op: "vitals", energy: -1.0 });
     fx
 }
 
@@ -750,24 +898,15 @@ fn yield_duration(a) { 1000 }
 fn yield_done(a) { [#{ op: "yield" }] }
 
 // What a creature's body leaves in its remains when it dies, however it died, beside what it
-// carried (its kind's `carcass`), and how long the remains lie (its kind's `remains_s`).
+// carried (its kind's `carcass`), and how long the remains lie in game hours (its kind's
+// `remains_h`).
 fn carcass(kind) { let c = kind_of(kind).carcass; if c == () { #{} } else { c } }
-fn remains_s(kind) { kind_of(kind).remains_s }
+fn remains_h(kind) { kind_of(kind).remains_h }
 
 fn max_hp(kind) { kind_of(kind).max_hp }
 
-// Regrowth per minute for resource kinds.
-fn regrow(kind) {
-    switch kind {
-        "berry_bush" => 1.2,
-        "reeds" => 1.0,
-        "tree" => 0.5,
-        "boulder" => 0.2,
-        "fishing_spot" => 1.4,
-        "clay_bank" => 0.6,
-        _ => 0.0,
-    }
-}
+// Regrowth a game hour of growing time for resource kinds (their `regrow_per_h`).
+fn regrow_per_h(kind) { let r = entry_of("resources", kind); if r == () || r.regrow_per_h == () { 0.0 } else { r.regrow_per_h } }
 
 // ---- life course --------------------------------------------------------
 
@@ -816,7 +955,35 @@ fn signal_done(a) { [#{ op: "signal" }] }
 
 // ---- know-how -----------------------------------------------------------------
 
-fn requires(t) { switch t { "cooking" => ["fire"], "torch" => ["fire"], "carpentry" => ["shelter"], "smoking" => ["fire"], "bridging" => ["carpentry"], _ => [] } }
+// Every technique there is, in order (read once when the script compiles): what one is told it
+// is (`help`) and what must be known first (`requires`). What it lets one do is the skills'.
+fn know_how() {
+    [
+        #{ name: "fire", help: "build a campfire (3 wood)" },
+        #{ name: "cooking", help: "cook raw fish or meat at a campfire", requires: ["fire"] },
+        #{ name: "spear", help: "craft a spear (2 wood, 1 stone)" },
+        #{ name: "shelter", help: "build a shelter (6 wood, 3 fiber)" },
+        #{ name: "storage", help: "build a storage (4 wood)" },
+        #{ name: "cloak", help: "craft a warm cloak (2 hide, 1 fiber) that keeps the night cold off" },
+        #{ name: "torch", help: "craft a torch (1 wood, 1 fiber) that lights the night", requires: ["fire"] },
+        #{ name: "planting", help: "plant berries to grow new berry bushes" },
+        #{ name: "writing", help: "write and read tablets and signs" },
+        #{ name: "masonry", help: "build walls (2 stone per tile)" },
+        #{ name: "carpentry", help: "build houses (6 wood, 4 clay, 2 stone; warm like a shelter and a fire) and gates (4 wood)", requires: ["shelter"] },
+        #{ name: "fishing", help: "craft a net (3 fiber) that brings in two fish at a time" },
+        #{ name: "smoking", help: "smoke raw fish or meat at a campfire so it keeps for weeks", requires: ["fire"] },
+        #{ name: "basketry", help: "craft a basket (2 fiber, 1 wood) to carry 20 more" },
+        #{ name: "archery", help: "craft a bow (2 wood, 1 fiber) and arrows (1 wood, 1 stone for 3) and shoot from afar" },
+        #{ name: "tanning", help: "craft leather from hide, and armor (3 leather, 1 fiber) that softens blows" },
+        #{ name: "medicine", help: "craft a salve (2 berries, 1 fiber); tending with a salve heals far more" },
+        #{ name: "trapping", help: "build a trap (2 wood, 2 fiber) that catches small game over time" },
+        #{ name: "bridging", help: "build a bridge (4 wood, 2 stone) over water beside you", requires: ["carpentry"] },
+        #{ name: "fire_bolt", help: "hurl a bolt of fire (firebolt) that burns the first creature in its path" },
+        #{ name: "wound_tending", help: "close wounds quickly with your hands (the heal skill), your own or an ally's, even in a fight; not mending things" },
+        #{ name: "toolmaking", help: "craft an axe (2 wood, 1 stone; cuts wood twice as fast) or a pick (2 wood, 2 stone; breaks stone twice as fast)" },
+    ]
+}
+fn requires(t) { let k = entry_of("know_how", t); if k == () || k.requires == () { [] } else { k.requires } }
 
 // ---- roads and gates ------------------------------------------------------
 
@@ -836,14 +1003,10 @@ fn close_check(a) { if a.target.kind != "gate" { return "that is not a gate"; } 
 fn close_duration(a) { 1500 }
 fn close_done(a) { [#{ op: "gate", open: 0.0 }] }
 
-// Every technique there is: whatever experimenting with some material can reveal.
-fn techniques() {
-    let all = [];
-    for m in ["stone", "wood", "clay", "fiber", "hide", "berries", "meat", "fish"] {
-        for t in discoveries(m) { if !all.contains(t) { all.push(t); } }
-    }
-    all
-}
+// Every technique there is: the world's know-how table (its own entries included, such as a
+// seed's glassmaking), not only what experimenting with a material can reveal (`discoveries`):
+// fire_bolt and wound_tending are learned only from someone or from writing.
+fn techniques() { names_of("know_how") }
 fn teach_check(a) {
     let all = techniques();
     if !all.contains(a.item) {
@@ -1028,6 +1191,12 @@ fn seize_combat() { #{ aim: "creature", dares: true } }
 fn tend_combat() { #{ aim: "creature" } }
 // The player's skill bar, in order (the game binds LMB, RMB, Q, E, R, Shift, Space).
 fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump"] }
+// How a skill is presented to a player: `<skill>_ui()`, read once when the script is installed
+// (docs/INTERFACE.md). It only shows: what a skill may do is its spec, shape and check. A skill
+// that declares nothing is presented by how the rules aim it; these three look otherwise.
+fn strike_ui() { #{ look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" } } }
+fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }
+fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }
@@ -1419,10 +1588,10 @@ fn foods_text() {
     list(parts)
 }
 // Where an item comes from (shown when a skill lacks it).
-fn gathered() { ["berry_bush", "tree", "boulder", "reeds", "fishing_spot", "clay_bank"] }
+fn gathered() { names_of("resources") }
 fn source_of(item) {
-    for r in gathered() {
-        if yield_of(r) == item { return `gather it at a ${r}, or take it from a storage`; }
+    for r in names_of("resources") {
+        if entry_of("resources", r).yields == item { return `gather it at a ${r}, or take it from a storage`; }
     }
     if item == "food" {
         // What can be gathered and eaten, from the items' nutrition and the resources' yields.
@@ -1437,9 +1606,36 @@ fn source_of(item) {
         "cooked_meat" => "cook meat at a campfire",
         "smoked_fish" => "smoke fish at a campfire (knowing smoking), or trade for it",
         "smoked_meat" => "smoke meat at a campfire (knowing smoking), or trade for it",
-        _ => if cost(item) == () { "someone who has it can give or trade it to you" } else { `craft it (${cost_text(item)})` },
+        _ => {
+            if cost(item) != () { return `craft it (${cost_text(item)})`; }
+            let m = recipe_for(item);
+            if m != () { recipe_words(m) } else { "someone who has it can give or trade it to you" }
+        },
     }
 }
+// How a made item is made, from its recipe.
+fn made_how(item) { recipe_words(recipe_for(item)) }
+// A recipe's words: `m` is #{ r: the recipe, input: the item it turns (or ()) }.
+fn recipe_words(m) {
+    let r = m.r;
+    let parts = [];
+    let t = if r.turns != () && m.input == () { #{} } else { takes_of(m) };
+    for k in t.keys() { parts.push(`${t[k]} ${k}`); }
+    if r.turns != () && m.input == () { parts.push(`anything with ${r.turns}`); }
+    let at = if r.at == () { "" } else if r.at == "fire" { " at a fire" } else { ` at a ${r.at}` };
+    let heat = if r.fuel == () { "" } else { ` and ${short(r.fuel)} fuel from it` };
+    let how = if r.knows == () { "" } else { ` (knowing ${r.knows})` };
+    `make it${at} from ${list(parts)}${heat}${how}`
+}
+// The items fires burn: whatever has one of their fuel traits.
+fn fuels() {
+    let out = [];
+    for k in having("structures", "burns") {
+        for i in having("items", burns_of(k).fuel) { if !out.contains(i) { out.push(i); } }
+    }
+    out
+}
+
 // ---- what each skill is ----------------------------------------------------------------
 // `<skill>_spec()`, read once when the script compiles (the engine never asks per tick). Every
 // skill with rules (a duration or effects) declares one; graph normalization, the minds'
@@ -1516,6 +1712,16 @@ fn take_spec() {
     #{ latch: true, notable: true, target: true, item: true, args: ["qty"], reach: 1.5,
        about: "Take items from a storage, remains or a trap beside you. From another household's store, unless you are their guest or of their community, it is theft: its owner and anyone watching see it.",
        takes: "items in a storage, remains or a trap in reach, room in your pack", gives: "the items in your pack" }
+}
+fn feed_spec() {
+    #{ latch: true, notable: true, target: true, item: true, items: ["fuel"] + fuels(), args: ["qty"], reach: 1.5, listed: having("structures", "burns").len() > 0,
+       about: "Put fuel from your pack on a fire beside you that burns it (a hearth, an oven, a furnace): it burns only while it has fuel, and goes out when the fuel is spent. Feeding an out fire lights it again, which takes knowing fire. A campfire needs no feeding. Item \"fuel\" puts on the first fuel you carry.",
+       takes: "fuel from your pack (anything that fire burns), a fire in reach with room for it", gives: "the fire burning longer, or lit again" }
+}
+fn make_spec() {
+    #{ latch: true, notable: true, target: true, item: true, items: products(), reach: 1.5, listed: names_of("recipes").len() > 0,
+       about: "Make goods from what you carry at the place they are made (target it: a furnace, an oven, a fire...), by the world's recipes: some need the fire there burning and use some of its fuel, some a technique. Tools and garments are crafted (craft); structures are built (build).",
+       takes: "the recipe's goods from your pack, its workplace in reach (lit, with fuel, when it needs heat)", gives: "the goods made, in your pack" }
 }
 fn drop_spec() { #{ item: true, args: ["qty"], about: "Set items down where you stand and leave them, e.g. to free your pack. What is dropped is kept for no one.", takes: "the items from your pack", gives: "room in your pack; the items are left behind" } }
 
@@ -1782,8 +1988,28 @@ fn know_how_law() {
 }
 
 fn food_law() {
-    #{ cadence: "compile", topic: "food", covers: ["nutrition", "spoil_rate", "carried_spoil", "kept_spoil", "carry_limit", "source_of", "items"],
+    #{ cadence: "compile", topic: "food", covers: ["nutrition", "spoil_per_h", "carried_spoil", "kept_spoil", "carry_limit", "source_of", "items"],
        about: `${foods_text()} (hunger points). Cook raw ${or_list(items_with("cooks_to"))} at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it ${short(1.0 / kept_spoil("storage"))} times longer. A pack holds about ${short(carry_limit("person"))} things. Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (${carcass("deer").meat} meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).` }
+}
+
+// The world's recipes and fires in words, for the making law (empty when it has none).
+fn recipes_text() {
+    let parts = [];
+    for n in names_of("recipes") {
+        let r = entry_of("recipes", n);
+        let what = if r.turns == () { gives_of(r) } else { `${n} (what has ${r.turns})` };
+        parts.push(`${what}: ${recipe_words(#{ r: r, input: () })}`);
+    }
+    if parts.len() == 0 { "" } else { ` Made at workplaces (make): ${list(parts)}.` }
+}
+fn fires_text() {
+    let parts = [];
+    for k in having("structures", "burns") {
+        let b = burns_of(k);
+        let warms = if b.warmth == () || b.warmth <= 0.0 { "" } else { ` and warms within ${short(b.warmth)} m while lit` };
+        parts.push(`a ${k} burns ${short(b.rate)} ${b.fuel} a game hour (${or_list(having("items", b.fuel))})${warms}`);
+    }
+    if parts.len() == 0 { "" } else { ` Fires that burn fuel (feed them): ${list(parts)}; one goes out when its fuel is spent and is lit again by feeding it.` }
 }
 
 fn making_law() {
@@ -1794,8 +2020,17 @@ fn making_law() {
         for m in c.keys() { if need != "" { need += " + "; } need += `${c[m]} ${m}`; }
         parts.push(`${k} = ${need}`);
     }
-    #{ cadence: "event", topic: "making", covers: ["structure_traits", "regrow", "planted_max", "trap_every_s", "trap_holds"],
+    #{ cadence: "event", topic: "making", covers: ["structures", "resources", "regrow_per_h", "planted_max", "trap_every_h", "trap_holds"],
        about: `${list(parts)} (a wall and a road per tile; a tablet or sign is 1 wood, to write on). A spear hits much harder and fishes faster; an axe cuts wood and a pick breaks stone twice as fast; a cloak keeps the night cold off; a house is a home, warm like a shelter and a fire; walking on road is faster; anyone can take from a storage.` }
+}
+
+// The world's fires that burn fuel and its recipes, for minds; a world with neither says
+// nothing of them.
+fn workplaces_law() {
+    let t = fires_text() + recipes_text();
+    t.trim();
+    #{ cadence: "event", topic: if t == "" { "" } else { "making" }, covers: ["recipes"],
+       about: if t == "" { "Fires that burn fuel, and recipes made at workplaces: this world has none." } else { t } }
 }
 
 fn settlements_law() {
@@ -1809,8 +2044,8 @@ fn theft_law() {
 }
 
 fn remains_law() {
-    #{ cadence: "event", topic: "food", covers: ["carcass", "remains_s"],
-       about: `Whatever dies leaves remains where it fell: what it carried, and what its body gives (a deer ${carcass("deer").meat} meat and ${carcass("deer").hide} hide, a wolf ${carcass("wolf").meat} meat and ${carcass("wolf").hide} hide). A kill does not fill the killer's pack: whoever is beside the remains, the hunter, its pack or anyone else, takes from them (take). Remains are gone after about ${short(remains_s("deer") / 60.0)} minutes (a person's after ${short(remains_s("person") / 60.0)}), with whatever is left in them, unless they hold a tablet or sign.` }
+    #{ cadence: "event", topic: "food", covers: ["carcass", "remains_h"],
+       about: `Whatever dies leaves remains where it fell: what it carried, and what its body gives (a deer ${carcass("deer").meat} meat and ${carcass("deer").hide} hide, a wolf ${carcass("wolf").meat} meat and ${carcass("wolf").hide} hide). A kill does not fill the killer's pack: whoever is beside the remains, the hunter, its pack or anyone else, takes from them (take). Remains are gone after about ${short(remains_h("deer") * hour_ms() / 60000.0)} minutes (a person's after ${short(remains_h("person") * hour_ms() / 60000.0)}), with whatever is left in them, unless they hold a tablet or sign.` }
 }
 
 fn combat_law() {
@@ -1863,7 +2098,7 @@ fn laws_about(l) {
         combat_hz: `in a fight a body looks again ${short(l.combat_hz)} times a second`,
         input_hz: `a player may send ${short(l.input_hz)} movement inputs a second`,
         input_burst: `and ${short(l.input_burst)} in a burst`,
-        pasture_regen: `grass regrows ${l.pasture_regen} grazing units per grassy tile per growing minute`,
+        pasture_regen_per_h: `grass regrows ${l.pasture_regen_per_h} grazing units per grassy tile per growing game hour`,
         alone_within: `someone with no other person within ${short(l.alone_within)} m is alone`,
         face_slack: `a body within ${short(l.face_slack)} radians of facing something already faces it`,
         flee_clear: `a flight ends ${short(l.flee_clear)} m farther from the threat than it began`,

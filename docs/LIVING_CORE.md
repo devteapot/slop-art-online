@@ -58,8 +58,8 @@ flowchart LR
 | `vitals` | hp, hunger, energy anchored at `at_ms` with current rates | on rate change / damage |
 | `activity` | current skill, target, start/end | per action |
 | `inventory` | `(owner, item) → qty` | per action |
-| `resource_node` | kind, position, amount, lazy regrowth anchor | on gather |
-| `structure` | campfire / shelter / storage | on build |
+| `resource_node` | kind, position, amount, lazy regrowth anchor; `pool`: the node whose stock it shares (a fishing ground) | on gather |
+| `structure` | campfire / shelter / storage / a fire that eats fuel; `lit_until_ms`: when a fire that burns fuel runs out ([goods](WORLD_RULES.md#goods-recipes-and-fuel)) | on build; on feeding a fire or a recipe drawing its fuel |
 | `brain` | behavior graph JSON, revision, sequence cursors, active path, `next_think_ms` | per think (only when changed) |
 | `experience` | durable per-character log of what reached the senses; minds track progress in `mind_cursor` | per event × witnesses |
 | `deliberation` (private, per-controller view) | pending LLM deliberation with a scene snapshot | per trigger |
@@ -133,6 +133,8 @@ First lab evidence is in the [stage log](STAGES.md#stage-1).
 3. **Deliberation.** Triggered by events (plan finished, repeated failure, being hurt, being addressed, introspection timer). What comes to mind is recalled from the actor's graph by the situation (below). The prompt says how the body feels, in words, from the vitals the service subscribes to ([mind feedback](MIND_FEEDBACK.md#1-the-body-in-prompts)). Output: a validated behavior graph, optional speech and judgments.
 4. **Beliefs reach behavior** through judgments (`believes` conditions) and relations (target filters), without rewriting the graph.
 
+**How the model is framed (experiment, 2026-11-11, branch `exp-player-frame`, off by default).** Every person's prompt has the model be the person ("You are the mind of the person described under # Who you are …"). `LIVING_FRAME=player` opens deliberation (think and compile), consolidation and conversation turns instead with a short frame: the model is an AI playing this person in a persistent world shared with other players, human and AI; the body, needs, death and rules are real; what to pursue is its own choice; what the person says or writes stays in their own words. It is the owner's hypothesis, after a play-test, that characters feel like NPCs rather than players. The default (`character`) leaves every prompt byte-identical, and the variant `player-frame` with an out-of-character probe measures it ([trials](TRIALS.md#the-player-frame-experiment-2026-11-11)). Animals, starting identities, sleep and player memory are not framed.
+
 ### Situational recall
 
 Every reasoning episode (deliberation, conversation turn, consolidation, an animal's impulse) is given what the moment brings to mind, not the most recently written part of the mind ([recall.rs](../living/mind/src/mind/recall.rs), `Store::recall` in [memory.rs](../living/mind/src/memory.rs)):
@@ -163,6 +165,18 @@ Prompted by OpenRig's knowledge design (lessons kept as stories, canon that rest
 - **Lessons in the gist (experiment).** `LIVING_LESSONS=1` asks consolidation to keep, with a memory, what it taught as the person would tell it. Off by default; to be compared on two scratch worlds with real model calls, measuring transmission, hardening and tokens (tokens per minute bind on Mistral since `aske-coast-5`).
 - **Measurement, not mechanics, for shared belief, customs and offices.** No role table: minds already invoke offices (the Oath, the Headwoman, the Elders' sign) without engine support. [transmission.py](../living/tools/transmission.py) reports, read-only, beliefs by provenance, stories and what they ground, stance lean and near-absolute stances with their backing, per community the beliefs most members hold and how much of them newcomers hold, and the offices minds name.
 
+### Projects (experiment, 2026-11-11)
+
+In six-hour trial lives the subject's plans were 80–95% about food and warmth, and nothing it intended outlived the next deliberation. The hypothesis: the mind had no durable place for aims it chose itself, so every deliberation re-derived the day from the body. `LIVING_PROJECTS=1` (mind service, off by default; trial variant `projects`) gives each person one ([projects.rs](../living/mind/src/mind/projects.rs), `Store::projects`, `serve_project` and `projects_into` in [memory.rs](../living/mind/src/memory.rs)):
+
+- **In the graph, by the open-graph conventions.** `self -PURSUES {since, progress, next_step, confidence, because, thought, t}-> project:<slug>`; the aim, in the mind's words, is the project concept's name (label `Project`). `PURSUES` is a stored relationship type and fades like any belief (`c · exp(-age / 40 min)`, closed at the night's fade with `retracted_by = 'faded'`). A project is the person's own, so it is never hearsay.
+- **Consolidation and the nightly reorganization** see the open projects in their own section and may answer a `projects` array: an entry with `aim`, `progress` and `next_step` takes one up or revises it (re-asserting reinforces it), and `{"key", "ended": "done|dropped", "why"}` closes it with `outcome` and `outcome_why` on the edge (the concept keeps `outcome` and `ended_t`). Nothing is deleted. Ordinary `retract` and `merge` work on projects too.
+- **Every deliberation's think step** sees its open projects (at most 3, strongest first, the rest counted) under `# Your projects`, with since, progress and next step, and may answer `serves` with the key of the project its decision works toward. A decision carried out for an open project reinforces it (its fading restarts from then; `served`, `served_t`, `served_by`, `last_plan` on the edge). The compile step does not see projects: it expresses the decision.
+- **Recorded for the lab.** The deliberation's thought row carries `detail.projects = {open: [keys], said, serves}` and its summary ends `[serves <key>]`; consolidation and reorganization rows carry the patch, including `ended`.
+- **No goals are handed out.** The prompts say what a project is and how to keep one (a few at a time, at most 3; one never taken up again fades); they never suggest one. Nothing seeds, approves, scores or ranks aims, and survival stays the body's business.
+
+SpacetimeDB: no table, reducer, view or subscription changes. The only authority data touched is the existing `thought` row's `detail` text, written through the existing `mind_install`/`mind_say` reducers (about 100 bytes more per deliberation). Neo4j cost: one indexed read (the `self` node by `(run, actor, key)`, then its `PURSUES` edges) per think, consolidation and reorganization, and one indexed write when a decision serves a project.
+
 ### Player memory and the offline character (2026-11-09)
 
 The mind service integrates what human-played characters live into their own Neo4j minds (on by default; `LIVING_PLAYER_MEMORY=0` turns it off), so relations, judgments, places and an identity read from the character's conduct stay derived from what it lived ([design and measurements](PLAYER_MEMORY.md), [lived.rs](../living/mind/src/mind/lived.rs)). Only the character's experience rows are used, never the player's input or guessed intent. It runs on a slow cadence (a buffer, a game day, the end of a session, death), in direct calls or the provider's batch API, with one system prompt shared by every player. Everything it writes carries `lived_under = ["human"]`; what the minds consolidate carries `"ai"`.
@@ -189,6 +203,8 @@ Animal minds are deliberately simple: a small model (`ministral-8b`) feels an im
 Silence is information: addressing someone out of earshot (far away, or dead without anyone knowing) yields "No answer from Mira", so a mind can come to worry, search and eventually find remains.
 
 ### Conversations (checkpoint 4, item 6, first part)
+
+How characters speak beyond what this section covers (to the room, to one person in public, whispering, calling out, skill-granted channels such as mindspeech), what each hearer receives, what a speaker can know afterwards, and the gap list: [communication](COMMUNICATION.md) (design, 2026-11-11).
 
 A conversation is an exchange of turns between two minds, not one line per deliberation ([talk.rs](../living/mind/src/mind/talk.rs)):
 
@@ -226,8 +242,21 @@ World rules are Rhai functions in [skills.rhai](../living/scripts/skills.rhai). 
 - **Lean contexts.** When a script compiles, the AST is walked (Rhai's `internals`) to find which fields of `a` each law reads, through helpers and `let` names ([fields.rs](../living/rules/src/script/fields.rs)). A call builds only those fields ([context.rs](../living/rules/src/script/context.rs)), and the skill factor and genes only when read. Wherever the analysis cannot follow a use, it counts the whole value as read. A strike (check and done) went from 52.6 to 25.3 µs in the module.
 - **Need rates are parameters.** `rates(a)` decides every named condition (activity, age, shelter, rain, cold) and returns the state's rates. It also returns the numbers by which the engine finishes them for each body: the hunger and energy thresholds for healing and harm, the genes that scale tiring and healing, and exposure. That finishing is [`NeedLaw::rates`](../living/rules/src/script.rs). The law no longer reads a body's levels or genes, so one answer serves every body in the same state. As the authority calls it, `rates` went from 28.6 to 0.44 µs. A floor overlay that changes `cold(a)` or wraps `base_rates(a)` still changes the rates ([floors](FLOORS.md)).
 - **Install checks.** `install_script` and `init` run `Scripts::validate` before anything is written ([check.rs](../living/rules/src/script/check.rs)). It calls every law and skill function on sample states, the way the engine calls it. It refuses the script, naming the function, if a call fails, returns the wrong shape, reads a context field the engine does not provide, or exceeds the engine's limits. The module log gets the operations each function took.
+- **Interface declarations** (`<name>_ui()`, [interface](INTERFACE.md)) are read at compile into `living_rules::ui::UiSpec`, over defaults derived from each skill's spec and combat shape. They only present: no rule reads them (a test strips them and compares the rules). The read is lenient (`Scripts::ui_errors`), so a client plays on with defaults; `validate()` refuses any problem at install. `living_rules::ui::offered` is the one filter of which skills a body is offered, for players and minds' references alike.
 - **Limits.** `LIMITS` in script.rs, set from what the rules use on the install samples: 2,000 operations per call (the heaviest function takes 864), call depth 8, expression depth 40, strings 2,048 characters, arrays and maps 64 entries. The source cap is 256 KiB.
 - **Fuel budgets.** [gate.sh](../living/tools/script_bench/gate.sh) measures fuel per call (WASM instructions) of `rates`, the strike path, `perceived_of` and a constant lookup. It runs under wasmtime configured as SpacetimeDB runs reducers, and fails over [budgets.json](../living/tools/script_bench/budgets.json).
+  - **What `rates-law`'s budget protects** (measured 2026-11-11, branch `rates-2`). There are two numbers. `rates` (8,585 fuel, budget 9,000) is the authority's call: a body's rates, from an answer kept per state, finished for its own levels and genes. `rates-law` is one call of the `rates(a)` law itself. The authority asks the law only when a body's state is one no body has been in since the script revision (`Scripts::need_law`, a memo of up to 4,096 states). It looks again only when the cheap rate key changes (`brain::settle_needs`: night, the law's level cuts, fire, shelter, sleep, rest, cloak, winter, rain, the darkness step). On the island at rest (277 people, 33 animals, graph-driven, no minds or players; own container `rates2-stdb`, SpacetimeDB 2.14.1, dev-box; `living/tools/bench.py`, 60 s windows; spans `needs.rates` and the profiling-only `needs.rates.law`, added on `rates-2`):
+
+    | Window | Rate recomputes (`needs.rates`) | The law asked (`needs.rates.law`) | Law ms per call, p50 / max, in the module | Law ms a second |
+    | --- | ---: | ---: | ---: | ---: |
+    | 1, about 2 minutes after creation | 96 a second (4.1 ms/s, with the facts) | 14 in the minute | 0.22 / 0.79 | 0.05 |
+    | 2 | 99 a second (4.2 ms/s) | 4 | 0.22 / 0.22 | 0.01 |
+    | 3, the script installed 20 s in (every state asked again) | 108 a second (4.5 ms/s) | 58 | 0.13 / 0.28 | 0.13 |
+
+    So the law runs about once every 4 to 15 seconds for the whole world in steady state, and about once a second for a minute after a script revision or a fresh module instance. That is 0.01 to 0.13 ms of each second: 0.03 to 0.42 µs per character per second at 310 characters, under 0.01 µs per character per 60 Hz tick. The per-tick cost that matters is the `rates` call, 96 to 108 a second for 310 characters.
+  - **What happens when it is exceeded.** Nothing automatic. No CI runs in this repository, `just living-check` does not run the gate, and nothing warns at install or at runtime. Install limits are operations per call (2,000), not fuel. The gate fails only when someone runs `just living-script-gate` by hand. That is how `rates-law` stayed over its 160,000 from main `6593f725` (207,882, measured by goods-1) until rates-2.
+  - **How far over, in real cost.** 209,504 fuel a call before rates-2's change (36 µs p50 in the bench host, wasmtime under 2.14.1's config: about 6,000 fuel a µs). In the module that is 0.13 to 0.22 ms a call measured with its span, at the frequencies above. The budget was set on rhai-1 as the measured 127,454 plus 25%. It is a regression tripwire, not a cost limit derived from the tick. The law grew with its content, not its mechanism: under today's engine the script at `18aa818b` takes 12.2 µs natively against 16.3 µs today (`.local/rates2/evidence/rates-native-probe.txt`). rules-1's per-game-hour conversion is one multiplication in `NeedLaw::from_dynamic`, outside the law, and goods-1 measured the 207,882 before rules-1 merged.
+  - **What was done.** The law was made cheaper where it could be without changing what an overlay may replace. `rates` asks `cold(a)` and `wet(a)` once each instead of up to three times: a law called with `a` gets its own copy of the context. That brought it to 194,609 fuel (−7%). The island's rates stay bit-identical (`rates_check::rates_are_bit_identical`, 50,725 states, 38,400 of them need states). Making it much cheaper would mean inlining `cold`, `wet` and `freezing`, which overlays replace (Cullet's `freezing`), or passing the context by reference, which changes every law's signature. Natively that saves about 30%, which at these frequencies is worth less than the laws' openness. The budget is now 245,000: the measured 194,609 plus 25%, the margin every other budget has, re-based because the call is too rare to matter. After merging lives-3 (`2e9f19d9`) the gate measured `rates-law` at 218,311 (rates 8,589, strike 259,737, perceived 64,240, hook 441,450, senses-law 51,829; every law within budget): 11% under the new budget. That merge changed neither the shipped script nor the `rates` path in the rules crate (it added the `life_years` law and rhythms), so the rise is not the law's. It is probably the module's code generation, but that was not investigated. The real-time check is the `needs.rates.law` span. If it ever shows the law asked per tick (a law reading a value that changes every moment, so no state repeats), that is the regression to fix, whatever the fuel.
 - **A world's day and its own laws** (since `rules-1`, [Cullet's rules](CULLET_RULES.md)). A seed sets the day's length (`day_minutes`) and may carry a laws overlay (`laws_file`) installed at creation. Need rates are written per game hour and converted for the day; night is the `daylight` law; `glow` and lamplight show lit people farther.
 - **Skills and social rules are the script's** (since `rules-2`, [world rules](WORLD_RULES.md)). Each skill declares its arguments, reach and a description for minds in `<skill>_spec()`; there is no Rust skill list. The engine keeps generic records, calls hooks on events (`on_<skill>`, `on_expire`, `on_death`) and tells parties what the rules say. Agreements, demands and community regard are content built on those primitives.
 
@@ -483,6 +512,116 @@ LIVING_LOD=1 just living-mind                          # minds with the level of
 python3 living/tools/mind_load.py <db> <run>           # model load per person, extrapolated, and off stage
 ```
 
+**Play session report.** After every owner play session, `living/tools/play_report.py` writes one page of what was on screen and a timeline of the session (lines and who heard and answered them, fights, refusals, errors, cost). The play launcher records each session (`play_report.py record-start`/`record-stop`, `LIVING_GAME_RECORD` for the client) and runs it at the end; by hand: `python3 living/tools/play_report.py --db <database> --run <run> --journal <journal dir> --logs <dir with client.log and mind.log> --out <dir> [--capture <dir>]`. See [the play report](PLAY_REPORT.md).
+
+Checking, merging and disk cleanup (`just living-check`, `just living-merge`, the disk timer) are described in [tooling](TOOLING.md).
+
 `just living-publish` updates the module in place and installs the current skill rules. LLM exchanges are journaled to `.local/living/journal/<run>/<name>.jsonl`.
+
+### Play with one command
+
+`just living-play <scene>` (`living/tools/play.py`) starts a play session from prebuilt binaries:
+
+1. the scene's world, created on the first start or resumed;
+2. its memory store, a Neo4j container for the minds;
+3. the mind service;
+4. the game client.
+
+The session ends when the client exits, whether you close the window or it crashes. The launcher then does the following, in order:
+
+- **Pauses the world.** No ticks run, and the offline takeover of your character (`takeover_s`, 30 s) does not fire while the world is paused.
+- **Stops the mind service.** It uses the recorded PID only, after checking that PID's start time and command.
+- **Stops the memory store.** It uses the exact container name; the volume is kept.
+- **Prints the session's cost.** The cost is read from the run's journal at `living/tools/trials.py`'s prices. A model with no price there, such as the fake model server, is counted and named, not priced.
+- **Closes the rest.** It stops the client if it is still up (on `--stop`) and tool 1's recorder, and releases the build lock.
+- **Runs tool 1's report** (`living/tools/play_report.py`), when that file exists. While a session runs, the report tool's recorder keeps the authority's rows, and the client gets `LIVING_GAME_RECORD`.
+
+**Builds stop while you play.** While a game is open, the launcher holds the laptop's build lock, `.local/build-slots/session/{pid,since}` in the main checkout, and `build-slot` starts no new heavy job while that pid lives.
+- **Order.** First, if heavy jobs already hold slots, the launcher lists them and waits for them to finish, printing a progress line every minute. It does not hold the lock while waiting, and nothing paid runs. `--now` opens the game anyway, and the frame rate may suffer. The world and the minds start next. The lock is taken only when the client starts.
+- **Tests.** Set `PLAY_BUILD_SLOTS` to a scratch directory, so the session lock is `<it>/session`, or set `PLAY_SESSION_LOCK` to name the lock directly. Only the owner's sessions use the real lock, which stops every heavy job on the laptop.
+- **Release.** The lock is removed in the same teardown that pauses the world. A killed launcher's lock is ignored by `build-slot`, because its pid is dead, unless the warden has taken it over to cover a game that is still running.
+
+Every external call in the teardown has a timeout, so a wedged Docker cannot keep the minds running. A signal that arrives while a child has been started but not yet recorded is held until it is recorded. Signals during the teardown are noted and do not interrupt it.
+
+A detached warden does the same steps if the launcher itself dies. It leaves a running game alone and closes the session when the game exits.
+
+```bash
+just living-play .local/play3                      # create or resume the world, then play
+just living-play .local/play3 --fresh              # delete the current world first; says what it deletes, asks (--yes)
+just living-play .local/play3 --no-minds           # the world and the client only; no model calls
+just living-play .local/play3 --now                # do not wait for heavy jobs already running
+just living-play .local/play3 --name Diego         # the character's name at its first join (later starts are the same character)
+just living-play .local/play3 --status             # world, session, mind and store state, the run's cost so far
+just living-play .local/play3 --stop               # close a session left open (by its recorded PIDs)
+python3 living/tools/play.py --cost <journal dir>  # price any journal (an evidence folder holding journal/ works too)
+```
+
+**Resume and fresh.**
+- **Resume.** Each start resumes the world named in `<state>/current.json`, with the same `LIVING_RUN`, the same Neo4j volume and the same player token. That means the same world, the same minds and the same character. The world stays paused until the client's connection opens, so a pending takeover is cancelled rather than fired.
+- **`--fresh`.** It lists what it will delete: the database and everything in it. It also lists what it keeps: the run's logs, the journal, and the old run's nodes in the store (minds are keyed by run). From a terminal it asks before deleting; otherwise it needs `--yes`.
+- **Refusals.**
+  - A start refuses a world whose laws read-back fails; use `--fresh`.
+  - A start refuses while another session of the scene is open: another launcher holds `<state>/launch.lock` (it may still be creating the world), or a game is still running under its warden. `--stop` reaches a launcher that is still starting, through that lock.
+  - A start refuses a world whose creation was interrupted. The name is written to `current.json` before publishing, and a failed creation deletes its half-made database. `--fresh` deletes an unfinished one.
+  - A start refuses a `current.json` whose database or run does not match the scene's `db` and `run` patterns (`{stamp}` is `YYYYMMDD-HHMMSS`).
+  - An SpacetimeDB answer other than 200 or 404 is reported as an error, never taken to mean the world is gone.
+
+**The cost guard.** A scene with minds refuses `--no-client`, because paid minds would run with nobody playing. With `--minds-without-client` it runs anyway, shows the scene's cost per hour (and the rate measured on the world's earlier sessions), and prints the cost so far every 5 minutes. It runs until Ctrl-C, `--stop` or `--minutes N`. A scene without minds has nothing to guard.
+
+**Logs.** Each session keeps its logs in `<state>/runs/<run>/sessions/<stamp>/`, where `<state>` is the scene directory unless `play.json` sets `"state"`:
+- `client.log` (the client's stdout and stderr) and `mind.log`;
+- `launcher.log` (every launcher line, the teardown's steps included) and `warden.log`;
+- `session.json` and `teardown.json`, which record what was stopped and how;
+- `cost.json`;
+- the laws read-back;
+- `capture/` and `report/`, from tool 1.
+
+The journal stays under the mind root at `.local/living/journal/<run>/`.
+
+**Scene config.** A scene is a directory holding `play.json`. Relative paths are relative to that directory.
+
+Placeholders expand only in these fields:
+- `{scene}` and `{state}`: every path field, `laws_check`, `client.token` and the `env` values.
+- `{server}`, `{db}`, `{seed}` and `{outdir}` (the session directory): `laws_check`.
+- `{db}`: `client.token`.
+- `{db}` and `{session}`: client `env` values and `--client-env`.
+- `{db}`, `{run}` and `{session}`: `minds.env` values.
+
+Names such as `db`, `run`, `neo4j.container` and `neo4j.volume` are taken literally, except for `{stamp}`. Optional keys:
+- `"state"`: where `current.json`, `session.json`, `runs/` and `tokens/` live. The default is the scene directory.
+- `"server"`: default `http://127.0.0.1:3300`.
+- `"stdb_container"`: default `sao-living_spacetimedb_1`.
+- `neo4j.heap` and `neo4j.pagecache`: default `1G` and `512M`.
+
+```json
+{
+  "name": "play3",
+  "about": "Brackenford, 17 LLM residents",
+  "db": "verify-play3-{stamp}",
+  "run": "play3-{stamp}",
+  "world": {"wasm": "/abs/bin/living_authority_play2.wasm"},
+  "seed": "/abs/bin/scene.built.json",
+  "laws_check": ["python3", "{scene}/check_laws.py", "{server}", "{db}", "{seed}", "{outdir}"],
+  "client": {"bin": "/abs/bin/living-game", "cwd": "/abs/main-checkout", "name": "Diego",
+             "token": "{state}/tokens/{db}.token", "env": {}},
+  "minds": {"bin": "/abs/bin/living-mind", "root": "/abs/worktree-at-the-build-commit",
+            "dotenv": "/abs/main-checkout/.env", "env": {}, "cost_per_hour": "about $1.50 (measured)"},
+  "neo4j": {"container": "play3-neo4j", "port": 7719, "volume": "play3-neo4j-data",
+            "image": "neo4j:2026.10.1", "password_file": "{state}/neo4j.env"}
+}
+```
+
+- **`db`** must start with `verify-` and contain `{stamp}`. The launcher only deletes or resumes databases that match it.
+- **`world.wasm`** is the authority compiled with the scene's seed. For a floor module (`LIVING_SEED=none`), add `"create_floor": "<seed.json>"`, which is given to `create_floor` after publishing; the launcher then waits for `genesis.done`.
+- **`minds.root`** is a checkout at the build's commit. The mind reads `living/seeds/species.json` there, along with its `.env`, and writes its journal there. `dotenv` links that checkout's `.env` when it has none. `seed` is passed relative to it. `minds.env` adds settings, for example `LIVING_MODELS` pointing at the fake model server for a free test.
+- **`neo4j`** names the scene's own container. play.py creates it with the label `sao.play.scene=<scene name>`. It refuses an existing container without that label, before anything starts, and so never starts or stops it. The shared lab store (`sao-living-neo4j-1`, `:7689`) is refused too. A missing password file is refused while the volume exists, because the store keeps the old password. The password is generated into `password_file` (mode 600) at first start and passed only through child environments.
+- **A walk (world only).** Leave out `minds` and `neo4j`, and `seed` and `laws_check` if there is no laws overlay to check. The world is created or resumed, the client runs, and the world is paused when the client exits.
+
+Options for tests and captures:
+- `--client-env K=V` adds client environment, for example a scripted `LIVING_GAME_LIVE_PLAN` with `LIVING_GAME_LIVE={session}/live` for a headless run that quits by itself.
+- `--no-record` skips tool 1's recorder. By default the client records the session's video from its own frames ([play report](PLAY_REPORT.md)); `--no-video` records stills every few seconds instead.
+- `--cost DIR --json` prints the totals as JSON.
+
+The launcher clears inherited `LIVING_*` and `TRIALS_*` variables from the shell before starting children. The admin token, the store's password and provider keys reach the children only through their environments; they are never printed or logged.
 
 **Public observer: retired (2026-11-09).** The public observer at `https://sos.carlid.dev` is gone. The user stopped and disabled its services on the dev-box (`sao-tunnel.service`, the Cloudflare tunnel, and `sao-observer-web.service`, which served the static bundle on 127.0.0.1:8331), and the site returns 530. After the perception work, the observer reads private developer truth as the database owner, which a public page cannot do without handing admin rights to every visitor ([perception](PERCEPTION.md#the-mind-service-and-the-observer)). The lab observer is local: `just living-web`, opened with the owner's token in the page fragment (`#token=…`). `just living-web-dist` still builds the optimized bundle into `.local/living/web`; nothing serves it.

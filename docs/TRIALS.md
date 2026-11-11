@@ -22,7 +22,7 @@ A trial is a JSON file in [`living/trials/`](../living/trials/). Fields:
 | `timeline` | Steps. `"at": "prepare"` runs right after publishing, `"at": "start"` at the start hour before the mind starts, `"at": <minutes>` during the run, and `"when": {…}` on a trigger. An entry is one step or has `steps`, each with an optional `after` (seconds). |
 | `probes` | Probes the trial is about (all probes are computed for every trial). |
 | `minds` | Who the mind service thinks for. Default: the subject (`LIVING_ONLY`). `"only": "all"`: every person and animal. With `"max": N` as well, at most N at a time: those already thinking who are alive, then the earliest-born of the rest past infancy. A death frees a place, and a newborn takes one when it becomes a child. The runner restarts the mind with the new `LIVING_ONLY` when someone joins the set, at most every 2 minutes (a `reslot` event; planned restarts do not count toward the runaway watchdog's restarts). A death alone only drops the dead from the set. |
-| `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. |
+| `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. A world seed with its own laws (`laws`/`laws_file`) has them composed over the file first (`compose_laws`, as `floors::compose` does at creation), and the runner checks its composition against the world's. |
 | `census_s` | Every so many seconds, every character of the world goes to `census.jsonl`: stage, alive, cause and time of death, parents, position, hunger, activity, and who the mind thinks for. This is meant for small worlds (four whole-table reads per census). |
 | `life.stop_on_death` | `false`: a life run goes on to its duration after the subject dies, and the mind keeps running (default `true`: it stops 20 s after the death). |
 | `human` | A scripted human player for a `subject.join` trial (`Player` in trials.py): `minutes`, and `script: greet` for the greeting trial (`wait_s`, `listen_s`, `earshot_m`, `greetings`, `addressed`; [the greeting trial](#the-greeting-trial-2026-11-11)). Without `script` it plays the takeover session. |
@@ -36,7 +36,7 @@ Substitutions in steps: `"$<role>"` is that character as a target (`{"id": n}`),
 
 Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of`, `within`), `hour`; with `max`, `per_addressee`, `after_min`.
 
-**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds` and `lod`. In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
+**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds`, `lod`, `projects` (`LIVING_PROJECTS=1`: [projects](LIVING_CORE.md#projects-experiment-2026-11-11); the thought rows' `detail.projects` says which project each plan served) and `player-frame` (`LIVING_FRAME=player`, [below](#the-player-frame-experiment-2026-11-11)). In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
 
 ### How the script reaches the world
 
@@ -69,7 +69,7 @@ python3 living/tools/trials.py down                      # stop the containers (
 Three runner behaviours since 2026-11-11 (branch `exp-greet`):
 
 - `run --fake --fake-script FILE` gives the fake server a rules file. `living/trials/fake/latency.json` sets model latencies near the real ones and open-ended talk replies.
-- A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) keeps them: the runner does not install the plain `skills.rhai` after publishing (that would drop them; docs/CULLET_RULES.md), and refuses a `skills_patch` on such a seed.
+- A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) keeps them: the runner composes the overlay over the skills file as the authority did at creation (`compose_laws`), checks the result against the world's own script, applies any `skills_patch` and installs that (docs/CULLET_RULES.md). Main's runner did this first; `exp-greet`'s earlier way, skipping the install, was dropped in the merge.
 - Run from a git worktree, `build` copies each module into the container's `/wasm` mount (another checkout's) under a tagged name, `<module>-wt<hash>` (`served_name`), and `run` publishes that name, so a worktree never overwrites another checkout's modules. Remove the tagged files from the mount when done.
 
 Each instance is a database `verify-trial-<batch>-<trial>-<variant>-r<k>` on the trial service and one `living-mind` process. Its evidence directory, `.local/living/trials/<batch>/<trial>-<variant>-r<k>/`, holds:
@@ -108,6 +108,8 @@ export CARGO_TARGET_DIR=$HOME/slop-trials-target OPENSSL_INCLUDE_DIR=$HOME/slop-
 python3 living/tools/trials.py up && python3 living/tools/trials.py build wolves wolves-valley hungry hungry-village teacher theft
 python3 living/tools/trials.py run --batch b3 wolves hungry --variants default,lessons --replicates 3
 ```
+
+**From another checkout** (a git worktree), the trial container still serves the starting checkout's `.local/living/trials/wasm/` as `/wasm`. `trials.py build` then also copies each module there as `<module>-wt<tag>.wasm` (`tag` from the checkout's path) and `run` publishes that file, so a worktree never overwrites or reuses a module another checkout's batches run. The worktree needs its own copy of `.local/living/trials/neo4j.env` (mode 600); it must not run `up` against a running stack.
 
 The verify harness runs there too, against the trial container: `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320` make `verify.py`, `living/tools/stdb`, `verify-llm` and `verify-minds` use it instead of `sao-living_spacetimedb_1` on 3300. Other surface scripts (`verify-client`, `verify-generation`, `verify-knowledge`) still assume 3300.
 
@@ -408,11 +410,73 @@ Batches: `l6` (main 445db098, island presets, 6 h planned), `l7` (valley, 6 h), 
 
 **Weak measures.** `goals_reached` is the least reliable. Goal wording drifts inside a cluster, so an outcome can answer a different wording of the same goal, and the outcome classes are keyword matches. `goals_1d` depends on how often consolidation rewords goals (Jaccard threshold 0.4). `acts_other` counts every `say` and `wave` as "other", so asking for food scores as living. `self_started` counts every `wander` as exploring. `prompted` has been checked only on `s11`. `fail_streak` is broken by any act outcome in between.
 
+### Owner-tuned player score
+
+`life_feel.py` stays a set of heuristics until the owner's judgement says which columns, if any, track "a player living their own life". Three tools close that loop. All three read evidence read-only and make no model calls. The one exception is an explicit `feel_tune.py judge --run`, which needs real ratings.
+
+1. **Excerpts.** `feel_excerpts.py build` cuts candidate windows of 10 real minutes from every thinking character's run. It scores each window with life_feel's own columns, computed on just that window, and draws about 20 excerpts. The draw follows a per-source quota and spreads across the arms within each source. Within an arm it alternates trials and early and late windows, and it reaches toward the 5th and 95th percentiles of `feel0`, a provisional composite: the mean percentile of the initiative, exploration and social columns minus the loop columns. `feel0` only stratifies the draw and is not a score. Each excerpt is a plain second-person timeline of at most 12 lines. It opens with the plan held at the start. Exchanges (a line to the character and its reply) are kept together, and the other lines follow: plan changes, failures and struggles, things learned, given and received, and other percepts. A line said again, or a repeated percept, is folded into one line with a count. A closing line gives how the body spent the window and how hunger moved. Runs whose subject is a scripted human (the greeting trials) are followed through a thinking resident. Its speech comes from `speech.jsonl` joined to `audience.jsonl`, and other people are named only once the resident knows them. Its other percepts are the stamped lines of its journal requests, placed in time through the census, and its body comes from `census.jsonl`. A subject, who has the same newcomer name in every trial, gets a pseudonym, while a resident keeps its own name. Ids, coordinates, day numbers and clock minutes are removed, and nothing names a run, batch, model or arm. It writes `.local/living/feel/excerpts.json` (blind, for the page) and `.local/living/feel/excerpts_key.json` (private: id → source, run, variant, window, columns). Both are under the git-ignored `.local/living/`. Never serve, commit or show the key to the rater.
+2. **Rating page.** `feel_page.py` turns the blind file into one HTML page. Each excerpt carries one question, "Does this feel like a player living their own life?", answered on a 1–5 scale with an optional one-line reason. The page is published as a private claude.ai Artifact with the `db`, `user` and `downloads` capabilities. Every click saves the document `owner_ratings/<excerpt id>` = `{score, reason, at, rater, source: "page"}` on the artifact's server-side store. The page never touches the `ratings` collection, where the proxy's ratings are kept, and it ignores any `proxy:` document, so the owner always rates blind. To read the ratings back, call the ArtifactData tool's `list` on collection `owner_ratings` for that artifact URL and save the result as JSON. Without the store, for example in a saved copy, the page keeps ratings in the browser and offers "Copy ratings" and "Download ratings.json", which write the shape `feel_tune.py` reads.
+3. **Tuning.** `feel_tune.py fit --ratings R` joins the ratings to the key. Per column, for both the window values and the whole-run values, it reports Spearman ρ and a permutation p. It then fits a ridge on the standardized columns and a single-column isotonic fit. Both are scored leave-one-out, with the column and λ chosen inside each training fold, against two baselines: the mean rating and `feel0`. Each predictor gets Spearman, within-one, exact agreement and MAE. The report lists every excerpt where the score and the owner disagree, with the owner's reason. `feel_tune.py judge` builds an LLM-judge rubric from the owner's reasons, leave-one-out, so no excerpt is judged with its own rating in the prompt. The default `--dry-run` writes the prompts and a cost estimate. `--run` uses DeepSeek V4.1 Flash on Mistral's API (`MISTRAL_API_KEY`) and refuses synthetic ratings. Both commands refuse with "no ratings: no agreement claim" when fewer than 5 ratings exist. `feel_tune.py synth` writes a clearly labelled synthetic ratings file for testing the plumbing, and every report built from it carries a "SYNTHETIC RATINGS" banner.
+
+```bash
+python3 living/tools/feel_excerpts.py build                    # default sources and quotas (docstring); --source L=DIR --quota L=N to change
+python3 living/tools/feel_excerpts.py show [--key]             # the blind excerpts as text (--key adds sources: coordinator only)
+python3 living/tools/feel_page.py                              # .local/living/feel/page/player_feel.html, to publish as the Artifact
+python3 living/tools/feel_tune.py fit --ratings .local/living/feel/ratings.json
+python3 living/tools/feel_tune.py judge --ratings .local/living/feel/ratings.json            # dry run: prompts and cost only
+python3 living/tools/feel_tune.py fit --ratings DIR --proxy                 # proxy ratings only, labelled PROXY on every output
+python3 living/tools/feel_tune.py compare --owner NEW_DUMP --proxy OLD_PROXY_DUMP   # the owner's ratings against the proxy's
+python3 living/tools/feel_tune.py judge --ratings .local/living/feel/ratings.json --run --env-file ~/dev/slop-trials-e6/.env --base-url https://api.mistral.ai/v1   # paid; only with the owner's ratings
+```
+
+The first page (2026-11-11, 22 excerpts) is the claude.ai Artifact `https://claude.ai/artifact/MyiNwW9QmdXt1m91H4b5xX`, and its key is `.local/living/feel/excerpts_key.json` in the `tool-feel-tune` worktree on the Spark. It leaves out the `greet-nearest` (gr1a) and `park-concurrent` (gr1b) arms, whose runs failed at publish (`--skip`, default). They rerun as `gr1c`, which `build --quota gr1c=N` adds to a later page. To collect the owner's ratings, save an ArtifactData `list` of collection `owner_ratings` with `out_dir` and pass that directory as `--ratings`. A rebuild draws new excerpt ids, so do not rebuild while ratings for the published page are still coming in. Keep the key that matches the page. The excerpts cover 10 real minutes and the owner rates lives as they read, so a window-level column can agree with the owner while the whole-run column does not, or the reverse. The report gives both.
+
+**Proxy ratings.** A rating document whose `rater` starts with `proxy:` (or that names `proxy_for`) comes from someone rating on the owner's behalf. `fit` and `judge` refuse such documents unless `--proxy` is given. With `--proxy` they use only proxy documents. Every output then says "PROXY RATINGS (general coordinator, rating for the owner); not the owner's judgement", and files get a `_proxy` suffix. No proxy report claims agreement with the owner. The page (version 2, 2026-11-11) writes the owner's ratings to `owner_ratings`, so they never replace the proxy's documents in `ratings`. `compare --owner <owner_ratings dump> --proxy <ratings dump or the saved copy>` reports the differences.
+
+On 2026-11-11 the owner asked the general coordinator to rate the first page in their place, so those 22 ratings are proxy ratings. They are saved in `.local/living/feel/ratings-proxy-2026-11-11/` on the Spark, and the fit is in `.local/living/feel/proxy-fit/tune_report_proxy.md`. The proxy's rubric:
+
+- 4–5: pursues something of its own beyond food and warmth, deals with other people and is answered; relationships with history (a debt, a promise, a child learning); wants negotiated with someone.
+- 3: an agenda beyond survival, but nobody answers or the act lands on no one.
+- 1–2: a survival loop; plans restated unchanged; the same line said to silence; repeated failures; nobody else present.
+- Being answered mattered most.
+
+**Circularity.** The proxy rater stated that being answered mattered most. A fit that finds `heard` and `answered` as the signal therefore shows that the rubric was applied consistently, not that it matches the owner's judgement. `feel_tune.py` prints this in the header of every proxy report and of every proxy-tuned score.
+
+What the proxy fit says (proxy ratings, n = 22; one rater, one sample):
+
+1. Window columns about being spoken to track the proxy ratings best: `heard` ρ +0.90, `silence` −0.79, `addressed` +0.78, `answered` +0.76, all p < 0.001.
+2. Leave-one-out, the window ridge reaches Spearman +0.70, within-one 0.86 and MAE 0.84. Its whole-pipeline permutation p, with fitting and the pick of the best predictor included, is 0.020 over 200 shuffles. `feel0` reaches +0.57, and the run-level ridge +0.53.
+   After `feel_excerpts.py rescore` (the same windows, placed from the key's 0.1-minute starts, with the own-project columns kept out of the models as probes), the window ridge reaches +0.68, within-one 0.91, MAE 0.89, with a whole-pipeline p of 0.030 over 200 shuffles.
+3. Much of this is the split between worlds. Excerpts where everyone thinks average 4.10 and single-thinker lives 1.75 (AUC 0.92). `heard` and `answered` are 0 in every single-thinker window, so they cannot rank those lives. Within the single-thinker lives the window ridge reaches only +0.43 (p 0.08, n = 12); `addressed` (+0.82), `lines` (+0.77), `self_started` (+0.74) and `people` (+0.74) are the columns that vary with the rating there. The whole-run columns mostly encode the split: all-minds runs are short and hold few goals, so `goals_1d` and `min` correlate negatively with the rating.
+
+**The proxy-tuned score, never alone.** The score rises when residents simply talk more, including when they answer lines meant for others or repeat themselves. `feel_tune.py score BATCH_DIR...` applies the fit's window ridge to every thinking character's windows, per arm. It always prints the score beside three guards over the same lives:
+
+- false replies per minute, from `greet_report.py` where the batch's checkout has it;
+- the share of a character's own lines that repeat one of its own from the last 10 minutes;
+- the share of addressed lines that led to something within 180 s: an outcome the character is part of (a trade, lesson, gift, help, hosting or agreement), or a new plan of its own or of the addressee that names the other.
+- beside it, a placebo: the same test with every line moved 6 minutes earlier. Whatever the placebo still finds was not caused by the line, so read the difference.
+
+Runs without `final.json` (still running, or failed before writing their rows) are left out unless `--include-running` is given. Against a baseline arm (a `control` arm, else `default`), an arm that raises the score while any guard gets worse is reported as `LOST`, and a guard that cannot be measured is named as unmeasured. On 2026-11-11, with the proxy-tuned model (report `.local/living/feel/score/score_report_proxy.md` on the Spark):
+
+- gr1a `greet-nearest` (finished run r4 only) raised the score (4.13 against 4.11) while false replies rose from 0.010 to 0.081 per minute and repeated lines from 0.11 to 0.13. It is reported `LOST`.
+- pf2 `player-frame` (still running, scored with `--include-running`) raised the score (2.72 against 2.56) while talk that led to something fell from 0.02 to 0.00. It is reported `LOST`, with false replies unmeasured.
+- In the hamlet, talk that led to something is 0.64–0.71, but the placebo already finds 0.47–0.58. Most of what this guard counts there would happen without the line, so only the difference means anything.
+
+**Sustained own-project activity** (`life_feel.py` measure 7: `own_project`, `project_acts`, `project_progress`). It looks for a goal of the character's own, held from the first to the last third of the window's plans and intentions. Food and fire or cold are excluded, but a cloak or a shelter can be a craft project, and names and filler words are excluded too. It then counts the acts toward that goal, each once: decided acts or, failing those, attempts, plus the character's own lines naming it. It also records whether one of them was done. The measure was added for the known blind spot: a resident with her own project in a village that talks around her (Mara, timber for her own house) got 1.2 from the window ridge where the proxy gave 4. `feel_excerpts.py rescore` recomputes the key's windows with it, and `fit --probe` reports it outside every model, so nothing is refitted to claim agreement. A review found that the first version depended on hash order and took words like "pack/full/work" or "Millbrook" as projects; both are fixed. Result, on proxy ratings:
+
+- It marks Mara (`own_project` 1.0, timber, 4 acts) and two other highly rated residents: Cal teaching and writing (rytd3, 1.0) and the carpentry in tha3g (0.94).
+- It does not close the other gap. vpxff, also underrated, scores 0. It also gives high values to four low-rated single-thinker lives with a held but unanswered project: storage (2zt89, 0.95), a shelter (vnr8j, 0.94), wood and toolmaking (s2asb, 1.0) and a trap line (u86uh, 0.71).
+- Across the 22 excerpts it tracks neither the proxy ratings (ρ +0.05) nor the window ridge's residual (ρ −0.04).
+
+The measure finds held projects. What the proxy rewarded is whether anyone answers, which this measure does not see.
+
+**No LLM judge on proxy ratings.** `judge --proxy` refuses outright, building no prompts and making no call. The judge waits for the owner's own ratings.
+
 ## The hamlet: a small world where everyone thinks (2026-11-11)
 
-Branch `exp-hamlet-births`. Status: **built and proved with fake minds only** (`hm0`, below). No paid run has been made on it.
+Branch `exp-hamlet-births`. Status: **built and proved with fake minds only** (`hm2` on Cullet's day and laws, `hm0` and `hm1` before them on the 12-minute day; below). No paid run has been made on it.
 
-The seed [`hamlet`](../living/seeds/hamlet.json) is [`authored-test`](../living/seeds/authored-test.json) with five more residents, larger stores, the fishing spots and berry bushes each settlement promises (`resources`), and no animals. It keeps that seed's 96 × 96 realm map, its sheets and its pace (`year_days` 4, `life_pace` 0.1428). Twelve people live in four households in two settlements a short walk apart. Each settlement has houses, a store on its square, planted berry fields and its own fishing water. Nothing is restocked during a run. Ids are the seeding order. Each person's death of old age is fixed by their id (`Life::deathline`), so the death times below come from `births_report.py`.
+The seed [`hamlet`](../living/seeds/hamlet.json) is [`authored-test`](../living/seeds/authored-test.json) with five more residents, larger stores, the fishing spots and berry bushes each settlement promises (`resources`), and no animals. It keeps that seed's 96 × 96 realm map and its sheets. Since main brought a seed's own day and laws (`rules-1`, [Cullet's rules](CULLET_RULES.md)) it has Cullet's day (`day_minutes` 48) and Cullet's laws (`laws_file` `worlds/cullet/laws.rhai`). Its pace is `year_days` 4 and `life_pace` 0.0357, a quarter of `authored-test`'s 0.1428, so that a life still lasts 8 real hours on the four-times-longer day. Twelve people live in four households in two settlements a short walk apart. Each settlement has houses, a store on its square, planted berry fields and its own fishing water. Nothing is restocked during a run. Ids are the seeding order. Each person's death of old age is fixed by their id (`Life::deathline`), so the death times below come from `births_report.py`.
 
 | Id | Who | Age | Household | Stage at start | Thinks in `hamlet` | Dies of old age at |
 | ---: | --- | ---: | --- | --- | --- | ---: |
@@ -429,12 +493,12 @@ The seed [`hamlet`](../living/seeds/hamlet.json) is [`authored-test`](../living/
 | 11 | Sefa Reed, Wenna's daughter (the subject) | 19 | reed | adult | yes | 337 min |
 | 12 | Lio Reed, Wenna's son | 10 | reed | child | yes | 377 min |
 
-Food is plentiful. Within 24 m of the two squares there are 31 and 22 berry bushes, wild and planted, and 2 and 7 fishing spots (verify-generation, `generation-hamlet-20261111-141545`). A bush holds 5 berries and regrows 1.2 a minute outside winter (`regrow`). A person eats about 1.2 hunger a real minute awake, about 0.1 berries. The stores hold 16 berries, 10 cooked fish, 6 fish and 10 wood between them, and everyone carries a few berries or fish. Winter, when nothing regrows, is one game day in four (12 real minutes of every 48).
+Food is plentiful. Within 24 m of the two squares there are 31 and 22 berry bushes, wild and planted, and 2 and 7 fishing spots (verify-generation, `generation-hamlet-20261111-141545`). A bush holds 5 berries and regrows 1.2 a minute outside winter (`regrow`). A person gets about 1.2 hunger a real minute awake (Cullet's 2.4 a game hour), about 0.1 berries' worth. The stores hold 16 berries, 10 cooked fish, 6 fish and 10 wood between them, and everyone carries a few berries or fish. Winter, when nothing regrows, is one game day in four: 48 real minutes of every 192.
 
 The tensions are in the sheets and none is scripted. Oren's debt to Teodor and the secret of the sold seed grain come from `authored-test`. Teodor has no apprentice, and Mara wants a house of her own rather than his trade. Brisk and Cal are rivals. Sefa wants to leave her mother's house.
 
 - **Minds.** `hamlet` thinks for every person past infancy, at most 12 at a time (`minds.max`, above): 11 at the start, 12 once Tobin is a child. In a stable population every person thinks. If the hamlet grows past 12 people old enough to think, the youngest live on their seeded ways until a death frees a place. Each time someone joins the thinking set, the runner restarts the mind service (at most every 2 minutes), which breaks off model calls and conversations in progress for all of them. A death alone does not restart it. `hamlet-solo` thinks only for the subject (`LIVING_ONLY` = 11). The other eleven run their behaviour graphs, as the island's residents do in a scripted trial, and graph adults do not conceive. Both runs go on to their full duration after the subject's death (`life.stop_on_death` false). The solo run then has no mind at all and costs nothing more.
-- **Cullet's law values.** Sight is a law (`sight_in` in `skills.rhai`), so the trials set Cullet's distances through `skills_patch`: 48 m by day, 14 m in the dark, and 20 m with a torch (docs/SMALL_CITY.md, decision 6). The day length cannot be set. `World.day_ms` comes from `living_rules::DEFAULT_DAY_MS` (12 minutes) in `init`, and no seed field or reducer sets it (SMALL_CITY.md section 4 already notes that the seed needs a field for it). The hamlet therefore runs on the default 12-minute day, not Cullet's 48 minutes.
+- **Cullet's day and laws.** The seed sets them, and the world composes the overlay when it is created. Cullet's laws give needs per game hour, so 48 hunger a game day is the same 1.2 a real minute awake as before. They also give eased dusk and dawn, and Cullet's senses: sight 48 m by day and 14 m in the dark, 20 m with a torch, someone in lamplight seen from 28 m, names within 24 m, and speech carrying 12 m. Night is 20:00–06:00, 20 real minutes of the 48. The runner installs the skills file after publishing, and installing the bare file would drop the overlay. So the runner composes the seed's `laws`/`laws_file` over that file first, the way `floors::compose` does (`trials.compose_laws`), then applies any `skills_patch`. Before installing it compares its composition with the one the world made at creation and logs `seed laws composed as the world composed them: True` (an `error` event otherwise). The hamlet's earlier sight `skills_patch` is gone.
 - **What the runner records** besides the subject's samples: `census.jsonl` every 30 s (every character's stage, life and death, parents, position, hunger and activity, and the thinkers), hourly snapshots, and every resident's journal.
 
 ```bash
@@ -444,7 +508,21 @@ python3 living/tools/births_report.py hm0
 python3 living/tools/trials.py clean --batch hm0
 ```
 
-### Fake proof (`hm0`)
+### Fake proof
+
+`hm2` (after merging main fd2030c, which carries rules-1): 2026-11-11 15:08–15:19, fake model, 10 minutes, one replicate of each of the five trials on Cullet's day and laws. Modules: `trial-hamlet-5a897620` (hamlet, solo, provided), `-94c40654` (spaced), `-48fa2f46` (longing). The world rows read `day_ms` 2880000, `life_pace` 0.0357 and `year_days` 4. The longing world had its `world_law` rows (120, 4). In all five runs `actions.log` says `seed laws composed as the world composed them: True`. The provided run installed `seed laws,conceive_food,conceive_roof`. The host's load was 26–28, from other builds and `l9`.
+
+| Run | Minds thinking | Model calls (by purpose) | Calls per real minute per mind (run / minutes 5–10) | Tick p99, minute 1–2 | Ticks over 16.7 ms |
+| --- | --- | --- | --- | --- | ---: |
+| `hamlet` | 11, and 12 from t = 484 s (`reslot`: Tobin) | 201 (consolidate 85, think 53, deliberate 53, talk 10) | 1.80 / 1.82 | 0.92 ms | 0 |
+| `hamlet-spaced` | the same (t = 484 s) | 195 | 1.74 / 1.67 | 0.92 ms | 0 |
+| `hamlet-provided` | the same (t = 482 s) | 198 | 1.77 / 1.83 | 1.00 ms | 0 |
+| `hamlet-longing` | the same (t = 487 s) | 200 | 1.79 / 1.83 | 0.87 ms | 0 |
+| `hamlet-solo` | 1 (Sefa Reed #11) | 7 | 0.70 / 0.4 | 0.86 ms | 0 |
+
+Mind processes used 67–81 MB resident. No one died or was born in 10 minutes. Teodor's death is due at minute 49, the same real time as before: the life was kept at 8 real hours. Fake minds made more calls on Cullet's day (1.8 a minute per mind against 1.1–1.5 on the 12-minute day). The fake model answers at once, so this is the mind's cadence, not a price.
+
+Before rules-1 (the 12-minute day, `life_pace` 0.1428, the same lives in real time, sight by `skills_patch`):
 
 `hm0`: 2026-11-11 14:13–14:24, fake model, 10 minutes, one replicate of each, module `trial-hamlet-c43ae3e5` built from this branch's working tree. The trial service also carried batch `l9` and other builds (load 14–21).
 
@@ -455,7 +533,7 @@ python3 living/tools/trials.py clean --batch hm0
 
 Mind processes used 33–69 MB resident. What else the run showed:
 
-- The cast picked Sefa Reed (#11, the youngest adult) as the subject, the sight patch was installed (`patched sight` in `actions.log`), and each run wrote 21 census rows.
+- The cast picked Sefa Reed (#11, the youngest adult) as the subject, the sight patch of that version was installed (`patched sight` in `actions.log`), and each run wrote 21 census rows.
 - The population stayed 12 → 12. No one was due to die in 10 minutes; Teodor's death is due at 49.
 - Fake replies carry no acts, so the act shares are empty. 42 plans were classed, none about food or children.
 - Tobin was within 4 m of a grown person in 60% of his census rows while an infant. 10% of grown persons' rows had him that near.
@@ -476,24 +554,24 @@ The owner's working target is an experiment, not a change to the defaults: over 
 
 ### The arithmetic
 
-The person life table (`species.json`): `years` 70; infant until 0.03 of a lifespan, child until 0.23, elder from 0.85; death of old age at each person's own point between `old_age` 0.87 and 1.0, spread evenly by id; `gestation` 0.011; `interbirth` 0.03 (after a birth both parents are raising the child, `rearing`, and neither can conceive); `litter` 1. Only adults (0.23 to 0.85) may conceive (`conceive_check`). A game day is 12 real minutes on every seed.
+The person life table (`species.json`): `years` 70; infant until 0.03 of a lifespan, child until 0.23, elder from 0.85; death of old age at each person's own point between `old_age` 0.87 and 1.0, spread evenly by id; `gestation` 0.011; `interbirth` 0.03 (after a birth both parents are raising the child, `rearing`, and neither can conceive); `litter` 1. Only adults (0.23 to 0.85) may conceive (`conceive_check`). A game day is 48 real minutes in the hamlet (`day_minutes`) and 12 on the island.
 
 A lifespan in game days is L = years × `year_days` × `life_pace`.
 
-| | Hamlet (`year_days` 4, `life_pace` 0.1428) | Island (`year_days` 8, `life_pace` 1) |
+| | Hamlet (`day_minutes` 48, `year_days` 4, `life_pace` 0.0357) | Island (12-minute day, `year_days` 8, `life_pace` 1) |
 | --- | --- | --- |
-| Lifespan L | 70 × 4 × 0.1428 = 40.0 game days = 480 real min = **8.0 h** | 70 × 8 × 1 = 560 game days = **112 h** |
-| A year of age | 0.571 game days = 6.9 real min | 8 game days = 96 real min |
+| Lifespan L | 70 × 4 × 0.0357 = 10.0 game days × 48 min = 480 real min = **8.0 h** | 70 × 8 × 1 = 560 game days = **112 h** |
+| A year of age | 0.143 game days = 6.9 real min | 8 game days = 96 real min |
 | Infant, child, adult from | 0–14 min, to 1.84 h, then adult | 0–3.4 h, to 25.8 h, then adult |
 | Elder from (0.85 L) | 6.8 h | 95 h |
-| Death of old age (0.87 to 1.0 L, mean 0.935 L) | 6.96 to 8.0 h, mean 37.4 game days = 7.48 h | 97 to 112 h, mean 524 game days = 105 h |
-| Gestation (0.011 L) | 0.44 game days = 5.3 min | 6.2 game days = 74 min |
-| Raising after a birth (0.03 L) | 1.2 game days = 14 min | 16.8 game days = 3.4 h |
+| Death of old age (0.87 to 1.0 L, mean 0.935 L) | 6.96 to 8.0 h, mean 9.35 game days = 7.48 h | 97 to 112 h, mean 524 game days = 105 h |
+| Gestation (0.011 L) | 0.11 game days = 5.3 min | 6.2 game days = 74 min |
+| Raising after a birth (0.03 L) | 0.3 game days = 14 min | 16.8 game days = 3.4 h |
 | Shortest time between one couple's births (0.041 L) | 19.7 min | 4.6 h |
 
 **Births a stationary population needs.** If no one dies before old age, a population of N stays stationary when b = N / (mean age at death) = N / (0.935 L) births a game day. In a stationary population a share (0.85 − 0.23) / 0.935 = 0.66 are adults. Each couple then needs 2 children over its 0.62 L of adult life, one per 0.31 L.
 
-- **Hamlet, N = 12:** 12 / 37.4 = 0.32 births a game day, **3.2 per 10 game days** (2 real hours). Over a 6-hour run (30 game days, 0.75 L) that is 12 × 0.75 / 0.935 = **9.6 births**. Per adult, 0.4 per 10 game days. Per couple, 0.8 per 10 game days, if every adult is in a couple.
+- **Hamlet, N = 12:** 12 / 9.35 = 1.28 births a game day, **12.8 per 10 game days** (8 real hours), so 3.2 per 2 real hours. Over a 6-hour run (7.5 game days, 0.75 L) that is 12 × 0.75 / 0.935 = **9.6 births**. Per adult, 1.6 per 10 game days. Per couple, 3.2 per 10 game days (one per 0.31 L, 2.5 real hours), if every adult is in a couple. Everything in real time is as it was on the 12-minute day, because the lifespan in real time was kept. Only the count of game days per life changed, from 40 to 10.
 - **Island, N ≈ 311 (everyone thinking, `s12`):** 311 / 524 = 0.59 a game day, **5.9 per 10 game days**. 61 is about ten times that. That count was the first wave: no one is raising young at the start, so every willing couple conceives at once.
 - **Today's ceiling:** an eager couple, conceiving at each first chance, can have a child every 0.041 L, so 1 + (0.62 − 0.011) / 0.041 ≈ 16 children over an adult life. That is 8 times replacement. Only the minds' choices hold births down today.
 
@@ -506,8 +584,8 @@ Each arm is general law or data. None names the hamlet or touches what minds may
 | Arm (trial) | Values | What a body can do | What it should give |
 | --- | --- | --- | --- |
 | Control (`hamlet`) | shipped: `interbirth` 0.03, `conceive_food` 0, `conceive_roof` false, `longing_after_min` 20, `longing_food` 0 | today's rules | the births minds choose today |
-| **Spaced** (`hamlet-spaced`) | `species.person.life.interbirth` **0.15** (world.overrides.species, merged over species.json at build) | after a birth both parents raise the child for 0.15 L (6 game days, 72 real min here; 84 game days, 16.8 h on the island) | an eager couple has at most one child per 0.161 L: 1.55 per 10 game days here, twice the 0.8 a couple needs when every adult is paired. That is replacement when about half the adults are paired, as at the hamlet's start (4 of 8). 0.30 would be replacement with everyone paired (one per 0.311 L), but with the hamlet's two couples that caps births well under the 9 deaths. |
-| **Provided** (`hamlet-provided`) | `conceive_food` **8**, `conceive_roof` **true** (skills_patch of `skills.rhai`) | to start a family the two must carry 8 portions of food between them, and the asker must stand under a shelter or in a house | births depend on a surplus put by, so more mouths sharing the same bushes and fishing spots make a surplus harder to gather. With the hamlet's plenty (above), the gate costs effort and timing (gathering and keeping 8 rather than eating them) rather than scarcity, so its density dependence is weak there. It would bind harder in a leaner world. 8 berries are 96 hunger: about 11 game days of an infant's hunger (8.6 a day) or 3 of a pair's (14.4 a day each). |
+| **Spaced** (`hamlet-spaced`) | `species.person.life.interbirth` **0.15** (world.overrides.species, merged over species.json at build) | after a birth both parents raise the child for 0.15 L (1.5 game days, 72 real min here; 84 game days, 16.8 h on the island) | an eager couple has at most one child per 0.161 L (77 real min): 6.2 per 10 game days here, twice the 3.2 a couple needs when every adult is paired. That is replacement when about half the adults are paired, as at the hamlet's start (4 of 8). 0.30 would be replacement with everyone paired (one per 0.311 L), but with the hamlet's two couples that caps births well under the 9 deaths. |
+| **Provided** (`hamlet-provided`) | `conceive_food` **8**, `conceive_roof` **true** (skills_patch of `skills.rhai`) | to start a family the two must carry 8 portions of food between them, and the asker must stand under a shelter or in a house | births depend on a surplus put by, so more mouths sharing the same bushes and fishing spots make a surplus harder to gather. With the hamlet's plenty (above), the gate costs effort and timing (gathering and keeping 8 rather than eating them) rather than scarcity, so its density dependence is weak there. It would bind harder in a leaner world. 8 berries are 96 hunger. Under Cullet's laws that is one game day of a pair's hunger (48 a day each), or 3.3 game days (2.7 real hours) of an infant's (29 a day). |
 | **Later longing** (`hamlet-longing`) | `longing_after_min` **120**, `longing_food` **4** (world.rules) | unchanged; anyone may still choose to conceive | the felt drive ("You long for a child…", the alert that asks a mind to think) comes 120 min × (1 − nurture/120) after one's own birth or youngest child's: 70 min at nurture 50, 35 at 85, and only while carrying 4 food. Once due, it comes back each dawn as today (it goes off at night; iteration 3). On the hamlet's pace that is about 0.15 L, the spaced arm's interval. It tests whether the drive is what drives births, without changing any rule of the body. |
 
 The fact the rules needed and Rhai could not see was the longing drive's timing and condition, which were Rust constants. They are now laws (`longing_after_min`, `longing_food`, typed in `Laws`, settable by a seed's `rules`). `conceive_check` reads only what the actor's context already had (`near_shelter`, `inv`, the target's `inv`), so no new actor field was added.
@@ -526,7 +604,7 @@ python3 living/tools/trials.py run --batch hb1 hamlet hamlet-spaced hamlet-provi
     --replicates 3 --sample-s 5 --stagger 15
 ```
 
-An estimate, not a measurement. It uses the coordinator's island figure of about $0.10 per thinking person per hour on glm-flash. Nothing has been measured on the hamlet. 48 m sight puts more people in each scene, and that may raise it.
+An estimate, not a measurement. It uses the coordinator's island figure of about $0.10 per thinking person per hour on glm-flash. Nothing has been measured on the hamlet. Two things may raise it: 48 m sight puts more people in each scene, and fake minds called about 1.8 times a minute per mind on Cullet's day against 1.1–1.5 on the 12-minute day.
 
 | Arms | Runs | Thinking at most | Person-hours | Estimate |
 | --- | ---: | --- | ---: | ---: |
@@ -541,7 +619,7 @@ These are upper bounds. Fewer think when deaths outrun births, and only the cap 
 ### Not covered
 
 - No real model has run on the hamlet. Fake minds do not conceive, so fake runs show the plumbing (minds, census, restarts) and nothing about births.
-- The day length is the default 12 minutes, not Cullet's 48 (no seed field).
+- Cullet's laws were written for Cullet's town (lamplight, hearths, coats). The hamlet's houses and campfires are what the authored-test layout gives: no lamps and no coats in the stores.
 - The arms' values are derived from the arithmetic, not tuned. How often a pair actually carries 8 food, so whether the provided arm's gate binds, is not known until real minds run.
 - The `family_laws` scene proves each law's gate on a scratch world. It does not prove what minds do with them.
 
@@ -664,6 +742,38 @@ Candidates not run tonight, for later:
 - **Re-reading loops** (a plan to "read both signs" re-read the nearest sign 57 times): a check refusing to re-read needs the sign's topic in what Rhai sees of a target, an engine change.
 - Several earlier candidates are covered by `feedback-1` (merged to main during the night): structures noticed once, ids resolving only to things in sight, gone things weakening memory, wants following the life lived.
 
+## The player frame (experiment, 2026-11-11)
+
+**Hypothesis** (from the owner's play-test: the characters feel like NPCs, not like players run by AI). A model told it is *playing* this person in an open-ended living world, free to choose what to pursue as a human player would, lives with more initiative, exploration and long-range aims, while what the person says and does stays in character.
+
+**Switch.** `LIVING_FRAME=player` in the mind service (`living/mind/src/prompts.rs`, `Frame`); the default `character` leaves every prompt byte-identical to before (all 26 exported prompt fixtures compared byte for byte before and after the change; test `character_frame_is_the_default_and_unchanged`). A value that is neither stops the service at start. Under `player`, four system prompts of a person replace their opening sentence ("You are the mind of the person described under # Who you are, living in a persistent simulated world.", and the consolidation and talk equivalents) with this frame and a one-line role:
+
+> You are an AI playing the person described under # Who you are, in a persistent world shared with other players, human and AI. For you, as for every player, the person's body, needs and death are real, and the world's rules hold. What you pursue in this life is your own choice. Whatever the person says or writes is in their own words, inside the world: never speak out of character.
+
+| Prompt | Role line after the frame |
+| --- | --- |
+| think (the decision) and deliberate (compiling it into acts and a graph) | Here you are that person's mind. |
+| consolidate | Here you are that person's memory and self-understanding, kept in their own terms. |
+| talk (a conversation turn) | Here you are that person, face to face with the other person described below. |
+
+With `LIVING_PROJECTS=1` as well, each switch does what it does alone: the frame replaces only the opening sentence, and the projects text, the `serves` field and the `# Your projects` section stay as projects has them (test `player_frame_and_projects_compose`). Nothing else changes (test `player_frame_changes_only_the_opening`): the rules, grammar, reply shapes and every user message are the same, and the frame is part of the shared, cacheable prefix. Not framed: animals' prompts, starting identities (`identity_system`, `birth_identity_system`), sleep's reorganization and player memory (`internalize_system`, for characters people play). The frame names no goals or activities, gives no advice and does not rank survival (test `player_frame_is_short_and_prescribes_nothing`).
+
+**Measuring.** Variant `player-frame` (`LIVING_FRAME=player`, otherwise `default`). Every summary now carries:
+
+- `prompt_frame`: per purpose, how many of the subject's journaled requests opened with the player frame (`player 12/12`, or `character 0/12`), read from the journal's stored system prompts;
+- `out_of_character` (`ooc_lines`, `ooc_private` in the report): [`ooc.py`](../living/tools/ooc.py), a word list (player, game, AI, NPC, prompt, simulation, "my character", role-play, respawn, XP, logging in, online, …; hunting "game" is not counted), over the lines the subject spoke or wrote (chronicle `speech` and `write` rows) and, separately, over its replies' private fields (thoughts, intentions, consolidation summaries and gists, identity narrative, goals and values). A word list over-counts and misses paraphrase: read the examples kept with each count (`python3 living/tools/ooc.py .local/living/trials/<batch>`).
+
+Initiative, exploration and long-range aims are read with the existing probes and life timelines (distance ranged, places named, techniques learned, structures built, graph plans, goals in persona revisions), side by side across replicates.
+
+```bash
+python3 living/tools/trials.py run --batch <b> life --variants default,player-frame --replicates 3
+python3 living/tools/ooc.py .local/living/trials/<b>
+```
+
+**Fake-model proof** (`pf1`, 2026-11-11, DGX Spark, from a worktree of `exp-player-frame`; `life` × `default`, `player-frame` × 1, 10 minutes, `--fake`, no model spend). Both arms ran the full 10 minutes (20 and 19 calls). `prompt_frame`: default `think 0/7, deliberate 0/7, consolidate 0/6` framed; player-frame `think 7/7, deliberate 7/7, consolidate 4/5`, the fifth being the starting identity, which is not framed. In the journals each arm has one distinct system prompt per purpose; replacing the player arm's opening (frame and role line) with the old first sentence gives the default arm's prompt exactly, for think, deliberate and consolidate. No talk turn happened in either arm (nobody addressed the newcomer), so talk is proven by `verify_minds.py --case frame`. `ooc_lines` 0/1 and `ooc_private` 0/34 and 0/33: the fake model's canned lines, which say nothing about real models. Evidence: `.local/living/trials/pf1/` (`report.md`, `frame-check.txt`, each instance's `summary.json` and `journal/`); databases and Neo4j minds cleaned.
+
+**Not established:** whether the frame changes what real minds do, or how often they break character. That needs a real batch (paid; the coordinator runs it).
+
 ## What still special-cases trials (to remove later)
 
 No engine code knows about trials. The authority gained one generic admin-only scene reducer, `spawn_newcomer` (a player's `join`, thought for by the minds). Everything else a trial sets up uses existing admin scene reducers, `mind_say`/`mind_act` for admin-controlled characters, behaviour graphs with the existing skills (the ladder's scribe is a graph plus the ordinary `teach` act), the player reducers (the human session) and the real presence path (the takeover). What the runner itself still hard-codes:
@@ -735,6 +845,67 @@ The trial service listens on the LAN: `http://192.168.1.103:3320` (container `sl
 - Get the token: `ssh gooning@192.168.1.103 docker exec slop-trials-stdb spacetime login show --token`. It is printed after "Your auth token"; don't paste it into logs or chat.
 - **Observer (read-only):** natively, `LIVING_TOKEN=<token> LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --manifest-path living/Cargo.toml --release -p living-viewer`. On the web, `just living-web` and then `http://127.0.0.1:8330/?server=http://192.168.1.103:3320&db=<database>#token=<token>`; the browser never sends the fragment to a server. The observer subscribes and calls no reducer.
 - **Game client:** `LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --release --manifest-path living/Cargo.toml -p living-game` connects with its own player identity and always calls `join` when that identity has no living character. That adds a player newcomer to the trial world, whom the main character perceives, so it changes the run. As a player it sees only its own perception, not the main character's. The client has no spectator or owner mode, so it cannot watch a trial without changing it. A watch mode that follows a named character with the owner's token is UI work, not built.
+
+## Resident inspector
+
+`living/tools/inspector.py` answers "why did they do that?" for one run as a single static page: pick a resident and a moment, or a line someone said. It reads evidence only and makes no model calls. The page is one self-contained HTML file with its data embedded (gzip; it needs a browser with `DecompressionStream`). Open it from disk; no server is involved.
+
+```bash
+python3 living/tools/inspector.py .local/living/trials/<batch>/<instance> -o page.html   # a trial, finished or running
+python3 living/tools/inspector.py .local/living/playtest-2 -o page.html                  # a play session's evidence folder
+python3 living/tools/inspector.py RUN --who "Agnes Fenner,Avice Hollis" --since 600 --until 1200 -o page.html   # a large run, narrowed
+```
+
+**What it reads.** It reads everything it finds under the folder.
+- Trials: `state.json` (the start `t0`), `cast.json`, `census.jsonl`, `chronicle.jsonl`, `speech.jsonl`, `experiences.jsonl`, `audience.jsonl`, `samples.jsonl`, `graphs.jsonl`, `mind_rows.jsonl`, `human.jsonl`, `events.jsonl`, `final.json`, `mind.log`, `mind-env.json`, and `journal/`. A running trial has not copied its journal yet, so the page reads the live one (`<LIVING_ROOT>/.local/living/journal/<LIVING_RUN>/`).
+- Play sessions: `journal/` (or `session/journal/`), `mind.log` (or `session/run/mind.log`), and any world-table exports below the folder. These are either the CLI's text tables (`spacetime sql … > chronicle.txt`) or `verify.py sql --save` JSON lists.
+  - Export at least `chronicle`, `character` (or `id, name, alive, died_ms, cause`) and `presence`.
+  - Export `experience` for the player too. Residents' own experience rows are evicted past a 400-row window. What a resident perceived then comes from the experience lines their own requests show.
+  - Tables are recognised by their columns; `--rows` adds files or folders kept elsewhere.
+
+**Residents.** A timeline per character, filtered by lane, for the whole run, a time window ("around hh:mm:ss ± 90 s"), or the last 90 s of their life. Each row shows wall time, time since the start, and game time.
+- *perceive*: experience rows, plus the percept lines of each request. Lines read from requests are marked ≈ and placed at the middle of their game minute (0.5 s in current worlds), on a game clock fitted from the requests' "Now" lines.
+- *recall*: the "What comes to mind" and "Memories this brings back" sections of each request.
+- *decide*: every model exchange, placed when it was queued. Click it for the timings (queued → sent → reply, queue wait, model latency), the "why now" section, the line being answered, the full request section by section, the system prompt and the reply.
+- *graph*: what each deliberation installed (plan, acts, intent graph), and `brain` revisions where recorded.
+- *body*: chronicle rows, census and sample activity, and the position, health and activity from each request's scene. It also shows what others saw the body do ("seen by …"), and the player's reducer calls.
+- *talk*: lines said and heard. *log*: the mind log's lines naming them.
+
+**Sources.** The files read, the fitted game clock, the mind's switches, and per purpose the model exchanges' queue wait (admission) against model time, as p50, p90 and max.
+
+**Lines.** Every line said, merged from the chronicle, the speaker's `said` row, listeners' speech rows and requests, and the mind log. The chronicle keeps one row for a line repeated within 2 minutes; the speaker's `said` rows keep each one.
+- Click a line for each hearer's fate: a talk turn (with its latency), an answer from a deliberation, parked behind a running deliberation (each release and re-park, and the turn that finally followed), a settled pair, or no turn.
+- For "no turn" the page lists the gate's inputs as the evidence shows them (talk.rs `on_speech`): addressed or not (the line's `to`, the hearer's salience, or who stood within the 6 m `address_m` of the speaker), whether the hearer cares (their relation from the nearest request's "People you know"), an active or closed exchange, another exchange, and whether the line asks something.
+- Below the hearers is the exchange around the line, from every side: the participants' lines, their talk turns and deliberations, and the mind log.
+
+- The mind's draws are deterministic (talk.rs `draw(listener, at_ms)`). The page recomputes the remark draw and the overheard draw from the line's exact time and the hearer's sociability, as their requests show it. So "let the remark pass" is shown as a fact, not a guess, although the mind logs it at debug level only.
+- A line said to someone who did not hear it is marked as such. The evidence is the line's audience row, the speaker's "No answer from …" percept, or the mind's "out of earshot" at the line. A player's character is never judged as a mind before the AI takes it over.
+
+**What it cannot show.**
+- Stamina and the off-stage hold are not recomputed. When a turn was due and none came, the page names them as the possible causes.
+- Without `audience` rows or salience, whether a line said to no one was addressed is shown only where distances near the line are known. Otherwise the page says it is unknown.
+- Hearers are those the evidence shows. Without `audience` rows, others in earshot may be missing.
+- The verdicts follow main's gate and log lines, plus the `exp-greet` switches' log lines (drawn in, faced, alongside). The greet modes' own curiosity draw is not recomputed. A changed gate needs the page updated.
+- Scene positions are dated at the request's queue time. A scene can be older than that, so distances from scenes more than 10 s from a line are not used for the address rule.
+
+**How often its verdicts are right** (2026-11-11, after two review rounds' fixes).
+- The sample: 60 turn/no-turn verdicts drawn at random (seeded) from gr1a, gr1b, gr1c and play-test 2. Every line the reviews had looked at was left out. 40 are on the scripted player's lines, 20 on residents' lines.
+- Each verdict was checked against the raw speech and audience rows, the journal's requests and replies, `mind.log`, and a separate recomputation of the draw.
+- Result: 0 of 60 wrong outcomes and 0 of 60 wrong reasons. The 95% Wilson interval is 0–6.0% overall and 0–8.8% for the player's lines (0 of 40).
+- One reason could not be fully verified: "in another exchange", where the remark draw would also have refused.
+- Two reasons were incomplete: a talk turn that came only after the line had been parked did not say so. This is fixed. A fresh sample of 12 such verdicts was all correct; two of them missed a release time, also fixed.
+- The sample checks the page against the evidence. It cannot check what the evidence does not record, such as stamina or the off-stage hold.
+
+### What it showed on the greeting batches `gr1a` and `gr1b` (2026-11-11, 18:15)
+
+Coverage: the instances with evidence at 18:15. gr1a: control ×4, nearest-concurrent ×3 (r4 still running), nearest ×1 (r1–r3 failed). gr1b: curious ×4, facing ×2, park-concurrent ×1. Six instances failed between 16:58 and 17:00 with SQL timeouts against the trial service. `greet_report.py` gives answered shares and latencies; the inspector adds the following.
+
+- **Many counted answers were not answers to the line.** A resident's line to the player within 60 s, which the table counts as an answer, was often caused by something else. Examples are a deliberation that began before the line, a delayed answer to an earlier line, or a resident repeating "your name?" because the scripted player never gives one. For lines to no one, the share not caused by the line was 6 of 8 in control, 4 of 19 in curious and 9 of 19 in facing. In control-r1, the "answer" to "Hello there!" 2.8 s later ("That's the whole of it, friend…") came from Wenna's deliberation about the earlier question on work.
+- **The trial's model queue, not the model, sets the pace.** With `LIVING_CONCURRENCY=4` for 11 minds, the median queue wait was 6–13 s for think and deliberate calls (p90 up to 41 s) and 2–7 s for talk turns (p90 15–25 s, max 78 s). Model time was a median 0.8 s for talk and 5–6 s for deliberation. A deliberation counts as running from its prompt, so lines heard during its queue wait are parked. Play-test 2 ran with 192 and had queue waits under 0.2 s. Latency and parking results from these trials therefore do not carry over to play.
+- **Parked lines are released and parked again at once.** A released line is often parked again in the same second, because the listener's next deliberation has already started. Some waited 74 s and got no turn (control-r1, Oren), and one was re-parked three times (curious-r1, Sefa). Under `LIVING_PARK=concurrent` such lines get their turn alongside instead ("parked alongside" 44 times in nearest-concurrent; addressees answered 19 of 20).
+- **The script's addressed statements meet the remark draw.** "You look like you know this place well." and "That looks like hard work." ask nothing, so a resident who passes the gate can still let them pass. The recomputed draw refused 4 of 22 addressed lines in control.
+- **The script addressed characters who are not minds.** Tobin is not in `LIVING_ONLY`: 2 of 22 addressed lines in control and 5 of 23 in curious went to him and could never be answered.
+- **Hearers do not answer each other's turns.** With curious and nearest, one hearer is drawn in and the others' verdicts read "another took it": a line to no one draws one hearer.
 
 ## Results
 

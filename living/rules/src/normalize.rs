@@ -71,8 +71,8 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 }
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
-const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion", "bedtime", "evening"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, raining, moving, believes, judged, chance, all, any, not";
+const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion", "bedtime", "evening", "work_hours"];
+const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, work_hours, raining, moving, believes, judged, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -405,7 +405,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         return Err(format!("{path}.do: skill `{skill}` needs a target"));
     }
     if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && spec.needs_item) {
-        let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some() || spec.items.iter().any(|w| w == i);
+        let known = i == "food" || catalog::item(i).is_some() || catalog::is_structure(i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some() || spec.items.iter().any(|w| w == i);
         if !known {
             return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::item_names().join(", ")));
         }
@@ -687,6 +687,7 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                 "night" => json!({"night": v.as_bool().unwrap_or(true)}),
                 "bedtime" => json!({"bedtime": v.as_bool().unwrap_or(true)}),
                 "evening" => json!({"evening": v.as_bool().unwrap_or(true)}),
+                "work_hours" => json!({"work_hours": v.as_bool().unwrap_or(true)}),
                 "raining" => json!({"raining": v.as_bool().unwrap_or(true)}),
                 "moving" | "walking" => json!({"moving": v.as_bool().unwrap_or(true)}),
                 "standing" | "still" => json!({"moving": !v.as_bool().unwrap_or(true)}),

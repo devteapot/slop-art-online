@@ -10,27 +10,46 @@
 //!   `verbs.rs` (the F hint's acts, the list of acts, notes of outcomes, inventory and know-how);
 //! - `theme.rs` (colours, type, panels) and `icons.rs` (procedural glyphs).
 //!
-//! Layout is designed at 1080p and scaled with the window's height (`UiScale`).
+//! Interface D (2026-11-11, the owner's choice; `wood.rs`, `win.rs`, `top.rs`, `hit.rs`) is
+//! replacing these widgets step by step. Its layout is the mock-up's, drawn at 1600×900, scaled
+//! with the window's height (`UiScale`).
 
-mod chat;
-mod compass;
 mod death;
 mod frame;
+pub mod hit;
 mod icons;
+pub mod kit;
 mod link;
 mod live;
 pub mod model;
 mod numbers;
 mod overhead;
+mod pack;
+pub mod people;
+mod prompt;
 mod sample;
+pub mod say;
+pub mod settings;
 mod theme;
 pub mod tips;
+mod top;
 mod verbs;
+pub mod win;
+pub mod wood;
 
 use bevy::prelude::*;
 use bevy::ui::UiSystems;
 
 pub struct UiPlugin;
+
+/// The live source and the widgets (timed with `LIVING_GAME_PERF=ui`).
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UiWork;
+
+/// The game UI's input this frame (pointer, Esc, window keys), before anything else reads keys
+/// and the mouse: a click on a window is not a strike, and Esc is spent once.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UiInput;
 
 /// Whether the look-dev scene gets the sample UI (`LIVING_GAME_HUD`).
 fn sample_on() -> bool {
@@ -44,19 +63,46 @@ impl Plugin for UiPlugin {
         if lookdev && !sample_on() {
             return;
         }
+        win::plugin(app);
         app.init_resource::<model::HudModel>()
             .init_resource::<model::Outbox>()
             .init_resource::<overhead::Stack>()
             .init_resource::<tips::Tips>()
+            .init_resource::<hit::UiPointer>()
+            .init_resource::<say::Typing>()
+            .init_resource::<settings::Capture>()
+            .init_resource::<Dump>()
+            .init_resource::<settings::Page>()
+            .init_resource::<settings::SkillNames>()
+            .init_resource::<people::Talks>()
+            .init_resource::<people::LogPage>()
+            .init_resource::<people::Hints>()
+            .init_resource::<prompt::Tip>()
+            .init_resource::<pack::Carrying>()
+            .configure_sets(Update, UiInput.in_set(crate::phase::Phase::Input).before(crate::controls::movement))
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
-            .add_systems(Startup, (frame::spawn, overhead::spawn, numbers::spawn, chat::spawn, compass::spawn, death::spawn, verbs::spawn, link::spawn, tips::spawn))
-            .add_systems(Update, (default_camera, scale, chat::keys.in_set(crate::phase::Phase::Input).before(crate::controls::movement)))
+            .init_resource::<ThemeState>()
+            // The UI's trees are spawned once the theme is known, and again on each new theme.
+            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
+            .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
-        let widgets = (frame::vitals, frame::status, frame::skills, frame::hint, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, chat::update, compass::update, death::update, link::update, verbs::menu, verbs::toasts, verbs::panels, visibility);
+        let widgets = (frame::vitals, frame::status, frame::skills, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
+        let windows = (people::update, people::hints, prompt::update, say::update, pack::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
         } else {
-            app.add_systems(PostUpdate, (live::fill, verbs::fill, widgets).chain().before(UiSystems::Prepare));
+            // Connected play: the game UI's input, its windows and the live source.
+            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
+                .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
+                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, dump.after(UiSystems::Layout))
+                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare));
+            if perf_on() {
+                app.init_resource::<UiPerf>()
+                    .add_systems(Update, (perf_begin::<0>.before(UiInput).in_set(crate::phase::Phase::Input), perf_end::<0>.after(UiInput).in_set(crate::phase::Phase::Input)))
+                    .add_systems(PostUpdate, (perf_begin::<1>.before(UiWork), perf_end::<1>.after(UiWork).before(UiSystems::Prepare)))
+                    .add_systems(PostUpdate, (perf_begin::<2>.after(UiSystems::Prepare).before(UiSystems::Layout), perf_end::<2>.after(UiSystems::Layout), perf_report.after(UiSystems::Layout)));
+            }
         }
     }
 }
@@ -64,6 +110,29 @@ impl Plugin for UiPlugin {
 /// Every top-level UI tree of the game UI (hidden when no source fills the model).
 #[derive(Component)]
 pub struct HudRoot;
+
+/// The list of acts asked for a person's window ("Their window").
+/// And a script's `panel:` steps: the pack and know-how are windows since interface D.
+fn their_window(mut verbs: ResMut<crate::verbs::Verbs>, mut ws: ResMut<win::Windows>) {
+    if let Some(id) = verbs.open_window.take() {
+        ws.open(win::Win::Person(id));
+    }
+    // Introduce yourself from the list: their window, with the line in its box.
+    if let Some(id) = verbs.introduce.take() {
+        ws.open(win::Win::Person(id));
+        verbs.want_intro = Some(id);
+    }
+    if std::mem::take(&mut verbs.inventory) {
+        ws.open(win::Win::Pack);
+    }
+    if std::mem::take(&mut verbs.know_how) {
+        ws.open(win::Win::Skills);
+    }
+    if std::mem::take(&mut verbs.close_panels) {
+        ws.close(win::Win::Pack);
+        ws.close(win::Win::Skills);
+    }
+}
 
 /// The UI shows while a source fills it; the death screen hides everything else.
 fn visibility(model: Res<model::HudModel>, mut q: Query<(&mut Visibility, Has<death::DeathRoot>), With<HudRoot>>) {
@@ -80,12 +149,12 @@ fn default_camera(mut commands: Commands, cams: Query<Entity, Added<Camera3d>>) 
     }
 }
 
-/// Designed at 1080p; scales with the target's height (1600×900 → 0.83, 2560×1440 → 1.33).
+/// Interface D was drawn at 1600×900: the UI scales with the target's height over 900
+/// (1600×900 → 1, 2560×1440 → 1.6), and never under 0.9 (at 720p the old HUD's 9–12 px type
+/// read as 6–8 px, play-test 1).
 fn scale(mut ui: ResMut<UiScale>, cams: Query<&Camera, With<Camera3d>>) {
-    let h = cams.iter().find_map(|c| c.logical_viewport_size()).map_or(1080.0, |s| s.y);
-    // Designed at 1080p, drawn 10% larger and never under 0.9 of it: at 720p it was 0.67, and
-    // its 9–12 px type read as 6–8 px (play-test 1).
-    let s = (h / 1080.0 * 1.1).clamp(0.9, 2.5);
+    let h = cams.iter().find_map(|c| c.logical_viewport_size()).map_or(900.0, |s| s.y);
+    let s = (h / 900.0).clamp(0.9, 2.5);
     if (ui.0 - s).abs() > 1e-3 {
         ui.0 = s;
     }
@@ -102,6 +171,15 @@ pub(crate) fn label(s: &str) -> String {
         Some(f) => f.to_uppercase().chain(c).collect(),
         None => s,
     }
+}
+
+/// Health as the bars read it: both figures rounded alike, so a full bar never reads more than
+/// its maximum (the authority's 109.48 of 109.48 read "110 / 109": `ceil` against `round`), and
+/// a living character never reads 0.
+pub(crate) fn hp_text(hp: f32, max: f32) -> String {
+    let max = max.round().max(1.0);
+    let hp = if hp > 0.0 { hp.round().clamp(1.0, max) } else { 0.0 };
+    format!("{hp:.0} / {max:.0}")
 }
 
 pub(crate) fn set_text(t: &mut Text, s: &str) {
@@ -144,4 +222,179 @@ mod tests {
         assert_eq!(super::label("Old Hale"), "Old Hale");
         assert_eq!(super::label(""), "");
     }
+
+    #[test]
+    fn health_never_reads_over_its_maximum() {
+        assert_eq!(super::hp_text(109.48073, 109.48073), "109 / 109");
+        assert_eq!(super::hp_text(110.6, 110.6), "111 / 111");
+        assert_eq!(super::hp_text(0.3, 110.0), "1 / 110");
+        assert_eq!(super::hp_text(0.0, 110.0), "0 / 110");
+    }
+}
+
+/// The interface's theme in force, and a change asked for this frame (F4, Settings › Play).
+#[derive(Resource, Default)]
+pub struct ThemeState {
+    pub name: wood::Name,
+    pub want: Option<wood::Name>,
+    rebuild: bool,
+    started: bool,
+}
+
+/// The theme: from the settings file (or `LIVING_GAME_THEME`, for captures) at start; F4 cycles
+/// it; a change is saved, named on screen, and rebuilds the UI.
+fn theme(mut looks: ResMut<ThemeState>, keys: Res<ButtonInput<KeyCode>>, input: Res<crate::controls::Input>, mut prefs: ResMut<crate::keys::Prefs>, mut verbs: Option<ResMut<crate::verbs::Verbs>>, mut tips: ResMut<tips::Tips>, mut ws: ResMut<win::Windows>, time: Res<Time>) {
+    if !looks.started {
+        looks.started = true;
+        let n = std::env::var("LIVING_GAME_THEME").ok().and_then(|v| wood::Name::parse(&v)).or_else(|| prefs.theme.as_deref().and_then(wood::Name::parse)).unwrap_or_default();
+        looks.name = n;
+        wood::set(n);
+        looks.rebuild = true;
+        info!("ui: theme {}", n.label());
+        return;
+    }
+    if keys.just_pressed(KeyCode::F4) && !input.chat_open {
+        looks.want = Some(looks.name.next());
+    }
+    if let Some(n) = looks.want.take().filter(|n| *n != looks.name) {
+        looks.name = n;
+        wood::set(n);
+        looks.rebuild = true;
+        ws.respawn = true;
+        prefs.theme = Some(n.key().into());
+        prefs.dirty = true;
+        let text = format!("Theme: {}  ·  F4 changes it", n.label());
+        info!("ui: {text}");
+        match verbs.as_mut() {
+            Some(v) => v.toasts.push(crate::verbs::Toast { text, ok: None, at: time.elapsed_secs_f64() }),
+            None => tips.show(&text, time.elapsed_secs_f64()),
+        }
+    }
+}
+
+fn rebuilding(looks: Res<ThemeState>) -> bool {
+    looks.rebuild
+}
+
+/// A new theme: every UI tree goes, to be spawned again in the new look.
+fn sweep(mut commands: Commands, roots: Query<Entity, With<HudRoot>>) {
+    for e in &roots {
+        commands.entity(e).despawn();
+    }
+}
+
+fn rebuilt(mut looks: ResMut<ThemeState>) {
+    looks.rebuild = false;
+}
+
+/// A script's request for the game UI's state (`dump:NAME` in the live script; `verify-ui`).
+#[derive(Resource, Default)]
+pub struct Dump(pub Option<std::path::PathBuf>);
+
+/// Write the game UI's state: open windows (top last) with their anchors and rectangles (UI px
+/// and fractions of the picture), the Menu list, the list of acts, the words being typed and to
+/// whom, the weapon, and every tagged node shown.
+#[allow(clippy::too_many_arguments)]
+fn dump(
+    mut d: ResMut<Dump>,
+    ws: Res<win::Windows>,
+    ui: Res<hit::UiPointer>,
+    frames: Query<(&win::WinFrame, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform)>,
+    cams: Query<&Camera, With<Camera3d>>,
+    verbs: Res<crate::verbs::Verbs>,
+    input: Res<crate::controls::Input>,
+    typing: Res<say::Typing>,
+    talk: Option<Res<crate::talk::Talk>>,
+    (extra, model, pick): (DumpExtra, Res<model::HudModel>, Option<Res<crate::pick::Pick>>),
+) {
+    let Some(path) = d.0.take() else { return };
+    let size = cams.iter().find_map(|c| c.physical_viewport_size()).map_or(Vec2::new(1600.0, 900.0), |s| s.as_vec2());
+    let k = ui.scale * ui.ui_scale.max(0.01);
+    let windows: Vec<serde_json::Value> = ws
+        .open
+        .iter()
+        .map(|o| {
+            let r = frames.iter().find(|(f, _, _)| f.0 == o.win).map(|(_, n, t)| {
+                let c = t.affine().translation;
+                let (tl, sz) = (c - n.size() / 2.0, n.size());
+                serde_json::json!({"x": tl.x / k, "y": tl.y / k, "w": sz.x / k, "h": sz.y / k, "fx": tl.x / size.x, "fy": tl.y / size.y, "fw": sz.x / size.x, "fh": sz.y / size.y})
+            });
+            serde_json::json!({"win": o.win.name(), "anchor": format!("{:?}", o.anchor), "rect": r})
+        })
+        .collect();
+    let v = serde_json::json!({
+        "windows": windows,
+        "top": ws.top().map(|w| w.name()),
+        "menu": ws.menu,
+        "acts": verbs.menu.as_ref().map(|m| serde_json::json!({"title": m.title, "group": m.group, "rows": m.rows().iter().map(|r| r.label()).collect::<Vec<_>>()})),
+        "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone())})),
+        "pointer_over_ui": ui.over_ui,
+        // Who is under the cursor (`pick.rs`), whose nameplates show as hovered, and the target plate.
+        "under": pick.as_ref().and_then(|p| p.under),
+        "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground})).collect::<Vec<_>>()),
+        "hovered": model.actors.iter().filter(|a| a.hovered).map(|a| serde_json::json!({"id": a.id, "label": a.name})).collect::<Vec<_>>(),
+        "targeted": model.actors.iter().find(|a| a.targeted).map(|a| a.id),
+        "extra": extra.json(),
+        "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
+    });
+    match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
+        Ok(()) => info!("ui: state written to {}", path.display()),
+        Err(e) => warn!("ui: could not write {}: {e}", path.display()),
+    }
+}
+
+/// Further state the dump reports, from the widgets of later steps.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct DumpExtra<'w> {
+    prefs: Res<'w, crate::keys::Prefs>,
+    binds: Res<'w, crate::keys::Binds>,
+    theme: Res<'w, ThemeState>,
+}
+
+impl DumpExtra<'_> {
+    fn json(&self) -> serde_json::Value {
+        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key()})
+    }
+}
+
+/// `LIVING_GAME_PERF=ui`: what the game UI costs a frame, timed round its own work (input; the
+/// live source and the widgets; Bevy's UI layout of every node), logged every 10 s as means
+/// and worsts in µs, with the number of UI nodes. Whole-frame time on a shared, loaded machine
+/// is too noisy to see a fraction of a millisecond.
+#[derive(Resource, Default)]
+pub struct UiPerf {
+    t0: [Option<std::time::Instant>; 3],
+    sum: [f64; 3],
+    worst: [f64; 3],
+    frames: u32,
+    next: f64,
+}
+
+pub fn perf_on() -> bool {
+    std::env::var("LIVING_GAME_PERF").is_ok_and(|v| v.split(',').any(|f| f.trim() == "ui"))
+}
+
+fn perf_begin<const K: usize>(mut p: ResMut<UiPerf>) {
+    p.t0[K] = Some(std::time::Instant::now());
+}
+
+fn perf_end<const K: usize>(mut p: ResMut<UiPerf>) {
+    if let Some(t) = p.t0[K].take() {
+        let us = t.elapsed().as_secs_f64() * 1e6;
+        p.sum[K] += us;
+        p.worst[K] = p.worst[K].max(us);
+    }
+}
+
+fn perf_report(mut p: ResMut<UiPerf>, time: Res<Time>, nodes: Query<(), With<Node>>) {
+    p.frames += 1;
+    let now = time.elapsed_secs_f64();
+    if now < p.next {
+        return;
+    }
+    if p.next > 0.0 && p.frames > 0 {
+        let n = p.frames as f64;
+        info!("ui perf: input {:.0} µs (worst {:.0}), fill+widgets {:.0} µs (worst {:.0}), layout {:.0} µs (worst {:.0}) over {} frames; {} UI nodes", p.sum[0] / n, p.worst[0], p.sum[1] / n, p.worst[1], p.sum[2] / n, p.worst[2], p.frames, nodes.iter().count());
+    }
+    *p = UiPerf { next: now + 10.0, ..default() };
 }

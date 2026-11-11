@@ -179,7 +179,14 @@ impl Shapes {
 
     /// Ongoing or real-time behavior: it belongs in a graph, not in a one-off act.
     pub fn real_time(&self, skill: &str) -> bool {
-        crate::catalog::skill(skill).is_some_and(|k| k.moment) || self.get(skill).is_some_and(|s| s.real_time)
+        self.real_time_in(&crate::catalog::skills(), skill)
+    }
+
+    /// The same, for a given world's skills (a script that is not this process's world): a
+    /// skill whose spec says `moment`, or a combat skill whose shape says `real_time`. The one
+    /// definition players and minds share (`living_rules::ui::real_time`).
+    pub fn real_time_in(&self, skills: &crate::catalog::Skills, skill: &str) -> bool {
+        skills.get(skill).is_some_and(|k| k.moment) || self.get(skill).is_some_and(|s| s.real_time)
     }
 
     /// A reflex in a graph takes the body back from a deliberate act (fleeing, or a combat

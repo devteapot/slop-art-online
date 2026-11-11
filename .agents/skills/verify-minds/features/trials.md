@@ -22,6 +22,8 @@ python3 living/tools/trials.py clean --batch dry1
 - `samples.jsonl` advances every 2 s from the start; `summary.json` exists for every instance, including failed ones (`stopped_by` says why).
 - `journal/` in the instance directory is a copy of the mind's journal (`.local/living/journal/<db>/`), with the actual requests and replies.
 - After `clean`, the batch's databases answer SQL with 404 and the Neo4j nodes of their runs are gone; the evidence directory remains.
+- Every `summary.json` has `prompt_frame` (per purpose, the subject's journaled requests that opened with the player frame) and `out_of_character` (`ooc_lines`, `ooc_private`: [`ooc.py`](../../../../living/tools/ooc.py) over spoken and written lines and over private reply fields). Under `default` every purpose reads `character 0/n`; under `player-frame` every think, deliberate, talk and consolidation request is framed and starting identities are not ([frame.md](frame.md)).
+- From a git worktree, `build` copies each module into the container's `/wasm` mount (the starting checkout's `.local/living/trials/wasm/`) as `<module>-wt<tag>.wasm` and `run` publishes that copy; `actions.log` names it. The worktree needs its own `.local/living/trials/neo4j.env` and does not run `up` against a running stack.
 
 ## Life runs, resume and disk
 
@@ -33,7 +35,7 @@ python3 living/tools/trials.py clean --batch dry1
 
 - `greet` (living/trials/greet.json; docs/TRIALS.md, "The greeting trial") has a scripted human player (`Player.greet_session`) that joins with its own identity and plays through `join`, `human_act` (`goto` with `{"at": [x, y]}`), `human_move` (a step into the group, and a stand-still call every 10 s that keeps its presence) and `human_say`, in cycles. Every reducer call is in `human.jsonl`, and each line is a `human_line` event with the residents within 12 m. `record.speech`, `record.talk` and `record.audience` write `speech.jsonl` (every line), `talk.jsonl` (every talk turn) and `audience.jsonl`. `living/tools/greet_report.py BATCH` reads them.
 - `run --fake --fake-script FILE` passes a rules file to the fake server (only with `--fake`): `living/trials/fake/latency.json` gives think 5 s, compile 4 s, talk 1.5 s and consolidate 2 s, so that `LIVING_PARK` timing shows in a fake run.
-- A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) keeps them unless the variant names a `skills` file. The runner skips its post-publish `install_script` (logged "the seed's own laws … stay installed") and refuses a `skills_patch` on such a seed. A variant's `skills` file still installs over the seed's laws.
+- A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) keeps them: the runner composes the overlay over the skills file (`compose_laws`), logs whether that equals the world's own composition ("seed laws composed as the world composed them: True"), applies `skills_patch` and installs the result.
 - When the container's `/wasm` mount is another checkout's (this one is a git worktree), `trials.py build` copies each module into that mount under a tagged name (`served_name`: `<module>-wt<hash of the checkout path>`), and `run` publishes that name. It never overwrites another checkout's module. Remove the tagged `.wasm` files from the mount when done.
 
 ## Paid tier

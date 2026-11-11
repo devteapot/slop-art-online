@@ -9,6 +9,7 @@ Since `rules-1` (2026-11-11, [Cullet's rules](../../../../docs/CULLET_RULES.md))
 - By day a player perceives figures to the day sight (Cullet: 48 m) and not beyond; a figure is named, with a health band, only within the knowing distance (24 m): beyond it the `projected` row has no name, the stranger's label and band 255. The name is known because the figure said it beside the player (an introduction, `acquaintance`).
 - At full dark (21:00): the dark's sight (14 m: 10 m seen, 16 m not), a figure carrying a torch seen from the carried light's distance (44 m), someone standing at the seed's lamp seen from about 21 m (between the dark's 14 and lamplight's 28), and the same distance off the other way, away from any light, not seen.
 - An ordinary night outside costs no health.
+- **People's life table as a law** (since `lives-3`): `life_years(t)`, given a species' table in years (`kind`, `lifespan`, `infant`, `child`, `elder`, `old_age`, `gestation`, `interbirth`), returns it with any changed (`Scripts::life`, read by `common::life_of(ctx, kind)` for stages, deaths of old age, ages at seeding and the minds' life line). The shipped script has none, so every other world keeps `species.json`'s tables bit for bit (`cullet_check::life_tests::worlds_without_the_law_keep_the_species_tables`). Cullet's: lifespan 90, a child until 15, deaths of old age from 75; infancy, elder from 59.5 and pregnancy keep their years (`cullet_people_live_longer_and_grow_up_sooner`); a law whose ages are out of order is refused at install (`a_wrong_life_table_is_refused`). Live: `rhythm.py drive` checks the cast's 15- and 16-year-olds start adults and the 70-year-old an elder.
 - Unit checks (`cargo test -p living-rules`): `cullet_check` (the survival targets computed from the composed script, sight values, eased dusk with night where it was, names within 24 m, the island unchanged), `floors::tests`, the install checks on twilight and lamplight samples.
 
 ## Driving it
@@ -29,7 +30,7 @@ Start it right after launch: the day checks need the world's morning, then the s
 - Started at night (a rerun on the same database), the scene skips the day checks and says so; launch afresh for them. The mirrored dark spot is skipped when it is not open ground with a clear line.
 - `launch` does not install the plain `skills.rhai` on a seed with its own laws (it would drop them); `state.json` records `seed_laws`.
 - `install_script` installs a whole script: installing the shipped one on such a world removes its laws until it is created again.
-- The scene needs the seed's lamp (`structure` kind `lamp`) with an open line from it; without one it fails "the seed has a lamp with an open line of sight from it".
+- The scene needs the seed's lamp (`structure` kind `lamp`) with an open line from it; without one it fails "the seed has a lamp with an open line of sight from it". Since `goods-1` the lamp burns oil and lights only while lit: the seed gives it 8 units (32 game hours, past the scene's night at 21:00); a lamp seeded without fuel is dark and the lamplight check fails.
 - These checks do not measure cost: longer sight and re-projection every sweep cost more per player (docs/CULLET_RULES.md, "Costs").
 
 ## Who heard a line (`speech_audience`, 2026-11-11, branch `exp-greet`)
@@ -44,3 +45,31 @@ python3 "$V" cleanup --run "$R"
 ```
 
 The scene places a speaker, a person 1 m east, one 4 m east and one 13 m east (beyond the shipped 9 m hearing), turns the speaker east (`face`) and speaks through `mind_say`. Checks: law off, no row. Law on (the shipped script with `speech_audience: true`, installed with `install_script`): one row, said to no one, with the two within hearing and not the third, distances about 1 and 4 m, both under 0.35 rad off the facing. A line 61 s later deletes the first row. The shipped script is installed again at the end. Evidence: `audience-line.json`, `audience-audience-off.json`, `audience-audience-on.json`, `audience-audience-later.json`, `audience-results.json`.
+
+## Decay
+
+Since `rates-2` (docs/CULLET_RULES.md, "The other rates in game time"): spoiling (`spoil_per_h(item)`), resource regrowth (a kind's `regrow_per_h`, read by `regrow_per_h(kind)`), grass regrowth (`laws().pasture_regen_per_h`), traps (`trap_every_h`) and remains (a kind's `remains_h`) are written in game time; the engine keeps them in real time for the world's day (`Scripts::spoil_per_min`, `regrow_per_min`, `trap_every_ms`, `remains_ms`, `Laws::pasture_regen`; `resource_node.regen` stays per real minute). A script that defines the old real-time law (`spoil_rate`, `regrow`, `trap_every_s`, `remains_s`, `pasture_regen`) is read as before.
+
+### Sub-features
+
+- On a `cullet-laws` world (48-minute day): a new node's `regen` is its kind's `regrow_per_h` × 60,000 / the game hour's real ms (exact to 1e-6).
+- 1,000 raw fish carried and about 600 in a storage spoil once a real minute at `spoil_per_h("fish")` turned into real minutes (a storage at its `kept_spoil` third): after `--game-hours` the stacks lie within the band of `q (1 − r)^k` for the real minutes passed, give or take one sweep and each sweep's chance (`decay-samples.json` keeps the trajectory).
+- An emptied greens bed, gathered once beside it after the watch, held what its `regen` grew over the real minutes since it was emptied (the row's new amount plus one, within 0.01; growing time). Gathering more would count the wild beds `nearest` walks on to.
+- Unit checks: `rates_check::rates_are_bit_identical` (ignored; `LIVING_OLD_SKILLS=<the script before rates-2>`): on the 12-minute day every spoiling loss, regrowth, pasture, trap catch, remains due time, need rate, sleep and law description is bit-identical to the old script's. `script::tests::game_time_rates_follow_the_day_and_real_time_laws_stay_real` (a 48-minute day quarters them; an overlay in real time keeps its numbers). `cullet_check::tests::cullet_s_goods_meet_their_targets_in_a_game_day` (Cullet's spoiling, stores, traps, remains and the plan's daily yield against SMALL_CITY §2 and §4).
+
+### Driving it
+
+```bash
+R=core-decay-$(date +%H%M%S)
+python3 "$V" launch --run "$R" --seed cullet-laws > ".local/living/verify/$R/launch.txt" 2>&1
+python3 .agents/skills/verify-core/scripts/scenes.py decay --run "$R" [--game-hours 24] > ".local/living/verify/$R/decay.txt" 2>&1
+python3 "$V" cleanup --run "$R"
+```
+
+A whole game day (the default) is 48 real minutes on Cullet's day; `--game-hours 2` takes about 5 minutes and checks the same rates, with fewer sweeps.
+
+### Gotchas
+
+- Person `a` holds the 1,000 fish, so its pack is full and it cannot gather: person `b` stores its fish first and does the gathering.
+- Regrowth happens only in growing time (not winter): a watch across winter fails the regrowth check, which reads the elapsed time, not the season.
+- The two people are held on `wait` for an hour; they grow hungry over a whole Cullet day but do not starve, and nobody eats the fish.

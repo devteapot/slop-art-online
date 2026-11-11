@@ -1,8 +1,58 @@
 # Validation record (generation)
 
+
+## 2026-11-11 rates-2: plan resources, structures and stores; unknown plan kinds refused (dev-box)
+
+Branch `rates-2` (from `f2d803fa`, origin/main `12fd78ef` merged, with the cast of Cullet), own container `rates2-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. A maintain pass of the plans feature scoped to this change: the map was read against the source it changed (`plan.rs`, `seed.rs` `plan_resources`/`plan_structures`/`put_authored`/`house_at`, `floor.rs` `plan_kinds`), not by a source wave.
+
+- `generation-rates2-20261111-174238` (`--feature worlds --seeds cullet,plan-test,island,floor-megacity-4k`): cullet 305 (64 residents; 158 authored resources where written with their max, regrowth and four pools; 34 authored structures where written, each lit for its fuel at its kind's rate; the Store's and the Cone yard's stores), plan-test 76, island 977, floor-megacity-4k 90 (with `create_floor refuses a plan naming a resource or structure kind the world does not have`); original seeds unchanged.
+- The first run after merging the cast (`generation-rates2-20261111-173512`) failed four Cullet checks, `household fenwick owns the house on lot mid_2` and three like it. main's `house_at` gave a household bound to a lot the first unowned structure at its door, which could be the plan's hearth there. Fixed in the authority: the structure the lot row names comes first. The rerun above passes.
+- Not rerun: valley, realm, authored-test, aske-coast, stage3-village, cullet-laws, cullet-laws-floor, floor-megacity-2k.
+
+## 2026-11-11 lives-3: rhythms at any hour, Cullet's ways, Cullet's life law (dev-box)
+
+Branch `lives-3` (from the coordinator's main `3faa7bfb`, origin/main `12fd78ef` merged, with Cullet's 64 drafted residents), own container `lives3-stdb` (2.14.1, port 3321, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. New checks in every child: `people without a seeded rhythm have a drawn one (no working hours, no second sleep)` and `seeded rhythms are as given (any rising hour, working hours, a second sleep)` (the `rhythm` table is snapshotted now).
+
+- `generation-l3-171418` (before the merge; `--feature worlds --seeds island,aske-coast,cullet`): island 979 and aske-coast 286 checks pass (277 and 68 drawn rhythms, none with working hours or a second sleep). Cullet, then a town with no people but with `town_life`, failed 5 town-life checks that assume residents (places known, workers' workplaces, `lot:` places); and "original seeds unchanged" failed because I regenerated `cullet.json` (the ways' `holds` fix) while the run was going. Neither is a generation defect; the town-life checks still assume people wherever a seed has `town_life`.
+- `generation-l3b-172604` (after the merge and `author_world.py cullet --compile-only`): island 979, aske-coast 286, cullet 313 checks pass; original seeds unchanged. Cullet: 64 seeded rhythms as given, 50 workers with a workplace, 149 authored places, every resident on the seed's own ways.
+- Not run: `authored` and `guards` features, the other seeds.
+
+## 2026-11-11 kit-1: Cullet's lots name their models (dev-box)
+
+Branch `kit-1` (origin/main `a107fdfa` merged at `cba7d89b` for the runs below; `view-1`, `29cd401f`, merged afterwards at `4e080ecf`: it changes only the game client and docs, so the generation run was not repeated), own container `kit1-stdb` (2.14.1, port 3316, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. Evidence under the worktree's `.local/living/verify/`. The seed changed only in its plan lots' content: 73 lots carry `model` (`cullet/<folder>/<id>.glb`), every lot a `seed`, and three glasshouses a `repair` of 0.9; no shape changed, so no maintain pass.
+
+- `generation-kit1b-20261111-165531` (`--feature worlds --seeds cullet,plan-test`): cullet 65 and plan-test 72 checks pass; `land` digests equal `floor_preview`'s; original seeds unchanged. Before the merge, `generation-kit1-20261111-163847`: cullet 64, plan-test 71.
+- The real game client connected to `verify-kit1-cullet-170011`, and after merging `view-1` to `verify-kit1-cullet-172154` (a fresh player, headless): digests matched (tiles `07290076efd70ae6`, heights `bc0680832fd92c40`, layout `bc262d3ed04f5cb2`), the `lot` rows' models drew, none reported as not on disk.
+- After merging main again (`ee477fbc`: Cullet's 64 residents compiled into the seed, ui-1, the asset board), `generation-kit1c-20261111-173034` (same features and seeds): cullet 301 and plan-test 72 checks pass; original seeds unchanged. The seed then has both the residents and the lots' models (`cullet_plan.py --check` passes).
+- Not covered: `authored`, `guards`, the other seeds (unchanged by this branch).
+
+
+## 2026-11-11 eye-2: eye-height cells in the model table (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. `generation.py --feature worlds --seeds island,plan-test,cullet,floor-megacity-2k` (`generation-eye2v`): every world passes (island 977 checks, cullet 65, floor-megacity-2k 75, plan-test passes), original seeds unchanged. The island's live and native tiles digest is `e051dd1788c4d9f9` (heights `0d2f77752781845c`, layout `8ff57472b004a13f`), with 9,153 low and 4,116 drop tiles; plan-test 595 low and 188 drop. The blocking-lot check now accepts a drop at a lot's centre (a part of a model that does not hide over a drop's edge stays `Drop`) and reports `wall_at_centre` separately. Maintained: seeded-world.md, plans.md (pinned digests since eye-2), SKILL.md (rerun after the model table is regenerated).
+
+## 2026-11-11 drop-1: drop (8) and low (9) tiles (dev-box)
+
+Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `generation-drop1b-20261111-151550` (`--feature worlds --seeds island,plan-test,floor-megacity-2k,cullet-laws`): island 977, plan-test 70, floor-megacity-2k 75 and cullet-laws 41 checks pass; original seeds unchanged. Tiles: island drop 4,116, low 61, wall 44,253; plan-test drop 198, low 3 (`a planned settlement's drops are drop tiles`); megacity drop 0, low 590. Blocking lots stand on wall or low tiles: 450, 42, 2,468 of as many. `land` digests equal `floor_preview`'s: island `1a2a9a096caa8e21 0d2f77752781845c 8ff57472b004a13f`, plan-test `00d85c20a07e8312 b668d5f2c3e777c2 089870648749a822`, megacity `a3d6f6164c07192c c06f16f3dcac1290 0c6b3f2c51f13129`.
+- After merging main `3f2f3443` (plan-2's Cullet), `generation-drop1m-20261111-160203` (`--seeds cullet,plan-test,island`): cullet 65 (drop 1,753, low 0, wall 4,362; `a planned settlement's drops are drop tiles`), plan-test 72 (drop 188, low 3) and island 977 checks pass; native digests match (cullet `07290076efd70ae6 bc0680832fd92c40 18b1e66d0eb92a78`, plan-test `8ebb2aa8efa58eb7`, island `1a2a9a096caa8e21`); original seeds unchanged.
+- The first attempt (`generation-drop1-20261111-151031`) failed the native digest comparison on the three lands with low tiles: `floor_preview` counted tiles by class in an array of 8 and panicked on class 9; fixed in the example. cullet-laws is not a land seed (no drops or low tiles there).
 ## 2026-11-11 the hamlet seed (exp-hamlet-births, Spark)
 
 Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`; its port is published on `0.0.0.0`, which `verify.py` now accepts as local), private target dirs. `generation.py --feature worlds --seeds hamlet,authored-test` (`generation-hamlet-20261111-141545`): `hamlet` 59 of 59 checks (both settlements' 8 and 4 authored residents, sheets, parents, memberships, promised fishing spots and berry bushes, no animals), `authored-test` 40 of 40, original seeds unchanged. `--seeds` now accepts any tracked seed. The first attempt stopped at launch: the harness refused the trial service's `0.0.0.0` port binding.
+
+After merging main `fd2030c` (rules-1), with the hamlet on Cullet's day (`day_minutes` 48) and laws (`laws_file` `worlds/cullet/laws.rhai`), `life_pace` 0.0357: `generation-hamlet-20261111-150942`, `hamlet` 61 of 61 and `authored-test` 42 of 42, original seeds unchanged.
+
+After merging main `7837320`: `generation-hamlet-20261111-160615`, `hamlet` 61 of 61, original seeds unchanged.
+
+## 2026-11-11 plan-2: Cullet's plan, authored relief, plan resources (dev-box)
+
+Branch `plan-2` (from the plan-1 merge `bcbde99d`), own container `plan2-stdb` (2.14.1, port 3314, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. A maintain pass of this skill ran with it: a source reader each for [plans](../features/plans.md) and [seeded-world](../features/seeded-world.md) (the features the change touched; plan-1's pass earlier the same day covered the rest), then every feature driven live. Drift fixed: the `cullet` seed and the authored resources and relief in plans, seeded-world and SKILL.md; the seed-test count (seven); the people-less town's checks.
+- `generation-plan2b-20261111-152231` (`--feature worlds --seeds cullet,plan-test,island`): cullet 62, plan-test 69, island 975 checks pass; `land` digests equal `floor_preview`'s; original seeds unchanged. New checks: `plan cullet: its 93 authored resources of known kinds stand where written`, `... of unknown kinds are not placed` (greens 11, kelp 12, peat 18, roots 18, sand 6); plan-test's 2 fishing spots placed and its `kelp` not. The cullet town has no people: `households own lot houses (none: the seed has no people)` and the like.
+- `generation-plan2-worlds-20261111-152524` (`--seeds floor-megacity-4k`): 87 checks pass, `create_floor` refusing the bad plan among them. `generation-plan2-authored-20261111-152524`: aske-coast and island compile offline. `generation-plan2-guards-20261111-152524`: 7 `seed::tests` pass (with `the_cullet_seed_is_hosted`), the malformed seed refused.
+- After merging main (`90f6fac1`, with rules-1's `cullet-laws` seeds), `generation-plan2m-20261111-153709` (`--seeds cullet,plan-test,cullet-laws,cullet-laws-floor`): 64, 71, 41 and 46 checks pass; original seeds unchanged.
+- An earlier run (`generation-plan2-20261111-145116`) failed cullet's people-dependent checks (backgrounds, building places, households owning houses), which assumed every seeded town has people; the driver now skips them for a town with neither `residents` nor `occupations`. Its one missing Weirs fishing spot lay in the water more than 2.5 m from land; the plan moved it onto the shore.
 
 ## 2026-11-11 rules-1: a seed's own day and laws (dev-box)
 

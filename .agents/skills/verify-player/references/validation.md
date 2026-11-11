@@ -4,6 +4,27 @@
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (port 3320). `player-1111-152137`, the speech part of `player-character.md`, passed. An addressed and an unaddressed `human_say` gave the same chronicle lines and listener experiences as before ("A stranger said to you: …", salience 0.9; the unaddressed line was also 0.9, because the listener was the only one close by). No `audience` row was written. `set_paused` and `install_script` were refused to the player ("admin only"), and the player's SQL on `audience` was refused (a private table). The other recipes were not rerun.
 
+
+
+## 2026-11-11 rules-offers: trade offers a player receives (Spark)
+
+Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. `offers.py` (new, [offers.md](../features/offers.md)) on `player-offers-1111-183948`: 17 of 17. Shown: a resident's offer in `my_offers`, a second player's outgoing one, isolation between them, refused and then completed `accept`, `trade_offer` private. After the window the second offer was gone (`expiry-after-window.json`). Not covered: a client drawing the offer (the laptop's ui-1), and a mind deciding to offer (the resident's offer came through admin `mind_act`).
+
+## 2026-11-11 eye-2: across a drop, unchanged (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. `drop.py` on plan-test (`player-eye2v-drop`): 6 of 6 (both see each other across one drop tile, the walk stops at the edge, the route never crosses, the arrow over the drop strikes). Plan-test's lots name no measured model, so eye-2 changes none of its tiles. Maintained: drop.md (the script reads plan-test's plan whatever the seed; the search's full conditions), comments in `combat.py` and `gesture.py` (open stalls and wells no longer hide).
+
+## 2026-11-11 drop-1: across a drop (dev-box)
+
+Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `player-drop1b-20261111-155119` (plan-test): `drop.py` 6 of 6: the players above (the row, 6.5 m) and below (the quay, 2.5 m), 2 m apart across one drop tile, see each other in `seen_bodies` and `seen_characters`; the one above walking straight at the drop slides 2.65 m along its edge and never stands on it or on the quay; told to go below, it walks 20.3 m by the stair and its route never crosses the drop; its arrow over the drop strikes ("struck Below: hit for 16").
+- An earlier run (`player-drop1-20261111-154955`) failed only "stops at its edge": the check wanted the player inside the row's polygon, and steering had slid it past the plan's west end into the skirt (neither level). The check is now "never on a blocked tile and never on the lower level".
+
+## 2026-11-11 goods-1 (dev-box)
+
+Own container `goods1-stdb` (port 3313), merged build (rules-1, plan-1). `player-g3-11111531`: `new_skill.py` 6 of 6 (it installs the script, now over HTTP through the harness) and `told.py` 12 of 12 pass. The player path did not change; `feed` and `make` are skills from the script like `whittle`, and are not offered in the shipped world (no fires that burn fuel, no recipes).
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.

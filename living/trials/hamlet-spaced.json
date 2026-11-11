@@ -1,7 +1,7 @@
 {
  "extends": "hamlet",
  "title": "The hamlet, births spaced by the life table",
- "about": "`hamlet` with the person life table's `interbirth` 0.15 of a lifespan instead of 0.03 (world.overrides.species, merged over species.json at build): after a birth, both parents raise the child for 0.15 of a life (6 game days, 72 real minutes at this pace) before they can start another. With gestation 0.011, an eager couple then has at most one child per 0.161 of a life: twice the rate a stationary population needs per couple when every adult is paired, so replacement when about half the adults are (the hamlet starts with 4 of its 8 adults in couples; docs/TRIALS.md, \"Births that keep a settlement's numbers\").",
+ "about": "`hamlet` with the person life table's `interbirth` 0.15 of a lifespan instead of 0.03 (world.overrides.species, merged over species.json at build): after a birth, both parents raise the child for 0.15 of a life (1.5 game days, 72 real minutes at this pace) before they can start another. With gestation 0.011, an eager couple then has at most one child per 0.161 of a life: twice the rate a stationary population needs per couple when every adult is paired, so replacement when about half the adults are (the hamlet starts with 4 of its 8 adults in couples; docs/TRIALS.md, \"Births that keep a settlement's numbers\").",
  "world": {
   "seed": "hamlet",
   "overrides": {

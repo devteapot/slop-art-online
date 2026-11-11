@@ -40,6 +40,10 @@ import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ooc  # noqa: E402
+from journal_io import restore  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 TRIALS = ROOT / "living/trials"
 OUT = ROOT / ".local/living/trials"
@@ -61,6 +65,8 @@ TOTAL_CAP = int(os.environ["TRIALS_TOTAL_TOKENS"]) if os.environ.get("TRIALS_TOT
 FAKE = ROOT / ".agents/skills/verify-llm/scripts/fake_llm.py"
 FOOD = {"berries", "meat", "fish", "cooked_meat", "cooked_fish", "smoked_meat", "smoked_fish", "bread"}
 SAMPLE_S = 2.0
+# How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
+PLAYER_FRAME_HEAD = "You are an AI playing the person described under # Who you are"
 # Estimated USD per million tokens: (input, output, cached input), for the report only, not an
 # invoice. Mistral's model pages, read 2026-11-09 (docs.mistral.ai/models/...): DeepSeek V4.1
 # Flash 0.30 / 1.20 / 0.007; GLM 5.3 Flash 0.15 / 0.50 / 0.03; Ministral 3 3B, 8B and 14B
@@ -187,6 +193,28 @@ def journal_file(name):
     """A character's journal file name, as the mind writes it (llm.rs: every character that is
     not a letter or digit becomes `_`, so "Sefa Reed" is Sefa_Reed.jsonl)."""
     return "".join(c if c.isalnum() else "_" for c in name) + ".jsonl"
+
+
+DEF = re.compile(r"^(\s*)(private\s+)?fn\s+([A-Za-z0-9_]+)(\s*\()", re.M)
+
+
+def compose_laws(base, overlay):
+    """`living_rules::floors::compose` in Python: each function the overlay defines replaces the
+    base's (`fn NAME(` at the start of a base line becomes `fn base_NAME(`), and the overlay is
+    appended. The authority composes a seed's `laws`/`laws_file` when the world is created; the
+    runner installs the skills file after publishing, so it composes the same overlay first."""
+    names = {m.group(3) for m in DEF.finditer(overlay)}
+    renamed = DEF.sub(lambda m: f"{m.group(1)}{m.group(2) or ''}fn base_{m.group(3)}{m.group(4)}" if m.group(3) in names else m.group(0), base)
+    return renamed + ("" if renamed.endswith("\n") else "\n") + "\n// ---- floor overlay ----\n" + overlay
+
+
+def seed_laws(seed):
+    """A seed's laws overlay: `laws`, or the file `laws_file` names under living/seeds."""
+    if str(seed.get("laws") or "").strip():
+        return seed["laws"]
+    if seed.get("laws_file"):
+        return (ROOT / "living/seeds" / seed["laws_file"]).read_text()
+    return ""
 
 
 def patch_skills(text, trial, variant):
@@ -316,7 +344,7 @@ def wasm_mount():
 def served_name(name):
     """A module's name under the container's /wasm: as built, or, when the mount is another
     checkout's, with this checkout's tag, so a worktree never overwrites or reuses a module
-    another checkout's batches run (`trial-hamlet-<hash>-wt<tag>`)."""
+    another checkout's batches run (`trial-island-<hash>-wt<tag>`)."""
     if wasm_mount().resolve() == (OUT / "wasm").resolve():
         return name
     return f"{name}-wt{hashlib.sha256(str(ROOT).encode()).hexdigest()[:6]}"
@@ -679,26 +707,28 @@ class Instance:
         self.published = True
         self.save()
         # A variant may name another skills file (a rules change under test); the default is the tree's.
-        v = self.shared["variants"][self.variant]
-        skills = ROOT / v.get("skills", "living/scripts/skills.rhai")
-        # A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) had them composed over the
-        # shipped script and installed when the world was created; installing the plain file
-        # would drop them (docs/CULLET_RULES.md), so that world keeps its own.
-        _, _, merged = world_seed(worlds_of(self.trial)[world_key(self.trial, self.rep)])
-        if (merged.get("laws") or merged.get("laws_file")) and not v.get("skills"):
-            if self.trial.get("skills_patch") or v.get("skills_patch"):
-                raise RuntimeError("skills_patch on a seed with its own laws: put the values in the seed's laws instead")
-            self.log(f"published {self.db} from {wasm}.wasm; the seed's own laws ({merged.get('laws_file') or 'laws'}) stay installed")
-        else:
-            # The trial's and then the variant's `skills_patch` change law values in that file
-            # (name -> [old text, new text]; each old text must occur exactly once).
-            source, patched = patch_skills(skills.read_text(), self.trial, v)
-            code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
-            if code != 200:
-                raise RuntimeError(f"install_script {code}: {body[:300]}")
-            (self.dir / "skills.sha256").write_text(hashlib.sha256(source.encode()).hexdigest() + "\n")
-            self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)}"
-                     f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(source.encode()).hexdigest()[:12]})")
+        skills = ROOT / self.shared["variants"][self.variant].get("skills", "living/scripts/skills.rhai")
+        # The trial's and then the variant's `skills_patch` change law values in that file
+        # (name -> [old text, new text]; each old text must occur exactly once).
+        # A seed's own laws (`laws`/`laws_file`, docs/CULLET_RULES.md) are composed over it first, as
+        # the authority did at creation: installing the bare file would drop them.
+        overlay = seed_laws(world_seed(worlds_of(self.trial)[world_key(self.trial, self.rep)])[2])
+        base = compose_laws(skills.read_text(), overlay) if overlay else skills.read_text()
+        if overlay and not self.shared["variants"][self.variant].get("skills"):
+            # The world's own composition, from its creation, is the check on this one.
+            made = next(iter(self.rows("SELECT * FROM script WHERE name = 'skills'")), {}).get("source")
+            self.log(f"seed laws composed as the world composed them: {made == base}")
+            if made != base:
+                self.emit("events", {"t": self.t(), "error": "the runner's composition of the seed's laws differs from the world's"})
+        source, patched = patch_skills(base, self.trial, self.shared["variants"][self.variant])
+        if overlay:
+            patched = ["seed laws"] + patched
+        code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
+        if code != 200:
+            raise RuntimeError(f"install_script {code}: {body[:300]}")
+        (self.dir / "skills.sha256").write_text(hashlib.sha256(source.encode()).hexdigest() + "\n")
+        self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)}"
+                 f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(source.encode()).hexdigest()[:12]})")
         end = time.time() + 60
         while time.time() < end:
             st = self.rows("SELECT * FROM stats")
@@ -1666,7 +1696,7 @@ def summarize(d, trial, extra):
     for f in sorted(jdir.glob("*.jsonl")) if jdir.exists() else []:
         for n, line in enumerate(f.read_text().splitlines(), 1):
             try:
-                r = json.loads(line)
+                r = restore(json.loads(line), f.parent)
                 r["_ref"] = f"{d.name}/journal/{f.name}:{n}"
                 j.append(r)
             except ValueError:
@@ -1730,9 +1760,33 @@ def summarize(d, trial, extra):
                 per_day[day]["tokens"] += r.get("tokens") or 0
         s["by_game_day"] = {k: dict(v) for k, v in sorted(per_day.items())}
     s["memories_remembered"] = remembered
+    frame_probes(s, S, chron, j)
     s["exchanges"] = [{"ref": r["_ref"], "purpose": r.get("purpose"), "model": r.get("model"), "tokens": r.get("tokens"),
                        "reply": excerpt(r.get("reply"))} for r in j if r.get("purpose") in ("deliberate", "think", "talk")][:40]
     return s
+
+
+def frame_probes(s, S, chron, j):
+    """The player-frame experiment's probes. `prompt_frame`: per purpose, how many of the
+    subject's recorded requests opened with the player frame, of all its requests ("player
+    3/3"; "character" when none did). `out_of_character`: lines the subject spoke or wrote that
+    step outside the world (ooc.py), and the same count over its replies' private fields."""
+    sub_name = (s.get("subject") or "").split("#")[0]
+    mine = [r for r in j if sub_name and r.get("_ref", "").split("/journal/")[-1].startswith(sub_name + ".jsonl")]
+    framed, total = Counter(), Counter()
+    for r in mine:
+        msgs = (r.get("request") or {}).get("messages") or []
+        system = next((m.get("content") for m in msgs if isinstance(m, dict) and m.get("role") == "system"), None)
+        if not isinstance(system, str):
+            continue
+        total[r.get("purpose")] += 1
+        framed[r.get("purpose")] += system.startswith(PLAYER_FRAME_HEAD)
+    s["prompt_frame"] = {p: f"{'player' if framed[p] else 'character'} {framed[p]}/{n}" for p, n in sorted(total.items(), key=lambda x: str(x[0]))}
+    spoken = [re.sub(r"^[^“]*“|”$", "", c.get("text", "")) for c in chron if c.get("a") == S and c.get("kind") in ("speech", "write")]
+    private = [x for r in mine for x in ooc.private_texts(parse_reply(r.get("reply")))]
+    s["out_of_character"] = {"spoken": ooc.scan(spoken), "private": ooc.scan(private)}
+    s["ooc_lines"] = s["out_of_character"]["spoken"]["flagged"]
+    s["ooc_private"] = s["out_of_character"]["private"]["flagged"]
 
 
 def social(s, d, S, chron, exps, samples, j, extra):
@@ -1866,7 +1920,7 @@ def shared_for(trials, a, bdir):
     for t in trials:
         for key, w in worlds_of(t).items():
             name, rel, _ = world_seed(w)
-            if not (OUT / "wasm" / f"{name}.wasm").exists():
+            if not (wasm_mount() / f"{served_name(name)}.wasm").exists():
                 sys.exit(f"module for {key} ({name}) is not built: run `trials.py build {t['name']}`")
             shared["wasm"][key], shared["seed_rel"][key] = name, rel
     if not (TARGET / "release/living-mind").exists():
@@ -2161,7 +2215,7 @@ def spread(vals):
 
 ROWS = ["subject", "stopped_by", "minutes_run", "game_days", "tokens_per_game_day", "survived", "died_min", "hp_min", "hunger_start", "hunger_max", "hunger_end",
         "first_eat_min", "food_gained", "skills", "min_dist", "fled_m", "lines_said", "said_to", "talk_turns", "graph_revisions",
-        "refusals", "learned", "built", "relations_end", "judgments_end", "memories_remembered", "calls", "tokens"]
+        "refusals", "learned", "built", "relations_end", "judgments_end", "memories_remembered", "prompt_frame", "ooc_lines", "ooc_private", "calls", "tokens"]
 
 
 def report(a):

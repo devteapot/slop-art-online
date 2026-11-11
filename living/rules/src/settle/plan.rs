@@ -65,6 +65,54 @@ pub struct PlanSpec {
     pub sea: Vec<[f32; 2]>,
     #[serde(default)]
     pub lots: Vec<LotSpec>,
+    /// Resources at authored points (fishing spots on a quay's edge, trees in a copse), in the
+    /// plan's frame; they may lie outside its levels. The authority places those of kinds the
+    /// rules know when the world is created ([`Laid::resources`]); the others wait, unplaced,
+    /// for their kinds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<ResourceSpec>,
+    /// Structures the authority places when the world is created (a furnace at a mouth, lamps
+    /// along a quay, a store), at a point in the plan's frame or at a lot's door or spot, with
+    /// the fuel a fire starts burning and the items it holds ([`StructureSpec`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub structures: Vec<StructureSpec>,
+}
+
+/// A resource at a point ([`PlanSpec::resources`]), with what it holds and regrows when the
+/// author says so (else its kind's `max` and `regrow_per_h` in the script). Resources that name
+/// the same `pool` draw on one stock, held by the first of them (a fishing ground's spots).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResourceSpec {
+    pub kind: String,
+    pub at: [f32; 2],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f32>,
+    /// Units it regrows a game hour of growing time (the world's day turns it into real time).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regrow_per_h: Option<f32>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pool: String,
+}
+
+/// A structure the plan places ([`PlanSpec::structures`]): `at` a point in the plan's frame, or
+/// at a `lot`'s door, or at one of its named `spot`s. A kind the rules do not know is left out
+/// and logged when the world is created.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StructureSpec {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lot: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spot: Option<String>,
+    /// For a fire that burns fuel (its kind `burns`): the units it starts burning with (0: out),
+    /// as a seed's `structures[].fuel`.
+    #[serde(default)]
+    pub fuel: f32,
+    /// Items it holds at the start.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub contents: std::collections::BTreeMap<String, u32>,
 }
 
 /// A ground level: a polygon at an exact height.
@@ -152,6 +200,10 @@ pub struct LotSpec {
     /// right of its front's middle as one faces out, and forward from its centre toward the front.
     #[serde(default)]
     pub spots: Vec<SpotSpec>,
+    /// Items the structure at its door holds at the start (a store's stock); a lot of a kind
+    /// with no structure has nowhere to keep them, and they are left out and logged.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub contents: std::collections::BTreeMap<String, u32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -271,6 +323,8 @@ pub(crate) struct Resolved {
     pub(crate) paved: bool,
     pub(crate) sea: Vec<V2>,
     pub(crate) lots: Vec<PlanLot>,
+    pub(crate) resources: Vec<LaidResource>,
+    pub(crate) structures: Vec<LaidStructure>,
     pub(crate) drop: f32,
     pub(crate) skirt: f32,
     pub(crate) blend: f32,
@@ -463,6 +517,43 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
         }
         lots.push(PlanLot { id: l.id.clone(), kind: l.kind, name: l.name.clone(), rect, level: li, model: l.model.clone().filter(|m| !m.is_empty()), height, landmark: l.landmark, spots });
     }
+    let mut resources = Vec::new();
+    for (i, rs) in s.resources.iter().enumerate() {
+        if rs.kind.is_empty() || !finite(&[rs.at]) {
+            return Err(format!("plan {id}: resources[{i}] needs a kind and a place"));
+        }
+        let ok = |v: Option<f32>| v.map_or(true, |v| v.is_finite() && v >= 0.0);
+        if !ok(rs.max) || !ok(rs.regrow_per_h) {
+            return Err(format!("plan {id}: resources[{i}] ({}) has a max or regrow_per_h that is not a number of at least 0", rs.kind));
+        }
+        resources.push(LaidResource { kind: rs.kind.clone(), at: f.pt(rs.at), max: rs.max, regrow_per_h: rs.regrow_per_h, pool: rs.pool.clone() });
+    }
+    // Structures at a point, a lot's door or a lot's spot; then each lot's own store.
+    let door = |l: &PlanLot| add(l.rect.c, mul(l.rect.f, l.rect.hd + 0.5));
+    let mut structures = Vec::new();
+    for (i, st) in s.structures.iter().enumerate() {
+        let name = format!("structures[{i}] ({})", st.kind);
+        if st.kind.is_empty() || !(st.fuel.is_finite() && st.fuel >= 0.0) {
+            return Err(format!("plan {id}: structures[{i}] needs a kind, and fuel of at least 0"));
+        }
+        let at = match (&st.at, &st.lot) {
+            (Some(q), None) if st.spot.is_none() && finite(&[*q]) => f.pt(*q),
+            (None, Some(lid)) => {
+                let l = lots.iter().find(|l: &&PlanLot| l.id == *lid).ok_or_else(|| format!("plan {id}: {name} is at lot {lid}, which the plan does not have"))?;
+                match &st.spot {
+                    None => door(l),
+                    Some(sp) => l.spots.iter().find(|(n, _)| n == sp).map(|(_, q)| *q).ok_or_else(|| format!("plan {id}: {name}: lot {lid} has no spot {sp:?}"))?,
+                }
+            }
+            _ => return Err(format!("plan {id}: {name} needs either `at` or a `lot` (with an optional `spot`)")),
+        };
+        structures.push(LaidStructure { kind: st.kind.clone(), lot: String::new(), at, fuel: st.fuel, contents: st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect() });
+    }
+    for (l, spec) in lots.iter().zip(&s.lots) {
+        if !spec.contents.is_empty() {
+            structures.push(LaidStructure { kind: String::new(), lot: l.id.clone(), at: door(l), fuel: 0.0, contents: spec.contents.iter().map(|(k, v)| (k.clone(), *v)).collect() });
+        }
+    }
     let n = square.len() as f32;
     let centre = square.iter().fold((0.0, 0.0), |a, q| add(a, mul(*q, 1.0 / n)));
     let all: Vec<V2> = levels.iter().flat_map(|l| l.poly.iter().copied()).collect();
@@ -485,6 +576,8 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
         paved: s.square.paved,
         sea,
         lots,
+        resources,
+        structures,
         drop: s.drop_m,
         skirt: s.skirt_m,
         blend: s.blend_m,
@@ -570,6 +663,12 @@ pub fn validate(s: &PlanSpec, size: u32) -> Result<(), String> {
         off(format!("stair {}", st.id), &st.rect.corners())?;
     }
     off("the square".into(), &r.square)?;
+    for (i, q) in r.resources.iter().enumerate() {
+        off(format!("resources[{i}] ({})", q.kind), &[q.at])?;
+    }
+    for (i, q) in r.structures.iter().enumerate() {
+        off(format!("structures[{i}] ({})", if q.kind.is_empty() { &q.lot } else { &q.kind }), &[q.at])?;
+    }
     off("the sea".into(), &r.sea)?;
     for l in &r.lots {
         off(format!("lot {}", l.id), &l.rect.corners())?;
@@ -764,6 +863,32 @@ pub struct Laid {
     pub lots: Vec<LaidLot>,
     /// Road ids of its streets and their paving.
     pub streets: Vec<(u32, Option<String>)>,
+    /// Its authored resources on the land ([`PlanSpec::resources`]).
+    pub resources: Vec<LaidResource>,
+    /// Its authored structures and its lots' stores, on the land ([`PlanSpec::structures`],
+    /// [`LotSpec::contents`]).
+    pub structures: Vec<LaidStructure>,
+}
+
+/// An authored resource on the land.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct LaidResource {
+    pub kind: String,
+    pub at: V2,
+    pub max: Option<f32>,
+    pub regrow_per_h: Option<f32>,
+    pub pool: String,
+}
+
+/// An authored structure on the land: a structure of `kind` to place at `at`, or (an empty
+/// kind) what the structure at lot `lot`'s door holds.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct LaidStructure {
+    pub kind: String,
+    pub lot: String,
+    pub at: V2,
+    pub fuel: f32,
+    pub contents: Vec<(String, u32)>,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -801,7 +926,7 @@ pub(crate) fn paint(land: &mut Land, r: &Resolved) -> ((i32, i32), (i32, i32)) {
             let k = (y * w + x) as usize;
             let t = Terrain::from_u8(land.map.tiles[k]);
             if r.levels.iter().any(|l| poly_contains(&l.poly, q)) {
-                if matches!(t, Terrain::Water | Terrain::Rock | Terrain::Forest | Terrain::Wall) {
+                if matches!(t, Terrain::Water | Terrain::Rock | Terrain::Forest | Terrain::Wall | Terrain::Drop) {
                     land.map.tiles[k] = Terrain::Grass as u8;
                 }
             } else if !r.sea.is_empty() && poly_contains(&r.sea, q) {
@@ -821,7 +946,7 @@ pub(crate) fn build(land: &Land, r: Resolved, idx: u16, site: u16, first_road: u
     let sq = &r.square;
     let near_square = |q: V2| poly_outside(sq, q) < 1.0;
     let mut roads = Vec::new();
-    let mut laid = Laid { id: r.id.clone(), settlement: idx, ..Laid::default() };
+    let mut laid = Laid { id: r.id.clone(), settlement: idx, resources: r.resources.clone(), structures: r.structures.clone(), ..Laid::default() };
     for (i, st) in r.streets.iter().enumerate() {
         // Points at most 2 m apart, each at the ground's height: the street lies on the plan.
         let pts = dedup(resample(&st.points, 2.0));
@@ -1064,6 +1189,98 @@ mod tests {
         validate(&s, 1024).expect("still valid");
     }
 
+    /// `seeds/cullet.json` (docs/SMALL_CITY.md, written by `living/tools/cullet_plan.py`): the plan
+    /// and the authored land are valid, every building door is reachable, its five landmarks are
+    /// the Cone, the Counting House, the Heron, the Watchglass and the Lintel, and the sea, the
+    /// Hanger's forest and the Wrack Strand's sand are where the plan puts them.
+    #[test]
+    fn the_cullet_seed_is_valid_and_reachable() {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../../seeds/cullet.json")).expect("cullet.json");
+        let p: LandParams = serde_json::from_value(v["map"]["params"].clone()).expect("map.params");
+        let size = v["map"]["size"].as_u64().unwrap() as u32;
+        validate_all(&p.plans, size).unwrap();
+        crate::land::validate_relief(&p.relief).unwrap();
+        let l = land::generate(v["seed"].as_u64().unwrap(), size, &p);
+        let (m, h) = crate::host::hosted_map(&l, &p);
+        assert_eq!(stranded_doors(&l, &m, &h.reachable), Vec::<String>::new());
+        let laid = &l.plans[0];
+        let mut marks: Vec<&str> = laid.lots.iter().filter(|q| l.lots[q.lot as usize].landmark).map(|q| q.key.as_str()).collect();
+        marks.sort();
+        assert_eq!(marks, ["cone", "counting_house", "heron", "lintel", "watchglass"]);
+        let f = Frame::of(&p.plans[0]);
+        let at = |x: f32, y: f32| m.get(f.pt([x, y]).0 as i32, f.pt([x, y]).1 as i32);
+        assert_eq!(at(0.0, -40.0), Terrain::Water, "the harbour");
+        assert_eq!(at(0.0, -200.0), Terrain::Water, "the sea beyond the Combs");
+        assert_eq!(at(-220.0, 30.0), Terrain::Sand, "the Wrack Strand");
+        assert!(l.lakes.is_empty() && l.rivers.is_empty(), "no lake or river on a rock that drinks rain");
+        let forest = m.tiles.iter().filter(|t| **t == Terrain::Forest as u8).count();
+        assert!(forest > 500 && l.regions.len() > 0, "the Hanger: {forest} forest tiles");
+    }
+
+    /// Authored resources are kept on the land at their points, for the authority to place; one
+    /// off the land or without a kind is refused.
+    #[test]
+    fn the_test_plans_resources_are_kept_on_the_land() {
+        let (l, _, _) = plan_land();
+        let s = spec();
+        assert!(!s.resources.is_empty());
+        let f = Frame::of(&s);
+        let laid = &l.plans[0];
+        assert_eq!(laid.resources.len(), s.resources.len());
+        for (rs, q) in s.resources.iter().zip(&laid.resources) {
+            assert_eq!(rs.kind, q.kind);
+            assert!(dist(f.pt(rs.at), q.at) < 1e-4, "{} at {:?}", q.kind, q.at);
+        }
+        let mut bad = s.clone();
+        bad.resources[0].at = [0.0, 2000.0];
+        assert!(validate(&bad, 1024).unwrap_err().contains("resources[0]"));
+        bad.resources[0].kind.clear();
+        assert!(validate(&bad, 1024).unwrap_err().contains("needs a kind"));
+    }
+
+    /// Authored structures stand at their point, at a lot's door or at a lot's spot, with their
+    /// fuel and contents; a lot's own `contents` go to the structure at its door; one at a lot or
+    /// spot the plan does not have, or with both a point and a lot, is refused.
+    #[test]
+    fn a_plans_structures_and_stores_are_kept_on_the_land() {
+        let mut s = spec();
+        let f = Frame::of(&s);
+        let spot = |id: &str, n: usize| s.lots.iter().find(|l| l.id == id).unwrap().spots[n].name.clone();
+        let st = |kind: &str| StructureSpec { kind: kind.into(), at: None, lot: None, spot: None, fuel: 0.0, contents: Default::default() };
+        let (inn_seat, hall_door) = (spot("inn", 0), "hall".to_string());
+        s.structures = vec![
+            StructureSpec { at: Some([1.0, 2.0]), fuel: 4.0, ..st("lamp") },
+            StructureSpec { lot: Some(hall_door.clone()), fuel: 6.0, ..st("hearth") },
+            StructureSpec { lot: Some("inn".into()), spot: Some(inn_seat.clone()), contents: [("peat".to_string(), 9)].into(), ..st("storage") },
+        ];
+        for l in &mut s.lots {
+            l.contents.clear();
+        }
+        s.lots.iter_mut().find(|l| l.id == "store").unwrap().contents = [("fish".to_string(), 3)].into();
+        let r = resolve(&s).unwrap();
+        let lot = |id: &str| r.lots.iter().find(|l| l.id == id).unwrap().clone();
+        let door = |l: &PlanLot| add(l.rect.c, mul(l.rect.f, l.rect.hd + 0.5));
+        assert_eq!(r.structures.len(), 4);
+        assert!(dist(r.structures[0].at, f.pt([1.0, 2.0])) < 1e-4 && r.structures[0].fuel == 4.0);
+        assert!(dist(r.structures[1].at, door(&lot("hall"))) < 1e-4 && r.structures[1].kind == "hearth");
+        let seat = lot("inn").spots.iter().find(|(n, _)| *n == inn_seat).unwrap().1;
+        assert!(dist(r.structures[2].at, seat) < 1e-4 && r.structures[2].contents == vec![("peat".to_string(), 9)]);
+        assert!(r.structures[3].kind.is_empty() && r.structures[3].lot == "store" && dist(r.structures[3].at, door(&lot("store"))) < 1e-4);
+        assert!(validate(&s, 1024).is_ok());
+        let refused = |change: &dyn Fn(&mut PlanSpec), words: &str| {
+            let mut b = s.clone();
+            change(&mut b);
+            let e = validate(&b, 1024).unwrap_err();
+            assert!(e.contains(words), "{e}");
+        };
+        refused(&|b| b.structures[1].lot = Some("nowhere".into()), "which the plan does not have");
+        refused(&|b| b.structures[2].spot = Some("nowhere".into()), "has no spot");
+        refused(&|b| b.structures[0].lot = Some("hall".into()), "needs either `at` or a `lot`");
+        refused(&|b| b.structures[0].fuel = -1.0, "fuel of at least 0");
+        refused(&|b| b.structures[0].at = Some([0.0, 5000.0]), "structures[0]");
+        refused(&|b| b.resources[0].regrow_per_h = Some(f32::NAN), "regrow_per_h");
+    }
+
     /// The test plan stands as written: its site and id, lots on their levels at exact
     /// heights with their models, the square, streets, the stair between the levels, retaining
     /// walls along the drop, the harbour, island roads joining its trunk street, and every door
@@ -1161,6 +1378,46 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Across the drop between the quay and the row, two people 2 m either side see each other
+    /// and neither can step across: the drop's tiles are `Drop` on the hosted map (not `Wall`),
+    /// walking stops at them, and any route between goes round the drop, never over it.
+    #[test]
+    fn people_see_across_the_plans_drop_but_cannot_walk_across() {
+        let (l, map, _) = plan_land();
+        let r = resolve(&spec()).unwrap();
+        let (x0, y0, x1, y1) = (r.lo.0 as i32, r.lo.1 as i32, r.hi.0 as i32, r.hi.1 as i32);
+        let drops = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| map.get(x, y) == Terrain::Drop).count();
+        assert!(drops >= 50, "{drops} drop tiles in the plan");
+        let mut pairs = 0;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                if map.get(x, y) != Terrain::Drop {
+                    continue;
+                }
+                for (dx, dy) in [(1, 0), (0, 1)] {
+                    let (a, b) = ((x - 2 * dx, y - 2 * dy), (x + 2 * dx, y + 2 * dy));
+                    let (pa, pb) = ((a.0 as f32 + 0.5, a.1 as f32 + 0.5), (b.0 as f32 + 0.5, b.1 as f32 + 0.5));
+                    // Standing ground on two levels, nothing built between.
+                    let between_open = (-1..=1).all(|k| !map.get(x + k * dx, y + k * dy).opaque());
+                    if !map.walkable(a.0, a.1) || !map.walkable(b.0, b.1) || !between_open || (l.height(pa.0, pa.1) - l.height(pb.0, pb.1)).abs() < 2.0 {
+                        continue;
+                    }
+                    pairs += 1;
+                    assert!(map.sight_clear(pa, pb) && map.sight_clear(pb, pa), "the two levels see each other at ({x}, {y})");
+                    assert!(!map.free(x as f32 + 0.5, y as f32 + 0.5) && !map.line_clear(pa, pb), "a step across the drop at ({x}, {y})");
+                    // A route between them goes round the drop (by a stair, or past its end).
+                    if let Some(p) = map.path(pa, pb, 50_000) {
+                        for w in std::iter::once(pa).chain(p.iter().copied()).collect::<Vec<_>>().windows(2) {
+                            let n = (dist(w[0], w[1]) / 0.1).ceil().max(1.0) as i32;
+                            assert!((0..=n).all(|i| map.free(w[0].0 + (w[1].0 - w[0].0) * i as f32 / n as f32, w[0].1 + (w[1].1 - w[0].1) * i as f32 / n as f32)), "a route over the drop at ({x}, {y})");
+                        }
+                    }
+                }
+            }
+        }
+        assert!(pairs >= 20, "{pairs} places where people stand either side of the drop");
     }
 
     #[test]

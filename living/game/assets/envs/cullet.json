@@ -1,7 +1,7 @@
 {
  "id": "cullet",
  "name": "Cullet",
- "note": "Cullet, the glassmakers' harbour on the Wrack (docs/SMALL_CITY.md): the mood for a land whose `world` matches (seed 3 at 1024 m: living/seeds/plan-test.json and the rough living/seeds/cullet.json). Fog starts at 180 m and ends at 600 m on a clear day, so the Cone and the Watchglass can be seen from anywhere in town; the camera's own draw distance (camera.rs `follow`) still sets the fog the player sees. Atmosphere from the island's.",
+ "note": "Cullet, the glassmakers' harbour on the Wrack (docs/SMALL_CITY.md): the mood for a land whose `world` matches (seed 83 at 1024 m: living/seeds/cullet.json, written by living/tools/cullet_plan.py; plan-test, seed 3, takes the first world environment's mood). Fog starts at 180 m and ends at 600 m on a clear day, so the Cone and the Watchglass can be seen from anywhere in town; the camera's own draw distance (camera.rs `follow`) still sets the fog the player sees. Atmosphere from the island's.",
  "mood": {
   "hour": 15.0,
   "sun": [
@@ -44,7 +44,7 @@
  },
  "slots": [],
  "world": {
-  "seed": 3,
+  "seed": 83,
   "size": 1024
  },
  "atmosphere": {

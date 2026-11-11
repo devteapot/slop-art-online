@@ -426,6 +426,10 @@ pub struct ResourceNode {
     pub max: f32,
     pub regen: f32,
     pub at_ms: u64,
+    /// A spot that draws on another node's stock (a fishing ground's shared limit): the id of
+    /// the node holding it, whose amount, max and regrowth count for both (0: its own).
+    #[default(0u64)]
+    pub pool: u64,
 }
 
 #[derive(Clone)]
@@ -441,6 +445,11 @@ pub struct Structure {
     pub chunk: u32,
     pub owner: u32,
     pub built_ms: u64,
+    /// A fire that burns fuel (its kind `burns`): the moment its fuel runs out at its kind's
+    /// rate. Lit while this is in the future; the fuel left is the time left times the rate
+    /// (living_rules::fire). Written only when it is fed or drawn on. 0: out, or not such a fire.
+    #[default(0u64)]
+    pub lit_until_ms: u64,
 }
 
 /// When a creature's remains (a `remains` structure) are gone: `due_ms` is its `built_ms` plus
@@ -910,7 +919,10 @@ pub struct JoinRequest {
     pub at_ms: u64,
 }
 
-/// A standing trade proposal (expires after three minutes).
+/// A standing trade proposal: `from` gives `give_qty` `give_item` to `to` for `want_qty`
+/// `want_item`. It can be accepted until `until_ms` (`at_ms` plus the `trade_window_s` law
+/// when it was made); 0 on rows made before the column, which use the law's window.
+/// Indexed by `to` for `my_offers` (a point read per player) and the addressee's mind.
 #[spacetimedb::table(accessor = trade_offer)]
 pub struct TradeOffer {
     #[primary_key]
@@ -918,12 +930,27 @@ pub struct TradeOffer {
     pub id: u64,
     #[index(btree)]
     pub from: u32,
+    #[index(btree)]
     pub to: u32,
     pub give_item: String,
     pub give_qty: u32,
     pub want_item: String,
     pub want_qty: u32,
     pub at_ms: u64,
+    #[default(0u64)]
+    pub until_ms: u64,
+}
+
+impl TradeOffer {
+    /// When the offer can no longer be accepted (the stored end, or for an older row the
+    /// law's window from when it was made).
+    pub fn ends_ms(&self, window_s: f32) -> u64 {
+        if self.until_ms != 0 {
+            self.until_ms
+        } else {
+            self.at_ms + (window_s * 1000.0) as u64
+        }
+    }
 }
 
 /// A couple expecting a child, born at `due_ms`.
@@ -1453,9 +1480,12 @@ pub struct Presence {
 }
 
 /// A person's daily rhythm (private; seed content or drawn at birth, docs/SEEDED_LIVES.md):
-/// when it rises and goes to bed (hours of the day; `bed_h` may pass 24, e.g. 24.5 is 00:30)
-/// and how many hours before bed it keeps as its evening. Graphs read it as `bedtime` and
-/// `evening`; its new day starts at `rise_h`. Without a row: the world's night, and 18–22.
+/// when it rises and goes to bed (hours of the day; `bed_h` may pass 24, e.g. 24.5 is 00:30,
+/// and lies 8 to 22 hours after `rise_h`, which may be any hour), how many hours before bed it
+/// keeps as its evening, its working hours and a second sleep (spans whose end may pass 24; an
+/// end not after its start is none). Graphs read it as `bedtime`, `evening` and `work_hours`
+/// (`living_rules::rhythm`); its new day starts at `rise_h`. Without a row: the world's night,
+/// and 18–22.
 #[spacetimedb::table(accessor = rhythm)]
 pub struct Rhythm {
     #[primary_key]
@@ -1466,6 +1496,16 @@ pub struct Rhythm {
     /// The world day whose new day it last began (`living_rules::day_of`); the day it is
     /// born into counts as begun, so a world's people do not all begin one at its creation.
     pub last_day: u32,
+    /// Working hours (none: 0 and 0, so any waking hour outside the evening is work's).
+    #[default(0.0f32)]
+    pub work_from_h: f32,
+    #[default(0.0f32)]
+    pub work_to_h: f32,
+    /// A second sleep in the day (none: 0 and 0), e.g. a baker's afternoon.
+    #[default(0.0f32)]
+    pub nap_from_h: f32,
+    #[default(0.0f32)]
+    pub nap_to_h: f32,
 }
 
 /// A guest of a household (private; the database owner reads it): `guest` may sleep in the
