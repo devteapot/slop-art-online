@@ -336,7 +336,8 @@ fn dump(
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
         // Who is under the cursor (`pick.rs`), whose nameplates show as hovered, and the target plate.
         "under": pick.as_ref().and_then(|p| p.under),
-        "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground})).collect::<Vec<_>>()),
+        // `holds`: the cursor is inside its outline as `pick.rs` draws it (its own test).
+        "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground, "holds": extra.pointer.pos.is_some_and(|c| s.contains(c))})).collect::<Vec<_>>()),
         "hovered": model.actors.iter().filter(|a| a.hovered).map(|a| serde_json::json!({"id": a.id, "label": a.name})).collect::<Vec<_>>(),
         "targeted": model.actors.iter().find(|a| a.targeted).map(|a| a.id),
         // The notes on screen now (the facing-sight readout among them).
