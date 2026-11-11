@@ -264,6 +264,22 @@ pub(crate) fn acts_of(v: &Value) -> Vec<String> {
 /// The persona's line on one's community: how many others belong, and by name only those one
 /// has feelings about (a town of 77 listed every name: 11–20% of a think or consolidation
 /// prompt, growing with the town).
+/// How the authority's projection labels someone whose name one does not know
+/// (`perception::stranger`): by life stage for a person, by kind with its article otherwise.
+pub(crate) fn unnamed_label(kind: &str, stage: u8) -> String {
+    if kind == "person" {
+        return match stage {
+            0 => "a baby",
+            1 => "a child",
+            3 => "an old stranger",
+            _ => "a stranger",
+        }
+        .into();
+    }
+    let article = if kind.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+    format!("{article} {kind}")
+}
+
 fn belonging(community: &str, others: usize, known: &[String]) -> String {
     const NAMED: usize = 12;
     let mut line = format!("\nYou belong to {community}");
@@ -431,24 +447,61 @@ impl Minds {
 
     /// How `me` knows `other`: their name where the authority counts it known
     /// (`perception::knows_name`: itself, family, the other parent of its children, its
-    /// community, someone who told it their name), else "a stranger" (docs/PERCEPTION.md: names
-    /// only when known). For prompts and for what goes into a character's own memory; logs and
-    /// developer records keep names.
+    /// community, someone who told it their name), else as the authority's projection labels
+    /// someone unnamed ("a stranger", "a child", "an old stranger", "a baby";
+    /// `perception::stranger`; docs/PERCEPTION.md: names only when known). For prompts; logs and
+    /// developer records keep names. What goes into a character's own memory is
+    /// [`Minds::remembered_as`].
     pub(super) fn known_as(&self, me: u32, other: u32) -> String {
         let Some(o) = self.conn.db.character().id().find(&other) else { return "someone".into() };
+        if self.knows_name(me, &o) {
+            o.name
+        } else {
+            unnamed_label(&o.kind, o.stage)
+        }
+    }
+
+    /// Whether `me` knows `o`'s name (`perception::knows_name`, as [`Minds::known_as`] reads it).
+    fn knows_name(&self, me: u32, o: &Character) -> bool {
+        let other = o.id;
         let family = |a: &Character, b: &Character| a.parent_a == b.id || a.parent_b == b.id || b.parent_a == a.id || b.parent_b == a.id;
         let community = |id: u32| self.conn.db.membership().iter().find(|m| m.member == id).map(|m| m.community);
-        let known = me == other
+        me == other
             || self.conn.db.acquaintance().iter().any(|a| a.observer == me && a.known == other)
-            || self.conn.db.character().id().find(&me).is_some_and(|m| family(&m, &o))
+            || self.conn.db.character().id().find(&me).is_some_and(|m| family(&m, o))
             || community(me).is_some_and(|k| community(other) == Some(k))
-            || self.conn.db.character().iter().any(|k| (k.parent_a == me && k.parent_b == other) || (k.parent_b == me && k.parent_a == other));
-        if known {
-            o.name
-        } else if o.kind != "person" {
-            format!("a {}", o.kind)
-        } else {
-            "a stranger".into()
+            || self.conn.db.character().iter().any(|k| (k.parent_a == me && k.parent_b == other) || (k.parent_b == me && k.parent_a == other))
+    }
+
+    /// Everyone whose name `me` knows, by the rule of [`Minds::knows_name`], with each table read
+    /// once (for checking many people at a time).
+    pub(super) fn known_names(&self, me: u32) -> std::collections::HashSet<u32> {
+        let mut out: std::collections::HashSet<u32> = std::collections::HashSet::from([me]);
+        out.extend(self.conn.db.acquaintance().iter().filter(|a| a.observer == me).map(|a| a.known));
+        if let Some(m) = self.conn.db.character().id().find(&me) {
+            out.extend([m.parent_a, m.parent_b].into_iter().filter(|p| *p != 0));
+        }
+        for k in self.conn.db.character().iter().filter(|k| k.parent_a == me || k.parent_b == me) {
+            out.insert(k.id);
+            out.extend([k.parent_a, k.parent_b].into_iter().filter(|p| *p != 0));
+        }
+        let members: Vec<Membership> = self.conn.db.membership().iter().collect();
+        if let Some(k) = members.iter().find(|m| m.member == me).map(|m| m.community) {
+            out.extend(members.iter().filter(|m| m.community == k).map(|m| m.member));
+        }
+        out
+    }
+
+    /// The name of `other`'s node in `me`'s memory graph (`person:<id>`): their name where `me`
+    /// knows it, else the label they are perceived by with the id the mind perceives them by
+    /// (the scene's `id`, the `#id` of experience tags): "a stranger #77". Two people one does
+    /// not know by name are two nodes with two names, never one shared "a stranger" that
+    /// recall and the model fold together; the node takes the name once it is learned.
+    pub(super) fn remembered_as(&self, me: u32, other: u32) -> String {
+        match self.conn.db.character().id().find(&other) {
+            Some(o) if self.knows_name(me, &o) => o.name,
+            Some(o) => format!("{} #{other}", unnamed_label(&o.kind, o.stage)),
+            None => format!("someone #{other}"),
         }
     }
 
@@ -976,10 +1029,10 @@ impl Minds {
             people.extend(sheet["memories"].as_array().into_iter().flatten().flat_map(|m| m["about"].as_array().into_iter().flatten().filter_map(id_of)));
             people.sort_unstable();
             people.dedup();
-            // Named as this person knows them (`known_as`): someone the author says they know
-            // only by sight stays "a stranger" until they are told the name.
+            // Named as this person remembers them (`remembered_as`): someone the author says
+            // they know only by sight stays "a stranger #<id>" until they are told the name.
             for id in &people {
-                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.known_as(c.id, *id)), props: Default::default() });
+                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.remembered_as(c.id, *id)), props: Default::default() });
             }
             // Everything the sheet installs is the author's (`lived_under = ["authored"]`), apart
             // from world facts (`world`), what a model writes (`ai`) and what was lived (`instinct`,
@@ -2168,6 +2221,9 @@ impl Minds {
         self.name_people(actor, &mut patch);
         // Lived under the minds (a character's history shows both kinds: docs/PLAYER_MEMORY.md).
         patch.lived_under = Some("ai".into());
+        // The people these experiences involve keep their nodes' names current (a name learned
+        // here names the stranger's node even if the reply did not mention them).
+        let renamed = self.people_names(actor, &batch, &patch);
 
         // Identity shifts slowly: at most once per 8 minutes unless something momentous happened.
         let momentous = meaningful.iter().any(|e| e.salience >= 0.9);
@@ -2187,6 +2243,7 @@ impl Minds {
         };
         if let Some(store) = &self.store {
             store.apply(actor, &patch, &thought_ref, now).await?;
+            store.rename_people(actor, &renamed).await?;
             if let Some(p) = &identity {
                 let version = self.conn.db.persona().id().find(&actor).map(|x| x.version + 1).unwrap_or(1);
                 store.set_identity(actor, version, p, p["why"].as_str().unwrap_or_default(), &thought_ref, now).await?;
@@ -2227,35 +2284,70 @@ impl Minds {
     }
 
     /// Name person anchors from what the character perceives, when the model did not, and
-    /// give every person an edge mentions a node.
-    /// People in a patch are named as `actor` knows them (`known_as`): a stranger stays "a
-    /// stranger" in its memory, whatever name the model wrote, until it is told the name.
+    /// give every person an edge or a kept memory mentions a node.
+    /// People in a patch are named as `actor` remembers them (`remembered_as`): someone it
+    /// does not know by name stays "a stranger #<id>" in its memory, whatever name the model
+    /// wrote, until it is told the name.
     fn name_people(&self, actor: u32, patch: &mut memory::Patch) {
         for n in patch.nodes.iter_mut() {
             if let Some(id) = n.key.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
-                n.name = Some(self.known_as(actor, id));
+                n.name = Some(self.remembered_as(actor, id));
             }
         }
-        let mut people: Vec<String> = patch.edges.iter().flat_map(|e| [e.from.clone(), e.to.clone()]).filter(|k| k.starts_with("person:") && !patch.nodes.iter().any(|n| &n.key == k)).collect();
+        let mut people: Vec<String> = patch
+            .edges
+            .iter()
+            .flat_map(|e| [e.from.clone(), e.to.clone()])
+            .chain(patch.remember.iter().flat_map(|m| m.involves.iter().cloned()))
+            .filter(|k| k.starts_with("person:") && !patch.nodes.iter().any(|n| &n.key == k))
+            .collect();
         people.sort();
         people.dedup();
         for k in people {
             if let Some(id) = k.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
-                patch.nodes.push(memory::NodeOp { key: k, labels: vec!["Person".into()], name: Some(self.known_as(actor, id)), props: Default::default() });
+                patch.nodes.push(memory::NodeOp { key: k, labels: vec!["Person".into()], name: Some(self.remembered_as(actor, id)), props: Default::default() });
             }
         }
     }
 
-    /// `person:kael` → `person:7`: people are anchored by id so one person stays one concept.
-    /// Then merges are checked again (`memory::merge_refusal`) with people named by id and the
+    /// How `actor` now remembers each person a batch of experiences involves (subject, object)
+    /// and the patch does not name already, for [`memory::Store::rename_people`].
+    fn people_names(&self, actor: u32, batch: &[Experience], patch: &memory::Patch) -> Vec<(String, String)> {
+        let mut ids: Vec<u32> = batch.iter().flat_map(|e| [e.subject, e.object]).filter(|id| *id != 0 && *id != actor).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids.into_iter()
+            .filter(|id| self.conn.db.character().id().find(id).is_some_and(|c| c.kind == "person"))
+            .map(|id| (format!("person:{id}"), id))
+            .filter(|(k, _)| !patch.nodes.iter().any(|n| &n.key == k))
+            .map(|(k, id)| (k, self.remembered_as(actor, id)))
+            .collect()
+    }
+
+    /// `person:kael` → `person:7`: people are anchored by id so one person stays one concept,
+    /// by a name only where `actor` knows it (a name merely heard does not tell whose it is).
+    /// A person key written as a description (`person:the_stranger`) is anchored, edge by edge,
+    /// to the one person not known by name that the edge's cited experiences involve
+    /// (`memory::anchor_described`); otherwise it stays a concept of its own. Then
+    /// merges are checked again (`memory::merge_refusal`) with people named by id and the
     /// communities and places this mind has located; the refusals are returned as notes and
     /// kept for the next reorganization.
     fn canonical_people(&self, actor: u32, patch: &mut memory::Patch) -> Vec<String> {
-        let people: Vec<(String, u32)> = self.conn.db.character().iter().filter(|c| c.kind == "person").map(|c| (c.name.to_lowercase(), c.id)).collect();
+        let all: Vec<Character> = self.conn.db.character().iter().filter(|c| c.kind == "person").collect();
+        let knows = self.known_names(actor);
+        let people: Vec<(String, u32)> = all.iter().filter(|c| knows.contains(&c.id)).map(|c| (c.name.to_lowercase(), c.id)).collect();
+        let named = |rest: &str| -> String { rest.trim_start_matches('#').replace('_', " ") };
+        let is_name = |n: &str| all.iter().any(|c| c.name.to_lowercase() == n);
+        let unnamed_in = |x: u64| -> Vec<u32> {
+            self.conn.db.experience().id().find(&x).map_or(Vec::new(), |e| {
+                [e.subject, e.object].into_iter().filter(|id| *id != 0 && !knows.contains(id) && all.iter().any(|c| c.id == *id)).collect()
+            })
+        };
+        let mut notes: Vec<String> = memory::anchor_described(patch, &is_name, &unnamed_in).into_iter().map(|(k, id)| format!("{k} anchored to person:{id} (the one unnamed person its experiences involve)")).collect();
         let fix = |k: &mut String| {
             if let Some(rest) = k.strip_prefix("person:") {
                 if rest.parse::<u32>().is_err() {
-                    let name = rest.trim_start_matches('#').replace('_', " ");
+                    let name = named(rest);
                     if let Some((_, id)) = people.iter().find(|(n, _)| *n == name) {
                         *k = format!("person:{id}");
                     }
@@ -2278,7 +2370,6 @@ impl Minds {
             fix(&mut m.1);
         }
         let known = self.known_anchors(actor);
-        let mut notes = Vec::new();
         patch.merges.retain(|(a, b)| match memory::merge_refusal(a, b, &known) {
             _ if a == b => false,
             Some(why) => {
@@ -2404,6 +2495,16 @@ fn label_node(node: Value, label: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Someone one does not know by name is labelled as the authority's projection labels them
+    /// (`perception::stranger`).
+    #[test]
+    fn unnamed_people_are_labelled_as_perceived() {
+        let labels: Vec<String> = [0, 1, 2, 3].into_iter().map(|s| unnamed_label("person", s)).collect();
+        assert_eq!(labels, ["a baby", "a child", "a stranger", "an old stranger"]);
+        assert_eq!(unnamed_label("wolf", 2), "a wolf");
+        assert_eq!(unnamed_label("elk", 2), "an elk");
+    }
 
     /// The per-deliberation record of reasons: a reason carried again keeps counting, a new
     /// arrival of the same words starts at 0, and reasons no longer pending are forgotten.

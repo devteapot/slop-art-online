@@ -374,7 +374,9 @@ impl Minds {
         memory::attribute(&mut patch, actor, &told);
         self.name_people(actor, &mut patch);
         patch.lived_under = Some("human".into());
+        let renamed = self.people_names(actor, batch, &patch);
         store.apply(actor, &patch, &thought_ref, now).await?;
+        store.rename_people(actor, &renamed).await?;
         // Who the person shows themselves to be, read from their conduct (docs/PLAYER_MEMORY.md):
         // only a real change becomes a new version of the identity.
         let identity = match &v["identity"] {
@@ -435,7 +437,7 @@ impl Minds {
         let mut known: std::collections::HashSet<u32> = self.conn.db.relation().iter().filter(|r| r.actor == actor).map(|r| r.other).collect();
         for e in batch {
             known.extend([e.subject, e.object]);
-            known.extend(self.named_people(&e.text));
+            known.extend(self.named_people(actor, &e.text));
         }
         known.insert(actor);
         let stranger = |k: &str| k.strip_prefix("person:").and_then(|x| x.parse::<u32>().ok()).is_some_and(|id| !known.contains(&id));

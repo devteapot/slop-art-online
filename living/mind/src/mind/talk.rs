@@ -1284,7 +1284,7 @@ impl Minds {
         for l in lines.iter().rev().skip(1).take(4) {
             cues.text(&l.text, 0.5);
         }
-        for id in self.named_people(&lines.iter().rev().take(3).map(|l| l.text.as_str()).collect::<Vec<_>>().join(" ")) {
+        for id in self.named_people(me, &lines.iter().rev().take(3).map(|l| l.text.as_str()).collect::<Vec<_>>().join(" ")) {
             if id != me && id != other {
                 cues.key(format!("person:{id}"), 0.8);
             }
