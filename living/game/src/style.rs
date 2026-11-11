@@ -468,17 +468,26 @@ fn person_width(style: &Style, distance: f32) -> f32 {
     (w * 8.0).round() / 8.0
 }
 
-fn fog_outlines(style: Res<Style>, cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>, mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>, Option<&bevy::mesh::MeshTag>)>) {
+#[allow(clippy::type_complexity)]
+fn fog_outlines(
+    style: Res<Style>,
+    cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>,
+    mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>, Option<&bevy::mesh::MeshTag>)>,
+    (edge, target): (Option<Res<crate::sightedge::SightEdge>>, Option<Res<crate::controls::Target>>),
+) {
     let Ok((cam, fog)) = cams.single() else { return };
     let FogFalloff::Linear { start, end } = fog.falloff else { return };
     let cutoff = start + (end - start) * 0.55;
     let eye = cam.translation();
     let on = style.outlines && style.enabled;
+    // Limited view fogs round my character, not by the camera's distance (sightedge.rs).
+    let limit = edge.and_then(|e| e.outline_limit(target.and_then(|t| t.0)));
     for (kind, mut o, g, shown, tag) in &mut outlines {
         let d = g.translation().distance(eye);
         // A thing mostly faded out (fade.rs) loses its lines with it.
         let faded = tag.is_some_and(|t| crate::fade::tag_level(t.value) > 6);
-        let want = on && shown.is_none_or(|v| v.get()) && d < cutoff && !faded;
+        let within = limit.is_none_or(|(c, r)| Vec2::new(g.translation().x, g.translation().z).distance(c) < r);
+        let want = on && shown.is_none_or(|v| v.get()) && d < cutoff && !faded && within;
         if o.visible != want {
             o.visible = want;
         }

@@ -841,6 +841,34 @@ Branch `feel-4`. Evidence is in `.local/living/feel-4/` (git-ignored). Client on
   - Landing peak: 46 → 24 cm.
   - Take-off peak: 48 → 32 cm.
 
+## Edge of sight (2026-11-11)
+
+Branch `sight-edge`. Evidence, with a contact sheet, is in `.local/living/sight-edge/` (git-ignored). Client only: no authority, rules, bindings or seed changes.
+
+The screen drew ground and buildings to about 180 m, while people came and went at the rules' sight (11 m by day). **F2** now cycles three ways of showing where your character's sight ends, with a note naming the new one. `LIVING_SIGHT_EDGE=fade|unseen|limited` sets the starting mode, for headless captures.
+
+- **Fade** (the default, unchanged): people fade in and out at the edge of sight (`fade.rs`).
+- **Not seen now:** as Fade. Ground, buildings and scenery beyond your sight are also drawn greyer, flatter (toward the fog's colour, so night stays dark), dimmer and a little cooler, over a soft band from 1.5 m inside the radius to 3 m beyond it. They are public and stay drawn. The sky is left alone.
+- **Limited view:** as Fade. The view also fogs from your sight radius to 1.3 × of it, in the fog's colour, and the camera's far plane stops drawing just past that. The camera's angle, distance and controls are unchanged.
+
+How it works (`sightedge.rs`, `edges.wesl`, `post.rs`, `style.rs`):
+- **The radius is the rules'.** The client asks the world's installed script (`senses(a)`, the law the authority's perception sweep uses) for your character, with night from the displayed clock and a torch from your inventory. It eases to a new answer over about a second.
+- **The finishing pass marks the edge.** Both marks are a circle round your character on the ground plane, from each pixel's world position by depth.
+  - The fog is round you rather than Bevy's distance fog from the camera: the eye is about 22 m from you, so a camera fog at a 14 m night sight would hide your own character.
+  - Shell outlines are drawn outside that pass, so in limited view they stop halfway into the fog band.
+
+Measured on a scratch island world with the play-test scene's sight installed (48 m by day, 20 with a torch, 14 at night):
+- People drawn stayed within the radius, at most 0.9 m beyond it: the authority's one-tile margin.
+- Frame time showed no cost. Each run was one uncapped headless window at 1280×720, standing still with 11–18 people in sight by day and 3–6 at night, 20 s per mode. By day the median was 4.9–5.3 ms in every mode; at night it was 4.4–4.8 ms. The spread between modes is within run-to-run noise.
+
+**Not done:**
+- Sight lines: walls do not cut the marked circle, though the authority's sight does stop at them.
+- The two-distance rule (see at 48 m, know at 24 m).
+- Lamplight.
+- Weather shortening sight. That waits on rules that do it.
+- No F1 panel slider.
+- By day at 48 m, most of the default view already lies within sight, so "not seen now" marks only the far end of a street.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**
