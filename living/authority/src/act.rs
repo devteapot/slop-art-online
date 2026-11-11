@@ -467,7 +467,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             let d = living_rules::combat::unit(target.at.0 - here.0, target.at.1 - here.1).ok_or("no way to dodge")?;
             let map = common::map(ctx);
             let pick = [1.0f32, 0.75, 0.5, 0.3].into_iter().map(|k| (here.0 + d.0 * len * k, here.1 + d.1 * len * k)).find(|p| map.free(p.0, p.1) && map.line_clear(here, *p));
-            target = Resolved::point(pick.ok_or("no room to dodge")?);
+            target = Resolved::point(pick.ok_or_else(|| format!("no room to {skill}"))?);
         }
         _ if aim == Aim::Facing => {
             // The guard faces where it is aimed (a player), else what threatens: a windup
@@ -508,7 +508,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                     break;
                 }
             }
-            target = Resolved::point(pick.ok_or("no room to dodge")?);
+            target = Resolved::point(pick.ok_or_else(|| format!("no room to {skill}"))?);
         }
         "wander" => {
             let map = common::map(ctx);
@@ -975,6 +975,49 @@ pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
     }
 }
 
+/// A timed move goes off: the recovery starts, and those who can see it see the move go off
+/// (a missile shows its own launch instead).
+fn release(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activity, now: u64) {
+    let shape = shape_of(sc, &a.skill);
+    if shape.is_some_and(|s| s.timed && s.aim != Aim::Facing) {
+        crate::combat::released(ctx, a.id, &a.skill, now);
+        let until = crate::combat::recovering(ctx, a.id, &a.skill, now);
+        crate::combat::act_until(ctx, a.id, until);
+        let here = ctx.db.body().id().find(a.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+        let at = target_pos(ctx, &a.target, now).unwrap_or(here);
+        let dir = living_rules::combat::unit(at.0 - here.0, at.1 - here.1).unwrap_or((0.0, 0.0));
+        if shape.is_some_and(|s| !s.missile) {
+            crate::combat::show(ctx, now, crate::combat::Seen { kind: living_rules::combat::seen::RELEASE, actor: a.id, target: a.victim, skill: sc.shapes().code(&a.skill), at: here, dir, ..Default::default() });
+        }
+    }
+}
+
+/// Whether `victim` is getting away from a move begun at `since` by a dash that evades (the
+/// rules' combat shape: `aim: "dash"` and `evades`): one under way, or one started since then
+/// (its cooldown's start).
+fn evaded_since(ctx: &ReducerContext, victim: u32, since: u64) -> bool {
+    let sc = common::scripts(ctx);
+    let evades = |skill: &str| shape_of(&sc, skill).is_some_and(|s| s.aim == Aim::Dash && s.evades);
+    ctx.db.activity().id().find(victim).is_some_and(|v| evades(&v.skill))
+        || ctx.db.readiness().id().find(victim).is_some_and(|r| r.ready.iter().any(|t| t.from_ms >= since && evades(&t.skill)))
+}
+
+/// A blow dodged: both sides perceive it, it is shown as DODGED to them and to those who see
+/// it, and the fight stays engaged. Returns what came of it.
+fn dodged(ctx: &ReducerContext, attacker: u32, vc: &Character, skill: &str, from: (f32, f32), at_v: (f32, f32), now: u64) -> String {
+    let victim = vc.id;
+    percept(ctx, vc, now, "combat", attacker, victim, at_v, format!("You dodged {}'s attack.", common::label_for(ctx, vc, attacker)), 0.6);
+    if let Some(ac) = ctx.db.character().id().find(attacker) {
+        percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} dodged your attack.", common::label_cap(ctx, &ac, victim)), 0.6);
+    }
+    common::wake(ctx, victim);
+    fight_report(ctx, victim, attacker, now);
+    fight_report(ctx, attacker, victim, now);
+    let code = common::scripts(ctx).shapes().code(skill);
+    crate::combat::show(ctx, now, crate::combat::Seen { kind: living_rules::combat::seen::DODGED, actor: attacker, target: victim, skill: code, at: at_v, dir: living_rules::combat::unit(at_v.0 - from.0, at_v.1 - from.1).unwrap_or((0.0, 0.0)), ..Default::default() });
+    "dodged".into()
+}
+
 /// Steering reports on the movement of an activity that is still on its way.
 pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
     let Some(a) = ctx.db.activity().id().find(id) else { return };
@@ -1025,8 +1068,22 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
 fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
     let sc = common::scripts(ctx);
     let sctx = skill_ctx(ctx, a.id, &a, now);
-    // Targets can change or leave while the action runs.
+    // Targets can change or leave while the action runs. One that got away by a dash that
+    // evades (its `<skill>_combat()` shape) dodged the move, and everyone who sees it sees a
+    // dodge, as within reach; one that walked out of reach did not.
     if a.target.class == 3 && sctx.target.dist > reach(ctx, &a.skill) + 1.0 {
+        if a.victim != 0 && evaded_since(ctx, a.victim, a.started_ms) {
+            release(ctx, &sc, &a, now);
+            let from = ctx.db.body().id().find(a.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+            engage(ctx, a.id, now);
+            engage(ctx, a.victim, now);
+            common::count(|k| k.dodged += 1);
+            if let Some(vc) = ctx.db.character().id().find(a.victim) {
+                let at_v = ctx.db.body().id().find(a.victim).map(|b| pos(&b, now)).unwrap_or(from);
+                let summary = dodged(ctx, a.id, &vc, &a.skill, from, at_v, now);
+                return finish(ctx, a, true, &summary, now);
+            }
+        }
         return finish(ctx, a, false, "they moved away", now);
     }
     if let Err(why) = sc.check(&a.skill, &sctx) {
@@ -1039,20 +1096,7 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
             return finish(ctx, a, false, "something went wrong", now);
         }
     };
-    let shape = shape_of(&sc, &a.skill);
-    if shape.is_some_and(|s| s.timed && s.aim != Aim::Facing) {
-        // The release: the recovery starts, and those who can see it see the move go off.
-        crate::combat::released(ctx, a.id, &a.skill, now);
-        let until = crate::combat::recovering(ctx, a.id, &a.skill, now);
-        crate::combat::act_until(ctx, a.id, until);
-        let here = ctx.db.body().id().find(a.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
-        let at = target_pos(ctx, &a.target, now).unwrap_or(here);
-        let dir = living_rules::combat::unit(at.0 - here.0, at.1 - here.1).unwrap_or((0.0, 0.0));
-        // A missile shows its own launch instead.
-        if shape.is_some_and(|s| !s.missile) {
-            crate::combat::show(ctx, now, crate::combat::Seen { kind: living_rules::combat::seen::RELEASE, actor: a.id, target: a.victim, skill: sc.shapes().code(&a.skill), at: here, dir, ..Default::default() });
-        }
-    }
+    release(ctx, &sc, &a, now);
     match apply(ctx, &a, &sctx, effects, now) {
         Ok(summary) => {
             // What the rules make of it having been done (`on_<skill>`).
@@ -1821,7 +1865,8 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     // What the victim is doing defends it if it is a dash or a raised guard (its shape says).
     let sc = common::scripts(ctx);
     let held = guard.as_ref().and_then(|a| shape_of(&sc, &a.skill));
-    let mut defense = held.map_or(Aim::None, |s| s.aim);
+    // A dash defends only if it evades (a dodge, not a jump).
+    let mut defense = held.map_or(Aim::None, |s| if s.aim == Aim::Dash && !s.evades { Aim::None } else { s.aim });
     let takes = held.map_or(1.0, |s| s.takes);
     let mut turned = false;
     if defense == Aim::Facing {
@@ -1843,16 +1888,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         _ => k.hits += 1,
     });
     if defense == Aim::Dash {
-        let attacker_c = ctx.db.character().id().find(attacker);
-        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("You dodged {}'s attack.", common::label_for(ctx, &vc, attacker)), 0.6);
-        if let Some(ac) = attacker_c {
-            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} dodged your attack.", common::label_cap(ctx, &ac, victim)), 0.6);
-        }
-        common::wake(ctx, victim);
-        fight_report(ctx, victim, attacker, now);
-        fight_report(ctx, attacker, victim, now);
-        shown(living_rules::combat::seen::DODGED, 0.0);
-        return "dodged".into();
+        return dodged(ctx, attacker, &vc, skill, from, at_v, now);
     }
     if turned {
         percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("Your guard faced the wrong way: {}'s blow came from the side.", common::label_for(ctx, &vc, attacker)), 0.5);

@@ -164,8 +164,8 @@ pub fn update(
     for (w, mut span, mut c) in &mut who {
         let Some(l) = lines.get(w.0) else { continue };
         let text = match l.kind {
-            LogKind::ToMe => format!("{} (to you): ", l.who),
-            _ => format!("{}: ", l.who),
+            LogKind::ToMe => format!("{} (to you): ", super::label(&l.who)),
+            _ => format!("{}: ", super::label(&l.who)),
         };
         if span.0 != text {
             span.0 = text;

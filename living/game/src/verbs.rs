@@ -16,6 +16,7 @@
 //! - **F** acts on what is under the cursor, else the nearest thing or creature within reach:
 //!   a tap does the most likely act (the one I last chose for that kind, else the first the
 //!   rules allow on a thing); holding F, or a tap with nothing likely (a person), opens the list.
+//!   With nothing within reach, F says so (C opens the list of acts on myself).
 //! - **C** opens the list of acts on myself (eat, sleep, craft, write, ...), with what I carry.
 //! - **I** and **K** toggle the inventory and the know-how panels (`ui/verbs.rs`).
 //! - In a list: 1–9 and 0 or a click picks, Esc or the same key closes. A skill with many items opens
@@ -391,7 +392,9 @@ pub fn rows(choices: &[Choice], group: Option<&str>) -> Vec<Row> {
 }
 
 /// The act a tap does: the one I last chose for this kind of target, else, on a thing, the
-/// first the rules allow that needs no further choice and is no use of force.
+/// first the rules allow that needs no further choice, is no use of force and is not a gesture
+/// toward it (a skill whose `_shows()` faces its target: waving, nodding, looking over, turning
+/// to face; play-test 1 found F offering "face" on a berry bush).
 pub fn likely<'a>(sc: &Scripts, aim: &Aim, choices: &'a [Choice], last: Option<&Choice>) -> Option<&'a Choice> {
     if let Some(l) = last {
         if let Some(c) = choices.iter().find(|c| c.skill == l.skill && c.item == l.item && c.want == l.want && c.say == l.say) {
@@ -403,7 +406,8 @@ pub fn likely<'a>(sc: &Scripts, aim: &Aim, choices: &'a [Choice], last: Option<&
     }
     let force = |s: &str| sc.shapes().get(s).is_some_and(|s| s.hostile || s.force || s.menace);
     let per_skill = |s: &str| choices.iter().filter(|c| c.skill == s).count();
-    choices.iter().find(|c| !c.words && c.want.is_none() && c.say.is_none() && !force(&c.skill) && per_skill(&c.skill) == 1)
+    let gesture = |s: &str| sc.shows().faces(s);
+    choices.iter().find(|c| !c.words && c.want.is_none() && c.say.is_none() && !force(&c.skill) && !gesture(&c.skill) && per_skill(&c.skill) == 1)
 }
 
 // ---- state --------------------------------------------------------------------------------
@@ -850,7 +854,9 @@ pub fn input(
                     }
                 }
             } else {
-                open(&mut v, Aim::Me, None);
+                // Nothing within reach: say so, briefly. Opening my own list here (as before) met a
+                // newcomer's first F with fourteen abstract acts (play-test 1); C opens it.
+                v.toasts.push(Toast { text: "Nothing within reach — C for your own acts".into(), ok: None, at: now });
             }
         }
     } else if v.menu.as_ref().is_some_and(|m| m.aim != Aim::Me) && pressed(INTERACT) {

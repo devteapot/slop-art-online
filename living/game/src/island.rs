@@ -360,7 +360,16 @@ impl Island {
         let height = if exact.is_some() { lot.height_m } else { slot.map_or(6.0, |s| s.height[1]) };
         let file = exact.unwrap_or_else(|| files[(hash(lot.id, 11) * files.len() as f32) as usize % files.len()].clone());
         let it = Item { kind: kind.to_string(), file, at: lot.at, yaw: lot.yaw, height, glow: slot.and_then(|s| s.glow), k: lot.id as usize, floor: Some(lot.floor_m), native: true, person: None };
-        spawn_item(commands, assets, &self.land, &it)
+        let es = spawn_item(commands, assets, &self.land, &it);
+        if let Some(&root) = es.first() {
+            commands.entity(root).insert(crate::envs::Solid);
+            // Low buildings too (market stalls, wells): a newcomer arrives among the stalls, and
+            // their awnings hid them (play-test 1). Taller ones are occluders already.
+            if it.height < 3.0 {
+                commands.entity(root).insert((crate::envs::Occluder { height: it.height.max(1.0) }, crate::fade::Fade::shown()));
+            }
+        }
+        es
     }
 
     /// Whether everything in reach is in: ground and things, nothing queued (`loading.rs`).
@@ -787,7 +796,7 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(it.file.clone()));
     let mut e = commands.spawn((EnvPart, model, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(it.yaw)), Visibility::Hidden));
     if it.height >= 3.0 {
-        e.insert(Occluder { height: it.height });
+        e.insert((Occluder { height: it.height }, crate::fade::Fade::shown()));
     }
     if it.height <= SMALL {
         e.insert(crate::lookdev::NoShadow);

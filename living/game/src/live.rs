@@ -149,6 +149,11 @@ struct Shown {
     /// A rigged animal's tilt with the ground under its paws (`bodies::lie_on`), eased.
     tilt: Quat,
     kind: String,
+    /// A person's upper-body facing (sim angle), eased like `yaw`; it differs from the legs'
+    /// while walking one way and looking another ([`legs_and_twist`]).
+    face: f32,
+    /// Walking backwards (the legs face away from the travel, the gaits reversed).
+    back: bool,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -169,8 +174,25 @@ const STARTLE: (&str, f64) = ("startle", 420.0);
 const STARTLE_V: f32 = 4.0;
 const STILL_S: f32 = 1.0;
 
+/// How fast a drawn gait takes up a slower segment's speed (1/s): about 95% in 0.15 s.
+const SLOWING: f32 = 20.0;
 /// How fast drawn yaw takes up a new facing (1/s): about 90% in 0.15 s.
 const YAW_RATE: f32 = 16.0;
+/// Walking while looking more than this far from the travel (radians), a person walks
+/// backwards, and forward again under [`BACK_OFF`]; between, the upper body turns.
+const BACK_ON: f32 = 110.0 * PI / 180.0;
+const BACK_OFF: f32 = 80.0 * PI / 180.0;
+/// The most the upper body turns from the legs (radians).
+const TWIST_MAX: f32 = 110.0 * PI / 180.0;
+
+/// Where a moving person's legs face and whether it walks backwards: the legs step along the
+/// travel, so its feet keep still, and the upper body turns toward where it looks. Clips have
+/// no strafe or backward takes; the forward gaits reversed walk backwards.
+fn legs_and_twist(travel: f32, look: f32, back: bool) -> (f32, bool) {
+    let off = living_rules::steer::wrap(look - travel).abs();
+    let back = if back { off > BACK_OFF } else { off > BACK_ON };
+    (if back { living_rules::steer::wrap(travel + PI) } else { travel }, back)
+}
 
 #[derive(Resource, Default)]
 pub struct Live {
@@ -183,6 +205,9 @@ pub struct Live {
     shown: HashMap<u32, Shown>,
     /// Height (m) of each drawn character, for nameplates and bubbles.
     pub heights: HashMap<u32, f32>,
+    /// Bodies gone from sight, fading out where they were last drawn (`fade.rs`), and how long
+    /// they have been fading (s).
+    leaving: Vec<(Entity, f32)>,
 }
 
 /// Regenerate the land from the `land` row once, then put the island in place.
@@ -318,8 +343,10 @@ fn bodies(
     input: Res<Input>,
     combat: Res<crate::combat::Combat>,
     town: Res<crate::town::Town>,
+    rules: NonSend<crate::verbs::Rules>,
     mut live: ResMut<Live>,
     mut q: Query<Drawn>,
+    mut fades: Query<&mut crate::fade::Fade>,
     time: Res<Time>,
 ) {
     let Some(island) = island else { return };
@@ -328,11 +355,23 @@ fn bodies(
         for (_, s) in live.shown.drain() {
             commands.entity(s.entity).despawn();
         }
+        for (e, _) in live.leaving.drain(..) {
+            commands.entity(e).despawn();
+        }
         live.heights.clear();
         return;
     };
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
+    // Bodies that left sight fade out where they were, then go.
+    live.leaving.retain_mut(|(e, t)| {
+        *t += dt;
+        let keep = *t < crate::fade::OUT_S + 0.05;
+        if !keep {
+            commands.entity(*e).despawn();
+        }
+        keep
+    });
     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
     let mut talking: HashSet<u32> = me
         .map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
@@ -357,8 +396,18 @@ fn bodies(
             }
             continue;
         }
+        // Out of sight (the authority no longer sends them): fade out rather than vanish.
         if let Some(s) = live.shown.remove(&id) {
-            commands.entity(s.entity).despawn();
+            match fades.get_mut(s.entity) {
+                Ok(mut f) => {
+                    f.target = 1.0;
+                    if let Ok((_, _, _, _, mut motion, _)) = q.get_mut(s.entity) {
+                        motion.speed = 0.0;
+                    }
+                    live.leaving.push((s.entity, 0.0));
+                }
+                Err(_) => commands.entity(s.entity).despawn(),
+            }
         }
         live.heights.remove(&id);
     }
@@ -375,7 +424,7 @@ fn bodies(
         let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
         // Standing still, the body's own segment: its heading, turning on the spot by `turn` over
         // `turn_s` (the display clock may trail the row's start: then the turn has not begun).
-        let row = conn.db.seen_bodies().id().find(&id);
+        let row = crate::net::find_motion(conn, id);
         let standing = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| {
             let into = ((scene.now_ms - b.t_ms as f64) / 1000.0).clamp(0.0, b.turn_s.max(0.0) as f64) as f32;
             b.heading + if b.turn_s > 0.0 { b.turn * into } else { 0.0 }
@@ -414,11 +463,12 @@ fn bodies(
                 (e, crate::bodies::beast_height(&body.kind).min(1.4), false, false)
             };
             let startles = beast && crate::bodies::beast_file(&body.kind).is_some_and(|f| crate::gait::of(f).info(STARTLE.0).is_some());
-            commands.entity(entity).insert(Motion::default());
+            // Coming into sight: fade in once the model can be seen (`fade.rs`).
+            commands.entity(entity).insert((Motion::default(), crate::fade::Fade::appearing()));
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone() });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false });
             live.heights.insert(id, height);
             continue;
         }
@@ -450,28 +500,46 @@ fn bodies(
             }
         }
         // The gait takes up the displayed segment's speed at once when it rises: the authority
-        // starts a body at full speed, and an eased speed slid the feet as it set off. It eases
-        // down as before, so a stop finishes its step (the planted foot held) rather than
-        // freezing mid-stride and blending to standing, which slid both feet (foot_slide, 2026-11-10).
-        // A body held or catching up (getting up, a startle) is drawn off its segment: its gait
-        // follows the drawn motion.
+        // starts a body at full speed, and an eased speed slid the feet as it set off. A slower
+        // segment is taken up within about 0.15 s, and a standing one at once: the gait then
+        // finishes its step at its own rate (`anim.rs`, settling at double support) instead of
+        // stepping on the spot for most of a second while its speed eased down (play-test 1:
+        // 0.8 s of gait after the body stood). A body held or catching up (getting up, a
+        // startle) is drawn off its segment: its gait follows the drawn motion.
         let on_segment = held.is_none() && s.drawn == p;
         let v = (s.drawn - before).length() / dt;
         let p = s.drawn;
         let ground = island.height(p.x, p.y);
         let v = if v.is_finite() && v < 20.0 { v } else { 0.0 };
         match scene.speeds.get(&id) {
-            Some(&seg) if on_segment && seg >= s.speed => s.speed = seg,
-            Some(&seg) if on_segment => s.speed += (seg - s.speed) * (1.0 - (-dt * 8.0).exp()),
+            Some(&seg) if on_segment && (seg >= s.speed || seg <= 0.0) => s.speed = seg.max(0.0),
+            Some(&seg) if on_segment => s.speed += (seg - s.speed) * (1.0 - (-dt * SLOWING).exp()),
             _ => s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp()),
         }
-        if let Some(h) = h {
-            s.yaw += living_rules::steer::wrap(h - s.yaw) * (1.0 - (-dt * YAW_RATE).exp());
-            s.yaw = living_rules::steer::wrap(s.yaw);
+        // A person walking one way while looking another (my cursor, a move's aim): the legs keep
+        // to the travel, forward or backward, and the upper body turns toward the look.
+        let look_at = aimed.or(look);
+        let walking = s.person && s.speed > MOVING;
+        let (legs, back) = match (walking, look_at, heading) {
+            (true, Some(l), Some(t)) => {
+                let (y, b) = legs_and_twist(t, l, s.back);
+                (Some(y), b)
+            }
+            _ => (h, false),
+        };
+        s.back = back;
+        let k = 1.0 - (-dt * YAW_RATE).exp();
+        if let Some(y) = legs {
+            s.yaw = living_rules::steer::wrap(s.yaw + living_rules::steer::wrap(y - s.yaw) * k);
         }
+        if let Some(f) = look_at.filter(|_| walking).or(legs) {
+            s.face = living_rules::steer::wrap(s.face + living_rules::steer::wrap(f - s.face) * k);
+        }
+        let twist = if s.person { living_rules::steer::wrap(s.face - s.yaw).clamp(-TWIST_MAX, TWIST_MAX) } else { 0.0 };
+        let reverse = s.back;
         let (speed, person, beast, yaw) = (s.speed, s.person, s.beast, s.yaw);
         let rising = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(t, _)| t);
-        let startle = s.startle.map(|(t, _)| crate::combat::Action { clip: STARTLE.0, rate: 1.0, start_ms: t, hold: None, face: None });
+        let startle = s.startle.map(|(t, _)| crate::combat::Action { clip: STARTLE.0, rate: 1.0, start_ms: t, hold: None, face: None, ..Default::default() });
         let dir = Vec2::new(yaw.cos(), yaw.sin());
         // A rigged creature is drawn at its file's size times its life stage's (it grows up), its
         // body lying on the ground under its paws.
@@ -496,14 +564,14 @@ fn bodies(
         if beast {
             tf.scale = Vec3::splat(size);
         }
-        // Indoors (asleep, or resting at the door): not drawn. Never my own character.
-        let want = if show.hidden && !mine { Visibility::Hidden } else { Visibility::Inherited };
-        match vis {
-            Some(mut v) if *v != want => *v = want,
-            None if want == Visibility::Hidden => {
-                commands.entity(s.entity).insert(want);
+        // Indoors (asleep, or resting at the door): faded out, then not drawn. Never my own
+        // character.
+        let _ = vis;
+        if let Ok(mut f) = fades.get_mut(s.entity) {
+            let to = if show.hidden && !mine { 1.0 } else { 0.0 };
+            if f.target != to {
+                f.target = to;
             }
-            _ => {}
         }
         match (fitted, model.as_mut()) {
             // `fit` measured a creature at its file's size (height 0 keeps it).
@@ -517,8 +585,20 @@ fn bodies(
         motion.speed = speed;
         motion.stride = ch.map_or(size, |c| c.stride);
         motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
-        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None })).or(startle);
+        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle);
         motion.now_ms = scene.now_ms;
+        motion.reverse = reverse;
+        motion.twist = twist;
+        motion.freeze = motion.action.is_some_and(|a| a.clip == crate::jump::CLIP) && crate::jump::airborne(&motion) > 0.05;
+        // On a road the rules speed a body up (`road_speed`, by the share of road ahead): the
+        // gait is chosen at its own pace, so walking onto a road doesn't break into a run.
+        motion.pace = match (person, heading) {
+            (true, Some(t)) if speed > MOVING => {
+                let road = rules.scripts.as_ref().map_or(living_rules::steer::Tuning::default().road_speed, |sc| sc.laws().road_speed);
+                1.0 + (road - 1.0) * living_rules::steer::road_share(&island.land.map, (p.x, p.y), t)
+            }
+            _ => 1.0,
+        };
     }
 }
 
@@ -544,10 +624,10 @@ fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, liv
 
 /// Where the cursor meets the island's ground (the camera's own ray uses the tile ground). The
 /// eye's height over the island's hills is the camera's own (`camera::follow`).
-fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, windows: Query<&Window>) {
+fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, pointer: Res<crate::pointer::Pointer>) {
     let Some(island) = island else { return };
     let Ok((camera, gtf)) = cams.single() else { return };
-    let Some(c) = windows.iter().next().and_then(|w| w.cursor_position()) else { return };
+    let Some(c) = pointer.pos else { return };
     let Ok(ray) = camera.viewport_to_world(gtf, c) else { return };
     let (o, d) = (ray.origin, *ray.direction);
     let below = |p: Vec3| p.y <= island.height(p.x, p.z);
@@ -603,9 +683,9 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
     });
     info!(
         "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
-        conn.db.seen_bodies().count(),
+        conn.db.my_body().count() + conn.db.seen_bodies().count(),
         conn.db.seen_characters().count(),
-        conn.db.seen_doing().count(),
+        conn.db.my_doing().count() + conn.db.seen_doing().count(),
         conn.db.act_card().count(),
         conn.db.weather().iter().next().map_or("none", |w| if w.raining { "rain" } else { "dry" }),
         conn.db.lot().count(),
@@ -632,6 +712,11 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `walk:DEG:S[:run]`: hold a direction (0 = north, 90 = east) through `human_move`;
 ///   `hold:DEG[:run]` holds it and goes straight on to the next step (a skill or a gesture
 ///   while walking), until `stop`;
+/// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
+///   (a headless run has no cursor); `cursor:X,Y` puts the game's cursor there (fractions of the
+///   picture; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
+///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
+///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
 ///   (photographing small things up close);
@@ -672,6 +757,7 @@ fn key_code(name: &str) -> Option<KeyCode> {
         "Enter" => KeyCode::Enter,
         "Escape" => KeyCode::Escape,
         "ShiftLeft" => KeyCode::ShiftLeft,
+        "Space" => KeyCode::Space,
         _ => return None,
     })
 }
@@ -707,7 +793,7 @@ fn script(
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
     (mut skills, mut gestures, mut verbs): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>),
-    (hud, loading): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>),
+    (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
     target: Option<Res<crate::capture::Target>>,
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     time: Res<Time>,
@@ -770,6 +856,26 @@ fn script(
         }
         "yaw" => {
             cam.set_yaw(arg.parse().unwrap_or(0.0));
+            true
+        }
+        "frame" => {
+            cam.rig.frame = arg != "0";
+            true
+        }
+        "cursor" => {
+            pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
+            true
+        }
+        "pan" | "drag" => {
+            pointer.scripted_turn += arg.parse::<f32>().unwrap_or(0.0) * if verb == "pan" { 0.6 } else { 1.0 };
+            true
+        }
+        "pinch" => {
+            pointer.scripted_zoom *= 1.0 - arg.parse::<f32>().unwrap_or(0.0);
+            true
+        }
+        "look" => {
+            input.scripted_look = arg.parse::<f32>().ok().map(|deg| Vec2::new(deg.to_radians().sin(), -deg.to_radians().cos()));
             true
         }
         "view" => {

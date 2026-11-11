@@ -251,7 +251,7 @@ fn persistent(mut commands: Commands, a: Res<Assets3>, cards: Res<Cards>, net: N
     let t = scene.now_ms as u64;
     let mut want: Vec<((u32, Kind), Vec3, Quat)> = Vec::new();
     for (id, (p, _)) in &scene.shown {
-        let Some(f) = conn.db.seen_fighters().id().find(id) else { continue };
+        let Some(f) = crate::net::find_fighter(conn, *id) else { continue };
         let aim = Vec2::new(f.aim_x, f.aim_y).normalize_or(Vec2::Y);
         let g = ground(&island, &scene, *p);
         let Some(card) = cards.by_code(f.act) else { continue };

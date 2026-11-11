@@ -4,7 +4,7 @@
 
 - Refuse anonymous WebSocket subscriptions and HTTP SQL reads of every private table: the authority's bookkeeping, the private combat tables and, since 2026-11-09, developer audit truth (minds' state, thoughts, beliefs, personas, relations, judgments, routines, genomes, backgrounds, the chronicle, `stats`, offers, communities, `activity`, `practice`, `artifact`) and `perceived` (docs/PERCEPTION.md), and since town life layer 2 households' guests (`guest`) and, since 2026-11-11, people's daily rhythms (`rhythm`), which the player is refused too. `PRIVATE` in `drive.py` lists them; its inventory check fails when `tables.rs` adds a private table the list lacks.
 - In a `scoped` build (the default), refuse the same to the nine tables behind the perception views (`SCOPED` in `drive.py`: `body`, `character`, `fighter`, `doing`, `vitals`, `experience`, `place`, `inventory`, `know_how`), for anonymous and for a player identity.
-- Refuse a player's subscription and HTTP SQL to the scoped tables and to `thought`, `belief`, `persona`, `mind_state` and `perceived`: a player is not the owner.
+- Refuse a player's subscription and HTTP SQL to the scoped tables and to `thought`, `belief`, `persona`, `mind_state`, `perceived`, `projected`, `presence`, `woken`, `prior`, `prior_head`, `guest` and `player`: a player is not the owner.
 - `thought` (raw model replies included) is refused anonymously in every build; the owner still reads the scripted raw markers (`owner-thought.json`).
 - `experience` is refused anonymously in a scoped build. In an open build (`LIVING_PERCEPTION=open`, diagnostics) it is public, and the driver records the known issue as `XFAIL` (`privacy-experience.json`); `open-build-tables.json` proves the nine tables are public there.
 - The world's records (`record`, `record_party`, `record_clock`, since `rules-2`, docs/WORLD_RULES.md) are private in every build: a player reads its own characters' records through the `my_records` view, and verify-player `deal.py` proves the view's rows; this driver proves the tables are refused.
@@ -14,7 +14,7 @@
 
 A client submits `SELECT * FROM <table>` on its connection. Table visibility is enforced by the authority: a private table is "Visible only to reducers and the database owner" (2.14.1 resolves table names through the caller's read access, `crates/engine/src/sql/ast.rs`), independently of any client-side filter.
 
-`living/authority/src/tables.rs` declares the private tables without `public`. The scoped ones are declared twice under `cfg_attr(open_tables, …)` (public) and `cfg_attr(not(open_tables), …)` (private); `living/authority/build.rs` sets `open_tables` unless `LIVING_PERCEPTION=scoped`.
+`living/authority/src/tables.rs` declares the private tables without `public`. The scoped ones are declared twice under `cfg_attr(open_tables, …)` (public) and `cfg_attr(not(open_tables), …)` (private); `living/authority/build.rs` sets `open_tables` only for `LIVING_PERCEPTION=open`; unset or `scoped` is the scoped build.
 
 ## Driving it with drive.py
 
@@ -22,7 +22,7 @@ A client submits `SELECT * FROM <table>` on its connection. Table visibility is 
 LIVING_PERCEPTION=scoped .agents/skills/verify-client/scripts/run.py --run "$R"
 ```
 
-Read `visibility.json` and `private-<table>.json` (and `private-player-<table>.json`). Every subscription must be `rejected` with an error containing `private`. Every HTTP query must return a non-200 status and a private-table error. Each check uses a separate connection.
+Read `visibility.json` and `private-<table>.json` (and `private-player-<table>.json`). Every subscription must be `rejected` with an error containing `private`. Every anonymous HTTP query must return a non-200 status and a private-table error; a player's HTTP query must return a non-200 status. Each check uses a separate connection.
 
 The driver stops before driving if the private, scoped or view inventory in the source differs from its lists. Update the lists, this file and the views' feature map together.
 

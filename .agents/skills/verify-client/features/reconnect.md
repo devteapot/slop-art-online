@@ -10,7 +10,7 @@
 
 ## How to get to it (user POV)
 
-A program loses its authority connection, waits, creates a new connection, then subscribes again. The viewer schedules a retry in `living/viewer/src/net.rs:282` and calls `connect` at `net.rs:300`. Its inspector subscriptions must be recreated because they belonged to the old connection.
+A program loses its authority connection, waits, creates a new connection, then subscribes again. The viewer schedules a retry 3 s later and calls `connect` again (`living/viewer/src/net.rs`, `retry_at`). Its inspector subscriptions must be recreated because they belonged to the old connection.
 
 ## Driving it with drive.py
 
@@ -25,6 +25,6 @@ The driver listens on an ephemeral loopback port and forwards to the server's lo
 ## Gotchas
 
 - The relay never restarts, stops, or reconfigures the shared SpacetimeDB container.
-- An anonymous reconnect creates a new identity, as the viewer's tokenless builder does. This test verifies observer recovery, not player credential recovery.
-- The probe rebuilds connections explicitly. SDK 2.10.1 does not make this application policy automatic.
+- The probe reconnects with the owner's token, as the viewer does (`owner_token`). This test verifies observer recovery, not player credential recovery.
+- The probe rebuilds connections explicitly. SDK 2.14.1 does not make this application policy automatic.
 - This is a real network drop and authority connection, but it does not execute Bevy's `Net::pump`. Browser recovery belongs to the future UI skill (not built; see `verify`).

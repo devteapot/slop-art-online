@@ -51,6 +51,16 @@ pub struct Action {
     pub hold: Option<f32>,
     /// Facing during the move (sim direction).
     pub face: Option<Vec2>,
+    /// Where in the clip it starts (s), and where it starts fading out (s; the clip's end when
+    /// none): a move plays only its motion, timed to the rules' windup ([`timing`]).
+    pub from: f32,
+    pub cut: Option<f32>,
+}
+
+impl Default for Action {
+    fn default() -> Self {
+        Self { clip: "", rate: 1.0, start_ms: 0.0, hold: None, face: None, from: 0.0, cut: None }
+    }
 }
 
 /// One perceived event, as received.
@@ -182,6 +192,8 @@ pub fn look(card: &SkillCard) -> Look {
         "block" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
         // The dash on the rules' track (2.6 m at 5.2 m/s): the clip carries no travel of its own.
         "dodge" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
+        // Drawn by jump.rs over whatever the body plays (no jump take yet).
+        "jump" => l(&[crate::jump::CLIP], 1.0, None, SkillIcon::Dodge),
         _ => match card.aim.as_str() {
             "point" if card.radius >= BOLT_RADIUS => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
             "point" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
@@ -415,9 +427,11 @@ pub fn input(
             keys.just_pressed(KeyCode::KeyE),
             keys.just_pressed(KeyCode::KeyR),
             shift(&keys, |b, k| b.just_pressed(k)),
+            keys.just_pressed(KeyCode::Space),
         ];
-        // In bar order, as before: LMB, RMB, Q, then R before E, then Shift.
-        for i in [0, 1, 2, 4, 3, 5] {
+        // In bar order, as before: LMB, RMB, Q, then R before E, then Shift, then Space (the
+        // jump, not drawn on the bar).
+        for i in [0, 1, 2, 4, 3, 5, 6] {
             if went_down[i] {
                 if let Some(s) = slot(i) {
                     presses.push((s, None, None));
@@ -448,9 +462,10 @@ pub fn input(
         let (target_id, point) = match card.aim.as_str() {
             "creature" => (tgt.or(c.target).or_else(|| nearest(&scene, me_id, me, aim, card.reach + 0.4)).unwrap_or(0), aim),
             "self_or_ally" => (tgt.or(c.target.filter(|t| !hostile(conn, *t, me_id))).unwrap_or(0), aim),
-            // A dash goes the way I move, else back from where I face.
+            // A dash goes the way I move, else back from where I face (a jump: toward it).
             "dash" => {
-                let d = if input.dir != Vec2::ZERO { input.dir } else { (me - aim).normalize_or(Vec2::NEG_Y) };
+                let back = (me - aim).normalize_or(Vec2::NEG_Y);
+                let d = if input.dir != Vec2::ZERO { input.dir } else if skill == "jump" { -back } else { back };
                 (0, me + d * 2.0)
             }
             _ => (tgt.unwrap_or(0), aim),
@@ -492,7 +507,7 @@ fn nearest(scene: &Scene, me_id: u32, me: Vec2, toward: Vec2, within: f32) -> Op
 
 /// Whether a creature looks hostile to me: its move under way is aimed at me.
 pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
-    conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.target == me && f.act != 0)
+    crate::net::find_fighter(conn, id).is_some_and(|f| f.target == me && f.act != 0)
 }
 
 /// An animal's move: its own clip by how the rules aim the skill (`skill_card.aim`), never by
@@ -511,17 +526,53 @@ pub fn animal_clip(card: &SkillCard) -> Option<(&'static str, f32, Option<f32>)>
 /// its side, a person's on the ground.
 pub fn death(animal: bool, t: f64) -> Action {
     if animal {
-        Action { clip: "death", rate: 1.0, start_ms: t, hold: Some(0.995), face: None }
+        Action { clip: "death", rate: 1.0, start_ms: t, hold: Some(0.995), face: None, ..Default::default() }
     } else {
-        Action { clip: "death", rate: 1.1, start_ms: t, hold: Some(0.97), face: None }
+        Action { clip: "death", rate: 1.1, start_ms: t, hold: Some(0.97), face: None, ..Default::default() }
     }
 }
 
 /// The clip a move plays, at what rate, and whether it holds a pose.
-fn clip_of(card: Option<&SkillCard>, variant: u32) -> Option<(&'static str, f32, Option<f32>)> {
-    let l = look(card?);
-    let clip = l.clips.get(variant as usize % l.clips.len().max(1))?;
-    Some((clip, l.rate, l.hold))
+fn clip_of(card: Option<&SkillCard>, variant: u32, windup_s: Option<f32>) -> Option<Action> {
+    let card = card?;
+    let l = look(card);
+    let clip = *l.clips.get(variant as usize % l.clips.len().max(1))?;
+    let windup = windup_s.unwrap_or(card.windup_ms as f32 / 1000.0);
+    Some(match timing(clip, windup) {
+        Some((rate, from, cut)) if l.hold.is_none() => Action { clip, rate, from, cut: Some(cut), ..Default::default() },
+        _ => Action { clip, rate: l.rate, hold: l.hold, ..Default::default() },
+    })
+}
+
+/// When a one-shot's motion starts, peaks (the blow, the release) and settles, in its clip's
+/// seconds: measured on the baked takes with `living/tools/oneshot_beats.py` (both VRoid files
+/// alike, 2026-11-11). A clip without beats plays whole at its look's rate.
+const BEATS: &[(&str, f32, f32, f32)] = &[
+    ("cast", 0.9, 1.483, 1.617),
+    ("bow_shoot", 1.267, 1.383, 1.75),
+    ("sword_slash", 0.767, 1.15, 1.317),
+    ("sword_overhead", 0.267, 0.55, 2.05),
+    ("sword_thrust", 0.467, 1.2, 1.55),
+];
+/// Anticipation before the motion starts, the most and least a clip is sped or slowed, and how
+/// long it plays on after it settles (s).
+const LEAD_S: f32 = 0.15;
+const RATE: (f32, f32) = (0.8, 2.2);
+const TAIL_S: f32 = 0.35;
+
+/// How a move's clip is played so that its peak lands at the rules' windup: (rate, where it
+/// starts, where it starts fading out), in clip seconds. Play-test 1 found the cast at 2.2× and
+/// the bow at 3.4×, peaking up to 0.2 s after the release, and ending mid-motion.
+pub fn timing(clip: &str, windup_s: f32) -> Option<(f32, f32, f32)> {
+    let &(_, start, peak, settle) = BEATS.iter().find(|b| b.0 == clip)?;
+    if windup_s <= 0.05 {
+        return None;
+    }
+    let from = (start - LEAD_S).max(0.0);
+    let rate = ((peak - from) / windup_s).clamp(RATE.0, RATE.1);
+    let from = (peak - windup_s * rate).max(0.0);
+    let cut = settle.min(peak + 0.6) + TAIL_S * rate;
+    Some((rate, from, cut))
 }
 
 /// What each drawn character plays: its death, its move (mine predicted until confirmed),
@@ -546,15 +597,18 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
         if out.contains_key(&id) {
             continue;
         }
-        let f = conn.db.seen_fighters().id().find(&id);
-        let live = f.as_ref().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120);
+        let f = crate::net::find_fighter(conn, id);
+        // Live until its recovery ends, or, cut short (a guard let go, a move broken off: its end
+        // comes before its release), until it ended (play-test 1: a guard let go after 1 s stayed
+        // drawn for its whole 8 s hold).
+        let live = f.as_ref().filter(|f| f.act != 0 && (now as u64) < if f.until_ms < f.release_ms { f.until_ms } else { f.release_ms.max(f.until_ms) } + 120);
         let face = live.and_then(|f| (f.aim_x != 0.0 || f.aim_y != 0.0).then(|| Vec2::new(f.aim_x, f.aim_y)));
         let animal = c.animals.contains(&id);
         if let Some(f) = live {
-            let clip = if animal { cards.by_code(f.act).and_then(animal_clip) } else { clip_of(cards.by_code(f.act), (f.act_ms / 7) as u32) };
-            if let Some((clip, rate, hold)) = clip {
+            let clip = if animal { cards.by_code(f.act).and_then(animal_clip).map(|(c, r, h)| Action { clip: c, rate: r, hold: h, ..Default::default() }) } else { clip_of(cards.by_code(f.act), (f.act_ms / 7) as u32, Some(f.release_ms.saturating_sub(f.act_ms) as f32 / 1000.0)) };
+            if let Some(a) = clip {
                 // A held guard stays up while the authority holds it.
-                out.insert(id, Action { clip, rate, start_ms: f.act_ms as f64, hold, face });
+                out.insert(id, Action { start_ms: f.act_ms as f64, face, ..a });
                 if Some(id) == me && c.predicted.as_ref().is_some_and(|(s, t)| cards.code(s) == f.act && (f.act_ms as f64) >= t - 400.0) {
                     c.predicted = None;
                 }
@@ -566,8 +620,8 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
             // after the press, and the clip carries no travel of its own, so it plays with the
             // confirmed move (`live.rs` times one-shots on the display clock).
             if let Some((skill, t)) = c.predicted.clone().filter(|(s, _)| cards.by_name(s).is_none_or(|k| k.aim != "dash")) {
-                if let Some((clip, rate, hold)) = clip_of(cards.by_name(&skill), c.strikes) {
-                    out.insert(id, Action { clip, rate, start_ms: t, hold, face: input.look });
+                if let Some(a) = clip_of(cards.by_name(&skill), c.strikes, None) {
+                    out.insert(id, Action { start_ms: t, face: input.look, ..a });
                     continue;
                 }
             }
@@ -575,7 +629,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
         // A hit reaction for a blow that landed on them just now.
         if let Some(e) = c.recent.iter().rev().find(|e| e.row.target == id && e.row.kind == seen::HIT && now - e.seen_ms < HIT_MS) {
             // An animal's flinch is HIT_MS long at rate 1 (wolf.py); people's hit clip is twice that.
-            out.insert(id, Action { clip: "hit", rate: if animal { 1.0 } else { 2.0 }, start_ms: e.seen_ms, hold: None, face: None });
+            out.insert(id, Action { clip: "hit", rate: if animal { 1.0 } else { 2.0 }, start_ms: e.seen_ms, hold: None, face: None, ..Default::default() });
         }
     }
     c.actions = out;
@@ -624,7 +678,7 @@ fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<
             // The guard's arc in front (the rules' degrees either side), toward where it was
             // raised: the authority's aim on my fighter row once it holds it, else the direction
             // sent. Only an indicator before the press follows the cursor.
-            let held = net.my_id.and_then(|me| net.conn.as_ref()?.db.seen_fighters().id().find(&me)).filter(|f| f.act == card.code && (f.aim_x != 0.0 || f.aim_y != 0.0)).map(|f| Vec2::new(f.aim_x, f.aim_y).normalize_or(dir));
+            let held = net.my_id.and_then(|me| net.conn.as_ref()?.db.my_fighter().id().find(&me)).filter(|f| f.act == card.code && (f.aim_x != 0.0 || f.aim_y != 0.0)).map(|f| Vec2::new(f.aim_x, f.aim_y).normalize_or(dir));
             let dir = if c.guarding { held.or(c.guard_dir).unwrap_or(dir) } else { dir };
             let a0 = dir.y.atan2(dir.x);
             let half = card.arc.to_radians();
