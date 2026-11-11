@@ -1,5 +1,13 @@
 # Client protocol validation
 
+## 2026-11-11 fov-1: the field of view (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `client-fov1-a` (`run.py`, scoped build): 35 of 36. New and passing: the private inventory with `heard`, `hear_salt` and `law_change` (refused to anonymous clients; `heard` and `law_change` refused to the player), `heard_sounds` in the views, `set_world_law` refused to players and anonymous callers ("admin only"), and five field-of-view checks over real subscriptions (`field.json`).
+- One failure: presence counts each open connection (`presence.json`: 1 → 2 → 0). The "one closed" step read 0 connections, as if the held connection had already timed out on the loaded host. The change touches nothing in presence. Not rerun.
+- Not run: the `LIVING_PERCEPTION=open` build; `game-client`.
+
 ## 2026-11-11 goods-1 (dev-box)
 
 Own container `goods1-stdb` (port 3313), `scoped`. `client-g1-11111438` (before merging rules-1) and `client-g3-11111529` (merged): 31 of 31 pass, including the new "fire and shared-stock signals public to anonymous SQL" (`fire-signal.json`: `structure.lit_until_ms` and `resource_node.pool` reach anonymous SQL) and the permission matrix with `place_resource` (admin only; 214 calls, no mismatch).

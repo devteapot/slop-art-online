@@ -34,3 +34,14 @@ LIVING_PERCEPTION=scoped .agents/skills/verify-client/scripts/run.py --run "$R"
 - The sweep runs every 200 ms and frames every 33–100 ms; a probe right after `place_at` can still see the old set. The driver waits 1 s.
 - Since 2026-11-09 the combat feed (`my_combat`) and minds' percepts see by the same rule (sight and a clear sight line): a blow behind a wall no longer reaches a player's feed. `verify-minds`'s `sight` case drives the minds' side.
 - `my_experience` rows of a character the world's minds controlled while its person was away carry the mind service's identity as `controller`; the own-state check accepts the caller's identity or the world admin's.
+
+## The field of view
+
+Since 2026-11-11 (`fov-1`; docs/PERCEPTION.md, "The field of view (sixth change)"). `drive.py`'s `field_of_view` runs after the wall checks: two players 5 m apart on open ground (`sight_spots`' `field` pair, with open rows beside it), the admin's `set_world_law fov_on true`, and the primary player turning with the `face` act (`human_act`). Each look is a real subscription to `seen_*` and `heard_sounds` with the player's token.
+
+- Facing away: the other is in neither `seen_bodies` nor `seen_characters`; `heard_sounds` holds a row to the east (bearing 2), near (band 0), kind `person`, with only `key`, `kind`, `bearing`, `band` and a key that is neither player's id.
+- Facing it: seen, and no longer heard to the east.
+- The field's edge: kept at 75° off facing once seen (through 45°), not seen afresh at 75° (through 100°).
+- Off again (`set_world_law fov_on false`, then the 2 s linger): seen all round, nothing heard.
+
+`heard`, `hear_salt` and `law_change` are in the private inventory (`PRIVATE`; `heard` and `law_change` also refused to a player), `heard_sounds` in `VIEWS`, and `set_world_law` in `ADMIN` (refused to players and anonymous callers with "admin only"). The probe reports `heard_sounds` in its `perception` map (`key` as a string).

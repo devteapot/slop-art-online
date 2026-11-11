@@ -2,6 +2,8 @@
 
 Started 2026-11-09. This note records how the living authority limits what a human player's client receives to what the player's character perceives now, plus the character's own state ([game brief](GAME_BRIEF.md#core-work-the-game-needs-engine-independent), core work 1; [island authority](ISLAND_AUTHORITY.md), "Perception-scoped subscriptions" and "A slimmer moving-body stream"). It covers the table audit, the SpacetimeDB documentation and source the design rests on, the design, the measured cost, the per-table decisions, the client change and the verification.
 
+**Status (sixth change, 2026-11-11, branch `fov-1`).** Sight may depend on facing: a world law, `fov_on` (off as shipped), gives `senses(a)` a field, and one pure function in the rules crate, `living_rules::sight::sees`, decides every look for the authority and the game client alike. What is heard but not seen reaches players (`heard_sounds`) and minds (their scene and a percept) coarsely, with no identity. `set_world_law` changes a law on a running world and records it ([The field of view](#the-field-of-view-sixth-change)).
+
 **Status (fifth change, 2026-11-11, branch `fix-perceived-moving`).** What others perceive a creature doing is derived from its body when it moves under motion intent, so a walking player reads `walk → person`, not `wait`, as an AI character walking the same line reads `goto → person` ([Activity derived from the body](#activity-derived-from-the-body)). No table or view changed.
 
 **Status (fourth change, 2026-11-10, branch `scale-1`).** Perceived state reaches each player once per frame through per-viewer copies, and every view reads a handful of keys ([Frames](#frames-what-others-do-reaches-a-player-once-per-frame)). Measured against the 216-character gate and verified as recorded in [Fourth change: measurements and verification](#fourth-change-measurements-and-verification); the gate's verdicts are in [gate 216](GATE_216.md#scale-change-frames-2026-11-10-branch-scale-1).
@@ -16,7 +18,7 @@ Started 2026-11-09. This note records how the living authority limits what a hum
 
 - **Perception is enforced on the authority** (AGENTS.md: "Spatial subscriptions are not permission boundaries by themselves"). A chunk window is a client's choice of what to subscribe to, so it bounds bandwidth, not knowledge. The perceived set is worked out by the authority with the rules' own sight.
 - **Current perception, remembered knowledge and developer audit truth are separate paths.** Current perception is the `seen_*` views, recomputed from the world as it is. What a player remembers is its own `experience` window, places and know-how (`my_*`). Audit truth (minds' state, thoughts, beliefs, personas, the chronicle) is private, read by the database owner: the mind service and the lab observer.
-- **One sight for every character.** The radius is `common::sight_for` (day 11 tiles, night 6, a torch at night 9), and a clear sight line (`perception::in_sight`). Since the second change it holds for players and minds alike: "we should only observe what the actual NPC can see" (the user, 2026-11-09).
+- **One sight for every character.** The radius is `common::sight_for` (day 11 tiles, night 6, a torch at night 9), and a clear sight line (`perception::in_sight`). Since the second change it holds for players and minds alike: "we should only observe what the actual NPC can see" (the user, 2026-11-09). Since the sixth change it is one function in the rules crate, `living_rules::sight::sees`, which also reads the field of view when the world's law turns it on, and which the game client calls too.
 - **What one perceives of another is decided by the rules, per observer.** Not a fixed public column set: the full record through `perceived_of(p)` in the script, a function of the observer, the target, what the observer knows and can do, and what a skill use revealed (the user, 2026-11-09).
 
 ## SpacetimeDB documentation consulted (2026-11-09)
@@ -187,8 +189,8 @@ Second change. Every path by which a mind, or a behaviour graph, learns about an
 | Path | Before | Now |
 |---|---|---|
 | Witnessed events (`perceive::witnessed`: fights, deaths, gifts, building, births…) | anyone within the base sight of the place (no torch, no sight line) | each onlooker within its own sight (a torch at night) and a clear line from where it stands to the place |
-| A mind's scene (`perceive::scene_json`, the deliberation request) | creatures within sight | creatures within sight with a clear line (`perception::visible`), each described by its projection |
-| Behaviour graphs (`brain.rs` scene: `nearest`, `sees`, `visible_creature`, a resident noticing someone) | creatures within sight | the same `perception::visible` |
+| A mind's scene (`perceive::scene_json`, the deliberation request) | creatures within sight | creatures within sight with a clear line (`perception::visible`; `perception::sensed` since the sixth change), each described by its projection |
+| Behaviour graphs (`brain.rs` scene: `nearest`, `sees`, `visible_creature`, a resident noticing someone) | creatures within sight | the same `perception::visible` (`sensed` since the sixth change) |
 | What an animal senses before attacking a person (`act.rs`, `sensed`) | creatures within sight, or smelled | seen with a clear line, or smelled (smell is unchanged) |
 | A player's aimed act ("you cannot see them", `act.rs`) | `Map::line_clear` (a walking line: water blocked it) | `in_sight` (water does not block sight; the line the player's perceived set uses) |
 | The combat feed (`combat::show`, `combat::died`: `my_combat` / `combat_seen`) | onlookers within their sight, no sight line | within their sight and a clear line |
@@ -216,7 +218,7 @@ Fifth change (2026-11-11, branch `fix-perceived-moving`). Human-controlled and A
 
 - **The rule** (`perception::doing_of`). What a creature is perceived doing is its activity's label, as before, except when its body is moving under motion intent and its activity is none or `wait`. Then the motion is what is seen (`perception::moving_label`): `walk` or `run` (the run input, `motion::FLAG_RUN`), then `→ <kind>` for the nearest creature its heading points at (within about 18°, among what the observer sees, the observer included), else the compass way it goes (`walk east`). The form is the one an activity's label has (`goto → person`): a kind, never a name. The rule reads the body and its steering, never the controller, so an AI body under motion intent would read the same. No AI body steers that way today; `verify-core` `scenes.py doing` checks that none does.
 - **Where it is seen.** A mind's scene (`perceive::scene_json`, each creature's `doing`) and the first sight of someone (`brain.rs` `noticed`: "For the first time you see a stranger, 8 tiles east, walk → person."). These were the two places that put another creature's activity label into what a character perceives. A player's own `you.doing`, its `my_*` views and its graph and plan ("moving yourself") are unchanged. A player's client already received the same thing for both controllers: the body's motion in `seen_bodies`, and no `seen_doing` row for a walk (`doing` rows exist only for skills with an act card). No view's rows changed.
-- **Facing.** Not added. A standing body's `heading` reaches clients in `seen_bodies`, but a mind's scene does not carry facing for any controller. Adding it is a separate change to what every character perceives; the greeting work on `exp-greet` may add it.
+- **Facing.** Not added in this change. Since the sixth change a mind's scene carries `you.facing` while sight depends on facing ([The field of view](#the-field-of-view-sixth-change)); others' facing is still not listed.
 - **Before and after** (`verify-player` `approach.py`; R is the resident, the walkers start 8 m out on the same line):
 
   | Walker | R's scene `doing`, before | after |
@@ -228,6 +230,131 @@ Fifth change (2026-11-11, branch `fix-perceived-moving`). Human-controlled and A
 
 - **Cost.** It is computed when a scene or a first-sight line is built. It reads, per creature listed, its `activity` row as before, plus the `steer` and `body` rows by primary key, only when the activity is none or `wait`. It writes nothing and adds no table, column, view or subscription. The 60 Hz path, the frames and the views' read sets are untouched.
 - **SpacetimeDB documentation consulted (2026-11-11), against 2.14.1.** [Indexes](https://spacetimedb.com/docs/tables/indexes/): primary keys create an index for equality lookups, and `find` on one is the access pattern to use. [Performance](https://spacetimedb.com/docs/tables/performance/): prefer indexed lookups to scans, and split tables by access pattern so that updates touch fewer rows. [Views](https://spacetimedb.com/docs/functions/views/): a view re-runs when a row in its read set changes. The implications are three. Computing the label in the reducer that builds a scene, from rows read by key, costs three point lookups and changes no subscription. Putting it in a table or a column would add a write on the motion path, and a view re-run for every viewer whose read set holds it. Deriving it in a view would put `steer` and `body` in that view's read set. So the projection computes it.
+
+### The field of view (sixth change)
+
+Sixth change (2026-11-11, branch `fov-1`). In two play-tests the owner said that what they see does not change with the way their character faces; in the third they switched to the cursor-facing control scheme after 90 seconds and stayed in it. Sight was a radius and a clear line, the same in every direction.
+
+**The rule** (`living/rules/src/sight.rs`, pure; no `scripting` feature needed):
+
+```rust
+living_rules::sight::sees(map, eye, heading, at, dist, &senses, glow, kept) -> bool
+```
+
+- `senses` is `living_rules::sight::Senses { sight, hearing, field: Option<Field> }`, what the script's `senses(a)` returns (`script::Senses` is the same type). `Field { focal_deg, side_deg, side_share, near_m, margin_deg }`.
+- `heading` is the observer's facing: `body.heading` at the instant (`common::heading_at`, the turn under way included, as `steer::pose` gives it).
+- `glow` is the light on the target (the `glow` law; 0 without one). `kept` is `Some(keep_seen_m)` when the target is already seen.
+- **Without a field** the answer is the old rule exactly: `dist <= max(sight, glow) (+ keep_seen_m when kept)` and `Map::sight_clear`. The rules test `without_a_field_the_answer_is_the_old_rule` compares the two over 311,040 cases (sights, glows, keeps, 360 directions, nine distances, three headings, a wall).
+- **With a field**, how far one sees depends on the angle off facing (`sight::reach`, which a client draws the field from): `max(sight, glow)` within `focal_deg`; `max(sight × side_share, glow)` out to `side_deg`; nothing beyond; and all round within `min(near_m, sight)`. Someone already seen keeps `margin_deg` more on each angle and `keep_seen_m` more on each distance, so a creature at an edge does not flicker. A light on someone shows them only within the field: a torch behind you is not seen. The sight line is tested after, as before.
+- **Hearing** stays all round.
+
+**The law.** `senses(a)` returns `field: sight_field(a)` when `law("fov_on")` is true, and no `field` otherwise. Every value is a constant of `laws()`, so a seed's `rules` or `set_world_law` sets it:
+
+| Law | Shipped | Meaning |
+| --- | --- | --- |
+| `fov_on` | false | sight depends on facing |
+| `fov_focal_deg` | 70 | full sight within this many degrees either side of facing |
+| `fov_side_deg` | 110 | side vision out to this angle |
+| `fov_side_share` | 0.3333 | side vision reaches this share of sight |
+| `fov_near_m` | 3 | all round within this distance |
+| `fov_near_dark_m` | 2 | the same in the dark (`light_of(a)` is `night`: no torch) |
+| `fov_margin_deg` | 10 | someone already seen stays seen this far past an edge |
+| `heard_near_m`, `heard_close_m` | 5, 15 | a sound's distance bands: near, close, far out to hearing |
+| `heard_linger_s` | 2 | a sound is kept this long after it was last heard |
+
+`law(name)` is a new primitive for laws: the value in force, the script's `laws()` with the world's own values over it. Cullet's overlay replaces `senses` and carries the same `field` line (`living/seeds/worlds/cullet/laws.rhai`). When the field is on, `senses_law`'s description, which minds are told, says so ("One sees that far only within about 70 degrees either side of the way one faces, … one hears what is behind one, and turns to see it.").
+
+**Facing** is one state, the body's heading as the authority holds it: steering sets it (the travel direction, kept while standing), and so do the `face` act and the turns of a strike, a guard and an aim. No second facing state was added. A player's facing input (`human_face`) is the last part of this change and is not in this section.
+
+**Where it applies.** `perception::in_sight(ctx, map, observer, eye, heading, target, at, dist, w, now, kept)` asks the observer's senses and the target's glow and calls `sight::sees`. `perception::sensed` (what a graph's scene and a mind's scene see and hear, from one gather) and the players' sweep call `sight::sees` directly with the senses read once. Every path goes through it: players' perceived sets (`sweep_one`, with `kept` for those already perceived), minds' scenes and behaviour graphs (`sensed`), witnessed events (`perceive::witnessed`), a carer seeing a crying infant (`perception::sees`), the combat feed and the witnesses of a death (`combat::show`, `combat::died`), what a predator senses before it attacks (`act.rs`), and a player's aimed act ("you cannot see them", with `kept` when the target is in the player's perceived set). The chunk-body cache now holds each body's heading at the instant (`NearCreature.heading`), so onlookers' facing costs no extra lookup.
+
+**What is not seen coming.** A graph's `threatened` condition (a hostile windup aimed at me) now holds, while the field is on, only when the one winding up is seen. Without a field it is as before: any windup aimed at me, seen or not. See [combat](COMBAT.md#backstabs-when-sight-depends-on-facing) for when a blow from behind lands unseen.
+
+#### Heard, not seen
+
+A creature within hearing (`senses(a).hearing`, all round, no sight line) and not seen appears coarsely, while the listener's senses have a field. Without a field nothing is told as heard, so a world with the law off perceives exactly as before. This follows the scent pattern: kind, rough direction and distance, never who.
+
+- **Players: `heard_sounds`** (per-sender view, `primary_key = key`) returns `HeardSound { key: u64, kind, bearing: u8, band: u8 }`. `kind` is the `heard_as(kind)` law's word: "person", "deer", "wolf", or "creature" where the rules cannot tell. `bearing` is one of eight compass ways from the listener (0 north, clockwise). `band` is 0 near, 1 close, 2 far. `key` is derived from the listener, the creature and a secret salt (`hear_salt`, one private row drawn from the module's random source) in four-minute epochs. It is fixed when the sound starts and stays while it lasts, so a client can follow one sound, but it is not the character id and cannot be matched to one without the salt. The rows are kept in a private table `heard` (indexed by `viewer`; it holds the target, which the view leaves out), written at the 200 ms sweep only when a sound starts or its bearing or band changes, deleted at once when the creature comes into sight and `heard_linger_s` after it was last heard (module memory holds when; a fresh instance starts each row's linger at its first sweep). A death deletes the player's rows.
+- **Minds' scenes** (`perceive::scene_json`) carry, while the field is on, `you.facing` (a compass way) and a list under `you hear (out of sight)`, in a person's words, with no id: `{"what": "a person", "where": "behind you, to the east", "how far": "near"}` (`sight::heard_words`; "something moving" for a creature). The mind service sends the scene as it is, so this is what a model reads.
+- **Minds' percepts.** A body that hears something near and out of sight notices it when it begins (`brain.rs`, `SOUND_NEAR`): "You hear a person near, behind you, to the south-west." (kind `signal`, no subject, placed where the listener stands).
+- **Behaviour graphs.** A new target, `"sound"`: toward the nearest thing heard and not seen (a point; the body does not learn who). `"speaker"` resolves, for a target the body acts on, toward the voice when the speaker is heard and not seen.
+- **The habit** (`living/seeds/instincts.json`, people and the young): a branch labelled `turn to a sound`, after the danger, hunger and sleep branches. When someone spoke within 3 s, cannot be seen and is heard within 12 m, face the speaker. Standing, with a sound within 5 m, face the sound. It is an ordinary branch of the graph the character owns, keeps, changes or drops. Nothing is injected, and no guard limits what a character decides. With the law off `sound` never resolves, so the branch never acts; the plan text minds read includes it either way.
+
+#### Changing a law on a running world: `set_world_law`
+
+`set_world_law(name, value)` (admin only, like the other admin reducers; `value` is JSON text: `"true"`, `"0.5"`) changes any constant of `laws()`, of the law's own kind; another name or kind is refused with nothing written. The value is kept as the world's own (`world_law`, as a seed's `rules` are), and the reducer installs the world's script again with the values written at its end as a generated `fn world_law_values()` block (`script::with_world_laws`). The install is validated like `install_script` and given a new `script.revision`. **This is how clients learn it:** the game client already recompiles the `script` row when its revision changes, so `senses(a)` returns the field there at once; the authority's caches and the mind service do the same. Every install keeps the block from `world_law` (an `install_script` of the plain script no longer drops a world's own law values), and a seed's `rules` are written into it at creation.
+
+Every change is recorded in `law_change` (private, kept for good: `name`, `old` (the value in force before), `new`, `at_ms`, `by` (the caller's identity), `revision`) and as a chronicle row of kind `law` ("the world's law fov_on changed from false to true (script revision 13)"), so a run's evidence says which laws were live when.
+
+#### SpacetimeDB documentation consulted (2026-11-11)
+
+Pinned 2.14.1 (`living/Cargo.toml`, `clockworklabs/spacetime:v2.14.1`). The live docs' version selector reads 2.0.0 (and 1.12.0); nothing here depends on a feature newer than what the earlier sections verified in the 2.14.1 source.
+
+| Page | What it says | What follows here |
+| --- | --- | --- |
+| [Views](https://spacetimedb.com/docs/functions/views/) | `ViewContext` gives the caller; per-user views are computed and tracked per subscriber; views "can only access table data through indexed lookups"; a view is "reevaluated when SpacetimeDB detects something they read has since changed (the read set)" | `heard_sounds` is per sender and reads only `heard.viewer` (a point lookup), so it re-runs only when that player's rows change: at a sound's start, end, or bearing or band change, not at every sweep. It declares `primary_key = key` (allowed for views without arguments) so clients get updates. |
+| [Event tables](https://spacetimedb.com/docs/tables/event-tables/) | rows "exist only for the duration of the transaction that created them"; "Event tables cannot currently be accessed within view functions" | Not used: a sound must linger and be read through a per-player view. A private table with a view is the pattern `perceived` already uses. |
+| [Tables](https://spacetimedb.com/docs/tables/), [access permissions](https://spacetimedb.com/docs/tables/access-permissions/) | private tables are "Visible only to reducers and the database owner"; "Views can read from private tables and expose only the data appropriate for each client" | `heard` holds the target and is private; the view leaves the target out. `hear_salt` and `law_change` are private (the owner reads `law_change` as evidence). |
+| [Performance](https://spacetimedb.com/docs/tables/performance/) | prefer indexed lookups; split tables by access pattern; "Be mindful of unbounded table growth" | `heard` is bounded by the creatures within each player's hearing and empties as sounds stop; `law_change` grows by one row per admin change, kept on purpose. |
+| [Indexes](https://spacetimedb.com/docs/tables/indexes/) | b-tree point lookups; indexes "slow down inserts and updates" | One index, `heard.viewer`. No index was added to a hot table. |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) | adding tables and reducers is allowed | Three tables and one reducer are added; no column changes, so a running world updates in place. |
+| [Reducers](https://spacetimedb.com/docs/functions/reducers/), [reducer context](https://spacetimedb.com/docs/functions/reducers/reducer-context) | every call has a caller identity (`ctx.sender`); no admin pattern is given | `set_world_law` checks the caller against `world.admin` (`require_admin`), as every admin reducer does. |
+
+#### Data paths
+
+| Path | Reads | Writes | Index | Recipients | Frequency | Growth |
+| --- | --- | --- | --- | --- | --- | --- |
+| Sight with a field | the observer's senses (per-moment cache), its body's heading (in the chunk-body cache for onlookers; one PK lookup for a graph scene), the target's glow | — | PK | — | per look, as before | — |
+| Heard (players) | creatures within hearing from the chunk-body cache, the player's `heard` rows | `heard` insert, update or delete on change only | `heard.viewer`, PK | that player (`heard_sounds`) | each player every 200 ms (the sweep), only while the field is on | one row per creature heard per player, gone 2 s after it stops |
+| Heard (minds) | creatures within hearing | a percept when a near sound begins | — | that mind | per scene, per graph evaluation, only while the field is on | experience rows as before |
+| `set_world_law` | `world_law`, the script row | `world_law`, `script` (a new revision), `law_change`, `chronicle` | PK | every client of `script` | per admin call | one `law_change` row per call |
+
+#### Cost: off against on (sixth change)
+
+Tool: `living/tools/bench.py` with two additions for this change, `--law NAME=VALUE` (`set_world_law` before the window) and `graph_scenes` (behaviour graphs' scenes a second, and the creatures each one saw, from a line the module logs once a second while profiling, `common::note_scene`). There are no players and no minds in these worlds, so the costs are the graphs', the witnesses' and the feed's. Arms ran A B B A: off, on, on, off, each a fresh world, one at a time on the private server, with the dev-box's 1-minute load average recorded before each window.
+
+**Island** (seed `island`, 277 people at rest): 60 s at rest after a 15 s settle, then `spawn_skirmish(200, 12)` and 60 s more. This measured the build before `perception::sensed` merged the sight and hearing gathers into one (a graph's scene gathered twice while the field was on); the code that ships is that build plus the merge.
+
+| Window | Arm | Load | Tick p50 / p99 (ms) | Graph evaluations/s | `brain.scene` p50 / p99 (ms), ms per s | Scenes/s | Seen per scene, mean (max) | `housekeeping` p50 (ms) |
+| --- | --- | ---: | --- | ---: | --- | ---: | --- | ---: |
+| Rest | off | 33.5 | 1.37 / 3.07 | 372 | 0.022 / 0.083, 9.4 | 358 | 3.14 (19) | 0.55 |
+| Rest | on | 40.8 | 1.79 / 4.05 | 377 | 0.028 / 0.098, 12.3 | 362 | 2.13 (17) | 0.73 |
+| Rest | on | 38.3 | 1.99 / 4.53 | 374 | 0.031 / 0.108, 13.4 | 361 | 2.03 (15) | 0.78 |
+| Rest | off | 29.4 | 1.55 / 2.99 | 369 | 0.024 / 0.090, 10.4 | 363 | 2.94 (19) | 0.62 |
+| Skirmish | off | 26.9 | 2.40 / 14.9 | 627 | 0.029 / 0.103, 18.2 | 556 | 15.9 (104) | 1.06 |
+| Skirmish | on | 37.3 | 2.76 / 12.9 | 812 | 0.023 / 0.113, 22.6 | 741 | 18.0 (112) | 1.03 |
+| Skirmish | on | 42.8 | 2.26 / 25.6 | 742 | 0.029 / 0.109, 22.6 | 692 | 17.0 (116) | 0.96 |
+| Skirmish | off | 26.5 | 2.89 / 16.2 | 794 | 0.026 / 0.106, 21.7 | 712 | 23.3 (127) | 0.96 |
+
+**Cullet** (`living/seeds/cullet.json`, sight 48 m by day; its seed has no people, so each world got `spawn_crowd(200)` on the forager repertoire): 60 s after a 15 s settle, then `spawn_skirmish(200, 12)` and 60 s more. This measured the build that ships, `perception::sensed` included.
+
+| Window | Arm | Load | Tick p50 / p99 (ms) | Graph evaluations/s | `brain.scene` p50 / p99 (ms), ms per s | Scenes/s | Seen per scene, mean (max) | `housekeeping` p50 (ms) |
+| --- | --- | ---: | --- | ---: | --- | ---: | --- | ---: |
+| Crowd | off | 23.1 | 1.05 / 2.20 | 260 | 0.079 / 0.197, 21.7 | 253 | 3.93 (13) | 0.36 |
+| Crowd | on | 26.8 | 1.44 / 2.87 | 258 | 0.097 / 0.233, 27.0 | 254 | 2.38 (15) | 0.47 |
+| Crowd | on | 30.2 | 1.09 / 2.35 | 261 | 0.080 / 0.218, 22.2 | 256 | 2.01 (12) | 0.38 |
+| Crowd | off | 10.9 | 0.92 / 1.87 | 260 | 0.068 / 0.180, 19.7 | 258 | 3.44 (10) | 0.30 |
+| Skirmish | off | 23.5 | 1.83 / 9.69 | 609 | 0.050 / 0.195, 33.1 | 539 | 29.8 (108) | 0.75 |
+| Skirmish | on | 33.6 | 3.31 / 11.4 | 714 | 0.060 / 0.229, 49.0 | 654 | 22.4 (118) | 0.85 |
+| Skirmish | on | 23.5 | 1.75 / 8.51 | 658 | 0.035 / 0.152, 27.5 | 617 | 23.5 (115) | 0.56 |
+| Skirmish | off | 10.4 | 1.23 / 18.4 | 535 | 0.057 / 0.182, 31.3 | 458 | 30.4 (123) | 0.63 |
+
+- **Fewer people in view.** At rest a graph's scene saw fewer creatures with the field on: 2.1 against 3.0 on the island, 2.0–2.4 against 3.4–3.9 on Cullet. On Cullet's 48 m sight the skirmish's scenes saw a quarter fewer (22–23 against 30). On the island the skirmish's counts (17–18 on, 16–23 off) are within the spread between its two "off" worlds.
+- **No cost or saving shows outside the noise.** Cullet's scenes cost three to four times the island's (0.07–0.10 ms against 0.02–0.03 at p50), because 48 m of sight gathers more chunks. Within each world the "on" arms are within the spread of the "off" arms, and the one "on" window that stands out (Cullet's first skirmish, tick p50 3.3 ms) is matched by a higher `housekeeping` in the same window. On the island, at rest every phase of the tick was 25–40% slower in the two "on" windows, including phases the field does not touch (`housekeeping` 0.73–0.78 ms against 0.55–0.62, the need rates, motion). The load was higher during them (38–41 against 29–34), and `brain.scene` rose by the same ratio as `housekeeping`. A scene that sees a third fewer creatures did not get measurably cheaper: most of its cost is the gather of the creatures round it, which is unchanged (the field only skips the sight line for those out of reach). In the skirmish no difference shows outside the spread between arms.
+
+#### Verification (sixth change)
+
+On the dev-box, in a private SpacetimeDB 2.14.1 container (`fov1-stdb`, port 3318), scratch databases only. The host was shared with seven other workers (load average 17–60 on 32 cores throughout).
+
+| Surface | What was driven | Result | Evidence (`.local/living/verify/`) |
+| --- | --- | --- | --- |
+| Rules | `cargo test -p living-rules`: the field's zones, the margin, `glow` in and out of the field, off giving the old answers (311,040 cases), the law and its block, Cullet's field | 163 of 163 (8 ignored) in `just living-check` | `.local/fov1/check*.log` |
+| Core | `scenes.py fov` on the default seed (off, `set_world_law` refusals and record, facing east and west, a duel from behind with the 3 m ring and with a 0.5 m ring, witnesses by facing, off again); `tick`, `sight`, `senses`, `moves`, `death-names` | `fov` 18 of 18; the others pass | `core-fov1-j/` |
+| Player | `scripts/fov.py`: the `face` act turning the body, heard and not seen, the heard row's columns and key, seen when faced, the field's edge and margin, `set_world_law` refused to a player, off again | 18 of 18 | `player-fov1-d/fov.json` |
+| Client | `run.py` (the Rust SDK probe): the new private tables and view in the inventories, `set_world_law` admin only, the field of view over real subscriptions | 35 of 36; the field of view 5 of 5. The one failure was presence ("one closed" read 0 connections), which this change does not touch; it timed out on the loaded host | `client-fov1-a/results.md`, `field.json` |
+| Minds | `verify_minds.py --case fov` with the fake model (the scene and the prompt: heard in words, no id, facing; the percept; the person instinct's habit turning the body) and `--case sight` | both pass | `minds-fov1-h-fov/result.json`, `sent-prompt.txt` |
+
+`scenes.py doing` failed twice on one world after the `fov` and `senses` scenes. On that loaded host each admin CLI call took 1 to 14 s, so the walkers had finished their walks (activity `wait`) before the observer's scene was written. It reads activity labels, and no field was on. It failed the same way on `origin/main` (`6288f599`) on the same host.
 
 ### Compatibility: the `LIVING_PERCEPTION` build switch
 

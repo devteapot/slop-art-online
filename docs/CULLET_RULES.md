@@ -87,6 +87,19 @@ Values per game hour unless noted; in brackets per real minute on that world's d
 | A shout | none | none (not built) | 30 m |
 | Spoiling, raw fish | 5% a real minute | unchanged (goods) | About a day |
 
+**Sight that depends on facing** (`fov-1`, 2026-11-11; [perception](PERCEPTION.md#the-field-of-view-sixth-change)) is a world law, `fov_on`, off on both worlds as shipped; `set_world_law fov_on true` turns it on for a running world. Cullet's `senses` carries the shipped field, so the values are the same law values on both:
+
+| Law | Island | Cullet | |
+| --- | ---: | ---: | --- |
+| `fov_on` | false | false | sight depends on facing |
+| `fov_focal_deg` | 70 | 70 | full sight (48 m by day on Cullet) within ±70° of facing |
+| `fov_side_deg`, `fov_side_share` | 110, 0.3333 | 110, 0.3333 | a third of sight (16 m by day on Cullet) out to ±110° |
+| `fov_near_m`, `fov_near_dark_m` | 3, 2 | 3, 2 | all round within 3 m, 2 m in the dark |
+| `fov_margin_deg` | 10 | 10 | someone already seen stays seen 10° past an edge |
+| `heard_near_m`, `heard_close_m`, `heard_linger_s` | 5, 15, 2 | 5, 15, 2 | what is heard and not seen: near, close, far (out to hearing: 9 m on the island, 12 m on Cullet); kept 2 s |
+
+With the field on, `glow` (lamplight 28 m, a carried light 48 m) shows someone only within the field: a lit figure behind you is not seen.
+
 **Where this differs from SMALL_CITY §4's proposed column**, which was written per real minute before `person_pace` existed, and what I chose:
 
 - Hunger: the proposal's +1.0 a real minute is 48 a game day if it never slowed. Here hunger halves in sleep (as on the island), so awake it is 1.2 a real minute and the day still totals 48.

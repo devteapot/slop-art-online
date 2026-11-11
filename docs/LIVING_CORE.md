@@ -107,7 +107,7 @@ A small reactive behavior tree the mind writes as JSON and the authority validat
 - Composites: `first` (reactive priority), `seq` (remembered progress), `if/then/else` (continuous guard), `repeat`.
 - Leaves: `do` (skill with a target selector; walks into range automatically), `say`, `wait`, `think` (request LLM deliberation without blocking).
 - Conditions: needs, inventory, `sees`/`near` a target selector, `smells` one (species with a scent), recently hurt/heard, night, `believes` a mind-maintained judgment, `chance`, boolean combinators.
-- Target selectors: nearest resource/structure/character with relation filters (`friend`, `enemy`, `stranger`, by name), structures by what they hold (`{"kind": "remains", "holds": "meat"}`, since 2026-11-11), remembered named places, `attacker`, `speaker`, `home`, coordinates, and an id the scene listed (a creature, else a structure or resource in sight; since 2026-11-10, [mind feedback](MIND_FEEDBACK.md#4-the-phantom-map)).
+- Target selectors: nearest resource/structure/character with relation filters (`friend`, `enemy`, `stranger`, by name), structures by what they hold (`{"kind": "remains", "holds": "meat"}`, since 2026-11-11), remembered named places, `attacker`, `speaker`, `home`, `sound` (toward the nearest thing heard and not seen, while sight depends on facing; since 2026-11-11, [perception](PERCEPTION.md#heard-not-seen)), coordinates, and an id the scene listed (a creature, else a structure or resource in sight; since 2026-11-10, [mind feedback](MIND_FEEDBACK.md#4-the-phantom-map)).
 
 Selectors only resolve entities within the character's current perception radius (sight; for a skill's target also its species' scent, below) or its own remembered places, so the graph cannot act on observer truth.
 

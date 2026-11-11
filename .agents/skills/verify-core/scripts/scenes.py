@@ -980,6 +980,149 @@ def senses(s):
         s.call("install_script", shipped)
 
 
+def set_law(s, name, value, check=True):
+    """Change a law on the running world (`set_world_law`, admin)."""
+    return s.call("set_world_law", name, json.dumps(value), check=check)
+
+
+def fov(s):
+    """Sight that depends on facing (docs/PERCEPTION.md, "The field of view"), switched by the
+    world's `fov_on` law through `set_world_law` on a running world. A watcher stands on an open
+    line facing east with someone 5 m ahead, 5 m behind and 1.5 m behind; its graph turns where it
+    is told and says whom it `sees`. Off (as shipped): all three, as before. On: ahead and the one
+    within the near ring, not the one behind; facing west, the reverse. Off again: all three.
+    Every change is in `law_change` and the chronicle, and the installed script carries the
+    values. Then a duel from behind: a strike from the one behind at the watcher facing away,
+    whose graph guards when `threatened`. With the field on and the starting near ring (3 m, 2 m in
+    the dark) the striker 1 m behind is within the ring, seen, and guarded against; with a near
+    ring of 0.5 m (`set_world_law fov_near_m`, `fov_near_dark_m`) the windup is not seen, there is
+    no guard, and the blow lands (a backstab). Off, it guards as before. Two onlookers 4 m off face
+    toward the duel and away from it (4 and 5 m off on the line): with the field on only the one
+    facing it witnesses it."""
+    line = open_line(s)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    eye, ahead, behind, close, w_toward, w_away = s.people(6)
+    e = line[7]
+    places = {eye: e, ahead: line[12], behind: line[2], close: (e[0] - 1.5, e[1])}
+    names = {ahead: "ahead", behind: "behind", close: "close"}
+    rounds = iter(range(1000))
+
+    def place():
+        for c, p in places.items():
+            s.call("place_at", c, p[0], p[1])
+
+    def probe(label, way):
+        """The watcher turns to face `way` (+1 east, -1 west), then says whom it sees."""
+        place()
+        tag = f"{label}-{next(rounds)}"
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        # One line every 2 s at most (speaking faster is refused).
+        tell = [x for c, n in names.items() for x in ({"if": {"cond": {"sees": {"id": c}}, "then": {"say": f"{tag} sees {n}"}, "else": {"say": f"{tag} not {n}"}}}, {"wait": 2.2})]
+        s.graph(eye, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [e[0] + 4.0 * way, e[1]]}}}, {"wait": 0.1}]}, {"wait": 1.5}, *tell, {"wait": 300}]})
+
+        def said():
+            rows = [r for r in s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {eye}") if r["at_ms"] >= t0 and tag in r["text"]]
+            return rows if len(rows) >= len(names) else None
+        rows = s.wait(said, seconds=40, every=1)
+        (s.out / f"{s.name}-said-{tag}.json").write_text(json.dumps(rows, indent=2) + "\n")
+        return {n: any(f"{tag} sees {n}" in r["text"] for r in rows) for n in names.values()}
+
+    shipped = s.rows("SELECT revision FROM script WHERE name = 'skills'")[0]["revision"]
+    try:
+        got = probe("off", +1)
+        s.expect("off (as shipped): seen all round, as before", got == {"ahead": True, "behind": True, "close": True}, got)
+        r = set_law(s, "no_such_law", True, check=False)
+        s.expect("set_world_law refuses a name that is no law", r.returncode != 0 and "not a law" in (r.stderr + r.stdout), (r.stderr + r.stdout)[-300:])
+        r = set_law(s, "fov_on", 2, check=False)
+        s.expect("set_world_law refuses a value of another kind", r.returncode != 0 and "true or false" in (r.stderr + r.stdout), (r.stderr + r.stdout)[-300:])
+        set_law(s, "fov_on", True)
+        script = s.rows("SELECT revision, source FROM script WHERE name = 'skills'")[0]
+        s.expect("the installed script carries the world's law values, at a new revision",
+                 script["revision"] > shipped and re.search(r"fn world_law_values\(\) \{ #\{[^}]*\bfov_on: true\b", script["source"]) is not None, script["revision"])
+        changes = s.rows("SELECT * FROM law_change", "law-changes")
+        s.expect("the change is recorded (name, old, new, when, who, revision)",
+                 any(c["name"] == "fov_on" and c["old"] == "false" and c["new"] == "true" and c["at_ms"] > 0 and c["revision"] == script["revision"] for c in changes), changes)
+        story = [r for r in s.rows("SELECT * FROM chronicle WHERE kind = 'law'", "law-story")]
+        s.expect("and in the chronicle", any("fov_on changed from false to true" in r["text"] for r in story), story)
+        got = probe("on-east", +1)
+        s.expect("on, facing east: ahead and the near ring, not behind", got == {"ahead": True, "behind": False, "close": True}, got)
+        got = probe("on-west", -1)
+        s.expect("on, facing west: behind seen, ahead not", got == {"ahead": False, "behind": True, "close": True}, got)
+
+        # A duel from behind. The watcher faces east; the one behind (1 m west) strikes it.
+        last_blow = [-1000.0]
+
+        def duel(label):
+            places[behind] = (e[0] - 1.0, e[1])
+            place()
+            s.call("place_at", ahead, *line[15])
+            # Onlookers on the open line east of the duel, 4 and 5 m off: one faces it (west),
+            # one faces away (east).
+            s.call("place_at", w_toward, *line[11])
+            s.call("place_at", w_away, *line[12])
+            for w, at in ((w_toward, line[7]), (w_away, line[15])):
+                s.graph(w, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [at[0], at[1]]}}}, {"wait": 0.1}]}, {"wait": 60 + next(rounds)}]})
+            s.graph(eye, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [e[0] + 4.0, e[1]]}}}, {"wait": 0.1}]}, {"wait": 300}]})
+            time.sleep(2)
+            # Then it guards whenever it is threatened (a graph runs again from its root).
+            s.graph(eye, {"first": {"label": "guard", "children": [{"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "block"}}}}, {"wait": 0.2}]}})
+            time.sleep(3)
+            # Witnesses are told a fight's first blow: one more than 30 s after the attacker last
+            # hurt the victim (`act.rs` `first_blow`).
+            time.sleep(max(0.0, 31.0 - (time.monotonic() - last_blow[0])))
+            t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+            # The striker turns to where the watcher stands first: with a field it must see its
+            # target to strike it (a target it cannot see does not resolve). A graph of its own
+            # each time (the same graph again would not start over; a wait is held to 120 s).
+            s.graph(behind, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [e[0], e[1]]}}}, {"wait": 0.1}]},
+                                     {"do": {"skill": "strike", "target": {"id": eye}}}, {"wait": 60 + next(rounds)}]})
+            def struck():
+                u = [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == behind and x["skill"] == "strike" and x["outcome"]]
+                return u or None
+            strikes = s.wait(struck, seconds=30, every=1)
+            last_blow[0] = time.monotonic()
+            # Short waits from now on, so the next round's graph is taken at once.
+            s.graph(behind, {"wait": 1.0 + 0.01 * next(rounds)})
+            time.sleep(1)
+            uses = [x for x in s.rows("SELECT * FROM skill_use", f"duel-uses-{label}") if x["at_ms"] >= t0]
+            guards = [x for x in uses if x["actor"] == eye and x["skill"] in ("block", "dodge")]
+            seen = {w: [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {w}", f"duel-exp-{label}-{w}") if r["kind"] == "fight" and r["at_ms"] >= t0] for w in (w_toward, w_away)}
+            return strikes, guards, seen
+
+        # With the starting values the one striking from 1 m behind is within the near ring
+        # (3 m all round, 2 m in the dark): seen, so the guard goes up.
+        strikes, guards, seen = duel("on")
+        s.expect("on (near ring 3 m, 2 m dark): a strike from 1 m behind is within the ring, seen, guarded", guards, [x["outcome"] for x in strikes])
+        s.expect("on: the onlooker facing the duel witnesses it", seen[w_toward], seen[w_toward][:1])
+        s.expect("on: the onlooker facing away does not", not seen[w_away], seen[w_away][:1])
+        # A near ring under a strike's reach (a law value): the windup from behind is not seen,
+        # no guard, and the blow lands: a backstab.
+        set_law(s, "fov_near_m", 0.5)
+        set_law(s, "fov_near_dark_m", 0.5)
+        keep_behind = places[behind]
+        places[behind] = line[2]
+        got = probe("on-near", +1)
+        s.expect("on (near ring 0.5 m, a law value): 1.5 m behind is not seen", got == {"ahead": True, "behind": False, "close": False}, got)
+        places[behind] = keep_behind
+        strikes, guards, seen = duel("on-near")
+        s.expect("on (near ring 0.5 m): a windup from behind is not seen (no guard)", not guards, guards)
+        s.expect("on (near ring 0.5 m): the blow from behind lands", any(x["outcome"].startswith("struck") or "hit" in x["outcome"] for x in strikes), [x["outcome"] for x in strikes])
+        set_law(s, "fov_near_m", 3.0)
+        set_law(s, "fov_near_dark_m", 2.0)
+
+        set_law(s, "fov_on", False)
+        places[behind] = line[2]
+        got = probe("off-again", +1)
+        s.expect("off again: seen all round, as before", got == {"ahead": True, "behind": True, "close": True}, got)
+        strikes, guards, seen = duel("off")
+        s.expect("off: the one struck from behind guards, as before", guards, [x["outcome"] for x in strikes])
+        s.expect("off: both onlookers witness it, as before", seen[w_toward] and seen[w_away], {k: len(v) for k, v in seen.items()})
+    finally:
+        set_law(s, "fov_on", False, check=False)
+        set_law(s, "fov_near_m", 3.0, check=False)
+        set_law(s, "fov_near_dark_m", 2.0, check=False)
+
+
 def doing(s):
     """What one character perceives another doing, for AI bodies (docs/PERCEPTION.md, "Activity
     derived from the body"): its activity's label, unchanged by the derivation from the body,
@@ -1625,7 +1768,7 @@ def laws(s):
     s.expect("an ordinary night outside costs no health", night["hp_rate"] >= 0, night)
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov}
 
 
 def goods(s):

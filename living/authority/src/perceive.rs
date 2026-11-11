@@ -77,8 +77,8 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
     let map = common::map(ctx);
     let r = crate::perception::widest_sight(ctx, &w, now);
     for (c, d) in minds_near(ctx, at, r, now, exclude) {
-        let Some(eye) = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)) else { continue };
-        if !crate::perception::in_sight(&map, eye, at, d, common::sight_to(ctx, common::sight_for(ctx, c.id, &w, now), subject, &w, now)) {
+        let Some((eye, heading)) = ctx.db.body().id().find(c.id).map(|b| (pos(&b, now), common::heading_at(&b, now))) else { continue };
+        if !crate::perception::in_sight(ctx, &map, c.id, eye, heading, subject, at, d, &w, now, false) {
             continue;
         }
         // How this onlooker refers to the two (each projected once; the template's first `{a}`
@@ -226,7 +226,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
         for (c, _) in minds_near(ctx, at, range, now, &[baby.id]) {
             let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
             let text = if c.kind == "person" {
-                let visible = ctx.db.body().id().find(c.id).is_some_and(|b| crate::perception::sees(ctx, c.id, pos(&b, now), at, &common::world(ctx), &common::map(ctx), now));
+                let visible = ctx.db.body().id().find(c.id).is_some_and(|b| crate::perception::sees(ctx, c.id, &b, at, &common::world(ctx), &common::map(ctx), now));
                 if visible { format!("{heard}, {dir}.") }
                 else { format!("You hear {} crying, {dir}.", baby.name) }
             } else { format!("You hear a baby crying, {dir}.") };
@@ -247,7 +247,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
         let pending = ctx.db.deliberation().actor().find(carer);
         let pending_cry = pending.as_ref().is_some_and(|d| pending_infant_cry(&d.reason, &baby.name));
         if cry_prompt_due(&cry, carer, now, pending_cry) {
-            let visible = ctx.db.body().id().find(carer).is_some_and(|b| crate::perception::sees(ctx, carer, pos(&b, now), at, &common::world(ctx), &common::map(ctx), now));
+            let visible = ctx.db.body().id().find(carer).is_some_and(|b| crate::perception::sees(ctx, carer, &b, at, &common::world(ctx), &common::map(ctx), now));
             let reason = if visible { heard.clone() } else { format!("You hear {} crying.", baby.name) };
             if pending.as_ref().is_some_and(|d| d.reason.contains(&reason)) { continue; }
             let urgent = state.cold || state.starving || state.wound != living_rules::script::Wound::None;
@@ -528,7 +528,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut creatures = Vec::new();
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
-    let in_sight = crate::perception::visible(ctx, id, at, r, now);
+    let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, r, now);
     for c in &in_sight {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };
         let seen = crate::perception::project(ctx, &me, &ch, now);
@@ -706,6 +706,26 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut scene = json!({"you": you, "time": time, "creatures": creatures, "resources": resources, "structures": structures, "terrain_near": terrain});
     if !smelled.is_empty() {
         scene[living_rules::species::SMELLED] = Value::Array(smelled);
+    }
+    // While sight has a field (the `fov_on` law): which way one faces, and what one hears but
+    // cannot see, in a person's words (what it sounds like, where from the way one faces and by
+    // the compass, how far), never who it is.
+    if common::senses_of(ctx, id, &w, now).field.is_some() {
+        let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::heading_at(&b, now));
+        scene["you"]["facing"] = json!(living_rules::sight::COMPASS8[living_rules::sight::compass8(at, (at.0 + heading.cos(), at.1 + heading.sin())) as usize]);
+        let laws = common::laws(ctx);
+        let heard: Vec<Value> = heard_now
+            .iter()
+            .take(8)
+            .map(|c| {
+                let band = living_rules::sight::heard_band(c.dist, laws.heard_near_m, laws.heard_close_m);
+                let (what, wh, far) = living_rules::sight::heard_words(&crate::perception::heard_kind(ctx, &c.kind), at, heading, c.pos, band);
+                json!({"what": what, "where": wh, "how far": far})
+            })
+            .collect();
+        if !heard.is_empty() {
+            scene[living_rules::sight::HEARD] = Value::Array(heard);
+        }
     }
     scene.to_string()
 }

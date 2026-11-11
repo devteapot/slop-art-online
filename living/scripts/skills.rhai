@@ -54,6 +54,19 @@ fn laws() {
         // youngest child's (the most nurturing sooner, down to a sixth of it), and only while
         // carrying at least `longing_food` food (0: whatever it carries).
         longing_after_min: 20.0, longing_food: 0.0,
+        // Sight that depends on facing (`senses(a).field`, docs/PERCEPTION.md). Off: one sees
+        // the same distance all round, as before. On: full sight within `fov_focal_deg` of
+        // where the body faces, `fov_side_share` of it out to `fov_side_deg`, and all round only
+        // within `fov_near_m` (`fov_near_dark_m` in the dark); someone already seen stays seen
+        // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
+        // field. Hearing stays all round.
+        fov_on: false,
+        fov_focal_deg: 70.0, fov_side_deg: 110.0, fov_side_share: 0.3333,
+        fov_near_m: 3.0, fov_near_dark_m: 2.0, fov_margin_deg: 10.0,
+        // What is heard but not seen (only while the field is on) is told by its distance:
+        // near within `heard_near_m`, close within `heard_close_m`, far out to hearing; it
+        // lingers `heard_linger_s` after it was last heard.
+        heard_near_m: 5.0, heard_close_m: 15.0, heard_linger_s: 2.0,
     }
 }
 
@@ -70,7 +83,31 @@ fn sight_in(light) { switch light { "day" => 11.0, "torch" => 9.0, _ => 6.0 } }
 fn hearing_of_people() { 9.0 }
 fn light_of(a) { if !a.night { "day" } else if inv(a, "torch") > 0 { "torch" } else { "night" } }
 
-fn senses(a) { #{ sight: sight_in(light_of(a)), hearing: hearing_of_people() } }
+fn senses(a) {
+    let s = #{ sight: sight_in(light_of(a)), hearing: hearing_of_people() };
+    if law("fov_on") { s.field = sight_field(a); }
+    s
+}
+
+// How the view narrows away from facing (the `fov_*` laws); all round within the near ring,
+// less of it in the dark.
+fn sight_field(a) {
+    #{
+        focal_deg: law("fov_focal_deg"), side_deg: law("fov_side_deg"), side_share: law("fov_side_share"),
+        near_m: if light_of(a) == "night" { law("fov_near_dark_m") } else { law("fov_near_m") },
+        margin_deg: law("fov_margin_deg"),
+    }
+}
+
+// What a creature heard but not seen sounds like (the kind told for it; "creature" where one
+// cannot tell).
+fn heard_as(kind) { if kind == "person" || kind == "deer" || kind == "wolf" { kind } else { "creature" } }
+
+// The field of view in words, when the world's law turns it on.
+fn field_about() {
+    if !law("fov_on") { return ""; }
+    ` One sees that far only within about ${short(law("fov_focal_deg"))} degrees either side of the way one faces, a third as far out to ${short(law("fov_side_deg"))} degrees, and behind only within ${short(law("fov_near_m"))} m (${short(law("fov_near_dark_m"))} m in the dark): one hears what is behind one, and turns to see it. A light on someone shows them only where one is looking.`
+}
 
 // A number for descriptions: at most two decimals, a whole number without its ".0".
 fn short(x) { let r = (x * 100.0).round() / 100.0; if r == r.floor() { `${r.to_int()}` } else { `${r}` } }
@@ -83,7 +120,7 @@ fn senses_law() {
         // The farthest anyone sees by day and by night, and hears: the engine gathers onlookers
         // within these before testing each one's own senses, and holds every answer to them.
         reach: #{ day: sight_in("day"), night: night_most, hearing: hearing_of_people() },
-        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; at night ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.`,
+        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; at night ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`,
     }
 }
 
@@ -2104,5 +2141,15 @@ fn laws_about(l) {
         cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
+        fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
+        fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
+        fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,
+        fov_side_share: `side vision reaches ${short(l.fov_side_share)} of one's sight`,
+        fov_near_m: `one sees all round within ${short(l.fov_near_m)} m`,
+        fov_near_dark_m: `and within ${short(l.fov_near_dark_m)} m in the dark`,
+        fov_margin_deg: `someone already seen stays seen ${short(l.fov_margin_deg)} degrees past the edge of the view`,
+        heard_near_m: `a sound within ${short(l.heard_near_m)} m is near`,
+        heard_close_m: `within ${short(l.heard_close_m)} m it is close, farther it is far`,
+        heard_linger_s: `a sound is kept in mind ${short(l.heard_linger_s)} s after it was last heard`,
     }
 }

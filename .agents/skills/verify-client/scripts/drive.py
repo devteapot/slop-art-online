@@ -3,6 +3,7 @@
 import argparse
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -71,14 +72,17 @@ PRIVATE = ['clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberat
            # Frames: what each player was last shown of others (docs/PERCEPTION.md, "Frames").
            'motion_seen', 'fighter_seen', 'doing_seen', 'line_seen',
            # Which character each person plays (perception.rs `current`); a player reads it through my_characters.
-           'player']
+           'player',
+           # Heard, not seen (fov-1): who each player hears, its secret salt, and every change of a
+           # world law on a running world (`set_world_law`).
+           'heard', 'hear_salt', 'law_change']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'heard_sounds']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
@@ -105,6 +109,8 @@ ADMIN = {
     'create_floor': ['{}'],
     # Stop a staged creation between steps, and carry it on (floor.rs, admin only).
     'stop_genesis': [], 'resume_genesis': [],
+    # Change a law on a running world (fov-1, admin only).
+    'set_world_law': ['fov_on', 'false'],
 }
 
 
@@ -455,7 +461,7 @@ class Run:
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
             row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
-            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest', 'rhythm', 'player']:
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest', 'rhythm', 'player', 'heard', 'law_change']:
                 as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
                 code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
                 okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200
@@ -600,6 +606,8 @@ class Run:
         spots = {}
         for y in range(2, h - 2):
             for x in range(2, w - 32):
+                if 'field' not in spots and all(walk(x + i, y + d) for i in range(6) for d in (-1, 0, 1)):
+                    spots['field'] = [(x + .5, y + .5), (x + 5.5, y + .5)]
                 if 'open' not in spots and all(walk(x + i, y) for i in range(4)):
                     far = next((x + d for d in range(20, 31) if walk(x + d, y)), None)
                     if far is not None:
@@ -615,7 +623,7 @@ class Run:
                                 break
                         if 'wall' in spots:
                             break
-                if 'open' in spots and 'wall' in spots:
+                if 'open' in spots and 'wall' in spots and 'field' in spots:
                     return spots
         raise RuntimeError(f'no sight-check geometry on this map: found {sorted(spots)}')
 
@@ -687,6 +695,59 @@ class Run:
         hidden = scene('behind-wall', *spots['wall'])
         self.check('behind a wall or rock: no body, character, fighter or doing row', gone(hidden, me, other) and gone(hidden, other, me), 'sight.json',
                    f"{abs(spots['wall'][1][0] - spots['wall'][0][0]) + abs(spots['wall'][1][1] - spots['wall'][0][1]):.0f} tiles apart across tiles {spots['wall_tiles']}")
+
+        self.field_of_view(spots, admin_token, (me, t1), (other, t2))
+
+    def field_of_view(self, spots, admin_token, mine, theirs):
+        """Sight that depends on facing (docs/PERCEPTION.md, "The field of view"), switched on by
+        the admin's `set_world_law`: two players 5 m apart on open ground. Facing away, the
+        other is not in my perceived set and comes as a `heard_sounds` row with no id; facing it,
+        it is seen; at the field's edge it is kept by the margin once seen, not taken afresh."""
+        (me, t1), (other, t2) = mine, theirs
+        a, b = spots['field']
+        steps = []
+
+        def face(token, at, deg):
+            """Turn so that the other (east of me) lies `deg` degrees off facing."""
+            h = math.radians(-deg)
+            self.call('player-face', token, 'human_act', [json.dumps({'do': 'face', 'target': {'at': [at[0] + 4 * math.cos(h), at[1] + 4 * math.sin(h)]}})])
+            time.sleep(1.6)
+
+        def look(step):
+            v = self.probe(f'field-{step}', ['SELECT * FROM ' + t for t in SEEN + ['heard_sounds']], t1, seconds=0)
+            got = v['final']['perception']
+            steps.append({'step': step, 'seen': got})
+            write(self.directory / 'field.json', {'spots': spots['field'], 'steps': steps, 'players': [me, other]})
+            return got
+
+        for who, at in [(me, a), (other, b)]:
+            self.call('admin-place', admin_token, 'place_at', [who, at[0], at[1]])
+        try:
+            switched = self.call('admin-law', admin_token, 'set_world_law', ['fov_on', 'true'])
+            face(t1, a, 180)
+            away = look('facing-away')
+            heard = [h for h in away['heard_sounds'] if h['bearing'] == 2]
+            self.check('field on, facing away: the other is not in my perceived set', switched and other not in away['seen_bodies'] and other not in away['seen_characters'],
+                       'field.json', f"5 m behind; seen {away['seen_bodies']}")
+            self.check('heard_sounds: the other as a sound to the east, near, with no id', len(heard) == 1 and heard[0]['kind'] == 'person' and heard[0]['band'] == 0
+                       and set(heard[0]) == {'key', 'kind', 'bearing', 'band'} and int(heard[0]['key']) not in (me, other), 'field.json', f'{away["heard_sounds"]}')
+            face(t1, a, 0)
+            ahead = look('facing')
+            self.check('field on, facing it: seen, and no longer heard', other in ahead['seen_bodies'] and other in ahead['seen_characters'] and not [h for h in ahead['heard_sounds'] if h['bearing'] == 2],
+                       'field.json', f"seen {ahead['seen_bodies']}; heard {ahead['heard_sounds']}")
+            face(t1, a, 45)
+            face(t1, a, 75)
+            kept = look('edge-kept')
+            face(t1, a, 100)
+            face(t1, a, 75)
+            fresh = look('edge-fresh')
+            self.check('the field\'s edge: kept at 75 degrees once seen (margin), not seen afresh there', other in kept['seen_bodies'] and other not in fresh['seen_bodies'],
+                       'field.json', f"kept {other in kept['seen_bodies']}, fresh {other in fresh['seen_bodies']}")
+        finally:
+            self.call('admin-law', admin_token, 'set_world_law', ['fov_on', 'false'])
+        time.sleep(2.5)  # heard rows linger `heard_linger_s` (2 s)
+        off = look('off-again')
+        self.check('field off again: seen all round, nothing heard', other in off['seen_bodies'] and not off['heard_sounds'], 'field.json', f"seen {off['seen_bodies']}")
 
     def sql_admin(self, q):
         code, body = V.http(f"/v1/database/{self.state['db']}/sql", q, V.admin_token(), raw=True)

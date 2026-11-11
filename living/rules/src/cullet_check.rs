@@ -187,6 +187,17 @@ mod tests {
     }
 
     #[test]
+    fn cullet_s_sight_takes_the_field_when_the_law_is_on() {
+        let c = SkillCtx { actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), ..Default::default() }, dark: 0.0, ..Default::default() };
+        assert_eq!(cullet().senses(&c).unwrap().field, None, "off as shipped");
+        let src = crate::script::with_world_laws(&crate::floors::compose(BASE, CULLET).unwrap(), &[("fov_on".into(), serde_json::json!(true))]);
+        let on = Scripts::with_day(&src, CULLET_DAY_MS).unwrap();
+        on.validate().unwrap();
+        let s = on.senses(&c).unwrap();
+        assert_eq!((s.sight, s.field.map(|f| (f.focal_deg, f.side_deg, f.near_m))), (48.0, Some((70.0, 110.0, 3.0))));
+    }
+
+    #[test]
     fn dusk_and_dawn_take_an_hour_and_night_is_where_it_was() {
         let s = cullet();
         let at = |h: f32| s.daylight(h);

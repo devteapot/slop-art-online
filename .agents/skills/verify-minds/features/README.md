@@ -9,6 +9,7 @@
 | Wait off stage and resume on stage | `lod` | [level-of-detail.md](level-of-detail.md) |
 | An offline player's character: takeover after `takeover_s`, thought for like any AI, handback (plan stops, graph held), a reply in flight refused | `takeover` | [takeover.md](takeover.md) |
 | A mind sees what its character sees: the scene the model is sent and the deaths it witnesses follow the sight line | `sight` | [sight.md](sight.md) |
+| Sight that depends on facing (the `fov_on` law): what a mind hears and does not see, in its scene and the prompt in a person's words with no id, its facing, the percept when a sound begins, the person instinct's "turn to a sound" habit turning the body | `fov` | [fov.md](fov.md) |
 | Cheaper animal minds: one call picks among built options (choose), the deer it sees reuse it (pack), nothing new answers by instinct (salient) | `animals` | [animals.md](animals.md) |
 | Reorganization at night, in the night's batch round | `night` (scheduling, no store); `verify-knowledge` sleep stage (the batch job) | [sleep.md](sleep.md) |
 | A cached Jev judgment drives the graph: asked in the background, cached by `mind_judged`, read by `judged` | `jev` | [judgments.md](judgments.md) |
