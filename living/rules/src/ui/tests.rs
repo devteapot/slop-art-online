@@ -1158,7 +1158,15 @@ fn a_floor_overlay_restyles_a_base_declaration() {
 #[test]
 fn seventy_declarations_cost_little_to_compile() {
     // Coverage 11: the shipped script against the same with a declaration for every one of its
-    // skills (best of a few compiles each; a debug build, so the bound is loose).
+    // skills, measured in deterministic units, not wall time: under a loaded machine two timings
+    // in a parallel suite say nothing (dev-box measured +173% at load 66 on 32 cores, +12–15%
+    // alone).
+    // - The compile itself is linear in the source (Rhai's parse, the field analysis): the
+    //   declarations' share of the source bounds what they add to it.
+    // - Reading them: one script call per declaration (and per missile, per `detail` item), and
+    //   one scan of the source per declaration. The +49% of the first build was a sort that
+    //   scanned the whole source on every comparison; this bound is what would catch it.
+    // - Each declaration's own Rhai operations, as the install counts them.
     let shipped = include_str!("../../../scripts/skills.rhai");
     let bare = without_ui(shipped);
     let s = Scripts::new(&bare).unwrap();
@@ -1167,10 +1175,25 @@ fn seventy_declarations_cost_little_to_compile() {
     let n = s.ui_specs().count();
     // Every skill the island has (62 on 2026-11-11), the design's "about 70".
     assert!(n >= 60, "{n} declarations");
-    let best = |src: &str| (0..3).map(|_| { let t = std::time::Instant::now(); Scripts::new(src).unwrap(); t.elapsed() }).min().unwrap();
-    let (a, b) = (best(&bare), best(&declared));
-    println!("compile: {n} declarations {b:?}, none {a:?} (+{:.0}%)", (b.as_secs_f64() / a.as_secs_f64() - 1.0) * 100.0);
-    assert!(b.as_secs_f64() < a.as_secs_f64() * 1.6 + 0.05, "{n} declarations: {b:?} against {a:?}");
+    let grown = decls.len() as f64 / bare.len() as f64;
+    assert!(grown < 0.15, "{n} declarations are {:.0}% of the source", grown * 100.0);
+    let d = Scripts::new(&declared).unwrap();
+    let (w0, w) = (s.ui_work(), d.ui_work());
+    let missiles = s.shapes().iter().filter(|(_, sh)| sh.missile).count();
+    assert_eq!(w0, crate::script::UiWork { calls: missiles, scans: 0 }, "with no declaration, reading costs only the missiles");
+    assert_eq!(w, crate::script::UiWork { calls: missiles + n, scans: n }, "one call and one source scan per declaration");
+    let report = d.validate().unwrap();
+    let ops: Vec<(&String, &u64)> = report.ops.iter().filter(|(f, _)| f.ends_with("_ui")).collect();
+    assert_eq!(ops.len(), n, "the install runs every declaration");
+    let (most, total) = (ops.iter().map(|(_, o)| **o).max().unwrap_or(0), ops.iter().map(|(_, o)| **o).sum::<u64>());
+    assert!(most <= 40, "a declaration is a map literal; the heaviest took {most} operations");
+    // Wall time, printed only.
+    let time = |src: &str| {
+        let t = std::time::Instant::now();
+        Scripts::new(src).unwrap();
+        t.elapsed()
+    };
+    println!("compile: {n} declarations, {:.1}% more source, {} calls and {} scans to read, {total} operations in all (most {most}); wall {:?} against {:?}", grown * 100.0, w.calls, w.scans, time(&declared), time(&bare));
 }
 
 #[test]
