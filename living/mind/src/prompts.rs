@@ -82,6 +82,11 @@ fn compiled() -> Option<Arc<living_rules::script::Scripts>> {
     })
 }
 
+/// The ways of speaking the world's rules have (`<way>_speech()`), in their order.
+pub fn ways() -> Vec<String> {
+    compiled().map(|s| s.ways().iter().map(|w| w.name.clone()).collect()).unwrap_or_else(|| vec!["say".into()])
+}
+
 /// How a party reads one of its records, in the world's rules' words (`{id:N}` still to be
 /// named as the reader knows N).
 pub fn record_text(r: &living_rules::records::RecordFacts) -> Option<String> {

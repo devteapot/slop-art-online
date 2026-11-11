@@ -87,6 +87,37 @@ fn senses_law() {
     }
 }
 
+// ---- ways of speaking (read once per script revision; the speech primitive applies them) ----
+// Each `<way>_speech()` is a way to say a line (docs/COMMUNICATION.md). Speech is not a skill: it
+// never interrupts what the body is doing. The engine reads these maps when the script compiles
+// and refuses a key it does not know, so a way cannot claim what the engine does not do.
+//   about        what the way is, for minds (the world text) and players (the talk box).
+//   label, order the word a client shows for it, and where it comes among the ways.
+//   to           "optional" (the room, or one person) or "required" (one person).
+//   words        who receives the words: `hearing` a share of each listener's own hearing,
+//                or `within_m` metres (and never beyond the listener's hearing); `only_to:
+//                true` gives them to the addressee alone.
+//   noticed      who learns only that it was said, between whom: within `within_m`, those who
+//                see the speaker (`seen`), as rows of `kind` reading `text` ({a} the speaker,
+//                {b} the addressee as each one knows them).
+//   said, said_to, heard, heard_to, heard_to_you   the words of the rows, before the line
+//                itself (`: "…"` follows): {a} the speaker, {b} the addressee.
+//   kind         the kind of the rows that carry the words ("speech").
+//   animals      what an animal in range hears ("" nothing).
+//   gap_s        seconds between two lines of this way (never under the 2 s speaking limit).
+//   max_chars    longer lines are cut short.
+//   needs        a technique of `know_how()` the speaker must know.
+//   reach        the addressee must be within this many metres.
+//   needs_sight  the addressee must be in sight.
+//   introduces   a line with the speaker's own name tells it to those who receive the words.
+//   salience     #{ addressed, overheard }.
+// An optional `<way>_check(a)` refuses a line in the world's words ("" accepts it); `a.target`
+// is the addressee and `a.text` the line.
+fn say_speech() {
+    #{ label: "Say", order: 0, about: "Speak aloud. Everyone within earshot hears you, also when you speak to one person.",
+       words: #{ hearing: 1.0 }, to: "optional", gap_s: 2.0, max_chars: 400 }
+}
+
 // ---- moving (a law per creature, on the hot path) -----------------------------------
 // How a creature moves besides its walking pace (`move_speed`): its run, its flight and the
 // pace it steps aside at, as shares of its walk; how fast it turns (radians a second) and how
@@ -1917,7 +1948,7 @@ fn rest_shows() { #{ look: "rest" } }
 // The sections of the minds' world text, in order: [topic, heading]. `seasons` and `life` are
 // the world's own (its calendar and its people's life table) and come from the seed.
 fn world_topics() {
-    [["time", ""], ["senses", "SENSES"], ["moving", "MOVING"], ["seasons", "SEASONS"], ["body", "BODY"], ["know_how", "KNOW-HOW"],
+    [["time", ""], ["senses", "SENSES"], ["speech", "SPEAKING"], ["moving", "MOVING"], ["seasons", "SEASONS"], ["body", "BODY"], ["know_how", "KNOW-HOW"],
      ["food", "FOOD"], ["making", "MAKING"], ["settlements", "SETTLEMENTS"], ["life", "LIFE"], ["combat", "COMBAT"], ["force", "FORCE"],
      ["communities", "COMMUNITIES"], ["purpose", "TIME"], ["others", "OTHERS"]]
 }

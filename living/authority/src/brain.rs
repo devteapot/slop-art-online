@@ -473,11 +473,12 @@ impl<'a> Ev<'a> {
                 };
                 // Within the speaking limit the line waits its turn (a second line right after
                 // the first, or a graph installed just after one spoke) instead of being lost.
-                if perceive::too_soon_to_speak(self.ctx, self.me.id, self.now) {
+                let way = s.way.as_deref().unwrap_or("say");
+                if crate::speech::too_soon_to_speak(self.ctx, self.me.id, way, self.now) {
                     self.status = format!("about to {}", graph::describe(n));
                     return St::Run;
                 }
-                match perceive::speak(self.ctx, self.me.id, &s.text, to, self.now) {
+                match crate::speech::speak(self.ctx, self.me.id, &s.text, to, way, self.now) {
                     Ok(()) => {
                         self.set_mark(id);
                         St::Ok

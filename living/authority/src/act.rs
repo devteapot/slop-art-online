@@ -321,6 +321,22 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
     f
 }
 
+/// The context of a way of speaking's `<way>_check(a)`: the speaker (the fields the check
+/// reads), the addressee as its target (0: none), and the line as `a.text`.
+pub fn way_ctx(ctx: &ReducerContext, id: u32, way: &str, to: u32, text: &str, now: u64) -> SkillCtx {
+    let w = common::world(ctx);
+    let plan = common::scripts(ctx).law_plan(&format!("{way}_check"));
+    let mut c = law_ctx(ctx, id, &w, now, &plan);
+    c.actor.id = id;
+    c.skill = way.into();
+    c.text = text.into();
+    if to != 0 {
+        let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+        c.target = target_facts(ctx, &TargetRef { class: 3, id: to as u64, x: 0.0, y: 0.0 }, from, now);
+    }
+    c
+}
+
 fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx {
     let w = common::world(ctx);
     let mut actor = facts(ctx, id, now);
@@ -1917,6 +1933,7 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
     ctx.db.experience().observer().delete(id);
+    ctx.db.heard().speaker().delete(id);
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
     ctx.db.judged().actor().delete(id);

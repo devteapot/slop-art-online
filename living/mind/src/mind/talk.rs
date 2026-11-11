@@ -587,6 +587,9 @@ impl Minds {
             _ => (String::new(), 0),
         };
         let say = if say.eq_ignore_ascii_case("null") || living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
+        // The way it is said (`"way": "whisper"`, or inside `say`); one the world does not have
+        // is said aloud.
+        let way = way_of(&v);
         let to = if to != 0 && to != me && self.conn.db.character().id().find(&to).map_or(false, |c| c.kind == "person") { to } else { other };
         // What the speaker says is now settled closes the exchange (their own judgment).
         let outcome = flat(if v["settled"].is_null() || v["settled"] == json!(false) { &v["outcome"] } else { &v["settled"] }).trim().to_string();
@@ -693,10 +696,10 @@ impl Minds {
                 }
             }
         }
-        let mut result = self.say(me, say.clone(), to, t.clone()).await;
+        let mut result = self.say(me, say.clone(), to, way.clone(), t.clone()).await;
         if matches!(&result, Err(e) if e.to_string().contains("too fast")) {
             tokio::time::sleep(Duration::from_millis(SPEECH_GAP_MS)).await;
-            result = self.say(me, say.clone(), to, t).await;
+            result = self.say(me, say.clone(), to, way.clone(), t).await;
         }
         if result.is_err() && !say.is_empty() {
             let mut tk = self.talk.lock().unwrap();
@@ -727,9 +730,9 @@ impl Minds {
         result
     }
 
-    async fn say(&self, actor: u32, say: String, to: u32, t: ThoughtIn) -> Result<()> {
+    async fn say(&self, actor: u32, say: String, to: u32, way: String, t: ThoughtIn) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_say_then(actor, say, to, 0, t, move |_, r| {
+        self.conn.reducers.mind_say_then(actor, say, to, way, 0, t, move |_, r| {
             let _ = tx.send(flatten(r));
         })?;
         rx.await?.map_err(|e| anyhow!("mind_say: {e}"))
@@ -942,5 +945,15 @@ mod tests {
         // An act they already talked over is not news.
         c.lines.push(Line { speaker: 2, to: 1, text: "Three berries for one wood, then.".into(), at_ms: 0, at: (0.0, 0.0), turn: true, exp: 0 });
         assert!(c.novelty_without("Iseisevik offers you 3 berries for 1 wood.", &["iseisevik".to_string()]) < NEW_MATTER);
+    }
+}
+
+/// The way of speaking a reply names (`"way"` beside or inside `say`), when the world's rules
+/// have it; otherwise `say`.
+fn way_of(v: &Value) -> String {
+    let named = v["way"].as_str().or_else(|| v["say"]["way"].as_str()).unwrap_or("say").trim().to_lowercase().replace([' ', '-'], "_");
+    match crate::prompts::ways() {
+        ways if ways.iter().any(|w| *w == named) => named,
+        _ => "say".into(),
     }
 }

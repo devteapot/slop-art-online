@@ -799,7 +799,7 @@ class Instance:
                     self.call("grant_know_how", actor, t)
             elif kind == "say":
                 to = self.ids(s.get("to"))[0] if s.get("to") else 0
-                self.call("mind_say", actor, s["text"], to, 0, {"kind": "trial", "summary": f"scripted line (trial fixture): {s['text'][:200]}",
+                self.call("mind_say", actor, s["text"], to, s.get("way", ""), 0, {"kind": "trial", "summary": f"scripted line (trial fixture): {s['text'][:200]}",
                           "detail": "", "latency_ms": 0, "tokens": 0, "model": "", "reference": f"trial:{self.trial['name']}"})
             elif kind == "act":
                 acts = s["acts"] if "acts" in s else [s["act"]]
