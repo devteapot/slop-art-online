@@ -10,6 +10,15 @@
 #   woman, elder_man, elder_woman, boy, girl), a seed alone, or a parameter file (*.json). NAME
 #   defaults to the spec (a file's own name).
 #   PERSON_ARGS=<args>  more arguments for person.py (e.g. "--set age=70 --set beard.style=full")
+#   LOD=<list>          which models to make, comma-separated (default near): `near` the full model;
+#                       `far` the far model (about 6,000 triangles, for beyond 10 m) as a character
+#                       file of its own, lookdev/far/own-<name>.glb and lookdev/far/anim/…, with the
+#                       same clips; `both` one file with the two on one skeleton, the far model's
+#                       meshes named Far* (for a client that switches them by distance; today's
+#                       client would draw both), as lookdev/lod/own-<name>.glb and lookdev/lod/anim/…
+#   ANIMATE=<file>      the animate.py that bakes the clips (default: this folder's). Until the
+#                       third floor guard is on main, generated people are baked with a copy from
+#                       before the second (docs/CHARACTERS.md, "Motions on generated people")
 #   KIMODO_DIR=<dir>    the library's generated NPZs (default .local/kimodo/outputs/library)
 #   ONLY=<clips>        comma-separated library entries (default: the whole library, clips.json);
 #                       `present` takes every entry whose takes are all in KIMODO_DIR, for a
@@ -18,6 +27,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 src=living/game/assets/lookdev
 blender=${BLENDER:-blender}
+animate=${ANIMATE:-living/tools/blender/animate.py}
 kimodo=${KIMODO_DIR:-.local/kimodo/outputs/library}
 only=${ONLY:-}
 if [ "$only" = present ]; then
@@ -33,6 +43,7 @@ fi
 people=("$@")
 [ ${#people[@]} -gt 0 ] || people=(man woman elder youth boy girl heavy)
 mkdir -p "$src/anim"
+IFS=, read -r -a lods <<< "${LOD:-near}"
 for p in "${people[@]}"; do
   spec=${p#*=}
   case "$spec" in
@@ -43,17 +54,24 @@ for p in "${people[@]}"; do
   [ "$p" = "$spec" ] || name=${p%%=*}
   name=own-$name
   log=$(mktemp)
-  # shellcheck disable=SC2086
-  if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} --out "$src/$name.glb" > "$log" 2>&1; then
-    grep -v OpenColorIO "$log" | tail -30; rm -f "$log"; exit 1
-  fi
-  grep -E '^PERSON' "$log" || true
-  if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/animate.py -- --in "$src/$name.glb" --out "$src/anim/$name.glb" \
-    --library living/tools/blender/clips.json --summary "$src/anim/$name.clips.json" --kimodo-dir "$kimodo" ${only:+--only "$only"} > "$log" 2>&1; then
-    grep -v "OpenColorIO\|^ANIM" "$log" | tail -30; rm -f "$log"; exit 1
-  fi
-  grep -E '^(SKELETON|GRAFT|SUMMARY)' "$log" | cut -c1-220 || true
+  for lod in "${lods[@]}"; do
+    case "$lod" in near) dir=$src ;; far) dir=$src/far ;; both) dir=$src/lod ;; *) echo "gen_person: LOD: $lod is not near, far or both" >&2; exit 1 ;; esac
+    mkdir -p "$dir/anim"
+    # shellcheck disable=SC2086
+    if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} --lod "$lod" --out "$dir/$name.glb" > "$log" 2>&1; then
+      grep -v OpenColorIO "$log" | tail -30; rm -f "$log"; exit 1
+    fi
+    grep -E '^PERSON' "$log" || true
+    if ! "$blender" -b --python-exit-code 1 -P "$animate" -- --in "$dir/$name.glb" --out "$dir/anim/$name.glb" \
+      --library living/tools/blender/clips.json --summary "$dir/anim/$name.clips.json" --kimodo-dir "$kimodo" ${only:+--only "$only"} > "$log" 2>&1; then
+      grep -v "OpenColorIO\|^ANIM" "$log" | tail -30; rm -f "$log"; exit 1
+    fi
+    grep -E '^(SKELETON|GRAFT|SUMMARY)' "$log" | cut -c1-220 || true
+    python3 living/tools/merge_primitives.py "$dir/anim/$name.glb" "$dir/anim/$name.glb.tmp" && mv "$dir/anim/$name.glb.tmp" "$dir/anim/$name.glb"
+    python3 living/tools/face_normals.py "$dir/anim/$name.glb" "$dir/anim/$name.glb.tmp" --png "$dir/anim/$name.face.png" && mv "$dir/anim/$name.glb.tmp" "$dir/anim/$name.glb"
+    # The strand texture is the same for everyone: every file names the one copy (share.py).
+    [ -f "$src/strands.png" ] || cp "$dir/strands.png" "$src/strands.png"
+    python3 living/tools/characters/share.py strands --shared "$src/strands.png" "$dir/anim/$name.glb" > /dev/null
+  done
   rm -f "$log"
-  python3 living/tools/merge_primitives.py "$src/anim/$name.glb" "$src/anim/$name.glb.tmp" && mv "$src/anim/$name.glb.tmp" "$src/anim/$name.glb"
-  python3 living/tools/face_normals.py "$src/anim/$name.glb" "$src/anim/$name.glb.tmp" --png "$src/anim/$name.face.png" && mv "$src/anim/$name.glb.tmp" "$src/anim/$name.glb"
 done
