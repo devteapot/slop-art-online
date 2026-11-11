@@ -771,10 +771,12 @@ impl<'a> Ev<'a> {
             living_rules::catalog::KindClass::Structure => {
                 let (me, ctx) = (self.me.id, self.ctx);
                 let holds = |id: u64| f.holds.as_deref().map_or(true, |item| common::inv_count(ctx, STRUCTURE_BIT | id, item) >= 1);
+                // A kind `like` the one asked for counts as it (a world's `store` is a storage).
+                let sc = common::scripts(ctx);
                 self.scene()
                     .structures
                     .iter()
-                    .find(|(s, _)| s.kind == f.kind && (!f.mine || s.owner == me) && holds(s.id))
+                    .find(|(s, _)| sc.is_kind(&s.kind, &f.kind) && (!f.mine || s.owner == me) && holds(s.id))
                     .map(|(s, _)| Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() })
             }
         }

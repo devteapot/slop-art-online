@@ -608,7 +608,9 @@ SQUARE = {"level": "strand", "area": rect(15.5, 10.3, 45.5, 24.3), "paved": True
 # - the island yields 1.3 times that: fish 55%, roots 30%, greens 15%;
 # - fish are counted as eaten smoked (24 points; fresh and cooked gives 34, raw 16), roots baked
 #   at the Batch (30; raw 14), greens raw (10).
-# A node regrows only in growing time (not in winter, for every kind; `living_rules::growing_ms`).
+# A node regrows at its kind's share of the rate in each season (`regrow_by_season`; Cullet's
+# laws keep fish at 0.75 in winter, rest the root plots, ...): the winter is worked through in
+# living/tools/cullet_winter.py and docs/CULLET_RULES.md, "Winter".
 
 EATERS = 64 + 10
 EATEN_A_DAY = 48.0
@@ -708,7 +710,7 @@ HOLDS = {"furnace": 40.0, "oven": 8.0, "hearth": 12.0, "smokehouse": 8.0, "lamp"
 CONE_STOCK = 12 * CONE_DAY
 structures = [
     {"kind": "furnace", "lot": "cone", "spot": "the front mouth", "fuel": HOLDS["furnace"], "note": "the Cone's furnace, full (13 game hours at full firing)"},
-    {"kind": "storage", "lot": "cone_yard", "contents": {"peat": int(CONE_STOCK - HOLDS["furnace"])},
+    {"kind": "yard_store", "lot": "cone_yard", "contents": {"peat": int(CONE_STOCK - HOLDS["furnace"])},
      "note": f"the Cone's peat: with the furnace's, {CONE_STOCK:.0f} units, 12 days of full firing at {CONE_PEAT_H:g} a game hour"},
     {"kind": "oven", "lot": "batch", "spot": "the oven mouth", "fuel": HOLDS["oven"], "note": "the Batch's oven, full (8 game hours)"},
     {"kind": "hearth", "lot": "marver", "spot": "the hearth bench", "fuel": HOLDS["hearth"], "note": "the Marver's public hearth, full (a game day)"},
@@ -735,8 +737,11 @@ for where, note in LAMPS:
 assert len([s_ for s_ in structures if s_["kind"] == "lamp"]) == 7
 
 # Stores: six days of food for 64 residents at the start (§2), half in the Store (the common
-# store) and half in the households (once a plan's structure can belong to a household). Kept food: smoked fish for the
-# fish share and roots for the roots' and the greens' (greens do not keep), counted raw (14).
+# store) and half in the households' own stores. Kept food: smoked fish for the fish share and
+# roots for the roots' and the greens' (greens do not keep), counted raw (14). Each store is a
+# kind of Cullet's laws with its own size (`store_kinds()`: the Store 1,200, the peat barn 1,000,
+# the Cone yard's 900, a house's 150); the Store's and the peat barn's stand at their doors
+# (`lots[].structure`).
 RESIDENTS = 64
 STORE_DAYS = 6
 KEPT_AS = {"smoked_fish": (24.0, SHARE["fish"]), "roots": (14.0, SHARE["roots"] + SHARE["greens"])}
@@ -747,15 +752,28 @@ def food_for(people, days):
 
 
 COMMON_STORE = food_for(RESIDENTS, STORE_DAYS / 2)
+STORE_KIND = {"store": "store", "peat_barn": "peat_barn"}  # lot id -> the store kind at its door
 for l in lots:
     if l["id"] == "store":
         l["contents"] = COMMON_STORE
+    if l["id"] in STORE_KIND:
+        l["structure"] = STORE_KIND[l["id"]]
+# A household's hearth peat for the same days beyond its first fill (a hearth burns 0.5 a game
+# hour, 12 a day; Cullet's laws).
+HEARTH_DAY = 0.5 * 24
+HOUSE_PEAT = int(STORE_DAYS / 2 * HEARTH_DAY - HOLDS["hearth"])
 HOUSEHOLD_STORES = {
-    "note": f"Not placed yet. Each household's home holds the other {STORE_DAYS / 2:g} days of food for its people, and peat for its hearth beyond the hearth's first fill; with the Store's {STORE_DAYS / 2:g} days that is the {STORE_DAYS} days of §2. The cast exists (towns[].residents, homes), but a household's store must be its own (the theft law reads a store's owner), and a plan's structures have no owner yet: a general `owner` (a household key) on `structures[]` would place these.",
+    "note": f"Placed (structures[], kind house_store, owner household:<key>): each household's store in its home holds the other {STORE_DAYS / 2:g} days of food for its people and {HOUSE_PEAT} peat, its hearth's {STORE_DAYS / 2:g} days beyond the first fill; with the Store's {STORE_DAYS / 2:g} days that is the {STORE_DAYS} days of §2. It is the household's own: the world gives it to the owner of the household's house when it is created (the theft law reads a store's owner).",
     "per_person": food_for(1, STORE_DAYS / 2),
-    "by_household": {l["household"]: {"lot": l["id"], "people": l["people"], **food_for(l["people"], STORE_DAYS / 2)} for l in lots if l.get("household")},
+    "by_household": {l["household"]: {"lot": l["id"], "people": l["people"], **food_for(l["people"], STORE_DAYS / 2), "peat": HOUSE_PEAT} for l in lots if l.get("household")},
 }
 assert sum(h["people"] for h in HOUSEHOLD_STORES["by_household"].values()) == RESIDENTS
+for hh, h in HOUSEHOLD_STORES["by_household"].items():
+    structures.append({"kind": "house_store", "lot": h["lot"], "owner": f"household:{hh}", "contents": {k: h[k] for k in ("smoked_fish", "roots", "peat")},
+                       "note": f"the {hh} household's own store: {STORE_DAYS / 2:g} days of food for {h['people']} and {HOUSE_PEAT} hearth peat"})
+# Six days of food for the 64 between the Store and the households (§2), each store within its size.
+assert all(sum(h[k] for h in HOUSEHOLD_STORES["by_household"].values()) >= COMMON_STORE[k] - len(HOUSEHOLD_STORES["by_household"]) for k in COMMON_STORE)
+assert sum(COMMON_STORE.values()) <= 1200 and max(sum(st["contents"].values()) for st in structures if st["kind"] == "house_store") <= 150
 
 FEATURES = {
     "kelp_kilns": {"note": "four round stone pits on the Wrack Strand, upwind (south-west) of Low Row; P2 props", "at": [[-150, 12], [-170, 15], [-190, 18], [-210, 22]]},

@@ -2232,7 +2232,8 @@ def decay(s):
                 pass
             time.sleep(2)
             got += sum(s.inventory(actor).values()) - before
-            if heard(actor, "depleted", t0):
+            # A spent node is not `nearest` any more: "no nearest ... in sight", not "depleted".
+            if heard(actor, "depleted", t0) or heard(actor, f"no nearest {kind}", t0):
                 return got
         return got
 
@@ -2240,7 +2241,7 @@ def decay(s):
     for p in (a, b):
         s.graph(p, {"wait": 3600})
     s.call("place_near", b, a)
-    # Raw fish: 1,000 in a pack, 100 put in a storage beside it (a storage holds `storage_holds`;
+    # Raw fish: 1,000 in a pack, 100 put in a storage beside it (a storage holds its kind's `holds`, 120;
     # a `{"id": n}` target names a creature, so the storage is aimed at as the nearest).
     s.call("place_structure", b, "storage")
     store = max((r for r in s.rows(f"SELECT * FROM structure WHERE owner = {b}") if r["kind"] == "storage"), key=lambda r: r["id"])
@@ -2264,7 +2265,8 @@ def decay(s):
     took = empty(b, "greens_bed")
     t_empty = now()
     left = s.rows(f"SELECT * FROM resource_node WHERE id = {bed['id']}", "bed-emptied")[0]
-    s.expect("the bed is emptied by gathering", took >= int(bed["max"]) and left["amount"] < 1.0, {"took": took, "row": left})
+    # The bed's own row says it is spent; the pack is no count (spoiling and eating shrink it).
+    s.expect("the bed is emptied by gathering", left["amount"] < 1.0 and left["at_ms"] > bed["at_ms"], {"took_into_pack": took, "row": left})
 
     # Watch, sampling the stacks every few real minutes.
     watch_ms = DECAY_HOURS * hour_ms
@@ -2305,9 +2307,97 @@ def decay(s):
              {"had": round(had, 4), "expected": round(grown, 4), "game_hours": round((row["at_ms"] - left["at_ms"]) / hour_ms, 3), "row": row})
 
 
+def winter(s):
+    """Regrowth by season is a value on each resource kind (docs/CULLET_RULES.md, "Winter";
+    rules-3), on the winter fixture (winter.json: Cullet's laws on a 4-minute day and a 4-day
+    year, no wild nodes): in a Cullet winter a fishing spot keeps regrowing at its kind's winter
+    share (0.75 of `regrow_per_h`), and a root plot, which rests, regrows nothing. Waits for the
+    world's own winter (about 11 real minutes after creation); no clock is changed."""
+    w = s.rows("SELECT * FROM world", "world")[0]
+    day, epoch, year = w["day_ms"], w["epoch_ms"], max(4, w["year_days"])
+    src = (ROOT / "living/seeds/worlds/cullet/laws.rhai").read_text()
+    shares = {k: float(v) for k, v in re.findall(r"(\w+): ([\d.]+)", re.search(r"fn winter_regrowth\(\)\s*\{([^}]*)\}", src).group(1))}
+    s.expect("the world has Cullet's laws on a short day and year", "fn winter_regrowth()" in s.rows("SELECT source FROM script")[0]["source"] and day == 4 * 60000 and year == 4, w)
+    # The seasons are quarters of the year from day 1's midnight (the world starts at 07:00).
+    origin = epoch - day * 7 // 24
+    winter0, winter1 = origin + day * year * 3 // 4, origin + day * year
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def heard(actor, words, since):
+        return [r["text"] for r in s.rows(f"SELECT text, at_ms FROM experience WHERE observer = {actor}") if r["at_ms"] >= since and words in r["text"]]
+
+    def acts(actor, *nodes):
+        s.call("mind_act", actor, [json.dumps(n) for n in nodes], "verify-core")
+
+    def node(kind):
+        return max((r for r in s.rows("SELECT * FROM resource_node") if r["kind"] == kind), key=lambda r: r["id"])
+
+    def empty(actor, n):
+        """Gather at node `n` one at a time until its own row holds less than one. Read the row:
+        a node under one unit is not `nearest` any more ("no nearest ... in sight", not
+        "depleted"), and spoiling shrinks the pack, so neither words nor the pack can tell."""
+        row = lambda: s.rows(f"SELECT * FROM resource_node WHERE id = {n['id']}")[0]
+        for _ in range(20):
+            before, t0 = row(), now()
+            if before["amount"] < 1.0 and before["at_ms"] >= winter0:
+                return
+            acts(actor, {"do": "gather", "target": {"nearest": n["kind"]}})
+            try:
+                s.wait(lambda: row()["at_ms"] > before["at_ms"] or heard(actor, "did not work out", t0), seconds=30, every=0.5)
+            except TimeoutError:
+                pass
+        raise AssertionError(f"the {n['kind']} was not emptied")
+
+    a, = s.people(1)
+    # Everyone waits: the fixture's band would forage from the placed nodes, hungry on a 4-minute day.
+    for p in [c["id"] for c in s.rows("SELECT id, kind FROM character") if c["kind"] == "person"]:
+        s.graph(p, {"wait": 3600})
+    s.call("place_resource", a, "fishing_spot", 1.0, 0.0, 0.0, 0)
+    s.call("place_resource", a, "root_plot", 0.0, 1.5, 0.0, 0)
+    fish, roots = node("fishing_spot"), node("root_plot")
+    s.expect("a placed fishing spot and root plot, with their kinds' regen", fish["regen"] > 0 and roots["regen"] > 0, [fish, roots])
+    print(f"waiting {max(0, winter0 - now()) / 1000:.0f} s for winter", flush=True)
+    s.wait(lambda: now() >= winter0 + 2000, seconds=max(60, (winter0 - now()) / 1000 + 120), every=5)
+    s.expect("it is winter in the world (the calendar's last quarter)", winter0 <= now() < winter1, {"now": now(), "winter": [winter0, winter1]})
+    # Empty both in winter, the root plot first: it is checked last, once its full rate would
+    # have grown more than a unit (so a refusal means it rested), the fishing spot 45 s after it.
+    empty(a, roots)
+    empty(a, fish)
+    left = {k: s.rows(f"SELECT * FROM resource_node WHERE id = {n['id']}", f"{k}-emptied")[0] for k, n in (("fishing_spot", fish), ("root_plot", roots))}
+    s.expect("both nodes are emptied in winter", all(r["amount"] < 1.0 for r in left.values()) and all(r["at_ms"] >= winter0 for r in left.values()), left)
+    s.wait(lambda: now() >= left["fishing_spot"]["at_ms"] + 45_000, seconds=90, every=2)
+    s.expect("still winter", now() < winter1 - 15_000, {"now": now(), "winter_ends": winter1})
+    # One gathering at each: the fishing spot gives what it regrew at its winter share (the row
+    # holds what it had less one), the root plot refuses, depleted, its row unchanged.
+    t0 = now()
+    acts(a, {"do": "gather", "target": {"nearest": "fishing_spot"}})
+    s.wait(lambda: s.rows(f"SELECT at_ms FROM resource_node WHERE id = {fish['id']}")[0]["at_ms"] > left["fishing_spot"]["at_ms"] or heard(a, "did not work out", t0), seconds=60, every=1)
+    row = s.rows(f"SELECT * FROM resource_node WHERE id = {fish['id']}", "fishing_spot-regrown")[0]
+    lf = left["fishing_spot"]
+    had = row["amount"] + 1.0
+    share = shares["fishing_spot"]
+    grown = lf["amount"] + lf["regen"] * share * (row["at_ms"] - lf["at_ms"]) / 60000
+    s.expect(f"a fishing spot regrows in a Cullet winter, at {share:g} of its rate", row["at_ms"] > lf["at_ms"] and abs(had - min(grown, lf["max"])) < 0.01,
+             {"had": round(had, 4), "expected": round(grown, 4), "at_full_rate": round(lf["amount"] + lf["regen"] * (row["at_ms"] - lf["at_ms"]) / 60000, 4), "game_hours": round((row["at_ms"] - lf["at_ms"]) / (day / 24), 3), "row": row})
+    lr = left["root_plot"]
+    full = lambda: lr["regen"] * (now() - lr["at_ms"]) / 60000
+    s.wait(lambda: full() >= 1.5 or now() >= winter1 - 12_000, seconds=240, every=1)
+    t0 = now()
+    acts(a, {"do": "gather", "target": {"nearest": "root_plot"}})
+    # A node under one unit is not `nearest`: the gathering is refused ("no nearest root_plot").
+    s.wait(lambda: heard(a, "did not work out", t0) or s.rows(f"SELECT at_ms FROM resource_node WHERE id = {roots['id']}")[0]["at_ms"] > lr["at_ms"], seconds=60, every=1)
+    rrow = s.rows(f"SELECT * FROM resource_node WHERE id = {roots['id']}", "root_plot-after")[0]
+    grown_full = round(full(), 3)
+    s.expect(f"a root plot regrows nothing in a Cullet winter (share {shares['root_plot']:g}), where its full rate would have grown a unit", now() < winter1 and grown_full >= 1.0 and heard(a, "did not work out", t0) and rrow["at_ms"] == lr["at_ms"] and rrow["amount"] < 1.0,
+             {"heard": heard(a, "", t0), "row": rrow, "would_have_grown_at_full_rate": grown_full, "winter_left_ms": winter1 - now()})
+
+
 SCENES["goods"] = goods
 SCENES["stock"] = stock
 SCENES["decay"] = decay
+SCENES["winter"] = winter
 
 
 def main():
