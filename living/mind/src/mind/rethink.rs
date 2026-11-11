@@ -470,7 +470,7 @@ pub fn state(i: &Inputs, lim: &Limits) -> Value {
     }
     let unanswered: Vec<String> = asks
         .iter()
-        .filter(|(to, (_, first, _, _))| !window.iter().any(|e| e.subject == **to && e.at_ms >= *first && matches!(e.kind.as_str(), "speech" | "gesture" | "heard")))
+        .filter(|(to, (_, first, _, _))| !window.iter().any(|e| e.subject == **to && e.at_ms >= *first && matches!(e.kind.as_str(), "speech" | "whisper" | "gesture" | "heard")))
         .filter(|(_, (lines, _, _, _))| *lines > 0)
         .map(|(_, (lines, first, last, silences))| {
             let mut s = format!("{last} — {lines} line{} to them since {}, no answer", if *lines == 1 { "" } else { "s" }, ago(i.now_ms.saturating_sub(*first)));

@@ -12,6 +12,7 @@ pub(super) struct MindSayArgs {
     pub actor: u32,
     pub say: String,
     pub say_to: u32,
+    pub way: String,
     pub seen_ms: u64,
     pub thought: ThoughtIn,
 }
@@ -22,6 +23,7 @@ impl From<MindSayArgs> for super::Reducer {
             actor: args.actor,
             say: args.say,
             say_to: args.say_to,
+            way: args.way,
             seen_ms: args.seen_ms,
             thought: args.thought,
         }
@@ -48,10 +50,11 @@ pub trait mind_say {
         actor: u32,
         say: String,
         say_to: u32,
+        way: String,
         seen_ms: u64,
         thought: ThoughtIn,
     ) -> __sdk::Result<()> {
-        self.mind_say_then(actor, say, say_to, seen_ms, thought, |_, _| {})
+        self.mind_say_then(actor, say, say_to, way, seen_ms, thought, |_, _| {})
     }
 
     /// Request that the remote module invoke the reducer `mind_say` to run as soon as possible,
@@ -65,6 +68,7 @@ pub trait mind_say {
         actor: u32,
         say: String,
         say_to: u32,
+        way: String,
         seen_ms: u64,
         thought: ThoughtIn,
 
@@ -80,6 +84,7 @@ impl mind_say for super::RemoteReducers {
         actor: u32,
         say: String,
         say_to: u32,
+        way: String,
         seen_ms: u64,
         thought: ThoughtIn,
 
@@ -92,6 +97,7 @@ impl mind_say for super::RemoteReducers {
                 actor,
                 say,
                 say_to,
+                way,
                 seen_ms,
                 thought,
             },

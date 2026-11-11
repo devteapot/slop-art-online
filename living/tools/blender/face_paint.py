@@ -22,7 +22,7 @@ import zlib
 import numpy as np
 
 from head_form import ORIGIN, lerp, smooth
-from head_mesh import ATLAS, EYE_COLS, EYE_ROWS, IRIS_COL0, IRIS_FILL, IRIS_PX, IRIS_WIDE, eye_frame, skin_dirs
+from head_mesh import ATLAS, EYE_COLS, EYE_ROWS, IRIS_COL0, IRIS_FILL, IRIS_PX, IRIS_WIDE, brow_shape, eye_frame, iris_centre, skin_dirs
 
 
 def write_png(path, a):
@@ -324,3 +324,46 @@ def paint(hf, look):
         out[:EYE_ROWS, c0 : c0 + EYE_COLS] = paint_white(hf, look, side)
     out[:EYE_ROWS, IRIS_COL0 : IRIS_COL0 + IRIS_PX] = paint_iris(hf, look, rng)
     return (np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8)
+
+
+FAR = 256  # the far model's picture
+
+
+def paint_far(hf, look, size=FAR):
+    """The far model's picture (person.py --lod far): the atlas's layout at a quarter of its
+    size, with the eyes, the lash lines and the brows painted onto the skin, since the far head
+    has no openings and no parts standing off it. Same seed, same face as `paint`."""
+    rng = np.random.default_rng(int(look.get("seed", 0)) + 77)
+    out = np.empty((ATLAS, ATLAS, 3))
+    out[:] = look["skin"]
+    skin, where = paint_skin(hf, look, rng)
+    x, y, z = where["x"], where["y"], where["z"]
+    iris = paint_iris(hf, look, rng)
+    mid, scale = eye_frame(hf)
+    half = IRIS_PX * IRIS_FILL
+    c = Canvas(x, z, (y > 0.01).astype(float), look["skin"])
+    c.img = skin
+    for side in (-1, 1):
+        inside, _, _, _ = hf.eye_inside(x, z)
+        sel = inside & (y > 0) & (x * side > 0)
+        white = paint_white(hf, look, side)
+        col = np.clip((EYE_COLS / 2 + (x - side * hf.eye_x) * scale).astype(int), 0, EYE_COLS - 1)
+        row = np.clip((EYE_ROWS / 2 - (z - hf.eye_z - mid) * scale).astype(int), 0, EYE_ROWS - 1)
+        skin[sel] = white[row[sel], col[sel]]
+        cx, cz = iris_centre(hf, side)
+        a, b = (x - cx) / (hf.iris_r * IRIS_WIDE), (z - cz) / hf.iris_r
+        on = sel & (a * a + b * b < 1)
+        px = np.clip((IRIS_PX / 2 + a * half * IRIS_WIDE).astype(int), 0, IRIS_PX - 1)
+        py = np.clip((IRIS_PX / 2 - b * half).astype(int), 0, IRIS_PX - 1)
+        skin[on] = iris[py[on], px[on]]
+    # The lash line, heavier toward the outer corner, and the brows as one stroke each. From
+    # far off they are a texel or two wide, so they are drawn a little heavier than life.
+    ss = np.linspace(-1.0, 1.0 + look["lash_wing"], 16)
+    up = hf.lid(np.clip(ss, -1, 1))[0]
+    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0006 + 0.0013 * look["lash_k"] * smooth(t / 0.7), look["lash"], 1.0, taper=(0.0, 0.2))
+    top, bot = brow_shape(hf, 1)
+    c.stroke([(xt, (zt + zb) / 2) for (xt, zt), (_, zb) in zip(top, bot)], lambda t: np.maximum(0.62 * hf.brow_w * (1 - 0.6 * smooth((t - 0.5) / 0.5)), 0.0011), look["brow"], 0.92, taper=(0.1, 0.25))
+    out[EYE_ROWS:] = c.img
+    k = ATLAS // size
+    small = np.clip(out, 0, 1).reshape(size, k, size, k, 3).mean(axis=(1, 3))
+    return (small * 255 + 0.5).astype(np.uint8)

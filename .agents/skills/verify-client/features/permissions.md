@@ -33,7 +33,8 @@ A client invokes reducers with its own identity. `require_admin` (`living/author
 | Duplicate `join` while that character lives (or while the person has a `presence` row) | HTTP 530, `you already have a living character` |
 | `use_skill` / `release_skill` as a joined player | HTTP 200 (a refusal is told through `my_combat`) |
 | `use_skill` / `release_skill` without a living character | HTTP 530, `you have no living character` |
-| Joined identity's `human_move`, `human_act`, `human_say` | HTTP 200 |
+| Joined identity's `human_move`, `human_act`, `human_say`, `human_speak(text, 0, "say")` | HTTP 200 |
+| Joined identity's `human_speak` in a way the rules do not have | refused: "no way of speaking called `no_such_way`" |
 | Tokenless HTTP `human_*` without a character | HTTP 530, `you have no living character` |
 | Tokenless HTTP `join` | HTTP 200 for that request's new identity |
 

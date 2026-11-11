@@ -382,6 +382,108 @@ All of this is in `skills.rhai`. It is the same for players, minds and graphs: t
 - A skill whose spec reads `want` offers one choice per thing to ask for, from what the player carries and the skill's `items`: `offer`, and now `offer_terms`.
 - What the rules tell the player (experiences of kind `record`) shows as a toast.
 
+### Answering: accept and decline by id
+
+**Status:** built on branch `rules-offers-2`, 2026-11-11. Before it, `accept` toward a person took their oldest standing terms first and only then their trade offer, so a player who pressed accept on the trade the window showed could agree to different terms instead. It also had no way to say no.
+
+**The acts** are the same for both controllers: `human_act`, `mind_act` and graph leaves. They are parsed by the shared grammar (`graph::Action` `offer`/`record`, `normalize.rs`):
+
+```json
+{"do": "accept",  "target": {"id": 4}, "offer": 17}
+{"do": "accept",  "target": {"id": 4}, "record": 12}
+{"do": "decline", "target": {"id": 4}, "offer": 17}
+{"do": "decline", "target": {"id": 4}, "record": 12}
+{"do": "accept",  "target": {"id": 4}}
+{"do": "decline", "target": {"id": 4}}
+```
+
+- `offer` is a `trade_offer` id, as a player reads it in `my_offers` and a mind in its scene. `record` is a record id, as in `my_records` and a mind's dealings.
+- Without either, `accept` is what it always was: the person's oldest standing terms, then their trade. `decline` takes the one `accept` would take. A mind's existing acts parse and behave as before, and the stored act is byte-identical (test `answers_carry_what_they_name`).
+- `offer_id` and `record_id` are accepted as aliases, and so is a number written as text. 0 or null means none. Anything else is refused: "the id of the trade offer you answer". A skill whose spec does not list the argument ignores the word, as before.
+- The client's `ui::act_node` sends `"offer"` for `ActTarget::Offer` (left out when the id is 0).
+
+**Rules.** Both are ordinary skills in `skills.rhai`:
+
+- `accept_spec` and `decline_spec` (`args: ["offer", "record"]`, `talk`, reach 3);
+- `accept_check` and `decline_check` share `answer_refused`; `decline_duration` is 1 s;
+- `decline_ui()` declares only a look, the trade icon.
+
+The context gains `a.offer_id`, `a.record_id` and `a.offer`. `a.offer` is the trade offer at hand: the named one, read by id, or, when that one is gone or none is named, the target's standing offer to the actor. The engine fills it only for a law that reads it (`Scripts::skill_reads`), as it does `a.records`. A named record is found among `a.records`.
+
+Refused, with these words, at the start and again at completion:
+
+| Case | Refusal |
+| --- | --- |
+| a named offer that no longer exists | "that offer is gone" |
+| it is gone, and another offer from them stands | "they have changed their offer: now their 2 fish for your 1 hide" |
+| addressed to someone else, or not theirs | "that offer is not addressed to you" |
+| past its window | "that offer has expired" |
+| a named record not among the actor's | "that proposal is gone", or "they have changed their terms: now you give …, they give …" while other terms of theirs stand |
+| the actor's own proposal, or someone else's | "that proposal is not addressed to you" |
+| agreed already | "you have already agreed to it" |
+| run out (`not taken`) | "that proposal has expired" |
+| otherwise closed | "that proposal was declined" (or its status) |
+| a demand or a regard named | "that is not a proposal of terms" |
+| both named | "name one thing to answer: the offer or the proposal" |
+
+**Effects.**
+
+- `accept` with an offer returns the op `#{ op: "accept", offer: id }`. The engine takes only that offer, and only from the target to the actor while it stands. With a record, the agreement is made as before.
+- `decline` with a proposal closes it as `declined`, readable for 1 world hour. With a trade offer it returns `#{ op: "decline", offer: id }`, which ends that offer and nothing else. The engine refuses an offer not addressed to the actor, and with nothing standing: "they have no standing offer for you".
+- A decline tells the maker with `tell`, as kind `record`, salience 0.7, without asking its mind to think:
+  - "Bram declined your offer of 2 fish for 1 hide."
+  - "Bram declined your terms: you give 3 berries, they give 10 wood."
+- Onlookers witness "{a} turned down {b}'s offer." or "{a} turned down what {b} proposed."
+- The decliner's own outcome is the rules' line: "declined Bram's offer of 2 fish for 1 hide".
+- There is no cost and no limit on declining. Anything of the kind would be a law of the script.
+
+**What minds see:**
+
+- the scene's "asked of you" and "you are waiting on" entries carry `"offer": id`;
+- a proposal to them reads "…; accept or decline (toward them, record N)" in their dealings (`record_text`);
+- the talk turn's "between" lines name the offer ("(offer 17: accept to exchange, or decline)");
+- a trade offer's deliberation request names it ("You may accept or decline it (offer 17), or let it pass.");
+- the act forms (`prompts::ACTS`) and the talk examples show `accept` with `"offer"` and `decline`.
+
+The deliberation grammar lists both skills from their specs. `decline` is in `TALK_SHOWN`.
+
+**SpacetimeDB check** (consulted 2026-11-11; the docs' version selector reads 2.0.0; checked against the 2.14.1 crates pinned in `living/Cargo.toml`):
+
+| Source | What it says | What follows here |
+| --- | --- | --- |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) | New columns only "to the end of a table with a default value"; "Adding columns without a default value" and "Removing or modifying existing columns", including changing their type, are forbidden. | The act's reference is two columns at the end of `activity` with `#[default(0u64)]` (`offer`, `record`). `activity` is no other table's column type, so no embedded row type changes (unlike `line_seen.line`, [COMMUNICATION.md](COMMUNICATION.md#10-spacetimedb-documentation-and-data-paths)). `trade_offer` and `record` are unchanged. |
+| `spacetimedb-lib-2.14.1/src/db/raw_def/v9.rs` | `RawMiscModuleExportV9::ColumnDefaultValue`: "A default value for a column added during a supervised automigration." | The macro's `#[default]` is the migration's default. |
+| [Tables](https://spacetimedb.com/docs/tables/) | "Tables can be private (default) or public". | `activity` stays private. Clients never read it; they read their own offers through `my_offers` and records through `my_records`, unchanged. |
+| [Performance](https://spacetimedb.com/docs/tables/performance/) | "Use the smallest integer type that fits"; "Be mindful of unbounded table growth". | Ids are `u64`, as `trade_offer.id` and `record.id` are. `activity` holds one row per acting creature, so 16 bytes a row and no growth. |
+
+Migration proven on the trial server (`slop-trials-stdb`, v2.14.1). Main's module (`b004e6e`) ticked on a fresh world. The world was then updated in place to this branch's module (`verify.py launch --keep-data`). It kept ticking from tick 6,012, its 233 existing `activity` rows read `offer = 0, record = 0`, and accept and decline then worked on it.
+
+**Data paths.**
+
+- An answer reads the named `trade_offer` by primary key, or the target's offers by the `from` index (a maker holds one at a time).
+- It reads the actor's records by `record_party.party`, as `accept` already did at completion. Its check now reads them at the start too.
+- It writes:
+  - a trade: two inventory moves and one row deleted, as before;
+  - a declined trade: one row deleted;
+  - a declined proposal: one record closed;
+  - for the maker: one experience row;
+  - for onlookers in sight: one witnessed row each.
+- Nothing is read or written per tick. Recipients are the parties' own `my_experience` rows, the mind service (owner) and the onlookers' perception. No benchmarks were run; this change adds no per-tick or per-subscriber work.
+
+**Verification** (Spark, trial server, fake model, 2026-11-11):
+
+- `just living-check` ok;
+- rules tests `answers_take_what_they_name`, `answers_carry_what_they_name` and `an_act_toward_an_offer_names_it`;
+- verify-core `scenes.py answers` 17 of 17, `dealings` 13 of 14 (regard needs the island);
+- verify-player `answers.py` 9 of 9, `offers.py` 17 of 17, `deal.py` 13 of 13;
+- verify-minds `answers` and `acts` pass. `dealings` failed 2 of 11 runs (cause not established; see verify-minds' validation record).
+
+Records are in each skill's `references/validation.md`. Not covered:
+
+- the game client drawing and sending these acts;
+- a real model choosing to decline;
+- `verify-client`: no view or public table changed, and `activity` is private.
+
 ## Goods, recipes and fuel
 
 **Status:** built on branch `goods-1`, 2026-11-11, for Cullet's phase 4 ([small city](SMALL_CITY.md#the-land-that-feeds-it), decision 9: goods and fire that eats fuel now; pane decay and the tide later). The owner's standing decisions it follows: items satisfy requirements by traits, not lists; the world is self-sufficient; world rules are Rhai laws over Rust primitives; no hard-coded guardrails and no engine behaviour for tests.
@@ -399,8 +501,8 @@ What the world has is data in the script, each a list of maps with a `name`, rea
 | Table | Required | What its traits are |
 | --- | --- | --- |
 | `items()` | yes | `cooks_to`, `smokes_to` (what cooking or smoking makes), `fuel` (units a fire that burns `fuel` gets from one), and any trait a world's recipes read (`alkali`, `bakes_to`, `oil`) |
-| `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `lights` (metres of lamplight, rules-1), `burns` (below); other traits are the rules' data. A script with `structure_traits()` (from before, or a world's own) has its `warms`, `roof` and `lights` stand over the listed kinds' |
-| `resources()` | yes (new) | `yields`, `regrow_per_h` (units a game hour of growing time; `regrow`, a real minute, before rates-2), `max`, `ground` and `by_water` (where a settlement's promised nodes go), `gather_ms` |
+| `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `lights` (metres of lamplight, rules-1), `burns` (below), `holds` (a store: the most things it holds in all; rules-3) and `like` (the kind it counts as wherever a kind is asked by name; rules-3); other traits are the rules' data. A script with `structure_traits()` (from before, or a world's own) has its `warms`, `roof` and `lights` stand over the listed kinds' |
+| `resources()` | yes (new) | `yields`, `regrow_per_h` (units a game hour of growing time; `regrow`, a real minute, before rates-2), `regrow_by_season` (the share of that rate in each season; rules-3), `max`, `ground` and `by_water` (where a settlement's promised nodes go), `gather_ms` |
 | `know_how()` | yes (new) | `help` (what someone taught or reading is told), `requires` |
 | `recipes()` | no (none) | below |
 
@@ -500,7 +602,8 @@ They are the goods section of Cullet's laws, [`living/seeds/worlds/cullet/laws.r
 | --- | --- | --- |
 | hearth, oven, furnace (the Cone), smokehouse | `burns` peat or wood at 0.5, 1, 3 and 0.5 units a game hour | warmth 4, 2.5, 6 and 2 m while lit |
 | lamp | `burns` oil at 0.25 a game hour, holds 8 | lamplight 8 m while lit |
-| kelp_bed, sand_bank, peat_bank, root_plot, greens_bed, weir | resources | kelp, sand, peat, roots, greens, fish |
+| kelp_bed, sand_bank, peat_bank, root_plot, greens_bed, weir | resources | kelp, sand, peat, roots, greens, fish; in winter (rules-3) fish at 0.75 of the rate, kelp 1.25, greens 0.5, sand 1, roots and peat none |
+| store, peat_barn, yard_store, house_store | stores `like: "storage"` (rules-3) | hold 1,200, 1,000, 900 and 150 things; a crate anyone builds is the shipped storage, 120 |
 
 | Recipe | At | Takes | Heat |
 | --- | --- | --- | --- |
@@ -538,6 +641,17 @@ No whole-World scan was added. A fire costs nothing while it burns: no per-tick 
 - **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest; 282 since goods-2), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
 - **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here. After merging rules-1 and plan-1 (main `6a905c31`): rates 8,566, rates-law 212,202 (still the only law over budget), strike 274,209, cooldown 1,704, perceived 70,038, hook 450,841, senses 3,143, senses-law 41,866, moves 1,956.
 - **Not measured:** tick time and subscription volume at population. A fire changes one public row per feeding or recipe made; at Cullet's 64 residents that is a few rows a game hour.
+
+## Storage by kind, household stores, regrowth by season (rules-3)
+
+Built 2026-11-11 on branch `rules-3`, at the coordinator's decisions, general for every world; Cullet's values, the winter worked through and the evidence are in [Cullet's rules](CULLET_RULES.md#storage-household-stores-and-winter-rules-3).
+
+- **A store holds what its kind holds.** A structure kind with `holds` in `structures()` is a store: one stores into it (`store_check`, up to its `holds` in all) and takes from it (`take_check`). The shipped `storage` has `holds: 120`, the old global law's value; the law `storage_holds` is gone. A kind may say what it counts as: `like: "storage"` makes a world's own kind (Cullet's `store`, `peat_barn`, `yard_store`, `house_store`) a storage wherever a kind is asked for by name (a graph's `nearest storage`, `Scripts::is_kind`), so the ways that look for a storage find it. What a mind is shown of a structure's contents follows `holds` too. `like` must name another kind of the table, and `holds` must be a number of at least 0.
+- **A plan's structure may belong to a household.** `owner: "household:<key>"` on `plans[].structures[]` names a household of the seed's residents; the world gives the structure to the owner of that household's house when it is created ([authored plans](AUTHORED_PLANS.md#the-format)). `floor::check` refuses a household the residents do not have. A plan lot may also name the structure kind at its door (`lots[].structure`).
+- **Regrowth by season is a value on each resource kind.** `regrow_by_season: #{ spring, summer, autumn, winter }` gives the share of `regrow_per_h` in each season; a season left out, or a kind without the trait, keeps the shipped shares (full in spring, summer and autumn, none in winter: `living_rules::GROWING`). The authority grows a node by its `regen` times `living_rules::regrowth_ms` (the milliseconds of each season since the node was last written, weighted by the shares; with the shipped shares exactly `growing_ms`, as before). An unknown season or a share that is no number from 0 to 16 refuses the script.
+- **What minds are told of winter** comes from the same table: the script's `seasons_text()` (`Scripts::seasons_words`), after the calendar. The shipped kinds give the old sentence, "In winter nothing regrows and nights are colder: store food before it."; a world whose kinds regrow in winter says which.
+- **Old worlds are unchanged.** `rules3_check::rules3_is_bit_identical` (ignored; run with `LIVING_OLD_SKILLS` set to main's `93019a37` script) compares 63,753 states (63,754 against main `25c1fb92`'s script after merging it): every store and take check's answer for every structure kind at fills round 120, every skill's and law's words, the minds' world text with the seasons line, and 52,920 node amounts across every season for every shipped resource kind, on four day and year lengths. None differs.
+- **Not changed:** grass (the pasture law still grows only outside winter), the developer observer's drawing of a node's regrowth (`living/viewer/src/state.rs`, no script: it keeps `growing_ms`, so on a world with winter shares it draws winter nodes as not regrowing), `plant_check`'s frozen ground. No table, column, reducer or view changed.
 
 ## Spoiling, regrowth, traps and remains in game time (rates-2)
 

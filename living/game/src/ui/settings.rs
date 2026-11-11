@@ -2,6 +2,7 @@
 //! nothing open), with two pages.
 //!
 //! - **Play:** the interface's theme (Clear, Night, Linen, Walnut; F4 cycles it), the control scheme (facing the cursor, or where you walk; F3 switches it too),
+//!   how the body looks aside while walking (a look-walk preset, `twist.rs`),
 //!   how the edge of sight is drawn (not seen now, limited view, fade; F2 cycles it too), how
 //!   unseen ground looks (memory by default, grey, wash, lantern, shadows, hatch), facing sight
 //!   (on/off, its five values and its switch where the launcher allows it: `ui/facing.rs`), the
@@ -116,6 +117,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
             body.spawn((PageBody(Page::Play), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE)).with_children(|pg| {
                 row(pg, f, "Look", "The interface's theme (F4)", |c| kit::seg(c, f, "settings:theme", &super::wood::Name::ALL.map(|n| (n.label(), n.key()))));
                 row(pg, f, "Facing", "Which way your character looks while walking (F3)", |c| kit::seg(c, f, "settings:control", &[("Face where you walk", "travel"), ("Face the cursor", "cursor")]));
+                row(pg, f, "Looking aside", "Walking one way and looking another: how far the head and chest turn before the body follows", |c| kit::seg(c, f, "settings:look_walk", &crate::twist::PRESETS));
                 row(pg, f, "Edge of sight", "How what you can't see now is drawn (F2)", |c| kit::seg(c, f, "settings:sight", &[("Not seen now", "unseen"), ("Limited view", "limited"), ("Fade", "fade")]));
                 row(pg, f, "Unseen ground", "How ground you don't see now looks, with \"not seen now\"", |c| kit::seg(c, f, "settings:look", &crate::sightedge::Look::ALL.map(|l| (l.label(), l.name()))));
                 row(pg, f, "Weapon", "Draw it by itself when something attacks you", |c| kit::toggle(c, "settings:auto_draw"));
@@ -191,7 +193,7 @@ pub fn update(
     mut names_q: Query<(&BindName, &mut Text), Without<BindText>>,
     names: Res<SkillNames>,
     (mut binds, mut prefs, mut cap): (ResMut<Binds>, ResMut<Prefs>, ResMut<Capture>),
-    (mut input, mut edge, mut tips): (ResMut<crate::controls::Input>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<super::tips::Tips>),
+    (mut input, mut edge, mut tips, mut lw): (ResMut<crate::controls::Input>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<super::tips::Tips>, ResMut<crate::twist::LookWalk>),
     (keys, mouse, time): (Res<ButtonInput<KeyCode>>, Res<ButtonInput<MouseButton>>, Res<Time>),
     open: Res<super::win::Windows>,
     mut theme: ResMut<super::ThemeState>,
@@ -225,6 +227,14 @@ pub fn update(
                 changed = true;
             }
             "settings:theme" => theme.want = super::wood::Name::parse(value),
+            "settings:look_walk" => {
+                if let Some(p) = crate::twist::LookWalk::preset(value) {
+                    info!("settings: looking aside: {value}");
+                    *lw = p;
+                    prefs.look_walk = Some(value.into());
+                    changed = true;
+                }
+            }
             "settings:sight" => {
                 if let (Some(e), Some(m)) = (edge.as_mut(), crate::sightedge::Mode::parse(value)) {
                     e.mode = m;
@@ -279,7 +289,7 @@ pub fn update(
     let sight = edge.as_ref().map(|e| e.mode.name());
     let look = edge.as_ref().map(|e| e.look.name());
     let control = if input.control == crate::controls::Control::Cursor { "cursor" } else { "travel" };
-    let (pg, preset, theme_now) = (*page, binds.preset.name(), theme.name.key());
+    let (pg, preset, theme_now, look_walk) = (*page, binds.preset.name(), theme.name.key(), lw.base().to_string());
     kit::light(&mut lit, |t| {
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
         match what {
@@ -289,6 +299,7 @@ pub fn update(
             "settings:look" => Some(Some(value) == look),
             "settings:preset" => Some(value == preset),
             "settings:theme" => Some(value == theme_now),
+            "settings:look_walk" => Some(value == look_walk),
             _ => match t {
                 "settings:auto_draw" => Some(prefs.auto_draw),
                 "settings:tips" => Some(prefs.tips),
@@ -320,12 +331,15 @@ pub fn update(
 }
 
 /// The settings file's Play settings, once at start, unless the environment sets them
-/// (`LIVING_GAME_CONTROL`, `LIVING_SIGHT_EDGE`, used by headless captures).
-pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>, edge: Option<ResMut<crate::sightedge::SightEdge>>, mut done: Local<bool>) {
+/// (`LIVING_GAME_CONTROL`, `LIVING_SIGHT_EDGE`, `LIVING_GAME_LOOK_WALK`, used by headless captures).
+pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>, edge: Option<ResMut<crate::sightedge::SightEdge>>, mut lw: ResMut<crate::twist::LookWalk>, mut done: Local<bool>) {
     if *done {
         return;
     }
     *done = true;
+    if let (Some(p), true) = (prefs.look_walk.as_deref().and_then(crate::twist::LookWalk::preset), std::env::var("LIVING_GAME_LOOK_WALK").is_err()) {
+        *lw = p;
+    }
     if std::env::var("LIVING_GAME_CONTROL").is_err() {
         input.control = prefs.control;
     }

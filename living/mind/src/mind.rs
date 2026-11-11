@@ -16,7 +16,7 @@ use anyhow::{anyhow, Result};
 use living_bindings::*;
 use serde_json::{json, Value};
 use spacetimedb_sdk::{DbContext, Identity, Table};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
@@ -91,6 +91,24 @@ struct ActorMind {
     /// How many deliberations each pending reason (its text and arrival time) was already
     /// carried by (`carried_reasons`).
     carried: HashMap<(String, u64), u32>,
+    /// The consolidation now running, for its outcome line (`Llm::outcome`).
+    attempt: Option<Attempt>,
+    /// Experiences that were in a failed consolidation and are not integrated yet. One that
+    /// leaves the inbox meanwhile (the authority keeps a character's last 400) is lost.
+    unintegrated: BTreeSet<u64>,
+}
+
+/// What one consolidation took and how its model answered (`outcomes/consolidations.jsonl`).
+#[derive(Default)]
+struct Attempt {
+    ids: Vec<u64>,
+    meaningful: usize,
+    upto: u64,
+    /// Experiences of earlier failed consolidations gone from the inbox unintegrated.
+    trimmed: usize,
+    model_call: bool,
+    overflowed: bool,
+    model: Option<String>,
 }
 
 /// The record of what a deliberation carried: each reason line of its request, when it
@@ -702,10 +720,26 @@ impl Minds {
             }
         }
         let tag = if who.is_empty() { String::new() } else { format!(" {{{}}}", who.join(", ")) };
+        let tag = format!("{}{tag}", self.heard_by(e));
         if with_id {
             format!("[{}] {} {}{tag}", e.id, fmt(e.at_ms), e.text)
         } else {
             format!("[{}] {}{tag}", fmt(e.at_ms), e.text)
+        }
+    }
+
+    /// Who heard one's own line, as the speaker saw it (`heard`): " (heard by Bram and a
+    /// stranger)"; nothing for other rows, or a line with no `heard` row.
+    fn heard_by(&self, e: &Experience) -> String {
+        if e.kind != "said" {
+            return String::new();
+        }
+        let Some(h) = self.conn.db.line_heard().line().find(&e.id) else { return String::new() };
+        let names: Vec<String> = h.hearers.iter().map(|id| self.known_as(e.observer, *id)).collect();
+        match names.as_slice() {
+            [] => " (no one you saw heard it)".into(),
+            [one] => format!(" (heard by {one})"),
+            [rest @ .., last] => format!(" (heard by {} and {last})", rest.join(", ")),
         }
     }
 
@@ -1457,20 +1491,46 @@ impl Minds {
                 if r.is_ok() {
                     this.actors.lock().unwrap().entry(actor).or_default().since_sleep += 1;
                 }
-                let mut a = this.actors.lock().unwrap();
-                let m = a.entry(actor).or_default();
-                m.consolidating = false;
-                match r {
-                    Ok(()) => {
-                        m.failures = 0;
-                        m.retry_after = None;
-                        m.last_consolidated = Some(Instant::now());
+                let (attempt, number, retry_in) = {
+                    let mut a = this.actors.lock().unwrap();
+                    let m = a.entry(actor).or_default();
+                    m.consolidating = false;
+                    let attempt = m.attempt.take();
+                    let number = m.failures + 1;
+                    match &r {
+                        Ok(()) => {
+                            m.failures = 0;
+                            m.retry_after = None;
+                            m.last_consolidated = Some(Instant::now());
+                            if let Some(t) = &attempt {
+                                m.unintegrated.retain(|id| *id > t.upto);
+                            }
+                        }
+                        Err(e) => {
+                            m.failures += 1;
+                            m.retry_after = Some(Instant::now() + Duration::from_secs(20 * m.failures as u64));
+                            if let Some(t) = &attempt {
+                                m.unintegrated.extend(t.ids.iter().copied());
+                            }
+                            log::warn!("consolidation for {} failed ({}x): {e:#}", this.name(actor), m.failures);
+                        }
                     }
-                    Err(e) => {
-                        m.failures += 1;
-                        m.retry_after = Some(Instant::now() + Duration::from_secs(20 * m.failures as u64));
-                        log::warn!("consolidation for {} failed ({}x): {e:#}", this.name(actor), m.failures);
-                    }
+                    (attempt, number, r.is_err().then(|| 20 * (number as u64)))
+                };
+                // Each consolidation that called a model, failed or found experiences lost:
+                // the run's evidence says what its minds actually integrated.
+                if let Some(t) = attempt.filter(|t| t.model_call || r.is_err() || t.trimmed > 0) {
+                    this.llm
+                        .outcome("consolidations", &json!({
+                            "at_ms": llm::now_ms(), "actor": this.name(actor), "actor_id": actor,
+                            "outcome": if r.is_ok() { "integrated" } else { "failed" },
+                            "route": (r.is_ok() && t.model_call).then(|| if t.overflowed { "fallback" } else { "primary" }),
+                            "model": t.model, "model_call": t.model_call, "attempt": number,
+                            "experiences": t.ids.len(), "meaningful": t.meaningful, "upto": t.upto, "trimmed": t.trimmed,
+                            "retry_in_s": retry_in,
+                            "failure": r.as_ref().err().map(|e| format!("{e:#}").chars().take(300).collect::<String>()),
+                        }))
+                        .await;
                 }
             });
         }
@@ -1781,7 +1841,7 @@ impl Minds {
                     log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
                     self.deliberation_says(actor, &say, to);
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, say, to, d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, say, to, String::new(), d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
@@ -1936,7 +1996,7 @@ impl Minds {
                     };
                     log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, String::new(), 0, d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, String::new(), 0, String::new(), d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     return rx.await?.map_err(|e| anyhow!("mind_say: {e}"));
@@ -1980,10 +2040,27 @@ impl Minds {
         // A reply that ran too long failed: take fewer experiences at a time until it fits.
         let failures = self.actors.lock().unwrap().get(&actor).map_or(0, |m| m.failures);
         let take = (40 / (1 + failures as usize)).max(6);
-        let batch: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor && e.controller == self.me).take(take).collect();
-        let Some(upto) = batch.last().map(|e| e.id) else { return Ok(()) };
+        let inbox: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor && e.controller == self.me).collect();
+        let trimmed = {
+            let present: std::collections::HashSet<u64> = inbox.iter().map(|e| e.id).collect();
+            let mut a = self.actors.lock().unwrap();
+            let m = a.entry(actor).or_default();
+            m.unintegrated.retain(|id| *id > cursor);
+            let before = m.unintegrated.len();
+            m.unintegrated.retain(|id| present.contains(id));
+            before - m.unintegrated.len()
+        };
+        let batch: Vec<Experience> = inbox.into_iter().take(take).collect();
+        let Some(upto) = batch.last().map(|e| e.id) else {
+            if trimmed > 0 {
+                self.actors.lock().unwrap().entry(actor).or_default().attempt = Some(Attempt { trimmed, upto: cursor, ..Default::default() });
+            }
+            return Ok(());
+        };
         // Only experiences that carry meaning go to the model; routine results are passed over.
         let meaningful: Vec<&Experience> = batch.iter().filter(|e| e.salience >= 0.2).collect();
+        self.actors.lock().unwrap().entry(actor).or_default().attempt =
+            Some(Attempt { ids: batch.iter().map(|e| e.id).collect(), meaningful: meaningful.len(), upto, trimmed, ..Default::default() });
         if meaningful.is_empty() {
             return self.consolidated(actor, upto).await;
         }
@@ -2016,7 +2093,16 @@ impl Minds {
         let at = self.attention(actor, None);
         let _slow = self.slow.acquire().await?;
         let msgs = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
+        let answered = |reply: &llm::Reply| {
+            if let Some(t) = self.actors.lock().unwrap().get_mut(&actor).and_then(|m| m.attempt.as_mut()) {
+                (t.overflowed, t.model) = (reply.overflowed, Some(reply.model.clone()));
+            }
+        };
+        if let Some(t) = self.actors.lock().unwrap().get_mut(&actor).and_then(|m| m.attempt.as_mut()) {
+            t.model_call = true;
+        }
         let mut reply = self.llm.chat(&remember, at, "consolidate", &c.name, &msgs).await?;
+        answered(&reply);
         let v = match llm::parse_json(&reply.content) {
             Ok(v) => v,
             // A small mind's unusable output is re-done by the competent model.
@@ -2024,6 +2110,7 @@ impl Minds {
                 let compile = self.llm.species_profile(&c.kind, "compile").unwrap_or(profile.clone());
                 log::info!("{}'s memory reply was unusable ({e:#}); retrying with {compile}", c.name);
                 reply = self.llm.chat(&compile, at, "consolidate", &c.name, &msgs).await?;
+                answered(&reply);
                 llm::parse_json(&reply.content)?
             }
             Err(e) => return Err(e),
@@ -2039,7 +2126,7 @@ impl Minds {
         }
         notes.extend(self.canonical_people(actor, &mut patch));
         self.keep_refused_merges(actor, &notes);
-        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
+        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "whisper" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
         if c.stage <= 1 {
             for m in patch.remember.iter_mut() {

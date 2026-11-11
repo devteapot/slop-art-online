@@ -8,11 +8,14 @@ The world's records (docs/WORLD_RULES.md) reach a mind as perception and as its 
 - **Shown.** The deliberation prompt has a dynamic section "Your dealings and your people's standing", worded by the script's `record_text` and named as the character knows the people in it (`mind/src/mind/dealings.rs`). The talk turn lists the same character's dealings with the other person among its "between" lines. Talk-marked acts the examples do not show (`offer_terms`, `demand`, `welcome`) are listed from the specs (`prompts::talk_acts`).
 - **Acted on.** The fake model's deliberate reply carries `{"do": "give", ...}`. The act goes through `mind_act`; the rules' `on_give` counts it, the demand is `met`, the demander is told it was paid, and the demander's pack holds the stone.
 
+- **Answers by id** (`answers` case; since `rules-offers-2`). The second adult proposes terms and offers a trade before the mind starts. The deliberation shows the trade's id in the scene's "asked of you" (`"offer": N`) and the proposal's id in its dealings ("accept or decline (toward them, record N)"); the fake rule matches that record text and replies with two acts, `{"do": "accept", "target": {"id": other}, "offer": N}` and `{"do": "decline", "target": {"id": other}, "record": M}`. The trade is taken (the wood arrives) though the terms stood, the record is `declined`, and the proposer is told "… declined your terms: …".
+
 ## How to get to it
 
 ```bash
 R=minds-$(date +%Y%m%d-%H%M%S)
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case dealings
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R-a" --case answers
 ```
 
 The fake rule matches a deliberate request containing "demanded 1 stone of you", so the reply that pays is sent only when the prompt showed the demand. The demand itself is an admin `mind_act` of the second adult, as its own mind would decide.
