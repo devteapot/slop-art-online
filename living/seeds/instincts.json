@@ -220,6 +220,64 @@
           }
         },
         {
+          "first": {
+            "label": "turn to a sound",
+            "children": [
+              {
+                "if": {
+                  "cond": {
+                    "all": [
+                      {
+                        "heard_within": 3
+                      },
+                      {
+                        "not": {
+                          "sees": "speaker"
+                        }
+                      },
+                      {
+                        "near": {
+                          "target": "sound",
+                          "within": 12
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "do": {
+                      "skill": "face",
+                      "target": "speaker"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "cond": {
+                    "all": [
+                      {
+                        "moving": false
+                      },
+                      {
+                        "near": {
+                          "target": "sound",
+                          "within": 5
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "do": {
+                      "skill": "face",
+                      "target": "sound"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "if": {
             "cond": {
               "not": {
@@ -802,6 +860,64 @@
                 "skill": "sleep"
               }
             }
+          }
+        },
+        {
+          "first": {
+            "label": "turn to a sound",
+            "children": [
+              {
+                "if": {
+                  "cond": {
+                    "all": [
+                      {
+                        "heard_within": 3
+                      },
+                      {
+                        "not": {
+                          "sees": "speaker"
+                        }
+                      },
+                      {
+                        "near": {
+                          "target": "sound",
+                          "within": 12
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "do": {
+                      "skill": "face",
+                      "target": "speaker"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "cond": {
+                    "all": [
+                      {
+                        "moving": false
+                      },
+                      {
+                        "near": {
+                          "target": "sound",
+                          "within": 5
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "do": {
+                      "skill": "face",
+                      "target": "sound"
+                    }
+                  }
+                }
+              }
+            ]
           }
         },
         {

@@ -981,6 +981,152 @@ def senses(s):
         s.call("install_script", shipped)
 
 
+def set_law(s, name, value, check=True):
+    """Change a law on the running world (`set_world_law`, admin)."""
+    return s.call("set_world_law", name, json.dumps(value), check=check)
+
+
+def fov(s):
+    """Sight that depends on facing (docs/PERCEPTION.md, "The field of view"), switched by the
+    world's `fov_on` law through `set_world_law` on a running world. A watcher stands on an open
+    line facing east with someone 5 m ahead, 5 m behind and 1.5 m behind; its graph turns where it
+    is told and says whom it `sees`. Off (as shipped): all three, as before. On: ahead and the one
+    within the near ring, not the one behind; facing west, the reverse. Off again: all three.
+    Every change is in `law_change` and the chronicle, and the installed script carries the
+    values. Then a duel from behind: a strike from the one behind at the watcher facing away,
+    whose graph guards when `threatened`. With the field on and the starting near ring (3 m, 2 m in
+    the dark) the striker 1 m behind is within the ring, seen, and guarded against; with a near
+    ring of 0.5 m (`set_world_law fov_near_m`, `fov_near_dark_m`) the windup is not seen, there is
+    no guard, and the blow lands (a backstab). Off, it guards as before. Two onlookers 4 m off face
+    toward the duel and away from it (4 and 5 m off on the line): with the field on only the one
+    facing it witnesses it."""
+    line = open_line(s)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    eye, ahead, behind, close, w_toward, w_away = s.people(6)
+    e = line[7]
+    places = {eye: e, ahead: line[12], behind: line[2], close: (e[0] - 1.5, e[1])}
+    names = {ahead: "ahead", behind: "behind", close: "close"}
+    rounds = iter(range(1000))
+
+    def place():
+        for c, p in places.items():
+            s.call("place_at", c, p[0], p[1])
+
+    def probe(label, way):
+        """The watcher turns to face `way` (+1 east, -1 west), then says whom it sees."""
+        place()
+        tag = f"{label}-{next(rounds)}"
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        # One line every 2 s at most (speaking faster is refused).
+        tell = [x for c, n in names.items() for x in ({"if": {"cond": {"sees": {"id": c}}, "then": {"say": f"{tag} sees {n}"}, "else": {"say": f"{tag} not {n}"}}}, {"wait": 2.2})]
+        s.graph(eye, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [e[0] + 4.0 * way, e[1]]}}}, {"wait": 0.1}]}, {"wait": 1.5}, *tell, {"wait": 300}]})
+
+        def said():
+            rows = [r for r in s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {eye}") if r["at_ms"] >= t0 and tag in r["text"]]
+            return rows if len(rows) >= len(names) else None
+        rows = s.wait(said, seconds=40, every=1)
+        (s.out / f"{s.name}-said-{tag}.json").write_text(json.dumps(rows, indent=2) + "\n")
+        return {n: any(f"{tag} sees {n}" in r["text"] for r in rows) for n in names.values()}
+
+    shipped = s.rows("SELECT revision FROM script WHERE name = 'skills'")[0]["revision"]
+    try:
+        got = probe("off", +1)
+        s.expect("off (as shipped): seen all round, as before", got == {"ahead": True, "behind": True, "close": True}, got)
+        r = set_law(s, "no_such_law", True, check=False)
+        s.expect("set_world_law refuses a name that is no law", r.returncode != 0 and "not a law" in (r.stderr + r.stdout), (r.stderr + r.stdout)[-300:])
+        r = set_law(s, "fov_on", 2, check=False)
+        s.expect("set_world_law refuses a value of another kind", r.returncode != 0 and "true or false" in (r.stderr + r.stdout), (r.stderr + r.stdout)[-300:])
+        set_law(s, "fov_on", True)
+        script = s.rows("SELECT revision, source FROM script WHERE name = 'skills'")[0]
+        s.expect("the installed script carries the world's law values, at a new revision",
+                 script["revision"] > shipped and re.search(r"fn world_law_values\(\) \{ #\{[^}]*\bfov_on: true\b", script["source"]) is not None, script["revision"])
+        changes = s.rows("SELECT * FROM law_change", "law-changes")
+        s.expect("the change is recorded (name, old, new, when, who, revision)",
+                 any(c["name"] == "fov_on" and c["old"] == "false" and c["new"] == "true" and c["at_ms"] > 0 and c["revision"] == script["revision"] for c in changes), changes)
+        story = [r for r in s.rows("SELECT * FROM chronicle WHERE kind = 'law'", "law-story")]
+        s.expect("and in the chronicle", any("fov_on changed from false to true" in r["text"] for r in story), story)
+        got = probe("on-east", +1)
+        s.expect("on, facing east: ahead and the near ring, not behind", got == {"ahead": True, "behind": False, "close": True}, got)
+        got = probe("on-west", -1)
+        s.expect("on, facing west: behind seen, ahead not", got == {"ahead": False, "behind": True, "close": True}, got)
+
+        # A duel from behind. The watcher faces east; the one behind (1 m west) strikes it.
+        last_blow = [-1000.0]
+
+        def duel(label):
+            places[behind] = (e[0] - 1.0, e[1])
+            place()
+            s.call("place_at", ahead, *line[15])
+            # Onlookers on the open line east of the duel, 4 and 5 m off: one faces it (west),
+            # one faces away (east).
+            s.call("place_at", w_toward, *line[11])
+            s.call("place_at", w_away, *line[12])
+            for w, at in ((w_toward, line[7]), (w_away, line[15])):
+                s.graph(w, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [at[0], at[1]]}}}, {"wait": 0.1}]}, {"wait": 60 + next(rounds)}]})
+            s.graph(eye, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [e[0] + 4.0, e[1]]}}}, {"wait": 0.1}]}, {"wait": 300}]})
+            time.sleep(2)
+            # Then it guards whenever it is threatened (a graph runs again from its root).
+            s.graph(eye, {"first": {"label": "guard", "children": [{"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "block"}}}}, {"wait": 0.2}]}})
+            time.sleep(3)
+            # Witnesses are told a fight's first blow: one more than 30 s after the attacker last
+            # hurt the victim (`act.rs` `first_blow`).
+            time.sleep(max(0.0, 31.0 - (time.monotonic() - last_blow[0])))
+            t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+            # The striker turns to where the watcher stands first: with a field it must see its
+            # target to strike it (a target it cannot see does not resolve). A graph of its own
+            # each time (the same graph again would not start over; a wait is held to 120 s).
+            s.graph(behind, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [e[0], e[1]]}}}, {"wait": 0.1}]},
+                                     {"do": {"skill": "strike", "target": {"id": eye}}}, {"wait": 60 + next(rounds)}]})
+            def struck():
+                u = [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == behind and x["skill"] == "strike" and x["outcome"]]
+                return u or None
+            strikes = s.wait(struck, seconds=30, every=1)
+            last_blow[0] = time.monotonic()
+            # Short waits from now on, so the next round's graph is taken at once.
+            s.graph(behind, {"wait": 1.0 + 0.01 * next(rounds)})
+            time.sleep(1)
+            uses = [x for x in s.rows("SELECT * FROM skill_use", f"duel-uses-{label}") if x["at_ms"] >= t0]
+            guards = [x for x in uses if x["actor"] == eye and x["skill"] in ("block", "dodge")]
+            seen = {w: [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {w}", f"duel-exp-{label}-{w}") if r["kind"] == "fight" and r["at_ms"] >= t0] for w in (w_toward, w_away)}
+            return strikes, guards, seen
+
+        # With the starting values the one striking from 1 m behind is within the near ring
+        # (3 m all round, 2 m in the dark): seen, so the guard goes up.
+        strikes, guards, seen = duel("on")
+        s.expect("on (near ring 3 m, 2 m dark): a strike from 1 m behind is within the ring, seen, guarded", guards, [x["outcome"] for x in strikes])
+        s.expect("on: the onlooker facing the duel witnesses it", seen[w_toward], seen[w_toward][:1])
+        s.expect("on: the onlooker facing away does not", not seen[w_away], seen[w_away][:1])
+        # A near ring under a strike's reach (a law value): the windup from behind is not seen,
+        # no guard, and the blow lands: a backstab.
+        set_law(s, "fov_near_m", 0.5)
+        set_law(s, "fov_near_dark_m", 0.5)
+        keep_behind = places[behind]
+        places[behind] = line[2]
+        got = probe("on-near", +1)
+        s.expect("on (near ring 0.5 m, a law value): 1.5 m behind is not seen", got == {"ahead": True, "behind": False, "close": False}, got)
+        places[behind] = keep_behind
+        strikes, guards, seen = duel("on-near")
+        s.expect("on (near ring 0.5 m): a windup from behind is not seen (no guard)", not guards, guards)
+        s.expect("on (near ring 0.5 m): the blow from behind lands", any(x["outcome"].startswith("struck") or "hit" in x["outcome"] for x in strikes), [x["outcome"] for x in strikes])
+        set_law(s, "fov_near_m", 3.0)
+        set_law(s, "fov_near_dark_m", 2.0)
+
+        set_law(s, "fov_on", False)
+        places[behind] = line[2]
+        got = probe("off-again", +1)
+        s.expect("off again: seen all round, as before", got == {"ahead": True, "behind": True, "close": True}, got)
+        strikes, guards, seen = duel("off")
+        s.expect("off: the one struck from behind guards, as before", guards, [x["outcome"] for x in strikes])
+        s.expect("off: both onlookers witness it, as before", seen[w_toward] and seen[w_away], {k: len(v) for k, v in seen.items()})
+    finally:
+        set_law(s, "fov_on", False, check=False)
+        set_law(s, "fov_near_m", 3.0, check=False)
+        set_law(s, "fov_near_dark_m", 2.0, check=False)
+        # Off the shared open line: later scenes (doing) count who stands near its west end.
+        for k, who in enumerate((eye, ahead, behind, close, w_toward, w_away)):
+            s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 44, check=False)
+
+
 def doing(s):
     """What one character perceives another doing, for AI bodies (docs/PERCEPTION.md, "Activity
     derived from the body"): its activity's label, unchanged by the derivation from the body,
@@ -1317,6 +1463,113 @@ def dealings(s):
     s.rows(f"SELECT * FROM skill_use WHERE actor = {host}", "regard-wave")
     s.expect("a relation filter reads the community's regard", any(r.get("target") == rival for r in waved), waved)
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
+
+
+def answers(s):
+    """Accept and decline name what they answer (docs/WORLD_RULES.md, "Answering"): a trade
+    offer (`"offer": id`) or a proposal of terms (`"record": id`). Named, exactly that is taken
+    or refused with the reason; without a name, accept takes what it always took (terms first,
+    then the trade). Decline ends the offer or proposal, its maker is told (kind `record`) and
+    an onlooker sees it."""
+    a, b, c, d = s.people(4)
+    for x in (b, c, d):
+        s.call("place_near", x, a)
+    s.call("grant_items", a, "berries", 6)
+    s.call("grant_items", b, "wood", 6)
+
+    def offer_of(maker):
+        rows = [o for o in s.rows("SELECT * FROM trade_offer") if o["from"] == maker]
+        return rows[0] if rows else None
+
+    def proposal_of(maker, to):
+        rs = [r for r in s.rows("SELECT * FROM record") if r["kind"] == "agreement" and r["by"] == maker]
+        rs = [r for r in rs if any(p["party"] == to for p in s.rows(f"SELECT * FROM record_party WHERE record = {r['id']}"))]
+        return max(rs, key=lambda r: r["id"]) if rs else None
+
+    def refused(actor, words, since):
+        return [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {actor}")
+                if r["at_ms"] >= since and "did not work out" in r["text"] and words in r["text"]]
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    # A proposes terms to B and offers a trade too: B accepts the trade by its id, though the
+    # terms stand (before, an accept toward A took the terms first).
+    s.act(a, {"do": "offer_terms", "target": {"id": b}, "item": "berries", "qty": 2, "want": "wood", "want_qty": 3})
+    terms = s.wait(lambda: proposal_of(a, b))
+    s.act(a, {"do": "offer", "target": {"id": b}, "item": "berries", "qty": 2, "want": "wood", "want_qty": 1})
+    trade = s.wait(lambda: offer_of(a))
+    s.rows("SELECT * FROM trade_offer", "standing")
+    wood0 = s.inventory(a).get("wood", 0)
+    s.act(b, {"do": "accept", "target": {"id": a}, "offer": trade["id"]})
+    s.wait(lambda: offer_of(a) is None, seconds=20)
+    s.expect("accept with an offer id takes that trade, though terms stand",
+             s.inventory(a, "after-named-accept").get("wood", 0) == wood0 + 1 and proposal_of(a, b)["status"] == "offered", proposal_of(a, b))
+
+    # Wrong references are refused with the rules' reasons.
+    t0 = now()
+    s.act(b, {"do": "accept", "target": {"id": a}, "offer": trade["id"]})
+    s.expect("an offer already taken is refused: gone", bool(s.wait(lambda: refused(b, "that offer is gone", t0), seconds=20)))
+    s.act(a, {"do": "offer", "target": {"id": b}, "item": "berries", "qty": 1, "want": "wood", "want_qty": 1})
+    first = s.wait(lambda: offer_of(a))
+    s.act(a, {"do": "offer", "target": {"id": b}, "item": "berries", "qty": 3, "want": "wood", "want_qty": 1})
+    s.wait(lambda: (offer_of(a) or {}).get("id", first["id"]) != first["id"])
+    t0 = now()
+    s.act(b, {"do": "accept", "target": {"id": a}, "offer": first["id"]})
+    s.expect("an offer replaced since is refused with the new terms", bool(s.wait(lambda: refused(b, "they have changed their offer: now their 3 berries for your 1 wood", t0), seconds=20)))
+    t0 = now()
+    s.act(c, {"do": "accept", "target": {"id": a}, "offer": offer_of(a)["id"]})
+    s.expect("someone else's offer is refused: not addressed to you", bool(s.wait(lambda: refused(c, "that offer is not addressed to you", t0), seconds=20)))
+    t0 = now()
+    s.act(b, {"do": "accept", "target": {"id": a}, "record": terms["id"] + 100000})
+    s.expect("a proposal no longer there, with other terms standing, is refused with those terms",
+             bool(s.wait(lambda: refused(b, "they have changed their terms: now you give 3 wood, they give 2 berries", t0), seconds=20)))
+    t0 = now()
+    s.act(a, {"do": "accept", "target": {"id": b}, "record": terms["id"]})
+    s.expect("one's own proposal is refused: not addressed to you", bool(s.wait(lambda: refused(a, "that proposal is not addressed to you", t0), seconds=20)))
+
+    # Decline the standing trade by its id: it ends, A is told, D (beside them) sees it.
+    standing = offer_of(a)
+    t0 = now()
+    s.act(b, {"do": "decline", "target": {"id": a}, "offer": standing["id"]})
+    s.wait(lambda: offer_of(a) is None, seconds=20)
+    told = s.wait(lambda: s.told(a, "declined your offer of 3 berries for 1 wood.", "record"), seconds=20)
+    s.expect("decline ends the offer and its maker is told", offer_of(a) is None and bool(told), told)
+    seen = s.wait(lambda: s.told(d, "turned down", "record"), seconds=20)
+    s.expect("an onlooker sees the decline", bool(seen), seen)
+    s.expect("the decline is the decliner's own outcome", bool(s.wait(lambda: s.told(b, "eclined", "act"), seconds=10)),
+             s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {b}", "decliner"))
+
+    # Decline the terms by their record id: declined, closed, the proposer told.
+    s.act(b, {"do": "decline", "target": {"id": a}, "record": terms["id"]})
+    closed = s.wait(lambda: (lambda r: r if r and r["status"] == "declined" else None)(proposal_of(a, b)), seconds=20)
+    s.expect("decline closes the proposal as declined", closed and not closed["open"], closed)
+    s.expect("the proposer is told the terms were declined", bool(s.wait(lambda: s.told(a, "declined your terms: you give 2 berries, they give 3 wood.", "record"), seconds=20)))
+    t0 = now()
+    s.act(b, {"do": "accept", "target": {"id": a}, "record": terms["id"]})
+    s.expect("a declined proposal cannot be accepted after", bool(s.wait(lambda: refused(b, "that proposal was declined", t0), seconds=20)))
+    t0 = now()
+    s.act(b, {"do": "accept", "target": {"id": a}, "record": terms["id"] + 100000})
+    s.expect("a proposal that does not exist, nothing standing, is refused: gone", bool(s.wait(lambda: refused(b, "that proposal is gone", t0), seconds=20)))
+    t0 = now()
+    s.act(b, {"do": "decline", "target": {"id": a}})
+    s.expect("decline with nothing standing is refused", bool(s.wait(lambda: refused(b, "they have no standing offer for you", t0), seconds=20)))
+
+    # Without a reference, accept is what it was: terms first (C proposes to D and offers a
+    # trade; D's plain accept agrees the terms and leaves the trade standing).
+    s.call("grant_items", c, "berries", 2)
+    s.act(c, {"do": "offer_terms", "target": {"id": d}, "item": "berries", "qty": 1, "want": "stone", "want_qty": 1})
+    s.wait(lambda: proposal_of(c, d))
+    s.act(c, {"do": "offer", "target": {"id": d}, "item": "berries", "qty": 1, "want": "wood", "want_qty": 1})
+    s.wait(lambda: offer_of(c))
+    s.act(d, {"do": "accept", "target": {"id": c}})
+    agreed = s.wait(lambda: (lambda r: r if r and r["status"] == "agreed" else None)(proposal_of(c, d)), seconds=20)
+    s.expect("a plain accept takes the terms first, as before", agreed and offer_of(c) is not None, {"terms": agreed, "trade": offer_of(c)})
+    # And a plain decline then ends the trade (the one a plain accept would take now).
+    s.act(d, {"do": "decline", "target": {"id": c}})
+    s.wait(lambda: offer_of(c) is None, seconds=20)
+    s.expect("a plain decline ends what a plain accept would take", offer_of(c) is None and bool(s.told(c, "declined your offer of 1 berries for 1 wood.", "record")))
+    s.rows("SELECT * FROM record", "records-after")
 
 
 # Remains lie 3 game hours here: 90 real seconds on the 12-minute day (`remains_h`, turned into
@@ -1811,7 +2064,7 @@ def say(s):
         s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40)
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "audience": audience}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "audience": audience}
 
 
 def goods(s):
@@ -1920,6 +2173,12 @@ def goods(s):
     s.wait(lambda: structure("furnace", b)["lit_until_ms"] > 0, seconds=60)
     fed = structure("furnace", b)["lit_until_ms"]
     acts(a, {"do": "make", "item": "glass", "target": {"nearest": "furnace"}})
+    # Others see the work while it lasts (`make_shows`, goods-2): a `doing` row at the furnace.
+    card = {r["skill"]: r["code"] for r in s.rows("SELECT skill, code FROM act_card", "act-cards")}
+    s.expect("making and feeding are shown skills (act_card)", "make" in card and "feed" in card, card)
+    work = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM doing WHERE id = {a}") if r["code"] == card["make"]], seconds=20)
+    fx, fy = structure("furnace", b)["x"], structure("furnace", b)["y"]
+    s.expect("making glass is seen at the furnace while it lasts (doing)", abs(work[0]["x"] - fx) < 0.01 and abs(work[0]["y"] - fy) < 0.01, {"doing": work, "furnace": [fx, fy]})
     s.wait(lambda: s.inventory(a).get("glass", 0) == 1, seconds=60)
     inv = s.inventory(a, "after-glass")
     after = structure("furnace", b)

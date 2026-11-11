@@ -11,13 +11,25 @@
 #   defaults to the spec (a file's own name).
 #   PERSON_ARGS=<args>  more arguments for person.py (e.g. "--set age=70 --set beard.style=full")
 #   KIMODO_DIR=<dir>    the library's generated NPZs (default .local/kimodo/outputs/library)
-#   ONLY=<clips>        comma-separated library entries (default: the whole library, clips.json)
+#   ONLY=<clips>        comma-separated library entries (default: the whole library, clips.json);
+#                       `present` takes every entry whose takes are all in KIMODO_DIR, for a
+#                       machine whose copy of the library is behind clips.json
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 src=living/game/assets/lookdev
 blender=${BLENDER:-blender}
 kimodo=${KIMODO_DIR:-.local/kimodo/outputs/library}
 only=${ONLY:-}
+if [ "$only" = present ]; then
+  only=$(python3 - "$kimodo" <<'PY'
+import json, os, sys
+have = set(os.listdir(sys.argv[1]))
+clips = json.load(open("living/tools/blender/clips.json"))["clips"]
+print(",".join(c["name"] for c in clips if all(f"{c['name']}_s{s}.npz" in have for s in c.get("seeds", []))))
+PY
+)
+  echo "gen_person: baking the $(echo "$only" | tr ',' '\n' | wc -l) library entries present in $kimodo" >&2
+fi
 people=("$@")
 [ ${#people[@]} -gt 0 ] || people=(man woman elder youth boy girl heavy)
 mkdir -p "$src/anim"

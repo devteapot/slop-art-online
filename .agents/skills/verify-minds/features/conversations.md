@@ -52,3 +52,29 @@ The `parked` case selects `LIVING_PARK=wait` (the old rule); every other case ru
 - Speech triggers a talk turn, not a new full deliberation.
 - An ended exchange can reopen for new matter. Repetition tests closure without claiming permanent silence.
 - The observer does not control a player. The shared player identity is the real command path.
+
+## Ways and who heard
+
+Since `speech-1` (docs/COMMUNICATION.md §13):
+
+- A talk reply may name `"way"`, beside or inside `say`. `talk.rs` `way_of` keeps it when the world's rules have it (`prompts::ways`, from the compiled script) and otherwise says the line aloud. `mind_say` takes the way as its fourth argument. A deliberation's say (`mind_install`) is `say`.
+- A line whose words hold the speaker's own name gives the listener an `introduced` row when the name is news, so the mind is told "<Name> told you their name.". Consolidation sees it tagged `{Name=#id}`.
+- The mind service subscribes `line_heard` as the owner. Every prompt and consolidation shows a mind's own `said` line with whom it saw hear it: "… (heard by Bram and a stranger)", or "(no one you saw heard it)" (`Minds::heard_by`).
+
+The `speech` case (`verify_minds.py --case speech`) checks:
+
+1. A player introduces itself and the talk reply names `"way": "say"`: the line is spoken.
+2. The mind has one `introduced` row with the player as subject, and a `line_heard` row of its own lines listing the player.
+3. A second line draws a reply in `"way": "shout"`, which the world lacks: it is said aloud.
+4. The second talk prompt shows the mind's first line "(heard by …)", the player among those it lists (residents nearby may be listed too).
+5. A consolidation request carries "MindsTeller told you their name. {MindsTeller=#id}".
+
+Since `speech-2`:
+
+- A `whisper` row (words whispered to the mind) gives a turn as `speech` does; a `whispered` row (noticed, no words) never does.
+- The turn is told "They whispered this to you; …", and a reply that names no way is whispered back. A whisper refused because the speaker stepped away is not said aloud instead.
+- A turn answering a call is told how far the caller is, from its own row's words ("MindsTeller calls out to you from about 15 m"; this service does not follow bodies), and what an ordinary voice carries.
+- The reply format lists the ways (`"way": "say" or "whisper" or "call"`) when the world has more than one.
+- The `speech` case checks both, when the card has the ways:
+  - a whispered question from 1 m is answered with a "(whisper)" line, and its prompt says it was whispered;
+  - a call from 15 m is answered with a "(call)" line, and its prompt holds the distance, the voice's 9 m and the ways.

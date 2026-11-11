@@ -62,8 +62,8 @@ vocab! {
         Item = "item",
         /// The ways chips in the text box (ways of speaking only).
         Box = "box",
-        /// An incoming offer or proposal: toward its sender (`target: {"id": sender}`), the offer
-        /// it answers as the act's reference once the grammar carries one (rules-offers-2).
+        /// An incoming offer or proposal: toward its sender (`target: {"id": sender}`), naming the
+        /// offer it answers (`"offer": id`).
         Offer = "offer",
     }
 }
@@ -231,9 +231,14 @@ vocab! {
 
 /// Named icons for skills and acts (`look.icon`). The client's theme maps each to an image.
 pub const ICONS: &[&str] = &["sword", "bow", "fire", "shield", "dodge", "heal", "sheath", "give", "trade", "talk", "wave", "eye", "book", "hammer", "pot", "hand"];
-/// Named icons for items (an item's `icon` trait). Not checked at install: the goods' icon ids
-/// are the dev-box's (docs/WORLD_RULES.md), and this list follows them when they land.
-pub const ITEM_ICONS: &[&str] = &["berries", "bread", "meat", "arrow", "spear", "wood", "stone", "herb", "torch", "cloth", "tablet", "tool", "vessel", "bundle"];
+/// Named icons for items (an item's `icon` trait). Not checked at install. The goods' icon ids
+/// (goods-2, docs/WORLD_RULES.md "What a client shows") follow step 1's: one per item of the
+/// shipped script and Cullet's goods.
+pub const ITEM_ICONS: &[&str] = &[
+    "berries", "bread", "meat", "arrow", "spear", "wood", "stone", "herb", "torch", "cloth", "tablet", "tool", "vessel", "bundle",
+    "fish", "cooked_fish", "cooked_meat", "fiber", "hide", "cloak", "clay", "axe", "pick", "smoked_fish", "smoked_meat", "net", "basket", "bow", "salve", "leather", "armor", "mark",
+    "kelp", "ash", "sand", "glass", "roots", "baked_roots", "greens", "peat", "lamp_oil",
+];
 /// Clip families (`look.clip`): the client maps a family to its clips, rates and beats. `throw`
 /// is the spear throw's take; `turn`, `step` and `play` are the town-life looks of `_shows()`.
 pub const CLIPS: &[&str] = &["slash", "overhead", "thrust", "shoot", "throw", "cast", "guard", "dash", "jump", "bite", "leap", "gesture", "turn", "step", "play", "work", "eat", "sleep", "rest", "hand"];
@@ -244,7 +249,7 @@ pub const EFFECTS: &[&str] = &["slash", "arrow", "bolt", "burst", "glow", "guard
 pub const STATES: &[&str] = &[];
 /// Item groups that order the pack (an item's `group` trait). Not checked at install, as for
 /// [`ITEM_ICONS`].
-pub const ITEM_GROUPS: &[&str] = &["food", "tool", "material", "garment", "money"];
+pub const ITEM_GROUPS: &[&str] = &["food", "tool", "material", "garment", "money", "fuel", "weapon", "glass"];
 
 /// The keys of a `<name>_ui()` map.
 pub const UI_TRAITS: &[&str] = &["label", "on", "place", "order", "input", "picks", "choose", "detail", "unready", "toggles", "drag", "pin", "running", "refused", "look", "marker", "key", "tip", "alias", "to_label", "room_label", "rows", "bubble", "source"];
@@ -739,8 +744,8 @@ pub enum ActTarget {
     Thing { kind: String, at: Option<[f32; 2]> },
     /// A point on the ground.
     At([f32; 2]),
-    /// An incoming offer: toward its sender. The offer's id goes with the act once the grammar
-    /// carries a reference (rules-offers-2); until then the act names the sender only.
+    /// An incoming offer: toward its sender, naming the offer it answers (`"offer": id`; 0
+    /// names none, and the rules take what stands from the sender).
     Offer { from: u32, offer: u64 },
 }
 
@@ -764,7 +769,14 @@ pub fn act_node(skill: &str, target: &ActTarget, picked: &Picked) -> serde_json:
     let mut leaf = json!({"do": skill});
     match target {
         ActTarget::Me => {}
-        ActTarget::Creature(id) | ActTarget::Offer { from: id, .. } => leaf["target"] = json!({"id": id}),
+        ActTarget::Creature(id) => leaf["target"] = json!({"id": id}),
+        // The offer it answers goes with it (`"offer": id`); 0 names none.
+        ActTarget::Offer { from, offer } => {
+            leaf["target"] = json!({"id": from});
+            if *offer != 0 {
+                leaf["offer"] = json!(offer);
+            }
+        }
         ActTarget::Thing { kind, .. } => leaf["target"] = json!({"nearest": kind}),
         ActTarget::At(p) => leaf["target"] = json!({"at": p}),
     }

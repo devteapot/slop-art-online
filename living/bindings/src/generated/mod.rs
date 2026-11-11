@@ -77,11 +77,19 @@ pub mod grant_know_how_reducer;
 pub mod grant_repertoires_reducer;
 pub mod guest_table;
 pub mod guest_type;
+pub mod hear_salt_table;
+pub mod hear_salt_type;
+pub mod heard_sound_type;
+pub mod heard_sounds_table;
+pub mod heard_table;
+pub mod heard_type;
 pub mod hearer_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
+pub mod human_face_reducer;
 pub mod human_move_reducer;
 pub mod human_say_reducer;
+pub mod human_speak_reducer;
 pub mod infant_cry_table;
 pub mod infant_cry_type;
 pub mod infant_need_type;
@@ -102,7 +110,11 @@ pub mod know_how_table;
 pub mod know_how_type;
 pub mod land_info_type;
 pub mod land_table;
+pub mod law_change_table;
+pub mod law_change_type;
 pub mod leaf_result_type;
+pub mod line_heard_table;
+pub mod line_heard_type;
 pub mod line_seen_table;
 pub mod line_seen_type;
 pub mod lot_table;
@@ -135,6 +147,7 @@ pub mod my_deliberations_table;
 pub mod my_doing_table;
 pub mod my_experience_table;
 pub mod my_fighter_table;
+pub mod my_heard_table;
 pub mod my_inventory_table;
 pub mod my_know_how_table;
 pub mod my_offer_type;
@@ -213,6 +226,7 @@ pub mod set_behavior_reducer;
 pub mod set_paused_reducer;
 pub mod set_profile_reducer;
 pub mod set_weather_reducer;
+pub mod set_world_law_reducer;
 pub mod settlement_table;
 pub mod settlement_type;
 pub mod skill_card_table;
@@ -227,6 +241,8 @@ pub mod spawn_battle_reducer;
 pub mod spawn_crowd_reducer;
 pub mod spawn_newcomer_reducer;
 pub mod spawn_skirmish_reducer;
+pub mod speech_card_table;
+pub mod speech_card_type;
 pub mod stats_table;
 pub mod stats_type;
 pub mod steer_table;
@@ -331,11 +347,19 @@ pub use grant_know_how_reducer::grant_know_how;
 pub use grant_repertoires_reducer::grant_repertoires;
 pub use guest_table::*;
 pub use guest_type::Guest;
+pub use hear_salt_table::*;
+pub use hear_salt_type::HearSalt;
+pub use heard_sound_type::HeardSound;
+pub use heard_sounds_table::*;
+pub use heard_table::*;
+pub use heard_type::Heard;
 pub use hearer_type::Hearer;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
+pub use human_face_reducer::human_face;
 pub use human_move_reducer::human_move;
 pub use human_say_reducer::human_say;
+pub use human_speak_reducer::human_speak;
 pub use infant_cry_table::*;
 pub use infant_cry_type::InfantCry;
 pub use infant_need_type::InfantNeed;
@@ -356,7 +380,11 @@ pub use know_how_table::*;
 pub use know_how_type::KnowHow;
 pub use land_info_type::LandInfo;
 pub use land_table::*;
+pub use law_change_table::*;
+pub use law_change_type::LawChange;
 pub use leaf_result_type::LeafResult;
+pub use line_heard_table::*;
+pub use line_heard_type::LineHeard;
 pub use line_seen_table::*;
 pub use line_seen_type::LineSeen;
 pub use lot_table::*;
@@ -389,6 +417,7 @@ pub use my_deliberations_table::*;
 pub use my_doing_table::*;
 pub use my_experience_table::*;
 pub use my_fighter_table::*;
+pub use my_heard_table::*;
 pub use my_inventory_table::*;
 pub use my_know_how_table::*;
 pub use my_offer_type::MyOffer;
@@ -467,6 +496,7 @@ pub use set_behavior_reducer::set_behavior;
 pub use set_paused_reducer::set_paused;
 pub use set_profile_reducer::set_profile;
 pub use set_weather_reducer::set_weather;
+pub use set_world_law_reducer::set_world_law;
 pub use settlement_table::*;
 pub use settlement_type::Settlement;
 pub use skill_card_table::*;
@@ -481,6 +511,8 @@ pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_crowd_reducer::spawn_crowd;
 pub use spawn_newcomer_reducer::spawn_newcomer;
 pub use spawn_skirmish_reducer::spawn_skirmish;
+pub use speech_card_table::*;
+pub use speech_card_type::SpeechCard;
 pub use stats_table::*;
 pub use stats_type::Stats;
 pub use steer_table::*;
@@ -546,6 +578,10 @@ pub enum Reducer {
     HumanAct {
         node: String,
     },
+    HumanFace {
+        dx: f32,
+        dy: f32,
+    },
     HumanMove {
         dx: f32,
         dy: f32,
@@ -554,6 +590,11 @@ pub enum Reducer {
     HumanSay {
         text: String,
         to: u32,
+    },
+    HumanSpeak {
+        text: String,
+        to: u32,
+        way: String,
     },
     InstallScript {
         source: String,
@@ -595,6 +636,7 @@ pub enum Reducer {
         actor: u32,
         say: String,
         say_to: u32,
+        way: String,
         seen_ms: u64,
         thought: ThoughtIn,
     },
@@ -653,6 +695,10 @@ pub enum Reducer {
         raining: bool,
         secs: u32,
     },
+    SetWorldLaw {
+        name: String,
+        value: String,
+    },
     SpawnBattle {
         n: u32,
     },
@@ -695,8 +741,10 @@ impl __sdk::Reducer for Reducer {
             Reducer::GrantRepertoires => "grant_repertoires",
             Reducer::Housekeeping { .. } => "housekeeping",
             Reducer::HumanAct { .. } => "human_act",
+            Reducer::HumanFace { .. } => "human_face",
             Reducer::HumanMove { .. } => "human_move",
             Reducer::HumanSay { .. } => "human_say",
+            Reducer::HumanSpeak { .. } => "human_speak",
             Reducer::InstallScript { .. } => "install_script",
             Reducer::Join { .. } => "join",
             Reducer::Kill { .. } => "kill",
@@ -722,6 +770,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetPaused { .. } => "set_paused",
             Reducer::SetProfile { .. } => "set_profile",
             Reducer::SetWeather { .. } => "set_weather",
+            Reducer::SetWorldLaw { .. } => "set_world_law",
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
             Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
@@ -771,6 +820,12 @@ impl __sdk::Reducer for Reducer {
             Reducer::HumanAct { node } => {
                 __sats::bsatn::to_vec(&human_act_reducer::HumanActArgs { node: node.clone() })
             }
+            Reducer::HumanFace { dx, dy } => {
+                __sats::bsatn::to_vec(&human_face_reducer::HumanFaceArgs {
+                    dx: dx.clone(),
+                    dy: dy.clone(),
+                })
+            }
             Reducer::HumanMove { dx, dy, run } => {
                 __sats::bsatn::to_vec(&human_move_reducer::HumanMoveArgs {
                     dx: dx.clone(),
@@ -782,6 +837,13 @@ impl __sdk::Reducer for Reducer {
                 __sats::bsatn::to_vec(&human_say_reducer::HumanSayArgs {
                     text: text.clone(),
                     to: to.clone(),
+                })
+            }
+            Reducer::HumanSpeak { text, to, way } => {
+                __sats::bsatn::to_vec(&human_speak_reducer::HumanSpeakArgs {
+                    text: text.clone(),
+                    to: to.clone(),
+                    way: way.clone(),
                 })
             }
             Reducer::InstallScript { source } => {
@@ -844,12 +906,14 @@ impl __sdk::Reducer for Reducer {
                 actor,
                 say,
                 say_to,
+                way,
                 seen_ms,
                 thought,
             } => __sats::bsatn::to_vec(&mind_say_reducer::MindSayArgs {
                 actor: actor.clone(),
                 say: say.clone(),
                 say_to: say_to.clone(),
+                way: way.clone(),
                 seen_ms: seen_ms.clone(),
                 thought: thought.clone(),
             }),
@@ -941,6 +1005,12 @@ impl __sdk::Reducer for Reducer {
                     secs: secs.clone(),
                 })
             }
+            Reducer::SetWorldLaw { name, value } => {
+                __sats::bsatn::to_vec(&set_world_law_reducer::SetWorldLawArgs {
+                    name: name.clone(),
+                    value: value.clone(),
+                })
+            }
             Reducer::SpawnBattle { n } => {
                 __sats::bsatn::to_vec(&spawn_battle_reducer::SpawnBattleArgs { n: n.clone() })
             }
@@ -1016,6 +1086,9 @@ pub struct DbUpdate {
     genesis_timer: __sdk::TableUpdate<GenesisTimer>,
     genome: __sdk::TableUpdate<Genome>,
     guest: __sdk::TableUpdate<Guest>,
+    hear_salt: __sdk::TableUpdate<HearSalt>,
+    heard: __sdk::TableUpdate<Heard>,
+    heard_sounds: __sdk::TableUpdate<HeardSound>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
@@ -1023,6 +1096,8 @@ pub struct DbUpdate {
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
     land: __sdk::TableUpdate<LandInfo>,
+    law_change: __sdk::TableUpdate<LawChange>,
+    line_heard: __sdk::TableUpdate<LineHeard>,
     line_seen: __sdk::TableUpdate<LineSeen>,
     lot: __sdk::TableUpdate<Lot>,
     membership: __sdk::TableUpdate<Membership>,
@@ -1037,6 +1112,7 @@ pub struct DbUpdate {
     my_doing: __sdk::TableUpdate<Doing>,
     my_experience: __sdk::TableUpdate<Experience>,
     my_fighter: __sdk::TableUpdate<Fighter>,
+    my_heard: __sdk::TableUpdate<LineHeard>,
     my_inventory: __sdk::TableUpdate<Inventory>,
     my_know_how: __sdk::TableUpdate<KnowHow>,
     my_offers: __sdk::TableUpdate<MyOffer>,
@@ -1075,6 +1151,7 @@ pub struct DbUpdate {
     skill_code: __sdk::TableUpdate<SkillCode>,
     skill_use: __sdk::TableUpdate<SkillUse>,
     slow_timer: __sdk::TableUpdate<SlowTimer>,
+    speech_card: __sdk::TableUpdate<SpeechCard>,
     stats: __sdk::TableUpdate<Stats>,
     steer: __sdk::TableUpdate<Steer>,
     structure: __sdk::TableUpdate<Structure>,
@@ -1189,6 +1266,15 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "guest" => db_update
                     .guest
                     .append(guest_table::parse_table_update(table_update)?),
+                "hear_salt" => db_update
+                    .hear_salt
+                    .append(hear_salt_table::parse_table_update(table_update)?),
+                "heard" => db_update
+                    .heard
+                    .append(heard_table::parse_table_update(table_update)?),
+                "heard_sounds" => db_update
+                    .heard_sounds
+                    .append(heard_sounds_table::parse_table_update(table_update)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(infant_cry_table::parse_table_update(table_update)?),
@@ -1210,6 +1296,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "land" => db_update
                     .land
                     .append(land_table::parse_table_update(table_update)?),
+                "law_change" => db_update
+                    .law_change
+                    .append(law_change_table::parse_table_update(table_update)?),
+                "line_heard" => db_update
+                    .line_heard
+                    .append(line_heard_table::parse_table_update(table_update)?),
                 "line_seen" => db_update
                     .line_seen
                     .append(line_seen_table::parse_table_update(table_update)?),
@@ -1252,6 +1344,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_fighter" => db_update
                     .my_fighter
                     .append(my_fighter_table::parse_table_update(table_update)?),
+                "my_heard" => db_update
+                    .my_heard
+                    .append(my_heard_table::parse_table_update(table_update)?),
                 "my_inventory" => db_update
                     .my_inventory
                     .append(my_inventory_table::parse_table_update(table_update)?),
@@ -1366,6 +1461,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "slow_timer" => db_update
                     .slow_timer
                     .append(slow_timer_table::parse_table_update(table_update)?),
+                "speech_card" => db_update
+                    .speech_card
+                    .append(speech_card_table::parse_table_update(table_update)?),
                 "stats" => db_update
                     .stats
                     .append(stats_table::parse_table_update(table_update)?),
@@ -1524,6 +1622,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.guest = cache
             .apply_diff_to_table::<Guest>("guest", &self.guest)
             .with_updates_by_pk(|row| &row.id);
+        diff.hear_salt = cache
+            .apply_diff_to_table::<HearSalt>("hear_salt", &self.hear_salt)
+            .with_updates_by_pk(|row| &row.id);
+        diff.heard = cache
+            .apply_diff_to_table::<Heard>("heard", &self.heard)
+            .with_updates_by_pk(|row| &row.key);
         diff.infant_cry = cache
             .apply_diff_to_table::<InfantCry>("infant_cry", &self.infant_cry)
             .with_updates_by_pk(|row| &row.infant);
@@ -1545,6 +1649,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.land = cache
             .apply_diff_to_table::<LandInfo>("land", &self.land)
             .with_updates_by_pk(|row| &row.id);
+        diff.law_change = cache
+            .apply_diff_to_table::<LawChange>("law_change", &self.law_change)
+            .with_updates_by_pk(|row| &row.id);
+        diff.line_heard = cache
+            .apply_diff_to_table::<LineHeard>("line_heard", &self.line_heard)
+            .with_updates_by_pk(|row| &row.line);
         diff.line_seen = cache
             .apply_diff_to_table::<LineSeen>("line_seen", &self.line_seen)
             .with_updates_by_pk(|row| &row.id);
@@ -1644,6 +1754,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.slow_timer = cache
             .apply_diff_to_table::<SlowTimer>("slow_timer", &self.slow_timer)
             .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.speech_card = cache
+            .apply_diff_to_table::<SpeechCard>("speech_card", &self.speech_card)
+            .with_updates_by_pk(|row| &row.name);
         diff.stats = cache
             .apply_diff_to_table::<Stats>("stats", &self.stats)
             .with_updates_by_pk(|row| &row.id);
@@ -1683,6 +1796,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.world_law = cache
             .apply_diff_to_table::<WorldLaw>("world_law", &self.world_law)
             .with_updates_by_pk(|row| &row.name);
+        diff.heard_sounds = cache
+            .apply_diff_to_table::<HeardSound>("heard_sounds", &self.heard_sounds)
+            .with_updates_by_pk(|row| &row.key);
         diff.my_body = cache
             .apply_diff_to_table::<Motion>("my_body", &self.my_body)
             .with_updates_by_pk(|row| &row.id);
@@ -1701,6 +1817,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_fighter = cache
             .apply_diff_to_table::<Fighter>("my_fighter", &self.my_fighter)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_heard = cache
+            .apply_diff_to_table::<LineHeard>("my_heard", &self.my_heard)
+            .with_updates_by_pk(|row| &row.line);
         diff.my_inventory = cache
             .apply_diff_to_table::<Inventory>("my_inventory", &self.my_inventory)
             .with_updates_by_pk(|row| &row.id);
@@ -1833,6 +1952,15 @@ impl __sdk::DbUpdate for DbUpdate {
                 "guest" => db_update
                     .guest
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "hear_salt" => db_update
+                    .hear_salt
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heard" => db_update
+                    .heard
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heard_sounds" => db_update
+                    .heard_sounds
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1853,6 +1981,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "land" => db_update
                     .land
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "law_change" => db_update
+                    .law_change
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "line_heard" => db_update
+                    .line_heard
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
@@ -1895,6 +2029,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_fighter" => db_update
                     .my_fighter
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_heard" => db_update
+                    .my_heard
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
@@ -2009,6 +2146,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "slow_timer" => db_update
                     .slow_timer
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "speech_card" => db_update
+                    .speech_card
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "stats" => db_update
                     .stats
@@ -2155,6 +2295,15 @@ impl __sdk::DbUpdate for DbUpdate {
                 "guest" => db_update
                     .guest
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "hear_salt" => db_update
+                    .hear_salt
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heard" => db_update
+                    .heard
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heard_sounds" => db_update
+                    .heard_sounds
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2175,6 +2324,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "land" => db_update
                     .land
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "law_change" => db_update
+                    .law_change
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "line_heard" => db_update
+                    .line_heard
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
@@ -2217,6 +2372,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_fighter" => db_update
                     .my_fighter
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_heard" => db_update
+                    .my_heard
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
@@ -2332,6 +2490,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "slow_timer" => db_update
                     .slow_timer
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "speech_card" => db_update
+                    .speech_card
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "stats" => db_update
                     .stats
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2417,6 +2578,9 @@ pub struct AppliedDiff<'r> {
     genesis_timer: __sdk::TableAppliedDiff<'r, GenesisTimer>,
     genome: __sdk::TableAppliedDiff<'r, Genome>,
     guest: __sdk::TableAppliedDiff<'r, Guest>,
+    hear_salt: __sdk::TableAppliedDiff<'r, HearSalt>,
+    heard: __sdk::TableAppliedDiff<'r, Heard>,
+    heard_sounds: __sdk::TableAppliedDiff<'r, HeardSound>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
@@ -2424,6 +2588,8 @@ pub struct AppliedDiff<'r> {
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
+    law_change: __sdk::TableAppliedDiff<'r, LawChange>,
+    line_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
     lot: __sdk::TableAppliedDiff<'r, Lot>,
     membership: __sdk::TableAppliedDiff<'r, Membership>,
@@ -2438,6 +2604,7 @@ pub struct AppliedDiff<'r> {
     my_doing: __sdk::TableAppliedDiff<'r, Doing>,
     my_experience: __sdk::TableAppliedDiff<'r, Experience>,
     my_fighter: __sdk::TableAppliedDiff<'r, Fighter>,
+    my_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     my_inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     my_know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     my_offers: __sdk::TableAppliedDiff<'r, MyOffer>,
@@ -2476,6 +2643,7 @@ pub struct AppliedDiff<'r> {
     skill_code: __sdk::TableAppliedDiff<'r, SkillCode>,
     skill_use: __sdk::TableAppliedDiff<'r, SkillUse>,
     slow_timer: __sdk::TableAppliedDiff<'r, SlowTimer>,
+    speech_card: __sdk::TableAppliedDiff<'r, SpeechCard>,
     stats: __sdk::TableAppliedDiff<'r, Stats>,
     steer: __sdk::TableAppliedDiff<'r, Steer>,
     structure: __sdk::TableAppliedDiff<'r, Structure>,
@@ -2549,6 +2717,13 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<Genome>("genome", &self.genome, event);
         callbacks.invoke_table_row_callbacks::<Guest>("guest", &self.guest, event);
+        callbacks.invoke_table_row_callbacks::<HearSalt>("hear_salt", &self.hear_salt, event);
+        callbacks.invoke_table_row_callbacks::<Heard>("heard", &self.heard, event);
+        callbacks.invoke_table_row_callbacks::<HeardSound>(
+            "heard_sounds",
+            &self.heard_sounds,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<InfantCry>("infant_cry", &self.infant_cry, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
         callbacks.invoke_table_row_callbacks::<JoinRequest>(
@@ -2560,6 +2735,8 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
         callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
+        callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
+        callbacks.invoke_table_row_callbacks::<LineHeard>("line_heard", &self.line_heard, event);
         callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
         callbacks.invoke_table_row_callbacks::<Lot>("lot", &self.lot, event);
         callbacks.invoke_table_row_callbacks::<Membership>("membership", &self.membership, event);
@@ -2586,6 +2763,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Fighter>("my_fighter", &self.my_fighter, event);
+        callbacks.invoke_table_row_callbacks::<LineHeard>("my_heard", &self.my_heard, event);
         callbacks.invoke_table_row_callbacks::<Inventory>(
             "my_inventory",
             &self.my_inventory,
@@ -2660,6 +2838,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<SkillCode>("skill_code", &self.skill_code, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>("skill_use", &self.skill_use, event);
         callbacks.invoke_table_row_callbacks::<SlowTimer>("slow_timer", &self.slow_timer, event);
+        callbacks.invoke_table_row_callbacks::<SpeechCard>("speech_card", &self.speech_card, event);
         callbacks.invoke_table_row_callbacks::<Stats>("stats", &self.stats, event);
         callbacks.invoke_table_row_callbacks::<Steer>("steer", &self.steer, event);
         callbacks.invoke_table_row_callbacks::<Structure>("structure", &self.structure, event);
@@ -3368,6 +3547,9 @@ impl __sdk::SpacetimeModule for RemoteModule {
         genesis_timer_table::register_table(client_cache);
         genome_table::register_table(client_cache);
         guest_table::register_table(client_cache);
+        hear_salt_table::register_table(client_cache);
+        heard_table::register_table(client_cache);
+        heard_sounds_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
@@ -3375,6 +3557,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
         land_table::register_table(client_cache);
+        law_change_table::register_table(client_cache);
+        line_heard_table::register_table(client_cache);
         line_seen_table::register_table(client_cache);
         lot_table::register_table(client_cache);
         membership_table::register_table(client_cache);
@@ -3389,6 +3573,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_doing_table::register_table(client_cache);
         my_experience_table::register_table(client_cache);
         my_fighter_table::register_table(client_cache);
+        my_heard_table::register_table(client_cache);
         my_inventory_table::register_table(client_cache);
         my_know_how_table::register_table(client_cache);
         my_offers_table::register_table(client_cache);
@@ -3427,6 +3612,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         skill_code_table::register_table(client_cache);
         skill_use_table::register_table(client_cache);
         slow_timer_table::register_table(client_cache);
+        speech_card_table::register_table(client_cache);
         stats_table::register_table(client_cache);
         steer_table::register_table(client_cache);
         structure_table::register_table(client_cache);
@@ -3473,6 +3659,9 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "genesis_timer",
         "genome",
         "guest",
+        "hear_salt",
+        "heard",
+        "heard_sounds",
         "infant_cry",
         "inventory",
         "join_request",
@@ -3480,6 +3669,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "judgment",
         "know_how",
         "land",
+        "law_change",
+        "line_heard",
         "line_seen",
         "lot",
         "membership",
@@ -3494,6 +3685,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_doing",
         "my_experience",
         "my_fighter",
+        "my_heard",
         "my_inventory",
         "my_know_how",
         "my_offers",
@@ -3532,6 +3724,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "skill_code",
         "skill_use",
         "slow_timer",
+        "speech_card",
         "stats",
         "steer",
         "structure",

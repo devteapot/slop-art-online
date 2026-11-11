@@ -257,7 +257,7 @@ The client keeps a fixed vocabulary. The rules choose names from it, and only th
 | `self` | C, the acts on oneself | `human_act` with no target |
 | `item` | Clicking an item in the pack | as for `self`, with that item |
 | `box` | The ways chips in the text box | `human_speak(text, to, way)` |
-| `offer` | An incoming offer or proposal | `human_act` toward its sender, `target: {"id": sender}`; the offer's id as the act's reference once rules-offers-2 adds one |
+| `offer` | An incoming offer or proposal | `human_act` toward its sender, `target: {"id": sender}`, with the offer it answers, `"offer": id` (docs/WORLD_RULES.md, "Answering") |
 
 Declarations can add rows to two fixed window kinds: `person` (pinned acts) and `skills` (descriptions). A new window kind is a client change (section 4).
 
@@ -572,7 +572,7 @@ Each step leaves the game playable. A step that ships no declarations changes no
 
 **Act building.**
 - `act_node()` is `verbs.rs` `Choice::node`, moved here; `Picked` adds `topic`.
-- `ActTarget::Offer` names the sender. The offer's id joins the act once the grammar carries a reference (rules-offers-2); a test fails when it does.
+- `ActTarget::Offer` names the sender and the offer it answers: `{"do": "accept"|"decline", "target": {"id": sender}, "offer": id}`, with `"offer"` left out when the id is 0 (test `an_act_toward_an_offer_names_it`). A proposal of terms is answered with `"record": id` (docs/WORLD_RULES.md, "Answering").
 - `bar_act()` returns `Option`: the leaf a press means, resolved as `use_skill` resolves it, and `None` where the authority refuses. The equivalence covers intent and target only: a press is used where the body stands, while a leaf with `{"id": n}` walks into reach first.
 
 **`Scripts`.** Methods `ui(name)`, `ui_specs()`, `ui_default(name)` and `ui_errors()`. `validate()` refuses any `ui_errors`, listing up to 12. The read keeps the default per field, so the rest of a declaration holds. Checks against the rules:

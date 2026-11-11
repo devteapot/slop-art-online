@@ -94,6 +94,26 @@ struct ActorMind {
     deferring: bool,
     /// Deliberations in a row whose model could not be reached (their request waits).
     model_failures: u32,
+    /// How many deliberations each pending reason (its text and arrival time) was already
+    /// carried by (`carried_reasons`).
+    carried: HashMap<(String, u64), u32>,
+}
+
+/// The record of what a deliberation carried: each reason line of its request, when it
+/// arrived, and how many earlier deliberations of this service already carried that same
+/// arrival (0 for a reason seen the first time). `counts` keeps only the reasons still pending.
+fn carry(counts: &mut HashMap<(String, u64), u32>, lines: Vec<(String, u64)>) -> Value {
+    counts.retain(|k, _| lines.contains(k));
+    let out: Vec<Value> = lines
+        .into_iter()
+        .map(|(text, arrived_ms)| {
+            let n = counts.entry((text.clone(), arrived_ms)).or_insert(0);
+            let before = *n;
+            *n += 1;
+            json!({"text": text, "arrived_ms": arrived_ms, "carried_before": before})
+        })
+        .collect();
+    Value::Array(out)
 }
 
 /// Where a character's first identity comes from, when the service finds none.
@@ -694,10 +714,26 @@ impl Minds {
             }
         }
         let tag = if who.is_empty() { String::new() } else { format!(" {{{}}}", who.join(", ")) };
+        let tag = format!("{}{tag}", self.heard_by(e));
         if with_id {
             format!("[{}] {} {}{tag}", e.id, fmt(e.at_ms), e.text)
         } else {
             format!("[{}] {}{tag}", fmt(e.at_ms), e.text)
+        }
+    }
+
+    /// Who heard one's own line, as the speaker saw it (`heard`): " (heard by Bram and a
+    /// stranger)"; nothing for other rows, or a line with no `heard` row.
+    fn heard_by(&self, e: &Experience) -> String {
+        if e.kind != "said" {
+            return String::new();
+        }
+        let Some(h) = self.conn.db.line_heard().line().find(&e.id) else { return String::new() };
+        let names: Vec<String> = h.hearers.iter().map(|id| self.known_as(e.observer, *id)).collect();
+        match names.as_slice() {
+            [] => " (no one you saw heard it)".into(),
+            [one] => format!(" (heard by {one})"),
+            [rest @ .., last] => format!(" (heard by {} and {last})", rest.join(", ")),
         }
     }
 
@@ -1587,6 +1623,12 @@ impl Minds {
 
     // ---- deliberation ------------------------------------------------------------
 
+    /// What this deliberation carried (see `carry`), for its thought's `detail.reasons`.
+    fn carried_reasons(&self, d: &Deliberation) -> Value {
+        let lines = living_rules::reasons::lines(&d.reason, &d.arrived);
+        carry(&mut self.actors.lock().unwrap().entry(d.actor).or_default().carried, lines)
+    }
+
     async fn deliberate(self: &Arc<Self>, d: &Deliberation) -> Result<()> {
         let actor = d.actor;
         let lane = self.deliberation_lane(d);
@@ -1767,7 +1809,7 @@ impl Minds {
                             if acts.is_empty() { String::new() } else { format!(" and acts: {}", acts_text(&acts)) },
                             if say.is_empty() { String::new() } else { format!(" and says “{say}”") }
                         ),
-                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1, "projects": project_detail}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "reply": v, "attempts": attempt + 1, "projects": project_detail}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
                         model: reply.model.clone(),
@@ -1776,7 +1818,7 @@ impl Minds {
                     log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
                     self.deliberation_says(actor, &say, to);
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, say, to, d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, say, to, String::new(), d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
@@ -1813,7 +1855,7 @@ impl Minds {
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!("{thought} → {plan}{}{serves_note}", if acts.is_empty() { String::new() } else { format!(" (acts: {})", acts_text(&acts)) }),
-                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1, "pruned": pruned, "projects": project_detail}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "reply": v, "attempts": attempt + 1, "pruned": pruned, "projects": project_detail}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
                         model: reply.model.clone(),
@@ -1924,7 +1966,7 @@ impl Minds {
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!("{feeling} → {impulse}{}", if changed.is_empty() { String::new() } else { format!(" (reworks {})", changed.join(", ")) }),
-                        detail: json!({"reason": d.reason, "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1}).to_string(),
                         latency_ms: latency,
                         tokens,
                         model: format!("{} → {}", felt.model, reply.model),
@@ -1932,7 +1974,7 @@ impl Minds {
                     };
                     log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, String::new(), 0, d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, String::new(), 0, String::new(), d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     return rx.await?.map_err(|e| anyhow!("mind_say: {e}"));
@@ -1947,7 +1989,7 @@ impl Minds {
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!("{feeling} → {impulse}"),
-                        detail: json!({"reason": d.reason, "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1, "pruned": pruned}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1, "pruned": pruned}).to_string(),
                         latency_ms: latency,
                         tokens,
                         model: format!("{} → {}", felt.model, reply.model),
@@ -2035,7 +2077,7 @@ impl Minds {
         }
         notes.extend(self.canonical_people(actor, &mut patch));
         self.keep_refused_merges(actor, &notes);
-        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
+        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "whisper" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
         if c.stage <= 1 {
             for m in patch.remember.iter_mut() {
@@ -2281,6 +2323,21 @@ fn label_node(node: Value, label: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The per-deliberation record of reasons: a reason carried again keeps counting, a new
+    /// arrival of the same words starts at 0, and reasons no longer pending are forgotten.
+    #[test]
+    fn carried_reasons_count_earlier_deliberations_per_arrival() {
+        let mut counts = HashMap::new();
+        let first = carry(&mut counts, vec![("You long for another child.".into(), 10), ("I finished my plan.".into(), 12)]);
+        assert_eq!(first.as_array().unwrap().iter().map(|r| r["carried_before"].as_u64().unwrap()).collect::<Vec<_>>(), vec![0, 0]);
+        let again = carry(&mut counts, vec![("You long for another child.".into(), 10), ("I finished my plan.".into(), 30)]);
+        assert_eq!(again[0]["carried_before"], 1);
+        assert_eq!(again[1]["carried_before"], 0, "a new arrival of the same words is a new reason");
+        assert_eq!(again[0]["arrived_ms"], 10);
+        carry(&mut counts, vec![]);
+        assert!(counts.is_empty());
+    }
 
     /// A compile that put the decision's words in a say act (a real rules2-r2 reply's shape)
     /// speaks them when the decision said nothing; when it did, its speech stands. Either way

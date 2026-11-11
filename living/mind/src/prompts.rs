@@ -144,6 +144,27 @@ fn compiled() -> Option<Arc<living_rules::script::Scripts>> {
     })
 }
 
+/// How far an ordinary voice (`say`) carries for a person with the world's hearing (metres).
+pub fn voice_m() -> f32 {
+    compiled().and_then(|s| s.way("say").map(|w| w.carry_for(s.reach().hearing))).unwrap_or(9.0)
+}
+
+/// The ways of speaking for a talk turn's reply, when the world has more than `say`.
+fn ways_text() -> String {
+    let Some(s) = compiled() else { return String::new() };
+    if s.ways().len() < 2 {
+        return String::new();
+    }
+    let names: Vec<String> = s.ways().iter().map(|w| format!("\"{}\"", w.name)).collect();
+    let about: Vec<String> = s.ways().iter().map(|w| format!("{} = {}", w.name, w.about.trim())).collect();
+    format!("\"way\": how you say it, {} (default \"say\"; {}), ", names.join(" or "), about.join(" "))
+}
+
+/// The ways of speaking the world's rules have (`<way>_speech()`), in their order.
+pub fn ways() -> Vec<String> {
+    compiled().map(|s| s.ways().iter().map(|w| w.name.clone()).collect()).unwrap_or_else(|| vec!["say".into()])
+}
+
 /// How a party reads one of its records, in the world's rules' words (`{id:N}` still to be
 /// named as the reader knows N).
 pub fn record_text(r: &living_rules::records::RecordFacts) -> Option<String> {
@@ -152,7 +173,7 @@ pub fn record_text(r: &living_rules::records::RecordFacts) -> Option<String> {
 
 /// The acts a conversation turn's examples show (`talk_system`); every one must appear there as
 /// `"do": "<name>"`, or the turn neither shows nor lists it (test `talk_examples_show_every_shown_act`).
-const TALK_SHOWN: [&str; 6] = ["conceive", "accept", "give", "offer", "teach", "host"];
+const TALK_SHOWN: [&str; 7] = ["conceive", "accept", "decline", "give", "offer", "teach", "host"];
 
 /// The acts a conversation turn may carry that the rules mark for it (`talk` in a skill's
 /// spec) and the turn's examples do not show already, one line each.
@@ -322,7 +343,7 @@ Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}
   {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
-Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
+Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
   People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
@@ -358,7 +379,8 @@ the body walks to the target, does it by the same rules as anything else (checks
 While an act is under way your graph's work waits; only its reflexes (flee, dodge, block, attack, throw, yield) break it off. \
 Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happens when you both choose it toward each other within two minutes), \
 {\"do\": \"give\", \"target\": {\"id\": 4}, \"item\": \"berries\", \"qty\": 3}, \
-{\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}} (take a trade offered to you), \
+{\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}, \"offer\": 17} (take what they offered you: \"offer\" names their trade offer, \"record\" their proposed terms, by the id you were shown; without one, their terms come first, then their trade), \
+{\"do\": \"decline\", \"target\": {\"id\": 4}, \"offer\": 17} (say no to it: it ends, and they are told), \
 {\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"fire\"}, {\"do\": \"tend\", \"target\": {\"id\": 6}}, \
 {\"do\": \"host\", \"target\": {\"id\": 6}} (take someone in as your household's guest until morning: a bed in your house, food from its store), \
 {\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know\"}, {\"do\": \"read\"}, \
@@ -939,9 +961,10 @@ Real conversations are short and have a point. As soon as something is settled b
 one of you declined, someone will think it over, or there is simply nothing more to say), say so in \"settled\": that line closes \
 the conversation for now; don't restate what was already agreed or keep saying goodbye. You don't have to answer everything: \
 silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
-\"say\": \"your words\" or null, \"to\": id of who you speak to, \
+\"say\": \"your words\" or null, \"to\": id of who you speak to, {}\
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
-{{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}}} to take a trade they offered, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
+{{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to take a trade they offered (\"record\": id of their proposal, for terms), \
+{{\"do\": \"decline\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to say no to it, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
 {{\"do\": \"offer\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fire\"}}, \
 {{\"do\": \"host\", \"target\": {{\"id\": id of who you speak to}}}} to take them in as your household's guest until morning \
 (words change nothing in the world by themselves: what you agree to do now, do here; you will learn how it went), \
@@ -949,6 +972,7 @@ silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what yo
 \"until\": null or when to take it up again (\"dawn\", \"morning\", \"noon\", \"evening\", \"night\", \"tomorrow\" or an hour 0-23), \
 \"end\": true if this is your last word for now}}{}",
         opening(frame, TALK_OPENING),
+        ways_text(),
         match talk_acts() {
             a if a.is_empty() => String::new(),
             a => format!("\nOther acts you may carry the same way (\"target\": {{\"id\": id of who you speak to}}), as the world's rules describe them:\n{a}"),
@@ -973,6 +997,8 @@ pub struct TalkUser<'a> {
     pub body: &'a str,
     pub conversation: &'a [String],
     pub heard: &'a str,
+    /// How it was said, when that matters for the answer (a whisper, a call from afar).
+    pub how: &'a str,
     /// Standing proposals between the two, what one carries and knows (for acts).
     pub between: &'a [String],
 }
@@ -1012,6 +1038,9 @@ pub fn talk_user(t: &TalkUser) -> String {
         out.push(Stability::Dynamic, format!("{l}\n"));
     }
     out.push(Stability::Dynamic, format!("\n# What you are answering\n{other}: “{}”", t.heard));
+    if !t.how.is_empty() {
+        out.push(Stability::Dynamic, format!("\n{}", t.how));
+    }
     out.render()
 }
 
@@ -1119,6 +1148,7 @@ mod tests {
                     body: "",
                     conversation: &["dynamic-line".into()],
                     heard: "dynamic-heard",
+                    how: "",
                     between: &["dynamic-offer".into()],
                 }),
             ),
