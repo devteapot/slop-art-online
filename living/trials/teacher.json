@@ -1,22 +1,14 @@
 {
  "title": "A teacher before the cold night",
- "about": "Late afternoon (15:30), outside the town walls with no shelter near. A resident greets the subject, warns of the cold, teaches the cloak (the ordinary teach skill; every Elmwick adult already knows fire), gives two hides and a fiber, and goes home. Night falls about 2.3 minutes in and lasts 5 minutes; a person without a fire, shelter or cloak loses health to the cold at night.",
+ "about": "Late afternoon (15:30), outside the town walls with no shelter near. A resident greets the subject, warns of the cold, teaches the cloak (the ordinary teach skill; every Elmwick adult already knows fire), gives two hides and a fiber, and goes home. Night falls about 2.3 minutes in and lasts 5 minutes; a person without a fire, shelter or cloak loses health to the cold at night. Since 2026-11-11 the subject is a spawned newcomer (no seeded home): a picked Elmwick resident brought its seeded life into the scene (lives-2) and walked home, so the wolves trial's pack never reached it and the theft's owner never came back to its stall (docs/TRIALS.md, baseline b6).",
  "world": {
   "seed": "island",
   "start_hour": 15.5
  },
  "minutes": 15,
  "subject": {
-  "pick": {
-   "kind": "person",
-   "stage": 2,
-   "bg": {
-    "town": "Elmwick"
-   },
-   "lacks": [
-    "cloak"
-   ],
-   "fewest_know_how": true
+  "spawn": {
+   "name": "Wren"
   },
   "clear_items": true,
   "background": {
