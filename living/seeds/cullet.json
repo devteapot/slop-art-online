@@ -1,0 +1,1647 @@
+{
+ "run": "cullet-rough",
+ "seed": 3,
+ "map": {
+  "kind": "land",
+  "size": 1024,
+  "params": {
+   "sites": [],
+   "plans": [
+    {
+     "id": "cullet",
+     "kind": "town",
+     "style": "cullet",
+     "origin": [
+      575,
+      888
+     ],
+     "rotation_deg": 15,
+     "blend_m": 70,
+     "levels": [
+      {
+       "id": "strand",
+       "height_m": 2.0,
+       "area": [
+        [
+         -125,
+         0
+        ],
+        [
+         145,
+         0
+        ],
+        [
+         145,
+         30
+        ],
+        [
+         -125,
+         30
+        ]
+       ]
+      },
+      {
+       "id": "low",
+       "height_m": 5.5,
+       "area": [
+        [
+         -115,
+         30
+        ],
+        [
+         125,
+         30
+        ],
+        [
+         125,
+         50
+        ],
+        [
+         -115,
+         50
+        ]
+       ]
+      },
+      {
+       "id": "mid",
+       "height_m": 9.5,
+       "area": [
+        [
+         -110,
+         50
+        ],
+        [
+         120,
+         50
+        ],
+        [
+         120,
+         72
+        ],
+        [
+         -110,
+         72
+        ]
+       ]
+      },
+      {
+       "id": "high",
+       "height_m": 13.5,
+       "area": [
+        [
+         -100,
+         72
+        ],
+        [
+         110,
+         72
+        ],
+        [
+         110,
+         94
+        ],
+        [
+         -100,
+         94
+        ]
+       ]
+      },
+      {
+       "id": "crown",
+       "height_m": 20.0,
+       "area": [
+        [
+         -40,
+         94
+        ],
+        [
+         40,
+         94
+        ],
+        [
+         40,
+         130
+        ],
+        [
+         -40,
+         130
+        ]
+       ]
+      }
+     ],
+     "sea": [
+      [
+       -170,
+       -110
+      ],
+      [
+       175,
+       -110
+      ],
+      [
+       175,
+       0
+      ],
+      [
+       -170,
+       0
+      ]
+     ],
+     "square": {
+      "level": "strand",
+      "area": [
+       [
+        -15,
+        1
+       ],
+       [
+        15,
+        1
+       ],
+       [
+        15,
+        15
+       ],
+       [
+        -15,
+        15
+       ]
+      ],
+      "paved": true
+     },
+     "streets": [
+      {
+       "id": "the Strand west",
+       "points": [
+        [
+         -122,
+         5
+        ],
+        [
+         -15,
+         5
+        ]
+       ],
+       "width_m": 6.0,
+       "class": "street",
+       "surface": "flags",
+       "level": "strand"
+      },
+      {
+       "id": "the Strand east",
+       "points": [
+        [
+         15,
+         5
+        ],
+        [
+         142,
+         5
+        ]
+       ],
+       "width_m": 6.0,
+       "class": "street",
+       "surface": "flags",
+       "level": "strand"
+      },
+      {
+       "id": "Low Row",
+       "points": [
+        [
+         -112,
+         36
+        ],
+        [
+         122,
+         36
+        ]
+       ],
+       "width_m": 5.0,
+       "class": "street",
+       "surface": "setts",
+       "level": "low"
+      },
+      {
+       "id": "Mid Row",
+       "points": [
+        [
+         -107,
+         55
+        ],
+        [
+         117,
+         55
+        ]
+       ],
+       "width_m": 5.0,
+       "class": "street",
+       "surface": "setts",
+       "level": "mid"
+      },
+      {
+       "id": "High Row",
+       "points": [
+        [
+         -97,
+         77
+        ],
+        [
+         107,
+         77
+        ]
+       ],
+       "width_m": 5.0,
+       "class": "street",
+       "surface": "setts",
+       "level": "high"
+      },
+      {
+       "id": "the Crown path",
+       "points": [
+        [
+         -20,
+         104
+        ],
+        [
+         20,
+         104
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "earth",
+       "level": "crown"
+      },
+      {
+       "id": "the Moss road",
+       "points": [
+        [
+         107,
+         77
+        ],
+        [
+         130,
+         100
+        ],
+        [
+         150,
+         150
+        ],
+        [
+         160,
+         220
+        ]
+       ],
+       "width_m": 3.6,
+       "class": "trunk",
+       "surface": "earth"
+      }
+     ],
+     "stairs": [
+      {
+       "id": "wynd 1 low",
+       "from": "strand",
+       "to": "low",
+       "foot": [
+        -90,
+        24
+       ],
+       "head": [
+        -90,
+        33
+       ],
+       "width_m": 2.6,
+       "rise_m": 3.5
+      },
+      {
+       "id": "wynd 1 mid",
+       "from": "low",
+       "to": "mid",
+       "foot": [
+        -90,
+        46
+       ],
+       "head": [
+        -90,
+        53.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "wynd 1 high",
+       "from": "mid",
+       "to": "high",
+       "foot": [
+        -90,
+        68
+       ],
+       "head": [
+        -90,
+        75.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "wynd 2 low",
+       "from": "strand",
+       "to": "low",
+       "foot": [
+        -40,
+        24
+       ],
+       "head": [
+        -40,
+        33
+       ],
+       "width_m": 2.6,
+       "rise_m": 3.5
+      },
+      {
+       "id": "wynd 2 mid",
+       "from": "low",
+       "to": "mid",
+       "foot": [
+        -40,
+        46
+       ],
+       "head": [
+        -40,
+        53.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "wynd 2 high",
+       "from": "mid",
+       "to": "high",
+       "foot": [
+        -40,
+        68
+       ],
+       "head": [
+        -40,
+        75.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "wynd 3 low",
+       "from": "strand",
+       "to": "low",
+       "foot": [
+        10,
+        24
+       ],
+       "head": [
+        10,
+        33
+       ],
+       "width_m": 2.6,
+       "rise_m": 3.5
+      },
+      {
+       "id": "wynd 3 mid",
+       "from": "low",
+       "to": "mid",
+       "foot": [
+        10,
+        46
+       ],
+       "head": [
+        10,
+        53.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "wynd 3 high",
+       "from": "mid",
+       "to": "high",
+       "foot": [
+        10,
+        68
+       ],
+       "head": [
+        10,
+        75.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "wynd 4 low",
+       "from": "strand",
+       "to": "low",
+       "foot": [
+        60,
+        24
+       ],
+       "head": [
+        60,
+        33
+       ],
+       "width_m": 2.6,
+       "rise_m": 3.5
+      },
+      {
+       "id": "wynd 4 mid",
+       "from": "low",
+       "to": "mid",
+       "foot": [
+        60,
+        46
+       ],
+       "head": [
+        60,
+        53.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "wynd 4 high",
+       "from": "mid",
+       "to": "high",
+       "foot": [
+        60,
+        68
+       ],
+       "head": [
+        60,
+        75.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "wynd 5 low",
+       "from": "strand",
+       "to": "low",
+       "foot": [
+        105,
+        24
+       ],
+       "head": [
+        105,
+        33
+       ],
+       "width_m": 2.6,
+       "rise_m": 3.5
+      },
+      {
+       "id": "wynd 5 mid",
+       "from": "low",
+       "to": "mid",
+       "foot": [
+        105,
+        46
+       ],
+       "head": [
+        105,
+        53.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "wynd 5 high",
+       "from": "mid",
+       "to": "high",
+       "foot": [
+        105,
+        68
+       ],
+       "head": [
+        105,
+        75.5
+       ],
+       "width_m": 2.6,
+       "rise_m": 4.0
+      },
+      {
+       "id": "the Crown steps",
+       "from": "high",
+       "to": "crown",
+       "foot": [
+        0,
+        84
+       ],
+       "head": [
+        0,
+        98
+       ],
+       "width_m": 3.0,
+       "rise_m": 6.5
+      }
+     ],
+     "lots": [
+      {
+       "id": "cone",
+       "kind": "workshop",
+       "name": "the Cone",
+       "at": [
+        125,
+        20
+       ],
+       "size": [
+        14,
+        14
+       ],
+       "facing": "south",
+       "level": "strand",
+       "model": "cullet/landmark/cone.glb",
+       "height_m": 24.0,
+       "landmark": true
+      },
+      {
+       "id": "counting_house",
+       "kind": "hall",
+       "name": "the Counting House",
+       "at": [
+        0,
+        22
+       ],
+       "size": [
+        30,
+        12
+       ],
+       "facing": "south",
+       "level": "strand",
+       "model": "cullet/landmark/counting_house.glb",
+       "height_m": 15.0,
+       "landmark": true,
+       "spots": [
+        {
+         "name": "arch 1",
+         "at": [
+          -12,
+          5.0
+         ]
+        },
+        {
+         "name": "arch 2",
+         "at": [
+          -8,
+          5.0
+         ]
+        },
+        {
+         "name": "arch 3",
+         "at": [
+          -4,
+          5.0
+         ]
+        },
+        {
+         "name": "arch 4",
+         "at": [
+          0,
+          5.0
+         ]
+        },
+        {
+         "name": "arch 5",
+         "at": [
+          4,
+          5.0
+         ]
+        },
+        {
+         "name": "arch 6",
+         "at": [
+          8,
+          5.0
+         ]
+        },
+        {
+         "name": "arch 7",
+         "at": [
+          12,
+          5.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "heron",
+       "kind": "tower",
+       "name": "the Heron",
+       "at": [
+        -25,
+        13
+       ],
+       "size": [
+        7,
+        5
+       ],
+       "facing": "south",
+       "level": "strand",
+       "model": "cullet/landmark/heron.glb",
+       "height_m": 13.0,
+       "landmark": true
+      },
+      {
+       "id": "store",
+       "kind": "barn",
+       "name": "the Store",
+       "at": [
+        32,
+        20
+       ],
+       "size": [
+        12,
+        10
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.0
+      },
+      {
+       "id": "marver",
+       "kind": "inn",
+       "name": "the Marver",
+       "at": [
+        30,
+        62.75
+       ],
+       "size": [
+        12,
+        9
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.0,
+       "spots": [
+        {
+         "name": "seat 1",
+         "at": [
+          -4.5,
+          5.2
+         ]
+        },
+        {
+         "name": "seat 2",
+         "at": [
+          -2.7,
+          5.2
+         ]
+        },
+        {
+         "name": "seat 3",
+         "at": [
+          -0.8999999999999999,
+          5.2
+         ]
+        },
+        {
+         "name": "seat 4",
+         "at": [
+          0.9000000000000004,
+          5.2
+         ]
+        },
+        {
+         "name": "seat 5",
+         "at": [
+          2.7,
+          5.2
+         ]
+        },
+        {
+         "name": "seat 6",
+         "at": [
+          4.5,
+          5.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "batch",
+       "kind": "workshop",
+       "name": "the Batch",
+       "at": [
+        -15,
+        44.25
+       ],
+       "size": [
+        9,
+        8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 6.0
+      },
+      {
+       "id": "readers_house",
+       "kind": "hall",
+       "name": "the Readers' House",
+       "at": [
+        -20,
+        118
+       ],
+       "size": [
+        12,
+        9
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 8.0
+      },
+      {
+       "id": "cistern",
+       "kind": "well",
+       "name": "the cistern",
+       "at": [
+        15,
+        118
+       ],
+       "size": [
+        9,
+        9
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 4.0
+      },
+      {
+       "id": "loft_1",
+       "kind": "barn",
+       "name": "net loft 1",
+       "at": [
+        -75.0,
+        18
+       ],
+       "size": [
+        3.5,
+        9
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5
+      },
+      {
+       "id": "loft_2",
+       "kind": "barn",
+       "name": "net loft 2",
+       "at": [
+        -71.0,
+        18
+       ],
+       "size": [
+        3.5,
+        9
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5
+      },
+      {
+       "id": "loft_3",
+       "kind": "barn",
+       "name": "net loft 3",
+       "at": [
+        -67.0,
+        18
+       ],
+       "size": [
+        3.5,
+        9
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5
+      },
+      {
+       "id": "loft_4",
+       "kind": "barn",
+       "name": "net loft 4",
+       "at": [
+        -63.0,
+        18
+       ],
+       "size": [
+        3.5,
+        9
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5
+      },
+      {
+       "id": "loft_5",
+       "kind": "barn",
+       "name": "net loft 5",
+       "at": [
+        -59.0,
+        18
+       ],
+       "size": [
+        3.5,
+        9
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5
+      },
+      {
+       "id": "loft_6",
+       "kind": "barn",
+       "name": "net loft 6",
+       "at": [
+        -55.0,
+        18
+       ],
+       "size": [
+        3.5,
+        9
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5
+      },
+      {
+       "id": "smokehouse_1",
+       "kind": "workshop",
+       "name": "smokehouse 1",
+       "at": [
+        -109.0,
+        18
+       ],
+       "size": [
+        7,
+        8
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 6.5
+      },
+      {
+       "id": "smokehouse_2",
+       "kind": "workshop",
+       "name": "smokehouse 2",
+       "at": [
+        -94.0,
+        18
+       ],
+       "size": [
+        7,
+        8
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 6.5
+      },
+      {
+       "id": "low_1",
+       "kind": "house",
+       "at": [
+        -82.5,
+        43.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.0
+      },
+      {
+       "id": "low_2",
+       "kind": "house",
+       "at": [
+        -77.0,
+        43.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.0
+      },
+      {
+       "id": "low_3",
+       "kind": "house",
+       "at": [
+        -71.75,
+        43.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.5
+      },
+      {
+       "id": "low_4",
+       "kind": "house",
+       "at": [
+        -66.25,
+        43.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.0
+      },
+      {
+       "id": "low_6",
+       "kind": "house",
+       "at": [
+        -54.5,
+        43.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.5
+      },
+      {
+       "id": "low_7",
+       "kind": "house",
+       "at": [
+        -49.0,
+        43.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.0
+      },
+      {
+       "id": "low_8",
+       "kind": "house",
+       "at": [
+        -35.75,
+        43.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.0
+      },
+      {
+       "id": "low_9",
+       "kind": "house",
+       "at": [
+        -30.25,
+        43.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.5
+      },
+      {
+       "id": "low_11",
+       "kind": "house",
+       "at": [
+        -7.5,
+        43.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.0
+      },
+      {
+       "id": "low_12",
+       "kind": "house",
+       "at": [
+        -2.0,
+        43.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.5
+      },
+      {
+       "id": "low_13",
+       "kind": "house",
+       "at": [
+        3.25,
+        43.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.0
+      },
+      {
+       "id": "low_14",
+       "kind": "house",
+       "at": [
+        15.75,
+        43.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.0
+      },
+      {
+       "id": "low_16",
+       "kind": "house",
+       "at": [
+        27.5,
+        43.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.0
+      },
+      {
+       "id": "low_17",
+       "kind": "house",
+       "at": [
+        33.0,
+        43.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.0
+      },
+      {
+       "id": "low_18",
+       "kind": "house",
+       "at": [
+        38.25,
+        43.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.5
+      },
+      {
+       "id": "low_19",
+       "kind": "house",
+       "at": [
+        43.75,
+        43.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.0
+      },
+      {
+       "id": "low_21",
+       "kind": "house",
+       "at": [
+        55.5,
+        43.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 8.5
+      },
+      {
+       "id": "mid_1",
+       "kind": "house",
+       "at": [
+        -77.5,
+        62.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.5
+      },
+      {
+       "id": "mid_2",
+       "kind": "house",
+       "at": [
+        -72.0,
+        62.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 8.5
+      },
+      {
+       "id": "mid_3",
+       "kind": "house",
+       "at": [
+        -66.75,
+        62.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.0
+      },
+      {
+       "id": "mid_4",
+       "kind": "house",
+       "at": [
+        -61.25,
+        62.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.5
+      },
+      {
+       "id": "mid_6",
+       "kind": "house",
+       "at": [
+        -49.5,
+        62.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.0
+      },
+      {
+       "id": "mid_7",
+       "kind": "house",
+       "at": [
+        -35.0,
+        62.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.5
+      },
+      {
+       "id": "mid_8",
+       "kind": "house",
+       "at": [
+        -29.75,
+        62.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 8.5
+      },
+      {
+       "id": "mid_9",
+       "kind": "house",
+       "at": [
+        -24.25,
+        62.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.0
+      },
+      {
+       "id": "mid_11",
+       "kind": "house",
+       "at": [
+        -12.5,
+        62.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 8.5
+      },
+      {
+       "id": "mid_12",
+       "kind": "house",
+       "at": [
+        -7.0,
+        62.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.0
+      },
+      {
+       "id": "mid_13",
+       "kind": "house",
+       "at": [
+        -1.75,
+        62.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.5
+      },
+      {
+       "id": "mid_14",
+       "kind": "house",
+       "at": [
+        3.75,
+        62.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 8.5
+      },
+      {
+       "id": "mid_16",
+       "kind": "house",
+       "at": [
+        20.5,
+        62.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.5
+      },
+      {
+       "id": "mid_17",
+       "kind": "house",
+       "at": [
+        39.0,
+        62.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 8.5
+      },
+      {
+       "id": "mid_18",
+       "kind": "house",
+       "at": [
+        44.25,
+        62.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.0
+      },
+      {
+       "id": "mid_19",
+       "kind": "house",
+       "at": [
+        49.75,
+        62.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.5
+      },
+      {
+       "id": "high_1",
+       "kind": "house",
+       "at": [
+        -72.5,
+        84.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.0
+      },
+      {
+       "id": "high_2",
+       "kind": "house",
+       "at": [
+        -67.0,
+        84.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 10.0
+      },
+      {
+       "id": "high_3",
+       "kind": "house",
+       "at": [
+        -61.75,
+        84.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.5
+      },
+      {
+       "id": "high_4",
+       "kind": "house",
+       "at": [
+        -56.25,
+        84.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.0
+      },
+      {
+       "id": "high_6",
+       "kind": "house",
+       "at": [
+        -44.5,
+        84.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.5
+      },
+      {
+       "id": "high_7",
+       "kind": "house",
+       "at": [
+        -35.0,
+        84.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.0
+      },
+      {
+       "id": "high_8",
+       "kind": "house",
+       "at": [
+        -29.75,
+        84.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 10.0
+      },
+      {
+       "id": "high_9",
+       "kind": "house",
+       "at": [
+        -24.25,
+        84.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.5
+      },
+      {
+       "id": "high_11",
+       "kind": "house",
+       "at": [
+        -12.5,
+        84.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 10.0
+      },
+      {
+       "id": "high_12",
+       "kind": "house",
+       "at": [
+        -7.0,
+        84.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.5
+      },
+      {
+       "id": "high_13",
+       "kind": "house",
+       "at": [
+        -1.75,
+        84.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.0
+      },
+      {
+       "id": "high_14",
+       "kind": "house",
+       "at": [
+        3.75,
+        84.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 10.0
+      },
+      {
+       "id": "high_16",
+       "kind": "house",
+       "at": [
+        20.5,
+        84.75
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.0
+      },
+      {
+       "id": "high_17",
+       "kind": "house",
+       "at": [
+        26.0,
+        84.75
+       ],
+       "size": [
+        6.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 10.0
+      },
+      {
+       "id": "high_18",
+       "kind": "house",
+       "at": [
+        31.25,
+        84.75
+       ],
+       "size": [
+        4.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.5
+      },
+      {
+       "id": "high_19",
+       "kind": "house",
+       "at": [
+        36.75,
+        84.75
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.0
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "setting": "Cullet, a glassmakers' harbour on the south slope of a treeless island the people call the Wrack (docs/SMALL_CITY.md). A first rough plan: the quay, three rows, the Crown and the wynds, as boxes.",
+ "animals": {
+  "deer": 0,
+  "wolf": 0
+ },
+ "towns": [],
+ "villages": []
+}
