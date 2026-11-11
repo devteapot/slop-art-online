@@ -210,6 +210,19 @@ pub struct Live {
     leaving: Vec<(Entity, f32)>,
 }
 
+impl Live {
+    /// The tiles as the authority hosted them at world creation (`host::hosted_map`), once the
+    /// land is regenerated.
+    pub fn hosted_map(&self) -> Option<Arc<Map>> {
+        self.hosted.clone()
+    }
+
+    /// The bodies drawn now and their entities (those leaving sight are not among them).
+    pub fn drawn(&self) -> impl Iterator<Item = (u32, Entity)> + '_ {
+        self.shown.iter().map(|(id, s)| (*id, s.entity))
+    }
+}
+
 /// Regenerate the land from the `land` row once, then put the island in place.
 #[allow(clippy::too_many_arguments)]
 fn land(
