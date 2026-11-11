@@ -500,6 +500,20 @@ The row is written with the line, and the line reaches `my_experience` at the ch
 
 The pages and versions of [My senses](#spacetimedb-documentation-consulted-eighth-change-2026-11-11) above. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/): "removing or modifying existing columns (type …)" is refused, so no column of `experience` (embedded in `line_seen`) changes; adding a table is always allowed. [Views](https://spacetimedb.com/docs/functions/views/): a btree `.filter()` gives an exact read set, so `my_act_outcomes` re-runs only when that character's rows change. [Event tables](https://spacetimedb.com/docs/tables/event-tables/) were not used: views cannot read them and a reconnecting client (or the death screen) must still find the row. [Performance](https://spacetimedb.com/docs/tables/performance/): "Be mindful of unbounded table growth": rows go with their lines.
 
+#### Verification (eighth change)
+
+On the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), scratch databases only, fake models only; at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`.
+
+| Surface | What was driven | Result | Evidence |
+| --- | --- | --- | --- |
+| Client | `run.py`: the new private tables and views in the inventories, the own-state views over real subscriptions | 39 of 39 | `client-sso-214657/results.md`, `own-*.json`, `visibility.json` |
+| In-place update | origin/main `7c6a92b6` published fresh, a player joined and acted; this branch published `--keep-data` | data kept (265 characters, the player's character), `my_senses` and `my_act_outcomes` written after | `client-migrate-214519/` |
+| Player | `senses.py`, `outcomes.py`, `command.py`, `told.py`; `combat.py --scene death` on an island world | 8/8, 7/7, 4/4, 12/12 on a second run (11/12 on the first: the player's broken-off gift line late under load); death 4/4 with code `killed` | `player-sso-214702/`, `player-sso-island-215136/` |
+| Core | `scenes.py tick alarms refusal food senses death-names` | all pass | `core-sso-214854/` |
+| Minds | `verify_minds.py --case roundtrip --case acts --case rethink` | all pass; the body line and the rethink levels are the law's words | `minds-sso-215130-*` |
+
+Not covered: the game client reading `my_senses`, `my_act_outcomes`, `meters()` and `status_of` (the laptop's change; `verify-ui`); `needs`, `fov` and the island and Cullet core scenes; the act codes `busy`, `expired`, `timing`, `reach`, `broken_off`, `set_aside` and the deaths `starved`, `cold`, `exhausted`, `old_age` live (the same write path; `unreadable`, `check`, `done`, `other` and `killed` ran live). Performance at scale: only the `status_of` cost above, on 264 characters with no players; `my_senses` and `act_outcome` were not load-tested.
+
 ### Compatibility: the `LIVING_PERCEPTION` build switch
 
 `living/authority/build.rs` reads `LIVING_PERCEPTION` at build time:
