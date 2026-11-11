@@ -1,6 +1,14 @@
 # Validation record (generation)
 
 
+## 2026-11-11 rates-2: plan resources, structures and stores; unknown plan kinds refused (dev-box)
+
+Branch `rates-2` (from `f2d803fa`, origin/main `12fd78ef` merged, with the cast of Cullet), own container `rates2-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. A maintain pass of the plans feature scoped to this change: the map was read against the source it changed (`plan.rs`, `seed.rs` `plan_resources`/`plan_structures`/`put_authored`/`house_at`, `floor.rs` `plan_kinds`), not by a source wave.
+
+- `generation-rates2-20261111-174238` (`--feature worlds --seeds cullet,plan-test,island,floor-megacity-4k`): cullet 305 (64 residents; 158 authored resources where written with their max, regrowth and four pools; 34 authored structures where written, each lit for its fuel at its kind's rate; the Store's and the Cone yard's stores), plan-test 76, island 977, floor-megacity-4k 90 (with `create_floor refuses a plan naming a resource or structure kind the world does not have`); original seeds unchanged.
+- The first run after merging the cast (`generation-rates2-20261111-173512`) failed four Cullet checks, `household fenwick owns the house on lot mid_2` and three like it. main's `house_at` gave a household bound to a lot the first unowned structure at its door, which could be the plan's hearth there. Fixed in the authority: the structure the lot row names comes first. The rerun above passes.
+- Not rerun: valley, realm, authored-test, aske-coast, stage3-village, cullet-laws, cullet-laws-floor, floor-megacity-2k.
+
 ## 2026-11-11 drop-1: drop (8) and low (9) tiles (dev-box)
 
 Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).

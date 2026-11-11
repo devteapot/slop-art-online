@@ -2004,12 +2004,19 @@ def decay(s):
     lo, hi = band(stored0, fish_min * kept)
     s.expect("raw fish in a storage spoils at a third of that", lo <= stored <= hi, {"stored": stored, "from": stored0, "band": [round(lo, 1), round(hi, 1)], "share_left": stored / max(1, stored0)})
 
-    # Regrowth: what the emptied bed gives again after the watch is its regen times the real
-    # minutes of growing time since it was emptied (whole units only, up to its max).
-    grown = left["amount"] + left["regen"] * (now() - left["at_ms"]) / 60000
-    again = empty(b, "greens_bed")
-    want = min(int(grown), int(left["max"]))
-    s.expect(f"the emptied bed regrew regrow_per_h a game hour over {DECAY_HOURS:g} game hours (growing time)", abs(again - want) <= 1, {"gathered": again, "expected": want, "grown": round(grown, 2), "game_hours": round((now() - t_empty) / hour_ms, 2)})
+    # Regrowth, read from the bed's own row: one gathering beside it takes one unit and writes
+    # what it held then less one (`Effect::Harvest`), so what it had regrown is the new amount
+    # plus one, against its regen times the real minutes since it was emptied (growing time:
+    # not winter). Gathering more would count other beds too (`nearest` walks on to the wild
+    # ones once this one is spent).
+    t0 = now()
+    acts(b, {"do": "gather", "target": {"nearest": "greens_bed"}})
+    s.wait(lambda: s.rows(f"SELECT at_ms FROM resource_node WHERE id = {bed['id']}")[0]["at_ms"] > left["at_ms"] or heard(b, "did not work out", t0), seconds=60, every=1)
+    row = s.rows(f"SELECT * FROM resource_node WHERE id = {bed['id']}", "bed-regrown")[0]
+    had = row["amount"] + 1.0
+    grown = left["amount"] + left["regen"] * (row["at_ms"] - left["at_ms"]) / 60000
+    s.expect(f"the emptied bed regrew regrow_per_h a game hour over {DECAY_HOURS:g} game hours (growing time)", row["at_ms"] > left["at_ms"] and abs(had - min(grown, left["max"])) < 0.01,
+             {"had": round(had, 4), "expected": round(grown, 4), "game_hours": round((row["at_ms"] - left["at_ms"]) / hour_ms, 3), "row": row})
 
 
 SCENES["goods"] = goods

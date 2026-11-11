@@ -40,7 +40,7 @@ Since `rates-2` (docs/CULLET_RULES.md, "The other rates in game time"): spoiling
 
 - On a `cullet-laws` world (48-minute day): a new node's `regen` is its kind's `regrow_per_h` × 60,000 / the game hour's real ms (exact to 1e-6).
 - 1,000 raw fish carried and about 600 in a storage spoil once a real minute at `spoil_per_h("fish")` turned into real minutes (a storage at its `kept_spoil` third): after `--game-hours` the stacks lie within the band of `q (1 − r)^k` for the real minutes passed, give or take one sweep and each sweep's chance (`decay-samples.json` keeps the trajectory).
-- An emptied greens bed gives again, after the watch, the whole units its `regen` grew over the growing time since it was emptied (±1).
+- An emptied greens bed, gathered once beside it after the watch, held what its `regen` grew over the real minutes since it was emptied (the row's new amount plus one, within 0.01; growing time). Gathering more would count the wild beds `nearest` walks on to.
 - Unit checks: `rates_check::rates_are_bit_identical` (ignored; `LIVING_OLD_SKILLS=<the script before rates-2>`): on the 12-minute day every spoiling loss, regrowth, pasture, trap catch, remains due time, need rate, sleep and law description is bit-identical to the old script's. `script::tests::game_time_rates_follow_the_day_and_real_time_laws_stay_real` (a 48-minute day quarters them; an overlay in real time keeps its numbers). `cullet_check::tests::cullet_s_goods_meet_their_targets_in_a_game_day` (Cullet's spoiling, stores, traps, remains and the plan's daily yield against SMALL_CITY §2 and §4).
 
 ### Driving it
