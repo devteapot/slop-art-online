@@ -1,9 +1,22 @@
 # The store: heavy outputs in one place
 
-Status: **publishing, paused at step 4** (2026-11-11, branch `tool-store-2`, on the Spark). Public at <https://huggingface.co/datasets/carlid/slop-art-online-runs>: the fake batch `hm1` and the real batch `l9`, with the card.
-- **`l9` fetch-back.** Fetched from the Hub, it is byte-identical to the local pack (all six files). Unpacked, it matches the scrubbed source byte for byte (170 of 170 files).
-- **Paused.** The viewer's conversion of the `calls` table failed: "Couldn't cast array of type string to null". `hm1`'s `error` column is null throughout, so the column was typed null. The card now declares every column's type (`dataset_info`), and that fix is not yet uploaded. The other 60 batches are packed and checked in `~/store-dryrun-2026-11-11/stage-batches/`.
-- **Held.** `b1`–`b3` (unverified models), the motion library and play sessions.
+Status: **published** (2026-11-11, branch `tool-store-2`, from the Spark).
+
+| Dataset | Holds | Address |
+| --- | --- | --- |
+| `carlid/slop-art-online-runs` | 62 trial batches, as `batches/spark/<batch>/`: the fake `hm1`, `l9` and 60 more real batches (527 instances, 212,758 model calls, 935,249 rows, 1,192 prompts); play-test 2's session as `sessions/spark/playtest-2/` (133 calls, 5 prompts) | <https://huggingface.co/datasets/carlid/slop-art-online-runs> |
+| `carlid/slop-art-online-assets` | the motion library, as `motion/raw/`: 626 Kimodo takes and `batch_stats.json`, with `motion/MANIFEST.json` | <https://huggingface.co/datasets/carlid/slop-art-online-assets> |
+
+**Checks.**
+- **Fetch-backs.** `l9` came back byte-identical to the local pack. Unpacked, all 170 files equal the scrubbed source byte for byte. Play-test 2 came back byte-identical to its scrubbed tree (38 of 38 files). The motion library came back with every sha256 matching: 626 takes byte-identical, and `batch_stats.json` equal as JSON (one trailing newline added by the scrubber).
+- **Viewer.** It converted all six tables (`instances` 527, `calls` 212,758, `rows` 935,249, `prompts` 1,192, `session_calls` 133, `session_prompts` 5): row counts equal to the packs' manifests, nothing failed, and the previews, search and filter are on (checked 22:03). The first conversion of `calls` had failed ("Couldn't cast array of type string to null") because `hm1`'s `error` column is null throughout. The card now declares every column's type (`dataset_info`). The assets dataset has the viewer off, since its takes are binary.
+- **Held.**
+  - `b1`–`b3`: calls from `mistral-small-latest` and `gpt-6-luna`, whose terms are not read.
+  - `aborted` in `~/dev/slop-trials-cb`: no `batch.json`.
+  - Play-test 2's 22 non-record files (rule A, listed in its `MANIFEST.json`).
+  - Play-tests 3 and 4 are on the laptop.
+
+Publishing stays gated: `publish_enabled` is on only on the Spark, and `publish_sessions` was on only for play-test 2's upload.
 
 ## Why
 
