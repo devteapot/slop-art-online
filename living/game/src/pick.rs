@@ -65,13 +65,15 @@ impl Seen {
 }
 
 /// The body under the cursor: the front-most whose outline holds it, else the nearest within
-/// [`NEAR_GROUND_M`] of the cursor's ground point.
+/// [`NEAR_GROUND_M`] of the cursor's ground point. Ties go to the nearer to the camera, then the
+/// lower id, so two bodies stacked on one spot give the same answer every frame (the bodies come
+/// in the scene's map order, which is not stable).
 pub fn choose(cursor: Vec2, bodies: &[Seen]) -> Option<u32> {
     bodies
         .iter()
         .filter(|b| b.contains(cursor))
-        .min_by(|a, b| a.depth.total_cmp(&b.depth))
-        .or_else(|| bodies.iter().filter(|b| b.ground.is_some_and(|g| g < NEAR_GROUND_M)).min_by(|a, b| a.ground.unwrap_or(f32::MAX).total_cmp(&b.ground.unwrap_or(f32::MAX))))
+        .min_by(|a, b| a.depth.total_cmp(&b.depth).then(a.id.cmp(&b.id)))
+        .or_else(|| bodies.iter().filter(|b| b.ground.is_some_and(|g| g < NEAR_GROUND_M)).min_by(|a, b| a.ground.unwrap_or(f32::MAX).total_cmp(&b.ground.unwrap_or(f32::MAX)).then(a.depth.total_cmp(&b.depth)).then(a.id.cmp(&b.id))))
         .map(|b| b.id)
 }
 
@@ -141,6 +143,23 @@ mod tests {
         assert!(front.contains(chest) && behind.contains(chest));
         assert_eq!(choose(chest, &[behind, front]), Some(2));
         assert_eq!(choose(chest, &[front, behind]), Some(2));
+    }
+
+    #[test]
+    fn two_bodies_on_one_spot_give_one_answer_in_any_order() {
+        // Stacked exactly (the talk scene's two residents walked onto one spot): the nearer to
+        // the camera wins, and with equal depth the lower id, whatever order they come in.
+        let tall = body(3, 707.0, 542.0, 79.0, 20.469, Some(0.4));
+        let short = body(2, 707.0, 542.0, 78.0, 20.475, Some(0.4));
+        let at = Vec2::new(707.0, 520.0);
+        assert_eq!(choose(at, &[short, tall]), Some(3));
+        assert_eq!(choose(at, &[tall, short]), Some(3));
+        let (a, b) = (body(5, 707.0, 542.0, 78.0, 20.0, Some(0.4)), body(4, 707.0, 542.0, 78.0, 20.0, Some(0.4)));
+        assert_eq!(choose(at, &[a, b]), Some(4));
+        assert_eq!(choose(at, &[b, a]), Some(4));
+        // Off both outlines, by the ground point: the same rule.
+        let far = Vec2::new(100.0, 100.0);
+        assert_eq!(choose(far, &[a, b]), Some(4));
     }
 
     #[test]

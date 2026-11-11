@@ -23,6 +23,13 @@ Branch `exp-greet` (main 90f6fac with `exp-hamlet-births` merged), worktree, the
 - Unit tests (`cargo test -p living-mind talk`): `greet_off_is_the_old_rule` (every combination of a line's facts decides as before under `off`), `greet_modes_draw_in_one_stranger_and_not_the_hostile`, `the_faced_hearer_is_the_one_straight_ahead`, `a_line_gets_its_turn_alongside_only_when_the_deliberation_cannot_answer_it`, `switches_default_off_and_refuse_typos`.
 - Not run here: the rest of the suite (roundtrip, acts, consolidation, prune, reject, only, reconnect, lod, takeover, sight, resident, animals, night, jev, rethink, dealings). This change does not touch their paths: the switches are off by default and only conversation code reads them.
 
+## 2026-11-11 fix-health-leak: a fighting mind's prompts carry its opponent's band (Spark)
+
+Branch `fix-health-leak` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake model only.
+
+- `health-seen` (new) on `minds-hleak-222228-health-seen`: passes. Before the appraisal the prompt's report ends "they look unhurt."; inside A's reveal "they have 89 of 98 health." (B's max 98); no prompt carries "theirs looks about". Earlier attempts (`minds-hleak-221415`, `-221945`, `-222106`) failed on the case's scripting: under B's blows a reflex broke A's appraisal off, then A, badly hurt, yielded and got no report inside the reveal; B now only guards.
+- Mind tests 94 passed. verify-player `appraise.py` on `player-hleak-222311` (island): 10 of 10 (the appraise feedback now reads health through `perception::health_seen`).
+
 ## 2026-11-11 rules-senses-outcomes: body words from the status_of law (Spark)
 
 Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`.

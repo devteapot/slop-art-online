@@ -840,8 +840,11 @@ impl<'a> Ev<'a> {
             }
             Cond::HealthOf(h) => {
                 let Some(r) = self.resolve(&h.target).filter(|r| r.class == 3) else { return false };
-                let Some(v) = self.ctx.db.vitals().id().find(r.id as u32) else { return false };
-                let pct = common::needs(&v, self.now).hp / v.max_hp.max(1.0) * 100.0;
+                // As this character perceives it (its own exactly, another's band unless
+                // appraised), never the target's `vitals`; nothing when the law hides it.
+                let Some(t) = self.ctx.db.character().id().find(r.id as u32) else { return false };
+                let Some(seen) = crate::perception::health_seen(self.ctx, &self.me, &t, self.now) else { return false };
+                let pct = seen.percent();
                 h.above.map_or(true, |a| pct > a) && h.below.map_or(true, |b| pct < b)
             }
             Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
