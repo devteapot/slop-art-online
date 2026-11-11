@@ -100,6 +100,19 @@ PICKS = {
 }
 
 
+# Clip lab retakes (`living/tools/kimodo/cliplab.py --write`): the fields of an entry the lab
+# changed (prompt, seeds, pick, note, ...), applied over what entries() builds, so --write here
+# keeps them. Each retake's scores are in its checks.json in the handoff tarball.
+RETAKES = {
+    "turn_left_180": {"prompt": "a person turns around to the left on the spot, stepping left, right, left", "seeds": [20, 21, 22, 23, 24, 25, 26, 27], "pick": 25, "note": "three steps (left, right, left); the hips' heading is pinned to a steady turn from 0.3 s to 1.7 s. Clip lab 2026-11-11: the old s4 slid (planted feet 6.3 cm/s p90) and s3 took four steps; s25 (the prompt names the steps) passes every check: LRL, toes 0.4 cm under the floor at most, slide 4.7 cm/s"},
+    "jump_stand": {"prompt": "a person jumps high straight up on the spot and lands", "seeds": [20, 21, 22, 23, 24, 25, 26, 27], "pick": 25, "note": "Clip lab 2026-11-11: the hips rise 46 cm and both feet are off the ground 0.57 s (asked: 0.45 m, about 0.6 s); the old s4: 38 cm, 0.47 s. A tuck jump (knees pulled up, feet clear 91 cm) with the arms up, not a small hop. Fails slide only: planted feet 8.0 cm/s p90 at the landing (limit 6)"},
+    "run_back": {"pick": 3, "note": "a backward jog: cycle 0.73 s (x1.05 of run#1) at 2.0 m/s, 1.47 m a cycle against run#1's 2.30 m; almost no flight Clip lab 2026-11-11: re-picked s2 -> s3: s2's planted feet slide 10.1 cm/s p90 (gait limit 10), s3's 9.2; s3's chest drifts 6.0 degrees (s2: 2.9)"},
+    "jump_back": {"prompt": "a person hops backward with both feet together and lands softly on the balls of the feet", "seeds": [40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55], "pick": 49, "note": "from and to the neutral pose, not from a walk. Clip lab 2026-11-11: in the air 0.40 s (hop window overlap 0.81; the old s3: 0.33 s); still fails the floor: toe tips up to 5.9 cm under it for 16 frames at the landing, as every one of 40 takes does (least: s42, 2.4 cm, 0.33 s in the air)"},
+    "jump_right": {"seeds": [20, 21, 22, 23, 24, 25, 26, 27], "pick": 25, "note": "from and to the neutral pose. Clip lab 2026-11-11: in the air 0.43 s, matching the rules' hop window (overlap 0.98; the old s1: 0.33 s); still fails the floor: toe tips up to 3.9 cm under it at the landing (the old s1: 2.2 cm)"},
+    "run_diag_fr": {"pick": 4, "note": "cycle 0.70 s (x1.00 of run#1) at 2.6 m/s, 1.84 m a cycle; chest up to 13 degrees to the left of ahead Clip lab 2026-11-11: re-picked s5 -> s4: s5's planted feet slide 10.4 cm/s p90 (gait limit 10), s4's 8.2"},
+}
+
+
 def entries():
     out = []
 
@@ -109,6 +122,7 @@ def entries():
             e["pick"] = pick
         if note:
             e["note"] = note
+        e.update(RETAKES.get(name, {}))
         out.append({"name": name, **e})
 
     s6, s8 = list(range(6)), list(range(8))
