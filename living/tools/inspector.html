@@ -60,16 +60,18 @@ ul.tight { margin:4px 0; padding-left:20px; } ul.tight li { margin:2px 0; }
 const B64 = "__DATA__";
 let D, LANES = ["perceive","recall","decide","graph","body","talk","log"], laneOn = new Set(LANES);
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-function wall(ms) { if (ms == null) return "?"; const d = new Date(ms + D.meta.tz_min * 60000); return d.toISOString().slice(11, 22); }
-function rel(ms) { if (ms == null) return ""; const s = (ms - D.meta.start) / 1000, sg = s < 0 ? "−" : "+", a = Math.abs(s); return sg + Math.floor(a / 60) + ":" + (a % 60).toFixed(1).padStart(4, "0"); }
+const esc = s => String(s ?? "").replace(/[&<>"'`\\]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;","`":"&#96;","\\":"&#92;"}[c]));
+const num = v => (v != null && v !== "" && isFinite(+v)) ? +v : null;
+function wall(ms) { if (ms == null || !isFinite(ms)) return "?"; const d = new Date(ms + D.meta.tz_min * 60000); return d.toISOString().slice(11, 22); }
+function rel(ms) { if (ms == null) return ""; const s = (ms - D.meta.start) / 1000, sg = s < 0 ? "−" : "+", a = Math.round(Math.abs(s) * 10) / 10; return sg + Math.floor(a / 60) + ":" + (a % 60).toFixed(1).padStart(4, "0"); }
 function game(ms) { const c = D.meta.clock; if (!c || ms == null) return ""; const gm = (ms - c.a) / c.mpm; const d = Math.floor(gm / 1440) + 1, m = ((gm % 1440) + 1440) % 1440;
   return `day ${d} ${String(Math.floor(m / 60)).padStart(2, "0")}:${String(Math.floor(m % 60)).padStart(2, "0")}`; }
 function tcell(ms) { return `<td class="t">${wall(ms)}<br><span class="mut">${rel(ms)} · ${game(ms)}</span></td>`; }
-function nm(id) { if (!id) return "no one"; const p = D.people[id]; return p ? p.name : "#" + id; }
+function nm(id) { if (!id) return "no one"; id = String(id).replace(/^#/, ""); const p = D.people[id]; return p ? p.name : "#" + id; }
 function plink(id, a, b) { if (!id) return "no one"; return `<a href="#v=people&r=${id}${a != null ? `&a=${Math.round(a)}&b=${Math.round(b)}` : ""}">${esc(nm(id))}</a>`; }
-function parseHash() { const h = {}; location.hash.slice(1).split("&").forEach(kv => { const [k, v] = kv.split("="); if (k) h[k] = decodeURIComponent(v || ""); }); return h; }
-function go(h) { location.hash = Object.entries(h).filter(([k, v]) => v != null && v !== "").map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&"); }
+function parseHash() { const h = {}; location.hash.slice(1).split("&").forEach(kv => { const [k, v] = kv.split("="); if (!k) return; try { h[k] = decodeURIComponent(v || ""); } catch (e) { h[k] = v || ""; } });
+  if (h.ln != null) laneOn = new Set(h.ln.split(",").filter(x => LANES.includes(x))); return h; }
+function go(h) { if (h.v === "people" && laneOn.size < LANES.length) h.ln = [...laneOn].join(","); location.hash = Object.entries(h).filter(([k, v]) => v != null && v !== "").map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&"); }
 
 async function boot() {
   const bin = Uint8Array.from(atob(B64), c => c.charCodeAt(0));
@@ -108,17 +110,18 @@ function personView(h) {
   const id = h.r; if (!id || !D.people[id]) { $("#main").innerHTML = `<p class="mut">Pick a resident on the left, or open <a href="#v=lines">Lines</a>.</p>`; return; }
   const p = D.people[id], evs = D.events[id] || [];
   const last = evs.length ? evs[evs.length - 1][0] : D.meta.start, end = p.died || last;
-  const a = h.a != null ? +h.a : null, b = h.b != null ? +h.b : null;
+  let a = num(h.a), b = num(h.b); if (a != null && b == null) b = a + 180000; if (a == null) b = null;
+  const hl = num(h.h);
   const shown = evs.filter(e => laneOn.has(e[1]) && (a == null || (e[0] >= a && e[0] <= b)));
   const lanes = LANES.map(l => `<button class="${laneOn.has(l) ? "on" : ""}" onclick="toggleLane('${l}')"><span class="lane l-${l}">${l}</span></button>`).join("");
   $("#main").innerHTML = `<div class="bar"><span class="k" style="font-size:16px">${esc(p.name)}</span><span class="mut">${+id > 0 ? "#" + id : "id unknown"}${p.kind ? " · " + esc(p.kind) : ""}${p.player ? " · player" : ""}${p.died ? ` · died ${wall(p.died)} (${esc(p.cause)})` : ""}${p.takeover ? ` · AI took over at ${wall(p.takeover)}` : ""} · ${p.calls} model exchanges</span></div>
   <div class="bar"><button onclick="go({v:'people',r:${id}})" class="${a == null ? "on" : ""}">whole run</button>
    <button onclick="go({v:'people',r:${id},a:${end - 90000},b:${end + (p.died ? 2000 : 0)}})">last 90 s${p.died ? " of their life" : ""}</button>
-   <span class="mut">around</span><input id="at" size="10" placeholder="hh:mm:ss or +m:ss" value="${a != null ? wall((a + b) / 2).slice(0, 8) : ""}"><select id="span"><option value="30">±30 s</option><option value="60">±60 s</option><option value="90" selected>±90 s</option><option value="300">±5 min</option></select><button onclick="around(${id})">show</button>
+   <span class="mut">around</span><input id="at" size="10" placeholder="hh:mm:ss or +m:ss" value="${a != null ? wall((a + b) / 2).slice(0, 8) : ""}"><select id="span">${[30, 60, 90, 300].map(v => `<option value="${v}" ${(a != null ? Math.abs((b - a) / 2000 - v) < 1 : v === 90) ? "selected" : ""}>±${v < 300 ? v + " s" : "5 min"}</option>`).join("")}</select><button onclick="around(${id})">show</button>
    ${a != null ? `<span class="mut">window ${wall(a)} → ${wall(b)}</span>` : ""}</div>
   <div class="bar">${lanes}</div>
   <table><thead><tr><th>time</th><th>lane</th><th>what <span class="mut">(click a row for the evidence)</span></th></tr></thead><tbody>${shown.map((e, k) =>
-    `<tr class="ev" onclick="openEv(this, ${evs.indexOf(e)}, ${id})">${tcell(e[0])}<td><span class="lane l-${e[1]}">${e[1]}</span></td><td>${esc(e[2])}</td></tr>`).join("") || `<tr><td colspan=3 class="mut">nothing in this window</td></tr>`}</tbody></table>`;
+    `<tr class="ev${hl != null && Math.abs(e[0] - hl) <= 1500 ? " hl" : ""}" onclick="openEv(this, ${evs.indexOf(e)}, ${id})">${tcell(e[0])}<td><span class="lane l-${e[1]}">${e[1]}</span></td><td>${esc(e[2])}</td></tr>`).join("") || `<tr><td colspan=3 class="mut">nothing in this window</td></tr>`}</tbody></table>`;
 }
 function toggleLane(l) { laneOn.has(l) ? laneOn.delete(l) : laneOn.add(l); route(); }
 function parseTime(s) {
@@ -127,7 +130,7 @@ function parseTime(s) {
   const [hh, mm, ss] = s.split(":").map(Number); const base = new Date(D.meta.start + D.meta.tz_min * 60000);
   const day = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()); return day + ((hh * 60 + (mm || 0)) * 60 + (ss || 0)) * 1000 - D.meta.tz_min * 60000;
 }
-function around(id) { const t = parseTime($("#at").value), s = +$("#span").value * 1000; if (t != null) go({v: "people", r: id, a: t - s, b: t + s}); }
+function around(id) { const t = parseTime($("#at").value), s = +$("#span").value * 1000; if (t != null && isFinite(t)) go({v: "people", r: id, a: t - s, b: t + s}); }
 function openEv(tr, k, id) {
   if (tr.nextSibling && tr.nextSibling.classList && tr.nextSibling.classList.contains("detrow")) { tr.nextSibling.remove(); return; }
   const e = D.events[id][k], ref = e[4] || {};
@@ -147,6 +150,8 @@ function callCard(c) {
   <div class="small mut">journal: ${esc(c.src)}</div>`;
   if (c.error) r += `<div class="f-none">error: ${esc(c.error)}</div>`;
   if (c.why) r += `<div><span class="k">Why now:</span> ${esc(c.why)}</div>`;
+  let th = null; try { th = JSON.parse(c.reply).thought; } catch (e) {}
+  if (th) r += `<div><span class="k">Thought:</span> ${esc(th)}</div>`;
   if (c.answering) r += `<div><span class="k">Answering:</span> ${esc(c.answering[0])}: “${esc(c.answering[1])}”</div>`;
   if (c.body_feel) r += `<div class="small"><span class="k">Body:</span> ${esc(c.body_feel)}</div>`;
   r += `<details open><summary>Reply</summary><pre>${esc(pretty(c.reply))}</pre></details>`;
@@ -162,12 +167,17 @@ function linesView(h) {
   const only = h.p != null ? h.p === "1" : players.length > 0, q = (h.q || "").toLowerCase(), who = h.s ? +h.s : null;
   let ls = D.lines.filter(l => (!only || players.includes(l.speaker)) && (!who || l.speaker === who || l.to === who || l.hearers.some(x => x.id === who)) && (!q || l.text.toLowerCase().includes(q)));
   const speakers = [...new Set(D.lines.map(l => l.speaker))].sort((a, b) => nm(a).localeCompare(nm(b)));
-  $("#main").innerHTML = `<div class="bar">${players.length ? `<button class="${only ? "on" : ""}" onclick="go({v:'lines',p:${only ? 0 : 1},q:'${esc(h.q || "")}',s:'${h.s || ""}'})">players' lines only</button>` : ""}
-   <select onchange="go({v:'lines',p:${only ? 1 : 0},s:this.value})"><option value="">anyone</option>${speakers.map(s => `<option value="${s}" ${who === s ? "selected" : ""}>${esc(nm(s))}</option>`).join("")}</select>
-   <input id="q" placeholder="words" value="${esc(h.q || "")}" onchange="go({v:'lines',p:${only ? 1 : 0},q:this.value,s:'${h.s || ""}'})"><span class="mut">${ls.length} of ${D.lines.length} lines · click a line for who heard it and why each did or did not take a turn</span></div>
+  $("#main").innerHTML = `<div class="bar">${players.length ? `<button id="only" class="${only ? "on" : ""}">players' lines only</button>` : ""}
+   <select id="who"><option value="">anyone</option>${speakers.map(s => `<option value="${s}" ${who === s ? "selected" : ""}>${esc(nm(s))}</option>`).join("")}</select>
+   <input id="q" placeholder="words" value="${esc(h.q || "")}"><span class="mut">${ls.length} of ${D.lines.length} lines · click a line for who heard it and why each did or did not take a turn</span></div>
   <table><thead><tr><th>time</th><th>who → to</th><th>line</th><th>hearers and what each did</th></tr></thead><tbody>${ls.map(l =>
-    `<tr class="ev" onclick="go({v:'lines',l:${l.i}})">${tcell(l.ms)}<td>${esc(nm(l.speaker))} → ${esc(nm(l.to))}</td><td>“${esc(l.text)}”${l.reps > 1 ? ` <span class="mut">(×${l.reps})</span>` : ""}${l.exact ? "" : ' <span class="mut">≈</span>'}</td>
-    <td class="small">${l.hearers.map(x => `<span class="f-${x.fate.kind || "none"}">${esc(nm(x.id))}: ${esc((x.fate.short || "").split(":")[0])}</span>`).join("<br>") || '<span class="mut">no hearer in the evidence</span>'}</td></tr>`).join("")}</tbody></table>`;
+    `<tr class="ev" data-l="${l.i}">${tcell(l.ms)}<td>${esc(nm(l.speaker))} → ${esc(nm(l.to))}</td><td>“${esc(l.text)}”${l.reps > 1 ? ` <span class="mut">(repeat: ×${l.reps} in the chronicle)</span>` : ""}${l.exact ? "" : ' <span class="mut">≈</span>'}</td>
+    <td class="small">${l.hearers.map(x => `<span class="f-${x.fate.kind || "none"}">${esc(nm(x.id))}${x.id === l.to ? " (to)" : ""}: ${esc(x.fate.tag || "")}</span>`).join("<br>")}${l.unheard ? `<br><span class="f-settled">${esc(nm(l.unheard.id))} (to): did not hear it</span>` : ""}${!l.hearers.length && !l.unheard ? '<span class="mut">no hearer in the evidence</span>' : ""}</td></tr>`).join("")}</tbody></table>`;
+  const state = () => ({v: "lines", p: only ? 1 : 0, q: $("#q").value, s: $("#who").value});
+  if ($("#only")) $("#only").onclick = () => go({...state(), p: only ? 0 : 1});
+  $("#who").onchange = () => go({...state(), p: $("#who").value ? 0 : (only ? 1 : 0)});
+  $("#q").onchange = () => go(state());
+  document.querySelectorAll("tr[data-l]").forEach(tr => tr.onclick = () => go({v: "lines", l: tr.dataset.l}));
 }
 function lineView(i) {
   const l = D.lines[i]; if (!l) return linesView({});
@@ -175,13 +185,14 @@ function lineView(i) {
   const a = l.ms - 90000, b = l.ms + 120000;
   let html = `<div class="bar"><a href="#v=lines">← all lines</a>${i > 0 ? ` <a href="#v=lines&l=${i - 1}">← previous</a>` : ""}${i < D.lines.length - 1 ? ` <a href="#v=lines&l=${i + 1}">next →</a>` : ""}</div>
   <div class="card"><div class="small mut">${wall(l.ms)} · ${rel(l.ms)} · ${game(l.ms)}${l.exact ? "" : " · time ≈ (from requests or the mind log)"}</div>
-  <div style="font-size:16px">${plink(l.speaker, l.ms - 90000, l.ms + 90000)} → ${plink(l.to, l.ms - 90000, l.ms + 90000)}: “${esc(l.text)}”${l.reps > 1 ? ` <span class="mut">(said ${l.reps}× within 2 min; the chronicle keeps one row)</span>` : ""}</div>
+  <div style="font-size:16px">${plink(l.speaker, l.ms - 90000, l.ms + 90000)} → ${plink(l.to, l.ms - 90000, l.ms + 90000)}: “${esc(l.text)}”${l.reps > 1 ? ` <span class="mut">(the chronicle's one row for these words counts ×${l.reps}: lines said within 2 min of each other, this being the latest)</span>` : ""}</div>
   <div class="small mut">${esc(l.note || "")}</div><details><summary class="small">sources of the line</summary><ul class="tight small">${l.srcs.map(s => `<li>${esc(s)}</li>`).join("")}</ul></details></div>
+  ${l.unheard ? `<div class="card"><span class="k">${plink(l.unheard.id)}</span> <span class="f-settled" style="font-weight:600">said to them, but they did not hear it</span><div class="small">${esc(l.unheard.why)}</div></div>` : ""}
   <h3>Hearers</h3>`;
-  html += l.hearers.map(x => `<div class="card"><div><span class="k">${plink(x.id, l.ms - 60000, l.ms + 90000)}</span> <span class="mut">${x.d != null ? x.d + " m" : "distance unknown"}${x.off != null ? `, ${x.off} rad off the speaker's facing` : ""}${x.sal != null ? `, salience ${x.sal}` : ""}</span></div>
+  html += l.hearers.map(x => `<div class="card"><div><span class="k">${`<a href="#v=people&r=${x.id}&a=${Math.round(l.ms - 60000)}&b=${Math.round(l.ms + 90000)}&h=${Math.round(l.ms)}">${esc(nm(x.id))}</a>`}</span>${x.id === l.to ? ' <span class="mut">(said to them)</span>' : ""} <span class="mut">${x.d != null ? x.d + " m" : "distance unknown"}${x.off != null ? `, ${x.off} rad off the speaker's facing` : ""}${x.sal != null ? `, salience ${x.sal}` : ""}</span></div>
     <div class="f-${x.fate.kind || "none"}" style="font-weight:600">${esc(x.fate.short)}${x.fate.call != null ? ` · <a href="javascript:void 0" onclick="showCall(this, ${x.fate.call})">the exchange</a>` : ""}</div>
     ${x.ev.length ? `<div class="k small">Evidence</div><ul class="tight small">${x.ev.map(s => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
-    <div class="k small">The gate's inputs</div><ul class="tight small">${x.why.map(s => `<li>${esc(s)}</li>`).join("")}</ul>
+    ${x.why.length ? `<div class="k small">The gate's inputs</div><ul class="tight small">${x.why.map(s => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
     ${x.d_note ? `<div class="small mut">distance ${esc(x.d_note)}</div>` : ""}
     <details><summary class="small">how we know they heard it</summary><ul class="tight small">${x.srcs.map(s => `<li>${esc(s)}</li>`).join("")}</ul></details></div>`).join("") || `<p class="mut">No hearer in the evidence.</p>`;
   // The exchange, from each side: lines among these people and their talk turns and decisions around the line.
@@ -191,7 +202,7 @@ function lineView(i) {
     let t = `${esc(nm(c.actor))} ${c.purpose}${c.answering ? ` on “${esc(c.answering[1].slice(0, 80))}”` : ""}${c.why ? ` — why: ${esc(c.why.slice(0, 120))}` : ""} (queued ${wall(c.queued)}, reply ${wall(c.end)}, ${(c.lat / 1000).toFixed(1)} s)`;
     if (c.say && c.say[0]) t += ` → to ${esc(nm(c.say[1]))}: “${esc(c.say[0].slice(0, 120))}”`;
     rows.push([c.queued, "decide", c.actor, t + ` <a href="javascript:void 0" onclick="showCall(this, ${k})">open</a>`]); } });
-  for (const id of ids) (D.events[id] || []).forEach(e => { if (e[1] === "log" && e[0] >= a && e[0] <= b && !/ to .*: “/.test(e[2])) rows.push([e[0], "log", id, esc(e[2])]); });
+  for (const id of ids) (D.events[id] || []).forEach(e => { if (e[1] === "log" && e[0] >= a && e[0] <= b && !/ to .*: “/.test(e[2]) && !/as authored|thinks with|mind cursor at/.test(e[2])) rows.push([e[0], "log", id, esc(e[2])]); });
   const seen = new Set(); rows.sort((x, y) => x[0] - y[0]);
   html += `<h3>The exchange around it <span class="mut small">(${wall(a)} → ${wall(b)}: lines among these people, their talk turns and deliberations, and the mind log)</span></h3><table><tbody>` +
     rows.filter(r => { const k = r[1] + r[3]; if (seen.has(k)) return false; seen.add(k); return true; }).map(r => `<tr class="${r[4] ? "hl" : ""}">${tcell(r[0])}<td><span class="lane l-${r[1]}">${r[1]}</span></td><td>${r[3]}</td></tr>`).join("") + `</tbody></table>`;
