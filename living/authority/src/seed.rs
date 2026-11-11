@@ -524,6 +524,9 @@ pub struct Seed {
     pub artifacts: Vec<SeedArtifact>,
     #[serde(default)]
     pub structures: Vec<SeedStructure>,
+    /// Resource nodes placed where the author says (the land's own are generated).
+    #[serde(default)]
+    pub resource_nodes: Vec<SeedNode>,
     #[serde(default)]
     pub communities: Vec<SeedCommunity>,
     /// What every newcomer (a player's new character) arrives with: items and know-how. A
@@ -851,6 +854,25 @@ pub struct SeedStructure {
     pub owner: String,
     #[serde(default)]
     pub contents: std::collections::BTreeMap<String, u32>,
+    /// For a fire that burns fuel (its kind `burns`): the units it starts burning with (0: out).
+    #[serde(default)]
+    pub fuel: f32,
+}
+
+/// A resource node the author places: its kind (one of the script's `resources()`), where, and
+/// what it holds and regrows a minute (the kind's `max` and `regrow` when not given). Nodes
+/// that name the same `pool` share one stock, held by the first of them: a fishing ground's
+/// spots, each fished from but all drawing on the same fish.
+#[derive(Deserialize)]
+pub struct SeedNode {
+    pub kind: String,
+    pub at: [f32; 2],
+    #[serde(default)]
+    pub max: Option<f32>,
+    #[serde(default)]
+    pub regrow: Option<f32>,
+    #[serde(default)]
+    pub pool: String,
 }
 
 #[derive(Deserialize)]
@@ -997,15 +1019,19 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
         let at = map.nearest_walkable(st.at[0], st.at[1]).unwrap_or((48.0, 48.0));
         let owner = ctx.db.character().iter().find(|c| c.name == st.owner).map(|c| c.id).unwrap_or(0);
         common::invalidate_structures(ctx);
-        let row = ctx.db.structure().insert(Structure { id: 0, kind: st.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now });
+        // A fire the seed gives fuel starts lit, burning it down from now.
+        let burns = common::scripts(ctx).structure(&st.kind).burns.clone();
+        let lit_until_ms = burns.filter(|_| st.fuel > 0.0).and_then(|b| living_rules::fire::fed(0, now, st.fuel, b.rate, common::world(ctx).day_ms, None)).unwrap_or(0);
+        let row = ctx.db.structure().insert(Structure { id: 0, kind: st.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms });
         for (item, q) in &st.contents {
             common::inv_add(ctx, STRUCTURE_BIT | row.id, item, *q);
         }
     }
+    place_nodes(ctx, &s.resource_nodes, now);
     for a in &s.artifacts {
         let at = map.nearest_walkable(a.at[0], a.at[1]).unwrap_or((48.0, 48.0));
         common::invalidate_structures(ctx);
-        let st = ctx.db.structure().insert(Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0 });
+        let st = ctx.db.structure().insert(Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0, lit_until_ms: 0 });
         ctx.db.artifact().insert(Artifact { id: 0, kind: a.kind.clone(), holder: STRUCTURE_BIT | st.id, author: 0, author_name: a.author_name.clone(), written_ms: 0, topic: a.topic.clone(), text: a.text.clone() });
     }
     let mut authored: Vec<(String, u32)> = Vec::new();
@@ -1299,15 +1325,11 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     id
 }
 
-/// A fresh node's amount by kind, for resources an author places.
-fn resource_max(kind: &str) -> f32 {
-    match kind {
-        "tree" => 8.0,
-        "boulder" => 6.0,
-        "clay_bank" => 6.0,
-        "reeds" => 4.0,
-        _ => 5.0,
-    }
+/// A fresh node's amount by kind, for resources an author places: the kind's `max` in the
+/// script's `resources()` (tree 8, boulder and clay bank 6, reeds 4, the rest 5 in the shipped
+/// rules).
+fn resource_max(sc: &living_rules::script::Scripts, kind: &str) -> f32 {
+    resource_number(sc, kind, "max", 5.0)
 }
 
 /// A planned settlement's authored resources (`PlanSpec::resources`), at the nearest walkable
@@ -1322,9 +1344,9 @@ fn plan_resources(ctx: &ReducerContext, map: &living_rules::map::Map, at: &[(Str
             continue;
         }
         let Some(q) = map.nearest_walkable(p.0, p.1) else { continue };
-        let max = resource_max(kind);
+        let max = resource_max(&sc, kind);
         common::invalidate_resources(ctx, None);
-        ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: q.0, y: q.1, chunk: chunk_of(q.0, q.1), amount: max, max, regen: sc.num_of("regrow", kind, 0.5) as f32, at_ms: now });
+        ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: q.0, y: q.1, chunk: chunk_of(q.0, q.1), amount: max, max, regen: sc.num_of("regrow", kind, 0.5) as f32, at_ms: now, pool: 0 });
         placed += 1;
     }
     if placed > 0 || !waiting.is_empty() {
@@ -1340,20 +1362,20 @@ const SETTLEMENT_REACH: f32 = 24.0;
 fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, center: (f32, f32), now: u64) {
     let sc = common::scripts(ctx);
     let near = |x: i32, y: i32, k: Terrain| (-1..=1).any(|dy| (-1..=1).any(|dx| map.get(x + dx, y + dy) == k));
-    let fits = |kind: &str, x: i32, y: i32| {
-        let g = map.get(x, y);
-        match kind {
-            "fishing_spot" | "reeds" => (g == Terrain::Sand || g == Terrain::Grass) && near(x, y, Terrain::Water),
-            "clay_bank" => g == Terrain::Grass && near(x, y, Terrain::Water),
-            "berry_bush" => g == Terrain::Grass,
-            "tree" => g == Terrain::Forest || g == Terrain::Grass,
-            "boulder" => g == Terrain::Grass || g == Terrain::Dirt,
-            _ => false,
-        }
+    // Where each kind goes and how much a node holds are its traits in the script
+    // (`resources()`: `ground`, `by_water`, `max`).
+    let ground_of = |kind: &str| -> (Vec<String>, bool) {
+        let t = sc.tables();
+        (t.words("resources", kind, "ground"), t.flag("resources", kind, "by_water"))
     };
-    let max_of = resource_max;
+    let fits = |ground: &(Vec<String>, bool), x: i32, y: i32| {
+        let g = map.get(x, y);
+        ground.0.iter().any(|n| n == g.name()) && (!ground.1 || near(x, y, Terrain::Water))
+    };
+    let max_of = |kind: &str| resource_max(&sc, kind);
     let (cx, cy) = (center.0 as i32, center.1 as i32);
     for (kind, want) in &t.resources {
+        let ground = ground_of(kind);
         let mut spots: Vec<(f32, f32)> = ctx
             .db
             .resource_node()
@@ -1374,12 +1396,12 @@ fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &
                     }
                     let (x, y) = (cx + dx, cy + dy);
                     let p = (x as f32 + 0.5, y as f32 + 0.5);
-                    if !fits(kind, x, y) || spots.iter().any(|q| common::dist(*q, p) < 2.5) {
+                    if !fits(&ground, x, y) || spots.iter().any(|q| common::dist(*q, p) < 2.5) {
                         continue;
                     }
                     common::invalidate_resources(ctx, None);
                     let max = max_of(kind);
-                    ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), amount: max, max, regen: sc.num_of("regrow", kind, 0.5) as f32, at_ms: now });
+                    ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), amount: max, max, regen: sc.num_of("regrow", kind, 0.5) as f32, at_ms: now, pool: 0 });
                     spots.push(p);
                     have += 1;
                 }
@@ -1389,6 +1411,34 @@ fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &
             log::warn!("{}: only {have} of {want} {kind} could be placed within reach", t.name);
         }
     }
+}
+
+/// The seed's placed resource nodes (`resource_nodes`), each pool's stock on its first node.
+fn place_nodes(ctx: &ReducerContext, nodes: &[SeedNode], now: u64) {
+    let sc = common::scripts(ctx);
+    let mut pools: std::collections::BTreeMap<&str, u64> = Default::default();
+    for n in nodes {
+        if !living_rules::catalog::is_resource(&n.kind) {
+            log::warn!("seed: resource node of unknown kind `{}` left out", n.kind);
+            continue;
+        }
+        let max = n.max.unwrap_or_else(|| resource_number(&sc, &n.kind, "max", 5.0));
+        let regen = n.regrow.unwrap_or_else(|| sc.num_of("regrow", &n.kind, 0.5) as f32);
+        let pool = if n.pool.is_empty() { 0 } else { pools.get(n.pool.as_str()).copied().unwrap_or(0) };
+        common::invalidate_resources(ctx, None);
+        let row = ctx.db.resource_node().insert(ResourceNode { id: 0, kind: n.kind.clone(), x: n.at[0], y: n.at[1], chunk: chunk_of(n.at[0], n.at[1]), amount: max, max, regen, at_ms: now, pool });
+        if !n.pool.is_empty() && pool == 0 {
+            pools.insert(&n.pool, row.id);
+            let mut head = row;
+            head.pool = head.id;
+            ctx.db.resource_node().id().update(head);
+        }
+    }
+}
+
+/// A number among a resource kind's traits in the script (`resources()`), or `default`.
+fn resource_number(sc: &living_rules::script::Scripts, kind: &str, t: &str, default: f32) -> f32 {
+    sc.tables().number("resources", kind, t).map_or(default, |v| v as f32)
 }
 
 fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64) {
@@ -1441,6 +1491,7 @@ fn spawn_resources_in(ctx: &ReducerContext, map: &living_rules::map::Map, rows: 
             max,
             regen: sc.num_of("regrow", kind, 0.5) as f32,
             at_ms: now,
+            pool: 0,
         });
         true
     };
@@ -1578,7 +1629,7 @@ fn house(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), o
 fn put(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32, f32), owner: u32, now: u64) -> u64 {
     let at = walkable_near(map, at);
     common::invalidate_structures(ctx);
-    ctx.db.structure().insert(Structure { id: 0, kind: kind.into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now }).id
+    ctx.db.structure().insert(Structure { id: 0, kind: kind.into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms: 0 }).id
 }
 
 /// A settlement's named buildings: each on free walkable ground 5-12 tiles from the center,
@@ -1659,7 +1710,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
     for &(gx, gy) in &layout.gates {
         let p = (gx as f32 + 0.5, gy as f32 + 0.5);
         common::invalidate_structures(ctx);
-        let sid = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: 0, built_ms: 0 }).id;
+        let sid = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: 0, built_ms: 0, lit_until_ms: 0 }).id;
         ctx.db.gate().insert(Gate { id: sid, x: gx, y: gy, open: true, community: c.id, changed_ms: now, changed_by: 0 });
     }
     let (ids, authored): (Vec<u32>, Vec<(String, u32)>) = if t.residents.is_empty() {
@@ -1690,6 +1741,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
             max: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
             regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
             at_ms: now,
+            pool: 0,
         });
     }
     if !t.ledger.is_empty() {

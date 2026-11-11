@@ -640,7 +640,8 @@ fn ground_colour(t: Terrain, kind: RegionKind, v: f32, climate: Climate) -> [f32
         Terrain::Rock => rgb(128, 122, 116),
         Terrain::Dirt => rgb(132, 112, 80),
         Terrain::Road => rgb(178, 160, 120),
-        Terrain::Wall => rgb(110, 100, 90),
+        // A drop is drawn as its wall was: the bank under a retaining wall.
+        Terrain::Wall | Terrain::Drop | Terrain::Low => rgb(110, 100, 90),
         Terrain::Forest => match kind {
             RegionKind::SpiritGrove => rgb(40, 70, 80),
             RegionKind::OldForest => rgb(62, 98, 56),
@@ -667,7 +668,7 @@ fn arid_colour(t: Terrain, kind: RegionKind) -> [f32; 4] {
         Terrain::Rock => rgb(148, 130, 114),
         Terrain::Dirt => rgb(164, 140, 108),
         Terrain::Road => rgb(168, 152, 124),
-        Terrain::Wall => rgb(110, 100, 90),
+        Terrain::Wall | Terrain::Drop | Terrain::Low => rgb(110, 100, 90),
         Terrain::Forest => rgb(130, 124, 92),
         Terrain::Grass => match kind {
             RegionKind::Forest | RegionKind::OldForest | RegionKind::SpiritGrove => rgb(156, 146, 108),
@@ -687,7 +688,7 @@ fn arid_layers(t: Terrain, kind: RegionKind) -> [(Layer, f32); 2] {
         // An oasis's bed is mud; the sea's floor and shallows are sand.
         Terrain::Water => one(if matches!(kind, RegionKind::Sea | RegionKind::Beach) { Layer::Sand } else { Layer::Mud }),
         Terrain::Sand => one(Layer::Sand),
-        Terrain::Rock | Terrain::Wall => one(Layer::Rock),
+        Terrain::Rock | Terrain::Wall | Terrain::Drop | Terrain::Low => one(Layer::Rock),
         Terrain::Dirt => match kind {
             RegionKind::Highland | RegionKind::Peaks => one(Layer::Gravel),
             RegionKind::Wetland | RegionKind::Beach => one(Layer::CrackedMud),
@@ -718,7 +719,7 @@ fn ground_layers(t: Terrain, kind: RegionKind, climate: Climate) -> [(Layer, f32
         // Lake and river beds are mud; the sea's floor and shallows are sand.
         Terrain::Water => one(if matches!(kind, RegionKind::Sea | RegionKind::Beach) { Layer::Sand } else { Layer::Mud }),
         Terrain::Sand => one(Layer::Sand),
-        Terrain::Rock | Terrain::Wall => one(Layer::Rock),
+        Terrain::Rock | Terrain::Wall | Terrain::Drop | Terrain::Low => one(Layer::Rock),
         Terrain::Dirt => one(Layer::Dirt),
         Terrain::Road => one(Layer::Cobble),
         Terrain::Forest => one(if kind == RegionKind::SpiritGrove { Layer::SpiritMoss } else { Layer::ForestFloor }),

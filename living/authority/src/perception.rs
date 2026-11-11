@@ -194,7 +194,8 @@ fn regard_of(sc: &Rc<Scripts>, input: RegardIn) -> Regard {
 
 /// Whether `observer` knows `target`'s name: itself, its parents, children and the parent of
 /// its children, its community, someone its mind has feelings about (`relation`), or
-/// someone who told it their name (`acquaintance`).
+/// someone who told it their name (`acquaintance`, which also keeps the names of its
+/// community's dead: `remember_member`).
 pub fn knows_name(ctx: &ReducerContext, observer: &Character, target: &Character) -> bool {
     let (o, t) = (observer.id, target.id);
     if o == t || observer.parent_a == t || observer.parent_b == t || target.parent_a == o || target.parent_b == o {
@@ -656,6 +657,18 @@ pub fn introduce(ctx: &ReducerContext, observer: u32, known: u32, now: u64) -> b
     ctx.db.acquaintance().insert(Acquaintance { id: 0, observer, known, since_ms: now });
     knowledge_changed(Some(observer));
     true
+}
+
+/// `dead` dies a member of `community`: the others knew their name through it (`knows_name`
+/// reads living membership, which goes with the dead), so they keep it as an acquaintance and
+/// still name them in the death percept, at the remains and in memory. Call it before the
+/// membership row goes. One row per other member, gone when that member dies (`forget_dead`).
+pub fn remember_member(ctx: &ReducerContext, dead: u32, community: u32, now: u64) {
+    for m in ctx.db.membership().community().filter(community).map(|m| m.member).collect::<Vec<_>>() {
+        if m != dead {
+            introduce(ctx, m, dead, now);
+        }
+    }
 }
 
 /// A skill use reveals `what` of `target` to `observer` for `secs` seconds.

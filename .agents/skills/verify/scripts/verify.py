@@ -15,7 +15,7 @@ removes what the run started and keeps the evidence.
   verify.py player  --run R say TEXT [--to ID]
   verify.py sql     --run R QUERY [--as-player | --anonymous] [--save NAME]
                                             as the database owner unless told otherwise
-  verify.py call    --run R REDUCER ARGS_JSON [--as-player | --as-admin] [--expect-refusal TEXT]
+  verify.py call    --run R REDUCER ARGS_JSON|@FILE [--as-player | --as-admin] [--expect-refusal TEXT]
   verify.py observer --run R start|shot NAME|stop
   verify.py cleanup --run R [--keep-db]
 
@@ -92,7 +92,7 @@ def log(st, line, out=sys.stdout):
     print(line, file=out, flush=True)
 
 
-def http(path, body=None, token=None, raw=False):
+def http(path, body=None, token=None, raw=False, timeout=30):
     data = body.encode() if raw else (json.dumps(body).encode() if body is not None else b"")
     req = urllib.request.Request(URL + path, data=data, method="POST" if body is not None or path == "/v1/identity" else "GET")
     if not raw:
@@ -100,7 +100,7 @@ def http(path, body=None, token=None, raw=False):
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read().decode()
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()
@@ -183,7 +183,10 @@ def launch(a):
     if st["seed_laws"]:
         log(st, "the seed carries its own laws: kept as installed at creation (no install_script)")
     else:
-        stdb("call", "-s", "local", st["db"], "install_script", json.dumps((LIVING / "scripts/skills.rhai").read_text()))
+        # Over HTTP: the script is past the 128 KiB a command-line argument may hold.
+        code, body = http(f"/v1/database/{st['db']}/call/install_script", [(LIVING / "scripts/skills.rhai").read_text()], admin_token(), timeout=180)
+        if code != 200:
+            sys.exit(f"install_script failed: {code} {body.strip()[-4000:]}")
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)
@@ -283,12 +286,15 @@ def call(a):
     token = admin_token() if a.as_admin else st.get("token") if a.as_player else None
     if a.as_player and not token:
         sys.exit("no player yet: run `player join NAME` first")
-    args = json.loads(a.args)
+    # `@FILE` reads the arguments from a file (a script is past what one command-line argument
+    # may hold).
+    args = json.loads(Path(a.args[1:]).read_text() if a.args.startswith("@") else a.args)
     if not isinstance(args, list):
         sys.exit("ARGS_JSON must be a JSON array of the reducer's arguments")
     who = "admin" if a.as_admin else "player" if a.as_player else "anonymous"
-    code, body = http(f"/v1/database/{st['db']}/call/{a.reducer}", args, token)
-    log(st, f"call {a.reducer}{json.dumps(args)} as {who} -> {code} {body.strip()}")
+    code, body = http(f"/v1/database/{st['db']}/call/{a.reducer}", args, token, timeout=180)
+    shown = json.dumps(args)
+    log(st, f"call {a.reducer}{shown if len(shown) < 4000 else shown[:200] + f'... ({len(shown)} bytes)'} as {who} -> {code} {body.strip()}")
     if a.expect_refusal is not None:
         ok = code != 200 and a.expect_refusal in body
         log(st, f"expected refusal containing {a.expect_refusal!r}: {'yes' if ok else 'NO'}")

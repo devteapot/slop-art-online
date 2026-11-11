@@ -9,8 +9,9 @@
 //!
 //! Streets crossing a drop become ramps (their graded profiles average over it), lanes stop
 //! short of it, and the planner puts stairs (sloped pads) and retaining walls (props) on it.
-//! [`paint_drops`] turns tiles beside any drop steeper than a step can climb into `Wall`, so
-//! walking agrees with the ground: only roads, ramps and stairs join the levels.
+//! [`paint_drops`] turns tiles beside any drop steeper than a step can climb into `Drop`, so
+//! walking agrees with the ground: only roads, ramps and stairs join the levels. A drop is open
+//! air: people on either level see each other across it (and missiles fly over it).
 
 use super::*;
 
@@ -315,12 +316,14 @@ pub(crate) fn terraces(land: &Land, p: &SettleParams) -> Vec<Terrace> {
     out
 }
 
-/// Inside terrace zones, turn tiles beside a drop no one can step up into `Wall`: of two
+/// Inside terrace zones, turn tiles beside a drop no one can step up into `Drop` (unwalkable,
+/// see-through): of two
 /// neighbouring tiles whose ground differs by more than `CLIMB_M`, the upper one (where a
 /// retaining wall's top stands), or the lower one when the upper is a road, a stair, water,
 /// under a building (which blocks anyway) or under a lamp post. Roads, stairs (painted as road) and water are never
 /// walled. Planned settlements' drops are walled the same way within `planned` (centre, radius).
-/// Returns the tiles walled.
+/// Sealed pockets closed inside a zone become `Drop` as well: ground no one can reach, but no
+/// obstacle to the eye. Returns the tiles closed.
 pub(crate) fn paint_drops(land: &mut Land, lots: &[Lot], settlements: &[Settlement], p: &SettleParams, planned: &[(V2, f32)]) -> u32 {
     // (centre, outer radius, climb, planned) of every terrace zone, then of every plan.
     let zones: Vec<(V2, f32, f32, bool)> = land.mods.terr.iter().map(|z| (z.c, z.r_out, CLIMB_M * (z.drop_m / 0.8), false)).chain(planned.iter().map(|&(c, r)| (c, r, CLIMB_M, true))).collect();
@@ -379,7 +382,7 @@ pub(crate) fn paint_drops(land: &mut Land, lots: &[Lot], settlements: &[Settleme
     let mut n = 0;
     for k in mark {
         if Terrain::from_u8(land.map.tiles[k]).walkable() {
-            land.map.tiles[k] = Terrain::Wall as u8;
+            land.map.tiles[k] = Terrain::Drop as u8;
             n += 1;
         }
     }
@@ -417,7 +420,7 @@ pub(crate) fn paint_drops(land: &mut Land, lots: &[Lot], settlements: &[Settleme
             }
             if !edge && cells.len() < POCKET_TILES {
                 for c in cells {
-                    land.map.tiles[tile(c % nw, c / nw)] = Terrain::Wall as u8;
+                    land.map.tiles[tile(c % nw, c / nw)] = Terrain::Drop as u8;
                     n += 1;
                 }
             }

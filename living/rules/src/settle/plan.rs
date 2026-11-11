@@ -828,7 +828,7 @@ pub(crate) fn paint(land: &mut Land, r: &Resolved) -> ((i32, i32), (i32, i32)) {
             let k = (y * w + x) as usize;
             let t = Terrain::from_u8(land.map.tiles[k]);
             if r.levels.iter().any(|l| poly_contains(&l.poly, q)) {
-                if matches!(t, Terrain::Water | Terrain::Rock | Terrain::Forest | Terrain::Wall) {
+                if matches!(t, Terrain::Water | Terrain::Rock | Terrain::Forest | Terrain::Wall | Terrain::Drop) {
                     land.map.tiles[k] = Terrain::Grass as u8;
                 }
             } else if !r.sea.is_empty() && poly_contains(&r.sea, q) {
@@ -1237,6 +1237,46 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Across the drop between the quay and the row, two people 2 m either side see each other
+    /// and neither can step across: the drop's tiles are `Drop` on the hosted map (not `Wall`),
+    /// walking stops at them, and any route between goes round the drop, never over it.
+    #[test]
+    fn people_see_across_the_plans_drop_but_cannot_walk_across() {
+        let (l, map, _) = plan_land();
+        let r = resolve(&spec()).unwrap();
+        let (x0, y0, x1, y1) = (r.lo.0 as i32, r.lo.1 as i32, r.hi.0 as i32, r.hi.1 as i32);
+        let drops = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| map.get(x, y) == Terrain::Drop).count();
+        assert!(drops >= 50, "{drops} drop tiles in the plan");
+        let mut pairs = 0;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                if map.get(x, y) != Terrain::Drop {
+                    continue;
+                }
+                for (dx, dy) in [(1, 0), (0, 1)] {
+                    let (a, b) = ((x - 2 * dx, y - 2 * dy), (x + 2 * dx, y + 2 * dy));
+                    let (pa, pb) = ((a.0 as f32 + 0.5, a.1 as f32 + 0.5), (b.0 as f32 + 0.5, b.1 as f32 + 0.5));
+                    // Standing ground on two levels, nothing built between.
+                    let between_open = (-1..=1).all(|k| !map.get(x + k * dx, y + k * dy).opaque());
+                    if !map.walkable(a.0, a.1) || !map.walkable(b.0, b.1) || !between_open || (l.height(pa.0, pa.1) - l.height(pb.0, pb.1)).abs() < 2.0 {
+                        continue;
+                    }
+                    pairs += 1;
+                    assert!(map.sight_clear(pa, pb) && map.sight_clear(pb, pa), "the two levels see each other at ({x}, {y})");
+                    assert!(!map.free(x as f32 + 0.5, y as f32 + 0.5) && !map.line_clear(pa, pb), "a step across the drop at ({x}, {y})");
+                    // A route between them goes round the drop (by a stair, or past its end).
+                    if let Some(p) = map.path(pa, pb, 50_000) {
+                        for w in std::iter::once(pa).chain(p.iter().copied()).collect::<Vec<_>>().windows(2) {
+                            let n = (dist(w[0], w[1]) / 0.1).ceil().max(1.0) as i32;
+                            assert!((0..=n).all(|i| map.free(w[0].0 + (w[1].0 - w[0].0) * i as f32 / n as f32, w[0].1 + (w[1].1 - w[0].1) * i as f32 / n as f32)), "a route over the drop at ({x}, {y})");
+                        }
+                    }
+                }
+            }
+        }
+        assert!(pairs >= 20, "{pairs} places where people stand either side of the drop");
     }
 
     #[test]
