@@ -393,6 +393,18 @@ pub struct Laws {
     pub pasture_per_tile: f32,
     /// A crying infant makes its carers think about it; false: the cry is only heard.
     pub cry_prompts_carers: bool,
+    /// Real minutes after one's own birth, or one's youngest child's, before a grown person
+    /// feels the longing for a child; the most nurturing feel it sooner ([`longing_wait_ms`]).
+    pub longing_after_min: f32,
+    /// Food one must carry for that longing to be felt (0: it does not depend on food).
+    pub longing_food: f32,
+}
+
+/// How long after one's own birth, or one's youngest child's, a grown person waits before
+/// longing for a child: `after_min` real minutes, shortened by nurture (0..100) to a sixth of
+/// it at most nurturing. With the shipped 20 minutes this is the old `20 - nurture / 6`.
+pub fn longing_wait_ms(after_min: f32, nurture: f32) -> f32 {
+    60_000.0 * after_min.max(0.0) * (1.0 - nurture.clamp(0.0, 100.0) / 120.0)
 }
 
 
@@ -434,6 +446,8 @@ impl Default for Laws {
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
             cry_prompts_carers: true,
+            longing_after_min: 20.0,
+            longing_food: 0.0,
         }
     }
 }
@@ -1551,6 +1565,8 @@ impl Scripts {
             spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
             cry_prompts_carers: flag("cry_prompts_carers", l.cry_prompts_carers),
+            longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
+            longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
         };
         Ok(l)
     }
@@ -2110,6 +2126,14 @@ mod tests {
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));
         assert_eq!((l.keep_seen_m, l.chase_lost_share, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 1.4, 25.0, 85.0, 0.02));
+        // The longing for a child: shipped values keep the old wait (20 − nurture/6 minutes, any food).
+        assert_eq!((l.longing_after_min, l.longing_food), (20.0, 0.0));
+        for n in [0.0, 30.0, 60.0, 100.0] {
+            assert!((longing_wait_ms(l.longing_after_min, n) - 60_000.0 * (20.0 - n / 6.0)).abs() < 0.5);
+        }
+        let w = over("longing_after_min", serde_json::json!(90)).unwrap();
+        assert_eq!((w.longing_after_min, over("longing_food", serde_json::json!(4)).unwrap().longing_food), (90.0, 4.0));
+        assert!((longing_wait_ms(90.0, 60.0) - 60_000.0 * 45.0).abs() < 0.5);
     }
 
     fn ctx() -> SkillCtx {
