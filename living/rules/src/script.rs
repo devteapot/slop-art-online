@@ -578,6 +578,9 @@ pub const REQUIRED_LAWS: &[&str] = &["senses", "motion", "items", "structures", 
 /// `name`, in the script's order. `items`, `structures`, `resources` and `know_how` are
 /// required; `recipes` is the world's own (none when the script has no `recipes()`).
 pub const TABLES: &[&str] = &["items", "structures", "resources", "know_how", "recipes"];
+/// An item's traits a client draws it by (data only: no rule reads them; docs/WORLD_RULES.md,
+/// "What a client shows").
+pub const ITEM_LOOK: [&str; 3] = ["icon", "label", "group"];
 
 /// The data tables as the rules read them through the engine's primitives: `entry_of(table,
 /// name)` (the entry's map, or `()`), `names_of(table)` (its names, in order) and
@@ -792,6 +795,17 @@ pub struct StructureTraits {
     pub burns: Option<Burns>,
 }
 
+/// What a client shows of an item or of what a recipe makes (`Scripts::look_of`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Look {
+    /// A short stable id the client draws it by (docs/WORLD_RULES.md lists them).
+    pub icon: String,
+    /// Its name for players, lower case as in a sentence.
+    pub label: String,
+    /// Where a pack or a recipe grid sorts it (empty: none).
+    pub group: String,
+}
+
 /// A fire that eats fuel (`burns: #{ fuel, rate, warmth, light, holds }`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Burns {
@@ -816,6 +830,18 @@ impl StructureTraits {
     /// How far it lights the dark when it burns (its `lights`, or its fire's `burns.light`).
     pub fn light(&self) -> f32 {
         self.lights.max(self.burns.as_ref().map_or(0.0, |b| b.light))
+    }
+
+    /// A structure of this kind as the rules' checks see it (`a.target.lit`, `a.target.fuel`):
+    /// a fire that burns fuel is lit while `lit_until_ms` (the `structure` row's) is ahead of
+    /// `now`, holding what is left at its rate on a day of `day_ms` (the `world` row's); a fire
+    /// that needs no feeding is always lit and holds none; anything else is neither. The
+    /// authority and a client computing the same facts call this.
+    pub fn fire_state(&self, lit_until_ms: u64, now: u64, day_ms: u64) -> (bool, f32) {
+        match &self.burns {
+            Some(b) => (crate::fire::lit(lit_until_ms, now), crate::fire::fuel_left(lit_until_ms, now, b.rate, day_ms)),
+            None => (self.fire(), 0.0),
+        }
     }
 }
 
@@ -1150,7 +1176,18 @@ impl Scripts {
     }
 
     /// The world's items and their traits (`items()`), read once.
+    /// An item's `icon`, `label` and `group` (what a client shows of it) must be texts.
     fn read_items(&self) -> Result<Vec<crate::catalog::ItemSpec>, String> {
+        let t = self.tables.borrow();
+        for n in t.names("items") {
+            let m = t.entry("items", n).expect("listed");
+            for k in ITEM_LOOK {
+                if m.get(k).is_some_and(|v| !v.is_string()) {
+                    return Err(format!("items: the {k} of `{n}` must be a text"));
+                }
+            }
+        }
+        drop(t);
         Ok(self.kinds_of("items").into_iter().map(|k| crate::catalog::ItemSpec { name: k.name, traits: k.traits }).collect())
     }
 
@@ -1239,6 +1276,18 @@ impl Scripts {
             return None;
         }
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok()?.into_string().ok()
+    }
+
+    /// How an item looks in a client (`item_look`), or what a recipe makes (`recipe_look`: its
+    /// product's look under the recipe's own `icon` and `label`). None when the script has no
+    /// such function or it fails (a script from before 2026-11-11's looks).
+    pub fn look_of(&self, f: &str, name: &str) -> Option<Look> {
+        if !self.has(f) {
+            return None;
+        }
+        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (name.to_string(),)).ok()?.try_cast::<Map>()?;
+        let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
+        Some(Look { icon: text("icon"), label: text("label"), group: text("group") })
     }
 
     /// A yes-or-no law of a context (`theft(a)`); false when the script has none or it fails.
@@ -2584,7 +2633,7 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         assert!(go(&SkillCtx { actor: ActorFacts { knows: vec![], ..glass.actor.clone() }, ..glass.clone() }).unwrap_err().starts_with("you don't know how to make glass"));
         assert_eq!(s.text_of("source_of", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it (knowing glassmaking)");
         // Any alkali serves: a world's soda is used like ash, by the trait alone.
-        let overlay = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"glass\" },", "#{ name: \"glass\" }, #{ name: \"soda\", alkali: true },");
+        let overlay = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"sand\", icon: \"sand\", label: \"sand\", group: \"material\" },", "#{ name: \"sand\", icon: \"sand\", label: \"sand\", group: \"material\" }, #{ name: \"soda\", alkali: true },");
         let soda = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), &overlay).unwrap()).unwrap();
         let c = at_fire("furnace", true, 3.0, &[("soda", 2), ("sand", 2)], &["glassmaking"], "make", "glass", 0);
         assert_eq!(soda.check("make", &c).and_then(|_| soda.done("make", &c)).unwrap()[0], Effect::Remove { item: "soda".into(), qty: 1 });
@@ -2602,6 +2651,87 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         let text = s.world_text(&[]);
         assert!(text.contains("a furnace burns 3 fuel a game hour (wood or peat)") && text.contains("glass: make it at a furnace"), "{text}");
         assert!(!shipped.world_text(&[]).contains("Fires that burn fuel"));
+    }
+
+    /// Every item says how a client shows it (`icon`, `label`, `group`), as data no rule reads;
+    /// what a recipe makes looks like its product unless the recipe says otherwise; a look that
+    /// is not text is refused at install.
+    #[test]
+    fn items_and_recipes_say_how_they_look() {
+        let look = |icon: &str, label: &str, group: &str| Some(Look { icon: icon.into(), label: label.into(), group: group.into() });
+        for s in [scripts(), cullet()] {
+            let t = s.tables();
+            for n in t.names("items") {
+                let e = t.entry("items", n).unwrap();
+                for k in ITEM_LOOK {
+                    assert!(e.get(k).and_then(|v| v.clone().into_string().ok()).is_some_and(|v| !v.is_empty()), "item {n} has no {k}");
+                }
+            }
+        }
+        let (shipped, s) = (scripts(), cullet());
+        assert_eq!(shipped.look_of("item_look", "cooked_fish"), look("cooked_fish", "cooked fish", "food"));
+        assert_eq!(s.look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
+        assert_eq!(s.look_of("item_look", "glass"), look("glass", "glass", "glass"));
+        // An item without looks (a world's own, from before): its name, spaced; no group.
+        assert_eq!(s.look_of("item_look", "glass_beads"), look("glass_beads", "glass beads", ""));
+        // A recipe looks like its product, a recipe that turns items like each product.
+        assert_eq!(s.look_of("recipe_look", "glass"), s.look_of("item_look", "glass"));
+        assert_eq!(s.look_of("recipe_look", "smoked_meat"), look("smoked_meat", "smoked meat", "food"));
+        let over = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"lamp_oil\", at: \"fire\",", "#{ name: \"lamp_oil\", label: \"rendered oil\", icon: \"oil_jar\", at: \"fire\",");
+        let over = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), &over).unwrap()).unwrap();
+        assert_eq!(over.look_of("recipe_look", "lamp_oil"), look("oil_jar", "rendered oil", "fuel"));
+        assert_eq!(over.look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
+        let bad = include_str!("../../scripts/skills.rhai").replace("#{ name: \"berries\", icon: \"berries\",", "#{ name: \"berries\", icon: 3,");
+        assert_eq!(Scripts::new(&bad).err().unwrap(), "items: the icon of `berries` must be a text");
+    }
+
+    /// Teaching takes the world's know-how table, not only what experimenting can reveal, so
+    /// Cullet's glassmaking and the shipped fire_bolt and wound_tending can be taught. Every
+    /// technique the old list had answers as before; the minds are told every technique.
+    #[test]
+    fn teaching_takes_the_worlds_know_how() {
+        let (shipped, s) = (scripts(), cullet());
+        let teach = |s: &Scripts, item: &str, knows: &[&str], theirs: &[&str]| {
+            let mut c = ctx();
+            c.skill = "teach".into();
+            c.item = item.into();
+            c.actor.knows = knows.iter().map(|k| k.to_string()).collect();
+            c.target = TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "adult".into(), knows: theirs.iter().map(|k| k.to_string()).collect(), ..Default::default() };
+            s.check("teach", &c)
+        };
+        assert_eq!(teach(&s, "glassmaking", &["glassmaking"], &["fire"]), Ok(()));
+        assert_eq!(teach(&s, "glassmaking", &["glassmaking"], &[]).unwrap_err(), "they must first learn fire");
+        assert_eq!(teach(&s, "glassmaking", &[], &["fire"]).unwrap_err(), "you don't know glassmaking yourself");
+        assert_eq!(teach(&shipped, "glassmaking", &["glassmaking"], &["fire"]).unwrap_err().split(" (").next(), Some("there is no technique called glassmaking"));
+        for t in ["fire_bolt", "wound_tending"] {
+            assert_eq!(teach(&shipped, t, &[t], &[]), Ok(()));
+        }
+        assert!(teach(&s, "glass", &[], &[]).unwrap_err().contains("there is no technique called glass (the techniques are: fire, cooking"));
+        // The minds' world text names every technique of the table, with its brief.
+        let about = |s: &Scripts| s.law_specs()["know_how"].about.clone();
+        let (a, b) = (about(&shipped), about(&s));
+        assert!(a.starts_with("you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs), masonry (walls), carpentry (houses and gates; needs shelter), fishing,"), "{a}");
+        for t in s.skills().techniques.iter() {
+            assert!(b.contains(&t.name), "{} is not in {b}", t.name);
+        }
+        assert!(b.contains("toolmaking (axe, pick), glassmaking (glass from ash and sand at the furnace). Others may know"), "{b}");
+    }
+
+    /// Others see someone making at a workplace or feeding a fire, players and minds alike;
+    /// the authority and a client read a fire's state through one primitive.
+    #[test]
+    fn making_and_feeding_are_seen_and_a_fire_state_is_shared() {
+        let s = cullet();
+        for k in ["make", "feed"] {
+            assert_eq!(s.shows().get(k).map(|x| x.look.as_str()), Some("work"));
+        }
+        let day = 48 * 60_000;
+        let furnace = s.structure("furnace");
+        // 3 units a game hour on a 48-minute day: a unit lasts 40 s.
+        assert_eq!(furnace.fire_state(140_000, 100_000, day), (true, 1.0));
+        assert_eq!(furnace.fire_state(100_000, 100_000, day), (false, 0.0));
+        assert_eq!(s.structure("campfire").fire_state(0, 100_000, day), (true, 0.0));
+        assert_eq!(s.structure("house").fire_state(0, 100_000, day), (false, 0.0));
     }
 
     /// A skill added only in the script (its spec and rules) is one a graph, an act and a

@@ -442,6 +442,47 @@ A structure kind with a `burns` trait is a fire that eats fuel:
 
 The shipped world has no recipes and no fires that burn fuel, so `make` and `feed` are not offered to its people (`listed` is computed from the tables), and its minds' world text is unchanged. A world with them gets a "Fires that burn fuel" and "Made at workplaces" sentence in its making section (`workplaces_law`), built from the same tables.
 
+### What a client shows (goods-2)
+
+**Status:** built on branch `goods-2`, 2026-11-11: the rules' side of the interface design (branch `design-interface`, `docs/INTERFACE.md` §1 and §7). Data only: no rule reads these traits, so no behaviour changes.
+
+**Items.** Every item in `items()` carries three traits, in the shipped script and in Cullet's goods, so the pack and a recipe grid stop guessing by name:
+
+| Trait | What it is |
+| --- | --- |
+| `icon` | a short stable id the client maps to an image; it does not change when a label does |
+| `label` | the player-facing name, lower case as in a sentence ("lamp oil"); the client capitalises it where it starts a line |
+| `group` | where a pack or a recipe grid sorts it: `food`, `fuel`, `material`, `tool`, `weapon`, `wear`, `glass`, `money` |
+
+Each kind's own entry is the source; there is no list in Rust. An install refuses an `icon`, `label` or `group` that is not text (`script::ITEM_LOOK`). An item without them (a world's own, from before) looks like its name: the name as its icon, with spaces as its label, and no group (`item_look`).
+
+The icon ids, for the client. Today every id is the item's name; a world's new item may reuse an id (a world's soda could draw as `ash`) or name a new one, and the client draws an id it has no image for with its fallback.
+
+| Group | Item: `icon` (label) |
+| --- | --- |
+| food | `berries`, `fish`, `meat`, `cooked_fish` (cooked fish), `cooked_meat` (cooked meat), `smoked_fish` (smoked fish), `smoked_meat` (smoked meat); Cullet: `roots`, `baked_roots` (baked roots), `greens` |
+| fuel | Cullet: `peat`, `lamp_oil` (lamp oil) |
+| material | `wood`, `stone`, `fiber`, `hide`, `clay`, `leather`; Cullet: `kelp`, `ash`, `sand` |
+| tool | `torch`, `tablet`, `axe`, `pick`, `net`, `basket`, `salve` |
+| weapon | `spear`, `bow`, `arrow` |
+| wear | `cloak`, `armor` |
+| glass | Cullet: `glass` |
+| money | `mark` |
+
+The label is the item's name with spaces for every item listed. Wood burns (`fuel: 1.0`) but is grouped as a material: `group` is where it is shown, not what it can do; the rules ask the traits.
+
+**A recipe's look.** What a recipe makes looks like its product item: its `icon`, `label` and `group`. A recipe may set its own `icon` or `label`, which stand over the product's for what it makes (`recipe_look(product)`); a recipe that `turns` items looks like each product it makes (smoking: smoked fish, smoked meat). `make` does not read them. A client asks `Scripts::look_of("recipe_look", product)` or `look_of("item_look", item)` (`living_rules::script::Look`). `craft`, `cook` and `smoke` are not folded into `recipes()` here; that is a separate, later branch, and the rule is meant to carry over to it unchanged.
+
+**Showing work.** `make_shows()` and `feed_shows()` are `#{ look: "work" }`, like `cook` and `craft`: while someone makes at a workplace or feeds a fire, anyone in view sees a `doing` row at it (`doing.x/y` is the workplace or fire), players and minds alike. `act_card` gains two rows (`make`, `feed`); the authority keeps the other skills' presentation codes (`codes.rs`).
+
+**Teaching a world's techniques.** `teach_check` checked the item against `techniques()`, which was what experimenting with eight materials can reveal (`discoveries`), not the know-how table. So Cullet's glassmaking, and the shipped fire_bolt and wound_tending, could not be taught. `techniques()` is now `names_of("know_how")`; `discoveries`, `learn_how` and `experiment` keep the materials' lists (what experimenting reveals is only part of what there is to know). The refusal for a name that is no technique now lists the table in its order, so its text changed: before "(the techniques are: spear, fire, masonry, …, cooking, smoking)", after "(the techniques are: fire, cooking, spear, …, fire_bolt, wound_tending, toolmaking)" (and "…, glassmaking" in Cullet). For the 20 techniques of the old list every answer is the same: a comparison of main's script against this branch over every technique, three states of the teacher's knowledge and five targets gave 300 of 300 identical answers in each world, and differences only for fire_bolt, wound_tending, glassmaking and names that are no technique. `teach_check`'s heaviest sample fell from 635 to 282 operations (shipped) and 293 (Cullet).
+
+**What minds are told of know-how.** `know_how_law()`'s text was a hand-written list of twelve shipped techniques, so Cullet's minds were not told of glassmaking, nor anyone of fishing, smoking, basketry, archery, tanning, medicine, trapping, bridging, fire_bolt or wound_tending. It is now built from the table (`know_how_text`): each technique by name, with its `brief` in brackets where the entry has one. The shipped entries' briefs are the old text's brackets, so the shipped text is the old one with the ten missing names inserted in table order before toolmaking; Cullet's ends "toolmaking (axe, pick), glassmaking (glass from ash and sand at the furnace)." The cached world text of each world changes once, at its next install.
+
+**Make at a fuel-burning workplace (the design's §1).** The authority's check sees the fire: a player's act toward a structure runs as a one-off behaviour, and its target facts come from `act::target_facts`, which reads `lit` and `fuel` from the row's `lit_until_ms` (`fire_state`). The game client builds its own facts to choose what to offer (`living/game/src/verbs.rs` `thing_facts`) and leaves `lit` false and `fuel` 0, so `make_check` says "is out: feed it first" there and the F list never offers `make` at a hearth, oven, furnace or smokehouse. To match the authority, a client sets, for a structure target:
+- `lit`, `fuel` = `rules.structure(kind).fire_state(row.lit_until_ms, now_ms, world.day_ms)`, from the public `structure` row, the public `world` row and the server clock it already estimates. The authority computes the same through the same function.
+- (also wrong, for `cook` and `experiment`, not `make`) the actor's `near_fire`: the authority counts any burning structure within its `burns.warmth`, or a fire that needs no feeding within `fire_warmth`; the client counts only a kind named `campfire`.
+
 ### Cullet's goods, as data
 
 They are the goods section of Cullet's laws, [`living/seeds/worlds/cullet/laws.rhai`](../living/seeds/worlds/cullet/laws.rhai) (the seed's `laws_file`, composed over the shipped script when the world is created; [Cullet's rules](CULLET_RULES.md)). It adds no rule. Its numbers are first guesses for the soak.
@@ -494,7 +535,7 @@ No whole-World scan was added. A fire costs nothing while it burns: no per-tick 
 
 ### Costs (measured)
 
-- **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
+- **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest; 282 since goods-2), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
 - **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here. After merging rules-1 and plan-1 (main `6a905c31`): rates 8,566, rates-law 212,202 (still the only law over budget), strike 274,209, cooldown 1,704, perceived 70,038, hook 450,841, senses 3,143, senses-law 41,866, moves 1,956.
 - **Not measured:** tick time and subscription volume at population. A fire changes one public row per feeding or recipe made; at Cullet's 64 residents that is a few rows a game hour.
 

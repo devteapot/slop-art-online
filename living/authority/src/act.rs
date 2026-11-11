@@ -151,10 +151,9 @@ pub fn warmth(ctx: &ReducerContext, at: (f32, f32), now: u64) -> Warmth {
 pub fn fire_state(ctx: &ReducerContext, s: &Structure, now: u64) -> (bool, f32) {
     let sc = common::scripts(ctx);
     let t = sc.structure(&s.kind);
-    match &t.burns {
-        Some(b) => (living_rules::fire::lit(s.lit_until_ms, now), living_rules::fire::fuel_left(s.lit_until_ms, now, b.rate, common::world(ctx).day_ms)),
-        None => (t.fire(), 0.0),
-    }
+    // The world row is read only for a fire that burns fuel, as before.
+    let day_ms = if t.burns.is_some() { common::world(ctx).day_ms } else { 0 };
+    t.fire_state(s.lit_until_ms, now, day_ms)
 }
 
 pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {

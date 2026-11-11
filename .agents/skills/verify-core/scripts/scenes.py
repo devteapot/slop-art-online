@@ -1850,6 +1850,12 @@ def goods(s):
     s.wait(lambda: structure("furnace", b)["lit_until_ms"] > 0, seconds=60)
     fed = structure("furnace", b)["lit_until_ms"]
     acts(a, {"do": "make", "item": "glass", "target": {"nearest": "furnace"}})
+    # Others see the work while it lasts (`make_shows`, goods-2): a `doing` row at the furnace.
+    card = {r["skill"]: r["code"] for r in s.rows("SELECT skill, code FROM act_card", "act-cards")}
+    s.expect("making and feeding are shown skills (act_card)", "make" in card and "feed" in card, card)
+    work = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM doing WHERE id = {a}") if r["code"] == card["make"]], seconds=20)
+    fx, fy = structure("furnace", b)["x"], structure("furnace", b)["y"]
+    s.expect("making glass is seen at the furnace while it lasts (doing)", abs(work[0]["x"] - fx) < 0.01 and abs(work[0]["y"] - fy) < 0.01, {"doing": work, "furnace": [fx, fy]})
     s.wait(lambda: s.inventory(a).get("glass", 0) == 1, seconds=60)
     inv = s.inventory(a, "after-glass")
     after = structure("furnace", b)
