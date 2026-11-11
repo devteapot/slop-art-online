@@ -467,7 +467,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             let d = living_rules::combat::unit(target.at.0 - here.0, target.at.1 - here.1).ok_or("no way to dodge")?;
             let map = common::map(ctx);
             let pick = [1.0f32, 0.75, 0.5, 0.3].into_iter().map(|k| (here.0 + d.0 * len * k, here.1 + d.1 * len * k)).find(|p| map.free(p.0, p.1) && map.line_clear(here, *p));
-            target = Resolved::point(pick.ok_or("no room to dodge")?);
+            target = Resolved::point(pick.ok_or_else(|| format!("no room to {skill}"))?);
         }
         _ if aim == Aim::Facing => {
             // The guard faces where it is aimed (a player), else what threatens: a windup
@@ -508,7 +508,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                     break;
                 }
             }
-            target = Resolved::point(pick.ok_or("no room to dodge")?);
+            target = Resolved::point(pick.ok_or_else(|| format!("no room to {skill}"))?);
         }
         "wander" => {
             let map = common::map(ctx);
@@ -1831,7 +1831,8 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     // What the victim is doing defends it if it is a dash or a raised guard (its shape says).
     let sc = common::scripts(ctx);
     let held = guard.as_ref().and_then(|a| shape_of(&sc, &a.skill));
-    let mut defense = held.map_or(Aim::None, |s| s.aim);
+    // A dash defends only if it evades (a dodge, not a jump).
+    let mut defense = held.map_or(Aim::None, |s| if s.aim == Aim::Dash && !s.evades { Aim::None } else { s.aim });
     let takes = held.map_or(1.0, |s| s.takes);
     let mut turned = false;
     if defense == Aim::Facing {

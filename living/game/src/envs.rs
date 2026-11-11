@@ -461,38 +461,102 @@ pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: us
     Some(((light, lamp), Transform::from_xyz(0.0, height * 0.9, 0.0)))
 }
 
-/// Hide tall things that stand between the camera and you, or close to you on the camera's side.
-pub fn cutaway(target: Res<crate::controls::Target>, cam: Query<&Transform, (With<Camera3d>, Without<Occluder>)>, mut q: Query<(&Transform, &Occluder, &mut Visibility, Option<&Model>, Option<&Fitted>)>) {
+/// Fade out tall things that stand between the camera and you, or around the camera (`fade.rs`;
+/// play-test 1: whole houses popped on and off as the view turned, from a rule that hid
+/// anything tall within 5 m of you on the camera's side, and the eye sometimes sat inside a
+/// wall the rule missed).
+///
+/// A thing's box is its fitted bounds turned with it (else a guess from its height). It fades to
+/// [`SEE_THROUGH`] while the sight lines from the eye to my head, chest and feet pass through it,
+/// and fully while the eye is inside it; it comes back [`CUT_HOLD_S`] after the last frame it
+/// was in the way, so a line grazing a corner doesn't flicker.
+pub fn cutaway(
+    target: Res<crate::controls::Target>,
+    time: Res<Time>,
+    cam: Query<&Transform, (With<Camera3d>, Without<Occluder>)>,
+    mut q: Query<(Entity, &Transform, &Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>)>,
+    mut held: Local<std::collections::HashMap<Entity, f32>>,
+) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
     if crate::perf::has("nocutaway") {
         return;
     }
-    let head = me + Vec3::Y * 1.6;
-    let (a, ab) = (cam.translation, head - cam.translation);
-    let len2 = ab.length_squared().max(1e-4);
-    let toward_cam = Vec2::new(a.x - me.x, a.z - me.z).normalize_or_zero();
-    for (t, o, mut vis, model, fitted) in &mut q {
+    let now = time.elapsed_secs();
+    let eye = cam.translation;
+    let points = [me + Vec3::Y * 1.6, me + Vec3::Y * 1.05, me + Vec3::Y * 0.25];
+    for (e, t, o, mut fade, model, fitted) in &mut q {
         // Models stay hidden until fitted (look-dev fit shows them).
         if model.is_some() && fitted.is_none() {
             continue;
         }
-        // A body's own width: measured when the model is fitted, else guessed from its height and
-        // capped (a 60 m tower is a few metres wide, not twenty).
-        let (reach, centre) = match fitted {
-            Some(f) if f.size.x > 0.0 => (0.5 * f.size.x.max(f.size.z) + 0.4, t.translation + t.rotation * Vec3::new(f.center.x, 0.0, f.center.z) + Vec3::Y * o.height * 0.6),
-            _ => ((o.height * 0.25 + 0.6).min(5.0), t.translation + Vec3::Y * o.height * 0.6),
+        let (half, centre) = match fitted {
+            Some(f) if f.size.x > 0.0 => (f.size * 0.5, t.translation + t.rotation * f.center),
+            _ => {
+                let r = (o.height * 0.25 + 0.6).min(5.0);
+                (Vec3::new(r, o.height * 0.5, r), t.translation + Vec3::Y * o.height * 0.5)
+            }
         };
-        let s = ((centre - a).dot(ab) / len2).clamp(0.0, 1.0);
-        let off = (a + ab * s).distance(centre);
-        let flat = Vec2::new(centre.x - me.x, centre.z - me.z);
-        // The camera itself inside the thing (big buildings, giants' houses).
-        let around_cam = Vec2::new(centre.x - a.x, centre.z - a.z).length() < reach + 1.0 && a.y < t.translation.y + o.height + 1.0;
-        let cut = around_cam || (off < reach && s < 0.97) || (flat.length() < 5.0 + reach && flat.dot(toward_cam) > 0.0 && t.translation.y + o.height > me.y + 2.0);
-        let want = if cut { Visibility::Hidden } else { Visibility::Inherited };
-        if *vis != want {
-            *vis = want;
+        // Into the box's own frame.
+        let inv = t.rotation.inverse();
+        let local = |p: Vec3| inv * (p - centre);
+        let inside = { let l = local(eye).abs(); l.x < half.x + 0.6 && l.y < half.y + 0.6 && l.z < half.z + 0.6 };
+        let pad = Vec3::splat(0.25);
+        let blocks = points.iter().any(|p| segment_hits_box(local(eye), local(*p), half + pad, 0.35));
+        let want = if inside {
+            1.0
+        } else if blocks {
+            SEE_THROUGH
+        } else {
+            0.0
+        };
+        if want > 0.0 {
+            held.insert(e, now);
+        }
+        let keep = held.get(&e).is_some_and(|t| now - t < CUT_HOLD_S);
+        let to = if want > 0.0 { want } else if keep { fade.target } else { 0.0 };
+        if fade.target != to {
+            fade.target = to;
         }
     }
+    if held.len() > 4096 {
+        held.retain(|_, t| now - *t < CUT_HOLD_S);
+    }
+}
+
+/// How far a thing in the way fades (it stays faintly there, so you see what hides you), and how
+/// long it stays faded after it was last in the way (s).
+pub const SEE_THROUGH: f32 = 0.8;
+const CUT_HOLD_S: f32 = 0.35;
+
+/// Whether the segment from `a` to `b` (box space) passes through the box of half extents `h`
+/// round the origin, leaving out its last `tail` metres at `b` (what stands right behind me
+/// doesn't hide me).
+pub fn segment_hits_box(a: Vec3, b: Vec3, h: Vec3, tail: f32) -> bool {
+    let d = b - a;
+    let len = d.length();
+    if len < 1e-4 {
+        return false;
+    }
+    let end = ((len - tail) / len).max(0.0);
+    let (mut t0, mut t1) = (0.0f32, end);
+    for i in 0..3 {
+        if d[i].abs() < 1e-6 {
+            if a[i].abs() > h[i] {
+                return false;
+            }
+            continue;
+        }
+        let (mut lo, mut hi) = ((-h[i] - a[i]) / d[i], (h[i] - a[i]) / d[i]);
+        if lo > hi {
+            std::mem::swap(&mut lo, &mut hi);
+        }
+        t0 = t0.max(lo);
+        t1 = t1.min(hi);
+        if t0 > t1 {
+            return false;
+        }
+    }
+    true
 }
 
 /// Tear down the current environment and build the one asked for.
@@ -618,7 +682,7 @@ pub fn switch(
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, pl.yaw);
                 commands.entity(e).insert(EnvPart);
                 if pl.height >= 3.0 {
-                    commands.entity(e).insert(Occluder { height: pl.height });
+                    commands.entity(e).insert((Occluder { height: pl.height }, crate::fade::Fade::shown()));
                 }
                 continue;
             }
@@ -638,7 +702,7 @@ pub fn switch(
                     e.insert(crate::lookdev::NoShadow);
                 }
                 if pl.height >= 3.0 {
-                    e.insert(Occluder { height: pl.height });
+                    e.insert((Occluder { height: pl.height }, crate::fade::Fade::shown()));
                 }
                 drop(e);
                 if let Some((light, l_tf)) = local_light(&slot.kind, slot.glow, pl.height, k) {
@@ -658,7 +722,7 @@ pub fn switch(
             let tf = Transform::from_translation(at).with_rotation(Quat::from_rotation_y(pl.yaw)).with_scale(Vec3::splat(pl.height));
             let mut e = commands.spawn((EnvPart, Mesh3d(body), MeshMaterial3d(palette.vertex.clone()), tf, crate::style::stencil()));
             if pl.height >= 3.0 {
-                e.insert(Occluder { height: pl.height });
+                e.insert((Occluder { height: pl.height }, crate::fade::Fade::shown()));
             }
             let light = local_light(&slot.kind, slot.glow, pl.height, k);
             if slot.height[1] > 1.5 && !matches!(slot.kind.as_str(), "cave_wall" | "tree") {

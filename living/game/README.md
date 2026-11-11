@@ -111,21 +111,28 @@ The simulation logs its cost every 3 s. A 78-joint character costs about 9 µs o
 
 | Input | Effect |
 |---|---|
-| WASD, Shift | move relative to the camera, run (`human_move`) |
-| Right click | walk to that point (`human_act` with `goto`) |
+| A click in the window | captures the cursor: the system cursor is locked and hidden and the game draws its own (`pointer.rs`); the click does nothing else |
+| Esc | closes the text box, a list (a sub-list first) or the panels; with nothing open, gives the cursor back. Losing focus gives it back too |
+| WASD, Shift | move relative to the camera, run (`human_move`). Shift is also the dodge (an open question) |
+| Mouse or one finger on a trackpad | the cursor: where you face and aim. Moving, your legs keep to your travel (backwards beyond 110°) and your upper body turns toward it (`twist.rs`) |
+| Left click (tap) / left held | the strike (on release for a tap, after 0.22 s held for aiming) |
+| Left drag (mouse or trackpad press-and-move), two-finger pan, middle drag, `[` / `]` | turn the view; the cursor stays on its ground point, so where you face doesn't change |
+| Pinch, mouse wheel | zoom, within 0.6–1.4 of the view's distance |
+| Two-finger double tap, middle tap | turn the view until the direction you face is straight ahead |
+| Right click (two-finger click), Q, E, R, Shift | the bow shot, fire bolt, block, heal, dodge |
+| Space | jump (a 1.6 m hop; `jump.rs`, the rules' `jump`) |
 | Enter | say something; only characters within earshot hear it (`human_say`). Enter says it, Esc cancels |
-| Mouse cursor | where you face and aim (turning the view by pointing at screen sides is an F1 option, off by default) |
-| A middle mouse tap | turn the view until the direction you face is straight ahead; the cursor moves with the ground meanwhile, so you keep facing the same spot |
-| `[` / `]` held, or middle mouse drag | rotate the view (90°/s for the keys); it stays where you leave it |
 | Alt + mouse | glance around; the view eases back on release |
-| F | act on what is under the cursor or within 3 m: a tap does the likely act, holding opens the list of what the rules allow (`verbs.rs`) |
+| F | act on what is under the cursor or within 3 m: a tap does the likely act (never a gesture), holding opens the list of what the rules allow (`verbs.rs`) |
 | C | the list of acts on yourself (eat, sleep, craft, build, write, …) |
 | I / K | toggle the pack and the know-how panels |
-| 1–9, 0, click; Esc | pick from an open list; go back or close |
+| 1–9, 0, click | pick from an open list |
 | G / B / V | wave, nod, look someone over (`town.rs`) |
-| F1 | developer panels in egui (status, camera, look, sight, look-dev); hidden by default |
+| F1 | developer panels in egui (status, camera, look, sight, look-dev); hidden by default (the cursor is given back while they show) |
 
-The line from your character to the cursor shows where an aimed skill would go. There are no skills yet: the skill bar shows LMB, RMB, Q, E, R and Shift (docs/GAME_BRIEF.md, 2026-11-09), unavailable until combat is on the server. `F` acts on things and people from the rules' own data (docs/GAME_BRIEF.md, "Verbs"); the middle-button tap aligns the view.
+The line from your character to the cursor shows where an aimed skill would go. `F` acts on things and people from the rules' own data (docs/GAME_BRIEF.md, "Verbs").
+
+Buildings, trees and props that come between the camera and you fade to a dithered 20% (fully, around the eye) and return 0.35 s after; people and animals fade in and out of sight and into their houses (`fade.rs`). Headless scripts can drive the pointer (`cursor:X,Y`, `pan:PX`, `drag:PX`, `pinch:F`), face a direction (`look:DEG`), press Space (`key:Space:tap`) and turn the view's framing off (`frame:0`) (`live.rs`).
 
 ## Game UI
 
@@ -171,7 +178,7 @@ LIVING_GAME_LOOKDEV=1 LIVING_GAME_TOUR=/tmp/hud LIVING_GAME_TOUR_ONLY=island LIV
   - a finishing pass (`edges.wesl`): edge lines from the depth and normal prepasses, drawn outside silhouettes and fading with distance; a screen-space rim on silhouettes facing the sun; a warm film gradient; saturation grading. SMAA replaces MSAA so the prepasses stay single-sample;
   - outlines on characters and buildings, which the ground, trees and props hide;
   - every parameter is tunable, with a toggle to compare against the plain look.
-- **Occlusion:** trees between the camera and you, or close to you on the camera's side, are hidden, with a faded band around them.
+- **Occlusion:** tall things whose box cuts the sight lines from the eye to your head, chest or feet fade to a dithered 20% (`envs::cutaway`, `fade.rs`).
 - **Region subscriptions:** `body`, `resource_node` and `structure` rows are subscribed for the chunks within 40 m.
 - **Motion:** the observer's display sync (`living/viewer/src/sync.rs`, included by path) smooths it.
 - **Perception:** the chat log and speech bubbles come only from your character's own `experience` rows. Your own lines are echoed locally.

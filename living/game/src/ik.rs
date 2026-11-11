@@ -48,6 +48,13 @@ pub const IK_FAR: f32 = 30.0;
 /// while standing.
 const LOCK_MAX: f32 = 0.22;
 const LOCK_FOLLOW: f32 = 0.3;
+/// Standing, a held foot further than this (m) from the clip's steps there instead of letting
+/// go (which snapped it up to [`LOCK_MAX`] in one frame as a stop blended into the idle, and
+/// slid it at [`LOCK_FOLLOW`] for half a second): it lifts by [`STEP_LIFT`] and moves over
+/// [`STEP_S`], one foot at a time. Turning on the spot steps the same way.
+const STEP_GAP: f32 = 0.06;
+const STEP_S: f32 = 0.22;
+const STEP_LIFT: f32 = 0.05;
 /// The most the feet tilt to the ground (radians) and the most the hips come down (m, at the
 /// base's size).
 const TILT_MAX: f32 = 0.45;
@@ -81,6 +88,9 @@ pub struct Legs {
     legs: [[Entity; 4]; 2],
     /// Where each planted foot is held (world x, z), if it is.
     lock: [Option<(Vec2, bool)>; 2],
+    /// A foot stepping to the clip's place while standing: where it left from, and how far
+    /// through the step it is (0–1).
+    step: [Option<(Vec2, f32)>; 2],
     /// The hips' drop now (world m, ≤ 0).
     drop: f32,
     /// The lowest ankle height above its ground seen while planted (world m): the sole's depth.
@@ -121,7 +131,7 @@ fn rig(mut commands: Commands, new: Query<(Entity, &Anim), (With<crate::characte
             continue;
         }
         chain.reverse();
-        commands.entity(e).insert(Legs { chain, hips, legs: [l, r], lock: [None; 2], drop: 0.0, ankle_h: f32::NAN, toe_h: f32::NAN, written: Vec3::NAN, applied: Vec3::ZERO });
+        commands.entity(e).insert(Legs { chain, hips, legs: [l, r], lock: [None; 2], step: [None; 2], drop: 0.0, ankle_h: f32::NAN, toe_h: f32::NAN, written: Vec3::NAN, applied: Vec3::ZERO });
     }
 }
 
@@ -161,7 +171,7 @@ pub fn two_bone(u: Vec3, k: Vec3, f: Vec3, a: Vec3, fallback_bend: Vec3) -> (Qua
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn solve(
-    mut people: Query<(&Transform, &Anim, &mut Legs, Option<&mut crate::characters::Shaped>)>,
+    mut people: Query<(&Transform, &Anim, &mut Legs, Option<&mut crate::characters::Shaped>, Option<&crate::anim::Motion>)>,
     mut bones: Query<&mut Transform, Without<Legs>>,
     island: Option<Res<crate::island::Island>>,
     envs: Option<Res<crate::envs::Envs>>,
@@ -187,11 +197,13 @@ fn solve(
     };
     let eye = cams.iter().next().map(|c| c.translation());
     let mut solved = 0;
-    for (root, anim, mut legs, shaped) in &mut people {
+    for (root, anim, mut legs, shaped, motion) in &mut people {
         let near = eye.map_or(1.0, |e| 1.0 - ((e.distance(root.translation) - IK_NEAR) / (IK_FAR - IK_NEAR)).clamp(0.0, 1.0));
-        let w = near * anim.ik;
+        // Off the ground in a jump, the feet aren't held (`jump.rs`).
+        let w = near * anim.ik * (1.0 - motion.map_or(0.0, crate::jump::airborne));
         if w <= 0.0 {
             legs.lock = [None; 2];
+            legs.step = [None; 2];
             legs.drop = 0.0;
             legs.written = Vec3::NAN;
             continue;
@@ -258,16 +270,38 @@ fn solve(
             let ball = Vec2::new(toe.x, toe.z);
             let on_ball = above - ankle_h > toe_above - toe_h + 0.01 * scale;
             let pivot = |b: bool| if b { ball } else { at };
-            let lock = match legs.lock[s] {
-                Some((l, was)) if c > 0.0 && l.distance(pivot(was)) < LOCK_MAX * scale => {
-                    let l = if was == on_ball { l } else { pivot(on_ball) + (l - pivot(was)) };
-                    // Standing, the lock drifts toward the clip's foot.
-                    let follow = LOCK_FOLLOW * scale * dt * (1.0 - anim.moving);
-                    let d = pivot(on_ball) - l;
-                    Some((if d.length() <= follow { pivot(on_ball) } else { l + d / d.length() * follow }, on_ball))
+            let standing = anim.moving < 0.999 || anim.settling();
+            let other_stepping = legs.step[1 - s].is_some();
+            let mut lift_step = 0.0;
+            let lock = match (legs.lock[s], legs.step[s]) {
+                // Stepping to where the clip has the foot.
+                (Some(_), Some((from, p))) if c > 0.0 => {
+                    let p = (p + dt / STEP_S).min(1.0);
+                    let k = p * p * (3.0 - 2.0 * p);
+                    legs.step[s] = (p < 1.0).then_some((from, p));
+                    lift_step = (p * std::f32::consts::PI).sin() * STEP_LIFT * scale;
+                    Some((from.lerp(pivot(on_ball), k), on_ball))
                 }
-                _ if c > 0.5 => Some((pivot(on_ball), on_ball)),
-                _ => None,
+                (Some((l, was)), _) if c > 0.0 && (standing || l.distance(pivot(was)) < LOCK_MAX * scale) => {
+                    let l = if was == on_ball { l } else { pivot(on_ball) + (l - pivot(was)) };
+                    let d = pivot(on_ball) - l;
+                    if standing && d.length() > STEP_GAP * scale && !other_stepping {
+                        legs.step[s] = Some((l, 0.0));
+                        Some((l, on_ball))
+                    } else {
+                        // Standing, the lock drifts toward the clip's foot.
+                        let follow = LOCK_FOLLOW * scale * dt * (1.0 - anim.moving);
+                        Some((if d.length() <= follow { pivot(on_ball) } else { l + d / d.length() * follow }, on_ball))
+                    }
+                }
+                _ if c > 0.5 => {
+                    legs.step[s] = None;
+                    Some((pivot(on_ball), on_ball))
+                }
+                _ => {
+                    legs.step[s] = None;
+                    None
+                }
             };
             legs.lock[s] = lock;
             let xz = lock.map_or(at, |(l, b)| at + (l - pivot(b)) * c);
@@ -275,7 +309,7 @@ fn solve(
             let dy = c * (g - floor);
             // A foot in the air stays above the ground under it.
             let lift = (g + ankle_h - (f.y + dy)).max(0.0) * (1.0 - c);
-            target[s] = Vec3::new(xz.x, f.y + dy + lift, xz.y);
+            target[s] = Vec3::new(xz.x, f.y + dy + lift + lift_step * c, xz.y);
             low = low.min(dy);
             // Slope under the foot, from the ground ahead and to the side.
             let fwd = Vec2::new(toe.x - f.x, toe.z - f.z).normalize_or(Vec2::X);

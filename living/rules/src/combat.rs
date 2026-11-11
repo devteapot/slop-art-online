@@ -70,6 +70,9 @@ pub struct Shape {
     pub hostile: bool,
     /// Takes the body back from a deliberate act.
     pub reflex: bool,
+    /// A dash during which blows and missiles miss (the dodge). On for a dash unless its
+    /// `<skill>_combat()` says `evades: false` (a jump carries the body without dodging).
+    pub evades: bool,
     /// Behavior of the moment: it belongs in a graph, not in a one-off act.
     pub real_time: bool,
     /// A blow in reach, carrying the rules' `lunge(kind)`: out of reach by more when it

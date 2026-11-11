@@ -391,7 +391,9 @@ pub fn rows(choices: &[Choice], group: Option<&str>) -> Vec<Row> {
 }
 
 /// The act a tap does: the one I last chose for this kind of target, else, on a thing, the
-/// first the rules allow that needs no further choice and is no use of force.
+/// first the rules allow that needs no further choice, is no use of force and is not a gesture
+/// toward it (a skill whose `_shows()` faces its target: waving, nodding, looking over, turning
+/// to face; play-test 1 found F offering "face" on a berry bush).
 pub fn likely<'a>(sc: &Scripts, aim: &Aim, choices: &'a [Choice], last: Option<&Choice>) -> Option<&'a Choice> {
     if let Some(l) = last {
         if let Some(c) = choices.iter().find(|c| c.skill == l.skill && c.item == l.item && c.want == l.want && c.say == l.say) {
@@ -403,7 +405,8 @@ pub fn likely<'a>(sc: &Scripts, aim: &Aim, choices: &'a [Choice], last: Option<&
     }
     let force = |s: &str| sc.shapes().get(s).is_some_and(|s| s.hostile || s.force || s.menace);
     let per_skill = |s: &str| choices.iter().filter(|c| c.skill == s).count();
-    choices.iter().find(|c| !c.words && c.want.is_none() && c.say.is_none() && !force(&c.skill) && per_skill(&c.skill) == 1)
+    let gesture = |s: &str| sc.shows().faces(s);
+    choices.iter().find(|c| !c.words && c.want.is_none() && c.say.is_none() && !force(&c.skill) && !gesture(&c.skill) && per_skill(&c.skill) == 1)
 }
 
 // ---- state --------------------------------------------------------------------------------

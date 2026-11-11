@@ -746,9 +746,9 @@ fn rework_done(a) { [#{ op: "rework" }, #{ op: "vitals", energy: -1.0 }] }
 // then its release, a recovery in which only a dodge can follow (`combat_recover`), and a
 // cooldown counted from its start (`combat_cooldown`), for anyone who uses it: player or
 // graph, person or animal. `combat_cost` is the energy it takes, paid at the release.
-fn combat_recover(skill) { switch skill { "strike" => 250, "bowshot" => 250, "firebolt" => 350, "heal" => 300, "dodge" => 200, "attack" => 300, "shoot" => 300, "throw" => 400, _ => 0 } }
-fn combat_cooldown(skill) { switch skill { "strike" => 650, "bowshot" => 900, "firebolt" => 4000, "heal" => 8000, "dodge" => 900, "block" => 400, _ => 0 } }
-fn combat_cost(skill) { switch skill { "strike" => 2.0, "bowshot" => 1.5, "firebolt" => 12.0, "heal" => 15.0, "dodge" => 4.0, "block" => 1.0, _ => 0.0 } }
+fn combat_recover(skill) { switch skill { "strike" => 250, "bowshot" => 250, "firebolt" => 350, "heal" => 300, "dodge" => 200, "jump" => 150, "attack" => 300, "shoot" => 300, "throw" => 400, _ => 0 } }
+fn combat_cooldown(skill) { switch skill { "strike" => 650, "bowshot" => 900, "firebolt" => 4000, "heal" => 8000, "dodge" => 900, "block" => 400, "jump" => 600, _ => 0 } }
+fn combat_cost(skill) { switch skill { "strike" => 2.0, "bowshot" => 1.5, "firebolt" => 12.0, "heal" => 15.0, "dodge" => 4.0, "block" => 1.0, "jump" => 2.0, _ => 0.0 } }
 fn spent(skill) { [#{ op: "vitals", energy: -combat_cost(skill) }] }
 fn winded(a) { if a.actor.energy < combat_cost(a.skill) { "too tired" } else { "" } }
 
@@ -780,6 +780,8 @@ fn firebolt_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true
 fn block_combat() { #{ aim: "facing", timed: true, reflex: true, real_time: true, hold_ms: 8000, arc: 75.0, takes: 0.25 } }
 fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
 fn dodge_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true } }
+// A jump is a dash that does not evade: blows and missiles still land while you are in the air.
+fn jump_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true, evades: false } }
 fn attack_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
 fn shoot_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
 fn throw_combat() { #{ aim: "creature", timed: true, hostile: true, reflex: true, real_time: true, force: true } }
@@ -787,14 +789,23 @@ fn threaten_combat() { #{ aim: "creature", hostile: true, closes_in: true, menac
 fn yield_combat() { #{ reflex: true, force: true } }
 fn seize_combat() { #{ aim: "creature", dares: true } }
 fn tend_combat() { #{ aim: "creature" } }
-// The player's skill bar, in order (the game binds LMB, RMB, Q, E, R, Shift).
-fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge"] }
+// The player's skill bar, in order (the game binds LMB, RMB, Q, E, R, Shift, Space).
+fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump"] }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { switch kind { "wolf" => 2.4, "deer" => 2.8, _ => 2.6 } }
 fn dodge_speed(kind) { switch kind { "wolf" => 8.0, "deer" => 8.0, _ => 5.2 } }
 
 fn dodge_check(a) { if a.actor.energy < 5.0 { "too exhausted to dodge" } else { "" } }
 fn dodge_done(a) { spent("dodge") }
+
+// A jump (proposal for the owner, 2026-11-11): a hop of `jump_dist` tiles the way you move or
+// face, at `jump_speed` (a person: 1.6 tiles in about 0.45 s). The world is flat, so its height
+// is only shown (about half a metre). It stops short of walls, fences and water as a dodge
+// does, and does not evade: blows and missiles land while you are in the air.
+fn jump_dist(kind) { switch kind { "wolf" => 2.0, "deer" => 2.4, _ => 1.6 } }
+fn jump_speed(kind) { switch kind { "wolf" => 6.0, "deer" => 6.0, _ => 3.6 } }
+fn jump_check(a) { if a.actor.energy < combat_cost("jump") { "too tired to jump" } else { "" } }
+fn jump_done(a) { spent("jump") }
 
 // A guard is held for `qty` ms (a player holds it until they let go, at most its `hold_ms`),
 // else a moment. Holding it is tiring (see `rates`).
@@ -1362,6 +1373,7 @@ fn yield_spec() {
        gives: `for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in` }
 }
 fn dodge_spec() { #{ about: "Dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses. For fights, not travel.", takes: `${combat_cost("dodge")} energy`, gives: "a quick dash of a few tiles" } }
+fn jump_spec() { #{ about: "Jump: a short hop the way you move or face. It does not clear walls, fences or water, and blows still land while you are in the air (it is not a dodge).", takes: `${combat_cost("jump")} energy; ready again after ${combat_cooldown("jump") / 1000.0} s`, gives: "you a hop of a tile or two along" } }
 fn block_spec() { #{ args: ["qty"], about: "Raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it). Blows from the front do a quarter of their damage; from behind it does not help.", takes: `${combat_cost("block")} energy, holding still`, gives: "a guard in front of you" } }
 fn heal_spec() {
     #{ reach: 8.0,
