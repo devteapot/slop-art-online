@@ -1,5 +1,33 @@
 # Core validation record
 
+## 2026-11-11 fix-lives-tavvik: carriers take and store at stores, not squares (Spark)
+
+Branch `fix-lives-tavvik` from origin/main `accf27c8`, container `slop-trials-stdb` (port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, no minds.
+
+- Diagnosis (`core-tav1-190323`, origin/main build): Tavvik stood idle on his `square` place with 2 `cooked_meat` (he starts with 3 and eats one) and no activity. Highshelf's plaza middle is built on, so its square is a ring of edge spots; his spot is 43 m from the shelf's store, beyond a person's 11 m day sight, so the routine's `take` from `nearest storage` never resolved and no desire could act. Silas Pike's and Tern Gannet's far-market `work` (plaza spots) were 52 m and 36 m from a store, so their `store`/`take` there could not resolve either (latent; the scene does not check it).
+- Fix: `carry_graph` takes and stores at home at the `store` place; a carrier's `work` is the far town's `storage` (seed data, `author_world.py`; island.json's five carriers and four route graphs rewritten in place, since a full `--compile-only` would also rename `wound_tending`). `core-tav2-191131`: every carrier's `store` and `work` lie on a storage, legs 37.7-132.9 m; Tavvik takes 3 and leaves within 12 s.
+- `lives.py --minutes 24`: `core-lives-a-191326` 19 of 19 and `core-lives-b-193805` 19 of 19. Tavvik reached the Kettlebridge store (1.1 m, 5.9 m), carried wood back; Highshelf's store +3 wood in both.
+- `town.py` (`core-town-200247`): 22 of 23, the failure being the recorded flake (Cuth Marrow, facing someone who comes up behind; player stopped 1.8 tiles away). `just living-check` exits 0. Not run: the other baseline scenes (no rule, authority or other seed changed).
+
+## 2026-11-11 goods-2: item looks, make and feed shown, teaching a world's know-how (dev-box)
+
+Branch `goods-2` (from main `62d861f0`, merged with main four times, last with `94050f9a` at `6fefe997`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+
+| Scene | Run | Result |
+| --- | --- | --- |
+| `goods` (goods fixture), before the `doing` check | `core-goods2-goods` | 22 of 22 |
+| `stock` | `core-goods2-goods` | 4 of 4 |
+| `goods` with the new checks (`act_card` holds `make` and `feed`; A's `doing` row with `make`'s code at the furnace while the glass is made) | `core-goods2-goods-b`; merged `core-goods2m-goods` | 24 of 24 each |
+| `stock` (merged) | `core-goods2m-goods` | 4 of 4 |
+| `laws` (cullet-laws), first merge | `core-goods2-laws` | 15 pass, the known SKIP (the mirrored dark spot) |
+| `laws` (cullet-laws), second merge | `core-goods2m-laws` | 15 pass, the same SKIP |
+| `goods`, `stock` (third merge: rates-2, ui-decl-1) | `core-goods2f-goods` | 24 of 24, 4 of 4 |
+| `goods`, `stock` (fourth merge: fov-1) | `core-goods2g-goods` | 24 of 24, 4 of 4 |
+
+Rules: `cargo test -p living-rules` all pass, with `items_and_recipes_say_how_they_look`, `teaching_takes_the_worlds_know_how` and `making_and_feeding_are_seen_and_a_fire_state_is_shared`. Fuel gate A/B against main, same session: at the second merge within 0.1 % on every law (rates-law 211,278 → 211,120, then over its 160,000 budget on main). At the third merge (main `6caebe20`, rates-2's re-based budgets) within 0.5 %: rates-law 203,095 → 203,516, strike 279,080 → 280,161, perceived 76,912 → 77,252, hook 441,073 → 441,175, senses-law 60,495 → 60,767, the rest equal. **`perceived` is over its 75,000 budget on main itself** (76,912), not from this branch. The laws scene was not rerun at the third merge. `just living-check` exit 0 after each merge.
+
+Maintained: the goods scene checks `make`'s `doing` row; features/goods.md (item looks, shows, what is not covered). The harness: main's `1b3b5dd8` (projects experiment) had put back an older `verify.py` and `verify/SKILL.md`, which installed the plain script over a seed's own laws and dropped the verify-ui rows; `b7328bc0` restored the HTTP install only. goods-2 restores goods-1's `seed_laws` skip, `call ... @FILE`, the longer install timeout and the SKILL.md text, keeping main's `[::]` port and own-server wording.
+
 ## 2026-11-11 fov-1: sight that depends on facing (dev-box)
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).

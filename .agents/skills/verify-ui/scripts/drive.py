@@ -102,7 +102,8 @@ def main():
         syncs[name] = [c.split("|") for c in calls.split(";") if c]
     open(os.path.join(out, "plan.txt"), "w").write(a.plan.replace(";", ";\n") + "\n")
     token = os.path.join(ROOT, ".local/living/verify", a.run, "ui", "player.token")
-    env = dict(os.environ, LIVING_SERVER="http://127.0.0.1:3300", LIVING_DB=db, LIVING_GAME_NAME=a.player, LIVING_GAME_TOKEN=token,
+    # A worker's own server (`LIVING_STDB_URL`, the verify entry point's "Your own server"), else the shared one.
+    env = dict(os.environ, LIVING_SERVER=os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300"), LIVING_DB=db, LIVING_GAME_NAME=a.player, LIVING_GAME_TOKEN=token,
                LIVING_GAME_LIVE=out, LIVING_GAME_LIVE_PLAN=a.plan, LIVING_GAME_SIZE=a.size,
                LIVING_GAME_SETTINGS=os.path.join(out, "settings.json"), RUST_LOG=os.environ.get("RUST_LOG", "info,wgpu=warn,naga=warn"))
     secret = None
