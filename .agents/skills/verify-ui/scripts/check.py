@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick support (default: all but support)
+  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick turns support (default: all but support)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -275,7 +275,77 @@ def pick(run, c):
     c.check(s, "the authority's said row has to = the one in front", any(line in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
 
 
-SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "support": support}
+def cursor(d):
+    c = ((d or {}).get("extra") or {}).get("cursor")
+    return (c["x"], c["y"]) if c else None
+
+
+def view(d):
+    return ((d or {}).get("extra") or {}).get("view") or {}
+
+
+def ground(d):
+    return ((d or {}).get("extra") or {}).get("cursor_ground")
+
+
+def turns(run, c):
+    """The cursor while the view turns or zooms (Cullet walk 1, the owner: a pan turned the view
+    and carried the cursor off with it). A two-finger pan, a pinch either way and a left drag,
+    through the pointer's own paths (`pan:`, `pinch:`, `drag:`), with the cursor off-centre and
+    nothing open: the cursor keeps its screen position (within 1 px), the view turns or zooms,
+    and the ground under the cursor changes with the view."""
+    s = "turns"
+    plan = ("ready;wait:2;frame:0;cursor:0.72,0.62;wait:1;dump:01;shot:01_start;"
+            "pan:300;wait:0.15;dump:02;shot:02_panning;wait:1.5;dump:03;shot:03_panned;"
+            "pan:-500;wait:1.5;dump:04;shot:04_panned_back;"
+            "pinch:0.3;wait:0.15;dump:05;wait:1.2;dump:06;shot:06_pinched_in;"
+            "pinch:-0.4;wait:1.2;dump:07;shot:07_pinched_out;"
+            "drag:250;wait:1.5;dump:08;shot:08_dragged;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06", "07", "08"]}
+    start = cursor(d["01"])
+    c.check(s, "the cursor is off-centre with nothing open", start and abs(start[0] - 0.72 * W) <= 1 and abs(start[1] - 0.62 * H) <= 1 and not (d["01"] or {}).get("pointer_over_ui"), f"{start} over_ui {(d['01'] or {}).get('pointer_over_ui')}")
+
+    def same(k):
+        p = cursor(d[k])
+        return p is not None and start is not None and abs(p[0] - start[0]) <= 1 and abs(p[1] - start[1]) <= 1, f"{k}: {p} vs {start}"
+
+    def moved(a, b, m=1.0):
+        ga, gb = ground(d[a]), ground(d[b])
+        if not (ga and gb):
+            return False, f"no ground point ({ga}, {gb})"
+        dist = ((ga[0] - gb[0]) ** 2 + (ga[2] - gb[2]) ** 2) ** 0.5
+        return dist > m, f"{dist:.2f} m"
+
+    def yaw_turned(a, b, deg=10.0):
+        ya, yb = view(d[a]).get("yaw"), view(d[b]).get("yaw")
+        if ya is None or yb is None:
+            return False, f"{ya} {yb}"
+        t = (yb - ya + 180.0) % 360.0 - 180.0
+        return abs(t) > deg, f"{t:+.1f} deg"
+
+    for k, what in [("02", "mid-pan"), ("03", "after a pan"), ("04", "after a pan back")]:
+        ok, det = same(k)
+        c.check(s, f"pan: the cursor keeps its screen position {what} (1 px)", ok, det)
+    ok, det = yaw_turned("01", "03")
+    c.check(s, "pan: the view turned", ok, det)
+    ok, det = moved("01", "03")
+    c.check(s, "pan: the ground under the cursor follows the view", ok, det)
+    for k, what in [("05", "mid-pinch"), ("06", "after a pinch in"), ("07", "after a pinch out")]:
+        ok, det = same(k)
+        c.check(s, f"pinch: the cursor keeps its screen position {what} (1 px)", ok, det)
+    z = [view(d[k]).get("zoom") for k in ["04", "06", "07"]]
+    c.check(s, "pinch: the view zoomed in, then out", None not in z and z[1] < z[0] - 0.05 and z[2] > z[1] + 0.05, str(z))
+    ok, det = moved("04", "06", 0.3)
+    c.check(s, "pinch: the ground under the cursor follows the zoom", ok, det)
+    ok, det = same("08")
+    c.check(s, "left drag: the cursor keeps its screen position (1 px)", ok, det)
+    ok, det = yaw_turned("07", "08")
+    c.check(s, "left drag: the view turned", ok, det)
+
+
+SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "support": support}
 
 
 def main():

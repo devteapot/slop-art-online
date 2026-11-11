@@ -350,6 +350,8 @@ pub struct DumpExtra<'w> {
     prefs: Res<'w, crate::keys::Prefs>,
     binds: Res<'w, crate::keys::Binds>,
     theme: Res<'w, ThemeState>,
+    pointer: Res<'w, crate::pointer::Pointer>,
+    cam: Res<'w, crate::camera::Cam>,
     fov: Option<Res<'w, crate::facing::FovState>>,
     heard: Option<Res<'w, crate::heardmark::HeardMarks>>,
     edge: Option<Res<'w, crate::sightedge::SightEdge>>,
@@ -357,6 +359,12 @@ pub struct DumpExtra<'w> {
 
 impl DumpExtra<'_> {
     fn json(&self) -> serde_json::Value {
+        // The game's cursor (logical px in the window, and fractions of the picture), the view's
+        // yaw and zoom, and the ground point under the cursor (x, height, y): what a view turn or
+        // a zoom keeps or changes.
+        let size = crate::capture::size().as_vec2();
+        let cursor = self.pointer.pos.map(|p| serde_json::json!({"x": p.x, "y": p.y, "fx": p.x / size.x, "fy": p.y / size.y}));
+        let ground = self.cam.cursor_ground.map(|g| serde_json::json!([g.x, g.y, g.z]));
         // Facing sight: whether it is on, the field's five values, whether this client can switch
         // it, and the heard marks (`facing.rs`, `heardmark.rs`).
         let fov = self.fov.as_ref().map(|f| {
@@ -364,6 +372,7 @@ impl DumpExtra<'_> {
                 "field": f.field.map(|v| serde_json::json!({"focal_deg": v.focal_deg, "side_deg": v.side_deg, "side_share": v.side_share, "near_m": v.near_m, "margin_deg": v.margin_deg}))})
         });
         serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
+            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
             "facing_sight": fov, "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name())})
     }
 }

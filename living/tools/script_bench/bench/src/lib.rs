@@ -23,6 +23,29 @@ pub mod koto_engine;
 #[cfg(feature = "mlua")]
 pub mod mlua_engine;
 
+/// Rhai's hashing keys for the bench (`fix_hashing`). Rhai hashes function names, call
+/// signatures and interned strings with ahash, and enables ahash's `compile-time-rng`: unless
+/// keys are set, they are random numbers drawn when ahash is compiled. They decide where entries
+/// land in Rhai's tables (function lookup, the resolution caches, the string interner), so the
+/// same source compiled twice takes a different number of WASM instructions per call: on main
+/// 93019a37, six compiles measured rates-law from 197,784 to 215,390 and perceived from 60,414
+/// to 77,981 (docs/LIVING_CORE.md, Fuel budgets). Fixed keys make the fuel a function of the
+/// code and the fixtures only. Key set `i` is this base with `i` added to each word; any
+/// non-zero keys would do, but these never change, or every budget's history breaks.
+pub const HASHING_SEED: [u64; 4] = [0x5eed_0000_0000_0001, 0x5eed_0000_0000_0002, 0x5eed_0000_0000_0003, 0x5eed_0000_0000_0004];
+
+/// Rhai's hashing keys number `i` (`HASHING_SEED`).
+pub fn hashing_seed(i: u32) -> [u64; 4] {
+    HASHING_SEED.map(|w| w.wrapping_add(i as u64 * 0x9e37_79b9_7f4a_7c15))
+}
+
+/// Fix Rhai's hashing keys to set `i` (`hashing_seed`). Call before anything touches Rhai: keys
+/// set after an engine has hashed its functions would not find them. Only the first call in a
+/// process (a module instance) counts.
+pub fn fix_hashing(i: u32) {
+    let _ = rhai::config::hashing::set_hashing_seed(Some(hashing_seed(i)));
+}
+
 /// The laws under test.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Law {

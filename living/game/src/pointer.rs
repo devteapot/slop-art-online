@@ -9,10 +9,11 @@
 //!   (`Confined` is unsupported), and a locked cursor reports a frozen position, so the game's
 //!   cursor is virtual: [`Pointer::pos`] is what every reader uses (the camera's ground ray,
 //!   facing, the aim), and the UI's picking is fed from it while captured.
-//! - **Turning the view without turning you.** Dragging with the left button (press and move,
-//!   on a trackpad too), a two-finger pan, or the middle button turns the view; while it turns,
-//!   the cursor stays on the ground point it was over (`camera.rs`), so where you face doesn't
-//!   change. A left press that doesn't move is the strike: on release when it was a tap, or once
+//! - **Turning the view.** Dragging with the left button (press and move, on a trackpad too), a
+//!   two-finger pan, or the middle button turns the view; while it turns, the cursor keeps its
+//!   screen position and what it points at (where you face) follows the view (owner, Cullet walk
+//!   1, 2026-11-11: it used to stay on its ground point and ride off with the view). A drag does
+//!   not move the cursor. A left press that doesn't move is the strike: on release when it was a tap, or once
 //!   held [`HOLD_S`] (aiming, as before). A tap therefore fires on release, a click's length
 //!   later than a press would. A tap is marked ([`Pointer::tapped`]): on a peaceful person it
 //!   talks instead of striking (`combat.rs`).
@@ -74,7 +75,7 @@ pub struct Pointer {
     pub align: bool,
     /// The left button is turning the view now (the cursor is placed by the camera, not moved).
     pub dragging: bool,
-    /// Where the camera wants the cursor (keeping it on a ground point while the view turns).
+    /// Where the camera wants the cursor (keeping it on a ground point while an align turns the view).
     pub place: Option<Vec2>,
     /// A script's cursor (fractions of the window) and pans and drags (headless).
     pub scripted: Option<Vec2>,
