@@ -16,8 +16,10 @@
 `just living-play SCENE [options]` runs the same. SCENE is a directory holding `play.json` (or the
 path of such a file); docs/LIVING_CORE.md "Play with one command" documents the format.
 
-While the game is open the launcher holds the laptop's build lock (.local/build-slots/session),
-so build-slot starts no new heavy job; before opening it, it waits for jobs already running.
+While the game is open the launcher holds the laptop's build lock (.local/build-slots/session,
+taken when the client starts), so build-slot starts no new heavy job; before that, it waits
+(without the lock) for jobs already running. Tests set PLAY_BUILD_SLOTS (or PLAY_SESSION_LOCK)
+to a scratch path: only the owner's sessions may hold the real lock.
 
 When the client exits, whether the player quit or it crashed, the launcher:
   1. pauses the world (the offline takeover does not fire while it is paused);
@@ -32,7 +34,9 @@ admin token, the Neo4j password, provider keys) are passed in child environments
 printed or written to logs.
 """
 import argparse
+import contextlib
 import datetime
+import fcntl
 import gzip
 import json
 import os
@@ -52,6 +56,9 @@ REPORT = TOOLS / "play_report.py"
 # The laptop's heavy-job slots (.local/bin/build-slot). While a game is open the launcher holds
 # <slots>/session/{pid,since}; build-slot starts no new heavy job while that pid lives.
 BUILD_SLOTS = Path(os.environ.get("PLAY_BUILD_SLOTS", "/Users/carlid/dev/slop-art-online/.local/build-slots"))
+# The lock itself. Tests point PLAY_SESSION_LOCK at a scratch path; only the owner's sessions hold
+# the real one, which stops every heavy job on the laptop.
+SESSION_LOCK = Path(os.environ.get("PLAY_SESSION_LOCK", str(BUILD_SLOTS / "session")))
 JWT = re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
 # Never ours to start or stop: the shared lab store holds the paused reference worlds' minds.
 SHARED_NEO4J = {"sao-living-neo4j-1"}
@@ -66,6 +73,43 @@ class Stop(Exception):
 
 class Refuse(Exception):
     """A precondition failed before anything was started."""
+
+
+class _Guard:
+    """Signals that arrive inside a critical section (a child started but not yet recorded, a
+    teardown) are held and acted on when it ends, so nothing paid is ever left unrecorded."""
+    depth = 0
+    pending = None
+
+
+GUARD = _Guard()
+SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+
+@contextlib.contextmanager
+def critical():
+    GUARD.depth += 1
+    try:
+        yield
+    finally:
+        GUARD.depth -= 1
+        if GUARD.depth == 0 and GUARD.pending:
+            name, GUARD.pending = GUARD.pending, None
+            raise Stop(name)
+
+
+def hold_signals_for_good():
+    """From here on (the teardown) signals are noted and ignored; they cannot interrupt it."""
+    GUARD.depth += 1
+
+
+def run_cmd(cmd, timeout, **kw):
+    """subprocess.run with a timeout: a wedged Docker or tool never blocks the teardown."""
+    try:
+        return subprocess.run(cmd, timeout=timeout, **kw)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, stdout="" if kw.get("text") else b"",
+                                           stderr=f"timed out after {timeout} s" if kw.get("text") else b"")
 
 
 def say(*parts):
@@ -228,8 +272,11 @@ def proc_identity(pid):
         return None
     except PermissionError:
         pass
-    r1 = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True)
-    r2 = subprocess.run(["ps", "-o", "comm=", "-p", str(pid)], capture_output=True, text=True)
+    # A fixed locale and zone: lstart's text depends on both, and the identity is compared later
+    # from other shells (--stop) or after the laptop's time zone changed.
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C", "TZ": "UTC"}
+    r1 = run_cmd(["ps", "-o", "lstart=", "-p", str(pid)], 10, capture_output=True, text=True, env=env)
+    r2 = run_cmd(["ps", "-o", "comm=", "-p", str(pid)], 10, capture_output=True, text=True, env=env)
     start, comm = r1.stdout.strip(), r2.stdout.strip()
     if r1.returncode or not start:
         return None
@@ -257,13 +304,15 @@ def stop_pid(pid, ident, binary, popen=None, label="process"):
         return f"{label}: none recorded"
     if popen is not None and popen.poll() is not None:
         return f"{label} pid {pid}: already exited ({popen.returncode})"
-    if not alive(pid):
+    # Our own unreaped child cannot have had its PID reused: holding its Popen is proof enough.
+    ours = (lambda: popen.poll() is None) if popen is not None else (lambda: is_same(pid, ident, binary))
+    if popen is None and not alive(pid):
         return f"{label} pid {pid}: already gone"
-    if not is_same(pid, ident, binary):
+    if not ours():
         return f"{label} pid {pid}: no longer the {Path(binary).name} we started; not signalled"
     sent = []
     for sig, wait in ((signal.SIGINT, 15), (signal.SIGTERM, 5), (signal.SIGKILL, 5)):
-        if not is_same(pid, ident, binary):
+        if not ours():
             break
         try:
             os.kill(pid, sig)
@@ -281,9 +330,11 @@ def stop_pid(pid, ident, binary, popen=None, label="process"):
         gone = popen.poll() is not None if popen is not None else not alive(pid)
         if gone:
             return f"{label} pid {pid}: stopped ({' then '.join(sent)})"
-    if popen is not None and popen.poll() is None or popen is None and is_same(pid, ident, binary):
+    if ours():
         return f"{label} pid {pid}: STILL RUNNING after {' then '.join(sent)}"
-    return f"{label} pid {pid}: stopped ({' then '.join(sent)})"
+    if popen is None and alive(pid):
+        return f"{label} pid {pid}: a process with this PID runs but no longer matches what we started; check it"
+    return f"{label} pid {pid}: stopped ({' then '.join(sent) or 'it exited'})"
 
 
 # ---------------------------------------------------------------- SpacetimeDB
@@ -294,10 +345,10 @@ class World:
         self.s = scene
         self._token = None
 
-    def cli(self, *args, check=True, stdout=None, input_text=None):
+    def cli(self, *args, check=True, stdout=None, input_text=None, timeout=60):
         cmd = ["docker", "exec", "-i", self.s.container, "spacetime", *args]
-        r = subprocess.run(cmd, capture_output=stdout is None, stdout=stdout, stderr=subprocess.STDOUT if stdout else None,
-                           text=True, input=input_text)
+        r = run_cmd(cmd, timeout, capture_output=stdout is None, stdout=stdout,
+                    stderr=subprocess.STDOUT if stdout else None, text=True, input=input_text)
         if check and r.returncode:
             out = (r.stdout or "") if stdout is None else ""
             raise Refuse(f"spacetime {args[0]} failed (exit {r.returncode}) {out.strip()[-400:]}")
@@ -347,7 +398,7 @@ class World:
         return rows[0][0] if code == 200 and rows else None
 
     def set_paused(self, db, value):
-        self.cli("call", "-s", "local", db, "set_paused", "true" if value else "false")
+        self.cli("call", "-s", "local", db, "set_paused", "true" if value else "false", timeout=30)
         if self.paused(db) != value:
             raise Refuse(f"set_paused {value} on {db} did not take (paused reads {self.paused(db)})")
 
@@ -359,9 +410,9 @@ class World:
             return False
 
     def wasm_mount(self):
-        r = subprocess.run(["docker", "inspect", self.s.container, "--format",
-                            '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}'],
-                           capture_output=True, text=True)
+        r = run_cmd(["docker", "inspect", self.s.container, "--format",
+                     '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}'],
+                    30, capture_output=True, text=True)
         m = re.sub(r"^/host_mnt", "", r.stdout.strip())
         if not m or not Path(m).is_dir():
             raise Refuse(f"the server's /wasm mount ({m!r}) is not a directory")
@@ -376,7 +427,7 @@ class World:
         try:
             with open(log_path, "w") as log:
                 r = self.cli("publish", "-s", "local", "-b", f"/wasm/{name}", db, "--delete-data", "-y",
-                             check=False, stdout=log)
+                             check=False, stdout=log, timeout=900)
         finally:
             target.unlink(missing_ok=True)     # the module is stored in the database once published
         if r.returncode:
@@ -384,7 +435,8 @@ class World:
         if self.s.floor_seed:
             seed = json.loads(self.s.floor_seed.read_text())
             if seed.get("laws_file") and not str(seed.get("laws") or "").strip():
-                seed["laws"] = (TOOLS.parent / "seeds" / seed["laws_file"]).read_text()
+                base = self.s.minds["root"] / "living/seeds" if self.s.minds else TOOLS.parent / "seeds"
+                seed["laws"] = (base / seed["laws_file"]).read_text()   # the build's seeds when known
             code, body = self.http("POST", f"/v1/database/{db}/call/create_floor",
                                    json.dumps([json.dumps(seed)]).encode(), timeout=600)
             if code != 200:
@@ -401,7 +453,7 @@ class World:
     def delete(self, db):
         if not self.s.db_ok(db):
             raise Refuse(f"refusing to delete {db}: not this scene's database pattern {self.s.db_pattern}")
-        self.cli("delete", "-s", "local", db, "-y", check=False)
+        self.cli("delete", "-s", "local", db, "-y", check=False, timeout=120)
         code, _ = self.http("POST", f"/v1/database/{db}/sql", b"SELECT 1 FROM world")
         if code != 404:
             raise Refuse(f"{db} still answers SQL (HTTP {code}) after delete")
@@ -411,7 +463,7 @@ class World:
 
 
 def docker_state(name):
-    r = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", name], capture_output=True, text=True)
+    r = run_cmd(["docker", "inspect", "-f", "{{.State.Running}}", name], 30, capture_output=True, text=True)
     if r.returncode:
         return None
     return r.stdout.strip() == "true"
@@ -439,6 +491,10 @@ def port_open(port):
 def neo4j_password(n):
     f = n["password_file"]
     if not f.exists():
+        vol = run_cmd(["docker", "volume", "inspect", n["volume"]], 30, capture_output=True, text=True)
+        if vol.returncode == 0:
+            raise Refuse(f"{f} is missing but volume {n['volume']} exists: its store keeps the old password. "
+                         "Restore the file; a new password would lock the minds out")
         f.parent.mkdir(parents=True, exist_ok=True)
         old = os.umask(0o077)
         try:
@@ -451,7 +507,7 @@ def neo4j_password(n):
     raise Refuse(f"{f} has no LIVING_NEO4J_PASSWORD line")
 
 
-def neo4j_up(n, log):
+def neo4j_up(n, log, scene_name):
     name, port = n["container"], n["port"]
     pw = neo4j_password(n)
     since = str(int(time.time()) - 1)
@@ -460,17 +516,22 @@ def neo4j_up(n, log):
         if not port_free(port):
             raise Refuse(f"port {port} is taken; Neo4j {name} cannot use it")
         env = dict(os.environ, NEO4J_AUTH=f"neo4j/{pw}")
-        r = subprocess.run(["docker", "run", "-d", "--name", name, "--label", "sao.play.scene=1",
+        r = run_cmd(["docker", "run", "-d", "--name", name, "--label", f"sao.play.scene={scene_name}",
                             "-p", f"127.0.0.1:{port}:7687", "-e", "NEO4J_AUTH",
                             "-e", f"NEO4J_server_memory_heap_max__size={n['heap']}",
                             "-e", f"NEO4J_server_memory_pagecache_size={n['pagecache']}",
-                            "-v", f"{n['volume']}:/data", n["image"]], capture_output=True, text=True, env=env)
+                            "-v", f"{n['volume']}:/data", n["image"]], 120, capture_output=True, text=True, env=env)
         if r.returncode:
             raise Refuse(f"docker run {name} failed: {r.stderr.strip()[-300:]}")
         log(f"created Neo4j container {name} (volume {n['volume']}, bolt 127.0.0.1:{port})")
     else:
-        r = subprocess.run(["docker", "inspect", "-f", "{{json .HostConfig.PortBindings}}", name],
-                           capture_output=True, text=True)
+        lab = run_cmd(["docker", "inspect", "-f", '{{index .Config.Labels "sao.play.scene"}}', name], 30,
+                      capture_output=True, text=True).stdout.strip()
+        if lab != scene_name:
+            raise Refuse(f"container {name} exists but was not made by play.py for scene {scene_name} "
+                         f"(label sao.play.scene={lab or 'none'}); not using it. Name the scene's own container")
+        r = run_cmd(["docker", "inspect", "-f", "{{json .HostConfig.PortBindings}}", name], 30,
+                    capture_output=True, text=True)
         try:
             binds = (json.loads(r.stdout) or {}).get("7687/tcp") or []
         except ValueError:
@@ -480,12 +541,12 @@ def neo4j_up(n, log):
         if not state:
             if not port_free(port):
                 raise Refuse(f"port {port} is taken; Neo4j {name} cannot start on it")
-            r = subprocess.run(["docker", "start", name], capture_output=True, text=True)
+            r = run_cmd(["docker", "start", name], 120, capture_output=True, text=True)
             if r.returncode:
                 raise Refuse(f"docker start {name} failed: {r.stderr.strip()[-300:]}")
     end = time.time() + 180
     while time.time() < end:
-        r = subprocess.run(["docker", "logs", "--since", since, name], capture_output=True, text=True)
+        r = run_cmd(["docker", "logs", "--since", since, name], 30, capture_output=True, text=True)
         if "Started." in (r.stdout + r.stderr) and port_open(port):
             return pw
         if docker_state(name) is False:
@@ -499,7 +560,7 @@ def neo4j_down(name):
     if state is None:
         return f"Neo4j {name}: no such container"
     if state:
-        subprocess.run(["docker", "stop", "-t", "30", name], capture_output=True, text=True)
+        run_cmd(["docker", "stop", "-t", "30", name], 90, capture_output=True, text=True)
     state = docker_state(name)
     return f"Neo4j {name}: stopped (volume kept)" if state is False else f"Neo4j {name}: STILL RUNNING"
 
@@ -601,11 +662,11 @@ def held_slots():
     return out
 
 
-def lock_builds(pid):
+def lock_builds(pid, lock=None):
     """Hold the build lock for a play session (pid = the launcher). Returns what happened."""
-    if not BUILD_SLOTS.is_dir():
-        return f"no build slots at {BUILD_SLOTS}; nothing to hold"
-    lock = BUILD_SLOTS / "session"
+    lock = Path(lock or SESSION_LOCK)
+    if not lock.parent.is_dir():
+        return f"no build-slot directory at {lock.parent}; nothing to hold"
     for _ in range(2):
         try:
             lock.mkdir()
@@ -626,9 +687,9 @@ def lock_builds(pid):
     return "could not take the build lock"
 
 
-def repoint_builds(old, new):
+def repoint_builds(old, new, lock=None):
     """The warden takes over the lock when the launcher dies while the game still runs."""
-    f = BUILD_SLOTS / "session" / "pid"
+    f = Path(lock or SESSION_LOCK) / "pid"
     try:
         if int(f.read_text().split()[0]) == old:
             f.write_text(f"{new}\n")
@@ -638,9 +699,9 @@ def repoint_builds(old, new):
     return False
 
 
-def unlock_builds(pids):
+def unlock_builds(pids, lock=None):
     """Remove the build lock if one of `pids` (the launcher, the warden) holds it."""
-    lock = BUILD_SLOTS / "session"
+    lock = Path(lock or SESSION_LOCK)
     try:
         holder = int((lock / "pid").read_text().split()[0])
     except (OSError, ValueError, IndexError):
@@ -697,6 +758,7 @@ class Session:
         self.dir = None
         self.capture = None
         self.locked = False
+        self.fresh_ok = False
         self.pending = []          # log lines from before the session directory exists
 
     # -- state
@@ -734,9 +796,16 @@ class Session:
             if not (s.seed and s.seed.is_file()):
                 missing.append(f"seed {s.seed}")
             if s.neo4j:
-                r = subprocess.run(["docker", "image", "inspect", s.neo4j["image"]], capture_output=True)
+                r = run_cmd(["docker", "image", "inspect", s.neo4j["image"]], 30, capture_output=True)
                 if r.returncode:
                     missing.append(f"Neo4j image {s.neo4j['image']} (not pulled)")
+                if docker_state(s.neo4j["container"]) is not None:
+                    lab = run_cmd(["docker", "inspect", "-f", '{{index .Config.Labels "sao.play.scene"}}',
+                                   s.neo4j["container"]], 30, capture_output=True, text=True).stdout.strip()
+                    if lab != s.name:
+                        raise Refuse(f"container {s.neo4j['container']} exists but was not made by play.py for scene "
+                                     f"{s.name} (label sao.play.scene={lab or 'none'}); not using or stopping it. "
+                                     "Give the scene its own container name")
         if missing:
             raise Refuse("missing: " + "; ".join(missing))
         if docker_state(s.container) is not True:
@@ -753,23 +822,8 @@ class Session:
                          f"patterns {s.db_pattern} / {s.run_pattern}")
         if self.a.fresh and cur:
             db, run = cur["db"], cur["run"]
-            jd = s.journal_dir(run)
-            lines = [f"--fresh deletes world {db} (run {run}): the database and everything in it",
-                     "  (its people, places, chronicle and your character there).",
-                     "  Kept: the run's logs in " + str(s.run_dir(run))]
-            if jd:
-                lines.append(f"  the model journal {jd}")
-            if s.neo4j:
-                lines.append(f"  and the minds' memories of run {run} in Neo4j {s.neo4j['container']} "
-                             "(keyed by run; the new world's minds start empty).")
             if w.exists(db):
-                for line in lines:
-                    self.log(line)
-                if not self.a.yes:
-                    if not sys.stdin.isatty():
-                        raise Refuse("--fresh needs --yes when not run from a terminal")
-                    if input(f"delete {db}? [y/N] ").strip().lower() not in ("y", "yes"):
-                        raise Refuse("not deleted; nothing changed")
+                self.confirm_fresh(cur)          # already asked before any wait; a no-op then
                 w.delete(db)
                 self.log(f"deleted {db} (SQL now answers 404)")
             else:
@@ -777,6 +831,10 @@ class Session:
             s.run_dir(run).mkdir(parents=True, exist_ok=True)
             os.replace(s.current_file, s.run_dir(run) / "current.deleted.json")
             cur = None
+        if cur and cur.get("status") == "creating":
+            if not self.a.fresh:
+                raise Refuse(f"world {cur['db']} was never finished (its creation was interrupted); "
+                             "start with --fresh to delete it and make a new one")
         if cur:
             if not w.exists(cur["db"]):
                 raise Refuse(f"world {cur['db']} (from {s.current_file}) no longer exists; "
@@ -788,9 +846,47 @@ class Session:
         rd = s.run_dir(run)
         rd.mkdir(parents=True, exist_ok=True)
         self.log(f"creating world {db} (run {run}){': ' + s.about if s.about else ''}")
-        w.publish(db, rd / "publish.log")
+        # Recorded before publishing, so an interrupted creation is never an untracked world.
+        write_json(s.current_file, {"db": db, "run": run, "status": "creating", "scene": s.name})
+        try:
+            w.publish(db, rd / "publish.log")
+        except BaseException as e:
+            hold_signals_for_good()
+            try:
+                if w.exists(db):
+                    w.delete(db)
+                    self.log(f"the creation failed ({e or type(e).__name__}); deleted the half-made {db}")
+            except Exception as e2:  # noqa: BLE001
+                self.log(f"the creation failed and {db} could not be deleted ({e2}); --fresh deletes it")
+                raise
+            os.replace(s.current_file, rd / "current.failed.json")
+            raise
         write_json(s.current_file, {"db": db, "run": run, "created_utc": utc(), "scene": s.name})
         return db, run, True
+
+    def confirm_fresh(self, cur):
+        """Say what --fresh deletes and ask (or require --yes), once, before anything waits or starts."""
+        if self.fresh_ok:
+            return
+        s = self.s
+        db, run = cur["db"], cur["run"]
+        if cur.get("status") == "creating":
+            self.log(f"world {db} was never finished; --fresh deletes it")
+        jd = s.journal_dir(run)
+        self.log(f"--fresh deletes world {db} (run {run}): the database and everything in it")
+        self.log("  (its people, places, chronicle and your character there).")
+        self.log("  Kept: the run's logs in " + str(s.run_dir(run)))
+        if jd:
+            self.log(f"  the model journal {jd}")
+        if s.neo4j:
+            self.log(f"  and the minds' memories of run {run} in Neo4j {s.neo4j['container']} "
+                     "(keyed by run; the new world's minds start empty).")
+        if not self.a.yes:
+            if not sys.stdin.isatty():
+                raise Refuse("--fresh needs --yes when not run from a terminal")
+            if input(f"delete {db}? [y/N] ").strip().lower() not in ("y", "yes"):
+                raise Refuse("not deleted; nothing changed")
+        self.fresh_ok = True
 
     def check_laws(self, db):
         if not self.s.laws_check:
@@ -806,10 +902,13 @@ class Session:
     # -- children
     def start_neo4j(self):
         n = self.s.neo4j
-        self.info["neo4j"] = n["container"]
-        self.save()
         self.log(f"starting memory store {n['container']} (bolt 127.0.0.1:{n['port']}) ...")
-        return neo4j_up(n, self.log)
+        with critical():
+            # Recorded (and so stopped at the end) only once it is known to be this scene's.
+            pw = neo4j_up(n, self.log, self.s.name)
+            self.info["neo4j"] = n["container"]
+            self.save()
+        return pw
 
     def start_mind(self, db, run, pw):
         m, s = self.s.minds, self.s
@@ -826,13 +925,13 @@ class Session:
         else:
             env.update({"LIVING_NEO4J": "off", "LIVING_NEO4J_PASSWORD": ""})
         env.update({k: s.fill(v, db=db, run=run, session=self.dir) for k, v in m["env"].items()})
-        log = open(self.dir / "mind.log", "ab")
-        self.mind = subprocess.Popen([str(m["bin"])], cwd=m["root"], env=scrub_env(env), stdin=subprocess.DEVNULL,
-                                     stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-        log.close()
-        self.info.update({"mind_pid": self.mind.pid, "mind_ident": proc_identity(self.mind.pid),
-                          "mind_bin": str(m["bin"]), "journal": str(s.journal_dir(run))})
-        self.save()
+        with critical(), open(self.dir / "mind.log", "ab") as log:
+            self.mind = subprocess.Popen([str(m["bin"])], cwd=m["root"], env=scrub_env(env), stdin=subprocess.DEVNULL,
+                                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            self.info.update({"mind_pid": self.mind.pid, "mind_bin": str(m["bin"]), "journal": str(s.journal_dir(run))})
+            self.save()
+            self.info["mind_ident"] = proc_identity(self.mind.pid)
+            self.save()
         self.log(f"mind service pid {self.mind.pid} (run {run}) ...")
         end = time.time() + 120
         while time.time() < end:
@@ -855,15 +954,23 @@ class Session:
             env[k] = s.fill(v, db=db, session=self.dir)
         if self.capture:
             env["LIVING_GAME_RECORD"] = self.capture / "client"
-        log = open(self.dir / "client.log", "ab")
-        self.client = subprocess.Popen([str(s.client_bin)], cwd=s.client_cwd, env=scrub_env(env),
-                                       stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
-        log.close()
-        self.info.update({"client_pid": self.client.pid, "client_ident": proc_identity(self.client.pid),
-                          "client_bin": str(s.client_bin)})
-        self.save()
-        if self.capture:
-            self.record_start(db)
+        with critical():
+            self.info["build_lock"] = lock_builds(os.getpid(), self.info["build_lock_path"])
+            self.locked = True
+            self.save()
+        self.log(self.info["build_lock"])
+        late = held_slots()
+        if late:
+            self.log(f"note: {len(late)} heavy job(s) started before the lock was taken: " + "; ".join(late))
+        with critical(), open(self.dir / "client.log", "ab") as log:
+            self.client = subprocess.Popen([str(s.client_bin)], cwd=s.client_cwd, env=scrub_env(env),
+                                           stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+            self.info.update({"client_pid": self.client.pid, "client_bin": str(s.client_bin)})
+            self.save()
+            self.info["client_ident"] = proc_identity(self.client.pid)
+            self.save()
+            if self.capture:
+                self.record_start(db)
         self.log(f"game client pid {self.client.pid}, joining {db} as {env['LIVING_GAME_NAME']} "
                  f"(log {self.dir / 'client.log'})")
 
@@ -877,9 +984,12 @@ class Session:
                          "Add --minds-without-client to do it anyway, or --no-minds")
         if a.minds_without_client and not want_minds:
             raise Refuse("--minds-without-client given, but this run has no minds")
-        if a.minutes and want_client:
+        if a.minutes is not None and want_client:
             raise Refuse("--minutes limits a run without a client; with a client the session ends when it exits")
+        if a.minutes is not None and a.minutes <= 0:
+            raise Refuse("--minutes must be more than 0")
         s.state.mkdir(parents=True, exist_ok=True)
+        self.launch_lock()
         prior = read_json(s.session_file)
         if prior and prior.get("status") != "closed":
             if is_same(prior.get("launcher_pid"), prior.get("launcher_ident")):
@@ -889,23 +999,29 @@ class Session:
                 raise Refuse(f"a game of this scene is still open (client pid {prior['client_pid']}; its warden closes "
                              "the session when it exits). Quit it, or run with --stop")
             self.log("the previous session did not close; closing it first")
-            if teardown(s, prior, why="left over from a previous launch") is None:
+            with critical():
+                closed = teardown(s, prior, why="left over from a previous launch", ended_ms=last_evidence_ms(prior))
+            if closed is None:
                 end = time.time() + 180          # its warden is closing it: wait for that
                 while time.time() < end and (read_json(Path(prior["session_dir"]) / "session.json") or {}).get("status") != "closed":
                     time.sleep(1)
         self.preflight(want_minds, want_client)
+        cur = read_json(s.current_file)
+        if a.fresh and cur and s.db_ok(cur.get("db", "")) and self.w.exists(cur["db"]):
+            self.confirm_fresh(cur)              # refuse or confirm now, not after a wait for builds
         if want_client:
-            # Builds stop while the owner plays: hold the lock first (no new heavy job starts), then
-            # let the ones already running finish, before anything paid starts.
-            self.lock_note = lock_builds(os.getpid())
-            self.log(self.lock_note)
-            self.locked = True
+            # Let heavy jobs already running finish before anything paid starts. The lock is not held
+            # while waiting (nor while the world is made): it is taken when the client starts.
             wait_for_builds(self.log, self.a.now)
 
         db, run, created = self.choose_world()
         st = stamp()
         self.dir = s.run_dir(run) / "sessions" / st
-        self.dir.mkdir(parents=True, exist_ok=True)
+        n = 1
+        while self.dir.exists():
+            n += 1
+            self.dir = s.run_dir(run) / "sessions" / f"{st}-{n}"
+        self.dir.mkdir(parents=True)
         report = Path(a.report_tool).resolve() if a.report_tool else REPORT
         if want_client and report.is_file() and not a.no_record:
             self.capture = self.dir / "capture"
@@ -914,7 +1030,7 @@ class Session:
                      "started_ms": now_ms(), "started_utc": utc(), "created_world": created,
                      "launcher_pid": os.getpid(), "launcher_ident": proc_identity(os.getpid()),
                      "minds": want_minds, "client": want_client, "report_tool": str(report),
-                     "build_lock": getattr(self, "lock_note", None)}
+                     "build_lock_path": str(SESSION_LOCK)}
         self.save()
         self.start_warden()
         # The world stays paused until the client's connection is open, so no takeover fires for the
@@ -933,7 +1049,7 @@ class Session:
         self.save()
         if want_minds and not want_client:
             self.log(minds_rate(s, run, self.dir))
-            limit = f" for {a.minutes} minutes" if a.minutes else ""
+            limit = f" for {a.minutes} minutes" if a.minutes is not None else ""
             self.log(f"minds running without a client{limit}; Ctrl-C (or play.py {s.dir} --stop) ends it")
         self.wait(db, run, want_client)
 
@@ -941,7 +1057,8 @@ class Session:
         unpaused = not want_client
         warned_mind = False
         last_cost = time.time()
-        end = time.time() + self.a.minutes * 60 if self.a.minutes else None
+        end = time.time() + self.a.minutes * 60 if self.a.minutes is not None else None
+        started, warned_at = time.time(), None
         while True:
             if want_client and self.client.poll() is not None:
                 self.info["client_exit"] = self.client.returncode
@@ -955,6 +1072,10 @@ class Session:
                 self.info["unpaused_ms"] = now_ms()
                 self.save()
                 self.log(f"client connected; world {db} unpaused. Play; closing the game window ends the session")
+            elif not unpaused and time.time() - started > 120 and (warned_at is None or time.time() - warned_at > 120):
+                warned_at = time.time()
+                self.log(f"WARNING: the client has not connected after {(time.time() - started) / 60:.0f} min; the world "
+                         f"stays paused (minds idle). See {self.dir / 'client.log'}; closing the game ends the session")
             if self.mind is not None and self.mind.poll() is not None and not warned_mind:
                 warned_mind = True
                 self.log(f"WARNING: the mind service exited ({self.mind.returncode}); the world goes on without "
@@ -972,21 +1093,39 @@ class Session:
                "--game-pid", str(self.client.pid)]
         if self.a.no_screen:
             cmd.append("--no-screen")
+        self.info.update({"capture": str(self.capture), "recorder": "starting"})   # teardown stops it whatever happens
+        self.save()
         with open(self.dir / "recorder.log", "a") as f:
-            r = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, env=scrub_env({}))
-        self.info["capture"] = str(self.capture)
+            r = run_cmd(cmd, 60, stdout=f, stderr=subprocess.STDOUT, env=scrub_env({}))
         self.info["recorder"] = "started" if r.returncode == 0 else f"record-start failed ({r.returncode})"
         self.save()
         self.log(f"session recorder: {self.info['recorder']} (capture {self.capture}; log {self.dir / 'recorder.log'})")
 
     def start_warden(self):
-        log = open(self.dir / "warden.log", "ab")
-        p = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), str(self.s.file), "--warden", str(self.dir)],
-                             stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
-                             env=scrub_env({}))
-        log.close()
-        self.info["warden_pid"] = p.pid
+        with critical(), open(self.dir / "warden.log", "ab") as log:
+            p = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), str(self.s.file), "--warden", str(self.dir)],
+                                 stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                                 env=scrub_env({}))
+            self.info["warden_pid"] = p.pid
+            self.save()
+        time.sleep(0.5)
+        if p.poll() is not None:
+            raise Refuse(f"the warden exited at once ({p.returncode}); see {self.dir / 'warden.log'}. Nothing paid started")
+        self.info["warden_ident"] = proc_identity(p.pid)
         self.save()
+
+    def launch_lock(self):
+        """One launcher per scene: an exclusive lock held for the launcher's whole life."""
+        f = self.s.state / "launch.lock"
+        self.lock_fd = os.open(f, os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            other = read_json(f) or {}
+            raise Refuse(f"another launcher of this scene is running (pid {other.get('pid')}); "
+                         f"wait for it, or end it with play.py {self.s.dir} --stop")
+        os.ftruncate(self.lock_fd, 0)
+        os.write(self.lock_fd, json.dumps({"pid": os.getpid(), "ident": proc_identity(os.getpid())}).encode())
 
 
 def minds_rate(scene, run, session_dir):
@@ -1027,10 +1166,20 @@ def take_lock(session_dir):
     return False
 
 
-def teardown(scene, info, why, client=None, mind=None, report=True):
-    """Pause the world, stop the mind (by PID) and the memory store (by name), price the session,
-    run the report. Idempotent; safe to run from the launcher, the warden or --stop."""
+def last_evidence_ms(info):
+    """When a session left over (launcher and warden both gone) really ended: its newest log."""
+    sdir = Path(info.get("session_dir", ""))
+    times = [f.stat().st_mtime for f in sdir.glob("*") if f.is_file()] if sdir.is_dir() else []
+    return int(max(times) * 1000) if times else None
+
+
+def teardown(scene, info, why, client=None, mind=None, report=True, ended_ms=None):
+    """Pause the world, stop the mind (by PID) and the memory store (by name), stop the client and
+    tool 1's recorder, release the build lock, price the session, run the report. Every external call
+    is bounded, so a wedged Docker cannot keep the minds running. Idempotent; safe to run from the
+    launcher, the warden or --stop. Returns None when another live process is already doing it."""
     sdir = Path(info["session_dir"])
+    sdir.mkdir(parents=True, exist_ok=True)
     if not take_lock(sdir):
         say("another process is closing this session")
         return None
@@ -1039,8 +1188,7 @@ def teardown(scene, info, why, client=None, mind=None, report=True):
     done = {"why": why, "by_pid": os.getpid(), "at_utc": utc()}
     info["status"] = "closing"
     write_json(sdir / "session.json", info)
-    ended_ms = now_ms()
-    out = []
+    ended_ms = ended_ms or now_ms()
 
     def note(msg):
         say(msg)
@@ -1051,38 +1199,11 @@ def teardown(scene, info, why, client=None, mind=None, report=True):
             pass
 
     def step(msg):
-        out.append(msg)
         note("  " + msg)
 
     note(f"session ending ({why}):")
-    # The client first if it is still up (the launcher was told to stop).
-    if info.get("client_pid"):
-        if client is not None and client.poll() is not None:
-            done["client"] = f"client exited ({client.returncode})"
-        else:
-            done["client"] = stop_pid(info["client_pid"], info.get("client_ident"), info.get("client_bin", "living-game"),
-                                      popen=client, label="game client")
-        step(done["client"])
-    if info.get("capture") and info.get("recorder") == "started":
-        pidf = Path(info["capture"]) / "recorder.pid"
-        rec = pidf.read_text().split()[0] if pidf.is_file() else None
-        r = subprocess.run([sys.executable, info.get("report_tool") or str(REPORT), "record-stop", "--capture", info["capture"]],
-                           capture_output=True, text=True, env=scrub_env({}))
-        with open(sdir / "recorder.log", "a") as f:
-            f.write(r.stdout + r.stderr)
-        done["recorder"] = "stopped" if r.returncode == 0 else f"record-stop failed ({r.returncode})"
-        if rec and rec.isdigit():
-            time.sleep(1)
-            cmd = subprocess.run(["ps", "-o", "command=", "-p", rec], capture_output=True, text=True).stdout
-            if "_record" in cmd and f"--capture {info['capture']}" in cmd:
-                # Still this session's recorder (it polls the world every second): stop it by its PID.
-                done["recorder"] = stop_pid(int(rec), proc_identity(int(rec)), Path(cmd.split()[0]).name,
-                                            label="session recorder (record-stop left it)")
-        step(f"session recorder: {done['recorder']}")
-    if info.get("client"):
-        done["build_lock"] = unlock_builds([info.get("launcher_pid"), info.get("warden_pid"), os.getpid()])
-        step(done["build_lock"])
     # 1. Pause the world: no takeover of the player's character, no ticks, until the next start.
+    #    Safe while a client is still connected. Bounded: a failure here never delays step 2.
     try:
         if w.exists(db):
             w.set_paused(db, True)
@@ -1094,30 +1215,50 @@ def teardown(scene, info, why, client=None, mind=None, report=True):
         else:
             done["world"] = {"db": db, "exists": False}
             step(f"world {db}: no longer exists")
-    except Exception as e:  # keep going: stopping the minds matters more
+    except Exception as e:  # noqa: BLE001 - keep going: stopping the minds matters more
         done["world"] = {"db": db, "error": str(e)}
         step(f"world {db}: COULD NOT PAUSE ({e})")
-    # 2. The mind service, by its recorded PID only.
-    if info.get("mind_pid"):
-        done["mind"] = stop_pid(info["mind_pid"], info.get("mind_ident"), info.get("mind_bin", "living-mind"),
+    # 2. The mind service, by its recorded PID only (or the child we still hold, if it was not recorded).
+    if info.get("mind_pid") or mind is not None:
+        pid = info.get("mind_pid") or mind.pid
+        done["mind"] = stop_pid(pid, info.get("mind_ident"), info.get("mind_bin", "living-mind"),
                                 popen=mind, label="mind service")
         step(done["mind"])
-    # 3. The memory store, by its exact container name.
+    # 3. The memory store, by its exact container name (recorded only once known to be the scene's).
     if info.get("neo4j"):
         done["neo4j"] = neo4j_down(info["neo4j"])
         step(done["neo4j"])
-    # 4. Cost, from the run's journal.
+    # 4. The client, if it is still up (the launcher was told to stop), and tool 1's recorder.
+    if info.get("client_pid") or client is not None:
+        if client is not None and client.poll() is not None:
+            done["client"] = f"client exited ({client.returncode})"
+        else:
+            pid = info.get("client_pid") or client.pid
+            done["client"] = stop_pid(pid, info.get("client_ident"), info.get("client_bin", "living-game"),
+                                      popen=client, label="game client")
+        step(done["client"])
+    if info.get("capture"):
+        done["recorder"] = stop_recorder(info, sdir)
+        step(f"session recorder: {done['recorder']}")
+    if info.get("build_lock"):
+        done["build_lock"] = unlock_builds([info.get("launcher_pid"), info.get("warden_pid"), os.getpid()],
+                                           info.get("build_lock_path"))
+        step(done["build_lock"])
+    # 5. Cost, from the run's journal.
     if info.get("journal"):
         jd = Path(info["journal"])
         start_ms = info.get("started_ms")
-        sess = journal_cost(jd, since_ms=start_ms, until_ms=ended_ms + 60_000)
-        total = journal_cost(jd)
-        minutes = (ended_ms - start_ms) / 60000 if start_ms else 0
-        write_json(sdir / "cost.json", {"journal": str(jd), "session": sess, "run_total": total,
-                                        "minds_minutes": round(minutes, 2), "prices": str(TOOLS / "trials.py")})
-        step(cost_line(sess, f"cost: this session ({minutes:.1f} min of minds)"))
-        step(cost_line(total, f"cost: run {run} so far"))
-        done["cost_usd"] = round(sess["usd"], 4)
+        try:
+            sess = journal_cost(jd, since_ms=start_ms, until_ms=ended_ms + 60_000)
+            total = journal_cost(jd)
+            minutes = (ended_ms - start_ms) / 60000 if start_ms else 0
+            write_json(sdir / "cost.json", {"journal": str(jd), "session": sess, "run_total": total,
+                                            "minds_minutes": round(minutes, 2), "prices": str(TOOLS / "trials.py")})
+            step(cost_line(sess, f"cost: this session ({minutes:.1f} min of minds)"))
+            step(cost_line(total, f"cost: run {run} so far"))
+            done["cost_usd"] = round(sess["usd"], 4)
+        except Exception as e:  # noqa: BLE001 - the cost line must never keep a session open
+            step(f"cost: could not read the journal {jd} ({e!r}); price it later with play.py --cost")
     elif info.get("minds") is False:
         step("cost: $0.00 (no minds this session)")
     info["status"] = "closed"
@@ -1130,10 +1271,32 @@ def teardown(scene, info, why, client=None, mind=None, report=True):
         write_json(scene.session_file, info)
     logs = [n for n in ("client.log", "mind.log", "launcher.log") if (sdir / n).is_file()]
     note(f"  logs: {sdir} ({', '.join(logs)})")
-    # 5. Tool 1's report.
+    # 6. Tool 1's report.
     if report:
         run_report(scene, info, sdir)
     return done
+
+
+def stop_recorder(info, sdir):
+    """Tool 1's record-stop, then a check that the recorder PID it wrote is really gone."""
+    tool = info.get("report_tool") or str(REPORT)
+    pidf = Path(info["capture"]) / "recorder.pid"
+    rec = pidf.read_text().split()[0] if pidf.is_file() else None
+    result = "no recorder running"
+    if Path(tool).is_file():
+        r = run_cmd([sys.executable, tool, "record-stop", "--capture", info["capture"]], 60,
+                    capture_output=True, text=True, env=scrub_env({}))
+        with open(sdir / "recorder.log", "a") as f:
+            f.write((r.stdout or "") + (r.stderr or ""))
+        result = "stopped" if r.returncode == 0 else f"record-stop failed ({r.returncode})"
+    if rec and rec.isdigit():
+        time.sleep(1)
+        cmd = run_cmd(["ps", "-o", "command=", "-p", rec], 10, capture_output=True, text=True).stdout
+        if "_record" in cmd and f"--capture {info['capture']}" in cmd:
+            # Still this session's recorder (it polls the world every second): stop it by its PID.
+            result = stop_pid(int(rec), proc_identity(int(rec)), Path(cmd.split()[0]).name,
+                              label="session recorder (record-stop left it)")
+    return result
 
 
 def run_report(scene, info, sdir):
@@ -1146,7 +1309,7 @@ def run_report(scene, info, sdir):
     if info.get("capture"):
         cmd += ["--capture", info["capture"]]
     with open(sdir / "report.log", "w") as f:
-        r = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, env=scrub_env({}))
+        r = run_cmd(cmd, 600, stdout=f, stderr=subprocess.STDOUT, env=scrub_env({}))
     if r.returncode == 0 and (sdir / "report/index.html").is_file():
         say(f"  report: {sdir / 'report/index.html'}")
     else:
@@ -1154,7 +1317,9 @@ def run_report(scene, info, sdir):
 
 
 def warden(scene, session_dir):
-    """Detached: if the launcher dies before closing its session, close it."""
+    """Detached: if the launcher dies before closing its session, close it. A running game is left
+    alone (and its world unpaused once it connects); the session closes when the game exits."""
+    note_signals()
     sdir = Path(session_dir)
     say(f"{utc()} warden pid {os.getpid()} for {sdir}")
     waiting = False
@@ -1164,41 +1329,82 @@ def warden(scene, session_dir):
             say(f"{utc()} session closed; warden exits")
             return
         if not is_same(info.get("launcher_pid"), info.get("launcher_ident")):
-            # The launcher is gone. Leave a running game alone; close the session once it exits.
             if is_same(info.get("client_pid"), info.get("client_ident"), info.get("client_bin")):
                 if not waiting:
                     say(f"{utc()} launcher pid {info.get('launcher_pid')} is gone; waiting for client pid {info['client_pid']}")
-                    if repoint_builds(info.get("launcher_pid"), os.getpid()):
+                    if repoint_builds(info.get("launcher_pid"), os.getpid(), info.get("build_lock_path")):
                         say(f"{utc()} build lock now held by the warden (pid {os.getpid()})")
                     waiting = True
+                if not info.get("unpaused_ms") and CLIENT_LOG_READY in _read(sdir / "client.log"):
+                    try:
+                        World(scene).set_paused(info["db"], False)
+                        info["unpaused_ms"] = now_ms()
+                        write_json(sdir / "session.json", info)
+                        say(f"{utc()} client connected; unpaused {info['db']} (for the dead launcher)")
+                    except Exception as e:  # noqa: BLE001
+                        say(f"{utc()} could not unpause {info['db']}: {e}")
                 time.sleep(1)
                 continue
             say(f"{utc()} launcher pid {info.get('launcher_pid')} is gone; closing the session")
-            teardown(scene, info, why="the launcher died" + (" (then the client exited)" if waiting else ""), report=True)
-            return
+            if teardown(scene, info, why="the launcher died" + (" (then the client exited)" if waiting else ""),
+                        report=True) is not None:
+                return
+            # Another process holds the teardown lock: keep watching, and retry if it dies.
         time.sleep(1)
 
 
+def _read(path):
+    try:
+        return Path(path).read_text(errors="replace")
+    except OSError:
+        return ""
+
+
+def note_signals():
+    """For --stop and the warden: signals are noted and do not interrupt a teardown."""
+    for sig in SIGNALS:
+        signal.signal(sig, lambda signum, _f: say(f"{utc()} {signal.Signals(signum).name} noted; finishing first"))
+
+
+def launch_lock_holder(scene):
+    """The launcher holding the scene's launch lock (it may still be creating the world), or None."""
+    f = scene.state / "launch.lock"
+    if not f.exists():
+        return None
+    fd = os.open(f, os.O_RDWR)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return None
+    except BlockingIOError:
+        return read_json(f) or {}
+    finally:
+        os.close(fd)
+
+
 def stop_session(scene):
+    note_signals()
+    holder = launch_lock_holder(scene)
+    if holder and is_same(holder.get("pid"), holder.get("ident")):
+        pid = holder["pid"]
+        say(f"asking launcher pid {pid} to end its session")
+        os.kill(pid, signal.SIGTERM)
+        end = time.time() + 180
+        while time.time() < end and is_same(pid, holder.get("ident")):
+            time.sleep(0.5)
+        if is_same(pid, holder.get("ident")):
+            say(f"launcher pid {pid} is still closing after 3 minutes; closing its session from here")
     info = read_json(scene.session_file)
     if not info or info.get("status") == "closed":
-        say("no open session")
+        if not holder:
+            say("no open session")
         cur = read_json(scene.current_file)
         if cur and World(scene).exists(cur["db"]) and World(scene).paused(cur["db"]) is False:
             World(scene).set_paused(cur["db"], True)
             say(f"paused {cur['db']}")
         return 0
-    pid = info.get("launcher_pid")
-    if is_same(pid, info.get("launcher_ident")):
-        say(f"asking launcher pid {pid} to end its session")
-        os.kill(pid, signal.SIGTERM)
-        end = time.time() + 90
-        while time.time() < end and is_same(pid, info.get("launcher_ident")):
-            time.sleep(0.5)
-        info = read_json(scene.session_file) or info
-        if info.get("status") == "closed":
-            return 0
-    teardown(scene, info, why="play.py --stop")
+    if teardown(scene, info, why="play.py --stop") is None:
+        say("another process is closing that session; check again with --status")
     return 0
 
 
@@ -1282,12 +1488,17 @@ def main(argv=None):
 
     def on_signal(signum, _frame):
         # Ctrl-C reaches the client too (same terminal); it quits and the loop sees it. With no client,
-        # or for SIGTERM/SIGHUP, end the session here.
+        # or for SIGTERM/SIGHUP, end the session here, but never inside a critical section (a child
+        # started and not yet recorded, a teardown): there it is acted on when the section ends.
         if signum == signal.SIGINT and sess.client is not None and sess.client.poll() is None:
             return
-        raise Stop(signal.Signals(signum).name)
+        name = signal.Signals(signum).name
+        if GUARD.depth:
+            GUARD.pending = GUARD.pending or name
+            return
+        raise Stop(name)
 
-    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+    for sig in SIGNALS:
         signal.signal(sig, on_signal)
     why = "the client exited"
     code = 0
@@ -1295,7 +1506,7 @@ def main(argv=None):
         sess.run()
         if sess.client is not None:
             why = f"the client exited ({sess.client.returncode})"
-        elif a.minutes:
+        elif a.minutes is not None:
             why = f"{a.minutes} minutes are up"
     except Stop as e:
         why = f"{e} received"
@@ -1308,10 +1519,9 @@ def main(argv=None):
         why = "an error in the launcher"
         code = 1
     finally:
-        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-            signal.signal(sig, signal.SIG_IGN)
+        hold_signals_for_good()
         if sess.locked and not sess.info.get("session_dir"):
-            say(unlock_builds([os.getpid()]))
+            say(unlock_builds([os.getpid()], sess.info.get("build_lock_path")))
         if sess.info.get("session_dir"):
             teardown(scene, sess.info, why, client=sess.client, mind=sess.mind, report=code == 0 or bool(sess.client))
             say(f"next time: just living-play {scene.dir} (resumes {sess.info['db']}); --fresh for a new world")

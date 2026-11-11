@@ -496,11 +496,15 @@ The session ends when the client exits, whether you close the window or it crash
 - **Stops the mind service.** It uses the recorded PID only, after checking that PID's start time and command.
 - **Stops the memory store.** It uses the exact container name; the volume is kept.
 - **Prints the session's cost.** The cost is read from the run's journal at `living/tools/trials.py`'s prices. A model with no price there, such as the fake model server, is counted and named, not priced.
+- **Closes the rest.** It stops the client if it is still up (on `--stop`) and tool 1's recorder, and releases the build lock.
 - **Runs tool 1's report** (`living/tools/play_report.py`), when that file exists. While a session runs, the report tool's recorder keeps the authority's rows, and the client gets `LIVING_GAME_RECORD`.
 
 **Builds stop while you play.** While a game is open, the launcher holds the laptop's build lock, `.local/build-slots/session/{pid,since}` in the main checkout, and `build-slot` starts no new heavy job while that pid lives.
-- **Order.** The launcher takes the lock before the world or the minds start. If heavy jobs already hold slots, it lists them and waits for them to finish, printing a progress line every minute. Nothing paid runs while it waits. `--now` opens the game anyway, and the frame rate may suffer.
+- **Order.** First, if heavy jobs already hold slots, the launcher lists them and waits for them to finish, printing a progress line every minute. It does not hold the lock while waiting, and nothing paid runs. `--now` opens the game anyway, and the frame rate may suffer. The world and the minds start next. The lock is taken only when the client starts.
+- **Tests.** Set `PLAY_BUILD_SLOTS` to a scratch directory, so the session lock is `<it>/session`, or set `PLAY_SESSION_LOCK` to name the lock directly. Only the owner's sessions use the real lock, which stops every heavy job on the laptop.
 - **Release.** The lock is removed in the same teardown that pauses the world. A killed launcher's lock is ignored by `build-slot`, because its pid is dead, unless the warden has taken it over to cover a game that is still running.
+
+Every external call in the teardown has a timeout, so a wedged Docker cannot keep the minds running. A signal that arrives while a child has been started but not yet recorded is held until it is recorded. Signals during the teardown are noted and do not interrupt it.
 
 A detached warden does the same steps if the launcher itself dies. It leaves a running game alone and closes the session when the game exits.
 
@@ -520,7 +524,8 @@ python3 living/tools/play.py --cost <journal dir>  # price any journal (an evide
 - **`--fresh`.** It lists what it will delete: the database and everything in it. It also lists what it keeps: the run's logs, the journal, and the old run's nodes in the store (minds are keyed by run). From a terminal it asks before deleting; otherwise it needs `--yes`.
 - **Refusals.**
   - A start refuses a world whose laws read-back fails; use `--fresh`.
-  - A start refuses while another session of the scene is open: its launcher lives, or its game is still running under the warden.
+  - A start refuses while another session of the scene is open: another launcher holds `<state>/launch.lock` (it may still be creating the world), or a game is still running under its warden. `--stop` reaches a launcher that is still starting, through that lock.
+  - A start refuses a world whose creation was interrupted. The name is written to `current.json` before publishing, and a failed creation deletes its half-made database. `--fresh` deletes an unfinished one.
   - A start refuses a `current.json` whose database or run does not match the scene's `db` and `run` patterns (`{stamp}` is `YYYYMMDD-HHMMSS`).
   - An SpacetimeDB answer other than 200 or 404 is reported as an error, never taken to mean the world is gone.
 
@@ -572,7 +577,7 @@ Names such as `db`, `run`, `neo4j.container` and `neo4j.volume` are taken litera
 - **`db`** must start with `verify-` and contain `{stamp}`. The launcher only deletes or resumes databases that match it.
 - **`world.wasm`** is the authority compiled with the scene's seed. For a floor module (`LIVING_SEED=none`), add `"create_floor": "<seed.json>"`, which is given to `create_floor` after publishing; the launcher then waits for `genesis.done`.
 - **`minds.root`** is a checkout at the build's commit. The mind reads `living/seeds/species.json` there, along with its `.env`, and writes its journal there. `dotenv` links that checkout's `.env` when it has none. `seed` is passed relative to it. `minds.env` adds settings, for example `LIVING_MODELS` pointing at the fake model server for a free test.
-- **`neo4j`** names the scene's own container. The shared lab store (`sao-living-neo4j-1`, `:7689`) is refused. The password is generated into `password_file` (mode 600) at first start and passed only through child environments.
+- **`neo4j`** names the scene's own container. play.py creates it with the label `sao.play.scene=<scene name>`. It refuses an existing container without that label, before anything starts, and so never starts or stops it. The shared lab store (`sao-living-neo4j-1`, `:7689`) is refused too. A missing password file is refused while the volume exists, because the store keeps the old password. The password is generated into `password_file` (mode 600) at first start and passed only through child environments.
 - **A walk (world only).** Leave out `minds` and `neo4j`, and `seed` and `laws_check` if there is no laws overlay to check. The world is created or resumed, the client runs, and the world is paused when the client exits.
 
 Options for tests and captures:
