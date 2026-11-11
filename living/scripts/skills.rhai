@@ -50,6 +50,10 @@ fn laws() {
         // sets this in its seed's `rules`, like any law here. Every person has a mind: no law
         // turns minds off (docs/SEEDED_LIVES.md, "Every person a mind").
         cry_prompts_carers: true,
+        // A grown person longs for a child this many real minutes after its own birth or its
+        // youngest child's (the most nurturing sooner, down to a sixth of it), and only while
+        // carrying at least `longing_food` food (0: whatever it carries).
+        longing_after_min: 20.0, longing_food: 0.0,
     }
 }
 
@@ -756,12 +760,36 @@ fn regrow(kind) {
 fn young(a) { a.actor.stage == "infant" || a.actor.stage == "child" }
 fn grown(a) { !young(a) }
 
+// Laws of starting a family. The shipped values ask nothing beyond adulthood, a willing
+// partner and not being hungry; a world may ask more of a body (docs/TRIALS.md, "Births that
+// keep a settlement's numbers"):
+//   conceive_food  food the two partners carry between them, at least (0: none asked)
+//   conceive_roof  whether one must stand under a roof (a shelter or a house) to start a family
+fn conceive_food() { 0 }
+fn conceive_roof() { false }
+fn food_carried(inv) {
+    let n = 0;
+    for k in inv.keys() { if nutrition(k) > 0.0 { n += inv[k]; } }
+    n
+}
+fn conceive_more() {
+    let more = "";
+    if conceive_roof() { more += ", under a roof"; }
+    if conceive_food() > 0 { more += `, with at least ${conceive_food()} food carried between you`; }
+    more
+}
+
 fn conceive_check(a) {
     if a.actor.stage != "adult" { return "not of an age to start a family"; }
     if a.target.class != "creature" || a.target.kind != a.actor.kind || !a.target.alive { return "no partner"; }
     if a.target.id == a.actor.id { return "cannot do that alone"; }
     if a.target.stage != "adult" { return "they are not of an age for it"; }
     if a.actor.hunger > 60.0 { return "too hungry to think of a family"; }
+    if conceive_roof() && !a.actor.near_shelter { return "not under a roof: a family is started under a shelter or in a house"; }
+    if conceive_food() > 0 {
+        let food = food_carried(a.actor.inv) + food_carried(a.target.inv);
+        if food < conceive_food() { return `not enough food put by for a child: the two of you carry ${food}, a family needs ${conceive_food()}`; }
+    }
     ""
 }
 fn conceive_duration(a) { 3000 }
@@ -1568,7 +1596,7 @@ fn host_spec() {
        gives: "they are your guest until 7 in the morning: they know where your house is (their place \"lodging\"), may sleep there, and may take from your household's store" }
 }
 
-fn conceive_spec() { #{ notable: true, target: true, reach: 2.0, talk: true, about: "Start a family with a willing adult partner: it happens when both of you choose it toward each other within 2 minutes, while fed.", takes: "a willing adult partner choosing it too, both fed", gives: "a child in time" } }
+fn conceive_spec() { #{ notable: true, target: true, reach: 2.0, talk: true, about: `Start a family with a willing adult partner: it happens when both of you choose it toward each other within 2 minutes, while fed${conceive_more()}.`, takes: `a willing adult partner choosing it too, both fed${conceive_more()}`, gives: "a child in time" } }
 fn teach_spec() { #{ latch: true, target: true, item: "technique", reach: 2.0, talk: true, about: "Teach a technique you know to a person beside you. It takes a while and both must stay close; afterwards they know it and you still do.", takes: "a technique you know, a person beside you staying close for a while", gives: "they know it too" } }
 fn experiment_spec() { #{ latch: true, item: "material", about: "Tinker with a material from your pack hoping to work out a new technique. It uses up the material and often fails; learning from someone who knows is surer.", takes: "1 of the material", gives: "sometimes a new technique" } }
 fn write_spec() { #{ latch: true, item: true, items: ["tablet", "sign"], args: ["text", "topic"], about: "Write on a tablet you keep or a sign you leave here (text: your words; topic: a technique you know, so that readers can learn it). Needs writing.", takes: "1 wood, knowing writing", gives: "a tablet you keep or a sign left here, with your words" } }
@@ -1813,5 +1841,7 @@ fn laws_about(l) {
         spawn_energy: `and energy ${short(l.spawn_energy)}`,
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
         cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
+        longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
+        longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
     }
 }

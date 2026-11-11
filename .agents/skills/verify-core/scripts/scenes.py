@@ -672,9 +672,10 @@ def sight(s):
 
 
 
-def open_line(s, length=16):
+def open_line(s, length=16, avoid=()):
     """A row of `length` walkable tiles on this world's map, west to east, with nothing that
-    blocks sight on it: the tile centres from its west end."""
+    blocks sight on it: the tile centres from its west end. With `avoid`, the row starts more
+    than 10 m from each of those points."""
     w = s.rows("SELECT width, height FROM world")[0]
     W, H = w["width"], w["height"]
     tiles = bytearray(W * H)
@@ -689,7 +690,7 @@ def open_line(s, length=16):
     walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7)
     for y in range(8, H - 8, 3):
         for x in range(8, W - length - 8, 2):
-            if all(walk(x + i, y + d) for i in range(length) for d in (-1, 0, 1)):
+            if all(walk(x + i, y + d) for i in range(length) for d in (-1, 0, 1)) and all(math.dist((x + .5, y + .5), q) > 10 for q in avoid):
                 return [(x + i + .5, y + .5) for i in range(length)]
     raise RuntimeError("no open line on this map")
 
@@ -1165,7 +1166,72 @@ def remains(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains}
+def family_laws(s):
+    """The laws of starting a family and of the longing for a child (docs/TRIALS.md, "Births
+    that keep a settlement's numbers"). An installed overlay sets `conceive_roof` true and
+    `conceive_food` 6: two fresh adults in the open are refused for the roof, then (by a
+    shelter) for the food they carry, then, carrying 3 berries each, start a family. Then laws()
+    with `longing_after_min` 0.1 and `longing_food` 3: by day, a calm adult carrying 4 berries
+    feels the longing for a child and one carrying nothing does not, until `longing_food` is 0.
+    The shipped script is installed again at the end."""
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    a, b, c, d = s.people(4)
+    built = [(r["x"], r["y"]) for r in s.rows("SELECT x, y FROM structure", "structures")]
+    line = open_line(s, avoid=built)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    for who, at in ((a, 0), (b, 1), (c, 8), (d, 12)):
+        s.call("place_at", who, *line[at])
+        s.graph(who, {"first": [{"do": "rest"}]})
+    try:
+        s.call("install_script", compose(shipped, {"conceive_food": "fn conceive_food() { 6 }", "conceive_roof": "fn conceive_roof() { true }"}))
+        for who in (a, b):
+            for item, qty in s.inventory(who).items():
+                if qty:
+                    s.act(who, {"do": "drop", "item": item, "qty": qty})
+        time.sleep(3)
+        s.expect("the two carry no food", not any(s.inventory(a).values()) and not any(s.inventory(b).values()), [s.inventory(a), s.inventory(b)])
+        s.act(a, {"do": "conceive", "target": {"id": b}})
+        roof = s.wait(lambda: s.told(a, "not under a roof"), seconds=20)
+        s.expect("conceive_roof: refused in the open", bool(roof), roof)
+        s.call("place_structure", a, "shelter")
+        s.act(a, {"do": "conceive", "target": {"id": b}})
+        food = s.wait(lambda: s.told(a, "not enough food put by"), seconds=20)
+        s.expect("conceive_food: refused by a shelter with no food carried", "carry 0, a family needs 6" in food[-1]["text"], food[-1])
+        s.call("grant_items", a, "berries", 3)
+        s.call("grant_items", b, "berries", 3)
+        s.act(a, {"do": "conceive", "target": {"id": b}})
+        time.sleep(3)
+        s.act(b, {"do": "conceive", "target": {"id": a}})
+        expecting = s.wait(lambda: s.rows(f"SELECT * FROM expecting WHERE a = {a} OR b = {a}", "expecting"), seconds=20)
+        s.expect("with 6 food between them and a roof, they start a family", bool(expecting), expecting)
+        longing = shipped.replace("longing_after_min: 20.0, longing_food: 0.0", "longing_after_min: 0.1, longing_food: LONGING_FOOD")
+        s.expect("the shipped laws() has the longing values", longing != shipped)
+        # Empty-handed before the law can make the longing felt (it is a rising edge: felt
+        # once while it holds, so a moment with food in hand would already count).
+        for item, qty in s.inventory(d).items():
+            if qty:
+                s.act(d, {"do": "drop", "item": item, "qty": qty})
+        s.wait(lambda: not any(s.inventory(d).values()), seconds=20)
+        s.call("grant_items", c, "berries", 4)
+        s.call("install_script", longing.replace("LONGING_FOOD", "3.0"))
+        hour, day = world_hour(s)
+        if hour >= 19.5 or hour < 6:
+            wait_s = ((6 - hour) % 24) / 24 * day / 1000 + 5
+            print(f"Waiting {wait_s:.0f} s for day (world hour {hour:.1f}).", flush=True)
+            time.sleep(wait_s)
+        felt = s.wait(lambda: s.told(c, "You long for", kind="feeling"), seconds=90, every=2)
+        s.expect("longing_food 3: an adult carrying 4 food longs for a child", bool(felt), felt)
+        time.sleep(20)
+        s.expect("longing_food 3: an adult carrying nothing does not", not s.told(d, "You long for", kind="feeling"), s.inventory(d))
+        s.call("install_script", longing.replace("LONGING_FOOD", "0.0"))
+        felt = s.wait(lambda: s.told(d, "You long for", kind="feeling"), seconds=90, every=2)
+        s.expect("longing_food 0: the same adult then longs for a child", bool(felt), felt)
+        s.rows(f"SELECT * FROM experience WHERE observer = {c} OR observer = {d}", "longing-experiences")
+    finally:
+        s.call("install_script", shipped)
+
+
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "family_laws": family_laws}
 
 
 def main():
