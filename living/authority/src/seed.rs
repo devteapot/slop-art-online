@@ -1678,7 +1678,12 @@ fn house(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), o
 /// over its inn or in its hall owns that building, with no second house beside it.
 fn house_at(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64, any_kind: bool) -> u64 {
     let at = walkable_near(map, home);
-    let standing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| (any_kind || s.kind == "house") && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75);
+    let here: Vec<Structure> = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).filter(|s| (any_kind || s.kind == "house") && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75).collect();
+    // Other things may stand at a lot's door (a plan's hearth or lamp, docs/AUTHORED_PLANS.md):
+    // the building is the structure a lot row names; only then anything else standing there.
+    // Once per household at creation, over the lot rows.
+    let building = |s: &&Structure| ctx.db.lot().iter().any(|l| l.structure == s.id);
+    let standing = here.iter().find(building).or_else(|| here.iter().find(|s| s.kind == "house")).or_else(|| here.first()).cloned();
     match standing {
         Some(mut s) => {
             let id = s.id;
