@@ -259,12 +259,15 @@ fn inv(a, item) {
 //           holds: the most units it takes }. It is lit only while it holds fuel, warms and
 //           lights only while lit, goes out when its fuel is spent and is lit again by feeding
 //           it (feed). Its fuel is not an item to take back.
+//   holds   a store: the most things it holds in all (store into it, take from it)
+//   like    the kind it counts as wherever a kind is asked by name (a world's `store` with
+//           `like: "storage"` is found by a graph's `nearest storage`)
 // Other traits are the rules' own data.
 fn structures() {
     [
         #{ name: "campfire", warms: true },
         #{ name: "shelter", roof: true },
-        #{ name: "storage" }, #{ name: "remains" }, #{ name: "sign" }, #{ name: "bush_patch" },
+        #{ name: "storage", holds: 120 }, #{ name: "remains" }, #{ name: "sign" }, #{ name: "bush_patch" },
         #{ name: "house", warms: true, roof: true }, #{ name: "gate" }, #{ name: "trap" },
         #{ name: "hall", warms: true, roof: true }, #{ name: "workshop", roof: true }, #{ name: "market" },
         #{ name: "inn", warms: true, roof: true },
@@ -552,6 +555,8 @@ fn gather_duration(a) {
 // Every kind of resource, in order (read once when the script compiles):
 //   yields      what one gathering gives
 //   regrow_per_h  units it regrows a game hour of growing time, up to its max
+//   regrow_by_season  the share of that rate in each season, #{ spring, summer, autumn,
+//               winter } (a season left out, or no trait: full, and none in winter)
 //   max         units a node of it holds when full
 //   ground      the ground a settlement's promised nodes of it are placed on (`resources` in a
 //               town of the seed), and by_water: only beside water
@@ -923,13 +928,15 @@ fn give_check(a) {
 fn give_duration(a) { 1000 }
 fn give_done(a) { [#{ op: "give", item: a.item, qty: amount(a) }] }
 
-// A storage holds this many things in all; a full one takes no more.
-fn storage_holds(x) { 120 }
+// A store holds what its kind `holds` in all (a storage 120 things); a full one takes no more.
+// () for a kind that is no store.
+fn holds_of(kind) { structure_trait(kind, "holds") }
 fn store_check(a) {
-    if a.target.kind != "storage" { return "can only store in a storage"; }
+    let room = holds_of(a.target.kind);
+    if room == () { return "can only store in a storage"; }
     let held = 0;
     for k in a.target.inv.keys() { held += a.target.inv[k]; }
-    if held + amount(a) > storage_holds(0) { return `the storage is full (it holds ${held} of ${storage_holds(0)} things)`; }
+    if held + amount(a) > room { return `the storage is full (it holds ${held} of ${room} things)`; }
     if inv(a, a.item) < amount(a) { return `not enough ${a.item} (${a.item}: ${source_of(a.item)})`; }
     ""
 }
@@ -937,7 +944,7 @@ fn store_duration(a) { 1000 }
 fn store_done(a) { [#{ op: "store", item: a.item, qty: amount(a) }] }
 
 fn take_check(a) {
-    if a.target.kind != "storage" && a.target.kind != "remains" && a.target.kind != "trap" { return "nothing to take from"; }
+    if holds_of(a.target.kind) == () && a.target.kind != "remains" && a.target.kind != "trap" { return "nothing to take from"; }
     let have = a.target.inv[a.item];
     if have == () || have < 1 { return `no ${a.item} there`; }
     if pack_full(a) { return "your pack is full (eat, store, give or drop some first)"; }
@@ -1792,6 +1799,38 @@ fn leave_done(a) { [#{ op: "leave" }] }
 // Specs are read by minds to compose routines from skills: build them from the same numbers
 // as the rules so they change when the rules do.
 
+// How much each kind of store holds: "a storage holds 120 things in all", and any other's.
+fn stores_text() {
+    let out = "";
+    for k in having("structures", "holds") {
+        out += if out == "" { `a ${k} holds ${holds_of(k)} things in all` } else { `; a ${k} ${holds_of(k)}` };
+    }
+    out
+}
+// What minds are told winter does to the land, after the calendar (`Scripts::seasons_words`):
+// from each resource kind's share of its regrowth in winter (`regrow_by_season`).
+fn winter_share(kind) {
+    let r = entry_of("resources", kind);
+    if r == () || r.regrow_by_season == () || r.regrow_by_season.winter == () { 0.0 } else { r.regrow_by_season.winter }
+}
+fn and_list(parts) {
+    let out = "";
+    for i in 0..parts.len() { if i > 0 { out += if i == parts.len() - 1 { " and " } else { ", " }; } out += parts[i]; }
+    out
+}
+fn seasons_text() {
+    let ever = []; let slow = []; let rest = [];
+    for k in names_of("resources") {
+        let w = winter_share(k);
+        if w <= 0.0 { rest.push(k); } else if w < 1.0 { slow.push(k); } else { ever.push(k); }
+    }
+    if ever.is_empty() && slow.is_empty() { return "In winter nothing regrows and nights are colder: store food before it."; }
+    let parts = [];
+    if !ever.is_empty() { parts.push(`${and_list(ever)} regrow${if ever.len() == 1 { "s" } else { "" }} as in the other seasons or more`); }
+    if !slow.is_empty() { parts.push(`${and_list(slow)} more slowly`); }
+    let none = if rest.is_empty() { "" } else { `, and ${and_list(rest)} not at all` };
+    `In winter ${parts[0]}${if parts.len() > 1 { ", " + parts[1] } else { "" }}${none}. Nights are colder: store food before it.`
+}
 fn list(parts) {
     let out = "";
     for p in parts { if out != "" { out += ", "; } out += p; }
@@ -1928,7 +1967,7 @@ fn give_spec() {
 fn store_spec() {
     #{ latch: true, notable: true, target: true, item: true, args: ["qty"], reach: 1.5,
        about: "Put items from your pack into a storage beside you. Storing into someone's household store is how goods are delivered to them while they are away.",
-       takes: `the items from your pack, a storage in reach with room (a storage holds ${storage_holds(0)} things in all)`, gives: "the items in the storage" }
+       takes: `the items from your pack, a storage in reach with room (${stores_text()})`, gives: "the items in the storage" }
 }
 fn take_spec() {
     #{ latch: true, notable: true, target: true, item: true, args: ["qty"], reach: 1.5,
