@@ -289,3 +289,7 @@ Shared container `sao-living_spacetimedb_1` (v2.14.1), Mac checkout at `b7cf7fb`
 ## 2026-11-10, branch fix-agreement-terms
 
 Shared container, laptop, island seed. `dealings` passed all 15 checks in `core-terms-202051-dealings` (the scene composes its own short `due_by_dark`, so it covers the hooks, not the new minimum). Cargo `agreements_and_demands_are_rules_on_records` checks the new deadline: accepted at 7:00, due in 13 h, told "by dusk today"; at 14:00, due in 30 h, "by dusk tomorrow". The description change was replayed against glm-flash on the two real backwards `offer_terms` decisions (docs/TRIALS.md, "Fast iterations").
+
+## 2026-11-11, branch iter-11 (person needs paced to real time)
+
+Shared container, laptop. `needs` passed all 7 checks in `core-pace-095608`, with its thresholds scaled by `person_pace` (0.3), and `food` all 4. `infant` passed all 18 checks in `core-pacei2-100737-infant`, with its hunger waits divided by the pace (about 2 hours in all). The first `infant` attempt (`core-pacei-095616-infant`) failed its setup check "warm anchor lies outside crying hearing" at 15.6 m: the witness and anchor come from `spawn_crowd` at random spots, so that check can fail by chance; it passed on the rerun and on plain e6b7e698 (`core-maini2-095803-infant`, all 18). Rules: all 132 tests pass, the five that pinned the old person rates now expect them times the pace (animals still bit-exact).

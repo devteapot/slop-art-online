@@ -269,7 +269,7 @@ fn wet(a) { a.raining && a.actor.kind == "person" && !a.actor.near_shelter }
 fn freezing(a) { a.season == "winter" || wet(a) }
 
 // Survival is secondary (docs/SEEDED_LIVES.md, "Survival made secondary"): a person feels
-// hungry from 50, a full game day before starving at 100.
+// hungry from 50, about 42 real minutes (3.5 game days) before starving at 100.
 fn body_state(a) {
     let fraction = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
     #{ cold: cold(a), hungry: a.actor.hunger > 50.0, starving: a.actor.hunger >= 100.0,
@@ -289,12 +289,16 @@ fn body_state(a) {
 //   healing_gene              a rising health rate is multiplied by this gene
 //   wet_energy, cold_hp       exposure, added last
 //
-// Targets in game time (a game day is 12 real minutes; docs/SEEDED_LIVES.md, "Survival made
-// secondary"): a person's hunger rises 48 a game day awake (4 a minute), so a meal brought down
-// to about 5 is wanted again at about 25 two or three times a day; it feels hungry at 50 and
-// starves at 100, a full game day later; starving takes 25 minutes (two days) to kill a healthy
-// body. An ordinary night outside is uncomfortable (tiring), not harmful; only winter nights and
-// nights in the rain hurt without a fire, shelter or a warm cloak.
+// Targets in real time, for people (a game day is 12 real minutes; the owner and the minds' calls
+// live in real minutes; docs/TRIALS.md "Fast iterations" 11): every person rate below is scaled by
+// `person_pace`, so a person's hunger rises 1.2 a minute awake (14.4 a game day): a meal brought
+// down to about 5 is wanted again at about 25 every 16–17 real minutes; it feels hungry at 50 and
+// starves at 100 about 42 minutes later; starving takes about 83 minutes (seven game days) to
+// kill a healthy body. Energy, rest, sleep, healing and exposure are scaled alike, so a person
+// spends the same share of its time sleeping. An ordinary night outside is uncomfortable
+// (tiring), not harmful; only winter nights and nights in the rain hurt without a fire, shelter
+// or a warm cloak. Animals keep their own rates (the ecology is tuned on them).
+fn person_pace(x) { 0.3 }
 fn rates(a) {
     // A predator feeds big and rarely: a wolf lasts about an hour on a deer.
     let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 4.0 };
@@ -317,7 +321,7 @@ fn rates(a) {
     }
     // A suckling animal lives mostly on its mother's milk (not modelled on the mother).
     if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
-    #{
+    let r = #{
         hunger: hunger, energy: energy,
         // Starving hurts; fed and rested, a body heals; with no energy left, it suffers.
         starving_at: 100.0, starving_hp: -4.0,
@@ -332,7 +336,12 @@ fn rates(a) {
             + (if cold(a) { -1.5 } else { 0.0 }),
         // A cold night hurts only in winter or in the rain (a storm night).
         cold_hp: if cold(a) && freezing(a) { if a.season == "winter" { -3.0 } else { -1.5 } } else { 0.0 },
+    };
+    if a.actor.kind == "person" {
+        let k = person_pace(0);
+        for f in ["hunger", "energy", "starving_hp", "healing_hp", "spent_hp", "wet_energy", "cold_hp"] { r[f] = r[f] * k; }
     }
+    r
 }
 
 fn move_speed(a) {

@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- Idle hunger rises and energy falls.
+- Idle hunger rises and energy falls, at the rules' pace: every person rate is scaled by `person_pace` (0.3 since iter-11: hunger 1.2 a minute), and the needs and infant scenes read the law and scale their thresholds and hunger waits by it.
 - Rest recovers energy over time.
 - Eating consumes food and lowers hunger.
 - "food" is whatever the rules give nutrition (`nutrition(item)` in `skills.rhai`): `has food`, and eat, give, store and take of `food`, all read it. `eat food` takes the most nourishing food held.
