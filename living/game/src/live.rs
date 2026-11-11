@@ -244,6 +244,7 @@ fn land(
     mut cams: Query<&mut DistanceFog, With<Camera3d>>,
     mut clear: ResMut<ClearColor>,
     mut roam: ResMut<Roam>,
+    mut draw: ResMut<crate::world::Draw>,
 ) {
     if island.is_some() || net.mode != Mode::Land {
         return;
@@ -284,6 +285,9 @@ fn land(
     let mine = defs.iter().find(|d| d.world.as_ref().is_some_and(|w| w.seed == row.seed && w.size == row.size));
     if let Some(def) = mine.or_else(|| defs.iter().find(|d| d.world.is_some())) {
         crate::envs::apply_mood(&def.mood, &mut style, &mut look, &mut lights, &mut cams, &mut clear);
+        // The camera's fog, and how far landmarks are drawn, follow this mood (`world::Draw`).
+        draw.mood(&def.mood);
+        info!("land: mood {} (fog {:.0}–{:.0} m)", def.id, def.mood.fog_start, def.mood.fog_end);
     }
     live.hosted = Some(built.hosted);
     let arrive = Vec2::new(row.arrive_x, row.arrive_y);

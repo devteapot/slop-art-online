@@ -607,6 +607,7 @@ pub fn switch(
     mut cams: Query<&mut DistanceFog, With<Camera3d>>,
     mut clear: ResMut<ClearColor>,
     ground_mat: Res<crate::terrain::GroundMat>,
+    mut draw: ResMut<crate::world::Draw>,
 ) {
     // The island's land arrives from its worker thread: place it and you.
     if envs.current == Some(envs.want) {
@@ -643,12 +644,14 @@ pub fn switch(
         for mut f in &mut cams {
             f.color = SKY;
         }
+        draw.fog = None;
         crate::lookdev::build_lineup(&mut commands, &mut meshes, &palette, &style, &assets, &m);
         return;
     }
     let def = envs.defs[want - 1].clone();
     info!("environment: {} — {}", def.name, def.note);
     apply_mood(&def.mood, &mut *style, &mut *look, &mut lights, &mut cams, &mut *clear);
+    draw.mood(&def.mood);
     if let Some(world) = def.world {
         // The island streams itself in (island.rs); you start at its town. Its land generates
         // on a worker thread (most of a second), placed when it arrives (above).
