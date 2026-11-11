@@ -1039,6 +1039,15 @@ class Run:
         for k, x in enumerate(chain):
             if not any(x[3] in e for e in ev):
                 ev.append(f"mind log {fmt_dt(x[0] - ms)}: {x[1][5:] if x[1].startswith('INFO') else x[1]} ({x[3]})")
+            if x[4] == "parked" and "alongside" in x[1]:
+                # LIVING_PARK=concurrent: the turn runs while the deliberation does.
+                t = next((c for c in self.calls_by_actor.get(hid, []) if c["purpose"] == "talk" and x[0] - 1500 <= c["queued"] <= x[0] + 15_000), None)
+                bits[0] = head.replace("parked behind", "heard during") + f"; its turn was taken alongside {fmt_dt(x[0] - ms)}"
+                if t:
+                    bits.append(f"that turn answered “{t['answering'][1][:60] if t['answering'] else '?'}” (reply {fmt_dt(t['end'] - ms)})")
+                    out = dict(kind="parked", call=t["i"], latency=round((t["end"] - ms) / 1000, 1))
+                    break
+                continue
             if x[4] == "parked":
                 parks += 1
                 if parks > 1:
