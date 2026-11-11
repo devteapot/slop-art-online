@@ -1,6 +1,11 @@
 # Validation record (generation)
 
 
+
+## 2026-11-11 eye-2: eye-height cells in the model table (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. `generation.py --feature worlds --seeds island,plan-test,cullet,floor-megacity-2k` (`generation-eye2v`): every world passes (island 977 checks, cullet 65, floor-megacity-2k 75, plan-test passes), original seeds unchanged. The island's live and native tiles digest is `e051dd1788c4d9f9` (heights `0d2f77752781845c`, layout `8ff57472b004a13f`), with 9,153 low and 4,116 drop tiles; plan-test 595 low and 188 drop. The blocking-lot check now accepts a drop at a lot's centre (a part of a model that does not hide over a drop's edge stays `Drop`) and reports `wall_at_centre` separately. Maintained: seeded-world.md, plans.md (pinned digests since eye-2), SKILL.md (rerun after the model table is regenerated).
+
 ## 2026-11-11 drop-1: drop (8) and low (9) tiles (dev-box)
 
 Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).

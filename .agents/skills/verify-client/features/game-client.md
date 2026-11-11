@@ -104,3 +104,15 @@ Bytes per query come from the server's `spacetime_num_bytes_sent_to_clients_tota
 ## Evidence
 
 The script's photographs, `game.log`, the probe's `.jsonl` files, and a TSV of the metric samples. Name the commit and whether `living/` had uncommitted changes.
+
+### Tile classes
+
+Since drop-1 and eye-2 (2026-11-11) the hosted tiles carry two classes that block the foot and not the eye: `drop` (8, between ground levels) and `low` (9, what is low or open at eye height: a cart, an open stall, a well, a building's overhang; docs/ISLAND_AUTHORITY.md "Sight through what is open at eye height"). A client sees them as tile bytes in `terrain_chunk` and must get exactly the land the rules host. Subscribe every chunk through the probe on a land world and count the classes:
+
+```bash
+$V launch --run $R --seed island && $V doctor --run $R
+$D --run $R --save terrain-all --seconds 3 --query "SELECT * FROM terrain_chunk"
+.agents/skills/verify-client/scripts/tile_classes.py .local/living/verify/$R/terrain-all.jsonl --expect 8=DROPS --expect 9=LOWS
+```
+
+`DROPS` and `LOWS` are the rules' own counts for the build's land, the last line of `cargo run --release -p living-rules --example sight_census -- living/seeds/island.json` (`land: N low tiles, M drop tiles`; on 2026-11-11 with eye-2, 9,153 and 4,116). The script writes `terrain-all-classes.json` and exits 1 on a difference or an unknown class. The island's 16,384 chunks are about 4.3 MB in one initial update.
