@@ -1,10 +1,630 @@
 {
- "run": "cullet-rough",
- "seed": 3,
+ "run": "cullet",
+ "seed": 83,
  "map": {
   "kind": "land",
   "size": 1024,
   "params": {
+   "relief": {
+    "outline": [
+     [
+      382.0,
+      788.0
+     ],
+     [
+      310.0,
+      790.0
+     ],
+     [
+      248.0,
+      768.0
+     ],
+     [
+      188.0,
+      744.0
+     ],
+     [
+      158.0,
+      689.0
+     ],
+     [
+      134.0,
+      609.0
+     ],
+     [
+      130.0,
+      519.0
+     ],
+     [
+      158.0,
+      424.0
+     ],
+     [
+      210.0,
+      354.0
+     ],
+     [
+      295.0,
+      314.0
+     ],
+     [
+      380.0,
+      292.0
+     ],
+     [
+      438.0,
+      282.0
+     ],
+     [
+      480.0,
+      276.0
+     ],
+     [
+      524.0,
+      282.0
+     ],
+     [
+      590.0,
+      290.0
+     ],
+     [
+      680.0,
+      306.0
+     ],
+     [
+      762.0,
+      338.0
+     ],
+     [
+      832.0,
+      389.0
+     ],
+     [
+      875.0,
+      464.0
+     ],
+     [
+      888.0,
+      544.0
+     ],
+     [
+      898.0,
+      579.0
+     ],
+     [
+      896.0,
+      664.0
+     ],
+     [
+      872.0,
+      692.0
+     ],
+     [
+      838.0,
+      726.0
+     ],
+     [
+      772.0,
+      762.0
+     ],
+     [
+      706.0,
+      784.0
+     ],
+     [
+      690.0,
+      788.0
+     ]
+    ],
+    "outline_rise_m": 120.0,
+    "coast_warp": 0.035,
+    "coast_feature": 0.08,
+    "lowland_m": 12.0,
+    "sea_floor_m": 22.0,
+    "hills_m": 4.0,
+    "hills_feature_m": 220.0,
+    "peak_m": [
+     1.0,
+     1.0
+    ],
+    "foothills_m": 0.0,
+    "islets": 0,
+    "stamps": [
+     {
+      "id": "the island's moor grass",
+      "area": [
+       [
+        366.64,
+        802.24
+       ],
+       [
+        286.0,
+        804.36
+       ],
+       [
+        216.56,
+        781.04
+       ],
+       [
+        149.36,
+        755.6
+       ],
+       [
+        115.76,
+        697.3
+       ],
+       [
+        88.88,
+        612.5
+       ],
+       [
+        84.4,
+        517.1
+       ],
+       [
+        115.76,
+        416.4
+       ],
+       [
+        174.0,
+        342.2
+       ],
+       [
+        269.2,
+        299.8
+       ],
+       [
+        364.4,
+        276.48
+       ],
+       [
+        429.36,
+        265.88
+       ],
+       [
+        476.4,
+        259.52
+       ],
+       [
+        525.68,
+        265.88
+       ],
+       [
+        599.6,
+        274.36
+       ],
+       [
+        700.4,
+        291.32
+       ],
+       [
+        792.24,
+        325.24
+       ],
+       [
+        870.64,
+        379.3
+       ],
+       [
+        918.8,
+        458.8
+       ],
+       [
+        933.36,
+        543.6
+       ],
+       [
+        944.56,
+        580.7
+       ],
+       [
+        942.32,
+        670.8
+       ],
+       [
+        915.44,
+        700.48
+       ],
+       [
+        877.36,
+        736.52
+       ],
+       [
+        803.44,
+        774.68
+       ],
+       [
+        729.52,
+        798.0
+       ],
+       [
+        711.6,
+        802.24
+       ]
+      ],
+      "region": "meadow"
+     },
+     {
+      "id": "the Moss",
+      "area": [
+       [
+        300.0,
+        546.0
+       ],
+       [
+        430.0,
+        562.0
+       ],
+       [
+        570.0,
+        556.0
+       ],
+       [
+        670.0,
+        534.0
+       ],
+       [
+        680.0,
+        474.0
+       ],
+       [
+        650.0,
+        394.0
+       ],
+       [
+        550.0,
+        369.0
+       ],
+       [
+        390.0,
+        374.0
+       ],
+       [
+        280.0,
+        404.0
+       ],
+       [
+        255.0,
+        474.0
+       ]
+      ],
+      "height_m": 30.0,
+      "blend_m": 60.0,
+      "region": "highland"
+     },
+     {
+      "id": "the Moss's high middle",
+      "area": [
+       [
+        380.0,
+        484.0
+       ],
+       [
+        620.0,
+        484.0
+       ],
+       [
+        600.0,
+        404.0
+       ],
+       [
+        410.0,
+        404.0
+       ]
+      ],
+      "height_m": 35.0,
+      "blend_m": 40.0
+     },
+     {
+      "id": "the turf house's ground",
+      "area": [
+       [
+        432.0,
+        466.0
+       ],
+       [
+        464.0,
+        466.0
+       ],
+       [
+        464.0,
+        440.0
+       ],
+       [
+        432.0,
+        440.0
+       ]
+      ],
+      "height_m": 32.0,
+      "blend_m": 30.0
+     },
+     {
+      "id": "the north headland's shoulder",
+      "area": [
+       [
+        420.0,
+        314.0
+       ],
+       [
+        540.0,
+        314.0
+       ],
+       [
+        522.0,
+        272.0
+       ],
+       [
+        480.0,
+        264.0
+       ],
+       [
+        432.0,
+        276.0
+       ]
+      ],
+      "height_m": 34.0,
+      "blend_m": 45.0
+     },
+     {
+      "id": "the north headland",
+      "area": [
+       [
+        470.0,
+        267.0
+       ],
+       [
+        498.0,
+        267.0
+       ],
+       [
+        498.0,
+        247.0
+       ],
+       [
+        470.0,
+        247.0
+       ]
+      ],
+      "height_m": 46.0,
+      "blend_m": 48.0,
+      "note": "the island's highest ground, so the Lintel shows over the Moss from the town"
+     },
+     {
+      "id": "the Hanger",
+      "area": [
+       [
+        685.0,
+        559.0
+       ],
+       [
+        745.0,
+        574.0
+       ],
+       [
+        810.0,
+        534.0
+       ],
+       [
+        825.0,
+        484.0
+       ],
+       [
+        780.0,
+        454.0
+       ],
+       [
+        725.0,
+        484.0
+       ],
+       [
+        695.0,
+        519.0
+       ]
+      ],
+      "height_m": 15.0,
+      "blend_m": 35.0,
+      "region": "forest"
+     },
+     {
+      "id": "the Wrack Strand",
+      "area": [
+       [
+        382.0,
+        780.0
+       ],
+       [
+        310.0,
+        782.0
+       ],
+       [
+        252.0,
+        760.0
+       ],
+       [
+        198.0,
+        738.0
+       ],
+       [
+        204.0,
+        706.0
+       ],
+       [
+        260.0,
+        724.0
+       ],
+       [
+        320.0,
+        742.0
+       ],
+       [
+        380.0,
+        746.0
+       ]
+      ],
+      "height_m": 0.8,
+      "blend_m": 26.0,
+      "region": "beach",
+      "ground": "sand"
+     },
+     {
+      "id": "the Sand Spit",
+      "area": [
+       [
+        856.0,
+        692.0
+       ],
+       [
+        894.0,
+        674.0
+       ],
+       [
+        900.0,
+        574.0
+       ],
+       [
+        862.0,
+        572.0
+       ],
+       [
+        852.0,
+        634.0
+       ]
+      ],
+      "height_m": 0.8,
+      "blend_m": 18.0,
+      "region": "beach",
+      "ground": "sand"
+     },
+     {
+      "id": "the Weirs",
+      "area": [
+       [
+        360.0,
+        794.0
+       ],
+       [
+        260.0,
+        780.0
+       ],
+       [
+        248.0,
+        814.0
+       ],
+       [
+        350.0,
+        824.0
+       ]
+      ],
+      "height_m": -0.6,
+      "blend_m": 30.0
+     },
+     {
+      "id": "the Combs",
+      "area": [
+       [
+        250.0,
+        934.0
+       ],
+       [
+        770.0,
+        934.0
+       ],
+       [
+        770.0,
+        954.0
+       ],
+       [
+        250.0,
+        954.0
+       ]
+      ],
+      "height_m": -0.8,
+      "blend_m": 15.0
+     }
+    ]
+   },
+   "water": {
+    "river_catchment_m2": 1000000000.0,
+    "lakes_per_km2": 0.0,
+    "natural_lakes": 0
+   },
+   "regions": {
+    "wetlands_per_km2": 0.0,
+    "looks": [
+     {
+      "kind": "sea",
+      "trees": -0.5,
+      "detail_m": 0.5,
+      "beach_m": 20.0,
+      "outcrops": 0.0,
+      "dirt": 0.0
+     },
+     {
+      "kind": "beach",
+      "trees": -0.5,
+      "detail_m": 0.3,
+      "beach_m": 60.0,
+      "outcrops": 0.03,
+      "dirt": 0.0
+     },
+     {
+      "kind": "meadow",
+      "trees": -0.5,
+      "detail_m": 0.8,
+      "beach_m": 5.0,
+      "outcrops": 0.025,
+      "dirt": 0.06
+     },
+     {
+      "kind": "forest",
+      "trees": 0.62,
+      "detail_m": 1.2,
+      "beach_m": 4.0,
+      "outcrops": 0.01,
+      "dirt": 0.05
+     },
+     {
+      "kind": "old_forest",
+      "trees": -0.5,
+      "detail_m": 0.8,
+      "beach_m": 5.0,
+      "outcrops": 0.02,
+      "dirt": 0.06
+     },
+     {
+      "kind": "spirit_grove",
+      "trees": -0.5,
+      "detail_m": 0.8,
+      "beach_m": 5.0,
+      "outcrops": 0.02,
+      "dirt": 0.06
+     },
+     {
+      "kind": "wetland",
+      "trees": -0.5,
+      "detail_m": 0.4,
+      "beach_m": 5.0,
+      "outcrops": 0.0,
+      "dirt": 0.2
+     },
+     {
+      "kind": "highland",
+      "trees": -0.5,
+      "detail_m": 1.4,
+      "beach_m": 4.0,
+      "outcrops": 0.03,
+      "dirt": 0.32
+     },
+     {
+      "kind": "peaks",
+      "trees": -0.5,
+      "detail_m": 2.0,
+      "beach_m": 2.0,
+      "outcrops": 0.2,
+      "dirt": 0.5
+     }
+    ]
+   },
    "sites": [],
    "plans": [
     {
@@ -12,11 +632,13 @@
      "kind": "town",
      "style": "cullet",
      "origin": [
-      575,
-      888
+      510.0,
+      784.0
      ],
-     "rotation_deg": 15,
+     "rotation_deg": 0,
      "blend_m": 70,
+     "skirt_m": 10,
+     "note": "Cullet, a glassmakers' harbour on the south slope of the Wrack (docs/SMALL_CITY.md). Written by living/tools/cullet_plan.py; edit the script, not this file. Plan frame: origin at the Fish Steps, x east, y north (uphill), metres.",
      "levels": [
       {
        "id": "strand",
@@ -27,193 +649,508 @@
          0
         ],
         [
-         145,
+         -21.5,
          0
         ],
         [
-         145,
-         30
+         -21.5,
+         -6.0
+        ],
+        [
+         -12.5,
+         -6.0
+        ],
+        [
+         -12.5,
+         0
+        ],
+        [
+         -4,
+         0
+        ],
+        [
+         -4,
+         -3
+        ],
+        [
+         4,
+         -3
+        ],
+        [
+         4,
+         0
+        ],
+        [
+         175,
+         0
+        ],
+        [
+         175,
+         62
+        ],
+        [
+         80,
+         62
+        ],
+        [
+         80,
+         32
         ],
         [
          -125,
-         30
+         32
         ]
-       ]
+       ],
+       "note": "the quay (x -75..75, y 0..10), the strand buildings behind it, the slip and the dry dock west, Cinder Row east (x 80..175, up to y 62), all at +2"
+      },
+      {
+       "id": "mole",
+       "height_m": 2.0,
+       "area": [
+        [
+         126,
+         0
+        ],
+        [
+         126,
+         -14
+        ],
+        [
+         132,
+         -14
+        ],
+        [
+         132,
+         -54
+        ],
+        [
+         129,
+         -54
+        ],
+        [
+         129,
+         -67
+        ],
+        [
+         142,
+         -67
+        ],
+        [
+         142,
+         -54
+        ],
+        [
+         139,
+         -54
+        ],
+        [
+         139,
+         -14
+        ],
+        [
+         146,
+         -14
+        ],
+        [
+         146,
+         0
+        ]
+       ],
+       "note": "the ship-day mole: a 20 x 14 m root with the lamp house, a 7 m arm, and the Watchglass's 13 m tip 60 m out"
       },
       {
        "id": "low",
        "height_m": 5.5,
        "area": [
         [
-         -115,
-         30
+         -165,
+         32
         ],
         [
-         125,
-         30
+         80,
+         32
         ],
         [
-         125,
-         50
+         80,
+         60
         ],
         [
-         -115,
-         50
+         -165,
+         60
         ]
-       ]
+       ],
+       "note": "Low Row and the Ladder's first terrace"
       },
       {
        "id": "mid",
        "height_m": 9.5,
        "area": [
         [
-         -110,
-         50
+         -175,
+         60
         ],
         [
-         120,
-         50
+         80,
+         60
         ],
         [
-         120,
-         72
+         80,
+         90
         ],
         [
-         -110,
-         72
+         -175,
+         90
         ]
-       ]
+       ],
+       "note": "Mid Row and the Ladder's second terrace"
       },
       {
        "id": "high",
        "height_m": 13.5,
        "area": [
         [
-         -100,
-         72
+         -185,
+         90
         ],
         [
-         110,
-         72
+         80,
+         90
         ],
         [
-         110,
-         94
+         80,
+         120
         ],
         [
-         -100,
-         94
+         -185,
+         120
         ]
-       ]
+       ],
+       "note": "High Row and the Ladder's third terrace"
+      },
+      {
+       "id": "upper",
+       "height_m": 17.0,
+       "area": [
+        [
+         -260,
+         120
+        ],
+        [
+         55,
+         120
+        ],
+        [
+         55,
+         134
+        ],
+        [
+         -260,
+         134
+        ]
+       ],
+       "note": "the upper terrace: the Ladder's fourth, and the landing below the Crown"
       },
       {
        "id": "crown",
        "height_m": 20.0,
        "area": [
         [
-         -40,
-         94
+         -260,
+         134
         ],
         [
-         40,
-         94
+         55,
+         134
         ],
         [
-         40,
-         130
+         55,
+         196
         ],
         [
-         -40,
-         130
+         -260,
+         196
         ]
-       ]
+       ],
+       "note": "the Crown (x -55..55) and, west of it, the root plots and the Ladder's top terrace"
+      },
+      {
+       "id": "moss",
+       "height_m": 32.0,
+       "area": [
+        [
+         -78,
+         318
+        ],
+        [
+         -46,
+         318
+        ],
+        [
+         -46,
+         344
+        ],
+        [
+         -78,
+         344
+        ]
+       ],
+       "note": "the turf house's yard on the Moss"
+      },
+      {
+       "id": "hanger",
+       "height_m": 14.0,
+       "area": [
+        [
+         196,
+         196
+        ],
+        [
+         218,
+         196
+        ],
+        [
+         218,
+         214
+        ],
+        [
+         196,
+         214
+        ]
+       ],
+       "note": "the Hanger cottage's yard, at the foot of the copse"
+      },
+      {
+       "id": "headland",
+       "height_m": 46.0,
+       "area": [
+        [
+         -40,
+         520
+        ],
+        [
+         -10,
+         520
+        ],
+        [
+         -10,
+         536
+        ],
+        [
+         -40,
+         536
+        ]
+       ],
+       "note": "the Lintel's ground on the north headland"
       }
      ],
      "sea": [
       [
-       -170,
-       -110
+       -125,
+       0
       ],
       [
-       175,
-       -110
+       -21.5,
+       0
+      ],
+      [
+       -21.5,
+       -6.0
+      ],
+      [
+       -12.5,
+       -6.0
+      ],
+      [
+       -12.5,
+       0
+      ],
+      [
+       -4,
+       0
+      ],
+      [
+       -4,
+       -3
+      ],
+      [
+       4,
+       -3
+      ],
+      [
+       4,
+       0
+      ],
+      [
+       126,
+       0
+      ],
+      [
+       126,
+       -14
+      ],
+      [
+       132,
+       -14
+      ],
+      [
+       132,
+       -54
+      ],
+      [
+       129,
+       -54
+      ],
+      [
+       129,
+       -67
+      ],
+      [
+       142,
+       -67
+      ],
+      [
+       142,
+       -54
+      ],
+      [
+       139,
+       -54
+      ],
+      [
+       139,
+       -14
+      ],
+      [
+       146,
+       -14
+      ],
+      [
+       146,
+       0
       ],
       [
        175,
        0
       ],
       [
-       -170,
-       0
+       175,
+       -100
+      ],
+      [
+       -125,
+       -100
       ]
      ],
      "square": {
       "level": "strand",
       "area": [
        [
-        -15,
-        1
+        15.5,
+        10.3
        ],
        [
-        15,
-        1
+        45.5,
+        10.3
        ],
        [
-        15,
-        15
+        45.5,
+        24.3
        ],
        [
-        -15,
-        15
+        15.5,
+        24.3
        ]
       ],
-      "paved": true
+      "paved": true,
+      "note": "the Counting House yard, the only square (30 x 14 m): the market"
      },
      "streets": [
       {
-       "id": "the Strand west",
+       "id": "the Strand",
        "points": [
         [
-         -122,
+         -75,
          5
         ],
         [
-         -15,
+         75,
          5
         ]
        ],
-       "width_m": 6.0,
+       "width_m": 10.0,
        "class": "street",
-       "surface": "flags",
+       "surface": "quay_flags",
        "level": "strand"
       },
       {
-       "id": "the Strand east",
+       "id": "the slipway",
        "points": [
         [
-         15,
+         -75,
          5
         ],
         [
-         142,
-         5
+         -100,
+         6
+        ],
+        [
+         -110,
+         6
         ]
        ],
-       "width_m": 6.0,
-       "class": "street",
-       "surface": "flags",
+       "width_m": 3.5,
+       "class": "lane",
+       "surface": "setts",
        "level": "strand"
+      },
+      {
+       "id": "Cinder Row",
+       "points": [
+        [
+         75,
+         5
+        ],
+        [
+         124,
+         5
+        ],
+        [
+         124,
+         58
+        ]
+       ],
+       "width_m": 3.5,
+       "class": "lane",
+       "surface": "cinders",
+       "level": "strand"
+      },
+      {
+       "id": "the mole",
+       "points": [
+        [
+         136,
+         0
+        ],
+        [
+         136,
+         -54
+        ]
+       ],
+       "width_m": 4.0,
+       "class": "lane",
+       "surface": "flags",
+       "level": "mole"
       },
       {
        "id": "Low Row",
        "points": [
         [
-         -112,
-         36
+         -98,
+         41.0
         ],
         [
-         122,
-         36
+         78,
+         41.0
         ]
        ],
        "width_m": 5.0,
@@ -222,15 +1159,32 @@
        "level": "low"
       },
       {
+       "id": "Low Row walk",
+       "points": [
+        [
+         -102,
+         41.0
+        ],
+        [
+         -162,
+         41.0
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "earth",
+       "level": "low"
+      },
+      {
        "id": "Mid Row",
        "points": [
         [
-         -107,
-         55
+         -98,
+         69.0
         ],
         [
-         117,
-         55
+         78,
+         69.0
         ]
        ],
        "width_m": 5.0,
@@ -239,15 +1193,32 @@
        "level": "mid"
       },
       {
+       "id": "Mid Row walk",
+       "points": [
+        [
+         -102,
+         69.0
+        ],
+        [
+         -172,
+         69.0
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "earth",
+       "level": "mid"
+      },
+      {
        "id": "High Row",
        "points": [
         [
-         -97,
-         77
+         -98,
+         99.0
         ],
         [
-         107,
-         77
+         78,
+         99.0
         ]
        ],
        "width_m": 5.0,
@@ -256,15 +1227,49 @@
        "level": "high"
       },
       {
+       "id": "High Row walk",
+       "points": [
+        [
+         -102,
+         99.0
+        ],
+        [
+         -182,
+         99.0
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "earth",
+       "level": "high"
+      },
+      {
+       "id": "the upper walk",
+       "points": [
+        [
+         -255,
+         124.5
+        ],
+        [
+         50,
+         124.5
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "earth",
+       "level": "upper"
+      },
+      {
        "id": "the Crown path",
        "points": [
         [
-         -20,
-         104
+         -255,
+         139.0
         ],
         [
-         20,
-         104
+         -30,
+         139.0
         ]
        ],
        "width_m": 3.0,
@@ -273,298 +1278,791 @@
        "level": "crown"
       },
       {
+       "id": "the Ladder Wynd (strand)",
+       "points": [
+        [
+         -100,
+         10.3
+        ],
+        [
+         -100,
+         26.14
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "strand"
+      },
+      {
+       "id": "the Ladder Wynd (low)",
+       "points": [
+        [
+         -100,
+         32.5
+        ],
+        [
+         -100,
+         53.23
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "low"
+      },
+      {
+       "id": "the Ladder Wynd (mid)",
+       "points": [
+        [
+         -100,
+         60.5
+        ],
+        [
+         -100,
+         83.23
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "mid"
+      },
+      {
+       "id": "the Ladder Wynd (high)",
+       "points": [
+        [
+         -100,
+         90.5
+        ],
+        [
+         -100,
+         114.14
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "high"
+      },
+      {
+       "id": "the Ladder Wynd (upper)",
+       "points": [
+        [
+         -100,
+         120.5
+        ],
+        [
+         -100,
+         129.05
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "upper"
+      },
+      {
+       "id": "the Net Wynd (strand)",
+       "points": [
+        [
+         -30,
+         10.3
+        ],
+        [
+         -30,
+         26.14
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "strand"
+      },
+      {
+       "id": "the Net Wynd (low)",
+       "points": [
+        [
+         -30,
+         32.5
+        ],
+        [
+         -30,
+         53.23
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "low"
+      },
+      {
+       "id": "the Net Wynd (mid)",
+       "points": [
+        [
+         -30,
+         60.5
+        ],
+        [
+         -30,
+         83.23
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "mid"
+      },
+      {
+       "id": "the Tally Wynd (strand)",
+       "points": [
+        [
+         24,
+         10.3
+        ],
+        [
+         24,
+         26.14
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "strand"
+      },
+      {
+       "id": "the Tally Wynd (low, 1)",
+       "points": [
+        [
+         24,
+         32.5
+        ],
+        [
+         24,
+         41.0
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "low"
+      },
+      {
+       "id": "the Tally Wynd (low, 2)",
+       "points": [
+        [
+         32,
+         41.0
+        ],
+        [
+         32,
+         53.23
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "low"
+      },
+      {
+       "id": "the Tally Wynd (mid, 1)",
+       "points": [
+        [
+         32,
+         60.5
+        ],
+        [
+         32,
+         69.0
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "mid"
+      },
+      {
+       "id": "the Tally Wynd (mid, 2)",
+       "points": [
+        [
+         -8,
+         69.0
+        ],
+        [
+         -8,
+         83.23
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "mid"
+      },
+      {
+       "id": "the Tally Wynd (high, 1)",
+       "points": [
+        [
+         -8,
+         90.5
+        ],
+        [
+         -8,
+         99.0
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "high"
+      },
+      {
+       "id": "the Tally Wynd (high, 2)",
+       "points": [
+        [
+         34,
+         99.0
+        ],
+        [
+         34,
+         114.14
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "high"
+      },
+      {
+       "id": "the Tally Wynd (upper, 1)",
+       "points": [
+        [
+         34,
+         120.5
+        ],
+        [
+         34,
+         124.5
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "upper"
+      },
+      {
+       "id": "the Tally Wynd (upper, 2)",
+       "points": [
+        [
+         -8,
+         124.5
+        ],
+        [
+         -8,
+         129.05
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "upper"
+      },
+      {
+       "id": "the Store Wynd (strand)",
+       "points": [
+        [
+         66,
+         10.3
+        ],
+        [
+         66,
+         26.14
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "strand"
+      },
+      {
+       "id": "the Store Wynd (low)",
+       "points": [
+        [
+         66,
+         32.5
+        ],
+        [
+         66,
+         53.23
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "low"
+      },
+      {
+       "id": "the Store Wynd (mid)",
+       "points": [
+        [
+         66,
+         60.5
+        ],
+        [
+         66,
+         83.23
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "mid"
+      },
+      {
        "id": "the Moss road",
        "points": [
         [
-         107,
-         77
+         50,
+         190
         ],
         [
-         130,
-         100
+         58,
+         230
         ],
         [
-         150,
-         150
+         20,
+         290
+        ],
+        [
+         -40,
+         322
+        ]
+       ],
+       "width_m": 2.5,
+       "class": "path",
+       "surface": "earth"
+      },
+      {
+       "id": "the Lintel path",
+       "points": [
+        [
+         -40,
+         322
+        ],
+        [
+         -35,
+         420
+        ],
+        [
+         -25,
+         518
+        ]
+       ],
+       "width_m": 2.0,
+       "class": "path",
+       "surface": "earth"
+      },
+      {
+       "id": "the Hanger path",
+       "points": [
+        [
+         124,
+         58
         ],
         [
          160,
-         220
+         110
+        ],
+        [
+         200,
+         170
+        ],
+        [
+         207,
+         196
         ]
        ],
-       "width_m": 3.6,
-       "class": "trunk",
+       "width_m": 2.0,
+       "class": "path",
        "surface": "earth"
+      },
+      {
+       "id": "the strand path",
+       "points": [
+        [
+         -127,
+         5
+        ],
+        [
+         -180,
+         12
+        ],
+        [
+         -240,
+         22
+        ],
+        [
+         -300,
+         40
+        ]
+       ],
+       "width_m": 2.5,
+       "class": "path",
+       "surface": "sand"
       }
      ],
      "stairs": [
       {
-       "id": "wynd 1 low",
+       "id": "the Ladder Wynd, strand to low",
        "from": "strand",
        "to": "low",
        "foot": [
-        -90,
-        24
+        -100,
+        26.14
        ],
        "head": [
-        -90,
-        33
-       ],
-       "width_m": 2.6,
-       "rise_m": 3.5
-      },
-      {
-       "id": "wynd 1 mid",
-       "from": "low",
-       "to": "mid",
-       "foot": [
-        -90,
-        46
-       ],
-       "head": [
-        -90,
-        53.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "wynd 1 high",
-       "from": "mid",
-       "to": "high",
-       "foot": [
-        -90,
-        68
-       ],
-       "head": [
-        -90,
-        75.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "wynd 2 low",
-       "from": "strand",
-       "to": "low",
-       "foot": [
-        -40,
-        24
-       ],
-       "head": [
-        -40,
-        33
-       ],
-       "width_m": 2.6,
-       "rise_m": 3.5
-      },
-      {
-       "id": "wynd 2 mid",
-       "from": "low",
-       "to": "mid",
-       "foot": [
-        -40,
-        46
-       ],
-       "head": [
-        -40,
-        53.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "wynd 2 high",
-       "from": "mid",
-       "to": "high",
-       "foot": [
-        -40,
-        68
-       ],
-       "head": [
-        -40,
-        75.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "wynd 3 low",
-       "from": "strand",
-       "to": "low",
-       "foot": [
-        10,
-        24
-       ],
-       "head": [
-        10,
-        33
-       ],
-       "width_m": 2.6,
-       "rise_m": 3.5
-      },
-      {
-       "id": "wynd 3 mid",
-       "from": "low",
-       "to": "mid",
-       "foot": [
-        10,
-        46
-       ],
-       "head": [
-        10,
-        53.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "wynd 3 high",
-       "from": "mid",
-       "to": "high",
-       "foot": [
-        10,
-        68
-       ],
-       "head": [
-        10,
-        75.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "wynd 4 low",
-       "from": "strand",
-       "to": "low",
-       "foot": [
-        60,
-        24
-       ],
-       "head": [
-        60,
-        33
-       ],
-       "width_m": 2.6,
-       "rise_m": 3.5
-      },
-      {
-       "id": "wynd 4 mid",
-       "from": "low",
-       "to": "mid",
-       "foot": [
-        60,
-        46
-       ],
-       "head": [
-        60,
-        53.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "wynd 4 high",
-       "from": "mid",
-       "to": "high",
-       "foot": [
-        60,
-        68
-       ],
-       "head": [
-        60,
-        75.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "wynd 5 low",
-       "from": "strand",
-       "to": "low",
-       "foot": [
-        105,
-        24
-       ],
-       "head": [
-        105,
-        33
-       ],
-       "width_m": 2.6,
-       "rise_m": 3.5
-      },
-      {
-       "id": "wynd 5 mid",
-       "from": "low",
-       "to": "mid",
-       "foot": [
-        105,
-        46
-       ],
-       "head": [
-        105,
-        53.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "wynd 5 high",
-       "from": "mid",
-       "to": "high",
-       "foot": [
-        105,
-        68
-       ],
-       "head": [
-        105,
-        75.5
-       ],
-       "width_m": 2.6,
-       "rise_m": 4.0
-      },
-      {
-       "id": "the Crown steps",
-       "from": "high",
-       "to": "crown",
-       "foot": [
-        0,
-        84
-       ],
-       "head": [
-        0,
-        98
+        -100,
+        32.5
        ],
        "width_m": 3.0,
-       "rise_m": 6.5
+       "rise_m": 3.5
+      },
+      {
+       "id": "the Ladder Wynd, low to mid",
+       "from": "low",
+       "to": "mid",
+       "foot": [
+        -100,
+        53.23
+       ],
+       "head": [
+        -100,
+        60.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 4.0
+      },
+      {
+       "id": "the Ladder Wynd, mid to high",
+       "from": "mid",
+       "to": "high",
+       "foot": [
+        -100,
+        83.23
+       ],
+       "head": [
+        -100,
+        90.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 4.0
+      },
+      {
+       "id": "the Ladder Wynd, high to upper",
+       "from": "high",
+       "to": "upper",
+       "foot": [
+        -100,
+        114.14
+       ],
+       "head": [
+        -100,
+        120.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 3.5
+      },
+      {
+       "id": "the Ladder Wynd, upper to crown",
+       "from": "upper",
+       "to": "crown",
+       "foot": [
+        -100,
+        129.05
+       ],
+       "head": [
+        -100,
+        134.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 3.0
+      },
+      {
+       "id": "the Net Wynd, strand to low",
+       "from": "strand",
+       "to": "low",
+       "foot": [
+        -30,
+        26.14
+       ],
+       "head": [
+        -30,
+        32.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 3.5
+      },
+      {
+       "id": "the Net Wynd, low to mid",
+       "from": "low",
+       "to": "mid",
+       "foot": [
+        -30,
+        53.23
+       ],
+       "head": [
+        -30,
+        60.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 4.0
+      },
+      {
+       "id": "the Net Wynd, mid to high",
+       "from": "mid",
+       "to": "high",
+       "foot": [
+        -30,
+        83.23
+       ],
+       "head": [
+        -30,
+        90.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 4.0
+      },
+      {
+       "id": "the Tally Wynd, strand to low",
+       "from": "strand",
+       "to": "low",
+       "foot": [
+        24,
+        26.14
+       ],
+       "head": [
+        24,
+        32.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 3.5
+      },
+      {
+       "id": "the Tally Wynd, low to mid",
+       "from": "low",
+       "to": "mid",
+       "foot": [
+        32,
+        53.23
+       ],
+       "head": [
+        32,
+        60.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 4.0
+      },
+      {
+       "id": "the Tally Wynd, mid to high",
+       "from": "mid",
+       "to": "high",
+       "foot": [
+        -8,
+        83.23
+       ],
+       "head": [
+        -8,
+        90.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 4.0
+      },
+      {
+       "id": "the Tally Wynd, high to upper",
+       "from": "high",
+       "to": "upper",
+       "foot": [
+        34,
+        114.14
+       ],
+       "head": [
+        34,
+        120.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 3.5
+      },
+      {
+       "id": "the Tally Wynd, upper to crown",
+       "from": "upper",
+       "to": "crown",
+       "foot": [
+        -8,
+        129.05
+       ],
+       "head": [
+        -8,
+        134.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 3.0
+      },
+      {
+       "id": "the Store Wynd, strand to low",
+       "from": "strand",
+       "to": "low",
+       "foot": [
+        66,
+        26.14
+       ],
+       "head": [
+        66,
+        32.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 3.5
+      },
+      {
+       "id": "the Store Wynd, low to mid",
+       "from": "low",
+       "to": "mid",
+       "foot": [
+        66,
+        53.23
+       ],
+       "head": [
+        66,
+        60.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 4.0
+      },
+      {
+       "id": "the Store Wynd, mid to high",
+       "from": "mid",
+       "to": "high",
+       "foot": [
+        66,
+        83.23
+       ],
+       "head": [
+        66,
+        90.5
+       ],
+       "width_m": 3.0,
+       "rise_m": 4.0
+      },
+      {
+       "id": "the Cinder Steps",
+       "from": "strand",
+       "to": "low",
+       "foot": [
+        85.86,
+        50.0
+       ],
+       "head": [
+        79.5,
+        50.0
+       ],
+       "width_m": 3.0,
+       "rise_m": 3.5
       }
      ],
      "lots": [
       {
-       "id": "cone",
-       "kind": "workshop",
-       "name": "the Cone",
+       "id": "fish_steps",
+       "kind": "lamp",
+       "name": "the Fish Steps",
        "at": [
-        125,
-        20
+        0,
+        -1.5
        ],
        "size": [
-        14,
-        14
+        8,
+        3
        ],
        "facing": "south",
        "level": "strand",
-       "model": "cullet/landmark/cone.glb",
-       "height_m": 24.0,
-       "landmark": true
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the top step",
+         "at": [
+          0,
+          1.0
+         ]
+        },
+        {
+         "name": "the second step, west",
+         "at": [
+          2.5,
+          0.2
+         ]
+        },
+        {
+         "name": "the second step, east",
+         "at": [
+          -2.5,
+          0.2
+         ]
+        },
+        {
+         "name": "Magda's place, where the catch is divided",
+         "at": [
+          0,
+          2.4
+         ]
+        }
+       ],
+       "district": "the Strand",
+       "building": false,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 1.0,
+        "repair": 0.3,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 151 m from the Cone at bearing 257; front faces 180"
+       },
+       "note": "stone steps down into the harbour; the catch is divided here each morning"
+      },
+      {
+       "id": "heron",
+       "kind": "workshop",
+       "name": "the Heron",
+       "at": [
+        -17.0,
+        -3.25
+       ],
+       "size": [
+        7.0,
+        5.0
+       ],
+       "facing": "north",
+       "level": "strand",
+       "height_m": 13.0,
+       "landmark": true,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.03,
+        "age": 1.0,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 168 m from the Cone at bearing 258; front faces 0"
+       },
+       "note": "treadwheel crane house, tarred black, on its stage over the water; the jib reaches 9 m out (fixed)",
+       "jib_m": 9.0
       },
       {
        "id": "counting_house",
        "kind": "hall",
        "name": "the Counting House",
        "at": [
-        0,
-        22
+        0.0,
+        16.3
        ],
        "size": [
         30,
@@ -572,86 +2070,304 @@
        ],
        "facing": "south",
        "level": "strand",
-       "model": "cullet/landmark/counting_house.glb",
        "height_m": 15.0,
        "landmark": true,
        "spots": [
         {
-         "name": "arch 1",
+         "name": "arcade bay 1",
          "at": [
-          -12,
-          5.0
+          -12.86,
+          6.8
          ]
         },
         {
-         "name": "arch 2",
+         "name": "arcade bay 2",
          "at": [
-          -8,
-          5.0
+          -8.57,
+          6.8
          ]
         },
         {
-         "name": "arch 3",
+         "name": "arcade bay 3",
          "at": [
-          -4,
-          5.0
+          -4.29,
+          6.8
          ]
         },
         {
-         "name": "arch 4",
+         "name": "arcade bay 4",
          "at": [
-          0,
-          5.0
+          -0.0,
+          6.8
          ]
         },
         {
-         "name": "arch 5",
+         "name": "arcade bay 5",
          "at": [
-          4,
-          5.0
+          4.28,
+          6.8
          ]
         },
         {
-         "name": "arch 6",
+         "name": "arcade bay 6",
          "at": [
-          8,
-          5.0
+          8.57,
+          6.8
          ]
         },
         {
-         "name": "arch 7",
+         "name": "arcade bay 7",
          "at": [
-          12,
-          5.0
+          12.86,
+          6.8
          ]
         }
-       ]
+       ],
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 1.0,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 148 m from the Cone at bearing 264; front faces 180"
+       },
+       "note": "the ship-day hall on an open arcade of seven arches; hipped slate roof; cupola, clock stopped at ten past four. The rules block its footprint, so the bays' spots stand at the arcade's mouth",
+       "storeys": "arcade 4.2 m, hall 3.4 m, roof and cupola to 15 m"
       },
       {
-       "id": "heron",
-       "kind": "tower",
-       "name": "the Heron",
+       "id": "net_loft_1",
+       "kind": "workshop",
+       "name": "net loft 1",
        "at": [
-        -25,
-        13
+        -55.75,
+        14.3
        ],
        "size": [
-        7,
-        5
+        3.5,
+        8
        ],
        "facing": "south",
        "level": "strand",
-       "model": "cullet/landmark/heron.glb",
-       "height_m": 13.0,
-       "landmark": true
+       "height_m": 8.5,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 0.8,
+        "repair": 0.4,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 204 m from the Cone at bearing 265; front faces 180"
+       },
+       "note": "a tall thin tarred shed, gable to the sea; one of a rank of six"
+      },
+      {
+       "id": "net_loft_2",
+       "kind": "workshop",
+       "name": "net loft 2",
+       "at": [
+        -59.25,
+        14.3
+       ],
+       "size": [
+        3.5,
+        8
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.29,
+        "age": 0.8,
+        "repair": 0.45,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 207 m from the Cone at bearing 265; front faces 180"
+       },
+       "note": "a tall thin tarred shed, gable to the sea; one of a rank of six"
+      },
+      {
+       "id": "net_loft_3",
+       "kind": "workshop",
+       "name": "net loft 3",
+       "at": [
+        -62.75,
+        14.3
+       ],
+       "size": [
+        3.5,
+        8
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.29,
+        "age": 0.8,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 211 m from the Cone at bearing 265; front faces 180"
+       },
+       "note": "a tall thin tarred shed, gable to the sea; one of a rank of six"
+      },
+      {
+       "id": "net_loft_4",
+       "kind": "workshop",
+       "name": "net loft 4",
+       "at": [
+        -66.25,
+        14.3
+       ],
+       "size": [
+        3.5,
+        8
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.29,
+        "age": 0.8,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 214 m from the Cone at bearing 265; front faces 180"
+       },
+       "note": "a tall thin tarred shed, gable to the sea; one of a rank of six"
+      },
+      {
+       "id": "net_loft_5",
+       "kind": "workshop",
+       "name": "net loft 5",
+       "at": [
+        -69.75,
+        14.3
+       ],
+       "size": [
+        3.5,
+        8
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.29,
+        "age": 0.8,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 218 m from the Cone at bearing 265; front faces 180"
+       },
+       "note": "a tall thin tarred shed, gable to the sea; one of a rank of six"
+      },
+      {
+       "id": "net_loft_6",
+       "kind": "workshop",
+       "name": "net loft 6",
+       "at": [
+        -73.25,
+        14.3
+       ],
+       "size": [
+        3.5,
+        8
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.5,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 0.8,
+        "repair": 0.65,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 221 m from the Cone at bearing 265; front faces 180"
+       },
+       "note": "a tall thin tarred shed, gable to the sea; one of a rank of six"
+      },
+      {
+       "id": "smokehouse_1",
+       "kind": "workshop",
+       "name": "smokehouse 1 (Petra Tarn's)",
+       "at": [
+        -47.0,
+        13.3
+       ],
+       "size": [
+        6.0,
+        6
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 6.4,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 0.7,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 195 m from the Cone at bearing 264; front faces 180"
+       },
+       "note": "louvred roof; smoke is an effect"
+      },
+      {
+       "id": "smokehouse_2",
+       "kind": "workshop",
+       "name": "smokehouse 2",
+       "at": [
+        -41.0,
+        13.3
+       ],
+       "size": [
+        6.0,
+        6
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 6.4,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 0.7,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 189 m from the Cone at bearing 264; front faces 180"
+       },
+       "note": "louvred roof; smoke is an effect"
       },
       {
        "id": "store",
        "kind": "barn",
        "name": "the Store",
        "at": [
-        32,
-        20
+        54.0,
+        15.3
        ],
        "size": [
         12,
@@ -659,107 +2375,2680 @@
        ],
        "facing": "south",
        "level": "strand",
-       "height_m": 8.0
+       "height_m": 11.36,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 0.9,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 95 m from the Cone at bearing 259; front faces 180"
+       },
+       "note": "the common store"
       },
       {
-       "id": "marver",
-       "kind": "inn",
-       "name": "the Marver",
+       "id": "boatshed",
+       "kind": "workshop",
+       "name": "the boatshed",
        "at": [
-        30,
-        62.75
+        -91.0,
+        18.0
        ],
        "size": [
         12,
-        9
+        12
        ],
        "facing": "south",
-       "level": "mid",
-       "height_m": 9.0,
+       "level": "strand",
+       "height_m": 10.6,
+       "district": "the Strand",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 0.8,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 238 m from the Cone at bearing 266; front faces 180"
+       },
+       "note": "open front onto the slipway lane"
+      },
+      {
+       "id": "dry_dock",
+       "kind": "workshop",
+       "name": "the dry dock",
+       "at": [
+        -114.0,
+        21.5
+       ],
+       "size": [
+        20,
+        19
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 8.0,
+       "district": "the Strand",
+       "building": false,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 1.0,
+        "repair": 0.3,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 261 m from the Cone at bearing 267; front faces 180"
+       },
+       "note": "the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings"
+      },
+      {
+       "id": "slip",
+       "kind": "lamp",
+       "name": "the slip",
+       "at": [
+        -119,
+        5
+       ],
+       "size": [
+        10,
+        10
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "district": "the Strand",
+       "building": false,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 1.0,
+        "repair": 0.4,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 267 m from the Cone at bearing 264; front faces 180"
+       },
+       "note": "a stone slip into the harbour"
+      },
+      {
+       "id": "cone",
+       "kind": "workshop",
+       "name": "the Cone",
+       "at": [
+        147.0,
+        33.0
+       ],
+       "size": [
+        14,
+        14
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 24.0,
+       "landmark": true,
        "spots": [
         {
-         "name": "seat 1",
+         "name": "the west mouth",
          "at": [
-          -4.5,
-          5.2
+          6.1,
+          7.8
          ]
         },
         {
-         "name": "seat 2",
+         "name": "the front mouth",
          "at": [
-          -2.7,
-          5.2
+          0,
+          7.8
          ]
         },
         {
-         "name": "seat 3",
+         "name": "the east mouth",
          "at": [
-          -0.8999999999999999,
-          5.2
+          -6.1,
+          7.8
          ]
         },
         {
-         "name": "seat 4",
+         "name": "Halvard's bench at the mouth",
          "at": [
-          0.9000000000000004,
-          5.2
-         ]
-        },
-        {
-         "name": "seat 5",
-         "at": [
-          2.7,
-          5.2
-         ]
-        },
-        {
-         "name": "seat 6",
-         "at": [
-          4.5,
-          5.2
+          3.0,
+          9.2
          ]
         }
-       ]
+       ],
+       "district": "Cinder Row",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 1.0,
+        "wind": 0.42,
+        "age": 0.9,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 0 m from the Cone at bearing 0; front faces 180"
+       },
+       "note": "a brick cone, 14 m across, 24 m high, three arched mouths that glow; a band of newer, redder brick where it cracked (9 to 12 m, south-west side)"
+      },
+      {
+       "id": "cone_yard",
+       "kind": "lamp",
+       "name": "the Cone yard",
+       "at": [
+        150,
+        15.5
+       ],
+       "size": [
+        36,
+        13
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the cullet heaps",
+         "at": [
+          6,
+          2
+         ]
+        },
+        {
+         "name": "the trough",
+         "at": [
+          -8,
+          2
+         ]
+        }
+       ],
+       "district": "Cinder Row",
+       "building": false,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.06,
+        "wind": 0.42,
+        "age": 0.9,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 18 m from the Cone at bearing 170; front faces 180"
+       },
+       "note": "cinder underfoot; heaps of coloured broken glass"
+      },
+      {
+       "id": "wash_house",
+       "kind": "workshop",
+       "name": "the wash-house",
+       "at": [
+        147.0,
+        43.0
+       ],
+       "size": [
+        12,
+        6
+       ],
+       "facing": "north",
+       "level": "strand",
+       "height_m": 6.4,
+       "spots": [
+        {
+         "name": "the warm wall, west",
+         "at": [
+          -4,
+          3.6
+         ]
+        },
+        {
+         "name": "the warm wall",
+         "at": [
+          0,
+          3.6
+         ]
+        },
+        {
+         "name": "the warm wall, east",
+         "at": [
+          4,
+          3.6
+         ]
+        },
+        {
+         "name": "Greta's stool",
+         "at": [
+          2,
+          4.2
+         ]
+        }
+       ],
+       "district": "Cinder Row",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.84,
+        "wind": 0.03,
+        "age": 0.6,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 10 m from the Cone at bearing 0; front faces 0"
+       },
+       "note": "built against the Cone's warm north wall; the wall is where people gossip on cold evenings",
+       "leans_on": "cone"
+      },
+      {
+       "id": "lehr_house",
+       "kind": "workshop",
+       "name": "the lehr house",
+       "at": [
+        94.0,
+        19.0
+       ],
+       "size": [
+        24,
+        14
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 14.6,
+       "district": "Cinder Row",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 1.0,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 55 m from the Cone at bearing 255; front faces 180"
+       },
+       "note": "the old bonded warehouse of the ship days; the lehr's round arches inside"
+      },
+      {
+       "id": "pot_house",
+       "kind": "workshop",
+       "name": "the pot house",
+       "at": [
+        114.0,
+        16.0
+       ],
+       "size": [
+        12,
+        8
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 7.6,
+       "district": "Cinder Row",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 0.7,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 37 m from the Cone at bearing 243; front faces 180"
+       },
+       "note": "where Otto makes the crucibles"
+      },
+      {
+       "id": "cullet_shed",
+       "kind": "barn",
+       "name": "the cullet shed",
+       "at": [
+        112,
+        33
+       ],
+       "size": [
+        6,
+        8
+       ],
+       "facing": "east",
+       "level": "strand",
+       "height_m": 5.72,
+       "district": "Cinder Row",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.03,
+        "age": 0.6,
+        "repair": 0.4,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 35 m from the Cone at bearing 270; front faces 90"
+       },
+       "note": "open-fronted; crates of sorted cullet"
+      },
+      {
+       "id": "ash_house",
+       "kind": "barn",
+       "name": "the ash house",
+       "at": [
+        89.0,
+        36.0
+       ],
+       "size": [
+        10,
+        8
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 7.4,
+       "district": "Cinder Row",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 0.7,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 58 m from the Cone at bearing 273; front faces 180"
+       },
+       "note": "kelp ash in sacks, kept dry"
+      },
+      {
+       "id": "lamp_house",
+       "kind": "house",
+       "name": "the lamp house",
+       "at": [
+        142.5,
+        -10.5
+       ],
+       "size": [
+        6,
+        6
+       ],
+       "facing": "west",
+       "level": "mole",
+       "height_m": 8.82,
+       "district": "the mole",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.42,
+        "age": 0.9,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 44 m from the Cone at bearing 186; front faces 270"
+       },
+       "household": "faro",
+       "household_name": "Faro",
+       "family": "other",
+       "people": 2,
+       "door_colour": "sea_green",
+       "keepsake": "a lamp-oil drum and a coil of wick",
+       "address": "the lamp house on the mole"
+      },
+      {
+       "id": "watchglass",
+       "kind": "tower",
+       "name": "the Watchglass",
+       "at": [
+        135.5,
+        -60.5
+       ],
+       "size": [
+        6,
+        6
+       ],
+       "facing": "north",
+       "level": "mole",
+       "height_m": 17.0,
+       "landmark": true,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          0,
+          3.6
+         ]
+        },
+        {
+         "name": "Rafe's place by the light",
+         "at": [
+          3.8,
+          2.0
+         ]
+        },
+        {
+         "name": "the tip of the mole",
+         "at": [
+          0,
+          -5.8
+         ]
+        }
+       ],
+       "district": "the mole",
+       "building": true,
+       "wear": {
+        "salt": 1.0,
+        "soot": 0.0,
+        "wind": 0.03,
+        "age": 1.0,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+2 m above the sea; 94 m from the Cone at bearing 187; front faces 0"
+       },
+       "note": "squat eight-sided tower with a lantern room too big for it; one band of cobalt; lit every night"
+      },
+      {
+       "id": "low_1",
+       "kind": "house",
+       "name": "Low Row 1",
+       "at": [
+        61.55,
+        47.55
+       ],
+       "size": [
+        4.9,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.62,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.39,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 87 m from the Cone at bearing 280; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 1",
+       "terrace": "Low Row east",
+       "front_cause": "2 people",
+       "household": "dunlin",
+       "household_name": "Dunlin",
+       "family": "strand",
+       "people": 2,
+       "door_colour": "chalk_blue",
+       "keepsake": "a lamp hook and a creel"
+      },
+      {
+       "id": "low_2",
+       "kind": "house",
+       "name": "Low Row 2",
+       "at": [
+        56.25,
+        47.55
+       ],
+       "size": [
+        5.7,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.62,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.28,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 92 m from the Cone at bearing 279; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 2",
+       "terrace": "Low Row east",
+       "front_cause": "4 people",
+       "household": "calloway",
+       "household_name": "Calloway",
+       "family": "strand",
+       "people": 4,
+       "door_colour": "sea_green",
+       "keepsake": "a ship's knee of timber propped by the door"
+      },
+      {
+       "id": "low_3",
+       "kind": "house",
+       "name": "Low Row 3",
+       "at": [
+        50.9,
+        47.55
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.92,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.28,
+        "age": 0.7,
+        "repair": 0.4,
+        "empty": 1.0,
+        "cause": "+5.5 m above the sea; 97 m from the Cone at bearing 279; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 3",
+       "terrace": "Low Row east",
+       "front_cause": "an original 5 m plot, empty",
+       "state": "empty, sound",
+       "door_colour": "faded"
+      },
+      {
+       "id": "low_4",
+       "kind": "house",
+       "name": "Low Row 4",
+       "at": [
+        45.15,
+        47.55
+       ],
+       "size": [
+        6.5,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.62,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.28,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 103 m from the Cone at bearing 278; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 4",
+       "terrace": "Low Row east",
+       "front_cause": "7 people",
+       "household": "tarn",
+       "household_name": "Tarn",
+       "family": "strand",
+       "people": 7,
+       "door_colour": "oxblood",
+       "keepsake": "a row of glass floats; the Tarns have always painted their door so"
+      },
+      {
+       "id": "low_5",
+       "kind": "house",
+       "name": "Low Row 5",
+       "at": [
+        39.05,
+        47.55
+       ],
+       "size": [
+        5.7,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.62,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.39,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 109 m from the Cone at bearing 278; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 5",
+       "terrace": "Low Row east",
+       "front_cause": "4 people",
+       "household": "okoro",
+       "household_name": "Okoro",
+       "family": "strand",
+       "people": 4,
+       "door_colour": "mustard",
+       "keepsake": "a string of sea-glass, each colour from a known wreck"
       },
       {
        "id": "batch",
        "kind": "workshop",
        "name": "the Batch",
        "at": [
-        -15,
-        44.25
+        18.0,
+        47.55
        ],
        "size": [
-        9,
-        8
+        8.0,
+        7.5
        ],
        "facing": "south",
        "level": "low",
-       "height_m": 6.0
+       "height_m": 7.62,
+       "spots": [
+        {
+         "name": "the oven mouth",
+         "at": [
+          0,
+          4.4
+         ]
+        },
+        {
+         "name": "the bench by the oven",
+         "at": [
+          2.6,
+          4.6
+         ]
+        },
+        {
+         "name": "the step",
+         "at": [
+          -2.6,
+          4.4
+         ]
+        }
+       ],
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.32,
+        "age": 0.8,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 130 m from the Cone at bearing 276; front faces 180"
+       },
+       "note": "the common oven; its mouth to the street, glowing from 03:00",
+       "terrace": "Low Row west"
       },
       {
-       "id": "readers_house",
-       "kind": "hall",
-       "name": "the Readers' House",
+       "id": "low_6",
+       "kind": "house",
+       "name": "Low Row 6",
        "at": [
-        -20,
-        118
+        11.55,
+        47.55
+       ],
+       "size": [
+        4.9,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.62,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.28,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 136 m from the Cone at bearing 276; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 6",
+       "terrace": "Low Row west",
+       "front_cause": "2 people",
+       "household": "vane",
+       "household_name": "Vane",
+       "family": "strand",
+       "people": 2,
+       "door_colour": "chalk_blue",
+       "keepsake": "a counters board chalked on the step"
+      },
+      {
+       "id": "low_7",
+       "kind": "house",
+       "name": "Low Row 7",
+       "at": [
+        6.65,
+        47.55
+       ],
+       "size": [
+        4.9,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.62,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.28,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 141 m from the Cone at bearing 276; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 7",
+       "terrace": "Low Row west",
+       "front_cause": "2 people",
+       "household": "morrow",
+       "household_name": "Morrow",
+       "family": "strand",
+       "people": 2,
+       "door_colour": "oxblood",
+       "keepsake": "a caged gull"
+      },
+      {
+       "id": "low_8",
+       "kind": "house",
+       "name": "Low Row 8",
+       "at": [
+        1.55,
+        47.55
+       ],
+       "size": [
+        5.3,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 9.62,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.28,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 146 m from the Cone at bearing 276; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 8",
+       "terrace": "Low Row west",
+       "front_cause": "3 people",
+       "household": "sato",
+       "household_name": "Sato",
+       "family": "strand",
+       "people": 3,
+       "door_colour": "sea_green",
+       "keepsake": "a sack of kelp ash and a smoke-grey line of washing"
+      },
+      {
+       "id": "low_9",
+       "kind": "house",
+       "name": "Low Row 9",
+       "at": [
+        -3.5,
+        47.55
+       ],
+       "size": [
+        4.8,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 5.9,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.28,
+        "age": 0.9,
+        "repair": 0.0,
+        "empty": 1.0,
+        "cause": "+5.5 m above the sea; 151 m from the Cone at bearing 276; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 9",
+       "terrace": "Low Row west",
+       "front_cause": "an original plot, its roof stripped for fuel in the lean years",
+       "state": "roofless shell",
+       "door_colour": "none",
+       "note": "a tree grows inside the walls"
+      },
+      {
+       "id": "low_10",
+       "kind": "house",
+       "name": "Low Row 10",
+       "at": [
+        -8.6,
+        47.55
+       ],
+       "size": [
+        5.4,
+        7.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 10.22,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.39,
+        "age": 0.8,
+        "repair": 0.75,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 156 m from the Cone at bearing 275; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Low Row 10",
+       "terrace": "Low Row west",
+       "front_cause": "2 people, a Kiln house",
+       "household": "marl",
+       "household_name": "Marl",
+       "family": "kiln",
+       "people": 2,
+       "door_colour": "mustard",
+       "keepsake": "wind chimes of cullet"
+      },
+      {
+       "id": "marver",
+       "kind": "inn",
+       "name": "the Marver",
+       "at": [
+        58.0,
+        76.05
+       ],
+       "size": [
+        12.0,
+        8.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 10.56,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          0,
+          4.7
+         ]
+        },
+        {
+         "name": "the hearth bench",
+         "at": [
+          3.5,
+          4.9
+         ]
+        }
+       ],
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.41,
+        "age": 0.7,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+9.5 m above the sea; 99 m from the Cone at bearing 296; front faces 180"
+       },
+       "household": "achterberg",
+       "household_name": "Achterberg",
+       "family": "other",
+       "people": 3,
+       "door_colour": "mustard",
+       "keepsake": "a ship's figurehead over the door",
+       "address": "over the Marver, Mid Row",
+       "note": "the cookshop: open front, figurehead over the door; the Achterbergs live over it",
+       "terrace": "Mid Row east"
+      },
+      {
+       "id": "marver_terrace",
+       "kind": "lamp",
+       "name": "the Marver's terrace",
+       "at": [
+        58.0,
+        63.25
        ],
        "size": [
         12,
-        9
+        6.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "terrace seat 1",
+         "at": [
+          -4.5,
+          1.5
+         ]
+        },
+        {
+         "name": "terrace seat 2",
+         "at": [
+          -1.5,
+          1.5
+         ]
+        },
+        {
+         "name": "terrace seat 3",
+         "at": [
+          1.5,
+          1.5
+         ]
+        },
+        {
+         "name": "terrace seat 4",
+         "at": [
+          4.5,
+          1.5
+         ]
+        },
+        {
+         "name": "terrace seat 5",
+         "at": [
+          -4.5,
+          -1.0
+         ]
+        },
+        {
+         "name": "terrace seat 6",
+         "at": [
+          -1.5,
+          -1.0
+         ]
+        }
+       ],
+       "district": "the Rows",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.51,
+        "age": 0.5,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+9.5 m above the sea; 94 m from the Cone at bearing 289; front faces 180"
+       },
+       "note": "tables over the harbour"
+      },
+      {
+       "id": "mid_1",
+       "kind": "house",
+       "name": "Mid Row 1",
+       "at": [
+        49.15,
+        75.55
+       ],
+       "size": [
+        5.7,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.82,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.31,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+9.5 m above the sea; 107 m from the Cone at bearing 294; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Mid Row 1",
+       "terrace": "Mid Row east",
+       "front_cause": "4 people",
+       "household": "greave",
+       "household_name": "Greave",
+       "family": "ladder",
+       "people": 4,
+       "door_colour": "sea_green",
+       "keepsake": "seedling trays on the sill"
+      },
+      {
+       "id": "mid_2",
+       "kind": "house",
+       "name": "Mid Row 2",
+       "at": [
+        43.45,
+        75.55
+       ],
+       "size": [
+        5.7,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.82,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.31,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+9.5 m above the sea; 112 m from the Cone at bearing 292; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Mid Row 2",
+       "terrace": "Mid Row east",
+       "front_cause": "4 people",
+       "household": "fenwick",
+       "household_name": "Fenwick",
+       "family": "ladder",
+       "people": 4,
+       "door_colour": "mustard",
+       "keepsake": "a rain gauge on a post"
+      },
+      {
+       "id": "mid_3",
+       "kind": "house",
+       "name": "Mid Row 3",
+       "at": [
+        38.2,
+        75.55
+       ],
+       "size": [
+        4.8,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 5.9,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.31,
+        "age": 0.9,
+        "repair": 0.0,
+        "empty": 1.0,
+        "cause": "+9.5 m above the sea; 117 m from the Cone at bearing 291; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Mid Row 3",
+       "terrace": "Mid Row east",
+       "front_cause": "an original plot, its roof stripped for fuel in the lean years",
+       "state": "roofless shell",
+       "door_colour": "none"
+      },
+      {
+       "id": "mid_4",
+       "kind": "house",
+       "name": "Mid Row 4",
+       "at": [
+        33.35,
+        75.55
+       ],
+       "size": [
+        4.9,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.82,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.44,
+        "age": 0.65,
+        "repair": 0.55,
+        "empty": 0.0,
+        "cause": "+9.5 m above the sea; 121 m from the Cone at bearing 291; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Mid Row 4",
+       "terrace": "Mid Row east",
+       "front_cause": "2 people",
+       "household": "stannard",
+       "household_name": "Stannard",
+       "family": "ladder",
+       "people": 2,
+       "door_colour": "oxblood",
+       "keepsake": "a stack of odd slates"
+      },
+      {
+       "id": "mid_5",
+       "kind": "house",
+       "name": "Mid Row 5",
+       "at": [
+        19.3,
+        75.55
+       ],
+       "size": [
+        5.4,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 10.22,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.44,
+        "age": 0.8,
+        "repair": 0.75,
+        "empty": 0.0,
+        "cause": "+9.5 m above the sea; 135 m from the Cone at bearing 288; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Mid Row 5",
+       "terrace": "Mid Row west",
+       "front_cause": "2 people, a Kiln house",
+       "household": "sarro",
+       "household_name": "Sarro",
+       "family": "kiln",
+       "people": 2,
+       "door_colour": "chalk_blue",
+       "keepsake": "a pontil rod hung over the door"
+      },
+      {
+       "id": "mid_6",
+       "kind": "house",
+       "name": "Mid Row 6",
+       "at": [
+        14.1,
+        75.55
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 9.92,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.31,
+        "age": 0.7,
+        "repair": 0.4,
+        "empty": 1.0,
+        "cause": "+9.5 m above the sea; 140 m from the Cone at bearing 288; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Mid Row 6",
+       "terrace": "Mid Row west",
+       "front_cause": "an original 5 m plot, empty",
+       "state": "empty, sound",
+       "door_colour": "faded"
+      },
+      {
+       "id": "mid_7",
+       "kind": "house",
+       "name": "Mid Row 7",
+       "at": [
+        8.7,
+        75.55
+       ],
+       "size": [
+        5.8,
+        7.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 10.22,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.44,
+        "age": 0.8,
+        "repair": 0.75,
+        "empty": 0.0,
+        "cause": "+9.5 m above the sea; 145 m from the Cone at bearing 287; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "Mid Row 7",
+       "terrace": "Mid Row west",
+       "front_cause": "3 people, a Kiln house",
+       "household": "brandt",
+       "household_name": "Brandt",
+       "family": "kiln",
+       "people": 3,
+       "door_colour": "sea_green",
+       "keepsake": "a hen coop against the front"
+      },
+      {
+       "id": "high_1",
+       "kind": "house",
+       "name": "High Row 1",
+       "at": [
+        61.1,
+        105.55
+       ],
+       "size": [
+        5.8,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 10.22,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.48,
+        "age": 0.8,
+        "repair": 0.75,
+        "empty": 0.0,
+        "cause": "+13.5 m above the sea; 112 m from the Cone at bearing 310; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "High Row 1",
+       "terrace": "High Row east",
+       "front_cause": "3 people, a Kiln house",
+       "household": "pontil",
+       "household_name": "Pontil",
+       "family": "kiln",
+       "people": 3,
+       "door_colour": "chalk_blue",
+       "keepsake": "a sill of cullet, one piece of every colour Ode has kept"
+      },
+      {
+       "id": "high_2",
+       "kind": "house",
+       "name": "High Row 2",
+       "at": [
+        55.1,
+        105.55
+       ],
+       "size": [
+        6.2,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 10.22,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.34,
+        "age": 0.8,
+        "repair": 0.75,
+        "empty": 0.0,
+        "cause": "+13.5 m above the sea; 117 m from the Cone at bearing 308; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "High Row 2",
+       "terrace": "High Row east",
+       "front_cause": "4 people, a Kiln house",
+       "household": "hollin",
+       "household_name": "Hollin",
+       "family": "kiln",
+       "people": 4,
+       "door_colour": "sea_green",
+       "keepsake": "a bucket of off-cuts the children play with by the step"
+      },
+      {
+       "id": "high_3",
+       "kind": "house",
+       "name": "High Row 3",
+       "at": [
+        49.1,
+        105.55
+       ],
+       "size": [
+        5.8,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 10.22,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.34,
+        "age": 0.8,
+        "repair": 0.75,
+        "empty": 0.0,
+        "cause": "+13.5 m above the sea; 122 m from the Cone at bearing 307; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "High Row 3",
+       "terrace": "High Row east",
+       "front_cause": "3 people, a Kiln house",
+       "household": "quill",
+       "household_name": "Quill",
+       "family": "kiln",
+       "people": 3,
+       "door_colour": "mustard",
+       "keepsake": "a slate tally board by the door"
+      },
+      {
+       "id": "high_4",
+       "kind": "house",
+       "name": "High Row 4",
+       "at": [
+        43.7,
+        105.55
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.92,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.48,
+        "age": 0.7,
+        "repair": 0.4,
+        "empty": 1.0,
+        "cause": "+13.5 m above the sea; 126 m from the Cone at bearing 305; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "High Row 4",
+       "terrace": "High Row east",
+       "front_cause": "an original 5 m plot, empty",
+       "state": "empty, sound",
+       "door_colour": "faded"
+      },
+      {
+       "id": "high_5",
+       "kind": "house",
+       "name": "High Row 5",
+       "at": [
+        19.1,
+        105.55
+       ],
+       "size": [
+        5.8,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 10.22,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.48,
+        "age": 0.8,
+        "repair": 0.75,
+        "empty": 0.0,
+        "cause": "+13.5 m above the sea; 147 m from the Cone at bearing 300; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "High Row 5",
+       "terrace": "High Row west",
+       "front_cause": "3 people, a Kiln house",
+       "household": "dunmore",
+       "household_name": "Dunmore",
+       "family": "kiln",
+       "people": 3,
+       "door_colour": "chalk_blue",
+       "keepsake": "a bench made from a boat's thwart"
+      },
+      {
+       "id": "high_6",
+       "kind": "house",
+       "name": "High Row 6",
+       "at": [
+        13.7,
+        105.55
+       ],
+       "size": [
+        5.0,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 9.92,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.34,
+        "age": 0.7,
+        "repair": 0.4,
+        "empty": 1.0,
+        "cause": "+13.5 m above the sea; 152 m from the Cone at bearing 299; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "High Row 6",
+       "terrace": "High Row west",
+       "front_cause": "an original 5 m plot, empty",
+       "state": "empty, sound",
+       "door_colour": "faded"
+      },
+      {
+       "id": "high_7",
+       "kind": "house",
+       "name": "High Row 7",
+       "at": [
+        8.8,
+        105.55
+       ],
+       "size": [
+        4.8,
+        7.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 5.9,
+       "district": "the Rows",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.48,
+        "age": 0.9,
+        "repair": 0.0,
+        "empty": 1.0,
+        "cause": "+13.5 m above the sea; 156 m from the Cone at bearing 298; front faces 180"
+       },
+       "storeys": 2,
+       "pitch_deg": 47.0,
+       "address": "High Row 7",
+       "terrace": "High Row west",
+       "front_cause": "an original plot, its roof stripped for fuel in the lean years",
+       "state": "roofless shell",
+       "door_colour": "none"
+      },
+      {
+       "id": "glasshouse_1",
+       "kind": "workshop",
+       "name": "glasshouse 1",
+       "at": [
+        -39.0,
+        57.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.46,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 188 m from the Cone at bearing 277; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
+       "leans_on": "the low terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_2",
+       "kind": "workshop",
+       "name": "glasshouse 2",
+       "at": [
+        -53.0,
+        57.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.46,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 201 m from the Cone at bearing 277; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
+       "leans_on": "the low terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_3",
+       "kind": "workshop",
+       "name": "glasshouse 3",
+       "at": [
+        -109.0,
+        57.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.12,
+        "soot": 0.0,
+        "wind": 0.46,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+5.5 m above the sea; 257 m from the Cone at bearing 275; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
+       "leans_on": "the low terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_4",
+       "kind": "workshop",
+       "name": "glasshouse 4",
+       "at": [
+        -39.0,
+        87.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.51,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+9.5 m above the sea; 194 m from the Cone at bearing 286; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; Cora Stannard's flowers in a corner",
+       "leans_on": "the mid terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_5",
+       "kind": "workshop",
+       "name": "glasshouse 5",
+       "at": [
+        -53.0,
+        87.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.51,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+9.5 m above the sea; 207 m from the Cone at bearing 285; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
+       "leans_on": "the mid terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_6",
+       "kind": "workshop",
+       "name": "glasshouse 6",
+       "at": [
+        -109.0,
+        87.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.51,
+        "age": 0.3,
+        "repair": 0.15,
+        "empty": 0.6,
+        "cause": "+9.5 m above the sea; 262 m from the Cone at bearing 282; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; broken in last autumn's storm, not mended",
+       "leans_on": "the mid terrace wall",
+       "state": "broken"
+      },
+      {
+       "id": "glasshouse_7",
+       "kind": "workshop",
+       "name": "glasshouse 7",
+       "at": [
+        -39.0,
+        117.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.57,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+13.5 m above the sea; 204 m from the Cone at bearing 294; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
+       "leans_on": "the high terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_8",
+       "kind": "workshop",
+       "name": "glasshouse 8",
+       "at": [
+        -67.0,
+        117.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.57,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+13.5 m above the sea; 230 m from the Cone at bearing 291; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
+       "leans_on": "the high terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_9",
+       "kind": "workshop",
+       "name": "glasshouse 9",
+       "at": [
+        -109.0,
+        117.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.57,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+13.5 m above the sea; 269 m from the Cone at bearing 288; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; Jory Greave's fruit tree in one bay",
+       "leans_on": "the high terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_10",
+       "kind": "workshop",
+       "name": "glasshouse 10",
+       "at": [
+        -39.0,
+        131.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "upper",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.61,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+17 m above the sea; 210 m from the Cone at bearing 298; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
+       "leans_on": "the upper terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_11",
+       "kind": "workshop",
+       "name": "glasshouse 11",
+       "at": [
+        -53.0,
+        131.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "upper",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.61,
+        "age": 0.3,
+        "repair": 0.15,
+        "empty": 0.6,
+        "cause": "+17 m above the sea; 223 m from the Cone at bearing 296; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; broken in last autumn's storm, not mended",
+       "leans_on": "the upper terrace wall",
+       "state": "broken"
+      },
+      {
+       "id": "glasshouse_12",
+       "kind": "workshop",
+       "name": "glasshouse 12",
+       "at": [
+        -109.0,
+        131.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "upper",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.61,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+17 m above the sea; 274 m from the Cone at bearing 291; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
+       "leans_on": "the upper terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "glasshouse_13",
+       "kind": "workshop",
+       "name": "glasshouse 13",
+       "at": [
+        -131.0,
+        193.05
+       ],
+       "size": [
+        12.0,
+        4.5
        ],
        "facing": "south",
        "level": "crown",
-       "height_m": 8.0
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.3,
+        "repair": 0.15,
+        "empty": 0.6,
+        "cause": "+20 m above the sea; 321 m from the Cone at bearing 300; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m; broken in last autumn's storm, not mended",
+       "leans_on": "the crown terrace wall",
+       "state": "broken"
+      },
+      {
+       "id": "glasshouse_14",
+       "kind": "workshop",
+       "name": "glasshouse 14",
+       "at": [
+        -145.0,
+        193.05
+       ],
+       "size": [
+        12.0,
+        4.5
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 3.2,
+       "spots": [
+        {
+         "name": "the door",
+         "at": [
+          4.5,
+          2.8
+         ]
+        },
+        {
+         "name": "the rain butt",
+         "at": [
+          -6.6,
+          0.0
+         ]
+        }
+       ],
+       "district": "the Ladder",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.3,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 333 m from the Cone at bearing 299; front faces 180"
+       },
+       "note": "a lean-to against the terrace wall; bays 1 m, panes at most 0.45 m",
+       "leans_on": "the crown terrace wall",
+       "state": "working"
+      },
+      {
+       "id": "root_plot_1",
+       "kind": "garden",
+       "name": "root plot 1",
+       "at": [
+        -236.0,
+        147.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 400 m from the Cone at bearing 287; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_2",
+       "kind": "garden",
+       "name": "root plot 2",
+       "at": [
+        -226.0,
+        147.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 390 m from the Cone at bearing 287; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_3",
+       "kind": "garden",
+       "name": "root plot 3",
+       "at": [
+        -216.0,
+        147.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 380 m from the Cone at bearing 287; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_4",
+       "kind": "garden",
+       "name": "root plot 4",
+       "at": [
+        -206.0,
+        147.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 371 m from the Cone at bearing 288; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_5",
+       "kind": "garden",
+       "name": "root plot 5",
+       "at": [
+        -196.0,
+        147.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 361 m from the Cone at bearing 288; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_6",
+       "kind": "garden",
+       "name": "root plot 6",
+       "at": [
+        -186.0,
+        147.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 352 m from the Cone at bearing 289; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_7",
+       "kind": "garden",
+       "name": "root plot 7",
+       "at": [
+        -236.0,
+        155.5
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 402 m from the Cone at bearing 288; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_8",
+       "kind": "garden",
+       "name": "root plot 8",
+       "at": [
+        -226.0,
+        155.5
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 393 m from the Cone at bearing 288; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_9",
+       "kind": "garden",
+       "name": "root plot 9",
+       "at": [
+        -216.0,
+        155.5
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 383 m from the Cone at bearing 289; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_10",
+       "kind": "garden",
+       "name": "root plot 10",
+       "at": [
+        -206.0,
+        155.5
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 374 m from the Cone at bearing 289; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_11",
+       "kind": "garden",
+       "name": "root plot 11",
+       "at": [
+        -196.0,
+        155.5
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 364 m from the Cone at bearing 290; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_12",
+       "kind": "garden",
+       "name": "root plot 12",
+       "at": [
+        -186.0,
+        155.5
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 355 m from the Cone at bearing 290; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_13",
+       "kind": "garden",
+       "name": "root plot 13",
+       "at": [
+        -236.0,
+        164.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 405 m from the Cone at bearing 289; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_14",
+       "kind": "garden",
+       "name": "root plot 14",
+       "at": [
+        -226.0,
+        164.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 395 m from the Cone at bearing 289; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_15",
+       "kind": "garden",
+       "name": "root plot 15",
+       "at": [
+        -216.0,
+        164.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 386 m from the Cone at bearing 290; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_16",
+       "kind": "garden",
+       "name": "root plot 16",
+       "at": [
+        -206.0,
+        164.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 377 m from the Cone at bearing 290; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_17",
+       "kind": "garden",
+       "name": "root plot 17",
+       "at": [
+        -196.0,
+        164.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 367 m from the Cone at bearing 291; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
+      },
+      {
+       "id": "root_plot_18",
+       "kind": "garden",
+       "name": "root plot 18",
+       "at": [
+        -186.0,
+        164.0
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Ladder",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.7,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 358 m from the Cone at bearing 291; front faces 180"
+       },
+       "note": "walled with dry stone; fed with kelp"
       },
       {
        "id": "cistern",
        "kind": "well",
        "name": "the cistern",
        "at": [
-        15,
-        118
+        -4.5,
+        160.5
        ],
        "size": [
         9,
@@ -767,881 +5056,1656 @@
        ],
        "facing": "south",
        "level": "crown",
-       "height_m": 4.0
+       "height_m": 2.6,
+       "spots": [
+        {
+         "name": "the cistern's rim",
+         "at": [
+          0,
+          5.0
+         ]
+        }
+       ],
+       "district": "the Crown",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 1.0,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 198 m from the Cone at bearing 310; front faces 180"
+       },
+       "note": "round, 9 m across; rain-fed; Hobb measures it every dusk"
       },
       {
-       "id": "loft_1",
+       "id": "cistern_house",
        "kind": "barn",
-       "name": "net loft 1",
+       "name": "the cistern house",
        "at": [
-        -75.0,
-        18
+        8.5,
+        159.0
        ],
        "size": [
-        3.5,
-        9
+        5,
+        4
        ],
        "facing": "south",
-       "level": "strand",
-       "height_m": 8.5
+       "level": "crown",
+       "height_m": 5.0,
+       "district": "the Crown",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.9,
+        "repair": 0.6,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 187 m from the Cone at bearing 312; front faces 180"
+       },
+       "note": "the pump and the tablets of the cistern's level"
       },
       {
-       "id": "loft_2",
-       "kind": "barn",
-       "name": "net loft 2",
+       "id": "readers_house",
+       "kind": "hall",
+       "name": "the Readers' House",
        "at": [
-        -71.0,
-        18
+        24.0,
+        167.0
        ],
        "size": [
-        3.5,
-        9
+        12,
+        10
        ],
        "facing": "south",
-       "level": "strand",
-       "height_m": 8.5
+       "level": "crown",
+       "height_m": 11.36,
+       "spots": [
+        {
+         "name": "the step",
+         "at": [
+          0,
+          5.6
+         ]
+        },
+        {
+         "name": "the bench by the door",
+         "at": [
+          3.0,
+          5.8
+         ]
+        }
+       ],
+       "district": "the Crown",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.9,
+        "repair": 0.65,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 182 m from the Cone at bearing 317; front faces 180"
+       },
+       "household": "orme",
+       "household_name": "Orme",
+       "family": "other",
+       "people": 1,
+       "door_colour": "chalk_blue",
+       "keepsake": "a shelf of ship-day tablets in the window",
+       "address": "the Readers' House",
+       "note": "the school and the ship-day tablets; Benedikt Orme lives here"
       },
       {
-       "id": "loft_3",
-       "kind": "barn",
-       "name": "net loft 3",
+       "id": "graveyard",
+       "kind": "lamp",
+       "name": "the graveyard",
        "at": [
-        -67.0,
-        18
+        -35.0,
+        176.0
        ],
        "size": [
-        3.5,
-        9
+        26,
+        18
        ],
        "facing": "south",
-       "level": "strand",
-       "height_m": 8.5
+       "level": "crown",
+       "height_m": 0,
+       "district": "the Crown",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 1.0,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 231 m from the Cone at bearing 308; front faces 180"
+       },
+       "note": "glass markers"
       },
       {
-       "id": "loft_4",
-       "kind": "barn",
-       "name": "net loft 4",
+       "id": "thorn",
+       "kind": "lamp",
+       "name": "the thorn",
        "at": [
-        -63.0,
-        18
+        -22.0,
+        138.6
        ],
        "size": [
-        3.5,
-        9
+        2,
+        2
        ],
        "facing": "south",
-       "level": "strand",
-       "height_m": 8.5
+       "level": "crown",
+       "height_m": 4.5,
+       "district": "the Crown",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 1.0,
+        "repair": 0.0,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 199 m from the Cone at bearing 302; front faces 180"
+       },
+       "note": "one wind-bent thorn, leaning north-east"
       },
       {
-       "id": "loft_5",
-       "kind": "barn",
-       "name": "net loft 5",
+       "id": "crown_bench",
+       "kind": "lamp",
+       "name": "the Crown bench",
        "at": [
-        -59.0,
-        18
+        -17.5,
+        137.0
        ],
        "size": [
-        3.5,
-        9
+        2.2,
+        0.7
        ],
        "facing": "south",
-       "level": "strand",
-       "height_m": 8.5
+       "level": "crown",
+       "height_m": 0.5,
+       "spots": [
+        {
+         "name": "the bench, west seat",
+         "at": [
+          0.55,
+          0.8
+         ]
+        },
+        {
+         "name": "the bench, east seat",
+         "at": [
+          -0.55,
+          0.8
+         ]
+        }
+       ],
+       "district": "the Crown",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.6,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 195 m from the Cone at bearing 302; front faces 180"
+       },
+       "note": "the whole town below"
       },
       {
-       "id": "loft_6",
+       "id": "peat_barn",
        "kind": "barn",
-       "name": "net loft 6",
+       "name": "the peat barn",
        "at": [
-        -55.0,
-        18
+        44.0,
+        184.0
        ],
        "size": [
-        3.5,
-        9
+        12,
+        8
        ],
-       "facing": "south",
-       "level": "strand",
-       "height_m": 8.5
+       "facing": "west",
+       "level": "crown",
+       "height_m": 7.6,
+       "district": "the Crown",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.65,
+        "age": 0.6,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+20 m above the sea; 183 m from the Cone at bearing 326; front faces 270"
+       },
+       "note": "at the top of the Moss road; peat comes down here"
       },
       {
-       "id": "smokehouse_1",
-       "kind": "workshop",
-       "name": "smokehouse 1",
+       "id": "turf_house",
+       "kind": "house",
+       "name": "the turf house",
        "at": [
-        -109.0,
-        18
+        -62.0,
+        328.5
+       ],
+       "size": [
+        8,
+        6
+       ],
+       "facing": "south",
+       "level": "moss",
+       "height_m": 6.0,
+       "district": "the Moss",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.81,
+        "age": 0.8,
+        "repair": 0.5,
+        "empty": 0.0,
+        "cause": "+32 m above the sea; 362 m from the Cone at bearing 325; front faces 180"
+       },
+       "household": "roon",
+       "household_name": "Roon",
+       "family": "other",
+       "people": 3,
+       "door_colour": "oxblood",
+       "keepsake": "a stack of drying peat by the door",
+       "address": "the turf house on the Moss"
+      },
+      {
+       "id": "hanger_cottage",
+       "kind": "house",
+       "name": "the Hanger cottage",
+       "at": [
+        207.0,
+        207.5
        ],
        "size": [
         7,
-        8
+        6
        ],
        "facing": "south",
-       "level": "strand",
-       "height_m": 6.5
+       "level": "hanger",
+       "height_m": 6.32,
+       "district": "the Hanger",
+       "building": true,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.57,
+        "age": 0.7,
+        "repair": 0.7,
+        "empty": 0.0,
+        "cause": "+14 m above the sea; 185 m from the Cone at bearing 19; front faces 180"
+       },
+       "household": "sedge",
+       "household_name": "Sedge",
+       "family": "other",
+       "people": 1,
+       "door_colour": "sea_green",
+       "keepsake": "a seedling bed of thorn and rowan",
+       "address": "the Hanger cottage"
       },
       {
-       "id": "smokehouse_2",
-       "kind": "workshop",
-       "name": "smokehouse 2",
+       "id": "lintel",
+       "kind": "tower",
+       "name": "the Lintel",
        "at": [
-        -94.0,
-        18
-       ],
-       "size": [
-        7,
-        8
-       ],
-       "facing": "south",
-       "level": "strand",
-       "height_m": 6.5
-      },
-      {
-       "id": "low_1",
-       "kind": "house",
-       "at": [
-        -82.5,
-        43.75
-       ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 9.0
-      },
-      {
-       "id": "low_2",
-       "kind": "house",
-       "at": [
-        -77.0,
-        43.75
+        -25.0,
+        528.0
        ],
        "size": [
         6.0,
-        7.5
+        2.0
        ],
        "facing": "south",
-       "level": "low",
-       "height_m": 8.0
-      },
+       "level": "headland",
+       "height_m": 9.0,
+       "landmark": true,
+       "district": "the north headland",
+       "building": false,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.84,
+        "age": 1.0,
+        "repair": 0.0,
+        "empty": 0.0,
+        "cause": "+46 m above the sea; 524 m from the Cone at bearing 341; front faces 180"
+       },
+       "note": "two standing stones and a capstone; a slab of dark glass fills the opening. It is shut. A fact with no purpose"
+      }
+     ],
+     "resources": [
       {
-       "id": "low_3",
-       "kind": "house",
-       "at": [
-        -71.75,
-        43.75
-       ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.5
-      },
-      {
-       "id": "low_4",
-       "kind": "house",
-       "at": [
-        -66.25,
-        43.75
-       ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 9.0
-      },
-      {
-       "id": "low_6",
-       "kind": "house",
-       "at": [
-        -54.5,
-        43.75
-       ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.5
-      },
-      {
-       "id": "low_7",
-       "kind": "house",
-       "at": [
-        -49.0,
-        43.75
-       ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 9.0
-      },
-      {
-       "id": "low_8",
-       "kind": "house",
-       "at": [
-        -35.75,
-        43.75
-       ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.0
-      },
-      {
-       "id": "low_9",
-       "kind": "house",
-       "at": [
-        -30.25,
-        43.75
-       ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.5
-      },
-      {
-       "id": "low_11",
-       "kind": "house",
-       "at": [
-        -7.5,
-        43.75
-       ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.0
-      },
-      {
-       "id": "low_12",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
         -2.0,
-        43.75
+        -2.0
        ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.5
+       "where": "the Fish Steps"
       },
       {
-       "id": "low_13",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        3.25,
-        43.75
+        2.0,
+        -2.0
        ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 9.0
+       "where": "the Fish Steps"
       },
       {
-       "id": "low_14",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        15.75,
-        43.75
+        -62.0,
+        0.6
        ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.0
+       "where": "the quay edge"
       },
       {
-       "id": "low_16",
-       "kind": "house",
-       "at": [
-        27.5,
-        43.75
-       ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 9.0
-      },
-      {
-       "id": "low_17",
-       "kind": "house",
-       "at": [
-        33.0,
-        43.75
-       ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.0
-      },
-      {
-       "id": "low_18",
-       "kind": "house",
-       "at": [
-        38.25,
-        43.75
-       ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.5
-      },
-      {
-       "id": "low_19",
-       "kind": "house",
-       "at": [
-        43.75,
-        43.75
-       ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 9.0
-      },
-      {
-       "id": "low_21",
-       "kind": "house",
-       "at": [
-        55.5,
-        43.75
-       ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "low",
-       "height_m": 8.5
-      },
-      {
-       "id": "mid_1",
-       "kind": "house",
-       "at": [
-        -77.5,
-        62.75
-       ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.5
-      },
-      {
-       "id": "mid_2",
-       "kind": "house",
-       "at": [
-        -72.0,
-        62.75
-       ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 8.5
-      },
-      {
-       "id": "mid_3",
-       "kind": "house",
-       "at": [
-        -66.75,
-        62.75
-       ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.0
-      },
-      {
-       "id": "mid_4",
-       "kind": "house",
-       "at": [
-        -61.25,
-        62.75
-       ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.5
-      },
-      {
-       "id": "mid_6",
-       "kind": "house",
-       "at": [
-        -49.5,
-        62.75
-       ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.0
-      },
-      {
-       "id": "mid_7",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
         -35.0,
-        62.75
+        0.6
        ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.5
+       "where": "the quay edge"
       },
       {
-       "id": "mid_8",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        -29.75,
-        62.75
+        40.0,
+        0.6
        ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 8.5
+       "where": "the quay edge"
       },
       {
-       "id": "mid_9",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        -24.25,
-        62.75
+        68.0,
+        0.6
        ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.0
+       "where": "the quay edge"
       },
       {
-       "id": "mid_11",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        -12.5,
-        62.75
+        132.6,
+        -22.0
        ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 8.5
+       "where": "the mole"
       },
       {
-       "id": "mid_12",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        -7.0,
-        62.75
+        138.4,
+        -30.0
        ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.0
+       "where": "the mole"
       },
       {
-       "id": "mid_13",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        -1.75,
-        62.75
+        132.6,
+        -40.0
        ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.5
+       "where": "the mole"
       },
       {
-       "id": "mid_14",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        3.75,
-        62.75
+        138.4,
+        -48.0
        ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 8.5
+       "where": "the mole"
       },
       {
-       "id": "mid_16",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        20.5,
-        62.75
+        129.6,
+        -63.0
        ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.5
+       "where": "the mole"
       },
       {
-       "id": "mid_17",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        39.0,
-        62.75
+        141.4,
+        -63.0
        ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 8.5
+       "where": "the mole"
       },
       {
-       "id": "mid_18",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        44.25,
-        62.75
+        -163.75,
+        -0.9
        ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.0
+       "where": "the Weirs"
       },
       {
-       "id": "mid_19",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        49.75,
-        62.75
+        -171.25,
+        1.3
        ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "mid",
-       "height_m": 9.5
+       "where": "the Weirs"
       },
       {
-       "id": "high_1",
-       "kind": "house",
+       "kind": "fishing_spot",
        "at": [
-        -72.5,
-        84.75
+        -178.75,
+        3.5
        ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.0
+       "where": "the Weirs"
       },
       {
-       "id": "high_2",
-       "kind": "house",
+       "kind": "fishing_spot",
+       "at": [
+        -186.25,
+        5.7
+       ],
+       "where": "the Weirs"
+      },
+      {
+       "kind": "fishing_spot",
+       "at": [
+        -193.75,
+        7.9
+       ],
+       "where": "the Weirs"
+      },
+      {
+       "kind": "fishing_spot",
+       "at": [
+        -201.25,
+        10.1
+       ],
+       "where": "the Weirs"
+      },
+      {
+       "kind": "fishing_spot",
+       "at": [
+        -208.75,
+        12.3
+       ],
+       "where": "the Weirs"
+      },
+      {
+       "kind": "fishing_spot",
+       "at": [
+        -216.25,
+        14.5
+       ],
+       "where": "the Weirs"
+      },
+      {
+       "kind": "fishing_spot",
+       "at": [
+        -223.75,
+        16.7
+       ],
+       "where": "the Weirs"
+      },
+      {
+       "kind": "fishing_spot",
+       "at": [
+        -231.25,
+        18.9
+       ],
+       "where": "the Weirs"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        215.6,
+        218.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        226.2,
+        217.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        240.8,
+        215.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        183.8,
+        229.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        194.4,
+        228.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        209.0,
+        230.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        223.6,
+        229.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        234.2,
+        227.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        248.8,
+        229.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        259.4,
+        228.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        187.2,
+        241.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        201.8,
+        240.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        212.4,
+        242.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        227.0,
+        241.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        241.6,
+        239.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        252.2,
+        241.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        266.8,
+        240.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        277.4,
+        242.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        184.6,
+        253.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        195.2,
+        252.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        209.8,
+        254.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        220.4,
+        253.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        235.0,
+        251.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        249.6,
+        253.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        260.2,
+        252.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        274.8,
+        254.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        285.4,
+        253.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        300.0,
+        251.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        188.0,
+        265.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        202.6,
+        264.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        213.2,
+        266.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        227.8,
+        265.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        238.4,
+        263.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        253.0,
+        265.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        267.6,
+        264.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        278.2,
+        266.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        292.8,
+        265.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        303.4,
+        263.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        196.0,
+        276.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        210.6,
+        278.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        221.2,
+        277.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        235.8,
+        275.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        246.4,
+        277.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        261.0,
+        276.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        275.6,
+        278.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        286.2,
+        277.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        300.8,
+        275.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        214.0,
+        290.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        228.6,
+        289.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        239.2,
+        287.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        253.8,
+        289.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        264.4,
+        288.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        279.0,
+        290.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        293.6,
+        289.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        304.2,
+        287.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        222.0,
+        301.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        236.6,
+        299.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        247.2,
+        301.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        261.8,
+        300.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        272.4,
+        302.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        287.0,
+        301.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        301.6,
+        299.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        312.2,
+        301.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        240.0,
+        311.4
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        254.6,
+        313.8
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        265.2,
+        312.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        279.8,
+        314.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        290.4,
+        313.0
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        262.6,
+        324.2
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "tree",
+       "at": [
+        273.2,
+        326.6
+       ],
+       "where": "the Hanger"
+      },
+      {
+       "kind": "clay_bank",
+       "at": [
+        64.0,
+        140.0
+       ],
+       "where": "the clay bank below the Crown"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -146.67,
+        5.33
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -160.0,
+        8.0
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -173.33,
+        10.67
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -186.67,
+        13.33
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -200.0,
+        16.0
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -213.33,
+        18.67
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -226.67,
+        21.33
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -240.0,
+        24.0
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -253.33,
+        26.67
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -266.67,
+        29.33
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -280.0,
+        32.0
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "kelp",
+       "at": [
+        -293.33,
+        34.67
+       ],
+       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+      },
+      {
+       "kind": "sand",
+       "at": [
+        353.67,
+        108.75
+       ],
+       "where": "the Sand Spit (white sand for glass)"
+      },
+      {
+       "kind": "sand",
+       "at": [
+        357.0,
+        126.25
+       ],
+       "where": "the Sand Spit (white sand for glass)"
+      },
+      {
+       "kind": "sand",
+       "at": [
+        360.33,
+        143.75
+       ],
+       "where": "the Sand Spit (white sand for glass)"
+      },
+      {
+       "kind": "sand",
+       "at": [
+        363.67,
+        161.25
+       ],
+       "where": "the Sand Spit (white sand for glass)"
+      },
+      {
+       "kind": "sand",
+       "at": [
+        367.0,
+        178.75
+       ],
+       "where": "the Sand Spit (white sand for glass)"
+      },
+      {
+       "kind": "sand",
+       "at": [
+        370.33,
+        196.25
+       ],
+       "where": "the Sand Spit (white sand for glass)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        -150,
+        360
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        -90,
+        360
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        -30,
+        360
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        30,
+        360
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        90,
+        360
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        150,
+        360
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        -150,
+        400
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        -90,
+        400
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        -30,
+        400
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        30,
+        400
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        90,
+        400
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        150,
+        400
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        -150,
+        440
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        -90,
+        440
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        -30,
+        440
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        30,
+        440
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        90,
+        440
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "peat",
+       "at": [
+        150,
+        440
+       ],
+       "where": "the Moss (peat cuttings)"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -236.0,
+        147.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -226.0,
+        147.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -216.0,
+        147.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -206.0,
+        147.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -196.0,
+        147.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -186.0,
+        147.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -236.0,
+        155.5
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -226.0,
+        155.5
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -216.0,
+        155.5
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -206.0,
+        155.5
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -196.0,
+        155.5
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -186.0,
+        155.5
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -236.0,
+        164.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -226.0,
+        164.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -216.0,
+        164.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -206.0,
+        164.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -196.0,
+        164.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "roots",
+       "at": [
+        -186.0,
+        164.0
+       ],
+       "where": "the root plots"
+      },
+      {
+       "kind": "greens",
+       "at": [
+        -39.0,
+        55.05
+       ],
+       "where": "the working glasshouses"
+      },
+      {
+       "kind": "greens",
+       "at": [
+        -53.0,
+        55.05
+       ],
+       "where": "the working glasshouses"
+      },
+      {
+       "kind": "greens",
+       "at": [
+        -109.0,
+        55.05
+       ],
+       "where": "the working glasshouses"
+      },
+      {
+       "kind": "greens",
+       "at": [
+        -39.0,
+        85.05
+       ],
+       "where": "the working glasshouses"
+      },
+      {
+       "kind": "greens",
+       "at": [
+        -53.0,
+        85.05
+       ],
+       "where": "the working glasshouses"
+      },
+      {
+       "kind": "greens",
+       "at": [
+        -39.0,
+        115.05
+       ],
+       "where": "the working glasshouses"
+      },
+      {
+       "kind": "greens",
        "at": [
         -67.0,
-        84.75
+        115.05
        ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 10.0
+       "where": "the working glasshouses"
       },
       {
-       "id": "high_3",
-       "kind": "house",
+       "kind": "greens",
        "at": [
-        -61.75,
-        84.75
+        -109.0,
+        115.05
        ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.5
+       "where": "the working glasshouses"
       },
       {
-       "id": "high_4",
-       "kind": "house",
+       "kind": "greens",
        "at": [
-        -56.25,
-        84.75
+        -39.0,
+        129.05
        ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.0
+       "where": "the working glasshouses"
       },
       {
-       "id": "high_6",
-       "kind": "house",
+       "kind": "greens",
        "at": [
-        -44.5,
-        84.75
+        -109.0,
+        129.05
        ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.5
+       "where": "the working glasshouses"
       },
       {
-       "id": "high_7",
-       "kind": "house",
+       "kind": "greens",
        "at": [
-        -35.0,
-        84.75
+        -145.0,
+        191.05
        ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.0
-      },
-      {
-       "id": "high_8",
-       "kind": "house",
-       "at": [
-        -29.75,
-        84.75
-       ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 10.0
-      },
-      {
-       "id": "high_9",
-       "kind": "house",
-       "at": [
-        -24.25,
-        84.75
-       ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.5
-      },
-      {
-       "id": "high_11",
-       "kind": "house",
-       "at": [
-        -12.5,
-        84.75
-       ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 10.0
-      },
-      {
-       "id": "high_12",
-       "kind": "house",
-       "at": [
-        -7.0,
-        84.75
-       ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.5
-      },
-      {
-       "id": "high_13",
-       "kind": "house",
-       "at": [
-        -1.75,
-        84.75
-       ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.0
-      },
-      {
-       "id": "high_14",
-       "kind": "house",
-       "at": [
-        3.75,
-        84.75
-       ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 10.0
-      },
-      {
-       "id": "high_16",
-       "kind": "house",
-       "at": [
-        20.5,
-        84.75
-       ],
-       "size": [
-        5.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.0
-      },
-      {
-       "id": "high_17",
-       "kind": "house",
-       "at": [
-        26.0,
-        84.75
-       ],
-       "size": [
-        6.0,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 10.0
-      },
-      {
-       "id": "high_18",
-       "kind": "house",
-       "at": [
-        31.25,
-        84.75
-       ],
-       "size": [
-        4.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.5
-      },
-      {
-       "id": "high_19",
-       "kind": "house",
-       "at": [
-        36.75,
-        84.75
-       ],
-       "size": [
-        6.5,
-        7.5
-       ],
-       "facing": "south",
-       "level": "high",
-       "height_m": 9.0
+       "where": "the working glasshouses"
       }
      ]
     }
    ]
   }
  },
- "setting": "Cullet, a glassmakers' harbour on the south slope of a treeless island the people call the Wrack (docs/SMALL_CITY.md). A first rough plan: the quay, three rows, the Crown and the wynds, as boxes.",
+ "setting": "Cullet, a glassmakers' harbour on the south slope of a treeless island its people call the Wrack, in year 83 since the Last Sail (docs/SMALL_CITY.md). The grey city: every lot of the hand-authored plan, the land round it, its fishing spots and its one wood; no residents yet.",
+ "resource_scale": {
+  "tree": 0.0,
+  "fishing_spot": 0.0,
+  "berry_bush": 0.0,
+  "clay_bank": 0.0,
+  "boulder": 0.4,
+  "reeds": 0.3
+ },
  "animals": {
   "deer": 0,
   "wolf": 0
  },
- "towns": [],
+ "towns": [
+  {
+   "name": "Cullet",
+   "site": "cullet",
+   "walled": false,
+   "character": "a glassmakers' harbour: the Cone, the Counting House, the Rows, the Ladder",
+   "buildings": [
+    {
+     "kind": "hall",
+     "name": "the Counting House",
+     "lot": "counting_house",
+     "about": "the tally room upstairs; the market and the counters game under the arches"
+    },
+    {
+     "kind": "inn",
+     "name": "the Marver",
+     "lot": "marver",
+     "about": "the cookshop, with a terrace over the harbour"
+    },
+    {
+     "kind": "workshop",
+     "name": "the Cone",
+     "lot": "cone",
+     "about": "the glass furnace; it never goes dark"
+    },
+    {
+     "kind": "workshop",
+     "name": "the Batch",
+     "lot": "batch",
+     "about": "the common oven"
+    },
+    {
+     "kind": "hall",
+     "name": "the Readers' House",
+     "lot": "readers_house",
+     "about": "the school and the ship-day tablets"
+    }
+   ]
+  }
+ ],
  "villages": []
 }
