@@ -74,7 +74,7 @@ def load_config(repo_config=None, local_config=None):
     local_config = local_config or os.environ.get("STORE_CONFIG") or LOCAL_CONFIG
     with open(repo_config, encoding="utf-8") as f:
         cfg = json.load(f)
-    if "publish_enabled" in cfg:
+    if "publish_enabled" in cfg or "publish_sessions" in cfg:
         raise Refused(f"{repo_config} sets publish_enabled; that switch belongs in the machine-local "
                       f"config only ({LOCAL_CONFIG})")
     local = {}
@@ -83,6 +83,7 @@ def load_config(repo_config=None, local_config=None):
             local = json.load(f)
     cfg = _merge(cfg, local)
     cfg["publish_enabled"] = local.get("publish_enabled") is True
+    cfg["publish_sessions"] = local.get("publish_sessions") is True
     cfg["_local_config"] = local_config
     return cfg
 
@@ -517,7 +518,7 @@ class Identity:
             env_files += glob.glob(os.path.join(co, ".local", "living", "trials", "*.env"))
         for p in env_files:
             secrets |= _env_file_secrets(p)
-        for p in (os.path.expanduser("~/.cache/huggingface/token"),):
+        for p in (os.path.expanduser("~/.cache/huggingface/token"), os.path.expanduser("~/.config/slop-store/hf_token")):
             try:
                 with open(p) as f:
                     t = f.read().strip()
@@ -626,7 +627,8 @@ def _alternation(words, flags=0, boundary=True):
     if not words:
         return None
     body = "|".join(re.escape(w) for w in words)
-    return re.compile(rf"(?<![\w-])(?:{body})(?![\w-])" if boundary else f"(?:{body})", flags)
+    # "_" separates ("experience_name.txt"); letters, digits and "-" join
+    return re.compile(rf"(?<![A-Za-z0-9-])(?:{body})(?![A-Za-z0-9-])" if boundary else f"(?:{body})", flags)
 
 
 PRIVATE_KEY = re.compile(r"-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----")
@@ -669,6 +671,136 @@ PLAYER_LOG = re.compile(r"playing character #(\d+)")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
+# Owner-line echoes: a model quoting, varying or repeating an owner's typed line.
+# ("say" is left out: it is the JSON key in front of every spoken line, "say": "Hi! …")
+SPEECH_VERBS = {"said", "says", "saying", "typed", "types", "babbled", "babbles", "babbling", "muttered",
+                "mutters", "called", "calls", "shouted", "shouts", "whispered", "greeted", "greets", "answered",
+                "replied", "repeated", "repeats", "told", "asked", "asks", "uttered"}
+COMMON_SHORT = {"hi", "hey", "helo", "yes", "no", "ok", "okay", "yeah", "thanks", "bye", "sup", "yo", "what",
+                "why", "huh", "oh", "ah", "wow", "please", "sory", "god", "nice", "cool", "here", "there"}
+WORD = re.compile(r"[A-Za-z0-9]+(?:'[A-Za-z]+)?")
+QUOTE_CHARS = "\"'“”‘’«»`"
+LINE_OPEN = r"(“|‘|«|\"|'|`|\\\"|&quot;|&#34;|&ldquo;|&#8220;|&lsquo;|&#8216;|&#39;|&apos;)"
+LINE_CLOSE = r"(”|’|»|\"|'|`|\\\"|&quot;|&#34;|&rdquo;|&#8221;|&rsquo;|&#8217;|&#39;|&apos;)"
+
+
+def _collapse(w):
+    """Lower case, runs of one letter folded ("ssssssssshi" and "sssshi" are both "shi")."""
+    return re.sub(r"(.)\1+", r"\1", w.lower().replace("'", ""))
+
+
+def _norm_line(s):
+    return " ".join(_collapse(w) for w in WORD.findall(s))
+
+
+class EchoMatcher:
+    """Finds where a text quotes or closely repeats one of the owner's lines, beyond exact quotes.
+
+    Tuned on play-tests 2 and 3 (docs/STORE.md, "Owner-line echoes"):
+    - one- or two-word lines: a word equal after folding letter runs, or within edit ratio 0.8 for
+      words of four letters or more ("sssshi" for "ssssssssshi"). A common word ("hi") counts
+      only quoted alone or within two words after a speech verb ("said hi, then …"), so a
+      resident's own "Hi! Are you new here?" stays;
+    - longer lines: a window of the same length sharing at least 60% of its words (Jaccard, at
+      least three) or reading 80% alike (difflib)."""
+
+    def __init__(self, lines):
+        import difflib
+        self._difflib = difflib
+        self.short, self.long = [], []
+        for line in lines:
+            toks = [_collapse(w) for w in WORD.findall(line)]
+            toks = [t for t in toks if t]
+            if not toks:
+                continue
+            (self.short if len(toks) <= 2 else self.long).append((line, toks))
+
+    def __bool__(self):
+        return bool(self.short or self.long)
+
+    def _close(self, w, t):
+        if w == t:
+            return True
+        return len(t) >= 4 and len(w) >= 3 and self._difflib.SequenceMatcher(None, w, t).ratio() >= 0.8
+
+    def find(self, text, context=True):
+        """[(start, end, line)] of every echo in text. context=False drops the quote-or-verb
+        requirement for common words (for file names)."""
+        words = [(m.start(), m.end(), _collapse(m.group(0))) for m in WORD.finditer(text)]
+        out = []
+        for line, toks in self.short:
+            n = len(toks)
+            common = all(t in COMMON_SHORT or len(t) <= 3 for t in toks)
+            for i in range(len(words) - n + 1):
+                if not all(self._close(words[i + k][2], toks[k]) for k in range(n)):
+                    continue
+                a, b = words[i][0], words[i + n - 1][1]
+                if common and context:
+                    before = text[max(0, a - 2):a]
+                    after = re.match(r"[.!?,…]*\s?(.)?", text[b:b + 4])
+                    quoted = any(c in QUOTE_CHARS for c in before[-1:]) and after and after.group(1) and \
+                        after.group(1) in QUOTE_CHARS
+                    verb = any(words[j][2] in SPEECH_VERBS for j in range(max(0, i - 2), i))
+                    if not (quoted or verb):
+                        continue
+                out.append((a, b, line))
+        for line, toks in self.long:
+            n = len(toks)
+            want = set(toks)
+            joined = " ".join(toks)
+            for i in range(0, max(0, len(words) - n + 1)):
+                win = [w[2] for w in words[i:i + n]]
+                ws = set(win)
+                inter = len(want & ws)
+                if (inter >= 3 and inter / len(want | ws) >= 0.6) or \
+                        self._difflib.SequenceMatcher(None, " ".join(win), joined).ratio() >= 0.8:
+                    out.append((words[i][0], words[i + n - 1][1], line))
+        out.sort()
+        merged = []
+        for a, b, l in out:
+            if merged and a <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(b, merged[-1][1]), merged[-1][2])
+            else:
+                merged.append((a, b, l))
+        return merged
+
+
+# Play sessions publish an allow-list: the record of the run, not analysis of the person who played.
+SESSION_ALLOW = (
+    ("journal/*.jsonl", "the minds' journals"),
+    ("journal/system/*.txt", "the journals' system prompts"),
+    ("journal/batches/*.json", "the journals' provider batch records"),
+    ("run/*.log", "the run's logs"),
+    ("run/*.jsonl", "the run's recorded rows"),
+    ("run/*.txt", "the run's installed script"),
+    ("run/*.rhai", "the run's installed rules"),
+    ("run/created_utc", "the run's creation time"),
+    ("skills.rhai", "the scene's rules"),
+    ("README.md", "the scene's description (only if it does not describe the owner)"),
+)
+OWNER_WORDS = re.compile(r"(?i)\b(owner|owner's|you|your|you're|yourself|feedback|play-?test(?:er)?s?|intends?|"
+                         r"intention|wants? to|wishes|liked|disliked|felt)\b")
+
+
+def session_rel(relpath):
+    """The path inside the session folder ("session/journal/x.jsonl" -> "journal/x.jsonl"), or None."""
+    parts = relpath.replace("\\", "/").split("/")
+    if "session" not in parts[:-1]:
+        return None
+    return "/".join(parts[parts.index("session") + 1:])
+
+
+def session_allowed(relpath):
+    """(allowed?, reason) under the play-session allow-list."""
+    inner = session_rel(relpath)
+    if inner is None:
+        return False, "held: outside session/ (feedback, reports, agents' analysis of the owner's play)"
+    for pat, what in SESSION_ALLOW:
+        if fnmatch.fnmatchcase(inner, pat) and inner.count("/") == pat.count("/"):
+            return True, what
+    return False, f"held: not on the session allow-list (session/{inner})"
+
+
 class Scrubber:
     """Redacts what must not be public from text, refuses whole files that cannot be made safe,
     and holds back files in categories the owner has not decided."""
@@ -689,6 +821,8 @@ class Scrubber:
         self.kind = kind
         self.logins_seen = set()
         self.profile_dirs = set()
+        self.dropped = []       # what the session echo pass dropped: {file, where, why}
+        self.echo = None
         self._build()
 
     def _build(self):
@@ -697,7 +831,10 @@ class Scrubber:
         self.owner_email = _alternation(idn.emails, re.I, boundary=False)
         self.owner_name = _alternation(idn.names, re.I)
         self.surname = _alternation(idn.surnames)
-        self.first_name = _alternation(idn.first_names)
+        # names: any case, and "_" counts as a separator ("experience_diego.txt")
+        self.first_name = (re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(re.escape(n) for n in
+                                      sorted(idn.first_names, key=len, reverse=True)) + r")(?![A-Za-z0-9])", re.I)
+                           if idn.first_names else None)
         self.hostnames = _alternation(idn.hostnames, re.I)
         # binary scans: literals without word boundaries (strings in binaries run into bytes)
         self.bin_literals = _alternation(idn.emails | idn.hostnames | idn.names | idn.surnames, re.I,
@@ -712,13 +849,16 @@ class Scrubber:
         lines = sorted(self.owner_lines, key=len, reverse=True)
         if lines:
             body = "|".join(re.escape(l) for l in lines)
-            self.line_re = re.compile(rf"(“|\"|\\\")({body})(”|\"|\\\")")
+            # any quote, typographic, single, escaped or as an HTML entity; any case
+            self.line_re = re.compile(LINE_OPEN + rf"\s*({body})([.!?,…]*)\s*" + LINE_CLOSE, re.I)
         else:
             self.line_re = None
+        self.line_norms = {_norm_line(l) for l in lines}
+        self.echo = EchoMatcher(lines) if lines else None
         # Lines of 6+ characters are also caught unquoted (a model repeating them in a reply);
         # shorter ones ("hi") only in quotes, or every "hi" in the world would go.
         longer = [l for l in lines if len(l) >= 6]
-        self.line_bare = (re.compile(r"(?<![\w])(?:" + "|".join(re.escape(l) for l in longer) + r")(?![\w])", re.I)
+        self.line_bare = (re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(re.escape(l) for l in longer) + r")(?![A-Za-z0-9])", re.I)
                           if longer else None)
 
     # -- pass 1: learn the session's player and the owner's lines --------------------------------
@@ -739,6 +879,16 @@ class Scrubber:
         if not self.player_ids or "“" not in s:
             return
         pids = self.player_ids
+        # The player's own percepts (player memory, "played by a person"; their own rows):
+        # "You said[ to …]: “…”" is the owner speaking.
+        own = "(played by a person" in s or any(f"# Who you are ({n})" in s
+                                                for n in self.player_labels | self.id.first_names)
+        if own:
+            for m in re.finditer(r"You said(?: to [^:“\n]{1,80})?: “([^”\n]{1,800})”", s):
+                self.owner_lines.add(m.group(1))
+        for m in re.finditer(r"(?m)^\s*\d+\s*\|\s*(\d+)\s*\|.*?You said(?: to [^:“\n]{1,80})?: “([^”\n]{1,800})”", s):
+            if int(m.group(1)) in pids:
+                self.owner_lines.add(m.group(2))
         # "<speaker> said[ to <x>]: “…” {<speaker>=#n, …}": the tags follow the order of mention,
         # so the first is the speaker, except in "You said to …", where the tags start after "You".
         for m in re.finditer(r"(?:^|\n|\] |\d\d:\d\d )([^:“\n\]]{1,80}?) [a-z]+(?: to [^:“\n]{1,80})?: "
@@ -775,6 +925,13 @@ class Scrubber:
                 if isinstance(v, str) and v.strip() and (who is not None or
                                                          (said and os.path.basename(name) == "events.jsonl")):
                     self.owner_lines.add(v)
+            subj = obj.get("subject")
+            if isinstance(subj, int) and subj in self.player_ids:
+                for v in obj.values():
+                    if isinstance(v, str):
+                        m = re.match(r"\s*You said(?: to [^:“\n]{1,80})?: “([^”\n]{1,800})”", v)
+                        if m:
+                            self.owner_lines.add(m.group(1))
             for v in obj.values():
                 self.learn_json(v, name)
         elif isinstance(obj, list):
@@ -817,7 +974,7 @@ class Scrubber:
         if not binary and self.line_re is not None and self.decisions.get("owner_lines") != "include":
             def lf(m):
                 acc.add("owner-line", m.group(2))
-                return m.group(1) + "[owner line]" + m.group(3)
+                return m.group(1) + "[owner line]" + m.group(4)
             s = self.line_re.sub(lf, s)
             s = self._sub(self.line_bare, s, "owner-line", acc, "[owner line]")
         s = self._sub(self.owner_email, s, "owner-email", acc, "[owner-email]")
@@ -849,7 +1006,12 @@ class Scrubber:
         s = self._sub(self.surname, s, "owner-name", acc, "[owner]")
         s = self._sub(self.login, s, "login", acc, "[user]")
         if not binary and self.decisions.get("owner_first_name", "redact") != "include":
-            s = self._sub(self.first_name, s, "owner-first-name", acc, "Player")
+            def fn(m):
+                acc.add("owner-first-name", m.group(0))
+                v = m.group(0)
+                return "player" if v.islower() else "PLAYER" if v.isupper() and len(v) > 1 else "Player"
+            if self.first_name is not None:
+                s = self.first_name.sub(fn, s)
         return s
 
     def scrub_obj(self, obj, acc):
@@ -868,8 +1030,91 @@ class Scrubber:
         if isinstance(obj, list):
             return [self.scrub_obj(v, acc) for v in obj]
         if isinstance(obj, str):
+            if (self.line_re is not None and self.decisions.get("owner_lines") != "include"
+                    and _norm_line(obj) in self.line_norms and obj.strip()):
+                acc.add("owner-line", obj)
+                return "[owner line]"
             return self.scrub_text(obj, acc)
         return obj
+
+    def publish_path(self, rel, acc=None):
+        """The path a file is published under: scrubbed like text, and in a play session any
+        word of it that echoes an owner line, even a common one ("reply_hi"), is replaced."""
+        acc = acc if acc is not None else Findings()
+        pub = self.scrub_text(rel, acc).replace("[owner line]", "owner-line")
+        if self._echo_on():
+            for a, b, line in reversed(self.echo.find(pub, context=False)):
+                acc.add("owner-echo", pub[a:b])
+                pub = pub[:a] + "owner-line" + pub[b:]
+        return pub
+
+    # -- session echo pass: drop what quotes or repeats an owner line ------------------------------
+    def _echo_on(self):
+        return (self._session() and self.decisions.get("owner_lines") != "include"
+                and self.echo is not None and bool(self.echo))
+
+    def _echoes(self, text):
+        hits = []
+        if "[owner line]" in text:
+            hits.append("quotes an owner line")
+        for a, b, line in self.echo.find(text):
+            hits.append(f"echo of {mask(line, 'owner-line')}: {mask(text[a:b], 'owner-line')}")
+        return hits
+
+    def _redact_echo(self, obj, acc):
+        if isinstance(obj, dict):
+            return {k: self._redact_echo(v, acc) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self._redact_echo(v, acc) for v in obj]
+        if isinstance(obj, str):
+            spans = self.echo.find(obj)
+            for a, b, line in reversed(spans):
+                acc.add("owner-echo", obj[a:b])
+                obj = obj[:a] + "[owner line]" + obj[b:]
+            return obj
+        return obj
+
+    def _echo_pass(self, relpath, name, new, acc):
+        """In a play session: drop journal entries whose reply, and world rows or text lines that,
+        quote or echo an owner line; redact echoes inside prompts and JSON files."""
+        if name.endswith(".jsonl"):
+            out = []
+            for i, line in enumerate(new.splitlines()):
+                try:
+                    obj = json.loads(line) if line.strip() else None
+                except ValueError:
+                    obj = None
+                if isinstance(obj, dict) and "request" in obj and "reply" in obj:
+                    hits = self._echoes(str(obj.get("reply")))
+                    if hits:
+                        self.dropped.append({"file": relpath, "where": f"entry {i} ({obj.get('purpose')}, "
+                                             f"{obj.get('actor')})", "why": "; ".join(hits)})
+                        acc.add("dropped-entry", str(i))
+                        continue
+                    out.append(json.dumps(self._redact_echo(obj, acc), ensure_ascii=False, separators=(",", ":")))
+                    continue
+                hits = self._echoes(line) if line.strip() else []
+                if hits:
+                    self.dropped.append({"file": relpath, "where": f"row {i}", "why": "; ".join(hits)})
+                    acc.add("dropped-row", str(i))
+                    continue
+                out.append(line)
+            return "\n".join(out) + ("\n" if out else "")
+        if name.endswith(".json"):
+            try:
+                return json.dumps(self._redact_echo(json.loads(new), acc), ensure_ascii=False, indent=1) + "\n"
+            except ValueError:
+                pass
+        out = []
+        for i, line in enumerate(new.splitlines()):
+            hits = self._echoes(line)
+            if hits:
+                self.dropped.append({"file": relpath, "where": f"line {i + 1}", "why": "; ".join(hits)})
+                acc.add("dropped-line", str(i + 1))
+                out.append("[line dropped: it quotes or repeats an owner line]")
+            else:
+                out.append(line)
+        return "\n".join(out) + ("\n" if new.endswith("\n") else "")
 
     # -- files ----------------------------------------------------------------------------------
     def classify(self, relpath, abspath=None):
@@ -893,8 +1138,14 @@ class Scrubber:
                 return "skipped", f"build output or cache ({p}/)"
         if name.endswith(BUILD_EXT):
             return "skipped", "build output"
+        if self._session():
+            allowed, why = session_allowed(relpath)
+            if not allowed:
+                return "excluded", why
         if name.endswith(MEDIA_EXT) and self._session():
             return self._decision("session_media")
+        if name.endswith((".html", ".htm")) and self._session():
+            return "excluded", "report page: play_report.py regenerates it from the session's evidence"
         if name in OWNER_NOTE_NAMES:
             return self._decision("owner_notes")
         if "journal" in parts[:-1] and name.endswith((".jsonl", ".txt")):
@@ -910,6 +1161,8 @@ class Scrubber:
             return "ok", None
         if d == "undecided":
             return "held", f"owner decision pending: {cat}"
+        if d == "hold":
+            return "excluded", f"held by the owner: {cat}"
         return "excluded", f"owner decision: {cat} = {d}"
 
     def scrub_bytes(self, relpath, data):
@@ -936,6 +1189,14 @@ class Scrubber:
             return "ok", "binary (scanned for secrets and identity)", data, acc
         if PRIVATE_KEY.search(text):
             return "refused", "contains a private key", None, acc
+        if self._session() and session_rel(relpath) == "README.md":
+            hit = OWNER_WORDS.search(text)
+            idn = None if hit else (self.first_name.search(text) if self.first_name else None) or \
+                (self.owner_name.search(text) if self.owner_name else None) or \
+                (self.login.search(text) if self.login else None)
+            if hit or idn:
+                return "excluded", ("held: the README describes the owner or their intentions "
+                                    f"({'mentions “' + hit.group(0) + '”' if hit else 'names the owner'})"), None, acc
         if name.endswith(".jsonl"):
             out = []
             for line in text.splitlines():
@@ -957,6 +1218,8 @@ class Scrubber:
                 new = self.scrub_text(text, acc)
         else:
             new = self.scrub_text(text, acc)
+        if self._echo_on():
+            new = self._echo_pass(relpath, name, new, acc)
         return "ok", None, new.encode("utf-8"), acc
 
     def learn_bytes(self, relpath, data):
@@ -1091,7 +1354,7 @@ def scrub_source(src, scrubber, keep_data=False):
             raw = load()
         if raw is not None:
             st2, why2, out, acc = scrubber.scrub_bytes(inner, raw)
-            if st2 == "refused":
+            if st2 in ("refused", "excluded") and st != "excluded":
                 st, why = st2, why2
             elif st == "ok":
                 why = why or why2
@@ -1099,7 +1362,7 @@ def scrub_source(src, scrubber, keep_data=False):
             if keep_data and st == "ok":
                 data[rel] = out
             # renames: the published path is scrubbed too
-            pub = scrubber.scrub_text(rel, acc_paths := Findings())
+            pub = scrubber.publish_path(rel, acc_paths := Findings())
             rows.append({"path": rel, "published_as": pub if pub != rel else None,
                          "bytes": size if size is not None else len(raw), "status": st, "reason": why,
                          "findings": acc.as_dict()})
@@ -1200,9 +1463,11 @@ def dry_run_markdown(src, kind, rows, totals, decisions, scrubber):
 # --------------------------------------------------------------------------------------------
 
 def _jsonl_gz(path, rows):
-    with gzip.open(path, "wt", encoding="utf-8", compresslevel=9) as f:
+    """Deterministic gzip (no name, mtime 0): the same rows give the same bytes."""
+    with open(path, "wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0,
+                                                compresslevel=9) as gz:
         for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n")
+            gz.write((json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8"))
 
 
 def _tar_add(tf, name, data):
@@ -1225,10 +1490,10 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
     os.makedirs(out_dir, exist_ok=True)
     instances, calls, streams, prompts = {}, [], [], []
     tar_buf = io.BytesIO()
-    with tarfile.open(fileobj=tar_buf, mode="w:gz") as tf:
+    with tarfile.open(fileobj=tar_buf, mode="w", format=tarfile.PAX_FORMAT) as tf:
         for rel in sorted(data):
             body = data[rel]
-            pub = scrubber.scrub_text(rel, Findings())
+            pub = scrubber.publish_path(rel)
             parts = pub.split("/")
             inst = parts[0] if len(parts) > 1 else None
             base = parts[-1]
@@ -1277,14 +1542,23 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
     _jsonl_gz(os.path.join(out_dir, "rows.jsonl.gz"), streams)
     _jsonl_gz(os.path.join(out_dir, "prompts.jsonl.gz"), prompts)
     with open(os.path.join(out_dir, "files.tar.gz"), "wb") as f:
-        f.write(tar_buf.getvalue())
+        f.write(gzip.compress(tar_buf.getvalue(), compresslevel=9, mtime=0))
     man = {"format": FORMAT, "unit": "batch", "name": name, "machine": machine,
            "source": scrubber.scrub_text(tilde(src), Findings()),
            "packed": _dt.datetime.now().isoformat(timespec="seconds"), "tool_commit": _git("rev-parse", "--short", "HEAD"),
-           "decisions": scrubber.decisions, "redactions": totals.as_dict(),
+           "decisions": scrubber.decisions,
+           # counts only: even masked examples ("/home/g…") are not for publication
+           "redactions": {c: v["count"] for c, v in totals.as_dict().items()},
            "files": [{k: r[k] for k in ("path", "bytes", "status", "reason")} |
-                     {"path": scrubber.scrub_text(r["path"], Findings()),
+                     {"path": scrubber.publish_path(r["path"]),
                       "redactions": {c: v["count"] for c, v in r["findings"].items()}} for r in rows],
+           "models": _model_counts(calls),
+           "held": [{"path": scrubber.publish_path(r["path"]), "reason": r["reason"]}
+                    for r in rows if r["status"] in ("excluded", "held")],
+           "dropped": [{"file": scrubber.publish_path(d["file"]), "where": d["where"],
+                        "why": "quotes an owner line" if d["why"].startswith("quotes") else "repeats an owner line"}
+                       for d in scrubber.dropped
+                       if d["file"] in {r["path"].split("!")[-1] for r in rows if r["status"] == "ok"}],
            "counts": {"instances": len(instances), "calls": len(calls), "rows": len(streams),
                       "prompts": len(prompts)}}
     with open(os.path.join(out_dir, "MANIFEST.json"), "w", encoding="utf-8") as f:
@@ -1348,7 +1622,11 @@ def _safe_join(root, rel):
 
 def pack_session(src, out_dir, scrubber, name=None, machine=None):
     """A play session: the same shape as a batch with one 'instance' per top-level folder."""
-    return pack_batch(src, out_dir, scrubber, name=name, machine=machine)
+    man = pack_batch(src, out_dir, scrubber, name=name, machine=machine)
+    man["unit"] = "session"
+    with open(os.path.join(out_dir, "MANIFEST.json"), "w", encoding="utf-8") as f:
+        json.dump(man, f, ensure_ascii=False, indent=1)
+    return man
 
 
 def pack_motion(src, out_dir, scrubber, machine=None):
@@ -1366,7 +1644,7 @@ def pack_motion(src, out_dir, scrubber, machine=None):
         files.append({"path": f"motion/raw/{base}", "sha256": _sha(data[rel]), "bytes": len(data[rel])})
     man = {"format": FORMAT, "unit": "motion-library", "machine": machine, "files": files,
            "refused": [r["path"] for r in rows if r["status"] == "refused"],
-           "redactions": totals.as_dict(), "packed": _dt.datetime.now().isoformat(timespec="seconds")}
+           "redactions": {c: v["count"] for c, v in totals.as_dict().items()}, "packed": _dt.datetime.now().isoformat(timespec="seconds")}
     with open(os.path.join(out_dir, "motion", "MANIFEST.json"), "w") as f:
         json.dump(man, f, indent=1)
     return man
@@ -1393,6 +1671,12 @@ class Backend:
 class LocalBackend(Backend):
     """A directory per repository: <root>/<repo>/<path>. For tests and for a machine-local mirror."""
     name = "local"
+
+    def publish_units(self, repo, units, message):
+        """Several (path_in_repo, local_dir) units in one commit."""
+        for path_in_repo, local_dir in units:
+            self.publish(repo, local_dir, path_in_repo, message)
+        return os.path.join(self.root, repo)
 
     def __init__(self, root):
         self.root = expand(root)
@@ -1438,9 +1722,44 @@ class LocalBackend(Backend):
         return sorted(out)
 
 
+def token_path():
+    """The store's Hugging Face token: this file and nowhere else (not HF_TOKEN, not the hf CLI's
+    cache, not the machine's other tokens)."""
+    return os.path.expanduser("~/.config/slop-store/hf_token")
+
+
+def read_token():
+    p = token_path()
+    try:
+        st = os.stat(p)
+    except OSError:
+        raise Refused(f"no store token at {tilde(p)}")
+    if st.st_mode & 0o077:
+        raise Refused(f"{tilde(p)} must be readable by its owner only (chmod 600)")
+    with open(p, encoding="utf-8") as f:
+        tok = f.read().strip()
+    if not tok:
+        raise Refused(f"{tilde(p)} is empty")
+    return tok
+
+
+def _hide(text, secret):
+    return text.replace(secret, "[redacted:token]") if secret else text
+
+
+def _isolate_hub_env():
+    """Keep huggingface_hub from finding any other token: no environment token, no implicit one."""
+    for var in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_API_TOKEN"):
+        os.environ.pop(var, None)
+    os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
+    os.environ["HF_TOKEN_PATH"] = os.path.join(tempfile.gettempdir(), "slop-store-no-token")
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+
+
 class HFBackend(Backend):
     """Hugging Face datasets. Publishing needs the --yes-publish flag AND publish_enabled in the
-    machine-local config; the check runs before huggingface_hub is imported."""
+    machine-local config; the check runs before huggingface_hub is imported. Every call passes the
+    token read from token_path() explicitly; errors are re-raised with the token removed."""
     name = "hf"
 
     COMMIT_FILES = 100   # the Hub's advice: about 50-100 files a commit (docs/STORE.md)
@@ -1454,6 +1773,7 @@ class HFBackend(Backend):
         self.repo_type = hf.get("repo_type", "dataset")
         self.yes_publish = yes_publish
         self._api = api
+        self._token = None
 
     def gate(self):
         if not self.yes_publish:
@@ -1468,25 +1788,39 @@ class HFBackend(Backend):
         name = (self.cfg.get("repos") or {}).get(repo, repo)
         return name if "/" in name else f"{self.namespace}/{name}"
 
+    def token(self):
+        if self._token is None:
+            self._token = read_token()
+        return self._token
+
     def api(self):
         if self._api is None:
+            _isolate_hub_env()
             from huggingface_hub import HfApi  # imported only past the gate or for a fetch
-            self._api = HfApi()
+            self._api = HfApi(token=self.token())
         return self._api
+
+    def _call(self, fn, *a, **k):
+        try:
+            return fn(*a, **k)
+        except Refused:
+            raise
+        except Exception as e:  # noqa: BLE001 - re-raised without the token
+            raise Refused(_hide(f"{type(e).__name__}: {e}", self._token)) from None
 
     def publish(self, repo, local_dir, path_in_repo, message):
         self.gate()
         api = self.api()
         rid = self.repo_id(repo)
-        api.create_repo(rid, repo_type=self.repo_type, private=self.private, exist_ok=True)
+        self._call(api.create_repo, rid, repo_type=self.repo_type, private=self.private, exist_ok=True)
         files = []
         for root, _, names in os.walk(local_dir):
             for n in sorted(names):
                 files.append(os.path.relpath(os.path.join(root, n), local_dir))
         files.sort()
         if len(files) <= self.COMMIT_FILES:
-            return api.upload_folder(repo_id=rid, repo_type=self.repo_type, folder_path=local_dir,
-                                     path_in_repo=path_in_repo, commit_message=message)
+            return self._call(api.upload_folder, repo_id=rid, repo_type=self.repo_type, folder_path=local_dir,
+                              path_in_repo=path_in_repo, commit_message=message)
         op = self._op
         if op is None:
             from huggingface_hub import CommitOperationAdd as op
@@ -1495,33 +1829,62 @@ class HFBackend(Backend):
         for k, chunk in enumerate(chunks, 1):
             ops = [op(path_in_repo=f"{path_in_repo.rstrip('/')}/{f}", path_or_fileobj=os.path.join(local_dir, f))
                    for f in chunk]
-            out = api.create_commit(repo_id=rid, repo_type=self.repo_type, operations=ops,
-                                    commit_message=f"{message} ({k}/{len(chunks)})")
+            out = self._call(api.create_commit, repo_id=rid, repo_type=self.repo_type, operations=ops,
+                             commit_message=f"{message} ({k}/{len(chunks)})")
         return out
+
+    def publish_units(self, repo, units, message):
+        """Several (path_in_repo, local_dir) units in one commit."""
+        self.gate()
+        api = self.api()
+        rid = self.repo_id(repo)
+        self._call(api.create_repo, rid, repo_type=self.repo_type, private=self.private, exist_ok=True)
+        op = self._op
+        if op is None:
+            from huggingface_hub import CommitOperationAdd as op
+        ops = []
+        for path_in_repo, local_dir in units:
+            for root, _, names in os.walk(local_dir):
+                for n in sorted(names):
+                    f = os.path.join(root, n)
+                    ops.append(op(path_in_repo=f"{path_in_repo.rstrip('/')}/{os.path.relpath(f, local_dir)}",
+                                  path_or_fileobj=f))
+        return self._call(api.create_commit, repo_id=rid, repo_type=self.repo_type, operations=ops,
+                          commit_message=message)
+
+    def put_file(self, repo, local_file, path_in_repo, message):
+        self.gate()
+        api = self.api()
+        rid = self.repo_id(repo)
+        self._call(api.create_repo, rid, repo_type=self.repo_type, private=self.private, exist_ok=True)
+        return self._call(api.upload_file, path_or_fileobj=local_file, path_in_repo=path_in_repo, repo_id=rid,
+                          repo_type=self.repo_type, commit_message=message)
 
     def fetch(self, repo, path_in_repo, dest):
         if not self.namespace:
             raise Refused("backends.hf.namespace is not set")
+        _isolate_hub_env()
         from huggingface_hub import snapshot_download
-        snapshot_download(repo_id=self.repo_id(repo), repo_type=self.repo_type, local_dir=dest + ".hf",
-                          allow_patterns=[path_in_repo.rstrip("/") + "/*"])
-        srcp = os.path.join(dest + ".hf", path_in_repo)
+        stage = dest.rstrip("/") + ".hf"
+        self._call(snapshot_download, repo_id=self.repo_id(repo), repo_type=self.repo_type, local_dir=stage,
+                   allow_patterns=[path_in_repo.rstrip("/") + "/*"], token=self.token())
+        srcp = os.path.join(stage, path_in_repo)
         os.makedirs(dest, exist_ok=True)
         got = []
         for root, _, names in os.walk(srcp):
             for n in names:
-                s = os.path.join(root, n)
-                d = _safe_join(dest, os.path.relpath(s, srcp))
+                s_ = os.path.join(root, n)
+                d = _safe_join(dest, os.path.relpath(s_, srcp))
                 os.makedirs(os.path.dirname(d), exist_ok=True)
-                shutil.move(s, d)
+                shutil.move(s_, d)
                 got.append(d)
-        shutil.rmtree(dest + ".hf", ignore_errors=True)
+        shutil.rmtree(stage, ignore_errors=True)
         return got
 
     def list(self, repo, prefix=""):
         if not self.namespace:
             raise Refused("backends.hf.namespace is not set")
-        files = self.api().list_repo_files(self.repo_id(repo), repo_type=self.repo_type)
+        files = self._call(self.api().list_repo_files, self.repo_id(repo), repo_type=self.repo_type)
         return sorted(f for f in files if f.startswith(prefix))
 
 
@@ -1531,6 +1894,48 @@ def make_backend(name, cfg, yes_publish=False, root=None):
     if name == "hf":
         return HFBackend(cfg, yes_publish=yes_publish)
     raise Refused(f"unknown backend {name}")
+
+
+def _model_counts(calls):
+    out = {}
+    for c in calls:
+        m = c.get("model")
+        if m:
+            out[m] = out.get(m, 0) + 1
+    return out
+
+
+def model_status(model, cfg):
+    """(verified?, note) for a model name, from store_config.json's models section."""
+    models = cfg.get("models") or {}
+    for pat, note in (models.get("verified") or {}).items():
+        if fnmatch.fnmatch(model, pat):
+            return True, note
+    for pat, note in (models.get("unverified") or {}).items():
+        if fnmatch.fnmatch(model, pat):
+            return False, note
+    return False, "not listed in store_config.json models"
+
+
+def check_models(man, cfg):
+    """Hold a unit with any call from a model whose terms were not read."""
+    bad = {m: model_status(m, cfg)[1] for m in man.get("models") or {} if not model_status(m, cfg)[0]}
+    if bad:
+        raise Refused("held: calls from unverified model(s): " + "; ".join(f"{m} ({n})" for m, n in sorted(bad.items())))
+
+
+def check_batch_complete(src):
+    """A batch is complete when batch.json exists and every instance has its summary.json."""
+    if not os.path.exists(os.path.join(src, "batch.json")):
+        raise Refused(f"{tilde(src)}: no batch.json")
+    insts = [d for d in sorted(os.listdir(src)) if os.path.isdir(os.path.join(src, d))
+             and os.path.exists(os.path.join(src, d, "cast.json"))]
+    if not insts:
+        raise Refused(f"{tilde(src)}: no instances")
+    missing = [d for d in insts if not os.path.exists(os.path.join(src, d, "summary.json"))]
+    if missing:
+        raise Refused(f"{tilde(src)}: incomplete, no summary.json in {', '.join(missing[:3])}")
+    return insts
 
 
 def check_publishable(man, scrubber):
@@ -1552,17 +1957,17 @@ def unit_path(kind, name, machine):
     raise Refused(kind)
 
 
-def fetch_batch(backend, name, dest, machine=None, unpack=False):
-    prefix = "batches/"
+def fetch_batch(backend, name, dest, machine=None, unpack=False, top="batches"):
+    prefix = top + "/"
     hits = [p for p in backend.list("runs", prefix) if p.split("/")[2:3] == [name]]
     machines = sorted({p.split("/")[1] for p in hits})
     if machine:
         machines = [m for m in machines if m == machine]
     if not machines:
-        raise Refused(f"no batch {name} in the runs repository")
+        raise Refused(f"no {top[:-2] if top.endswith('es') else top[:-1]} {name} in the runs repository")
     if len(machines) > 1:
-        raise Refused(f"batch {name} exists on several machines ({', '.join(machines)}); pass --machine")
-    path = f"batches/{machines[0]}/{name}"
+        raise Refused(f"{name} exists on several machines ({', '.join(machines)}); pass --machine")
+    path = f"{top}/{machines[0]}/{name}"
     packed = os.path.join(dest, "packed") if unpack else dest
     backend.fetch("runs", path, packed)
     if unpack:
@@ -1672,7 +2077,7 @@ def _scrubber_for(src, cfg, machine, kind=None, player=None, decide=()):
     decisions = {}
     for d in decide or ():
         k, _, v = d.partition("=")
-        if k not in DECISIONS or v not in ("include", "exclude", "redact", "undecided"):
+        if k not in DECISIONS or v not in ("include", "exclude", "redact", "hold", "undecided"):
             raise Refused(f"--decide {d}: expected one of {', '.join(DECISIONS)} = include|exclude|redact|undecided")
         decisions[k] = v
     return Scrubber(Identity.from_runtime(cfg, machine), decisions=decisions, cfg=cfg, machine=machine,
@@ -1694,24 +2099,55 @@ def cmd_manifest(a, cfg, machine):
         sys.stdout.write(md)
 
 
+def write_scrubbed(src, scrubber, out):
+    """The scrubbed tree as it would be published, for review, under its published paths."""
+    rows, totals, data = scrub_source(src, scrubber, keep_data=True)
+    for rel, body in data.items():
+        pub = scrubber.publish_path(rel.replace("!", "/"))
+        p = _safe_join(out, pub)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as f:
+            f.write(body)
+    return rows, totals
+
+
+def dropped_markdown(dropped):
+    lines = ["# Dropped by the owner-line echo pass", "",
+             f"{len(dropped)} item(s). Owner lines and echoes are masked.", "",
+             "| File | Where | Why |", "| --- | --- | --- |"]
+    for d in dropped:
+        lines.append(f"| `{d['file']}` | {d['where']} | {d['why']} |")
+    return "\n".join(lines) + "\n"
+
+
 def cmd_scrub(a, cfg, machine):
-    if not a.dry_run:
-        raise Refused("scrub only runs as --dry-run; `pack` writes scrubbed units")
+    if not a.dry_run and not a.write:
+        raise Refused("scrub runs as --dry-run, or with --write DIR to write the scrubbed tree for review")
     src = os.path.abspath(os.path.expanduser(a.src))
     nt = is_never_touch(src, cfg, machine)
     if nt:
         raise Refused(f"{tilde(src)} is in a never-touch folder ({tilde(nt)})")
     sc, kind = _scrubber_for(src, cfg, machine, a.kind, a.player, a.decide)
-    rows, totals, _ = scrub_source(src, sc)
+    if a.write:
+        if os.path.exists(a.write) and os.listdir(a.write):
+            raise Refused(f"{a.write} is not empty")
+        rows, totals = write_scrubbed(src, sc, os.path.join(a.write, "tree"))
+    else:
+        rows, totals, _ = scrub_source(src, sc)
+    okp = {r["path"].split("!")[-1] for r in rows if r["status"] == "ok"}
+    dropped = [d for d in sc.dropped if d["file"] in okp]
     dec = decision_report(src, sc, rows, totals)
     md = dry_run_markdown(src, kind, rows, totals, dec, sc)
-    out = a.report or os.path.join(_dryrun_dir(), re.sub(r"[^\w.-]+", "_", tilde(src).strip("~/")))
+    out = a.write or a.report or os.path.join(_dryrun_dir(), re.sub(r"[^\w.-]+", "_", tilde(src).strip("~/")))
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "report.md"), "w") as f:
         f.write(md)
+    with open(os.path.join(out, "dropped.md"), "w") as f:
+        f.write(dropped_markdown(dropped))
     with open(os.path.join(out, "report.json"), "w") as f:
         json.dump({"src": tilde(src), "kind": kind, "rows": rows, "redactions": totals.as_dict(),
-                   "decisions": dec}, f, ensure_ascii=False, indent=1)
+                   "decisions": dec, "dropped": dropped}, f, ensure_ascii=False, indent=1)
+    print(f"  dropped by the echo pass: {len(dropped)}")
     by = {}
     for r in rows:
         by[r["status"]] = by.get(r["status"], 0) + 1
@@ -1750,18 +2186,91 @@ def cmd_publish(a, cfg, machine):
     src = os.path.abspath(os.path.expanduser(a.src))
     if is_never_touch(src, cfg, machine):
         raise Refused(f"{tilde(src)} is in a never-touch folder")
+    if a.kind == "session" and not cfg.get("publish_sessions"):
+        raise Refused("play sessions are held: publish_sessions is not set in the machine-local config")
+    if a.kind == "batch":
+        check_batch_complete(src)
+    if getattr(a, "packed", None):
+        # an existing pack, uploaded unchanged (so a fetch can be compared with it byte for byte)
+        if a.kind != "batch":
+            raise Refused("--packed is for batches")
+        name = a.name or os.path.basename(src.rstrip("/"))
+        man = verify_pack(a.packed, src, cfg, machine)
+        print(backend.publish("runs", a.packed, unit_path("batch", name, machine), f"batch {name} from {machine}"))
+        return
     sc, _ = _scrubber_for(src, cfg, machine, {"session": "play-session"}.get(a.kind, a.kind), a.player)
     stage = tempfile.mkdtemp(prefix="store-stage-")
     try:
         name = a.name or os.path.basename(src.rstrip("/"))
         man = _pack(a.kind, src, stage, sc, machine)
         check_publishable(man, sc)
+        if a.kind in ("batch", "session"):
+            check_models(man, cfg)
         local = stage if a.kind != "motion" else os.path.join(stage, "motion")
         where = backend.publish("runs" if a.kind != "motion" else "assets", local,
                                 unit_path(a.kind, name, machine), f"{a.kind} {name} from {machine}")
         print(where)
     finally:
         shutil.rmtree(stage, ignore_errors=True)
+
+
+PACK_FILES = ("instances.jsonl.gz", "calls.jsonl.gz", "rows.jsonl.gz", "prompts.jsonl.gz", "files.tar.gz",
+              "MANIFEST.json")
+
+
+def verify_pack(packed, src, cfg, machine):
+    """The checks publish runs on a fresh pack, run on an existing one."""
+    names = sorted(os.listdir(packed))
+    if names != sorted(PACK_FILES):
+        raise Refused(f"{packed}: expected exactly {', '.join(PACK_FILES)}, found {', '.join(names)}")
+    with open(os.path.join(packed, "MANIFEST.json"), encoding="utf-8") as f:
+        man = json.load(f)
+    if man.get("unit") != "batch" or man.get("name") != os.path.basename(src.rstrip("/")):
+        raise Refused(f"{packed}: MANIFEST names {man.get('unit')} {man.get('name')}, not this batch")
+    if man.get("machine") != machine:
+        raise Refused(f"{packed}: packed on {man.get('machine')}, this is {machine}")
+    held = [f["path"] for f in man.get("files", []) if f.get("status") == "held"]
+    if held:
+        raise Refused(f"{packed}: {len(held)} held file(s)")
+    check_models(man, cfg)
+    return man
+
+
+def cmd_publish_batches(a, cfg, machine):
+    """Pack many batches, then upload them in a few commits of whole batches."""
+    backend = make_backend(a.backend, cfg, yes_publish=a.yes_publish, root=a.root)
+    if isinstance(backend, HFBackend):
+        backend.gate()
+    with open(os.path.expanduser(a.list), encoding="utf-8") as f:
+        srcs = [os.path.abspath(os.path.expanduser(l.strip())) for l in f if l.strip() and not l.startswith("#")]
+    stage = os.path.abspath(os.path.expanduser(a.stage))
+    os.makedirs(stage, exist_ok=True)
+    ready, held = [], []
+    for src in srcs:
+        name = os.path.basename(src.rstrip("/"))
+        out = os.path.join(stage, name)
+        try:
+            if is_never_touch(src, cfg, machine):
+                raise Refused("never-touch folder")
+            check_batch_complete(src)
+            if not (os.path.isdir(out) and sorted(os.listdir(out)) == sorted(PACK_FILES)):
+                shutil.rmtree(out, ignore_errors=True)
+                sc, _ = _scrubber_for(src, cfg, machine, "trial-batch")
+                man = pack_batch(src, out, sc, machine=machine)
+                check_publishable(man, sc)
+            man = verify_pack(out, src, cfg, machine)
+            ready.append((name, out, man))
+            print(f"packed {name}: {man['counts']['calls']} calls, {man['counts']['rows']} rows", flush=True)
+        except Refused as e:
+            held.append((name, str(e)))
+            shutil.rmtree(out, ignore_errors=True)
+            print(f"held {name}: {e}", flush=True)
+    groups = [ready[i:i + a.per_commit] for i in range(0, len(ready), a.per_commit)]
+    for k, group in enumerate(groups, 1):
+        msg = f"{len(group)} batches from {machine} ({k}/{len(groups)}): {', '.join(n for n, _, _ in group)}"
+        where = backend.publish_units("runs", [(unit_path("batch", n, machine), out) for n, out, _ in group], msg)
+        print(f"commit {k}/{len(groups)}: {where}", flush=True)
+    print(json.dumps({"published": [n for n, _, _ in ready], "held": held}, indent=1))
 
 
 def cmd_fetch(a, cfg, machine):
@@ -1772,12 +2281,32 @@ def cmd_fetch(a, cfg, machine):
             raise Refused(f"{dest} is read-only on this machine")
         wrote, kept = fetch_motion(backend, dest, force=a.force)
         print(f"{wrote} take(s) written, {kept} already there: {tilde(dest)}")
-    elif a.what == "batch":
+    elif a.what in ("batch", "session"):
         if not a.name:
-            raise Refused("fetch batch NAME")
-        dest = a.dest or os.path.join(REPO, ".local", "living", "store", "batches", a.name)
-        path = fetch_batch(backend, a.name, dest, machine=a.machine, unpack=a.unpack)
+            raise Refused(f"fetch {a.what} NAME")
+        top = a.what + ("es" if a.what == "batch" else "s")
+        dest = a.dest or os.path.join(REPO, ".local", "living", "store", top, a.name)
+        path = fetch_batch(backend, a.name, dest, machine=a.machine, unpack=a.unpack, top=top)
         print(f"{path} → {tilde(dest)}")
+
+
+def cmd_card(a, cfg, machine):
+    """Publish a dataset card (store_cards/<repo>.md) as the repository's README.md."""
+    card = os.path.join(TOOLS, "store_cards", f"{a.repo}.md")
+    with open(card, encoding="utf-8") as f:
+        text = f.read()
+    if "DRAFT" in text:
+        raise Refused(f"{card} is still marked DRAFT")
+    backend = make_backend(a.backend, cfg, yes_publish=a.yes_publish, root=a.root)
+    if isinstance(backend, HFBackend):
+        print(backend.put_file(a.repo, card, "README.md", f"card: {a.repo}"))
+    else:
+        d = tempfile.mkdtemp(prefix="store-card-")
+        try:
+            shutil.copy(card, os.path.join(d, "README.md"))
+            print(backend.publish(a.repo, d, ".card", f"card: {a.repo}"))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 def cmd_layout(a, cfg, machine):
@@ -1802,6 +2331,12 @@ def main(argv=None):
     s.add_argument("--kind", choices=["trial-batch", "play-session", "motion", "generic"])
     s.add_argument("--player", type=int)
     s.add_argument("--decide", action="append", help="what-if: CATEGORY=include|exclude|redact (not saved)")
+    s.add_argument("--write", help="write the scrubbed tree (DIR/tree) and the reports into DIR, for review")
+    c = sub.add_parser("card")
+    c.add_argument("repo", choices=["runs", "assets"])
+    c.add_argument("--backend", choices=["local", "hf"], required=True)
+    c.add_argument("--root")
+    c.add_argument("--yes-publish", action="store_true")
     for name in ("pack", "publish"):
         q = sub.add_parser(name)
         q.add_argument("kind", choices=["batch", "session", "motion"])
@@ -1815,8 +2350,16 @@ def main(argv=None):
             q.add_argument("--backend", choices=["local", "hf"], required=True)
             q.add_argument("--root", help="local backend root")
             q.add_argument("--yes-publish", action="store_true")
+            q.add_argument("--packed", help="upload this existing pack of SRC unchanged (batches)")
+    pb = sub.add_parser("publish-batches")
+    pb.add_argument("--list", required=True, help="file with one batch folder per line")
+    pb.add_argument("--stage", required=True, help="where the packs are written (kept; reused when complete)")
+    pb.add_argument("--per-commit", type=int, default=15)
+    pb.add_argument("--backend", choices=["local", "hf"], required=True)
+    pb.add_argument("--root")
+    pb.add_argument("--yes-publish", action="store_true")
     f = sub.add_parser("fetch")
-    f.add_argument("what", choices=["motion-library", "batch"])
+    f.add_argument("what", choices=["motion-library", "batch", "session"])
     f.add_argument("name", nargs="?")
     f.add_argument("--backend", choices=["local", "hf"], default="local")
     f.add_argument("--root")
@@ -1832,7 +2375,8 @@ def main(argv=None):
         cfg = load_config()
         machine = machine_name(cfg)
         {"manifest": cmd_manifest, "scrub": cmd_scrub, "pack": cmd_pack, "publish": cmd_publish,
-         "fetch": cmd_fetch, "layout": cmd_layout}[a.cmd](a, cfg, machine)
+         "fetch": cmd_fetch, "layout": cmd_layout, "card": cmd_card,
+         "publish-batches": cmd_publish_batches}[a.cmd](a, cfg, machine)
     except Refused as e:
         print(f"store: refused: {e}", file=sys.stderr)
         return 2

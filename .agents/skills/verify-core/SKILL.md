@@ -103,7 +103,8 @@ python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
 
 # Rhythms at any hour and Cullet's trades (about 17 min): a night stoker rising at 14:00 and
 # working the night, the day watch feeding the furnace and making glass, a baker's second sleep,
-# Cullet's life stages (features/town.md, features/laws.md, docs/SEEDED_LIVES.md).
+# Cullet's life stages, and five trades at the places of the plan's open lots in their hours
+# (features/town.md, features/laws.md, docs/SEEDED_LIVES.md, docs/CULLET_LAYOUT.md pass 2).
 Y=$R-rhythm
 mkdir -p ".local/living/verify/$Y"
 python3 "$C/rhythm.py" seed --run "$Y" > ".local/living/verify/$Y/seed.txt" 2>&1

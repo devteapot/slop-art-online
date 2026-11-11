@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick turns support (default: all but support)
+  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick turns look-walk support (default: all but support)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -39,10 +39,12 @@ def residents(run, n=2):
 THEME = os.environ.get("LIVING_GAME_THEME", "")
 
 
-def drive(run, name, plan, places=(), syncs=()):
+def drive(run, name, plan, places=(), syncs=(), token=None):
     # A run per theme keeps its own evidence (`LIVING_GAME_THEME=night check.py …`).
     name = f"{name}-{THEME}" if THEME else name
     cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "420"]
+    if token:
+        cmd += ["--token", token]
     for p in places:
         cmd += ["--place", p]
     for s in syncs:
@@ -369,7 +371,233 @@ def turns(run, c):
     c.check(s, "left drag: the view turned", ok, det)
 
 
-SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "support": support}
+# The look-walk presets (`living/game/src/twist.rs` `LookWalk::preset`): head and chest limits,
+# the body's limit and time constant (s). Kept in step with the client by hand.
+LOOK_WALK = {"head": (60, 0, 45, 0.22), "chest": (50, 40, 45, 0.35), "loose": (60, 55, 45, 0.6)}
+
+
+def wrapd(a):
+    return (a + 180.0) % 360.0 - 180.0
+
+
+def feet_log(out):
+    p = os.path.join(out, "feet.jsonl")
+    rows = []
+    if os.path.exists(p):
+        for line in open(p, errors="replace"):
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                pass
+    return [r for r in rows if r.get("sim") and r.get("t") is not None]
+
+
+def look_walk_one(run, c, preset):
+    """Walk while looking 0/45/90/135° off the travel (steady), then turn the travel 90° and 180°
+    with the look held (sudden), in the cursor scheme, with the feet log on. Checks: the head and
+    chest within the preset's limits; the legs eased (no frame jump); no crossing in steady walking
+    within the head+chest limit; crossing after a sudden turn gone within 3 body_s + 0.6 s; ground
+    speed the same looking aside as straight."""
+    s = f"look-walk:{preset}"
+    head, chest, body, body_s = LOOK_WALK[preset]
+    upper = head + chest
+    # Compass degrees (0 north, 90 east); each steady segment walks 6 s east or west.
+    steady = [(0, 90, 90), (45, 270, 315), (90, 90, 180), (135, 270, 45)]
+    # Open grass west of Brackenford on the island seed (no roads, nothing to steer round for
+    # 10 m either way), placed there by admin `place_at` (scene setup).
+    # The drawn body catches up a short teleport at 1.2 m/s: wait it out before walking.
+    # A close camera for the photographs and the recording; the first-time tip out of the way.
+    plan = f"ready;click:@tip:ok;sync:spot;wait:5;frame:0;view:28:5.5;lookwalk:{preset};wait:1;"
+    for off, walk, look in steady:
+        plan += f"look:{look};wait:0.6;hold:{walk};wait:4;shot:steady{off};wait:2;stop;wait:0.8;"
+    plan += ("look:0;wait:0.6;hold:0;wait:3;hold:90;wait:0.35;shot:sudden90;wait:3.6;stop;wait:0.8;"
+             "look:180;wait:0.6;hold:180;wait:3;hold:0;wait:0.35;shot:sudden180;wait:3.6;stop;wait:0.5;quit")
+    # `LOOK_WALK_TAG=before` keeps a second set (another client: CARGO_TARGET_DIR).
+    name = f"look-walk-{preset}" + (f"-{os.environ['LOOK_WALK_TAG']}" if os.environ.get("LOOK_WALK_TAG") else "")
+    out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}-{THEME}" if THEME else name)
+    os.makedirs(out_dir, exist_ok=True)
+    env_keep = {k: os.environ.get(k) for k in ["LIVING_GAME_FEET", "LIVING_GAME_CONTROL", "LIVING_GAME_RECORD"]}
+    os.environ["LIVING_GAME_FEET"] = os.path.join(out_dir, "feet.jsonl")
+    os.environ["LIVING_GAME_CONTROL"] = "cursor"
+    if os.environ.get("LOOK_WALK_RECORD"):
+        os.environ["LIVING_GAME_RECORD"] = os.path.join(out_dir, "record")
+    try:
+        if os.environ.get("LOOK_WALK_REUSE") and os.path.exists(os.path.join(out_dir, "feet.jsonl")):
+            # Check the last drive's log again (iterating on the checks).
+            out, code, text = out_dir, 0, "reused"
+        else:
+            out, code, text = drive(run, name, plan, syncs=[f"spot=place_at|{{me}}|{LOOK_WALK_SPOT[0]}|{LOOK_WALK_SPOT[1]}"], token=os.environ.get("LOOK_WALK_TOKEN"))
+    finally:
+        for k, v in env_keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    rows = feet_log(out)
+    c.check(s, "the feet log recorded the walk", len(rows) > 300, f"{len(rows)} frames")
+    if len(rows) < 300:
+        return {}
+    # Per frame: drawn ground speed, the legs' yaw (the model root's: sim + 180°, `live.rs`
+    # `yaw_of` turned by π), crossing.
+    import math
+    FORWARD = ("walk", "walk_brisk", "run", "run_fast", "walk_back")
+    for i, r in enumerate(rows):
+        q = rows[i - 1] if i else r
+        r["dt"] = r["t"] - q["t"]
+        r["v"] = (((r["sim"][0] - q["sim"][0]) ** 2 + (r["sim"][1] - q["sim"][1]) ** 2) ** 0.5 / r["dt"]) if r["dt"] > 0 else 0.0
+        g = dict(r.get("gaits") or [])
+        # The crossover takes cross by design; the forward and back gaits must not, in the legs'
+        # own frame (the diagonals' feet trace across it by design, as the clip lab accepted).
+        r["cross_w"] = sum(w for n, w in g.items() if "cross" in n)
+        fwd = sum(w for n, w in g.items() if n in FORWARD) >= 0.8
+        legs = math.radians(r["yaw"])
+        sep = (r["la"][0] - r["ra"][0]) * -math.sin(legs) + (r["la"][2] - r["ra"][2]) * math.cos(legs)
+        r["sep_raw"] = sep if fwd else None
+    walking = [r for r in rows if r["v"] > 0.8 and r.get("heading") is not None]
+    def off_of(r):
+        return wrapd(r["look"] - r["heading"]) if r.get("look") is not None else None
+    straight = [r for r in walking if off_of(r) is not None and abs(off_of(r)) < 3 and r.get("sep_raw") is not None]
+    if not straight:
+        c.check(s, "found straight walking to calibrate", False)
+        return {}
+    import statistics
+    # Which side is the left foot in the legs' frame: from straight walking.
+    sep_sign = 1.0 if statistics.median(r["sep_raw"] for r in straight) >= 0 else -1.0
+    for r in rows:
+        r["legs_off"] = wrapd(r["yaw"] - 180.0 - r["heading"]) if r.get("heading") is not None else None
+        r["sep"] = r["sep_raw"] * sep_sign if r.get("sep_raw") is not None else None
+        r["crossed"] = r["cross_w"] > 0.25 or (r["sep"] is not None and r["sep"] < -0.03)
+    # Segments: consecutive walking frames with the same look (to 1°) and travel (to 5°).
+    segs, cur = [], []
+    for r in walking:
+        if cur and (abs(wrapd(r["look"] - cur[-1]["look"])) > 1 or abs(wrapd(r["heading"] - cur[-1]["heading"])) > 5 or r["t"] - cur[-1]["t"] > 0.3):
+            segs.append(cur)
+            cur = []
+        cur.append(r)
+    if cur:
+        segs.append(cur)
+    result = {"preset": preset, "segments": []}
+    base_v = None
+    # Exact limits on what the client asked of the bones (Motion), and the bones as drawn.
+    nk = max(abs(r.get("neck") or 0) for r in rows)
+    ch = max(abs((r.get("twist") or 0) - (r.get("neck") or 0)) for r in rows)
+    c.check(s, f"asked: neck and head within {head}°, spine and chest within {chest}°", nk <= head + 0.1 and ch <= chest + 0.1, f"neck {nk:.1f}, chest {ch:.1f}")
+    # As drawn: the head from the chest, and the chest from the legs (the model root; the hips
+    # sway ±10° in a walk), against what was asked, by median over walking frames.
+    dn = [wrapd(r["head_yaw"] - r["chest_yaw"]) - r["neck"] for r in walking if r.get("head_yaw") is not None and r.get("neck") is not None]
+    dc = [wrapd(r["chest_yaw"] - r["yaw"]) - (r["twist"] - r["neck"]) for r in walking if r.get("chest_yaw") is not None and r.get("twist") is not None]
+    mn, mc = (statistics.median(dn) if dn else 99), (statistics.median(dc) if dc else 99)
+    c.check(s, "drawn: the head turns from the chest and the chest from the legs as asked (median within 8°)", abs(mn) <= 8 and abs(mc) <= 8, f"head {mn:+.1f}°, chest {mc:+.1f}° off what was asked")
+    hn = max((abs(wrapd(r["head_yaw"] - r["chest_yaw"])) for r in walking if r.get("head_yaw") is not None), default=0)
+    c.check(s, f"drawn: the head never more than {head} + 15° from the chest", hn <= head + 15, f"max {hn:.1f}°")
+    # Frames over 50 ms (a headless hitch) are left out: a take turns at its own rate over them.
+    # A frame may turn the legs more than 15° only within 720°/s (`live.rs` TURN_MAX; the body's
+    # own cap is lower) over a long frame.
+    jumps = [(abs(wrapd(rows[i]["yaw"] - rows[i - 1]["yaw"])), rows[i]["dt"]) for i in range(1, len(rows)) if 0 < rows[i]["dt"] <= 0.05]
+    bad = [(d, dt) for d, dt in jumps if d > max(15.0, 720.0 * dt + 1.0)]
+    hitches = sum(1 for r in rows if r["dt"] > 0.05)
+    worst = max(jumps or [(0, 0)])
+    c.check(s, "the legs come round eased: no frame turns them more than 15° (or 720°/s over a long frame)", jumps and not bad, f"max {worst[0]:.1f}° in {worst[1] * 1000:.0f} ms; {len(bad)} over; {hitches} frames over 50 ms left out")
+    for off, walk, look in steady:
+        seg = max((g for g in segs if g and abs(abs(off_of(g[0])) - off) < 6), key=len, default=None)
+        if not seg or seg[-1]["t"] - seg[0]["t"] < 3.5:
+            c.check(s, f"steady {off}°: a segment of at least 3.5 s", False, f"{len(seg or [])} frames")
+            continue
+        t0 = seg[0]["t"] + 2.0
+        st = [r for r in seg if r["t"] >= t0]
+        # The drawn speed: the median of 0.5 s windows' net displacement (the drawn track's
+        # per-frame steps jitter at segment renewals, and a window over a snap is an outlier).
+        wins, j = [], 0
+        for i, r in enumerate(st):
+            while st[j]["t"] < r["t"] - 0.5:
+                j += 1
+            if r["t"] - st[j]["t"] >= 0.45:
+                wins.append(((r["sim"][0] - st[j]["sim"][0]) ** 2 + (r["sim"][1] - st[j]["sim"][1]) ** 2) ** 0.5 / (r["t"] - st[j]["t"]))
+        v = statistics.median(wins) if wins else 0.0
+        # The authority's segment speed is the ground speed the rules give the body.
+        auth = statistics.median(r["seg"][2] for r in st if r.get("seg"))
+        crossed = [r for r in st if r["crossed"]]
+        legs = statistics.median(abs(r["legs_off"]) for r in st if r["legs_off"] is not None)
+        # Forward: turned toward the look by what the head and chest leave, at most `body`;
+        # backwards (past the back limit): the same from the travel's reverse.
+        want = 180.0 - min(max((180 - off) - upper, 0), body) if off > LOOK_WALK_BACK.get(preset, 135) else min(max(off - upper, 0), body)
+        row = {"off": off, "speed": round(v, 3), "authority_speed": auth, "legs_off_median": round(legs, 1), "legs_want": want, "crossed_frames": len(crossed), "frames": len(st),
+               "min_sep_m": round(min((r["sep"] for r in st if r["sep"] is not None), default=0), 3), "cross_weight_max": round(max(r["cross_w"] for r in st), 2)}
+        result["segments"].append(row)
+        if off == 0:
+            base_v, base_auth = v, auth
+        if off <= upper:
+            c.check(s, f"steady {off}° (within head+chest {upper}°): no crossing", not crossed, f"{len(crossed)}/{len(st)} frames, min sep {row['min_sep_m']} m, cross weight {row['cross_weight_max']}")
+        else:
+            c.check(s, f"steady {off}° (past head+chest): no crossing once the body has come round", not crossed, f"{len(crossed)}/{len(st)} frames")
+        c.check(s, f"steady {off}°: the legs settle {want:.0f}° off the travel (±8°)", abs(legs - want) <= 8, f"{legs:.1f}°")
+        if base_v and off:
+            c.check(s, f"steady {off}°: the authority's ground speed as straight (±2%)", abs(auth / base_auth - 1) <= 0.02, f"{auth:.3f} vs {base_auth:.3f} m/s")
+            c.check(s, f"steady {off}°: the drawn speed as straight (±8%)", abs(v / base_v - 1) <= 0.08, f"{v:.2f} vs {base_v:.2f} m/s")
+    # Sudden turns: the travel turns 90° (then 180°) with the look held.
+    limit = 3 * body_s + 0.6
+    for turn, look_c in [(90, 0), (180, 180)]:
+        lk = wrapd(-90 + look_c)  # compass to sim degrees
+        cand = [i for i in range(1, len(rows)) if rows[i].get("look") is not None and abs(wrapd(rows[i]["look"] - lk)) < 1 and rows[i].get("heading") is not None and rows[i - 1].get("heading") is not None
+                and abs(wrapd(rows[i - 1]["heading"] - lk)) < 20 and abs(wrapd(rows[i]["heading"] - lk)) >= 20]
+        if not cand:
+            c.check(s, f"sudden {turn}°: found the turn", False)
+            continue
+        i0 = cand[0]
+        t_s = rows[i0]["t"]
+        # Until the travel changes again (a resident in the way, the stop).
+        new_h = None
+        after = []
+        for r in rows[i0:]:
+            if r["t"] - t_s >= 3.5 or r.get("heading") is None:
+                break
+            if r["t"] - t_s > 0.8:
+                new_h = r["heading"] if new_h is None else new_h
+                if abs(wrapd(r["heading"] - new_h)) > 20:
+                    break
+            if r["v"] > 0.5:
+                after.append(r)
+        crossed = [r for r in after if r["crossed"]]
+        last = (crossed[-1]["t"] - t_s) if crossed else 0.0
+        result[f"sudden{turn}"] = {"crossed_frames": len(crossed), "last_cross_s": round(last, 2), "limit_s": round(limit, 2), "cross_weight_max": round(max([r["cross_w"] for r in after] or [0]), 2)}
+        c.check(s, f"sudden {turn}°: any crossing ends within {limit:.2f} s", last <= limit, f"last crossing {last:.2f} s after the turn ({len(crossed)} frames)")
+    json.dump(result, open(os.path.join(out, "look_walk.json"), "w"), indent=1)
+    return result
+
+
+LOOK_WALK_BACK = {"head": 130, "chest": 135, "loose": 155}
+LOOK_WALK_SPOT = (300.0, 330.0)
+
+
+def look_walk(run, c):
+    """`look-walk` (play-test 5, item 2): every preset, or `LOOK_WALK_PRESETS=chest,head`;
+    `LOOK_WALK_REUSE=1` checks the last drives' feet logs again, `LOOK_WALK_RECORD=1` also records
+    the session (`LIVING_GAME_RECORD`, stills for a video), `LOOK_WALK_TOKEN=FILE` walks another
+    character (a tired one walks at 0.6 of the pace, where the old client crossed its legs)."""
+    for p in [x for x in os.environ.get("LOOK_WALK_PRESETS", "head,chest,loose").split(",") if x]:
+        look_walk_one(run, c, p)
+    if os.environ.get("LOOK_WALK_REUSE"):
+        return
+    # Settings › Play › Looking aside sets the preset and the settings file keeps it.
+    s = "look-walk:settings"
+    plan = ("ready;wait:1.5;click:@menu;wait:0.3;click:@menu:Settings;wait:0.6;shot:01_play;click:@settings:look_walk:loose;wait:0.5;dump:02;shot:02_loose;"
+            "click:@settings:look_walk:head;wait:0.5;dump:03;quit")
+    old = os.environ.pop("LIVING_GAME_LOOK_WALK", None)
+    try:
+        out, code, text = drive(run, "look-walk-settings", plan)
+    finally:
+        if old is not None:
+            os.environ["LIVING_GAME_LOOK_WALK"] = old
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    L = log(out)
+    c.check(s, "Settings › Play › Looking aside › Loose, then Head to 60°, set the preset", "settings: looking aside: loose" in L and "settings: looking aside: head" in L)
+    st = os.path.join(out, "settings.json")
+    saved = json.load(open(st)).get("look_walk") if os.path.exists(st) else None
+    c.check(s, "the settings file keeps it", saved == "head", str(saved))
+
+
+SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "support": support}
 
 
 def main():

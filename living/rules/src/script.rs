@@ -19,6 +19,8 @@ use std::rc::Rc;
 
 pub mod body;
 mod check;
+#[cfg(test)]
+mod seed_check;
 pub mod context;
 pub mod fields;
 pub mod speech;
@@ -952,12 +954,65 @@ pub struct Limits {
 /// 2026-11-11) and 2,373 after, so the string limit is 4,096.
 pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 4_096, array: 256, map: 512 };
 
+/// Rhai's hashing keys, the same in every build of every program that runs the laws: the
+/// authority, the game client and the mind service (docs/LIVING_CORE.md, "One hashing seed").
+///
+/// Rhai hashes function names, call signatures and `switch` cases with `ahash`, and turns on
+/// `ahash`'s `compile-time-rng`. Unless a seed is set, the keys are random numbers drawn each
+/// time `ahash` compiles (a new target folder, a cache miss, a toolchain update), and they
+/// decide where entries land in Rhai's tables and in which order it hands back a script's
+/// functions. So the same source cost a different fuel per call from build to build (`tool-8`),
+/// and a rule that followed that order (`fov-1`'s field analysis) decided differently by build.
+/// Fixed keys make both a function of the code alone.
+///
+/// The value is the fuel bench's key set 0 since `tool-8` (`sb_bench::hashing_seed(0)`), so the
+/// gate's history at that set is the game's; nothing else about it matters but that it is not
+/// zero (Rhai takes zero keys as no seed) and never changes: changing it moves every law's fuel.
+/// It was not chosen for a law's fuel. Fixed keys are public, so whoever chooses a string that
+/// Rhai hashes could look for collisions: to slow the engine (hash flooding) or to take a wrong
+/// `switch` branch (Rhai matches a case by its hash alone). Acceptable while scripts come from a
+/// world's seed and admin installs; the docs list where a player's words reach a hashed
+/// position today (an act's item) and when to revisit.
+pub const HASHING_SEED: [u64; 4] = [0x5eed_0000_0000_0001, 0x5eed_0000_0000_0002, 0x5eed_0000_0000_0003, 0x5eed_0000_0000_0004];
+
+/// Fix Rhai's hashing keys to [`HASHING_SEED`] (`rhai::config::hashing::set_hashing_seed`) and
+/// return the keys in force. Rhai reads them once per process (a module instance), so this must
+/// run before anything touches Rhai: every engine of this crate is made by [`new_engine`], which
+/// calls it. Keys set earlier by someone else stay in force (the fuel bench's other key sets).
+pub fn fix_hashing() -> [u64; 4] {
+    #[cfg(test)]
+    if let Some(k) = test_seed() {
+        let _ = rhai::config::hashing::set_hashing_seed(k);
+        return k.unwrap_or_default();
+    }
+    let _ = rhai::config::hashing::set_hashing_seed(Some(HASHING_SEED));
+    rhai::config::hashing::get_hashing_seed().unwrap_or_default()
+}
+
+/// Tests only: other keys for this process (`LIVING_RHAI_TEST_SEED`: four numbers, or `build`
+/// for the keys this build of `ahash` drew), for the check that no rule depends on them.
+#[cfg(test)]
+fn test_seed() -> Option<Option<[u64; 4]>> {
+    let v = std::env::var("LIVING_RHAI_TEST_SEED").ok()?;
+    if v == "build" {
+        return Some(None);
+    }
+    let k: Vec<u64> = v.split(',').map(|w| w.trim().parse().expect("LIVING_RHAI_TEST_SEED: four numbers or `build`")).collect();
+    Some(Some(k.try_into().expect("LIVING_RHAI_TEST_SEED: four numbers")))
+}
+
+/// A bare Rhai engine, after [`fix_hashing`]. The only way this crate makes one.
+pub fn new_engine() -> Engine {
+    fix_hashing();
+    Engine::new_raw()
+}
+
 fn engine(t: &Rc<RefCell<Tables>>) -> Engine {
     engine_with(LIMITS, t)
 }
 
 fn engine_with(l: Limits, t: &Rc<RefCell<Tables>>) -> Engine {
-    let mut e = Engine::new_raw();
+    let mut e = new_engine();
     register_tables(&mut e, t);
     rhai::packages::StandardPackage::new().register_into_engine(&mut e);
     e.set_max_operations(l.operations);
