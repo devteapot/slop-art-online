@@ -7,9 +7,9 @@ and memory, with every person a different file, at the game camera.
 
 TOWN_DIR is a town made by town.py (its `town.json` names the people; their models are
 lookdev/anim/own-<name>.glb). The people stand in the game's own crowd (`LIVING_GAME_CROWD`,
-characters.rs `spawn_crowd`) in an environment (`--env`, default `cullet`: its ground and light;
-its kit is drawn if this checkout has it), seen by the default game camera (22 m, 28° down),
-each playing its idle clip. Three runs, each in a fresh process, uncapped:
+characters.rs `spawn_crowd`) in an environment (`--env`, default `meadow`: open ground, so the
+people are what is measured; `cullet` is the grey city with its own walkers), seen by the
+default game camera (22 m, 28° down), each playing its idle clip. Three runs, each in a fresh process, uncapped:
 
 - `ours`: --count generated people, each a different file;
 - `vroid`: the same count of the VRoid bases the game used before (two files, recoloured);
@@ -122,7 +122,7 @@ def gpu_memory(pid):
     return total // (1 << 20)
 
 
-def run_game(out, name, env, seconds, size, place="cullet"):
+def run_game(out, name, env, seconds, size, place="meadow"):
     """Run the game headless on the line-up for `seconds`, logging; returns what was measured."""
     log = os.path.join(out, f"{name}.log")
     shots = os.path.join(out, name)
@@ -194,6 +194,14 @@ def run_game(out, name, env, seconds, size, place="cullet"):
         res.update(frames=len(rows), interval_ms_p50=round(iv[len(iv) // 2] / 1000, 2), interval_ms_p95=round(iv[int(len(iv) * 0.95)] / 1000, 2), interval_ms_p99=round(iv[int(len(iv) * 0.99)] / 1000, 2))
     except (OSError, IndexError, ValueError):
         pass
+    shutil.rmtree(shots, ignore_errors=True)
+    # The photograph: the same scene once more, left to take its one shot and quit.
+    e2 = dict(e, LIVING_GAME_TOUR_SHOTS="default", LIVING_GAME_PERF="", LIVING_GAME_FPS_CAP="60", RUST_LOG="warn")
+    e2.pop("LIVING_GAME_FRAMES", None)
+    try:
+        subprocess.run([binary], cwd=os.path.join(REPO, "living", "game"), env=e2, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180)
+    except subprocess.TimeoutExpired:
+        pass
     pics = sorted(x for x in os.listdir(shots) if x.endswith(".png")) if os.path.isdir(shots) else []
     if pics:
         keep = os.path.join(out, f"{name}.png")
@@ -214,7 +222,7 @@ def main():
     ap.add_argument("--perf", default="", help="more LIVING_GAME_PERF flags for every run (e.g. nooutlines)")
     ap.add_argument("--springs", default="", help="LIVING_GAME_SPRINGS for every run (0 turns spring bones off)")
     ap.add_argument("--tag", default="", help="a suffix for this set of runs' names")
-    ap.add_argument("--env", default="cullet", help="the environment the crowd stands in (envs/<id>.json; `lineup` is the look-dev line-up, which also shows every file in lookdev/)")
+    ap.add_argument("--env", default="meadow", help="the environment the crowd stands in (envs/<id>.json; `lineup` is the look-dev line-up, which also shows every file in lookdev/)")
     a = ap.parse_args()
     people = json.load(open(os.path.join(a.town, "town.json")))["people"]
     out = os.path.abspath(a.out)
