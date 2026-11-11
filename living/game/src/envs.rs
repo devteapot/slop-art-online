@@ -335,6 +335,52 @@ fn list_assets(env: &str, kind: &str) -> Vec<String> {
     out
 }
 
+/// A fixture of a hand-authored settlement's kit: a model that stands at a point of the land
+/// and is not a lot (a length of quay wall, a retaining wall, a flight of stairs, a bollard).
+#[derive(Deserialize, Clone, Debug)]
+pub(crate) struct Fixture {
+    /// Under `assets/`, as a lot's model file is.
+    pub file: String,
+    /// The kit's folder (`quay`, `retaining_wall`, `stairs`, `bollard`).
+    pub kind: String,
+    /// Land metres (x east, y south).
+    pub at: [f32; 2],
+    /// The way its front (glTF +Z) looks, on the land.
+    pub front: [f32; 2],
+    /// The ground its origin stands on.
+    pub floor: f32,
+    pub height: f32,
+    /// A light it carries: [`local_light`]'s kind (`lamp`) and colour.
+    #[serde(default)]
+    pub light: Option<String>,
+    #[serde(default)]
+    pub glow: Option<[f32; 3]>,
+}
+
+/// The fixtures an environment's kit lists (`envs/<env>/fixtures.json`), those whose models are
+/// on disk; none when the kit has no list. Read once per session.
+pub(crate) fn fixtures(env: &str) -> Vec<Fixture> {
+    static CACHE: std::sync::OnceLock<Mutex<HashMap<String, Vec<Fixture>>>> = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(env) {
+        return v.clone();
+    }
+    let root = std::path::Path::new(&crate::lookdev::asset_root()).to_path_buf();
+    let path = root.join(format!("envs/{env}/fixtures.json"));
+    let out = match std::fs::read_to_string(&path) {
+        Err(_) => Vec::new(),
+        Ok(text) => match serde_json::from_str::<Vec<Fixture>>(&text) {
+            Ok(list) => list.into_iter().filter(|f| root.join(&f.file).is_file()).collect(),
+            Err(e) => {
+                error!("{}: {e}", path.display());
+                Vec::new()
+            }
+        },
+    };
+    cache.lock().unwrap().insert(env.to_string(), out.clone());
+    out
+}
+
 /// One placed thing.
 pub(crate) struct Place {
     pub at: Vec2,

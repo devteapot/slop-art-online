@@ -1,0 +1,586 @@
+{
+ "schema": 1,
+ "family": "building:glasshouse",
+ "id": "20261111-78b8f3a2-1e6a54",
+ "published": "2026-11-11T18:03:56+01:00",
+ "track": "kit-1",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-1 pass 1, glow tuned at the dev-box coordinator's call: a falloff from the one lantern strip instead of two pools. Every pane within 1.0 m of the lantern is lit; out to 2.4 m fewer catch a dimmer light (GlowDim, strength 80 against 220); beyond it a pane keeps its glass colour. 8 to 12 panes lit and 15 to 21 dim of 342 in a worked house (before: nearly all of a sound house); a broken house has none. Generator parameters --lantern-core and --lantern-reach",
+ "source": {
+  "commit": "78b8f3a2bb6109b885954ce2d22e2d511e2997f2",
+  "branch": "kit-1",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "f3846087d328b69e07dbf0358efdf2b77212926b562c82fc89369f609670f2c5",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json",
+   "lantern_core_m": 1.0,
+   "lantern_reach_m": 2.4
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "86fae680d923921d2c41e9dffc8d39c75cc88752",
+  "dirty": false,
+  "key": "86fae680",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-glasshouse/20261111-78b8f3a2-1e6a54",
+ "members": [
+  {
+   "name": "glasshouse",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": "living/game/assets/envs/cullet/glasshouse/glasshouse_4.glb",
+   "sha256": "f7d28fbf778f7958a9a2d9dbf54107197ab27e1742cf96e9d6c711eef5279b18",
+   "stats": {
+    "file": "glasshouse_4.glb",
+    "sha256": "f7d28fbf778f7958a9a2d9dbf54107197ab27e1742cf96e9d6c711eef5279b18",
+    "bytes": 513160,
+    "triangles": 6649,
+    "vertices": 14688,
+    "parts": {
+     "glasshouse_4": 6649
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow",
+     "GlowDim"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 112,
+    "palette": [
+     {
+      "hex": "#3d4148",
+      "share": 0.3736
+     },
+     {
+      "hex": "#5a5e62",
+      "share": 0.1506
+     },
+     {
+      "hex": "#e6e5d9",
+      "share": 0.1373
+     },
+     {
+      "hex": "#9eccc7",
+      "share": 0.1064
+     },
+     {
+      "hex": "#878377",
+      "share": 0.0696
+     },
+     {
+      "hex": "#c7c4b6",
+      "share": 0.0351
+     },
+     {
+      "hex": "#7e786f",
+      "share": 0.0261
+     },
+     {
+      "hex": "#5e774d",
+      "share": 0.0217
+     },
+     {
+      "hex": "#2b1e15",
+      "share": 0.0198
+     },
+     {
+      "hex": "#3d3220",
+      "share": 0.0162
+     },
+     {
+      "hex": "#485362",
+      "share": 0.0074
+     },
+     {
+      "hex": "#566f43",
+      "share": 0.0069
+     },
+     {
+      "hex": "#55382b",
+      "share": 0.0067
+     },
+     {
+      "hex": "#c57e27",
+      "share": 0.0058
+     },
+     {
+      "hex": "other",
+      "share": 0.0168
+     }
+    ]
+   },
+   "file": "files/glasshouse.glb",
+   "report": {
+    "file": "glasshouse/glasshouse_4.glb",
+    "what": "lot",
+    "kind": "glasshouse",
+    "size_m": [
+     12.0,
+     4.5
+    ],
+    "plan_height_m": 3.2,
+    "seed": 394,
+    "above_floor_m": [
+     [
+      -6.0,
+      -2.25
+     ],
+     [
+      6.0,
+      2.25
+     ]
+    ],
+    "height_m": 3.277,
+    "foundation_m": 1.8,
+    "tris": 6649,
+    "materials": {
+     "Body": 6537,
+     "Glow": 44,
+     "GlowDim": 68
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8356,
+    "palette_wear_blend_share": 0.1644,
+    "budget_tris": 9000,
+    "doors": [],
+    "sha256": "f7d28fbf778f7958a9a2d9dbf54107197ab27e1742cf96e9d6c711eef5279b18",
+    "state": "patched",
+    "lantern_core_m": 1.0,
+    "lantern_reach_m": 2.4,
+    "lit_panes": 10,
+    "dim_panes": 17,
+    "ridge_m": 3.2,
+    "body_m": [
+     12.0,
+     3.85
+    ],
+    "strip_m": 0.65,
+    "bays": 12,
+    "panes": 342,
+    "boarded": 36,
+    "odd_glass": 25,
+    "missing": 8,
+    "holes": 4,
+    "not_original_share": 0.202,
+    "odd_share": 0.073
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     12.067999839782715,
+     5.076953887939453,
+     4.550064563751221
+    ],
+    "triangles": 6649,
+    "vertices": 14688,
+    "meshes": 3,
+    "materials": [
+     "Body",
+     "Glow",
+     "GlowDim"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "glasshouse_sound",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": "living/game/assets/envs/cullet/glasshouse/glasshouse_1.glb",
+   "sha256": "9a9eaba3b4deff88ea877556752b6b78e521f4706bb67d7dcb8138c5f7773665",
+   "stats": {
+    "file": "glasshouse_1.glb",
+    "sha256": "9a9eaba3b4deff88ea877556752b6b78e521f4706bb67d7dcb8138c5f7773665",
+    "bytes": 533692,
+    "triangles": 6871,
+    "vertices": 15288,
+    "parts": {
+     "glasshouse_1": 6871
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow",
+     "GlowDim"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 136,
+    "palette": [
+     {
+      "hex": "#3e4148",
+      "share": 0.3608
+     },
+     {
+      "hex": "#5d6365",
+      "share": 0.1511
+     },
+     {
+      "hex": "#e5e3d8",
+      "share": 0.138
+     },
+     {
+      "hex": "#9eccc7",
+      "share": 0.1236
+     },
+     {
+      "hex": "#868277",
+      "share": 0.0838
+     },
+     {
+      "hex": "#c8c5b6",
+      "share": 0.0343
+     },
+     {
+      "hex": "#5f774d",
+      "share": 0.0313
+     },
+     {
+      "hex": "#382a1e",
+      "share": 0.029
+     },
+     {
+      "hex": "#4a5563",
+      "share": 0.0088
+     },
+     {
+      "hex": "#55382b",
+      "share": 0.0071
+     },
+     {
+      "hex": "#657083",
+      "share": 0.006
+     },
+     {
+      "hex": "#73704f",
+      "share": 0.004
+     },
+     {
+      "hex": "#433f1e",
+      "share": 0.0034
+     },
+     {
+      "hex": "#7b746d",
+      "share": 0.0031
+     },
+     {
+      "hex": "other",
+      "share": 0.0158
+     }
+    ]
+   },
+   "file": "files/glasshouse_sound.glb",
+   "report": {
+    "file": "glasshouse/glasshouse_1.glb",
+    "what": "lot",
+    "kind": "glasshouse",
+    "size_m": [
+     12.0,
+     4.5
+    ],
+    "plan_height_m": 3.2,
+    "seed": 36197,
+    "above_floor_m": [
+     [
+      -6.0,
+      -2.25
+     ],
+     [
+      6.0,
+      2.25
+     ]
+    ],
+    "height_m": 3.277,
+    "foundation_m": 1.8,
+    "tris": 6871,
+    "materials": {
+     "Body": 6735,
+     "Glow": 52,
+     "GlowDim": 84
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8206,
+    "palette_wear_blend_share": 0.1794,
+    "budget_tris": 9000,
+    "doors": [],
+    "sha256": "9a9eaba3b4deff88ea877556752b6b78e521f4706bb67d7dcb8138c5f7773665",
+    "state": "sound",
+    "lantern_core_m": 1.0,
+    "lantern_reach_m": 2.4,
+    "lit_panes": 12,
+    "dim_panes": 21,
+    "ridge_m": 3.2,
+    "body_m": [
+     12.0,
+     3.85
+    ],
+    "strip_m": 0.65,
+    "bays": 12,
+    "panes": 342,
+    "boarded": 7,
+    "odd_glass": 13,
+    "missing": 1,
+    "holes": 1,
+    "not_original_share": 0.061,
+    "odd_share": 0.038
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     12.067994117736816,
+     5.076953887939453,
+     4.555203437805176
+    ],
+    "triangles": 6871,
+    "vertices": 15288,
+    "meshes": 3,
+    "materials": [
+     "Body",
+     "Glow",
+     "GlowDim"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "glasshouse_broken",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": "living/game/assets/envs/cullet/glasshouse/glasshouse_6.glb",
+   "sha256": "5c8176553584f71acd97bec373041860e4a31815a0fb8bb7794fc828f12251cf",
+   "stats": {
+    "file": "glasshouse_6.glb",
+    "sha256": "5c8176553584f71acd97bec373041860e4a31815a0fb8bb7794fc828f12251cf",
+    "bytes": 543600,
+    "triangles": 6923,
+    "vertices": 15652,
+    "parts": {
+     "glasshouse_6": 6923
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#3b3d44",
+      "share": 0.3724
+     },
+     {
+      "hex": "#5f5f64",
+      "share": 0.1435
+     },
+     {
+      "hex": "#e6e3d6",
+      "share": 0.1362
+     },
+     {
+      "hex": "#878277",
+      "share": 0.104
+     },
+     {
+      "hex": "#9eccc7",
+      "share": 0.0867
+     },
+     {
+      "hex": "#5c764a",
+      "share": 0.0359
+     },
+     {
+      "hex": "#2d2019",
+      "share": 0.0356
+     },
+     {
+      "hex": "#c8c5b6",
+      "share": 0.0322
+     },
+     {
+      "hex": "#485263",
+      "share": 0.0103
+     },
+     {
+      "hex": "#6a6446",
+      "share": 0.0076
+     },
+     {
+      "hex": "#626f81",
+      "share": 0.0073
+     },
+     {
+      "hex": "#55382b",
+      "share": 0.0072
+     },
+     {
+      "hex": "#c8812a",
+      "share": 0.0036
+     },
+     {
+      "hex": "#667d54",
+      "share": 0.0035
+     },
+     {
+      "hex": "other",
+      "share": 0.014
+     }
+    ]
+   },
+   "file": "files/glasshouse_broken.glb",
+   "report": {
+    "file": "glasshouse/glasshouse_6.glb",
+    "what": "lot",
+    "kind": "glasshouse",
+    "size_m": [
+     12.0,
+     4.5
+    ],
+    "plan_height_m": 3.2,
+    "seed": 34310,
+    "above_floor_m": [
+     [
+      -6.0,
+      -2.25
+     ],
+     [
+      6.0,
+      2.25
+     ]
+    ],
+    "height_m": 3.277,
+    "foundation_m": 1.8,
+    "tris": 6923,
+    "materials": {
+     "Body": 6923
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8005,
+    "palette_wear_blend_share": 0.1995,
+    "budget_tris": 9000,
+    "doors": [],
+    "sha256": "5c8176553584f71acd97bec373041860e4a31815a0fb8bb7794fc828f12251cf",
+    "state": "broken",
+    "lantern_core_m": 1.0,
+    "lantern_reach_m": 2.4,
+    "lit_panes": 0,
+    "dim_panes": 0,
+    "ridge_m": 3.2,
+    "body_m": [
+     12.0,
+     3.85
+    ],
+    "strip_m": 0.65,
+    "bays": 12,
+    "panes": 342,
+    "boarded": 44,
+    "odd_glass": 17,
+    "missing": 59,
+    "holes": 4,
+    "not_original_share": 0.351,
+    "odd_share": 0.05
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     12.067994117736816,
+     5.076953887939453,
+     4.555141448974609
+    ],
+    "triangles": 6923,
+    "vertices": 15652,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": [],
+ "baseline_render": {
+  "version": "20261111-80b4ec94-8bb39b",
+  "path": "vs/20261111-80b4ec94-8bb39b/render",
+  "renderer": "86fae680",
+  "members": {
+   "glasshouse": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ]
+  }
+ }
+}

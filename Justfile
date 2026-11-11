@@ -138,6 +138,7 @@ living-game-assets:
     living/tools/blender/gen_nature.sh
     living/tools/blender/gen_buildings.sh
     living/tools/blender/gen_city.sh
+    living/tools/blender/gen_cullet.sh
     living/tools/blender/gen_anim.sh
 
 # The asset board (docs/ASSET_BOARD.md): every generated family photographed in the game's own
