@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick turns look-walk bar offers support (default: all but support)
+  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick turns look-walk bar offers wheel wheel-workplace support (default: all but support and wheel-workplace, which need a Cullet world)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -395,12 +395,16 @@ def pick(run, c):
     c.check(s, "a tap on the one in front talks to them (combat's target is the same pick)", t4.get("to") == a, json.dumps(t4))
     rows = sql(run, f"SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = {a}")
     c.check(s, "the authority's said row has to = the one in front", any(line in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
+    # Both asked for one spot: `place_at` keeps bodies on free tiles (fix-place-free), so the
+    # second lands on a neighbouring one and their outlines overlap on screen. The pick holds one
+    # every frame: the nearest the camera of those whose outline holds the cursor, by the
+    # client's own test (`holds` in the dump; exact ties are pick.rs's unit test).
     st = [dump(out, f"05{k}") or {} for k in "abc"]
     unders = [x.get("under") for x in st]
     def front(x):
-        both = [b_ for b_ in (x.get("seen") or []) if b_["id"] in (a, b)]
-        return min(both, key=lambda b_: (b_["depth"], b_["id"]))["id"] if len(both) == 2 else None
-    c.check(s, "two bodies stacked on one spot: the same one every frame, the nearer the camera", len(set(unders)) == 1 and unders[0] in (a, b) and all(front(x) == unders[0] for x in st), f"under {unders}, front by depth {[front(x) for x in st]}")
+        held = [b_ for b_ in (x.get("seen") or []) if b_.get("holds")]
+        return min(held, key=lambda b_: (b_["depth"], b_["id"]))["id"] if held else None
+    c.check(s, "two bodies asked onto one spot, overlapping on screen: the same one every frame, the nearest the camera under the cursor", len(set(unders)) == 1 and unders[0] in (a, b) and all(front(x) == unders[0] for x in st), f"under {unders}, front of those under the cursor {[front(x) for x in st]}")
 
 
 def bar(run, c):
@@ -728,7 +732,79 @@ def look_walk(run, c):
     c.check(s, "the settings file keeps it", saved == "head", str(saved))
 
 
-SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "support": support}
+def wheel(run, c):
+    """The wheel (docs/INTERFACE.md §8): hold F on a resident, the held cursor picks a section,
+    letting go chooses; Esc and the hub send nothing; a flick opens it with its direction; a
+    digit chooses at once; the cursor is where it was after each (1 px)."""
+    s = "wheel"
+    a, b = residents(run)
+    P = "point:{A}:1.0;wait:0.6"
+    plan = ("ready;click:@tip:ok;sync:scene;wait:2;" + P + ";dump:00;"
+            # Held: open, toward nw (wave), let go.
+            "key:KeyF:down;wait:0.5;shot:01_open;dump:01;nudge:-42,-42;wait:0.3;shot:02_wave;dump:02;key:KeyF:up;wait:1.5;dump:03;"
+            # Esc closes it: nothing sent.
+            + P + ";key:KeyF:down;wait:0.5;nudge:60,0;wait:0.2;key:Escape:tap;wait:0.3;dump:04;key:KeyF:up;wait:0.5;dump:05;"
+            # Let go in the hub: nothing sent.
+            + P + ";key:KeyF:down;wait:0.5;key:KeyF:up;wait:0.5;dump:06;"
+            # A flick: F and a quick move east before it would draw: it opens with east chosen.
+            + P + ";key:KeyF:down;wait:0.12;nudge:45,0;wait:0.1;dump:07;key:KeyF:up;wait:0.8;dump:08;key:Escape:tap;wait:0.3;key:Escape:tap;wait:0.3;"
+            # A digit chooses at once (1 is north: Talk).
+            + P + ";key:KeyF:down;wait:0.5;key:Digit1:tap;wait:0.6;dump:09;key:KeyF:up;wait:0.3;key:Escape:tap;wait:0.3;dump:10;quit").replace("{A}", str(a))
+    out, code, text = drive(run, s, plan, places=[f"{a}:-1.8:1.2", f"{b}:2.0:-2.0"])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]}
+    w = lambda k: (d[k] or {}).get("wheel") or {}
+    cur = lambda k: (((d[k] or {}).get("extra") or {}).get("cursor") or {})
+    L = log(out)
+    secs = {x["dir"]: x["what"] for x in w("01").get("sections", [])}
+    c.check(s, "holding F on a person opens its wheel, held, with the pinned layout", w("01").get("held") is True and secs == {"n": "talk", "ne": "give", "e": "offer", "se": "teach", "s": "more", "sw": "window", "w": "appraise", "nw": "wave"}, str(secs))
+    c.check(s, "the drawn cursor is held: it has not moved while the wheel is open", cur("01").get("x") == cur("00").get("x") and cur("02").get("x") == cur("00").get("x"), str((cur("00"), cur("02"))))
+    c.check(s, "moving toward nw selects Wave (the hub names it)", w("02").get("sel") == "nw", str(w("02").get("sel")))
+    seg = L.split("ui: wheel chose nw wave", 1)
+    c.check(s, "letting go sends the rules' wave toward them (human_act)", len(seg) == 2 and re.search(rf'verbs: .* → \{{"do":"wave","target":\{{"id":{a}\}}\}}', seg[1]) is not None, seg[1][:300] if len(seg) == 2 else "not chosen")
+    c.check(s, "and its outcome is noted in the rules' words", len((d["03"] or {}).get("notes") or []) > 0, str((d["03"] or {}).get("notes")))
+    def quiet(after, until):
+        t = L.split(after, 1)
+        return len(t) == 2 and re.search(r'→ \{"do"', t[1].split(until, 1)[0]) is None
+    c.check(s, "Esc closes it and nothing is sent", not w("04") and "ui: wheel closed (Esc): nothing sent" in L and quiet("ui: wheel closed (Esc)", "ui: wheel toward"), "")
+    c.check(s, "letting go in the hub sends nothing", "ui: wheel chose the hub: nothing sent" in L and not w("06") and quiet("ui: wheel chose the hub", "ui: wheel toward"), "")
+    c.check(s, "a flick opens it with its direction chosen (east: Offer)", w("07").get("sel") == "e" and "ui: wheel chose e offer" in L, str(w("07")))
+    c.check(s, "and Offer's further choice opens its sub-list", ((d["08"] or {}).get("acts") or {}).get("group") == "offer", str((d["08"] or {}).get("acts")))
+    c.check(s, "a digit chooses at once (1, north: Talk opens the box to them)", "ui: wheel chose n talk" in L and ((d["09"] or {}).get("typing") or {}).get("to") == a, str((d["09"] or {}).get("typing")))
+    for k in ["03", "05", "06", "10"]:
+        x0, x1 = cur("00"), cur(k)
+        ok = x0 and x1 and abs(x0["x"] - x1["x"]) <= 1 and abs(x0["y"] - x1["y"]) <= 1
+        c.check(s, f"after closing ({k}) the cursor is where it was (1 px)", bool(ok), str((x0, x1)))
+
+
+def wheel_workplace(run, c):
+    """A fuel fire's wheel on Cullet: Make pinned north and Feed east; with the fire out, Make
+    greys with the rules' reason in the hub, and choosing it still sends it (the authority
+    decides; its words are noted)."""
+    s = "wheel-workplace"
+    fs = sql(run, "SELECT id, kind, x, y, lit_until_ms FROM structure WHERE kind = 'furnace'")
+    c.check(s, "the world has a furnace", len(fs) > 0, str(fs[:2]))
+    if not fs:
+        return
+    f = fs[0]
+    plan = ("ready;click:@tip:ok;wait:2;sync:there;wait:6;cursor:0.5,0.5;wait:0.5;dump:00;key:KeyF:down;wait:0.5;shot:01_open;dump:01;"
+            "nudge:0,-50;wait:0.3;shot:02_make;dump:02;key:KeyF:up;wait:3;shot:03_sent;dump:03;quit")
+    # Beside the furnace (admin place_at, scene setup); F aims at the nearest thing.
+    there = f"there=place_at|{{me}}|{f['x'] + 1.2}|{f['y']}"
+    out, code, text = drive(run, s, plan, syncs=[there])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["00", "01", "02", "03"]}
+    w = lambda k: (d[k] or {}).get("wheel") or {}
+    secs = {x["dir"]: x for x in w("01").get("sections", [])}
+    c.check(s, "F held at a furnace opens its wheel: Make north, Feed east", secs.get("n", {}).get("what") == "make" and secs.get("e", {}).get("what") == "feed", str({k: v["what"] for k, v in secs.items()}))
+    mk = secs.get("n", {})
+    c.check(s, "with the fire out, Make greys with the rules' reason", mk.get("allowed") is False and bool(mk.get("reason")), str(mk))
+    L = log(out)
+    c.check(s, "choosing it still sends it (grey is a hint)", "ui: wheel chose n make (grey: sent, the authority decides)" in L and re.search(r'verbs: .* → \{"do":"make"', L) is not None)
+    c.check(s, "and the authority's words are noted", len((d["03"] or {}).get("notes") or []) > 0, str((d["03"] or {}).get("notes")))
+
+
+SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "support": support}
 
 
 def main():
@@ -740,7 +816,7 @@ def main():
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
     # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
-    for name in a.scenarios or [k for k in SCENARIOS if k != "support"]:
+    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace")]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)

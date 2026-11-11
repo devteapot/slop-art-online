@@ -1170,7 +1170,8 @@ pub fn input(
         }
         // Another bar key closes it without choosing (a player attacked mid-choice can fight).
         let bar = [crate::keys::Act::Skill1, crate::keys::Act::Skill2, crate::keys::Act::Skill3, crate::keys::Act::Jump, crate::keys::Act::Dodge, crate::keys::Act::Run];
-        let fled = bar.iter().any(|a| binds.just_pressed(*a, &keys));
+        // Digits belong to the wheel (1–3 are also the skill keys' twins).
+        let fled = chosen.is_none() && bar.iter().any(|a| binds.just_pressed(*a, &keys));
         // Its target left sight (or died): it closes, saying so.
         let gone = matches!(&w.aim, Aim::Creature { id } if conn.db.seen_characters().id().find(id).is_none());
         let note = gone.then(|| format!("{} is out of sight", w.title));
