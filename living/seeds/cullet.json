@@ -1,6 +1,8 @@
 {
  "run": "cullet",
  "seed": 83,
+ "day_minutes": 48,
+ "laws_file": "worlds/cullet/laws.rhai",
  "map": {
   "kind": "land",
   "size": 1024,

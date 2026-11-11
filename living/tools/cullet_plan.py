@@ -634,6 +634,9 @@ def seed(p):
     return {
         "run": "cullet",
         "seed": SEED,
+        # Cullet's day and laws (docs/CULLET_RULES.md): a 48-minute day, its needs, light and sight.
+        "day_minutes": 48,
+        "laws_file": "worlds/cullet/laws.rhai",
         "map": {"kind": "land", "size": SIZE, "params": dict(LAND_PARAMS, plans=[rough])},
         "setting": "Cullet, a glassmakers' harbour on the south slope of a treeless island its people call the Wrack, in year 83 since the Last Sail (docs/SMALL_CITY.md). The grey city: every lot of the hand-authored plan, the land round it, its fishing spots and its one wood; no residents yet.",
         "resource_scale": {"tree": 0.0, "fishing_spot": 0.0, "berry_bush": 0.0, "clay_bank": 0.0, "boulder": 0.4, "reeds": 0.3},
