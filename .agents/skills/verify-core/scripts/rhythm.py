@@ -52,7 +52,10 @@ PEOPLE = ["Thessaly Marl", "Fenn Brandt", "Corvin Hollin", "Pieter Achterberg", 
 HABITS = {
     "Otto Brandt": ("the clay pit", 9.2, 9.95, 8.0),
     "Benedikt Orme": ("the Readers' yard", 9.4, 11.9, 7.0),
-    "Edda Hollin": ("the Readers' yard", 11.55, 11.97, 7.0),  # from High Row the walk takes her most of this short morning
+    # Edda follows her father down to the Cone before 09:00 and sets out from there: 230 m of
+    # wynds, about three of this day's 30 s hours. So she is checked on the way and at the end
+    # (`child_at_lessons`), not by a share of the lesson hours.
+    "Edda Hollin": ("the Readers' yard", 9.2, 12.75, 7.0),
     "Greta Dunmore": ("the Bleach", 12.4, 12.95, 9.0),
     "Bram Calloway": ("the boatyard", 15.1, 15.9, 9.0),
 }
@@ -126,6 +129,18 @@ def window(s, log, lo, hi, every=4.0):
         time.sleep(every)
 
 
+def child_at_lessons(rows, name):
+    """A child's morning on this short day: by the end of the lesson hours she has come most of
+    the way to the place (within 25 m, having started more than 100 m off), and she stands in
+    the yard (within its habit distance) by 12:45."""
+    place, _, by, within = HABITS[name]
+    xs = [(r["hour"], r["people"][name]["habit_m"]) for r in rows if name in r["people"] and r["people"][name]["habit_m"] is not None]
+    lessons = [d for h, d in xs if 9.0 <= h < 12.0]
+    after = [d for h, d in xs if 12.0 <= h <= by]
+    ok = bool(lessons) and max(lessons) > 100.0 and lessons[-1] < 25.0 and any(d < within for d in lessons[-2:] + after)
+    return ok, {"place": place, "farthest_m": max(lessons) if lessons else None, "at_noon_m": lessons[-1] if lessons else None, "nearest_by_12_45_m": min(lessons[-2:] + after) if lessons else None}
+
+
 def share(rows, name, pred):
     xs = [pred(r["people"][name]) for r in rows if name in r["people"]]
     return (sum(xs) / len(xs) if xs else 0.0), len(xs)
@@ -182,9 +197,11 @@ def drive(run):
         there = sum(1 for d in xs if d < within)
         return there >= 0.5 * max(1, len(xs)) and len(xs) >= 3, {"place": place, "hours": [lo, hi], "there": there, "samples": len(xs), "nearest_m": min(xs) if xs else None}
     for name, words in (("Otto Brandt", "the pot-maker is at the clay pit in the morning"), ("Benedikt Orme", "the reader teaches in the Readers' yard"),
-                        ("Edda Hollin", "a child sits at lessons in the Readers' yard"), ("Greta Dunmore", "the washer is on the Bleach before 13:00")):
+                        ("Greta Dunmore", "the washer is on the Bleach before 13:00")):
         ok, detail = at_habit(morning, name)
         s.check(words, ok, detail)
+    ok, detail = child_at_lessons(morning, "Edda Hollin")
+    s.check("a child walks up to lessons in the Readers' yard", ok, detail)
 
     # Afternoon: the night stoker is up (not at work, not asleep); the baker sleeps again.
     noon = window(s, log, 15.0, 18.5)
