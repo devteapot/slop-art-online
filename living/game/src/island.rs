@@ -360,7 +360,11 @@ impl Island {
         let height = if exact.is_some() { lot.height_m } else { slot.map_or(6.0, |s| s.height[1]) };
         let file = exact.unwrap_or_else(|| files[(hash(lot.id, 11) * files.len() as f32) as usize % files.len()].clone());
         let it = Item { kind: kind.to_string(), file, at: lot.at, yaw: lot.yaw, height, glow: slot.and_then(|s| s.glow), k: lot.id as usize, floor: Some(lot.floor_m), native: true, person: None };
-        spawn_item(commands, assets, &self.land, &it)
+        let es = spawn_item(commands, assets, &self.land, &it);
+        if let Some(&root) = es.first() {
+            commands.entity(root).insert(crate::envs::Solid);
+        }
+        es
     }
 
     /// Whether everything in reach is in: ground and things, nothing queued (`loading.rs`).
