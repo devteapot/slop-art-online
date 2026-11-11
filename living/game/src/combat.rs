@@ -450,8 +450,9 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
     }
 }
 
-/// The creature under or nearest the cursor (within 3.5 m of it, 30 m of me).
-pub fn pick(net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, town: Res<crate::town::Town>, mut c: ResMut<Combat>) {
+/// The creature under the cursor (`pick.rs`, the pick the nameplates and Enter use), else, with
+/// nobody under it, the nearest to its ground point (within 3.5 m of it, 30 m of me).
+pub fn pick(net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, town: Res<crate::town::Town>, under: Res<crate::pick::Pick>, mut c: ResMut<Combat>) {
     let (Some(cursor), Some(me_at)) = (cam.cursor_ground, target.0) else {
         c.target = None;
         return;
@@ -459,6 +460,10 @@ pub fn pick(net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res
     let cursor = Vec2::new(cursor.x, cursor.z);
     let me_at = Vec2::new(me_at.x, me_at.z);
     let me = net.my_id;
+    if let Some(id) = under.under.filter(|id| scene.shown.get(id).is_some_and(|(p, _)| p.distance(me_at) < 30.0)) {
+        c.target = Some(id);
+        return;
+    }
     c.target = scene
         .shown
         .iter()

@@ -58,7 +58,7 @@ fn main() {
         .collect();
     let roads: Vec<_> = land.roads.iter().map(|r| json!({"class": format!("{:?}", r.class), "width_m": r.width_m, "settlement": r.settlement, "points": r.points})).collect();
     let props: Vec<_> = land.props.iter().map(|p| json!({"kind": format!("{:?}", p.kind), "centre": [p.centre.0, p.centre.1], "width_m": p.width_m, "depth_m": p.depth_m, "front": [p.front.0, p.front.1], "floor_m": p.floor_m, "height_m": p.height_m})).collect();
-    let resources: Vec<_> = land.plans.iter().flat_map(|p| p.resources.iter().map(|r| json!({"kind": r.0, "at": [r.1 .0, r.1 .1]}))).collect();
+    let resources: Vec<_> = land.plans.iter().flat_map(|p| p.resources.iter().map(|r| json!({"kind": r.kind, "at": [r.at.0, r.at.1], "pool": r.pool}))).collect();
     let squares: Vec<_> = land.settlements.iter().map(|s| json!({"style": s.style, "centre": [s.plaza.centre.0, s.plaza.centre.1], "points": s.plaza.points})).collect();
     let out = json!({
         "seed": seed, "size": size,

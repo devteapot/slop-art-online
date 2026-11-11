@@ -235,7 +235,7 @@ The client keeps a fixed vocabulary. The rules choose names from it, and only th
 
 | Kind | The player… | Engine side |
 |---|---|---|
-| `tap` | presses once; a skill aimed at a creature takes the one under the cursor, else the nearest in reach | `pointer.rs` tap and hold; `combat.rs:331-348` pick |
+| `tap` | presses once; a skill aimed at a creature takes the one under the cursor, else the nearest in reach | `pointer.rs` tap and hold; `pick.rs` (who is under the cursor), `combat.rs` pick |
 | `hold` | holds; release ends it, as a guard does | `release_skill` on key up |
 | `toggle` | presses to switch a body state (drawn or sheathed) | a binding; the state shows on its slot |
 | `aim_point` | aims at a point within the spec's reach; a `marker` shows the reach | the ground point under the cursor; sent as `use_skill(…, x, y)` or `target: {"at": [x, y]}` |
@@ -472,7 +472,7 @@ The client keeps:
 - **Input feel:**
   - thresholds: tap against hold (`pointer.rs:40`, `verbs.rs:42`), the double-tap window (`keys.rs:24`);
   - press buffering and mouse capture;
-  - which person "under the cursor" means (`combat.rs:331-348`).
+  - which person "under the cursor" means (`pick.rs`: the front-most body whose outline holds the cursor; `combat.rs` pick).
 - **Combat timing:**
   - starting the clip on the press, before the authority answers;
   - aligning a clip's peak to the windup (`combat.rs:581-621`);

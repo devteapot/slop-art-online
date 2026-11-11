@@ -22,6 +22,7 @@ mod daylight;
 mod demo;
 mod envs;
 mod gait;
+mod ground;
 mod ik;
 mod twist;
 mod fade;
@@ -38,6 +39,7 @@ mod lookdev;
 mod net;
 mod perf;
 mod phase;
+mod pick;
 mod post;
 mod probe;
 mod route;
@@ -111,6 +113,7 @@ fn main() {
         .init_non_send::<world::Scene>()
         .init_resource::<world::Palette>()
         .init_resource::<world::Draw>()
+        .init_resource::<lookdev::NightGlows>()
         .init_resource::<sight::Sight>()
         .init_resource::<bodies::MySize>()
         .init_resource::<camera::Cam>()
@@ -149,6 +152,10 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
             .add_systems(
                 Update,
+                (lookdev::night_glow, envs::solid_if_large).after(lookdev::fit),
+            )
+            .add_systems(
+                Update,
                 (envs::hdr, envs::keys, envs::switch, island::stream, island::grey_boxes, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway, envs::reach).chain(),
             );
     } else {
@@ -164,6 +171,8 @@ fn main() {
             .add_systems(Update, (camera::follow, world::fade_trees, sight::update, controls::gizmos).chain().in_set(Phase::Camera));
         // Land worlds (the island the authority hosts) draw through the island renderer.
         app.add_plugins(live::LivePlugin);
+        // Who is under the cursor: one pick for the nameplates, Enter and combat's target.
+        app.add_plugins(pick::PickPlugin);
         // Combat: skill input, perceived events, clips and effects (docs/COMBAT.md).
         app.add_plugins((combat::CombatPlugin, vfx::VfxPlugin));
         // Town life: what residents are seen doing, my gestures, the authority's weather

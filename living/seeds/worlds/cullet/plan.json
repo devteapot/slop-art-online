@@ -1781,7 +1781,11 @@
     "empty": 0.0,
     "cause": "+2 m above the sea; 95 m from the Cone at bearing 259; front faces 180"
    },
-   "note": "the common store"
+   "note": "the common store",
+   "contents": {
+    "smoked_fish": 212,
+    "roots": 297
+   }
   },
   {
    "id": "boatshed",
@@ -4053,7 +4057,7 @@
   },
   {
    "id": "root_plot_1",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 1",
    "at": [
     -236.0,
@@ -4082,7 +4086,7 @@
   },
   {
    "id": "root_plot_2",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 2",
    "at": [
     -226.0,
@@ -4111,7 +4115,7 @@
   },
   {
    "id": "root_plot_3",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 3",
    "at": [
     -216.0,
@@ -4140,7 +4144,7 @@
   },
   {
    "id": "root_plot_4",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 4",
    "at": [
     -206.0,
@@ -4169,7 +4173,7 @@
   },
   {
    "id": "root_plot_5",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 5",
    "at": [
     -196.0,
@@ -4198,7 +4202,7 @@
   },
   {
    "id": "root_plot_6",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 6",
    "at": [
     -186.0,
@@ -4227,7 +4231,7 @@
   },
   {
    "id": "root_plot_7",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 7",
    "at": [
     -236.0,
@@ -4256,7 +4260,7 @@
   },
   {
    "id": "root_plot_8",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 8",
    "at": [
     -226.0,
@@ -4285,7 +4289,7 @@
   },
   {
    "id": "root_plot_9",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 9",
    "at": [
     -216.0,
@@ -4314,7 +4318,7 @@
   },
   {
    "id": "root_plot_10",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 10",
    "at": [
     -206.0,
@@ -4343,7 +4347,7 @@
   },
   {
    "id": "root_plot_11",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 11",
    "at": [
     -196.0,
@@ -4372,7 +4376,7 @@
   },
   {
    "id": "root_plot_12",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 12",
    "at": [
     -186.0,
@@ -4401,7 +4405,7 @@
   },
   {
    "id": "root_plot_13",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 13",
    "at": [
     -236.0,
@@ -4430,7 +4434,7 @@
   },
   {
    "id": "root_plot_14",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 14",
    "at": [
     -226.0,
@@ -4459,7 +4463,7 @@
   },
   {
    "id": "root_plot_15",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 15",
    "at": [
     -216.0,
@@ -4488,7 +4492,7 @@
   },
   {
    "id": "root_plot_16",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 16",
    "at": [
     -206.0,
@@ -4517,7 +4521,7 @@
   },
   {
    "id": "root_plot_17",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 17",
    "at": [
     -196.0,
@@ -4546,7 +4550,7 @@
   },
   {
    "id": "root_plot_18",
-   "kind": "garden",
+   "kind": "lamp",
    "name": "root plot 18",
    "at": [
     -186.0,
@@ -4942,7 +4946,10 @@
     -2.0,
     -2.0
    ],
-   "where": "the Fish Steps"
+   "where": "the Fish Steps",
+   "regrow_per_h": 0.4409,
+   "max": 21.2,
+   "pool": "the Fish Steps"
   },
   {
    "kind": "fishing_spot",
@@ -4950,7 +4957,10 @@
     2.0,
     -2.0
    ],
-   "where": "the Fish Steps"
+   "where": "the Fish Steps",
+   "regrow_per_h": 0.4409,
+   "max": 21.2,
+   "pool": "the Fish Steps"
   },
   {
    "kind": "fishing_spot",
@@ -4958,7 +4968,10 @@
     -62.0,
     0.6
    ],
-   "where": "the quay edge"
+   "where": "the quay edge (the jetties)",
+   "regrow_per_h": 0.8818,
+   "max": 42.3,
+   "pool": "the quay"
   },
   {
    "kind": "fishing_spot",
@@ -4966,7 +4979,10 @@
     -35.0,
     0.6
    ],
-   "where": "the quay edge"
+   "where": "the quay edge (the jetties)",
+   "regrow_per_h": 0.8818,
+   "max": 42.3,
+   "pool": "the quay"
   },
   {
    "kind": "fishing_spot",
@@ -4974,7 +4990,10 @@
     40.0,
     0.6
    ],
-   "where": "the quay edge"
+   "where": "the quay edge (the jetties)",
+   "regrow_per_h": 0.8818,
+   "max": 42.3,
+   "pool": "the quay"
   },
   {
    "kind": "fishing_spot",
@@ -4982,7 +5001,10 @@
     68.0,
     0.6
    ],
-   "where": "the quay edge"
+   "where": "the quay edge (the jetties)",
+   "regrow_per_h": 0.8818,
+   "max": 42.3,
+   "pool": "the quay"
   },
   {
    "kind": "fishing_spot",
@@ -4990,7 +5012,10 @@
     132.6,
     -22.0
    ],
-   "where": "the mole"
+   "where": "the mole",
+   "regrow_per_h": 1.3228,
+   "max": 63.5,
+   "pool": "the mole"
   },
   {
    "kind": "fishing_spot",
@@ -4998,7 +5023,10 @@
     138.4,
     -30.0
    ],
-   "where": "the mole"
+   "where": "the mole",
+   "regrow_per_h": 1.3228,
+   "max": 63.5,
+   "pool": "the mole"
   },
   {
    "kind": "fishing_spot",
@@ -5006,7 +5034,10 @@
     132.6,
     -40.0
    ],
-   "where": "the mole"
+   "where": "the mole",
+   "regrow_per_h": 1.3228,
+   "max": 63.5,
+   "pool": "the mole"
   },
   {
    "kind": "fishing_spot",
@@ -5014,7 +5045,10 @@
     138.4,
     -48.0
    ],
-   "where": "the mole"
+   "where": "the mole",
+   "regrow_per_h": 1.3228,
+   "max": 63.5,
+   "pool": "the mole"
   },
   {
    "kind": "fishing_spot",
@@ -5022,7 +5056,10 @@
     129.6,
     -63.0
    ],
-   "where": "the mole"
+   "where": "the mole",
+   "regrow_per_h": 1.3228,
+   "max": 63.5,
+   "pool": "the mole"
   },
   {
    "kind": "fishing_spot",
@@ -5030,87 +5067,120 @@
     141.4,
     -63.0
    ],
-   "where": "the mole"
+   "where": "the mole",
+   "regrow_per_h": 1.3228,
+   "max": 63.5,
+   "pool": "the mole"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -163.75,
     -0.9
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -171.25,
     1.3
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -178.75,
     3.5
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -186.25,
     5.7
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -193.75,
     7.9
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -201.25,
     10.1
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -208.75,
     12.3
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -216.25,
     14.5
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -223.75,
     16.7
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
-   "kind": "fishing_spot",
+   "kind": "weir",
    "at": [
     -231.25,
     18.9
    ],
-   "where": "the Weirs"
+   "where": "the Weirs (fish by trap)",
+   "regrow_per_h": 1.7637,
+   "max": 84.7,
+   "pool": "the Weirs"
   },
   {
    "kind": "tree",
@@ -5681,526 +5751,1025 @@
    "where": "the clay bank below the Crown"
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -146.67,
     5.33
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -160.0,
     8.0
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -173.33,
     10.67
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -186.67,
     13.33
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -200.0,
     16.0
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -213.33,
     18.67
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -226.67,
     21.33
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -240.0,
     24.0
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -253.33,
     26.67
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -266.67,
     29.33
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -280.0,
     32.0
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "kelp",
+   "kind": "kelp_bed",
    "at": [
     -293.33,
     34.67
    ],
-   "where": "the Wrack Strand (kelp: fertiliser and ash)"
+   "where": "the Wrack Strand (kelp: fertiliser and ash)",
+   "regrow_per_h": 0.2083,
+   "max": 10.0
   },
   {
-   "kind": "sand",
+   "kind": "sand_bank",
    "at": [
     353.67,
     108.75
    ],
-   "where": "the Sand Spit (white sand for glass)"
+   "where": "the Sand Spit (white sand for glass)",
+   "regrow_per_h": 0.1667,
+   "max": 8.0
   },
   {
-   "kind": "sand",
+   "kind": "sand_bank",
    "at": [
     357.0,
     126.25
    ],
-   "where": "the Sand Spit (white sand for glass)"
+   "where": "the Sand Spit (white sand for glass)",
+   "regrow_per_h": 0.1667,
+   "max": 8.0
   },
   {
-   "kind": "sand",
+   "kind": "sand_bank",
    "at": [
     360.33,
     143.75
    ],
-   "where": "the Sand Spit (white sand for glass)"
+   "where": "the Sand Spit (white sand for glass)",
+   "regrow_per_h": 0.1667,
+   "max": 8.0
   },
   {
-   "kind": "sand",
+   "kind": "sand_bank",
    "at": [
     363.67,
     161.25
    ],
-   "where": "the Sand Spit (white sand for glass)"
+   "where": "the Sand Spit (white sand for glass)",
+   "regrow_per_h": 0.1667,
+   "max": 8.0
   },
   {
-   "kind": "sand",
+   "kind": "sand_bank",
    "at": [
     367.0,
     178.75
    ],
-   "where": "the Sand Spit (white sand for glass)"
+   "where": "the Sand Spit (white sand for glass)",
+   "regrow_per_h": 0.1667,
+   "max": 8.0
   },
   {
-   "kind": "sand",
+   "kind": "sand_bank",
    "at": [
     370.33,
     196.25
    ],
-   "where": "the Sand Spit (white sand for glass)"
+   "where": "the Sand Spit (white sand for glass)",
+   "regrow_per_h": 0.1667,
+   "max": 8.0
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     -150,
     360
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     -90,
     360
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     -30,
     360
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     30,
     360
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     90,
     360
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     150,
     360
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     -150,
     400
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     -90,
     400
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     -30,
     400
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     30,
     400
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     90,
     400
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     150,
     400
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     -150,
     440
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     -90,
     440
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     -30,
     440
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     30,
     440
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     90,
     440
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "peat",
+   "kind": "peat_bank",
    "at": [
     150,
     440
    ],
-   "where": "the Moss (peat cuttings)"
+   "where": "the Moss (peat cuttings)",
+   "regrow_per_h": 0.2333,
+   "max": 11.2
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -236.0,
     147.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -226.0,
     147.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -216.0,
     147.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -206.0,
     147.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -196.0,
     147.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -186.0,
     147.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -236.0,
     155.5
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -226.0,
     155.5
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -216.0,
     155.5
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -206.0,
     155.5
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -196.0,
     155.5
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -186.0,
     155.5
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -236.0,
     164.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -226.0,
     164.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -216.0,
     164.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -206.0,
     164.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -196.0,
     164.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "roots",
+   "kind": "root_plot",
    "at": [
     -186.0,
     164.0
    ],
-   "where": "the root plots"
+   "where": "the root plots",
+   "regrow_per_h": 0.1069,
+   "max": 6.0
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -39.0,
     55.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -53.0,
     55.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -109.0,
     55.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -39.0,
     85.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -53.0,
     85.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -39.0,
     115.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -67.0,
     115.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -109.0,
     115.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -39.0,
     129.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -109.0,
     129.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   },
   {
-   "kind": "greens",
+   "kind": "greens_bed",
    "at": [
     -145.0,
     191.05
    ],
-   "where": "the working glasshouses"
+   "where": "the working glasshouses",
+   "regrow_per_h": 0.2624,
+   "max": 12.6
   }
  ],
+ "structures": [
+  {
+   "kind": "furnace",
+   "lot": "cone",
+   "spot": "the front mouth",
+   "fuel": 40.0,
+   "note": "the Cone's furnace, full (13 game hours at full firing)"
+  },
+  {
+   "kind": "storage",
+   "lot": "cone_yard",
+   "contents": {
+    "peat": 824
+   },
+   "note": "the Cone's peat: with the furnace's, 864 units, 12 days of full firing at 3 a game hour"
+  },
+  {
+   "kind": "oven",
+   "lot": "batch",
+   "spot": "the oven mouth",
+   "fuel": 8.0,
+   "note": "the Batch's oven, full (8 game hours)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "marver",
+   "spot": "the hearth bench",
+   "fuel": 12.0,
+   "note": "the Marver's public hearth, full (a game day)"
+  },
+  {
+   "kind": "smokehouse",
+   "lot": "smokehouse_1",
+   "fuel": 8.0,
+   "note": "full (16 game hours)"
+  },
+  {
+   "kind": "smokehouse",
+   "lot": "smokehouse_2",
+   "fuel": 8.0,
+   "note": "full (16 game hours)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "lamp_house",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "low_1",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "low_2",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "low_4",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "low_5",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "low_6",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "low_7",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "low_8",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "low_10",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "mid_1",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "mid_2",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "mid_4",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "mid_5",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "mid_7",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "high_1",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "high_2",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "high_3",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "high_5",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "readers_house",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "turf_house",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "hearth",
+   "lot": "hanger_cottage",
+   "fuel": 12.0,
+   "note": "the household's hearth, full (a game day)"
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    6.0,
+    1.5
+   ],
+   "fuel": 8.0,
+   "note": "at the top of the Fish Steps"
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -60.0,
+    4.0
+   ],
+   "fuel": 8.0,
+   "note": "on the quay by the net lofts"
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    54.0,
+    7.5
+   ],
+   "fuel": 8.0,
+   "note": "on the quay by the Store"
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    30.0,
+    17.0
+   ],
+   "fuel": 8.0,
+   "note": "in the Counting House yard"
+  },
+  {
+   "kind": "lamp",
+   "lot": "marver",
+   "spot": "the door",
+   "fuel": 8.0,
+   "note": "at the Marver's door"
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    136.0,
+    -8.0
+   ],
+   "fuel": 8.0,
+   "note": "on the mole by the lamp house"
+  },
+  {
+   "kind": "lamp",
+   "lot": "watchglass",
+   "spot": "Rafe's place by the light",
+   "fuel": 8.0,
+   "note": "at the Watchglass, where Rafe fishes by the light"
+  }
+ ],
+ "household_stores": {
+  "note": "Not placed yet. Each household's home holds the other 3 days of food for its people, and peat for its hearth beyond the hearth's first fill; with the Store's 3 days that is the 6 days of §2. The cast exists (towns[].residents, homes), but a household's store must be its own (the theft law reads a store's owner), and a plan's structures have no owner yet: a general `owner` (a household key) on `structures[]` would place these.",
+  "per_person": {
+   "smoked_fish": 4,
+   "roots": 5
+  },
+  "by_household": {
+   "faro": {
+    "lot": "lamp_house",
+    "people": 2,
+    "smoked_fish": 7,
+    "roots": 10
+   },
+   "dunlin": {
+    "lot": "low_1",
+    "people": 2,
+    "smoked_fish": 7,
+    "roots": 10
+   },
+   "calloway": {
+    "lot": "low_2",
+    "people": 4,
+    "smoked_fish": 14,
+    "roots": 19
+   },
+   "tarn": {
+    "lot": "low_4",
+    "people": 7,
+    "smoked_fish": 24,
+    "roots": 33
+   },
+   "okoro": {
+    "lot": "low_5",
+    "people": 4,
+    "smoked_fish": 14,
+    "roots": 19
+   },
+   "vane": {
+    "lot": "low_6",
+    "people": 2,
+    "smoked_fish": 7,
+    "roots": 10
+   },
+   "morrow": {
+    "lot": "low_7",
+    "people": 2,
+    "smoked_fish": 7,
+    "roots": 10
+   },
+   "sato": {
+    "lot": "low_8",
+    "people": 3,
+    "smoked_fish": 10,
+    "roots": 14
+   },
+   "marl": {
+    "lot": "low_10",
+    "people": 2,
+    "smoked_fish": 7,
+    "roots": 10
+   },
+   "achterberg": {
+    "lot": "marver",
+    "people": 3,
+    "smoked_fish": 10,
+    "roots": 14
+   },
+   "greave": {
+    "lot": "mid_1",
+    "people": 4,
+    "smoked_fish": 14,
+    "roots": 19
+   },
+   "fenwick": {
+    "lot": "mid_2",
+    "people": 4,
+    "smoked_fish": 14,
+    "roots": 19
+   },
+   "stannard": {
+    "lot": "mid_4",
+    "people": 2,
+    "smoked_fish": 7,
+    "roots": 10
+   },
+   "sarro": {
+    "lot": "mid_5",
+    "people": 2,
+    "smoked_fish": 7,
+    "roots": 10
+   },
+   "brandt": {
+    "lot": "mid_7",
+    "people": 3,
+    "smoked_fish": 10,
+    "roots": 14
+   },
+   "pontil": {
+    "lot": "high_1",
+    "people": 3,
+    "smoked_fish": 10,
+    "roots": 14
+   },
+   "hollin": {
+    "lot": "high_2",
+    "people": 4,
+    "smoked_fish": 14,
+    "roots": 19
+   },
+   "quill": {
+    "lot": "high_3",
+    "people": 3,
+    "smoked_fish": 10,
+    "roots": 14
+   },
+   "dunmore": {
+    "lot": "high_5",
+    "people": 3,
+    "smoked_fish": 10,
+    "roots": 14
+   },
+   "orme": {
+    "lot": "readers_house",
+    "people": 1,
+    "smoked_fish": 4,
+    "roots": 5
+   },
+   "roon": {
+    "lot": "turf_house",
+    "people": 3,
+    "smoked_fish": 10,
+    "roots": 14
+   },
+   "sedge": {
+    "lot": "hanger_cottage",
+    "people": 1,
+    "smoked_fish": 4,
+    "roots": 5
+   }
+  }
+ },
  "fixtures": [
   {
    "id": "quay_01",

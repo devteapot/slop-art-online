@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes offers (default: all)
+  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick offers support (default: all but support)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -13,7 +13,7 @@ and writes `.local/living/verify/RUN/ui/checks.json`. Exit 1 when any check fail
 Two residents are placed beside the player and held still for the talk and items scenarios
 (admin `place_at` and `set_behavior`: scene setup, not player acts).
 """
-import argparse, json, os, re, subprocess, sys
+import argparse, json, os, re, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
@@ -237,8 +237,86 @@ def offers(run, c):
     c.check(s, "proposed terms are noted once, in the rules' words", len([n for n in notes("06") if "bring it by dusk" in n]) == 1, str(notes("06")))
     c.check(s, "and the client reads them as terms (Accept takes them)", re.search(rf"ui: proposal Terms\(\d+\) from #{b}: .*proposes terms: they give 1 berries, you give 1 stone", L) is not None)
 
+# Where the support scenario stands the player on Cullet (land metres) and what holds it up there:
+# a kit fixture's file (part of its path) and whether it is tall enough to be an occluder, so the
+# camera's fade (`envs::cutaway`) considers it at all.
+SUPPORTS = [
+    ("stairs", 410.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True),
+    ("terrace", 568.0, 720.8, "marver_terrace/", False),
+    ("quay", 450.0, 782.6, "quay/", False),
+    # At the upper level's edge above a retaining wall: the drop's tiles keep you 1-1.5 m from
+    # it, so it is beside you, never under you; it may fade when it stands between the camera
+    # and you, as anything that hides you does.
+    ("wall", 440.0, 751.6, "retaining_wall/wall_005", False),
+]
 
-SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "offers": offers}
+
+def support(run, c):
+    """What I stand on or step onto never fades (the owner's Cullet walk: the flight dithered away
+    while climbing it). Needs a Cullet world (`--seed cullet`) and the cutaway's debug log."""
+    s = "support"
+    plan = "ready;wait:3"
+    for name, *_ in SUPPORTS:
+        plan += f";sync:{name};wait:6;shot:{name};dump:{name}"
+    plan += ";quit"
+    syncs = [f"{name}=place_at|{{me}}|{x}|{y}" for name, x, y, *_ in SUPPORTS]
+    old = os.environ.get("RUST_LOG")
+    os.environ["RUST_LOG"] = "info,wgpu=warn,naga=warn,living_game::envs=debug"
+    try:
+        out, code, text = drive(run, s, plan, syncs=syncs)
+    finally:
+        if old is None:
+            os.environ.pop("RUST_LOG")
+        else:
+            os.environ["RUST_LOG"] = old
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    L = log(out)
+    # The log in stretches, one per spot: from its sync step to the next.
+    parts = re.split(r"live script: sync:(\w+)", L)
+    seg = {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
+    for name, x, y, part, occluder in SUPPORTS:
+        t = seg.get(name, "")
+        held = set(re.findall(r"cutaway: (\S+) holds me up", t))
+        faded = re.findall(r"cutaway: (\S+) fades to", t)
+        mine = [f for f in held if part in f]
+        if occluder:
+            c.check(s, f"{name}: the cutaway finds what holds me up ({part})", bool(mine), f"held {sorted(held)}")
+        # What held me up there, and the spot's own support, never fades there.
+        bad = [f for f in faded if f in held or (not occluder and part in f)]
+        c.check(s, f"{name}: nothing under or beside my feet fades", t != "" and not bad, f"faded {bad}" if t else "no log for this spot")
+    c.check(s, "photographs of each spot", all(os.path.exists(os.path.join(out, f"{n}.png")) for n, *_ in SUPPORTS))
+
+
+def pick(run, c):
+    """Two people overlapping on screen: the cursor on the one in front (its chest, with the one
+    behind standing where the cursor's ground point falls) names, hovers and addresses that one.
+    The pick is one function for the nameplate, Enter and combat's target (living/game/src/pick.rs);
+    before it, Enter took the hovered person nearest the cursor's ground point: the one behind."""
+    s = "pick"
+    a, b = residents(run)
+    line = f"You in front, {int(time.time()) % 100000}."  # its own line: said rows from earlier drives don't count
+    # The view faces north (yaw 0, sim -y). A stands ahead and to the left; B 1.5 m behind A along
+    # the view, where the ray through A's chest meets the ground.
+    plan = ("ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
+            "key:Enter:tap;wait:0.6;shot:02_to_them;dump:02;type:{LINE};enter;wait:1.2;dump:03;key:Escape:tap;wait:0.6;"
+            "point:{A}:1.3;wait:0.8;tap;wait:0.8;dump:04;key:Escape:tap;wait:0.4;quit").replace("{A}", str(a)).replace("{LINE}", line)
+    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["01", "02", "03", "04"]}
+    L = log(out)
+    hov = [h.get("id") for h in (d["01"] or {}).get("hovered") or []]
+    c.check(s, "the cursor on the one in front: only they are hovered (one nameplate)", hov == [a], f"hovered {hov}, under {(d['01'] or {}).get('under')}, in front #{a}, behind #{b}")
+    t2 = (d["02"] or {}).get("typing") or {}
+    c.check(s, "Enter addresses the one in front, in their window", t2.get("to") == a and t2.get("window") == f"Person{a}", json.dumps(t2))
+    c.check(s, "the target plate is the one addressed", (d["02"] or {}).get("targeted") == a, str((d["02"] or {}).get("targeted")))
+    c.check(s, "the line goes to them (human_say with to)", re.search(rf'say: "{re.escape(line)}" to #{a}\b', L) is not None)
+    t4 = (d["04"] or {}).get("typing") or {}
+    c.check(s, "a tap on the one in front talks to them (combat's target is the same pick)", t4.get("to") == a, json.dumps(t4))
+    rows = sql(run, f"SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = {a}")
+    c.check(s, "the authority's said row has to = the one in front", any(line in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
+
+
+SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "offers": offers, "support": support}
 
 
 def main():
@@ -249,7 +327,8 @@ def main():
     if not f"verify-{a.run}".startswith("verify-ui-"):
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
-    for name in a.scenarios or list(SCENARIOS):
+    # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
+    for name in a.scenarios or [k for k in SCENARIOS if k != "support"]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)

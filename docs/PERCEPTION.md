@@ -266,11 +266,36 @@ Sixth change, 2026-11-11, branch `rules-offers`, on the Spark. In play-test 4 th
 
 One view with a direction column rather than two views: the outgoing offer costs one more point read in the same refresh, and a client needs both to draw its own standing offer beside the ones made to it.
 
-**The end of an offer.** `trade_offer` gains `until_ms`, set when the offer is made to `at_ms` + the `trade_window_s` law (180 s). `accept`, the mind's scene and housekeeping read it (`TradeOffer::ends_ms`); a law changed while an offer stands no longer changes that offer's end. Housekeeping (1 Hz) now deletes a trade offer as soon as it ends, not a minute later, so the row leaves `my_offers` within a second. A row written before the column (its default 0) is read through the law's window and given its end at the next housekeeping. `perceive.rs`'s "asked of you" now reads offers through the new `to` index instead of scanning the table. Bond offers are unchanged.
+**The end of an offer.** `trade_offer` gains `until_ms`, set when the offer is made to `at_ms` + the `trade_window_s` law (180 s). `accept`, the mind's scene and housekeeping read it (`TradeOffer::ends_ms`); a law changed while an offer stands no longer changes that offer's end. Housekeeping (1 Hz) now deletes a trade offer at its first pass after the end, not a minute later, so the row leaves `my_offers` about a second after `until_ms`. A row written before the column (its default 0) is read through the law's window and given its end at the next housekeeping. `perceive.rs`'s "asked of you" now reads offers through the new `to` index instead of scanning the table. Bond offers are unchanged.
 
 **Accept and decline.** Accepting is the existing `accept` act toward the maker (`from`), unchanged: refused with the rules' words when either side lacks the goods or the offer has ended, else the goods move both ways and the row goes. `accept_done` takes a proposal record of terms from the same person first, and the standing trade only when there is none. There is no decline act: an offer ends at `until_ms` or when its maker offers again.
 
 **Data paths.** Writes: one insert per offer, a delete per accept, replacement or end. Each re-runs the `my_offers` of the players who are its maker or addressee (the previous addressee too when an offer is replaced), and nobody else's. Reads: two point reads plus the `living` lookup per refresh. Retained: at most one row per character, for at most `trade_window_s` plus one second. Subscribers: the two parties.
+
+**Measured** (Spark, DGX, 20 cores, aarch64; SpacetimeDB 2.14.1 in the trial container `slop-trials-stdb`, port 3320, shared with other work: host load 15–21 during the runs, so the tick figures are noisy). Scratch database `verify-client-offers-bench-1111-190617`, default seed (`realm-4`, about 300 characters, no minds), 60 Hz tick. Tool: [`living/tools/offers_bench.py`](../living/tools/offers_bench.py). M player identities join near one another, each holding one real SDK subscription to `SELECT * FROM my_offers` (the verify-client probe). K adult residents stand beside them. A window at rest is followed by 60 s of load: residents offer to random players (`mind_act`, as a mind would) and players to one another (`human_act`), two to one. Figures come from the server's per-database view metrics.
+
+| M players | K residents | Offers made (per s) | Standing at end | Rows per player (mean, max) | `my_offers` refreshes per offer | µs per refresh, with materializing (call alone) | `my_offers` ms/s | Tick tx mean, rest → load (ms) |
+|---|---|---|---|---|---|---|---|---|
+| 20 | 60 | 552 (9.0) | 80 | 5.0, 9 | 1.97 | 46.8 (19.2) | 0.83 | 1.29 → 1.46 |
+| 50 | 150 | 1,096 (18.5) | 218 | 4.9, 8 | 1.92 | 44.0 (18.7) | 1.56 | 1.77 → 1.98 |
+
+- **The filters are point reads.** Each offer re-ran `my_offers` about twice: the addressee's, plus the maker's for a player's offer or the replaced offer's addressee. Under a full-scan read set every one of the M subscribers would re-run on every offer (20 or 50 per offer). At rest no `my_offers` refresh ran except those caused by `my_characters` changes (joins, the `living` lookup) and by the earlier run's offers ending.
+- **The cost per refresh** is about 45 µs, near the 43 µs of a `seen_bodies` refresh measured in the second change, with up to 9 rows. 18 offers a second cost 1.6 ms of view time per second. The tick's mean moved by 0.2 ms on a loaded host, inside its noise.
+- **Not measured:** wire bytes per player (one row is about 60 bytes plus item names), more than 50 subscribers, and offers to players who are far apart (an act toward a far target walks first, which does not change the view).
+
+**In-place update** (`verify-player-migrate-1111-191252`): main's module (`35c0717`, no `to` index, no `until_ms`) was published with an offer standing to a player, then this branch's module with `--keep-data`. The automatic migration accepted it (index added, `until_ms` defaulted to 0). The row kept its data, and housekeeping gave it its end within 0.5 s (`migrate-before.json`, `migrate-after.json`). For up to a second after such an update, a row in `my_offers` can carry `until_ms` 0, meaning `at_ms` plus the law's window. The offer was still there 64 ms after `until_ms` and gone 1,882 ms after (`expiry.json`; samples about 1.8 s apart on the loaded host).
+
+**Verified** on the same container, scoped build unless named, no model calls:
+
+| Surface | Run | Result |
+|---|---|---|
+| Rules (cargo) | `every_know_how_can_be_taught`, `cullet_s_glassmaking_can_be_taught` | pass; `just living-check` ok (all five steps) |
+| Player (`verify-player` `offers.py`) | `player-offers-1111-183948` | 17 of 17: a resident's offer in `my_offers` (incoming, ids, `until_ms` = `at_ms` + 180 s), told in `my_experience`; a second player's own offer outgoing; neither sees the other's, anonymous none, `trade_offer` private; `accept` refused without the goods (offer stands), then accepted (2 wood and 1 berries moved, row gone, outcome told). After the window the second player's offer was gone (`expiry-after-window.json`). |
+| Client (`verify-client` suite) | `client-offers-20261111-184207` | 34 rows, all PASS, including the new `my_offers` step over WebSocket (maker outgoing, addressee incoming, `ClientAnon` and anonymous nothing) and the own-state check with `my_offers` |
+| Client, open build | `client-offers-open-20261111-184616`, `client-offers-open2-20261111-184926` | first: `my_offers` PASS, "combat feed scoped to its viewer" FAIL (player-2's 4 s rows missed while a build ran beside it); rerun: all PASS but the known open-build XFAIL |
+| Core (`verify-core` `scenes.py teach`) | `core-teach-1111-184247` | 6 of 6 with this branch's rules. The same scene with main's `skills.rhai` installed on the same world: 2 of 6, with "there is no technique called fire_bolt (the techniques are: spear, fire, …)" (`teach-results-main-rules.json`) |
+
+Evidence is in the Spark worktree's git-ignored `.local/living/verify/<run>/`.
 
 ### Compatibility: the `LIVING_PERCEPTION` build switch
 

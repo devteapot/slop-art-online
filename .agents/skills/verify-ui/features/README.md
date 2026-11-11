@@ -7,7 +7,9 @@ This directory is the maintained source for verifying interface D in the game cl
 | Windows: the two anchors, opening and replacing, dragging by the title bar and snapping, ✕, the window keys, the Esc order, Menu and its list | [windows.md](windows.md) | `check.py windows` |
 | Talking: whom Enter addresses, the person window, Tab (another person, then everyone near), the log and people, introduce yourself, labels by looks, `heard_by` and `introduced` slots | [talking.md](talking.md) | `check.py talk` |
 | Items on people: the pack, an item's acts, carrying an item onto someone's window or onto them, hold F › Give › | [items.md](items.md) | `check.py items` |
+| What you stand on: a flight, a terrace, the quay's edge and a wall's top never fade under you; landmarks and far things are not faded for being in the way | [support.md](support.md) | `check.py support` on a Cullet world (`--seed cullet`) |
 | Themes: Clear (default), Night, Linen, Walnut; F4 cycles, Settings › Play › Look sets, the settings file keeps; windows stay through a change | [themes.md](themes.md) | `check.py themes`; `LIVING_GAME_THEME=<t> check.py …` for each theme's stills |
+| The cursor pick: who is under the cursor when two overlap on screen (the one drawn in front), the same for the nameplate, Enter, a tap and combat's target | [talking.md](talking.md) (`pick`) | `check.py pick` |
 
 ## Baseline preconditions
 

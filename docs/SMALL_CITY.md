@@ -213,6 +213,8 @@ The owner's rule: resources come from the world, and nothing spawns by magic. So
 - **Fire that eats fuel.** A furnace or hearth is lit only while it is fed.
 
   *Built 2026-11-11 on `goods-1`:* goods, fires that eat fuel, recipes and shared fishing stocks, with Cullet's goods as data in its laws file, `living/seeds/worlds/cullet/laws.rhai` ([world rules](WORLD_RULES.md#goods-recipes-and-fuel)). Placing Cullet's nodes and fires is the authored plan's.
+
+  *Placed 2026-11-11 on `rates-2`:* Cullet's resources, fires, lamps and the Store's food, with amounts and regrowth computed from the sustainability targets above as starting values for the soak ([Cullet's goods, placed](CULLET_RULES.md#cullets-goods-placed-rates-2)).
 - **Decay and upkeep.** Panes break and need glass. The owner has asked for this, as Rhai laws.
 - **Fish as a stock.** Today a fishing spot regrows. The owner wants fish to be animals eventually. For this test, regrowing spots with a shared limit are enough.
 - **Tide** (optional, recommended). A law that gives the water's state from the clock, shifting about 50 minutes later each day. It gates the Weirs and the wrack. It changes no terrain.
@@ -439,7 +441,7 @@ Law values for a 48-minute day. They are Rhai numbers in `rates(a)` and `cold(a)
 
 Other points:
 
-- **Rates should be written per game hour.** Today every rate is per real minute, so changing the day length silently changes every balance. The engine should convert. This is a rules change, flagged for the rules worker.
+- **Rates should be written per game hour.** Today every rate is per real minute, so changing the day length silently changes every balance. The engine should convert. This is a rules change, flagged for the rules worker. *Built:* need rates on `rules-1`; spoiling, regrowth, traps and remains on `rates-2` ([Cullet's rules](CULLET_RULES.md#the-other-rates-in-game-time-rates-2)).
 - **The day length is not in the seed.** `World.day_ms` exists, but the seed cannot set it. It needs one seed field.
 - **Night is fixed in Rust** as 20:00 to 06:00 (`is_night`). It should become a law, eased over a game hour at dusk and dawn, so that light, sight and sleepiness do not all flip in one tick.
 - **Warm places.** Warmth today is a campfire within 3.5 m or a roof within 2.5 m. A lit furnace, hearth or oven should warm like a fire, with its own radius as a property.

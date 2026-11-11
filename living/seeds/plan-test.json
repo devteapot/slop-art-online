@@ -31,13 +31,17 @@
             {"id": "the steps", "from": "quay", "to": "row", "foot": [32, 18], "head": [32, 28], "width_m": 2.4, "rise_m": 4.0}
           ],
           "resources": [
-            {"kind": "fishing_spot", "at": [-6, 0.6], "where": "the quay's edge"},
-            {"kind": "fishing_spot", "at": [6, 0.6], "where": "the quay's edge"},
-            {"kind": "kelp", "at": [-36, 1.0], "where": "a kind the rules do not know yet: kept, not placed"}
+            {"kind": "fishing_spot", "at": [-6, 0.6], "max": 8, "regrow_per_h": 1.0, "pool": "the quay", "where": "the quay's edge: one stock for both spots"},
+            {"kind": "fishing_spot", "at": [6, 0.6], "max": 8, "regrow_per_h": 1.0, "pool": "the quay", "where": "the quay's edge"},
+            {"kind": "reeds", "at": [-36, 1.0], "where": "reeds by the water, of the kind's own max and regrowth"}
+          ],
+          "structures": [
+            {"kind": "lamp", "lot": "hall", "note": "at the hall's door"},
+            {"kind": "storage", "lot": "inn", "spot": "seat 1", "contents": {"fish": 2}, "note": "a crate by the inn's first seat"}
           ],
           "lots": [
             {"id": "store", "kind": "workshop", "name": "the Store", "at": [-30, 14], "size": [8, 9], "facing": "south", "level": "quay", "model": "cullet/workshop/store.glb", "height_m": 7.5, "wear": {"salt": 0.7}},
-            {"id": "loft", "kind": "barn", "at": [-20, 14], "size": [7, 9], "facing": "south", "level": "quay", "model": "cullet/barn/loft.glb", "height_m": 9.0},
+            {"id": "loft", "kind": "barn", "at": [-20, 14], "size": [7, 9], "facing": "south", "level": "quay", "model": "cullet/barn/loft.glb", "height_m": 9.0, "contents": {"berries": 6, "wood": 3}},
             {"id": "hall", "kind": "hall", "name": "the Tally Hall", "at": [0, 19], "size": [16, 9], "facing": "south", "level": "quay", "model": "cullet/hall/tally.glb", "height_m": 14.0, "landmark": true, "spots": [{"name": "under the arch", "at": [-4, 5.5]}, {"name": "by the door", "at": [4, 5.5]}]},
             {"id": "inn", "kind": "inn", "name": "the Marrow", "at": [22, 15], "size": [10, 10], "facing": "south", "level": "quay", "height_m": 8.0, "spots": [{"name": "seat 1", "at": [-3, 6]}, {"name": "seat 2", "at": [0, 6]}, {"name": "seat 3", "at": [3, 6]}]},
             {"id": "house_a", "kind": "house", "at": [-20, 32.5], "size": [6, 9], "facing": "north", "level": "row", "model": "cullet/house/row-a.glb", "height_m": 8.5, "door_colour": "oxblood", "keepsake": "glass floats"},

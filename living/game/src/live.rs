@@ -79,7 +79,7 @@ impl Plugin for LivePlugin {
             .add_systems(Update, (land, lots, bodies, me).chain().in_set(Phase::Present).after(crate::combat::actions).after(crate::town::shows))
             .add_systems(
                 Update,
-                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, crate::envs::reach, report)
+                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::night_glow, crate::lookdev::fit, crate::envs::solid_if_large, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, crate::envs::reach, report)
                     .chain()
                     .in_set(Phase::Present)
                     .after(me)
@@ -303,7 +303,8 @@ fn land(
     // The mood of the environment made for this land (its `world` names the row's seed and
     // size), else the first world environment's.
     let mine = defs.iter().find(|d| d.world.as_ref().is_some_and(|w| w.seed == row.seed && w.size == row.size));
-    if let Some(def) = mine.or_else(|| defs.iter().find(|d| d.world.is_some())) {
+    let env = mine.or_else(|| defs.iter().find(|d| d.world.is_some()));
+    if let Some(def) = env {
         crate::envs::apply_mood(&def.mood, &mut style, &mut look, &mut lights, &mut cams, &mut clear);
         // The camera's fog, and how far landmarks are drawn, follow this mood (`world::Draw`).
         draw.mood(&def.mood);
@@ -312,7 +313,10 @@ fn land(
     live.hosted = Some(built.hosted);
     let arrive = Vec2::new(row.arrive_x, row.arrive_y);
     roam.pos = arrive;
-    commands.insert_resource(Island::hosted(built.land, &defs, arrive, &built.params));
+    // Its ground map is the environment made for this land's; the first world environment's
+    // (the island's, which has none) never paints another land.
+    let island = Island::hosted(built.land, &defs, mine, arrive, &built.params);
+    commands.insert_resource(island);
 }
 
 fn regenerate(row: &LandInfo) -> Result<Built, String> {
@@ -837,7 +841,7 @@ fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, liv
 
 /// Where the cursor meets the island's ground (the camera's own ray uses the tile ground). The
 /// eye's height over the island's hills is the camera's own (`camera::follow`).
-fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, pointer: Res<crate::pointer::Pointer>) {
+pub(crate) fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, pointer: Res<crate::pointer::Pointer>) {
     let Some(island) = island else { return };
     let Ok((camera, gtf)) = cams.single() else { return };
     let Some(c) = pointer.pos else { return };
@@ -954,7 +958,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   `click:X,Y` clicks there (fractions of the picture; `@NAME` is a tagged node of the game
 ///   UI, `ui/hit.rs` `Tag`), `slide:A>B[:SECS]` holds the click at A and slides to B (a
 ///   title-bar drag, an item onto someone), `scroll:PX` swipes
-///   two fingers over a window, `point:ID` puts the cursor on someone (hovering them),
+///   two fingers over a window, `point:ID[:H]` puts the cursor on someone (hovering them; H m above their feet, default 0.3, e.g. 1.3 for the chest),
 ///   `dodge:W|A|S|D` double-taps a direction, `weapon:toggle|draw|sheathe` is X, and `dump:NAME`
 ///   writes the game UI's state to `<dir>/NAME.json` (`ui::dump`);
 ///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
@@ -999,8 +1003,8 @@ pub struct Script {
     frames: u32,
     held: f32,
     pts: Option<(Vec2, Vec2)>,
-    /// `point:ID`: the cursor follows this character.
-    pointing: Option<u64>,
+    /// `point:ID[:H]`: the cursor follows this character, H m above its feet.
+    pointing: Option<(u64, f32)>,
     started: Option<u32>,
 }
 
@@ -1045,9 +1049,9 @@ fn script(
         None => v.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?))),
     };
     let dt = time.delta_secs();
-    if let Some(id) = s.pointing {
+    if let Some((id, lift)) = s.pointing {
         let at = hud.actors.iter().find(|a| a.id == id).and_then(|a| {
-            let ground = island.as_ref().map_or(a.head - Vec3::Y * 1.9, |i| Vec3::new(a.head.x, i.height(a.head.x, a.head.z) + 0.3, a.head.z));
+            let ground = island.as_ref().map_or(a.head - Vec3::Y * (2.2 - lift), |i| Vec3::new(a.head.x, i.height(a.head.x, a.head.z) + lift, a.head.z));
             cams.iter().find_map(|(c, t)| Some((c.world_to_viewport(t, ground).ok()?, c.logical_viewport_size()?)))
         });
         if let Some((p, size)) = at {
@@ -1193,7 +1197,10 @@ fn script(
             // Keep the cursor on character ID as drawn (their feet, where the cursor's ground
             // point finds them), frame after frame as the camera eases: hovering them, as a
             // player keeps pointing. Until a `cursor:` step or another `point:`.
-            s.pointing = arg.parse().ok();
+            s.pointing = match arg.split_once(':') {
+                Some((id, h)) => id.parse().ok().map(|id| (id, h.parse().unwrap_or(0.3))),
+                None => arg.parse().ok().map(|id| (id, 0.3)),
+            };
             true
         }
         "weapon" => {
