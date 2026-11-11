@@ -18,9 +18,9 @@
 //!   3.6 a second, about 0.44 s, [`crate::jump::AIR_S`]) the way the body moves or faces. The take
 //!   for that way plays, timed so its flight (the path's `hop`, else the longest time both feet
 //!   are up) is the hop's, from just before take-off: standing, `jump_stand_hop` (else
-//!   `jump_stand`); sideways (scheme "cursor"), `jump_left` or `jump_right`. Jumps forward while
-//!   moving and backward hops keep the procedural jump: clips 3's `jump_forward_run` s2 landed
-//!   sliding 1.1–3.4 m/s running (the arc 0.2–0.6), and `jump_back` s49's toes went 4.2 cm under.
+//!   `jump_stand`); sideways (scheme "cursor"), `jump_left` or `jump_right`; backward,
+//!   `jump_back`. Jumps forward while moving keep the procedural jump: clips 3's
+//!   `jump_forward_run` s2 landed sliding 1.1–3.4 m/s running (the arc 0.2–0.6).
 //!
 //! `LIVING_GAME_TAKES=off` plays none of these, nor the directional loops (`gait.rs`): the client
 //! as it was before them, for comparisons.
@@ -45,11 +45,12 @@ pub const TURN_RATE: f32 = 1.3;
 /// The jump takes the clip lab's verdicts accepted (clips 3): standing, the small hop
 /// `jump_stand_hop` s4 (the tuck jump `jump_stand` s25 throws the arms out and draws the feet up
 /// 91 cm), else `jump_stand`; left `jump_left` s17 and right `jump_right` s25 (toes within 1.3 cm
-/// of the ground in the game). Forward while moving and backward, the procedural jump: in the
-/// game `jump_forward_run` s2's landing slid 1.1–3.4 m/s running and 0.4–0.9 walking (the arc
-/// 0.2–0.6), and `jump_back` s49's toes stayed 4.2 cm under the ground for 0.45 s (a retake, s42).
+/// of the ground in the game); back `jump_back` s42 (2026-11-12: with foot IK its toes go at most
+/// 1.2 cm under for 0.07 s, where s49's stayed 4.2 cm under for 0.45 s; the pick is in
+/// `clips.json` since assets-locomotion-2). Forward while moving, the procedural jump: in the game
+/// `jump_forward_run` s2's landing slid 1.1–3.4 m/s running and 0.4–0.9 walking (the arc 0.2–0.6).
 const JUMP_STAND: [&str; 2] = ["jump_stand_hop", "jump_stand"];
-const JUMP_SIDES: [(&str, f32); 2] = [("jump_left", -90.0), ("jump_right", 90.0)];
+const JUMP_SIDES: [(&str, f32); 3] = [("jump_left", -90.0), ("jump_right", 90.0), ("jump_back", 180.0)];
 /// The walking stop take, and how far past its first step the gait may be for it to join (cycles).
 const STOP: &str = "walk_stop";
 pub const STOP_JOIN: f32 = 0.3;
@@ -213,7 +214,7 @@ mod tests {
         j["jump_back"] = serde_json::json!({"seconds": 1.7, "loop": false, "hop": [0.6, 1.044], "travel_deg": 180});
         let with_back = Gaits::parse(&j);
         for rel in [PI, -PI + 0.2, PI - 0.3] {
-            assert_eq!(jump_for(&with_back, true, rel), None, "at {rel}: jump_back is a retake, the procedural jump");
+            assert_eq!(jump_for(&with_back, true, rel).map(|j| j.0), Some("jump_back"), "at {rel}: backward, jump_back");
         }
     }
 }
