@@ -1,7 +1,7 @@
 //! Settings (interface D): a wide window in the centre, opened from Menu (or Menu after Esc with
 //! nothing open), with two pages.
 //!
-//! - **Play:** the control scheme (facing the cursor, or where you walk; F3 switches it too),
+//! - **Play:** the interface's theme (Clear, Night, Linen, Walnut; F4 cycles it), the control scheme (facing the cursor, or where you walk; F3 switches it too),
 //!   how the edge of sight is drawn (not seen now, limited view, fade; F2 cycles it too), the
 //!   weapon drawing itself when something attacks you, and key hints and first-time tips (with
 //!   "Show tips again").
@@ -100,18 +100,19 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
         if b.0 != Win::Settings {
             continue;
         }
-        commands.entity(e).insert(Node { margin: UiRect::new(Val::Px(9.0), Val::Px(9.0), Val::Px(0.0), Val::Px(9.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), padding: UiRect::all(Val::Px(14.0)), flex_direction: FlexDirection::Row, column_gap: Val::Px(18.0), overflow: Overflow::clip(), ..default() });
+        commands.entity(e).insert(Node { margin: wood::body_frame().0, border: wood::body_frame().1, border_radius: wood::r(8.0), padding: UiRect::all(Val::Px(14.0)), flex_direction: FlexDirection::Row, column_gap: Val::Px(18.0), overflow: Overflow::clip(), ..default() });
         commands.entity(e).with_children(|body| {
             // Pages.
             body.spawn((Node { width: Val::Px(150.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|tabs| {
                 for (label, page) in [("Play", "play"), ("Controls", "controls")] {
-                    tabs.spawn((super::hit::Hot, Tag(format!("settings:page:{page}")), kit::Paint::Choice, Lit(false), Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), ..default() }, bevy::ui::BackgroundGradient::default(), BorderColor::all(wood::INK)))
+                    tabs.spawn((super::hit::Hot, Tag(format!("settings:page:{page}")), kit::Paint::Choice, Lit(false), Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)), border: wood::b(2.0), border_radius: wood::r(8.0), ..default() }, bevy::ui::BackgroundGradient::default(), BorderColor::all(wood::edge())))
                         .with_child((Text::new(label), wood::ink(f, 14.0, 800), Pickable::IGNORE));
                 }
-                tabs.spawn((Text::new("Opened from Menu, or Esc with no window open. That also frees the cursor; click the world to take it back."), f.body(12.5, 600), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { margin: UiRect::top(Val::Px(14.0)), ..default() }, Pickable::IGNORE));
+                tabs.spawn((Text::new("Opened from Menu, or Esc with no window open. That also frees the cursor; click the world to take it back."), f.body(12.5, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { margin: UiRect::top(Val::Px(14.0)), ..default() }, Pickable::IGNORE));
             });
             // Play.
             body.spawn((PageBody(Page::Play), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE)).with_children(|pg| {
+                row(pg, f, "Look", "The interface's theme (F4)", |c| kit::seg(c, f, "settings:theme", &super::wood::Name::ALL.map(|n| (n.label(), n.key()))));
                 row(pg, f, "Facing", "Which way your character looks while walking (F3)", |c| kit::seg(c, f, "settings:control", &[("Face where you walk", "travel"), ("Face the cursor", "cursor")]));
                 row(pg, f, "Edge of sight", "How what you can't see now is drawn (F2)", |c| kit::seg(c, f, "settings:sight", &[("Not seen now", "unseen"), ("Limited view", "limited"), ("Fade", "fade")]));
                 row(pg, f, "Weapon", "Draw it by itself when something attacks you", |c| kit::toggle(c, "settings:auto_draw"));
@@ -133,9 +134,9 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                         ("People and things", vec![Act::Interact, Act::Talk, Act::Address, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log]),
                     ];
                     for (head, acts) in groups {
-                        grid.spawn((Node { grid_column: GridPlacement::span(2), margin: UiRect::new(Val::Px(0.0), Val::Px(0.0), Val::Px(8.0), Val::Px(2.0)), ..default() }, Text::new(head), f.title(16.0), TextColor(wood::SUB), Pickable::IGNORE));
+                        grid.spawn((Node { grid_column: GridPlacement::span(2), margin: UiRect::new(Val::Px(0.0), Val::Px(0.0), Val::Px(8.0), Val::Px(2.0)), ..default() }, Text::new(head), wood::tface(&f, 16.0), TextColor(wood::heading()), Pickable::IGNORE));
                         for a in acts {
-                            grid.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(8.0), padding: UiRect::vertical(Val::Px(3.0)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::DASH), Pickable::IGNORE)).with_children(|r| {
+                            grid.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(8.0), padding: UiRect::vertical(Val::Px(3.0)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::line()), Pickable::IGNORE)).with_children(|r| {
                                 r.spawn((BindName(a), Text::new(act_label(a, &names)), wood::ink(f, 13.5, 700), Pickable::IGNORE));
                                 r.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(4.0), ..default() }, Pickable::IGNORE)).with_children(|ks| {
                                     for slot in 0..2 {
@@ -144,30 +145,30 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                                             BindChip(a, slot),
                                             super::hit::Hot,
                                             Tag(format!("bind:{}:{slot}", a.name())),
-                                            Node { min_width: Val::Px(34.0), height: Val::Px(24.0), padding: UiRect::axes(Val::Px(6.0), Val::Px(0.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(6.0)), display: if shown { Display::Flex } else { Display::None }, ..default() },
-                                            BackgroundColor(wood::PARCH),
-                                            BorderColor::all(wood::INK),
+                                            Node { min_width: Val::Px(34.0), height: Val::Px(24.0), padding: UiRect::axes(Val::Px(6.0), Val::Px(0.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(2.0), border_radius: wood::r(6.0), display: if shown { Display::Flex } else { Display::None }, ..default() },
+                                            BackgroundColor(wood::surface()),
+                                            BorderColor::all(wood::edge()),
                                             wood::hard_shadow(2.0, 0.5),
                                         ))
-                                        .with_child((BindText(a, slot), Text::new(""), f.body(12.0, 900), TextColor(wood::INK), Pickable::IGNORE));
+                                        .with_child((BindText(a, slot), Text::new(""), f.body(12.0, 900), TextColor(wood::text()), Pickable::IGNORE));
                                     }
                                 });
                             });
                         }
                     }
                 });
-                pg.spawn((Text::new("Click a key, then press the new one (or a mouse button). Esc cancels. A key already in use is swapped. A second key slot takes a twin (Q and 1)."), f.body(12.5, 600), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { margin: UiRect::top(Val::Px(8.0)), ..default() }, Pickable::IGNORE));
+                pg.spawn((Text::new("Click a key, then press the new one (or a mouse button). Esc cancels. A key already in use is swapped. A second key slot takes a twin (Q and 1)."), f.body(12.5, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { margin: UiRect::top(Val::Px(8.0)), ..default() }, Pickable::IGNORE));
             });
         });
     }
 }
 
 fn row(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, help: &str, control: impl FnOnce(&mut ChildSpawnerCommands)) {
-    p.spawn((Node { display: Display::Grid, grid_template_columns: vec![GridTrack::px(220.0), GridTrack::fr(1.0)], column_gap: Val::Px(12.0), align_items: AlignItems::Center, padding: UiRect::vertical(Val::Px(9.0)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::DASH), Pickable::IGNORE)).with_children(|r| {
+    p.spawn((Node { display: Display::Grid, grid_template_columns: vec![GridTrack::px(220.0), GridTrack::fr(1.0)], column_gap: Val::Px(12.0), align_items: AlignItems::Center, padding: UiRect::vertical(Val::Px(9.0)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::line()), Pickable::IGNORE)).with_children(|r| {
         r.spawn((Node { flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE)).with_children(|l| {
             l.spawn((Text::new(label), wood::ink(f, 14.0, 800), Pickable::IGNORE));
             if !help.is_empty() {
-                l.spawn((Text::new(help), f.body(12.0, 600), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                l.spawn((Text::new(help), f.body(12.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
             }
         });
         r.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(10.0), ..default() }, Pickable::IGNORE)).with_children(control);
@@ -190,6 +191,7 @@ pub fn update(
     (mut input, mut edge, mut tips): (ResMut<crate::controls::Input>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<super::tips::Tips>),
     (keys, mouse, time): (Res<ButtonInput<KeyCode>>, Res<ButtonInput<MouseButton>>, Res<Time>),
     open: Res<super::win::Windows>,
+    mut theme: ResMut<super::ThemeState>,
 ) {
     let mut changed = false;
     if !open.is_open(Win::Settings) {
@@ -219,6 +221,7 @@ pub fn update(
                 input.control = if value == "cursor" { crate::controls::Control::Cursor } else { crate::controls::Control::Travel };
                 changed = true;
             }
+            "settings:theme" => theme.want = super::wood::Name::parse(value),
             "settings:sight" => {
                 if let (Some(e), Some(m)) = (edge.as_mut(), crate::sightedge::Mode::parse(value)) {
                     e.mode = m;
@@ -265,7 +268,7 @@ pub fn update(
     }
     let sight = edge.as_ref().map(|e| e.mode.name());
     let control = if input.control == crate::controls::Control::Cursor { "cursor" } else { "travel" };
-    let (pg, preset) = (*page, binds.preset.name());
+    let (pg, preset, theme_now) = (*page, binds.preset.name(), theme.name.key());
     kit::light(&mut lit, |t| {
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
         match what {
@@ -273,6 +276,7 @@ pub fn update(
             "settings:control" => Some(value == control),
             "settings:sight" => Some(Some(value) == sight),
             "settings:preset" => Some(value == preset),
+            "settings:theme" => Some(value == theme_now),
             _ => match t {
                 "settings:auto_draw" => Some(prefs.auto_draw),
                 "settings:tips" => Some(prefs.tips),
@@ -289,7 +293,7 @@ pub fn update(
         let shown = c.1 < have.max(1) || (c.1 == 1 && !matches!(c.0, Act::Dodge | Act::Primary | Act::Secondary));
         show(&mut n, shown);
         let waiting = cap.waiting == Some((c.0, c.1));
-        let col = if waiting { Color::srgb_u8(0xff, 0xcf, 0x5c) } else if c.1 >= have { wood::GHOST } else { wood::PARCH };
+        let col = if waiting { Color::srgb_u8(0xff, 0xcf, 0x5c) } else if c.1 >= have { wood::plain() } else { wood::surface() };
         if bg.0 != col {
             bg.0 = col;
         }

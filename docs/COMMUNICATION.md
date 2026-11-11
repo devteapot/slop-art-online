@@ -204,7 +204,15 @@ A line is heard by many minds and answered by few. Turn-taking is a matter of th
 | Call out | As for room or one-person lines. The talk prompt says the speaker is *d* m away and beyond a normal voice, so the reply should be a call or a walk over. | As above, within 30 m. |
 | Mindspeech | The addressee, if it is a mind. It can reply in kind only if it knows the technique; otherwise the prompt says the speaker cannot hear an ordinary reply. | Nobody. |
 
-**Evidence for the room line.** In play-test 2 a newcomer's "hi" to no one, with two or more people within 6 m, drew no turn: nobody cared about a stranger, and the 6 m rule marks only a lone listener. The greeting trial (`exp-greet`, [the greeting trial](TRIALS.md); fake model with realistic latencies, one 15-minute run per arm, `gf4`) measured that:
+**Evidence for the room line.** In play-test 2 the newcomer's two "hi"s to no one drew no turn. The [resident inspector](TRIALS.md#resident-inspector) shows why from the session's evidence.
+
+- None of the hearers knew the newcomer, so none "cares". A line to no one from someone the listener does not care about draws a turn only if it is addressed and the listener's remark draw passes ("hi" asks nothing).
+- The draw is deterministic (talk.rs `draw()`). Recomputed for each hearer, it refused every one:
+  - first "hi": Maud 0.6435 ≥ 0.560, Cuth 0.8472 ≥ 0.625, Mercy 0.8492 ≥ 0.787, Aldith 0.8958 ≥ 0.657;
+  - second "hi": its one hearer, Bram, 0.8731 ≥ 0.755.
+- So neither line could have drawn a turn even if it had been addressed. Whether it was addressed is not in the evidence: no salience and no positions near the line were recorded.
+
+The earlier reading was that two or more people stood within 6 m, so the line addressed nobody. That was a diagnosis from source that the evidence did not support, and the second "hi" had only one hearer. The greeting trial (`exp-greet`, [the greeting trial](TRIALS.md); fake model with realistic latencies, one 15-minute run per arm, `gf4`) measured how often such greetings are answered:
 
 | Arm | Crowded greetings answered | Latency median / p90 | Addressed lines answered | False replies | Talk turns/min |
 | --- | ---: | --- | ---: | ---: | ---: |

@@ -1,12 +1,12 @@
 # Tooling: the check, merges and disk
 
-Status: **current** (Tool 7, 2026-11-11, branch `tool-7`). Three machines (the laptop, the dev-box and the Spark) merge branches into `main`. Each merge runs `just living-check`, and each machine has several worktrees with their own Cargo target folders. Before Tool 7, every re-run of the check after `main` moved was a full rebuild, and build folders filled the disks three times in one day. Tool 7 has three parts, each built on our own scripts:
+Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-ups in `tool-7b`, the same day). Three machines (the laptop, the dev-box and the Spark) merge branches into `main`. Each merge runs `just living-check`, and each machine has several worktrees with their own Cargo target folders. Before Tool 7, every re-run of the check after `main` moved was a full rebuild, and build folders filled the disks three times in one day. Tool 7 has three parts, each built on our own scripts:
 
 | Part | Command | Script |
 | --- | --- | --- |
-| The check | `just living-check` (`just living-check-full`) | [`living/tools/check.py`](../living/tools/check.py), [`sccache-rustc`](../living/tools/sccache-rustc), [`install_sccache.sh`](../living/tools/install_sccache.sh) |
+| The check | `just living-check` (`just living-check-full`) | [`living/tools/check.py`](../living/tools/check.py), [`sccache-rustc`](../living/tools/sccache-rustc), [`install_sccache.sh`](../living/tools/install_sccache.sh), self-test [`check_selftest.py`](../living/tools/check_selftest.py) |
 | Merging | `just living-merge <branch> -m "Merge <branch>: …"` | [`living/tools/merge.py`](../living/tools/merge.py), self-test [`merge_selftest.py`](../living/tools/merge_selftest.py) |
-| Disk | `just living-disk-clean [--apply]`, on a timer | [`living/tools/disk_clean.py`](../living/tools/disk_clean.py), [`disk_clean_install.sh`](../living/tools/disk_clean_install.sh) |
+| Disk | `just living-disk-clean [--apply]`, on a timer | [`living/tools/disk_clean.py`](../living/tools/disk_clean.py), [`disk_clean_install.sh`](../living/tools/disk_clean_install.sh), self-test [`disk_clean_selftest.py`](../living/tools/disk_clean_selftest.py) |
 
 [`check_timings.py`](../living/tools/check_timings.py) reads a cargo `--timings` report and splits the time between workspace crates, dependencies and build scripts.
 
@@ -33,11 +33,23 @@ Three things are new:
   - the build environment (`RUSTFLAGS`, `CARGO_PROFILE_*`, `LIVING_*`, `CC`, and every variable a build script or crate was seen to depend on).
 
   Files are hashed from the working tree's raw bytes (tracked and untracked, not git-ignored), so uncommitted changes count and the index is not trusted. When a step passes, its digest is stamped in `~/.cache/slop-check/stamps/`, a store shared by every worktree on the machine. A later check with the same digest skips the step and prints where and when it passed.
-- **Compile cache.** When `sccache` is installed (`living/tools/install_sccache.sh` puts v0.19.0, pinned by checksum, in `~/.local/share/slop-tools/bin`, off `PATH`), rustc runs through `living/tools/sccache-rustc`. The cache lives in `~/.cache/slop-sccache`, capped at 20 GB (`SLOP_SCCACHE_SIZE`), behind a server on port 4237 of its own. sccache puts every `CARGO_*` variable and the working directory in a Rust cache key, so the wrapper removes the ones rustc never reads (`CARGO_TARGET_DIR`, terminal settings). Registry crates then hit across worktrees. Workspace crates hit only within their own worktree, and cargo does not cache incremental (debug) builds of them at all. A cache failure compiles locally.
+- **Compile cache.** When `sccache` is installed (`living/tools/install_sccache.sh` puts v0.19.0, pinned by checksum, in `~/.local/share/slop-tools/bin`, off `PATH`), rustc runs through `living/tools/sccache-rustc`. The check uses only that pinned copy (or `SLOP_SCCACHE`, when set), never an sccache on `PATH` such as Homebrew's; without the pinned copy it compiles without a cache and says so. The wrapper itself, run outside the check, takes `SLOP_SCCACHE`, then the pinned copy, then `PATH`. The cache lives in `~/.cache/slop-sccache`, capped at 20 GB (`SLOP_SCCACHE_SIZE`), behind a server on port 4237 of its own. sccache puts every `CARGO_*` variable and the working directory in a Rust cache key, so the wrapper removes the ones rustc never reads (`CARGO_TARGET_DIR`, terminal settings). Registry crates then hit across worktrees. Workspace crates hit only within their own worktree, and cargo does not cache incremental (debug) builds of them at all. A cache failure compiles locally. The check prints a `compile cache:` line saying which sccache it uses and through which wrapper, or why there is none.
+
+**A `RUSTC_WRAPPER` that is already set** (the laptop's `build-slot`, say) is handled by what it resolves to:
+
+| Pre-set `RUSTC_WRAPPER` | What the check does |
+| --- | --- |
+| `sccache-rustc`: this worktree's, a symlink to it, a copy of it under any name or in another worktree, or the bare name on `PATH` (recognized by its header line) | Keeps the caller's wrapper and adds the cache settings: the pinned sccache, and `SCCACHE_DIR`, `SCCACHE_SERVER_PORT` and `SCCACHE_CACHE_SIZE` unless the caller set them (the caller's values win, so the stats ask the server it compiles through). Prints the `compile cache:` line and records the sccache stats in `runs.jsonl`. Not part of the step digest. |
+| a plain `sccache` | Left as it is, with its own settings; no cache line or stats. Not part of the digest, as sccache does not change outputs. |
+| anything else | Left as it is: cargo runs it, without this check's cache settings or stats. It enters every step's digest, so stamps made with it apply only with it. (This was the behaviour for every pre-set wrapper before `tool-7b`.) |
+
+**Failed compiles in the sccache stats.** A passing check whose build scripts ran shows a few "compilation failures" (`failed` in the stats). They are build scripts' feature probes, compiled through `RUSTC_WRAPPER` and meant to fail on stable Rust. On 2026-11-11 the four were `anyhow` (`src/nightly.rs`, `error_generic_member_access`), `thiserror` 1.0.69 and 2.0.21 (`build/probe.rs`, `error_generic_member_access`) and `proc-macro2` (`src/probe/proc_macro_span.rs`, `proc_macro_span`). Each fails with E0554, "`#![feature]` may not be used on the stable release channel", so the crate uses its stable code. They were found by building those crates through a private sccache server with debug logging. sccache does not cache failures, so each build that re-runs those build scripts counts them again. A warm build that does not re-run them counts none. They are not ours to fix, and fixing them would change nothing.
+
+**Stopping its children.** Each cargo runs in a process group of its own, so an interrupted check stops rustc, build scripts and test binaries with it. A SIGINT or SIGTERM stops them directly. For a check that is killed outright, the check also starts a small watchdog process in a session of its own. The watchdog reads a pipe that only the check holds open, and the check registers each cargo's process group on it, along with its jobserver folder. When the check exits in any way, a SIGKILL included, the kernel closes the pipe. The watchdog then sends each group still registered SIGTERM, then SIGKILL after 10 s, and removes the folder. This relies only on POSIX pipes and process groups, so it works the same on macOS, where `PR_SET_PDEATHSIG` does not exist. On Linux, `PR_SET_PDEATHSIG` stays as a second guard. Tested on the dev-box: a `check.py --full` was SIGKILLed mid-build (3 cargos, 10–11 rustc), once with `PR_SET_PDEATHSIG` on and once with it off. Within 1 s no cargo, rustc or build script of the check was left, including the rustc processes the shared sccache server had started for it. `check_selftest.py` does the same with a stand-in group. One gap is left: a SIGKILL between starting a cargo and registering it (microseconds) is covered only by `PR_SET_PDEATHSIG`, so on macOS that cargo would be left running.
 
 A failure of the check itself (a full disk while writing a log, say) fails the step. Every planned step must end skipped, passed or failed, so a crash is never reported as a pass. With `CARGO_BUILD_JOBS` at or under the number of lanes, the steps run one by one. The jobserver caps compile jobs, not the threads of the rules tests while they run (libtest uses all cores).
 
-`just living-check-full` (or `LIVING_CHECK_FULL=1`) runs every step and ignores stamps; it still writes them. `python3 living/tools/check.py --plan` prints what would run or be skipped, and why. `--steps a,b` runs some steps. Every run is appended to `~/.cache/slop-check/runs.jsonl` with each step's time, the load average and the cache hits.
+`just living-check-full` (or `LIVING_CHECK_FULL=1`) runs every step and ignores stamps; it still writes them. `python3 living/tools/check.py --plan` prints what would run or be skipped, and why. `--steps a,b` runs some steps. Every run is appended to `~/.cache/slop-check/runs.jsonl` with each step's time, the load average, the wrapper used and the cache stats. `python3 living/tools/check_selftest.py` checks the wrapper choice and the watchdog (11 checks), building nothing.
 
 ### What a passing check still guarantees
 
@@ -75,7 +87,7 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 
 **May be removed:** Cargo target folders inside the git worktrees of this repository. A Cargo target folder is one Cargo tagged with `CACHEDIR.TAG`, or one holding Cargo's `.rustc_info.json` beside tagged or locked build directories. Cargo leaves the root of a `CARGO_TARGET_DIR` untagged when the folder already existed. Nothing else may be removed. A folder goes when all of these hold:
 
-- **Nothing uses it.** No process has its working directory, executable, open files or mapped files inside it (`/proc` on Linux, `lsof` on macOS; if `lsof` fails, every folder counts as in use). No Podman or Docker container mounts it, its worktree, or anything inside; stopped containers count too. A container tool that does not answer makes every folder count as mounted. One that answers with an error (no daemon running) is reported as a warning, since nothing of it runs. No Cargo lock in it is held. It holds no other mounted filesystem.
+- **Nothing uses it.** No process has its working directory, executable, open files or mapped files inside it (`/proc` on Linux, `lsof` on macOS; if `lsof` fails, every folder counts as in use). No Podman or Docker container mounts it, its worktree, or anything inside; stopped containers count too. A container tool that does not answer makes every folder count as mounted. One that answers with an error (no daemon running) is reported as a warning: nothing of it runs, but its stopped containers' mounts are unknown. It is only a note when the other tool answered, or when podman fails because it has no machine (macOS: `podman machine list` is empty), so it has no containers. No Cargo lock in it is held. It holds no other mounted filesystem.
 - **One of three rules fits:**
   - **merged:** the worktree's HEAD is in `origin/main` but not on `main`'s own first-parent line, the worktree has no uncommitted or untracked changes outside `.local/`, and the folder has been idle 2 hours. The first-parent condition means the worktree had a branch of its own that was merged. A fresh worktree started from `main`, or a coordinator whose merges are `main`, stays under the 24-hour rule, so a coordinator keeps its warm merge build;
   - **idle:** the folder and the worktree's git state (index, HEAD log) have been idle 24 hours;
@@ -97,22 +109,39 @@ When the folders that may go are gone and free space is still under the floor, t
 - `~/archive`;
 - container storage, Docker and Podman volumes (never pruned) and the databases in them. `living/tools/reclaim_disk.sh`, which deletes idle SpacetimeDB replicas, stays a manual tool: the paused reference worlds are idle replicas;
 - `.local` evidence that is not a build folder;
-- worktree roots, symlinks, and anything outside this repository's worktrees.
+- worktree roots, symlinks, and anything outside this repository's worktrees;
+- each machine's own protected paths (below).
+
+**The machine's protected paths.** Each machine lists its own in `~/.config/slop-disk/protect.txt`: one path per line, `~` expanded, `#` starting a comment (a whole line, or after a space). A path protects everything under it, and a build folder that holds it is not removed either. `--protect PATH` (repeatable) adds more for one run. These add to the built-in list above; nothing can remove a built-in path. Every run reads the file, the timer's included, so an edit applies from the next run. A missing file adds nothing. A file that cannot be read, or a line that is not an absolute path, stops the run with exit 2, and nothing is removed. Every report, and `--list-protected`, lists each protected path with its source: `built in`, `the repository's main checkout`, the file and line, or `--protect`. A protected worktree's build folders are listed as `never` with the path that protects them. Example (the laptop):
+
+```text
+# never touch these on this machine
+~/dev/slop-trials     # 14 GB, the trials
+~/dev/slop-play       # 2.5 GB, the play-tests
+```
 
 **A target folder that holds other files** (a worker's `build.log` in its target root, say) keeps them. Only Cargo's own entries are removed (`debug`, `release`, the target-triple and profile folders, `.rustc_info.json`, `CACHEDIR.TAG`, `cargo-timings`), and the folder and the other files stay. A nested repository (a folder with its own `.git`) is not entered.
 
-**Sizes and reflinks.** `du` and plain block counts count a reflink copy's shared blocks in every copy (`cp --reflink` on the dev-box's XFS, clones on APFS). Two copies of one 14 GB target therefore show as 28 GB, and deleting one of them frees almost nothing. For the folders it would remove, the report counts only the blocks no other file shares (Linux `FIEMAP`, `FIEMAP_EXTENT_SHARED`), notes the shared part, and plans the pressure tier with these real sizes. "Freed" is always the measured change in free space.
+**Sizes and reflinks.** `du` and plain block counts count a reflink copy's shared blocks in every copy (`cp --reflink` on the dev-box's XFS, clones on APFS). Two copies of one 14 GB target therefore show as 28 GB, and deleting one of them frees almost nothing. For the folders it would remove, the report counts only the blocks no other file shares, and notes the shared part:
 
-**How a removal happens.** Just before each removal the script looks again at the processes and containers. It takes every Cargo lock in the folder without waiting, renames the folder aside (`<folder>.slop-reclaim-<time>`), checks again that no process uses it, and deletes it. If a check fails, it renames the folder back. An aside folder left by an interrupted run is removed on a later run. `python3 living/tools/disk_clean_selftest.py` runs the policy in a throwaway home with aged fake targets: a merged worktree, a busy one, a fresh one, an old one holding a log, protected checkouts, untagged evidence, a foreign tag, a symlink and a nested repository. Reports go to `~/.local/state/slop-disk/reports/` and `log.jsonl`, and on Linux also to the journal (`journalctl --user -u slop-disk-clean.service`).
+- **Linux:** `FIEMAP`, counting the extents not marked `FIEMAP_EXTENT_SHARED`.
+- **macOS:** `getattrlist` with `ATTR_CMNEXT_PRIVATESIZE`. APFS keeps this for every file, and no root is needed: it is the bytes no clone shares, which is what deleting the file frees. `fcntl F_LOG2PHYS_EXT` was not used, because it maps one file's blocks. Telling whether another file shares them would mean mapping every file on the volume.
+- **Neither works** (another filesystem, an older macOS, tmpfs): the folder's blocks are counted in full, and the row says "all blocks counted: clones unknown".
 
-**Install** (re-run after `disk_clean.py` changes; it copies the script to `~/.local/share/slop-tools/`, so removing a worktree never breaks the timer):
+The report's `sizes:` line says which method was used. Whatever the method, the pressure tier no longer trusts the sizes when it is applied. The dry run projects free space from them. An applied run measures free space before each pressure removal, oldest first, and stops once it reaches the target, so a size that over-counts never leaves free space short and one that under-counts never removes extra folders. "Freed" is always the measured change in free space. On macOS, a local Time Machine snapshot holds deleted blocks until it is thinned, so a removal can free less than its size. The pressure tier then keeps going down the list, as the policy says.
+
+**Known limit on macOS.** Without Full Disk Access, `lsof` cannot see the open files of root's processes and of system processes (Spotlight's `mds`, say). A build is still seen, because cargo, rustc and the game run as the user. A system process holding a file inside a build folder could be missed. The removal would then delete the file under it, which harms neither the process nor the build. The laptop does not grant Full Disk Access, and this limit stands.
+
+**How a removal happens.** Just before each removal the script looks again at the processes and containers. It takes every Cargo lock in the folder without waiting, renames the folder aside (`<folder>.slop-reclaim-<time>`), checks again that no process uses it, and deletes it. If a check fails, it renames the folder back. An aside folder left by an interrupted run is removed on a later run. `python3 living/tools/disk_clean_selftest.py` runs the policy in a throwaway home with aged fake targets (24 checks). It covers a merged worktree, a busy one, a fresh one, an old one holding a log, protected checkouts, untagged evidence, a foreign tag, a symlink and a nested repository. It also covers worktrees protected by the protect file and by `--protect`, a target holding a protected path, an invalid protect file, a file newer than the scan (idle 0.0 h, never negative), the measured pressure tier, and the container notes (podman with no machine; docker answering). Reports go to `~/.local/state/slop-disk/reports/` and `log.jsonl`, and on Linux also to the journal (`journalctl --user -u slop-disk-clean.service`).
+
+**Install** (re-run after `disk_clean.py` changes; it copies the script to `~/.local/share/slop-tools/`, so removing a worktree never breaks the timer). The installer reads `~/.config/slop-disk/protect.txt` the way the timer will and prints every protected path. If the file is invalid, it stops before installing. When there is no file, it writes a template that holds only comments.
 
 ```bash
 living/tools/disk_clean_install.sh --floor-gb 40          # Linux: systemd user timer slop-disk-clean.timer
 living/tools/disk_clean_install.sh --uninstall
 ```
 
-On Linux the timer runs without a login when lingering is on (`loginctl enable-linger`). On macOS the same command writes and loads the launchd agent `~/Library/LaunchAgents/dev.slop.disk-clean.plist` (every 30 minutes, log in `~/.local/state/slop-disk/launchd.log`). Give `python3` Full Disk Access if the report shows folders it cannot read.
+On Linux the timer runs without a login when lingering is on (`loginctl enable-linger`). On macOS the same command writes and loads the launchd agent `~/Library/LaunchAgents/dev.slop.disk-clean.plist` (every 30 minutes, log in `~/.local/state/slop-disk/launchd.log`). Full Disk Access is optional; see the known limit above.
 
 [`disk_report.sh`](../living/tools/disk_report.sh) still reports free space and big folders across the machines; it deletes nothing.
 
@@ -175,10 +204,21 @@ Every part arrives with `main` once `tool-7` is merged; `just living-check` keep
 
 **Spark** (aarch64 Linux, its coordinator):
 1. `living/tools/install_sccache.sh` (the pinned aarch64 musl build).
-2. `living/tools/disk_clean_install.sh --floor-gb 40`, after a dry run `just living-disk-clean`. Check the dry run's list against the Spark's own rules: `~/kimodo-test` and the Hugging Face cache are not worktrees of this repository, so they are never candidates. If the Spark has protected checkouts other than the five listed, add them to `PROTECTED` in `disk_clean.py` first.
+2. `living/tools/disk_clean_install.sh --floor-gb 40`, after a dry run `just living-disk-clean`. Check the dry run's list against the Spark's own rules: `~/kimodo-test` and the Hugging Face cache are not worktrees of this repository, so they are never candidates. If the Spark has protected checkouts other than the five listed, add them to `~/.config/slop-disk/protect.txt` first.
 3. `loginctl show-user $USER -p Linger`; if it is `no`, run `loginctl enable-linger $USER` so the timer runs without a login.
 
-**Laptop** (macOS, Apple silicon):
-1. `living/tools/install_sccache.sh` (the pinned `aarch64-apple-darwin` build).
-2. `just living-check` needs `python3` (Xcode command-line tools). The lanes use a fifo jobserver. On macOS this is not verified yet; if cargo reports a jobserver error, run with `LIVING_CHECK_SERIAL=1` and report it.
-3. Disk: run the dry run, then `living/tools/disk_clean_install.sh --floor-gb <N>`, which writes and loads a launchd agent. In-use detection uses `lsof`; give `python3` Full Disk Access (System Settings, Privacy & Security) so it can see every process's files. If `lsof` fails, nothing is removed. The protected list includes the repository's own main checkout wherever it is. The script and installer were not run on macOS in this change.
+**Laptop** (macOS, Apple silicon), after `tool-7b` is merged:
+1. `living/tools/install_sccache.sh` (the pinned `aarch64-apple-darwin` build). Homebrew's sccache can stay on `PATH`: the check never uses it.
+2. `just living-check` needs `python3` (Xcode command-line tools). The lanes use a fifo jobserver. Under `build-slot`, which pre-sets `RUSTC_WRAPPER` to `sccache-rustc`, the check now prints `compile cache: … through the pre-set RUSTC_WRAPPER=…` and records the stats. If it says "is not living/tools/sccache-rustc" instead, `build-slot` points at something else; report what it is. Run `python3 living/tools/check_selftest.py` once: it checks the wrapper choice and the watchdog on macOS (11 checks).
+3. Disk, before installing anything:
+   1. Write `~/.config/slop-disk/protect.txt` with the never-touch list, at least `~/dev/slop-trials` and `~/dev/slop-play`.
+   2. Run `python3 living/tools/disk_clean_selftest.py`, which covers the getattrlist size path and the podman note on macOS.
+   3. Run the dry run, `just living-disk-clean`. Check four things:
+      - the `protected` list shows both paths with `protect.txt, line N`;
+      - `slop-trials` and `slop-play` are listed as `never`;
+      - the `sizes:` line says `asked with getattrlist ATTR_CMNEXT_PRIVATESIZE`. If it says `all blocks`, the attribute is not available: report it. Pressure removals are still measured one by one;
+      - podman without a machine shows as a `note:`, not a `warning:`.
+   4. Run `living/tools/disk_clean_install.sh --floor-gb <N>`. It prints the protected list again, then writes and loads the launchd agent. Later edits to `protect.txt` apply from the next run, with no reinstall.
+   5. In-use detection uses `lsof`, without Full Disk Access (the known limit above). If `lsof` fails, nothing is removed.
+
+   None of the macOS paths in `tool-7b` were run on macOS: the getattrlist sizes, the podman machine probe and the watchdog. They are reasoned from the documented interfaces, and the Linux runs cover the shared logic.

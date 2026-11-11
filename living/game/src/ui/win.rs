@@ -153,6 +153,8 @@ pub struct Windows {
     want: Vec<Want>,
     /// The screen in UI units (logical px over the UI scale).
     screen: Vec2,
+    /// A new theme: every open window's frame is spawned again where it was.
+    pub respawn: bool,
 }
 
 impl Windows {
@@ -210,6 +212,14 @@ pub fn plugin(app: &mut App) {
 
 /// Open and close what was asked this frame: spawn and despawn frames.
 pub fn apply(mut commands: Commands, mut ws: ResMut<Windows>, fonts: Res<Fonts>, icons: Res<Icons>) {
+    if std::mem::take(&mut ws.respawn) {
+        // The old frames went with the rest of the UI (`ui::rebuild`).
+        for i in 0..ws.open.len() {
+            let w = ws.open[i].win;
+            ws.open[i].frame = spawn_frame(&mut commands, &fonts, &icons, w);
+        }
+        ws.drag = None;
+    }
     for want in std::mem::take(&mut ws.want) {
         let (w, toggle) = match want {
             Want::Close(w) => {
@@ -258,40 +268,46 @@ fn spawn_frame(commands: &mut Commands, f: &Fonts, icons: &Icons, w: Win) -> Ent
             HudRoot,
             WinFrame(w),
             Block,
-            Node { position_type: PositionType::Absolute, width: Val::Px(width), flex_direction: FlexDirection::Column, border: UiRect::all(Val::Px(3.0)), border_radius: BorderRadius::all(Val::Px(12.0)), ..default() },
+            Node { position_type: PositionType::Absolute, width: Val::Px(width), flex_direction: FlexDirection::Column, border: wood::b(3.0), border_radius: wood::r(12.0), ..default() },
             wood::wood(),
             GlobalZIndex(Z_WINDOWS),
         ))
         .with_children(|fr| {
             fr.spawn(wood::rim(9.0));
             // Title bar: grip, title, the window's key, ✕. Holding it moves the window.
-            fr.spawn((WinHead(w), Hot, super::hit::Tag(format!("win:{}:head", w.name())), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, padding: UiRect::new(Val::Px(16.0), Val::Px(12.0), Val::Px(8.0), Val::Px(6.0)), ..default() }))
+            fr.spawn((WinHead(w), Hot, super::hit::Tag(format!("win:{}:head", w.name())), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(8.0), padding: if wood::t().serif_titles { UiRect::new(Val::Px(16.0), Val::Px(12.0), Val::Px(8.0), Val::Px(6.0)) } else { UiRect::new(Val::Px(18.0), Val::Px(10.0), Val::Px(12.0), Val::Px(8.0)) }, ..default() }))
                 .with_children(|h| {
-                    h.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(10.0), ..default() }, Pickable::IGNORE)).with_children(|l| {
-                        grip(l);
-                        l.spawn((WinTitle(w), Text::new(w.title()), wood::title(f, 22.0), Pickable::IGNORE));
+                    h.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(10.0), flex_shrink: 1.0, overflow: Overflow::clip(), ..default() }, Pickable::IGNORE)).with_children(|l| {
+                        if wood::t().grip {
+                            grip(l);
+                        }
+                        l.spawn((WinTitle(w), Text::new(w.title()), wood::title(f, 22.0), TextLayout::new(Justify::Left, LineBreak::NoWrap), Pickable::IGNORE));
                     });
                     h.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(6.0), ..default() }, Pickable::IGNORE)).with_children(|r| {
-                        if let Some(k) = w.key() {
-                            wood::chip(r, f, k, ());
-                            r.spawn((Text::new("or"), wood::on_wood(f, 12.0, 700), Pickable::IGNORE));
+                        // Keys beside the ✕ only in a dense theme (the keys are in Settings and the
+                        // Menu list).
+                        if wood::t().chips {
+                            if let Some(k) = w.key() {
+                                wood::chip(r, f, k, ());
+                                r.spawn((Text::new("or"), wood::on_wood(f, 12.0, 700), Pickable::IGNORE));
+                            }
+                            wood::chip(r, f, "Esc", ());
                         }
-                        wood::chip(r, f, "Esc", ());
                         r.spawn((
                             WinClose(w),
                             Hot,
                             super::hit::Tag(format!("win:{}:close", w.name())),
-                            Node { width: Val::Px(28.0), height: Val::Px(28.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), margin: UiRect::left(Val::Px(2.0)), ..default() },
-                            BackgroundColor(wood::X_RED),
-                            BorderColor::all(wood::INK),
+                            Node { width: Val::Px(28.0), height: Val::Px(28.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(2.0), border_radius: wood::r(8.0), margin: UiRect::left(Val::Px(2.0)), ..default() },
+                            BackgroundColor(wood::t().close),
+                            BorderColor::all(if wood::t().serif_titles { wood::edge() } else { Color::NONE }),
                             wood::hard_shadow(2.0, 0.4),
                         ))
-                        .with_child(wood::icon(icons, Glyph::Ui(Mark::Close), 14.0, Color::WHITE));
+                        .with_child(wood::icon(icons, Glyph::Ui(Mark::Close), if wood::t().serif_titles { 14.0 } else { 11.0 }, wood::t().close_glyph));
                     });
                 });
             fr.spawn((
                 WinBody(w),
-                Node { margin: UiRect::new(Val::Px(9.0), Val::Px(9.0), Val::Px(0.0), Val::Px(9.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), padding: UiRect::all(Val::Px(14.0)), flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), overflow: Overflow::clip(), flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() },
+                Node { margin: wood::body_frame().0, border: wood::body_frame().1, border_radius: wood::r(8.0), padding: UiRect::new(Val::Px(14.0), Val::Px(14.0), Val::Px(if wood::t().body.is_some() { 14.0 } else { 4.0 }), Val::Px(14.0)), flex_direction: FlexDirection::Column, row_gap: Val::Px(if wood::t().help { 8.0 } else { 10.0 }), overflow: Overflow::clip(), flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() },
                 wood::parch(),
             ));
         })
@@ -302,7 +318,7 @@ fn spawn_frame(commands: &mut Commands, f: &Fonts, icons: &Icons, w: Win) -> Ent
 pub fn grip(p: &mut ChildSpawnerCommands) {
     p.spawn((Node { display: Display::Grid, grid_template_columns: RepeatedGridTrack::px(3, 4.0), row_gap: Val::Px(3.0), column_gap: Val::Px(3.0), ..default() }, Pickable::IGNORE)).with_children(|g| {
         for _ in 0..6 {
-            g.spawn((Node { width: Val::Px(4.0), height: Val::Px(4.0), border_radius: BorderRadius::all(Val::Percent(50.0)), ..default() }, BackgroundColor(wood::alpha(wood::BRASS2, 0.7)), Pickable::IGNORE));
+            g.spawn((Node { width: Val::Px(4.0), height: Val::Px(4.0), border_radius: BorderRadius::all(Val::Percent(50.0)), ..default() }, BackgroundColor(wood::alpha(wood::t().title, 0.7)), Pickable::IGNORE));
         }
     });
 }
@@ -310,7 +326,7 @@ pub fn grip(p: &mut ChildSpawnerCommands) {
 /// The two anchors, outlined only while a window is dragged.
 pub fn spawn_anchors(mut commands: Commands, fonts: Res<Fonts>) {
     for (a, label) in [(Anchor::Left, "left anchor: people, log, character"), (Anchor::Right, "right anchor: the pack")] {
-        let mut node = Node { position_type: PositionType::Absolute, top: Val::Px(if a == Anchor::Left { MARGIN } else { RIGHT_TOP }), width: Val::Px(NARROW_W), height: Val::Px(560.0), border: UiRect::all(Val::Px(3.0)), border_radius: BorderRadius::all(Val::Px(14.0)), display: Display::None, ..default() };
+        let mut node = Node { position_type: PositionType::Absolute, top: Val::Px(if a == Anchor::Left { MARGIN } else { RIGHT_TOP }), width: Val::Px(NARROW_W), height: Val::Px(560.0), border: wood::b(3.0), border_radius: wood::r(14.0), display: Display::None, ..default() };
         if a == Anchor::Left {
             node.left = Val::Px(MARGIN);
         } else {
@@ -321,7 +337,7 @@ pub fn spawn_anchors(mut commands: Commands, fonts: Res<Fonts>) {
             Text::new(label),
             fonts.body(13.0, 900),
             TextColor(wood::ANCHOR),
-            bevy::ui::widget::TextShadow { offset: Vec2::new(0.0, 1.0), color: wood::INK },
+            bevy::ui::widget::TextShadow { offset: Vec2::new(0.0, 1.0), color: wood::edge() },
             Pickable::IGNORE,
         ));
     }

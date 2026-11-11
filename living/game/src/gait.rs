@@ -163,25 +163,99 @@ pub struct ClipInfo {
     pub upper: bool,
     pub ik: bool,
     pub contacts: Contacts,
+    /// A turn on the spot (`turn_deg` in the sidecar, the game's sense: -90 a quarter turn left):
+    /// the clip itself doesn't turn (`animate.py` took the turn out), so the body turns along
+    /// this curve (normalised clip time, degrees so far).
+    pub turn: Option<(f32, Vec<(f32, f32)>)>,
+    /// The rules' flight window of a jump take (clip seconds), from its path.
+    pub hop: Option<(f32, f32)>,
+    /// The body's own track while the clip plays (game metres per frame at 30 fps: to its left,
+    /// ahead): a start's, a stop's or a hop's (the asset view draws the body along it).
+    pub path: Vec<(f32, f32)>,
+    /// Its length (s), from the sidecar.
+    pub seconds: f32,
 }
 
-/// A character file's locomotion clips (sorted by natural speed), whether they split into walking
-/// and running families at [`WALK_MAX`] (people) or are one family (animals), and every clip's
-/// [`ClipInfo`].
+impl ClipInfo {
+    /// How far a turn take has turned the body at clip time `u` (0–1, radians, the game's sense).
+    pub fn turned(&self, u: f32) -> f32 {
+        let Some((_, curve)) = &self.turn else { return 0.0 };
+        let u = u.clamp(0.0, 1.0);
+        let k = curve.partition_point(|p| p.0 < u);
+        let deg = match (k.checked_sub(1).and_then(|i| curve.get(i)), curve.get(k)) {
+            (Some(a), Some(b)) if b.0 > a.0 => a.1 + (b.1 - a.1) * (u - a.0) / (b.0 - a.0),
+            (_, Some(b)) => b.1,
+            (Some(a), None) => a.1,
+            _ => 0.0,
+        };
+        deg.to_radians()
+    }
+
+    /// Where the body's own track has it at clip time `t` (s): (left, ahead) in metres.
+    pub fn path_at(&self, t: f32) -> Vec2 {
+        if self.path.is_empty() {
+            return Vec2::ZERO;
+        }
+        let x = (t * 30.0).clamp(0.0, (self.path.len() - 1) as f32);
+        let (a, b) = (x.floor() as usize, (x.ceil() as usize).min(self.path.len() - 1));
+        let (pa, pb) = (Vec2::from(self.path[a]), Vec2::from(self.path[b]));
+        pa.lerp(pb, x - a as f32)
+    }
+
+    /// The longest window (clip time, 0–1) where neither foot is down: a jump's flight.
+    pub fn flight(&self) -> Option<(f32, f32)> {
+        if self.contacts.feet() != 2 {
+            return None;
+        }
+        const N: usize = 240;
+        let up: Vec<bool> = (0..=N).map(|i| self.contacts.count(i as f32 / N as f32) == 0).collect();
+        let (mut best, mut k) = (None::<(usize, usize)>, 0);
+        while k <= N {
+            if !up[k] {
+                k += 1;
+                continue;
+            }
+            let b = k + up[k..].iter().position(|&u| !u).unwrap_or(N + 1 - k);
+            if best.is_none_or(|(x, y)| b - k > y - x) {
+                best = Some((k, b));
+            }
+            k = b;
+        }
+        best.map(|(a, b)| (a as f32 / N as f32, b as f32 / N as f32))
+    }
+}
+
+/// A character file's locomotion clips (the forward ones sorted by natural speed, then the
+/// directional ones), whether they split into walking and running families at [`WALK_MAX`]
+/// (people) or are one family (animals), every clip's [`ClipInfo`], and the directions people
+/// have takes for (scheme "cursor": [`Gaits::blend_toward`]).
 #[derive(Debug, Default)]
 pub struct Gaits {
     clips: Vec<Gait>,
+    /// How many of `clips` are the forward gaits ([`Gaits::blend`] chooses among those).
+    forward: usize,
     split: bool,
     info: HashMap<String, ClipInfo>,
     /// An animal's blend band (ratio either side of the geometric mean).
     band: f32,
+    /// Travel directions with their own takes: degrees from the facing (the game's sense: -90
+    /// left, 90 right, 180 back) and the walking and running clip (index into `clips`).
+    dirs: Vec<Dir>,
 }
 
-/// The gaits playing at a speed: up to two (index into [`Gaits::gaits`], weight), weights
-/// summing to 1, and the metres one cycle covers at stride 1 (the weighted mean).
+#[derive(Clone, Copy, Debug)]
+struct Dir {
+    deg: f32,
+    walk: Option<usize>,
+    run: Option<usize>,
+}
+
+/// The gaits playing at a speed: up to four (index into [`Gaits::gaits`], weight; two forward
+/// gaits, or two directions' walk and run), weights summing to 1, and the metres one cycle covers
+/// at stride 1 (the weighted mean).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Blend {
-    pub parts: [(usize, f32); 2],
+    pub parts: [(usize, f32); 4],
     pub n: usize,
     pub cycle_m: f32,
 }
@@ -190,7 +264,39 @@ impl Blend {
     pub fn parts(&self) -> &[(usize, f32)] {
         &self.parts[..self.n]
     }
+
+    /// One gait alone.
+    pub fn one(i: usize, cycle_m: f32) -> Self {
+        Self { parts: [(i, 1.0), (i, 0.0), (i, 0.0), (i, 0.0)], n: 1, cycle_m }
+    }
 }
+
+/// The directional takes the game plays while a person faces one way and moves another (scheme
+/// "cursor", `live.rs`), by travel direction from the facing (degrees, the game's sense): a
+/// walking and a running take, the first in each list that the file has. These are the takes the
+/// clip lab's verdicts accepted (clips 2, 2026-11-11; `docs/GAME_BRIEF.md`, "Locomotion clips").
+/// Left out for a retake: `run_back` (a planted foot slides 16–19 cm), `strafe_run_left` (a 15°
+/// seam), `strafe_run_right` (1.18 m a cycle), the step-touch `strafe_walk_left`/`_right` (0.6 m a
+/// cycle) and `walk_diag_bl` (a toe 6–8 cm low at its seam), with `walk_diag_br` waiting for its
+/// mirror. A direction without a take falls back to the forward gaits along the travel with the
+/// upper body turned (`twist.rs`).
+pub const DIRECTIONS: [(f32, &[&str], &[&str]); 7] = [
+    (180.0, &["walk_back"], &[]),
+    (-90.0, &["strafe_walk_cross_left"], &[]),
+    (90.0, &["strafe_walk_cross_right"], &[]),
+    (-45.0, &["walk_diag_fl"], &["run_diag_fl"]),
+    (45.0, &["walk_diag_fr"], &["run_diag_fr"]),
+    (-135.0, &[], &["run_diag_bl"]),
+    (135.0, &[], &["run_diag_br"]),
+];
+/// Neighbouring directions further apart than this (degrees) don't blend: the gap falls back.
+const DIR_GAP_MAX: f32 = 91.0;
+/// The directional takes step at most this many times as often as the forward gaits would at the
+/// same speed (their metres a cycle against the forward's); beyond, the gap falls back. The clip
+/// lab's sideways and backward takes cover 0.4–0.8 of the forward's metres a cycle, so at the
+/// rules' 2.6 m/s walk and 3.9 m/s run, and 1.4 times that on a road, most of them would step
+/// two or three times as often as the forward gait: a scurry.
+pub const CADENCE_MAX: f32 = 1.6;
 
 /// The clips this module chooses between, and whether each is a run.
 const LOCOMOTION: [(&str, bool); 4] = [("walk", false), ("walk_brisk", false), ("run", true), ("run_fast", true)];
@@ -204,19 +310,28 @@ impl Gaits {
                 Gait { clip: "walk", speed: crate::lookdev::WALK_SPEED, natural: crate::lookdev::WALK_SPEED, run: false, seconds: None },
                 Gait { clip: "run", speed: crate::lookdev::RUN_SPEED, natural: crate::lookdev::RUN_SPEED, run: true, seconds: None },
             ],
+            forward: 2,
             split: true,
             info: HashMap::new(),
             band: ANIMAL_BAND,
+            dirs: vec![],
         }
     }
 
     /// From a `clips.json` sidecar: its looping locomotion clips with a speed, and every clip's
     /// info. A character's sidecar maps clip names to clips; an animal's lists them under `clips`.
     fn parse(json: &serde_json::Value) -> Self {
-        let info_of = |c: &serde_json::Value, feet: &[&str]| ClipInfo {
-            upper: c["layer"].as_str() == Some("upper"),
-            ik: c["ik"].as_bool() != Some(false),
-            contacts: Contacts::parse(&c["contacts"], feet),
+        let info_of = |c: &serde_json::Value, feet: &[&str]| {
+            let pair = |v: &serde_json::Value| Some((v.get(0)?.as_f64()? as f32, v.get(1)?.as_f64()? as f32));
+            ClipInfo {
+                upper: c["layer"].as_str() == Some("upper"),
+                ik: c["ik"].as_bool() != Some(false),
+                contacts: Contacts::parse(&c["contacts"], feet),
+                turn: c["turn_deg"].as_f64().map(|d| (d as f32, c["turn_curve"].as_array().map(|a| a.iter().filter_map(pair).collect()).unwrap_or_default())),
+                hop: pair(&c["hop"]),
+                path: c["path_m"].as_array().map(|a| a.iter().filter_map(pair).collect()).unwrap_or_default(),
+                seconds: c["seconds"].as_f64().unwrap_or(0.0) as f32,
+            }
         };
         if let Some(list) = json.get("clips").and_then(|c| c.as_array()) {
             let info = list.iter().filter_map(|c| Some((c["name"].as_str()?.to_string(), info_of(c, &ANIMAL_FEET)))).collect();
@@ -229,7 +344,8 @@ impl Gaits {
                 })
                 .collect();
             let band = json["band"].as_f64().map_or(ANIMAL_BAND, |b| (b as f32).clamp(1.001, 1.5));
-            return if clips.is_empty() { Self { info, ..Self::fallback() } } else { Self { clips, split: false, info, band } };
+            let forward = clips.len();
+            return if clips.is_empty() { Self { info, ..Self::fallback() } } else { Self { clips, forward, split: false, info, band, dirs: vec![] } };
         }
         let info = json.as_object().map(|m| m.iter().filter(|(_, c)| c.is_object()).map(|(k, c)| (k.clone(), info_of(c, &PEOPLE_FEET))).collect()).unwrap_or_default();
         let mut clips = LOCOMOTION
@@ -244,7 +360,23 @@ impl Gaits {
         if clips.iter().any(|g| !g.run) && clips.iter().any(|g| g.run) {
             // Walks first, then runs, each by natural speed.
             clips.sort_by(|a, b| a.run.cmp(&b.run).then(a.natural.total_cmp(&b.natural)));
-            Self { clips, split: true, info, band: ANIMAL_BAND }
+            let forward = clips.len();
+            // Then the directional takes the file has (a loop with a speed and `travel_deg`).
+            let mut dirs = vec![];
+            for &(deg, walks, runs) in &DIRECTIONS {
+                let mut add = |names: &[&'static str], run: bool| {
+                    let &clip = names.iter().find(|n| json.get(**n).is_some_and(|c| c["travel_deg"].is_number() && c["loop"].as_bool() == Some(true) && c["speed"].as_f64().is_some_and(|v| v > 0.1)))?;
+                    let c = &json[clip];
+                    let speed = c["speed"].as_f64()? as f32;
+                    clips.push(Gait { clip, speed, natural: c["natural_speed"].as_f64().map_or(speed, |n| n as f32), run, seconds: c["seconds"].as_f64().map(|s| s as f32) });
+                    Some(clips.len() - 1)
+                };
+                let (walk, run) = (add(walks, false), add(runs, true));
+                if walk.is_some() || run.is_some() {
+                    dirs.push(Dir { deg, walk, run });
+                }
+            }
+            Self { clips, forward, split: true, info, band: ANIMAL_BAND, dirs }
         } else {
             Self { info, ..Self::fallback() }
         }
@@ -256,6 +388,82 @@ impl Gaits {
 
     pub fn info(&self, clip: &str) -> Option<&ClipInfo> {
         self.info.get(clip)
+    }
+
+    /// The gaits for moving at `speed` (m/s, the pace's: the gait is chosen at it) toward
+    /// `travel` radians from where the legs face (the game's sense: positive to the right, ±π
+    /// behind), from the directional takes either side of it: each direction blends its walk and
+    /// run take by speed between their own natural speeds (a backward jog serves a fast backward
+    /// walk), and the two directions blend by angle (no warp: they are at most [`DIR_GAP_MAX`]
+    /// apart). None when there is no take on a side, when the blend would step more than
+    /// [`CADENCE_MAX`] times as often as the forward gaits, or when the mirrored travel (left for
+    /// right) would fall back: the caller falls back to the forward gaits along the travel, so
+    /// both sides always look alike.
+    pub fn blend_toward(&self, speed: f32, stride: f32, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+        let b = self.blend_side(speed, stride, travel, len)?;
+        self.blend_side(speed, stride, -travel, len)?;
+        Some(b)
+    }
+
+    fn blend_side(&self, speed: f32, stride: f32, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+        let fwd = self.blend(speed, stride, len);
+        let deg = {
+            let d = travel.to_degrees().rem_euclid(360.0);
+            if d > 180.0 { d - 360.0 } else { d }
+        };
+        if deg.abs() < 0.5 {
+            return Some(fwd);
+        }
+        let s = speed / stride.max(0.05);
+        let mut angles: Vec<(f32, Option<Dir>)> = vec![(0.0, None)];
+        angles.extend(self.dirs.iter().map(|d| (d.deg, Some(*d))));
+        // Behind can be reached from either side.
+        if let Some(b) = angles.iter().find(|(a, _)| (a.abs() - 180.0).abs() < 0.5).and_then(|x| x.1) {
+            angles.push((-180.0, Some(b)));
+        }
+        angles.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let lo = angles.iter().rev().find(|(a, _)| *a <= deg)?;
+        let hi = angles.iter().find(|(a, _)| *a >= deg)?;
+        let gap = hi.0 - lo.0;
+        if gap > DIR_GAP_MAX {
+            return None;
+        }
+        let t = if gap > 0.0 { (deg - lo.0) / gap } else { 0.0 };
+        let mut parts: Vec<(usize, f32)> = Vec::with_capacity(4);
+        for (w, dir) in [(1.0 - t, lo.1), (t, hi.1)] {
+            if w <= 0.0 {
+                continue;
+            }
+            match dir {
+                None => parts.extend(fwd.parts().iter().map(|&(i, x)| (i, x * w))),
+                Some(d) => match (d.walk, d.run) {
+                    (Some(a), Some(b)) => {
+                        // Between the two takes' natural speeds, as neighbouring forward gaits.
+                        let (lo, hi) = (self.clips[a].natural, self.clips[b].natural.max(self.clips[a].natural + 0.01));
+                        let t = if s <= lo { 0.0 } else if s >= hi { 1.0 } else { smoothstep(0.0, 1.0, (s / lo).ln() / (hi / lo).ln()) };
+                        parts.push((a, w * (1.0 - t)));
+                        parts.push((b, w * t));
+                    }
+                    (Some(i), None) | (None, Some(i)) => parts.push((i, w)),
+                    (None, None) => {}
+                },
+            }
+        }
+        parts.retain(|p| p.1 > 1e-4);
+        let sum: f32 = parts.iter().map(|p| p.1).sum();
+        if parts.is_empty() || sum <= 0.0 {
+            return Some(fwd);
+        }
+        let cycle = |i: usize| {
+            let g = &self.clips[i];
+            g.speed * g.seconds.unwrap_or_else(|| len(i)).max(0.05)
+        };
+        let mut b = Blend { parts: [(parts[0].0, 0.0); 4], n: parts.len().min(4), cycle_m: 0.0 };
+        for (k, &(i, w)) in parts.iter().take(4).enumerate() {
+            b.parts[k] = (i, w / sum);
+            b.cycle_m += w / sum * cycle(i);
+        }
+        (fwd.cycle_m <= CADENCE_MAX * b.cycle_m).then_some(b)
     }
 
     /// The speed band (m/s at stride 1) over which gaits `i` and `i + 1` blend.
@@ -280,12 +488,12 @@ impl Gaits {
             let g = &self.clips[i];
             g.speed * g.seconds.unwrap_or_else(|| len(i)).max(0.05)
         };
-        let one = |i: usize| Blend { parts: [(i, 1.0), (i, 0.0)], n: 1, cycle_m: cycle(i) };
-        if self.clips.is_empty() {
-            return Blend { parts: [(0, 0.0); 2], n: 0, cycle_m: 1.0 };
+        let one = |i: usize| Blend::one(i, cycle(i));
+        if self.forward == 0 {
+            return Blend { parts: [(0, 0.0); 4], n: 0, cycle_m: 1.0 };
         }
         let mut prev_hi = 0.0f32;
-        for i in 0..self.clips.len() - 1 {
+        for i in 0..self.forward - 1 {
             let (lo, hi) = self.band(i);
             let lo = lo.max(prev_hi);
             let hi = hi.max(lo + 0.01);
@@ -301,11 +509,22 @@ impl Gaits {
                 if t >= 1.0 {
                     return one(i + 1);
                 }
-                return Blend { parts: [(i, 1.0 - t), (i + 1, t)], n: 2, cycle_m: (1.0 - t) * cycle(i) + t * cycle(i + 1) };
+                return Blend { parts: [(i, 1.0 - t), (i + 1, t), (i, 0.0), (i, 0.0)], n: 2, cycle_m: (1.0 - t) * cycle(i) + t * cycle(i + 1) };
             }
         }
-        one(self.clips.len() - 1)
+        one(self.forward - 1)
     }
+}
+
+/// A looping clip's belt in a character file's sidecar: its speed (m/s) and where it travels from
+/// its facing (degrees, the game's sense: `travel_deg`, 0 without it). None for a clip that
+/// doesn't travel.
+pub fn belt(file: &str, clip: &str) -> Option<(f32, f32)> {
+    let path = std::path::Path::new(&crate::lookdev::asset_root()).join(file).with_extension("clips.json");
+    let j = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).ok()?).ok()?;
+    let c = &j[clip];
+    let speed = c["speed"].as_f64()? as f32;
+    (c["loop"].as_bool() == Some(true) && speed > 0.1).then(|| (speed, c["travel_deg"].as_f64().unwrap_or(0.0) as f32))
 }
 
 /// The locomotion clips of a character file (cached; `<file stem>.clips.json`).
@@ -457,6 +676,7 @@ fn record(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use std::f32::consts::PI;
 
     /// Vivi's sidecar (`assets/lookdev/anim/vroid-Vivi.clips.json`): speeds, lengths and markers.
     pub(crate) fn vivi() -> Gaits {
@@ -470,6 +690,81 @@ pub(crate) mod tests {
             "wave": {"seconds": 2.97, "loop": false, "layer": "upper", "contacts": {"L": [[0.0, 1.0]], "R": [[0.0, 1.0]]}},
             "sit_ground": {"seconds": 6.0, "loop": true, "ik": false},
         }))
+    }
+
+    /// Vivi's sidecar with the clip lab's takes (2026-11-11): directional loops, turns and jumps
+    /// (numbers rounded from the bake).
+    pub(crate) fn takes_json() -> serde_json::Value {
+        let mut j = serde_json::json!({
+            "walk": {"speed": 1.389, "natural_speed": 1.435, "seconds": 1.033, "loop": true, "contacts": {"L": [[0.5161, 1.0]], "R": [[0.0, 0.5806]]}},
+            "walk_brisk": {"speed": 2.028, "natural_speed": 2.028, "seconds": 1.0, "loop": true, "contacts": {"L": [[0.5, 1.0]], "R": [[0.0, 0.4667]]}},
+            "run": {"speed": 3.67, "natural_speed": 3.146, "seconds": 0.6, "loop": true, "contacts": {"L": [[0.4444, 0.7778]], "R": [[0.0, 0.2778]]}},
+            "run_fast": {"speed": 3.497, "natural_speed": 3.497, "seconds": 0.767, "loop": true, "contacts": {"L": [[0.4783, 0.7826]], "R": [[0.0, 0.1739]]}},
+            "turn_right_90": {"seconds": 1.467, "loop": false, "turn_deg": 90.0, "turn_curve": [[0.0, 0.0], [0.3, 20.0], [0.7, 80.0], [1.0, 90.0]], "contacts": {"L": [[0.0, 1.0]], "R": [[0.0, 0.3], [0.6, 1.0]]}},
+            "turn_left_90": {"seconds": 1.467, "loop": false, "turn_deg": -90.0, "turn_curve": [[0.0, 0.0], [1.0, -90.0]]},
+            "turn_left_180": {"seconds": 2.0, "loop": false, "turn_deg": -180.0, "turn_curve": [[0.0, 0.0], [1.0, -180.0]]},
+            "jump_forward": {"seconds": 2.167, "loop": false, "hop": [0.95, 1.394], "contacts": {"L": [[0.17, 0.25], [0.68, 0.75]], "R": [[0.0, 0.14], [0.35, 0.43], [0.83, 0.97]]}},
+            "jump_stand": {"seconds": 1.7, "loop": false, "contacts": {"L": [[0.0, 0.37], [0.65, 1.0]], "R": [[0.0, 0.37], [0.65, 1.0]]}},
+            "jump_right": {"seconds": 1.7, "loop": false, "hop": [0.6, 1.044], "travel_deg": 90},
+        });
+        for (name, deg, loco, speed, secs) in [
+            ("walk_back", 180, "walk", 1.05, 1.1),
+            ("strafe_walk_cross_right", 90, "walk", 1.3, 1.0), ("strafe_walk_cross_left", -90, "walk", 1.3, 1.0),
+            ("walk_diag_fr", 45, "walk", 1.4, 1.0), ("run_diag_fr", 45, "run", 2.6, 0.7),
+            ("walk_diag_fl", -45, "walk", 1.4, 1.0), ("run_diag_fl", -45, "run", 2.6, 0.7),
+        ] {
+            j[name] = serde_json::json!({"speed": speed, "natural_speed": speed, "seconds": secs, "loop": true, "travel_deg": deg, "locomotion": loco, "sync": "R", "contacts": {"L": [[0.5, 1.0]], "R": [[0.0, 0.5]]}});
+        }
+        j
+    }
+
+    pub(crate) fn with_takes() -> Gaits {
+        Gaits::parse(&takes_json())
+    }
+
+    #[test]
+    fn directional_takes_blend_by_angle_and_fall_back_where_a_side_has_none() {
+        let g = with_takes();
+        let name = |b: &Blend| b.parts().iter().map(|&(i, w)| (g.clips[i].clip, (w * 100.0).round() / 100.0)).collect::<Vec<_>>();
+        let len = |_| 1.0;
+        // Straight ahead: the forward gaits, exactly as `blend`.
+        assert_eq!(g.blend_toward(1.4, 1.0, 0.0, len), Some(g.blend(1.4, 1.0, len)));
+        // Right and behind, at a walk: that side's take.
+        assert_eq!(name(&g.blend_toward(1.2, 1.0, PI / 2.0, len).unwrap()), vec![("strafe_walk_cross_right", 1.0)]);
+        assert_eq!(name(&g.blend_toward(1.2, 1.0, PI, len).unwrap()), vec![("walk_back", 1.0)]);
+        // Behind at the rules' 2.6 m/s walk: 1.16 m a cycle against walk_brisk's 2.03 would step
+        // 1.76 times as often, so it falls back.
+        assert_eq!(g.blend_toward(2.6, 1.0, PI, len), None);
+        // Between forward and the forward-right diagonal: both, by angle.
+        let b = g.blend_toward(1.2, 1.0, 22.5f32.to_radians(), len).unwrap();
+        assert_eq!(name(&b), vec![("walk", 0.5), ("walk_diag_fr", 0.5)]);
+        // Right to behind (no back-right diagonal): the 90° gap blends side and back.
+        assert_eq!(name(&g.blend_toward(1.0, 1.0, 135f32.to_radians(), len).unwrap()), vec![("strafe_walk_cross_right", 0.5), ("walk_back", 0.5)]);
+        // Each cycle covers the weighted metres, so the feet keep the body's speed.
+        let side = g.blend_toward(1.2, 1.0, PI / 2.0, len).unwrap();
+        assert!((side.cycle_m - 1.3).abs() < 1e-4);
+        // Between a direction's walk and run takes, by speed.
+        assert_eq!(g.blend_toward(1.9, 1.0, PI / 4.0, len).unwrap().n, 2);
+        // A side whose mirror falls back (no left take, and back to forward-left is too far to
+        // blend) falls back too.
+        let mut j = takes_json();
+        j.as_object_mut().unwrap().remove("strafe_walk_cross_left");
+        let lopsided = Gaits::parse(&j);
+        assert!(lopsided.blend_side(1.2, 1.0, PI / 2.0, len).is_some());
+        assert_eq!(lopsided.blend_toward(1.2, 1.0, PI / 2.0, len), None);
+        // A file with no directional takes falls back.
+        assert_eq!(vivi().blend_toward(1.4, 1.0, PI / 2.0, len), None);
+    }
+
+    #[test]
+    fn take_info_reads_turns_paths_hops_and_flight() {
+        let g = with_takes();
+        let t = g.info("turn_right_90").unwrap();
+        assert_eq!(t.turn.as_ref().map(|t| t.0), Some(90.0));
+        assert!((t.turned(0.5) - 50f32.to_radians()).abs() < 1e-4);
+        assert_eq!(g.info("jump_forward").unwrap().hop, Some((0.95, 1.394)));
+        let (a, b) = g.info("jump_stand").unwrap().flight().unwrap();
+        assert!((a - 0.37).abs() < 0.01 && (b - 0.65).abs() < 0.01, "the longest time both feet are up: {a}..{b}");
     }
 
     fn only(b: &Blend) -> Option<&'static str> {

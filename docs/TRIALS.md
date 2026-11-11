@@ -34,7 +34,7 @@ Substitutions in steps: `"$<role>"` is that character as a target (`{"id": n}`),
 
 Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of`, `within`), `hour`; with `max`, `per_addressee`, `after_min`.
 
-**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds` and `lod`. In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
+**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds`, `lod`, `projects` (`LIVING_PROJECTS=1`: [projects](LIVING_CORE.md#projects-experiment-2026-11-11); the thought rows' `detail.projects` says which project each plan served) and `player-frame` (`LIVING_FRAME=player`, [below](#the-player-frame-experiment-2026-11-11)). In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
 
 ### How the script reaches the world
 
@@ -100,6 +100,8 @@ export CARGO_TARGET_DIR=$HOME/slop-trials-target OPENSSL_INCLUDE_DIR=$HOME/slop-
 python3 living/tools/trials.py up && python3 living/tools/trials.py build wolves wolves-valley hungry hungry-village teacher theft
 python3 living/tools/trials.py run --batch b3 wolves hungry --variants default,lessons --replicates 3
 ```
+
+**From another checkout** (a git worktree), the trial container still serves the starting checkout's `.local/living/trials/wasm/` as `/wasm`. `trials.py build` then also copies each module there as `<module>-wt<tag>.wasm` (`tag` from the checkout's path) and `run` publishes that file, so a worktree never overwrites or reuses a module another checkout's batches run. The worktree needs its own copy of `.local/living/trials/neo4j.env` (mode 600); it must not run `up` against a running stack.
 
 The verify harness runs there too, against the trial container: `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320` make `verify.py`, `living/tools/stdb`, `verify-llm` and `verify-minds` use it instead of `sao-living_spacetimedb_1` on 3300. Other surface scripts (`verify-client`, `verify-generation`, `verify-knowledge`) still assume 3300.
 
@@ -645,6 +647,38 @@ Candidates not run tonight, for later:
 - **Re-reading loops** (a plan to "read both signs" re-read the nearest sign 57 times): a check refusing to re-read needs the sign's topic in what Rhai sees of a target, an engine change.
 - Several earlier candidates are covered by `feedback-1` (merged to main during the night): structures noticed once, ids resolving only to things in sight, gone things weakening memory, wants following the life lived.
 
+## The player frame (experiment, 2026-11-11)
+
+**Hypothesis** (from the owner's play-test: the characters feel like NPCs, not like players run by AI). A model told it is *playing* this person in an open-ended living world, free to choose what to pursue as a human player would, lives with more initiative, exploration and long-range aims, while what the person says and does stays in character.
+
+**Switch.** `LIVING_FRAME=player` in the mind service (`living/mind/src/prompts.rs`, `Frame`); the default `character` leaves every prompt byte-identical to before (all 26 exported prompt fixtures compared byte for byte before and after the change; test `character_frame_is_the_default_and_unchanged`). A value that is neither stops the service at start. Under `player`, four system prompts of a person replace their opening sentence ("You are the mind of the person described under # Who you are, living in a persistent simulated world.", and the consolidation and talk equivalents) with this frame and a one-line role:
+
+> You are an AI playing the person described under # Who you are, in a persistent world shared with other players, human and AI. For you, as for every player, the person's body, needs and death are real, and the world's rules hold. What you pursue in this life is your own choice. Whatever the person says or writes is in their own words, inside the world: never speak out of character.
+
+| Prompt | Role line after the frame |
+| --- | --- |
+| think (the decision) and deliberate (compiling it into acts and a graph) | Here you are that person's mind. |
+| consolidate | Here you are that person's memory and self-understanding, kept in their own terms. |
+| talk (a conversation turn) | Here you are that person, face to face with the other person described below. |
+
+With `LIVING_PROJECTS=1` as well, each switch does what it does alone: the frame replaces only the opening sentence, and the projects text, the `serves` field and the `# Your projects` section stay as projects has them (test `player_frame_and_projects_compose`). Nothing else changes (test `player_frame_changes_only_the_opening`): the rules, grammar, reply shapes and every user message are the same, and the frame is part of the shared, cacheable prefix. Not framed: animals' prompts, starting identities (`identity_system`, `birth_identity_system`), sleep's reorganization and player memory (`internalize_system`, for characters people play). The frame names no goals or activities, gives no advice and does not rank survival (test `player_frame_is_short_and_prescribes_nothing`).
+
+**Measuring.** Variant `player-frame` (`LIVING_FRAME=player`, otherwise `default`). Every summary now carries:
+
+- `prompt_frame`: per purpose, how many of the subject's journaled requests opened with the player frame (`player 12/12`, or `character 0/12`), read from the journal's stored system prompts;
+- `out_of_character` (`ooc_lines`, `ooc_private` in the report): [`ooc.py`](../living/tools/ooc.py), a word list (player, game, AI, NPC, prompt, simulation, "my character", role-play, respawn, XP, logging in, online, …; hunting "game" is not counted), over the lines the subject spoke or wrote (chronicle `speech` and `write` rows) and, separately, over its replies' private fields (thoughts, intentions, consolidation summaries and gists, identity narrative, goals and values). A word list over-counts and misses paraphrase: read the examples kept with each count (`python3 living/tools/ooc.py .local/living/trials/<batch>`).
+
+Initiative, exploration and long-range aims are read with the existing probes and life timelines (distance ranged, places named, techniques learned, structures built, graph plans, goals in persona revisions), side by side across replicates.
+
+```bash
+python3 living/tools/trials.py run --batch <b> life --variants default,player-frame --replicates 3
+python3 living/tools/ooc.py .local/living/trials/<b>
+```
+
+**Fake-model proof** (`pf1`, 2026-11-11, DGX Spark, from a worktree of `exp-player-frame`; `life` × `default`, `player-frame` × 1, 10 minutes, `--fake`, no model spend). Both arms ran the full 10 minutes (20 and 19 calls). `prompt_frame`: default `think 0/7, deliberate 0/7, consolidate 0/6` framed; player-frame `think 7/7, deliberate 7/7, consolidate 4/5`, the fifth being the starting identity, which is not framed. In the journals each arm has one distinct system prompt per purpose; replacing the player arm's opening (frame and role line) with the old first sentence gives the default arm's prompt exactly, for think, deliberate and consolidate. No talk turn happened in either arm (nobody addressed the newcomer), so talk is proven by `verify_minds.py --case frame`. `ooc_lines` 0/1 and `ooc_private` 0/34 and 0/33: the fake model's canned lines, which say nothing about real models. Evidence: `.local/living/trials/pf1/` (`report.md`, `frame-check.txt`, each instance's `summary.json` and `journal/`); databases and Neo4j minds cleaned.
+
+**Not established:** whether the frame changes what real minds do, or how often they break character. That needs a real batch (paid; the coordinator runs it).
+
 ## What still special-cases trials (to remove later)
 
 No engine code knows about trials. The authority gained one generic admin-only scene reducer, `spawn_newcomer` (a player's `join`, thought for by the minds). Everything else a trial sets up uses existing admin scene reducers, `mind_say`/`mind_act` for admin-controlled characters, behaviour graphs with the existing skills (the ladder's scribe is a graph plus the ordinary `teach` act), the player reducers (the human session) and the real presence path (the takeover). What the runner itself still hard-codes:
@@ -758,6 +792,14 @@ python3 living/tools/inspector.py RUN --who "Agnes Fenner,Avice Hollis" --since 
 - Hearers are those the evidence shows. Without `audience` rows, others in earshot may be missing.
 - The verdicts follow main's gate and log lines, plus the `exp-greet` switches' log lines (drawn in, faced, alongside). The greet modes' own curiosity draw is not recomputed. A changed gate needs the page updated.
 - Scene positions are dated at the request's queue time. A scene can be older than that, so distances from scenes more than 10 s from a line are not used for the address rule.
+
+**How often its verdicts are right** (2026-11-11, after two review rounds' fixes).
+- The sample: 60 turn/no-turn verdicts drawn at random (seeded) from gr1a, gr1b, gr1c and play-test 2. Every line the reviews had looked at was left out. 40 are on the scripted player's lines, 20 on residents' lines.
+- Each verdict was checked against the raw speech and audience rows, the journal's requests and replies, `mind.log`, and a separate recomputation of the draw.
+- Result: 0 of 60 wrong outcomes and 0 of 60 wrong reasons. The 95% Wilson interval is 0–6.0% overall and 0–8.8% for the player's lines (0 of 40).
+- One reason could not be fully verified: "in another exchange", where the remark draw would also have refused.
+- Two reasons were incomplete: a talk turn that came only after the line had been parked did not say so. This is fixed. A fresh sample of 12 such verdicts was all correct; two of them missed a release time, also fixed.
+- The sample checks the page against the evidence. It cannot check what the evidence does not record, such as stamina or the off-stage hold.
 
 ### What it showed on the greeting batches `gr1a` and `gr1b` (2026-11-11, 18:15)
 

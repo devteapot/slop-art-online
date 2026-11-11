@@ -156,6 +156,20 @@ struct Shown {
     back: bool,
     /// Standing and looking somewhere: the legs are turning to the look ([`STAND_TURN_ON`]).
     turning: bool,
+    /// A turn take playing (standing) and a jump take (`takes.rs`), the jump the last was chosen
+    /// for (its start, display ms) and whether it had a take.
+    turn: Option<crate::takes::Playing>,
+    jump: Option<crate::takes::Playing>,
+    jump_key: f64,
+    jump_took: bool,
+    /// Walking off the look on the file's directional takes (else the forward gaits along the
+    /// travel), and since when (display ms) the other choice has been wanted ([`TOWARD_HOLD_MS`]).
+    toward: bool,
+    toward_since: Option<f64>,
+    /// Walking last frame.
+    walked: bool,
+    /// The drawn speed before any move under way (a jump's dash speeds the body up).
+    calm_speed: f32,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -163,6 +177,11 @@ struct Shown {
 /// seat while the clip plays, then catches up at up to [`CATCH_UP`] m/s faster than the body.
 const STAND_UP: (&str, f32, f64) = ("stand_up_ground", 1.6, 2467.0 / 1.6);
 const CATCH_UP: f32 = 1.2;
+/// Walking, a body swaps between the directional takes and the forward gaits along its travel
+/// only once the other has been wanted this long (ms): as the travel's heading swings round at
+/// the start of a walk, it passes directions with and without takes, and each swap turns the legs
+/// (sideways at a run, the feet slid 15% of the body's speed instead of 5%).
+const TOWARD_HOLD_MS: f64 = 300.0;
 /// A body this far (m) from where it is drawn is drawn there at once: a teleport (an admin
 /// `place_at`) used to crawl in at [`CATCH_UP`], tens of seconds for a few tens of metres.
 const SNAP_M: f32 = 6.0;
@@ -193,9 +212,10 @@ const TWIST_MAX: f32 = 110.0 * PI / 180.0;
 const STAND_TURN_ON: f32 = 55.0 * PI / 180.0;
 const STAND_TURN_OFF: f32 = 6.0 * PI / 180.0;
 
-/// Where a moving person's legs face and whether it walks backwards: the legs step along the
-/// travel, so its feet keep still, and the upper body turns toward where it looks. Clips have
-/// no strafe or backward takes; the forward gaits reversed walk backwards.
+/// Where a moving person's legs face and whether it walks backwards, where its file has no
+/// directional take for the way it goes (`gait::Gaits::blend_toward`): the legs step along the
+/// travel, so its feet keep still, and the upper body turns toward where it looks; the forward
+/// gaits reversed walk backwards.
 fn legs_and_twist(travel: f32, look: f32, back: bool) -> (f32, bool) {
     let off = living_rules::steer::wrap(look - travel).abs();
     let back = if back { off > BACK_OFF } else { off > BACK_ON };
@@ -551,11 +571,44 @@ fn bodies(
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, toward: false, toward_since: None, walked: false, calm_speed: 0.0 });
             live.heights.insert(id, height);
             continue;
         }
         let s = live.shown.get_mut(&id).unwrap();
+        // A person's clip file: its directional, turn, start and jump takes (`gait.rs`,
+        // `takes.rs`), and its pace and stride as drawn last frame.
+        let (gaits, pace, stride) = match q.get(s.entity) {
+            Ok((_, _, Some(m), ch, motion, _)) if s.person && crate::takes::enabled() => (Some(crate::gait::of(&m.file)), motion.pace, ch.map_or(1.0, |c| c.stride)),
+            _ => (None, 1.0, 1.0),
+        };
+        // A jump plays the take for its way, timed to the rules' hop, chosen once per jump from
+        // how the body moved before it and where the hop goes from its legs (`takes::jump_for`);
+        // without one, `jump.rs` draws it. The take plays on to its own end.
+        if let (Some(a), Some(g)) = (action.filter(|a| a.clip == crate::jump::CLIP), gaits.as_ref()) {
+            if s.jump_key != a.start_ms {
+                s.jump_key = a.start_ms;
+                let rel = a.face.filter(|f| f.length_squared() > 1e-4).map_or(0.0, |f| living_rules::steer::wrap(f.y.atan2(f.x) - s.yaw));
+                let moving = s.calm_speed > MOVING;
+                s.jump = crate::takes::jump_for(g, moving, rel).map(|(clip, rate, from, cut)| crate::takes::Playing { clip, start_ms: a.start_ms, rate, from, cut: Some(cut), yaw0: s.yaw, gait: moving });
+                s.jump_took = s.jump.is_some();
+            }
+        }
+        if action.is_some_and(|a| a.clip != crate::jump::CLIP) {
+            s.jump = None;
+        }
+        // Asked for until its fade out begins (`cut`), so the gait comes back under it as it fades;
+        // the rules' jump it stands for draws nothing after (no procedural jump over the landing).
+        s.jump = s.jump.filter(|j| j.cut.is_some_and(|c| j.t(scene.now_ms) < c) && combat.deaths.get(&id).is_none());
+        let action = match (s.jump, action) {
+            (Some(j), None) => Some(j.action()),
+            (Some(j), Some(a)) if a.clip == crate::jump::CLIP => Some(crate::combat::Action { face: a.face, ..j.action() }),
+            (None, Some(a)) if a.clip == crate::jump::CLIP && s.jump_key == a.start_ms && s.jump_took => None,
+            _ => action,
+        };
+        if action.is_none() {
+            s.calm_speed = s.speed;
+        }
         // Getting up from the ground before walking off: hold the seat while the clip plays.
         let sitting = show.idle == Some("sit_ground") && !show.hidden;
         if s.sitting && !sitting && s.rising.is_none() && action.is_none() && !mine {
@@ -603,7 +656,71 @@ fn bodies(
         // to the travel, forward or backward, and the upper body turns toward the look.
         let look_at = aimed.or(look);
         let walking = s.person && s.speed > MOVING;
+        // The file's directional takes (scheme "cursor"): the legs face the look and the gaits
+        // for the travel's direction from it play, where the file has them on both sides at this
+        // pace; elsewhere the forward gaits walk along the travel (backward reversed) and the upper
+        // body turns.
+        let toward = |t: f32, l: f32| gaits.as_ref().is_some_and(|g| g.blend_toward(s.speed / pace.max(0.5), stride, living_rules::steer::wrap(t - l), |_| 1.0).is_some());
+        match (walking, look_at, heading) {
+            // A jump's dash speeds the body up: the choice holds through the take.
+            _ if s.jump.is_some() => {}
+            (true, Some(l), Some(t)) => {
+                let want = toward(t, l);
+                if want == s.toward {
+                    s.toward_since = None;
+                } else {
+                    // Setting off, the choice is made at once (the legs already face the look).
+                    let since = *s.toward_since.get_or_insert(scene.now_ms);
+                    if !s.walked || scene.now_ms - since >= TOWARD_HOLD_MS {
+                        s.toward = want;
+                        s.toward_since = None;
+                    }
+                }
+            }
+            _ => {
+                s.toward = false;
+                s.toward_since = None;
+            }
+        }
+        s.walked = walking;
+        let mut toward_t = None;
+        // A turn take playing: the legs follow its curve until it ends; walking or a move breaks
+        // it off where it is.
+        let mut turn_action = None;
+        if let (Some(tp), Some(g)) = (s.turn, gaits.as_ref()) {
+            if walking || action.is_some() {
+                s.turn = None;
+            } else {
+                let (by, done) = crate::takes::turned(g, &tp, scene.now_ms);
+                s.yaw = living_rules::steer::wrap(tp.yaw0 + by);
+                let len = g.info(tp.clip).map_or(0.0, |i| i.seconds);
+                if done {
+                    s.turn = None;
+                } else if tp.t(scene.now_ms) < len - crate::anim::FADE_OUT * tp.rate {
+                    turn_action = Some(tp.action());
+                }
+            }
+        }
+        // Standing, legs that would swivel past `takes::TURN_ON` turn by a take instead: toward the
+        // look, a standing body's own heading (where its segment's turn ends) or its activity.
+        let standing_to = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| b.heading + if b.turn_s > 0.0 { b.turn } else { 0.0 });
+        let turn_to = look_at.or(busy).or(standing_to.filter(|_| slow));
+        if let (Some(g), Some(to), None, false, None) = (gaits.as_ref(), turn_to, s.turn, walking, action) {
+            if s.speed < crate::anim::STEP_OFF {
+                if let Some(clip) = crate::takes::turn_for(g, living_rules::steer::wrap(to - s.yaw)) {
+                    let tp = crate::takes::Playing { clip, start_ms: scene.now_ms, rate: crate::takes::TURN_RATE, from: 0.0, cut: None, yaw0: s.yaw, gait: false };
+                    s.turn = Some(tp);
+                    s.turning = false;
+                    turn_action = Some(tp.action());
+                }
+            }
+        }
         let (legs, back) = match (walking, look_at, heading) {
+            _ if s.turn.is_some() => (None, false),
+            (true, Some(l), Some(t)) if s.toward => {
+                toward_t = Some(t);
+                (Some(l), false)
+            }
             (true, Some(l), Some(t)) => {
                 let (y, b) = legs_and_twist(t, l, s.back);
                 (Some(y), b)
@@ -629,6 +746,8 @@ fn bodies(
             s.face = living_rules::steer::wrap(s.face + living_rules::steer::wrap(f - s.face) * k);
         }
         let twist = if s.person { living_rules::steer::wrap(s.face - s.yaw).clamp(-TWIST_MAX, TWIST_MAX) } else { 0.0 };
+        // The travel from where the legs are drawn facing now (the game's sense: + to the right).
+        let travel = toward_t.map_or(0.0, |t| living_rules::steer::wrap(t - s.yaw));
         if mine {
             my_face = Some(Vec2::new(s.face.cos(), s.face.sin()));
         }
@@ -681,10 +800,11 @@ fn bodies(
         motion.speed = speed;
         motion.stride = ch.map_or(size, |c| c.stride);
         motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
-        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle);
+        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle).or(turn_action);
         motion.now_ms = scene.now_ms;
         motion.reverse = reverse;
         motion.twist = twist;
+        motion.travel = travel;
         motion.freeze = motion.action.is_some_and(|a| a.clip == crate::jump::CLIP) && crate::jump::airborne(&motion) > 0.05;
         // On a road the rules speed a body up (`road_speed`, by the share of road ahead): the
         // gait is chosen at its own pace, so walking onto a road doesn't break into a run.
