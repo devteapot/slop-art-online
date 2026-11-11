@@ -12,6 +12,7 @@ Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-
 - Not run: the rest of the baseline.
 - After merging origin/main (`93019a3`) into `speech-2`: `just living-check` passes; `core-speech6-regress` is identical to the base except the `introduced` rows; `core-speech6-channels` 22 of 22.
 - After merging origin/main again (`b004e6e`, the rules' UI declarations): `just living-check` passes; `core-speech8-regress` is identical to the base except the `introduced` rows; `core-speech8-channels` 22 of 22; verify-player `player-speak8` 15 of 15. The UI test `a_way_of_speaking_is_presented_in_the_box` declared its own `whisper_speech()` over the shipped script; it now presents the shipped whisper (its assertions unchanged).
+- After merging origin/main (`48cd022`, with fov-1): my table `heard` is now `line_heard` (fov-1's heard-not-seen sounds took `heard`), and the hearer list, noticing, overheard names and the truthful silence see by fov-1's `perception::in_sight` (facing, when the world's law gives a field). `just living-check` passes; `core-speech9-regress` is identical to the base except the `introduced` rows; `core-speech9-ways` 21 of 21; `core-speech9-channels` 22 of 22. verify-player `player-speak9` 15 of 15.
 
 ## 2026-11-11 speech-1: ways of speaking (Spark)
 
@@ -23,6 +24,18 @@ Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-s
 - `speech.py ways`: `core-speech-ways` 20 of 21 (the one failure was the check's own: two hearers equally near, in either order). Fixed, then `core-speech-ways2` 21 of 21. `scenes.py say` on the same run: 34 PASS.
 - `speech.py crowd` (20 people, 10 m square, 120 lines/min, 60 lines): `core-speech-crowd` on the change, `core-speech-crowdbase` on `a107fdf` (`--baseline`). Numbers in docs/COMMUNICATION.md §13. `-crowd-try1`/`-try2` were the metric parser's own fixes.
 - Not run on this change: tick, needs, food, refusal, seize, sight, senses, doing, moves, death-names, skirmish, dealings, town, lives, laws, goods, infant; mechanics.
+
+## 2026-11-11 fov-1: sight that depends on facing (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `core-fov1-m` (after merging `origin/main` `accf27c8`, eye-2's sight included): `fov` 18 of 18, `sight` 6, `senses` 7.
+- `core-fov1-j` (default seed, the final build before the merge: graph scenes see and hear from one gather, `perception::sensed`): `fov` 18 of 18; `tick` 6, `sight` 6, `senses` 7, `moves` 5, `death-names` 8 pass; `doing` fails as below.
+- `core-fov1-c` (the build before that): `fov` 18 of 18 (new: off as shipped; `set_world_law` refusals, the script block at a new revision, `law_change` and the chronicle row; facing east and west; the 3 m ring guarding a strike from 1 m behind; a 0.5 m ring: 1.5 m behind unseen, no guard, the blow lands; witnesses by facing; off again). Then `tick`, `sight`, `senses` and `moves` pass on the same world.
+- `doing` failed twice on that world (`doing.txt`, `doing-2.txt`): the admin CLI took 1 to 14 s a call on the loaded host, so the walkers finished before the observer's scene was written (`doing-actions.jsonl`). No field was on. It failed the same way on `origin/main` (`6288f599`, exported to `.local/fov1/main-src`, run `core-main-doing`), so it is an existing failure under load, not this change.
+- Earlier `fov` attempts (`core-fov1-a`, `-b`, `-d` to `-i`) found harness faults, now fixed in the scene. `say` lines are 2 s apart. The same graph does not restart, and waits are held to 120 s. The dark near ring (2 m) is a separate law. Onlookers stand on the open line, not off it. Witnesses are told only a fight's first blow (30 s), so duels are 31 s apart. A striker facing away cannot see its target with a 0.5 m ring, so it turns first; a strike cannot be a `mind_act`.
+- Not run on this change: needs, food, refusal, seize, death-names, skirmish, drop, low, dealings, town, lives, goods, laws, infant; mechanics.
+
 
 ## 2026-11-11 rates-2: spoiling, regrowth, traps and remains in game time; the decay scene (dev-box)
 

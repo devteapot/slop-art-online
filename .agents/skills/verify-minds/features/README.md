@@ -3,6 +3,7 @@
 | Feature | Cases | File |
 | --- | --- | --- |
 | Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt) | `roundtrip`, `acts` | [deliberation.md](deliberation.md) |
+| A deliberation consumes the reasons its prompt contained: plan-finished churn during model calls keeps no older reason pending, a reason arriving mid-call waits for the next deliberation only; each thought's `detail.reasons` with `carried_before` | `reasons` | [deliberation.md](deliberation.md) |
 | Answer speech and close an exchange | `conversation` | [conversations.md](conversations.md) |
 | Speech through a mind: a talk reply's `way` reaches `mind_say` (one the world lacks is said aloud), an `introduced` row reaches consolidation tagged with the person, the mind's own line reads as heard by those it saw (`heard`) | `speech` | [conversations.md](conversations.md#ways-and-who-heard) |
 | Privacy of words: none of a line's words reach anyone who should not receive them (experience, prompts, client, memory), for any way on `speech_card` | `privacy.py` (Neo4j) | [privacy.md](privacy.md) |
@@ -12,6 +13,7 @@
 | Wait off stage and resume on stage | `lod` | [level-of-detail.md](level-of-detail.md) |
 | An offline player's character: takeover after `takeover_s`, thought for like any AI, handback (plan stops, graph held), a reply in flight refused | `takeover` | [takeover.md](takeover.md) |
 | A mind sees what its character sees: the scene the model is sent and the deaths it witnesses follow the sight line | `sight` | [sight.md](sight.md) |
+| Sight that depends on facing (the `fov_on` law): what a mind hears and does not see, in its scene and the prompt in a person's words with no id, its facing, the percept when a sound begins, the person instinct's "turn to a sound" habit turning the body | `fov` | [fov.md](fov.md) |
 | A mind is told of drops and low things in words (`terrain_near`), and sees the one across them, on the island | `drop` | [drop.md](drop.md) |
 | The dead keep their names for those who knew them: a community member killed in view is named in the mind's death experience and in its next prompt (what happened, relations), not "a stranger"; the killer reads "killed by you" | `death-names` | [sight.md](sight.md) |
 | Cheaper animal minds: one call picks among built options (choose), the deer it sees reuse it (pack), nothing new answers by instinct (salient) | `animals` | [animals.md](animals.md) |

@@ -11,7 +11,7 @@ Design: [docs/COMMUNICATION.md](../../../../docs/COMMUNICATION.md). Source: `liv
      - the engine's own: "no way of speaking called `X`" and "speaking too fast" (2 s across all ways, `SPEAK_GAP_MS`, for a speaker with a `mind_state` row);
      - the way's (since the coordinator's requirement on `speech-2`): exactly the words its `<way>_check(a)` returns, built by `living_rules::script::speech::check_ctx`, the builder a client uses to run the same check before sending.
 
-     The check gets the addressee as `a.target` (class `none` for the room; absent or dead reads as alive false and very far), the line as `a.text`, and the milliseconds since the speaker's last line in this way as `a.qty` (from its `heard` rows; 4,000,000,000 if never). The install refuses a way that requires an addressee, a reach, a technique or a gap without a check that refuses a sample line breaking it (`check.rs` `ways`). Shipped words:
+     The check gets the addressee as `a.target` (class `none` for the room; absent or dead reads as alive false and very far), the line as `a.text`, and the milliseconds since the speaker's last line in this way as `a.qty` (from its `line_heard` rows; 4,000,000,000 if never). The install refuses a way that requires an addressee, a reach, a technique or a gap without a check that refuses a sample line breaking it (`check.rs` `ways`). Shipped words:
      - `whisper_check`: "a whisper needs someone to whisper to", and "too far to whisper: step closer";
      - `call_check`: "too soon to call out again: wait a few seconds".
   3. The chronicle line. A `say` line reads as before; another way names itself: "Ilsa (whisper) to Bram: …".
@@ -22,7 +22,7 @@ Design: [docs/COMMUNICATION.md](../../../../docs/COMMUNICATION.md). Source: `liv
   8. Introductions: a line that holds the speaker's own name gives every receiver an `acquaintance`. When the name is news, the receiver also gets an `introduced` row (subject = the speaker, 0.55): "Walker1 told you their name." The salience is below the 0.6 wake threshold, so a name never re-runs the listener's graph.
   9. Overheard names (since `speech-2`, the way's `names`, off for words for one ear): a line to someone that mentions their name tells it to each receiver who sees them. That receiver gets an `introduced` row with the named person as subject and the caller as object: "You heard a stranger call Walker3 by name."
   10. `noticed` (a whisper's onlookers): people within `within_m` who see the speaker, and who did not receive the words, get a row of the way's own kind with its `text` and no words.
-  11. A `heard` row in the same transaction: `line` = the `said` row's id, `speaker`, `way`, `hearers` = the receivers the speaker saw by the sight rule (`perception::in_sight` with the hearer's glow, as `seen_characters`), nearest first, and `at_ms`.
+  11. A `line_heard` row in the same transaction: `line` = the `said` row's id, `speaker`, `way`, `hearers` = the receivers the speaker saw by the sight rule (`perception::in_sight` with the hearer's glow, as `seen_characters`), nearest first, and `at_ms`.
 - **Entry points:**
   - `human_say(text, to)` is the `say` way;
   - `human_speak(text, to, way)` takes any way ("" is `say`);
@@ -36,7 +36,7 @@ Design: [docs/COMMUNICATION.md](../../../../docs/COMMUNICATION.md). Source: `liv
 | say | Say | 0 | false | 0 | 9 | "" | false | false | 400 | 2000 |
 | whisper | Whisper | 1 | true | 1.5 | 1.5 | "" | false | true | 400 | 2000 |
 | call | Call out | 2 | false | 0 | 22.5 | "" | false | false | 80 | 6000 |
-- **Retention of `heard`.** A row goes when its `said` row leaves the speaker's window: the trim in `perceive::percept`, `mind_consolidated` (a mind's integrated rows) and `forget_dead`. A played character keeps its rows (consolidation does not delete them).
+- **Retention of `line_heard`.** A row goes when its `said` row leaves the speaker's window: the trim in `perceive::percept`, `mind_consolidated` (a mind's integrated rows) and `forget_dead`. A played character keeps its rows (consolidation does not delete them).
 - **Mentions** (since `speech-2`): a name is mentioned by its given name (the first word) or in full. "I'm Vessa" introduces Vessa Pontil. Before, a name of two words never matched.
 - **The shipped ways** (since `speech-2`, docs/COMMUNICATION.md §14):
   - `say`.
@@ -59,17 +59,17 @@ python3 .agents/skills/verify-core/scripts/speech.py diff core-speech-base core-
 - **`diff A B`** compares two `regress` outputs with the new kinds (`introduced`) left out and writes `<B>/speech-diff.json`. That is the regression proof that the shipped `say` is unchanged: run `regress --baseline` on the pre-change module (a worktree at the base commit, its own `verify.py launch`) and `regress` on the change.
 - **`ways`** checks:
   - `speech_card` read anonymously;
-  - the `heard` row of a self-introduction (hearers by day or night sight);
+  - the `line_heard` row of a self-introduction (hearers by day or night sight);
   - `introduced` for b, c and the player but not d, and not news a second time;
   - `introduced` in `my_experience`;
   - `human_speak` (say, "" and an unknown way, refused), `human_say`, and an empty line;
-  - `my_heard` for the player: its lines, joinable to `my_experience` by `line`, empty for a second player identity; `heard` is not readable by a player;
+  - `my_heard` for the player: its lines, joinable to `my_experience` by `line`, empty for a second player identity; `line_heard` is not readable by a player;
   - a graph say with `way: "say"`, and with an unknown way (not spoken, the speaker told);
   - `mind_say` in an unknown way (refused);
-  - a hearer behind a wall within earshot (`scenes.wall_geometry`): hears the words, not listed in `heard`;
-  - `mind_consolidated` removing a mind's `heard` rows while the player's stay.
+  - a hearer behind a wall within earshot (`scenes.wall_geometry`): hears the words, not listed in `line_heard`;
+  - `mind_consolidated` removing a mind's `line_heard` rows while the player's stay.
 - **`channels`** places five minded people, a deer and a player named "Mara Quill" on one quiet line. From the speaker: b at 1 m, the deer at about 4 m, c at 4 m, the player at 7 m, e at 10 m (in sight by day, beyond the 9 m voice) and d at 20 m (within a call). It checks:
-  - a whisper to b: b gets the words; c notices them without the words; the player, e, d and the deer get nothing; the speaker's row, the `heard` row and the audit line are right; only b's hearing mark moves;
+  - a whisper to b: b gets the words; c notices them without the words; the player, e, d and the deer get nothing; the speaker's row, the `line_heard` row and the audit line are right; only b's hearing mark moves;
   - whispers to c at 4 m and to no one are refused and write nothing;
   - a whispered self-introduction teaches only b;
   - a call: d and the deer hear it (as a shout), it is cut to 80 characters, and a second call within 6 s is refused;
@@ -81,7 +81,7 @@ python3 .agents/skills/verify-core/scripts/speech.py diff core-speech-base core-
   - reducer plus query time;
   - `spacetime_num_rows_inserted_total` by table per line;
   - speech rows per line;
-  - the mean `heard` hearers.
+  - the mean `line_heard` hearers.
 
   Run it on the pre-change module with `--baseline` for the comparison.
 

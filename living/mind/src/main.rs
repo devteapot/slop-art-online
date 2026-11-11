@@ -182,7 +182,7 @@ async fn main() -> Result<()> {
                     "SELECT * FROM acquaintance",
                     // Who heard each line (private, one row per line in its speaker's window): a
                     // speaker's own line reads as heard by those it saw (docs/COMMUNICATION.md §6).
-                    "SELECT * FROM heard",
+                    "SELECT * FROM line_heard",
                 ].map(String::from)).collect::<Vec<String>>());
         })
         .on_disconnect(|_, e| {

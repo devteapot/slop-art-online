@@ -2,7 +2,7 @@
 // WILL NOT BE SAVED. MODIFY TABLES IN YOUR MODULE SOURCE CODE INSTEAD.
 
 #![allow(unused, clippy::all)]
-use super::heard_type::Heard;
+use super::line_heard_type::LineHeard;
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 /// Table handle for the table `my_heard`.
@@ -14,7 +14,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 /// but to directly chain method calls,
 /// like `ctx.db.my_heard().on_insert(...)`.
 pub struct MyHeardTableHandle<'ctx> {
-    imp: __sdk::TableHandle<Heard>,
+    imp: __sdk::TableHandle<LineHeard>,
     ctx: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
@@ -22,7 +22,7 @@ pub struct MyHeardTableHandle<'ctx> {
 pub struct MyHeardTableAccessor;
 
 impl __sdk::TableAccessor<super::RemoteTables> for MyHeardTableAccessor {
-    type Row = Heard;
+    type Row = LineHeard;
     type Handle<'db> = MyHeardTableHandle<'db>;
 
     fn get<'db>(db: &'db super::RemoteTables) -> Self::Handle<'db> {
@@ -43,7 +43,7 @@ pub trait MyHeardTableAccess {
 impl MyHeardTableAccess for super::RemoteTables {
     fn my_heard(&self) -> MyHeardTableHandle<'_> {
         MyHeardTableHandle {
-            imp: self.imp.get_table::<Heard>("my_heard"),
+            imp: self.imp.get_table::<LineHeard>("my_heard"),
             ctx: std::marker::PhantomData,
         }
     }
@@ -53,25 +53,25 @@ pub struct MyHeardInsertCallbackId(__sdk::CallbackId);
 pub struct MyHeardDeleteCallbackId(__sdk::CallbackId);
 
 impl<'ctx> __sdk::TableLike for MyHeardTableHandle<'ctx> {
-    type Row = Heard;
+    type Row = LineHeard;
     type EventContext = super::EventContext;
 
     fn count(&self) -> u64 {
         self.imp.count()
     }
-    fn iter(&self) -> impl Iterator<Item = Heard> + '_ {
+    fn iter(&self) -> impl Iterator<Item = LineHeard> + '_ {
         self.imp.iter()
     }
 }
 
 impl<'ctx> __sdk::Table for MyHeardTableHandle<'ctx> {
-    type Row = Heard;
+    type Row = LineHeard;
     type EventContext = super::EventContext;
 
     fn count(&self) -> u64 {
         self.imp.count()
     }
-    fn iter(&self) -> impl Iterator<Item = Heard> + '_ {
+    fn iter(&self) -> impl Iterator<Item = LineHeard> + '_ {
         self.imp.iter()
     }
 
@@ -172,7 +172,7 @@ impl<'ctx> __sdk::WithUpdate for MyHeardTableHandle<'ctx> {
 /// but to directly chain method calls,
 /// like `ctx.db.my_heard().line().find(...)`.
 pub struct MyHeardLineUnique<'ctx> {
-    imp: __sdk::UniqueConstraintHandle<Heard, u64>,
+    imp: __sdk::UniqueConstraintHandle<LineHeard, u64>,
     phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
@@ -189,40 +189,40 @@ impl<'ctx> MyHeardTableHandle<'ctx> {
 impl<'ctx> MyHeardLineUnique<'ctx> {
     /// Find the subscribed row whose `line` column value is equal to `col_val`,
     /// if such a row is present in the client cache.
-    pub fn find(&self, col_val: &u64) -> Option<Heard> {
+    pub fn find(&self, col_val: &u64) -> Option<LineHeard> {
         self.imp.find(col_val)
     }
 }
 
 #[doc(hidden)]
 pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
-    let _table = client_cache.get_or_make_table::<Heard>("my_heard");
+    let _table = client_cache.get_or_make_table::<LineHeard>("my_heard");
     _table.add_unique_constraint::<u64>("line", |row| &row.line);
 }
 
 #[doc(hidden)]
 pub(super) fn parse_table_update(
     raw_updates: __ws::v2::TableUpdate,
-) -> __sdk::Result<__sdk::TableUpdate<Heard>> {
+) -> __sdk::Result<__sdk::TableUpdate<LineHeard>> {
     __sdk::TableUpdate::parse_table_update(raw_updates).map_err(|e| {
-        __sdk::InternalError::failed_parse("TableUpdate<Heard>", "TableUpdate")
+        __sdk::InternalError::failed_parse("TableUpdate<LineHeard>", "TableUpdate")
             .with_cause(e)
             .into()
     })
 }
 
 #[allow(non_camel_case_types)]
-/// Extension trait for query builder access to the table `Heard`.
+/// Extension trait for query builder access to the table `LineHeard`.
 ///
 /// Implemented for [`__sdk::QueryTableAccessor`].
 pub trait my_heardQueryTableAccess {
     #[allow(non_snake_case)]
-    /// Get a query builder for the table `Heard`.
-    fn my_heard(&self) -> __sdk::__query_builder::Table<Heard>;
+    /// Get a query builder for the table `LineHeard`.
+    fn my_heard(&self) -> __sdk::__query_builder::Table<LineHeard>;
 }
 
 impl my_heardQueryTableAccess for __sdk::QueryTableAccessor {
-    fn my_heard(&self) -> __sdk::__query_builder::Table<Heard> {
+    fn my_heard(&self) -> __sdk::__query_builder::Table<LineHeard> {
         __sdk::__query_builder::Table::new("my_heard")
     }
 }

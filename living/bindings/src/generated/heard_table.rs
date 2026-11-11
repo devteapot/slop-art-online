@@ -164,30 +164,30 @@ impl<'ctx> __sdk::WithUpdate for HeardTableHandle<'ctx> {
     }
 }
 
-/// Access to the `line` unique index on the table `heard`,
+/// Access to the `key` unique index on the table `heard`,
 /// which allows point queries on the field of the same name
-/// via the [`HeardLineUnique::find`] method.
+/// via the [`HeardKeyUnique::find`] method.
 ///
 /// Users are encouraged not to explicitly reference this type,
 /// but to directly chain method calls,
-/// like `ctx.db.heard().line().find(...)`.
-pub struct HeardLineUnique<'ctx> {
+/// like `ctx.db.heard().key().find(...)`.
+pub struct HeardKeyUnique<'ctx> {
     imp: __sdk::UniqueConstraintHandle<Heard, u64>,
     phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
 impl<'ctx> HeardTableHandle<'ctx> {
-    /// Get a handle on the `line` unique index on the table `heard`.
-    pub fn line(&self) -> HeardLineUnique<'ctx> {
-        HeardLineUnique {
-            imp: self.imp.get_unique_constraint::<u64>("line"),
+    /// Get a handle on the `key` unique index on the table `heard`.
+    pub fn key(&self) -> HeardKeyUnique<'ctx> {
+        HeardKeyUnique {
+            imp: self.imp.get_unique_constraint::<u64>("key"),
             phantom: std::marker::PhantomData,
         }
     }
 }
 
-impl<'ctx> HeardLineUnique<'ctx> {
-    /// Find the subscribed row whose `line` column value is equal to `col_val`,
+impl<'ctx> HeardKeyUnique<'ctx> {
+    /// Find the subscribed row whose `key` column value is equal to `col_val`,
     /// if such a row is present in the client cache.
     pub fn find(&self, col_val: &u64) -> Option<Heard> {
         self.imp.find(col_val)
@@ -197,7 +197,7 @@ impl<'ctx> HeardLineUnique<'ctx> {
 #[doc(hidden)]
 pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
     let _table = client_cache.get_or_make_table::<Heard>("heard");
-    _table.add_unique_constraint::<u64>("line", |row| &row.line);
+    _table.add_unique_constraint::<u64>("key", |row| &row.key);
 }
 
 #[doc(hidden)]

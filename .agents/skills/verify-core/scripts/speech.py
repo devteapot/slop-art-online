@@ -301,7 +301,7 @@ def ways(s):
     time.sleep(1.0)
     said = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {a}") if r["kind"] == "said" and r["at_ms"] >= t0]
     s.expect("the speaker's own `said` row", len(said) == 1, said)
-    heard = s.rows(f"SELECT * FROM heard WHERE line = {said[0]['id']}", "heard-intro")
+    heard = s.rows(f"SELECT * FROM line_heard WHERE line = {said[0]['id']}", "heard-intro")
     want = [x for x in sorted((b, c, p.id), key=lambda x: dist(a, x)) if dist(a, x) <= sight]
     s.expect(f"heard: one row with the line, its way and the hearers a saw, nearest first ({'night' if night else 'day'})",
              len(heard) == 1 and heard[0]["speaker"] == a and heard[0]["way"] == "say" and nearest_first(heard[0]["hearers"], want, lambda x: dist(a, x)), (heard, want), fatal=False)
@@ -342,7 +342,7 @@ def ways(s):
     s.expect("each my_heard line is a `said` row the client was shown", all(r["line"] in shown for r in mh), None, fatal=False)
     other = Person(s, "Stranger")
     s.expect("another player's my_heard holds none of the player's lines", not other.sql("SELECT * FROM my_heard"), None, fatal=False)
-    code, body = http(f"/v1/database/{s.db}/sql", "SELECT * FROM heard", p.token, raw=True)
+    code, body = http(f"/v1/database/{s.db}/sql", "SELECT * FROM line_heard", p.token, raw=True)
     s.expect("the heard table itself is private to a player", code != 200 or json.loads(body)[-1]["rows"] == [], (code, body[:200]), fatal=False)
     # A graph's say in a named way, and one in a way there is not (a refused leaf).
     time.sleep(GAP)
@@ -371,15 +371,15 @@ def ways(s):
     say_as(s, a, "Can anyone hear me through this wall?", 0, "say", check=True)
     time.sleep(1.0)
     line = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {a}") if r["kind"] == "said" and r["at_ms"] >= t4]
-    h = s.rows(f"SELECT * FROM heard WHERE line = {line[0]['id']}", "heard-wall") if line else []
+    h = s.rows(f"SELECT * FROM line_heard WHERE line = {line[0]['id']}", "heard-wall") if line else []
     behind = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {d}") if r["kind"] == "speech" and r["at_ms"] >= t4]
     s.expect("heard: one behind a wall hears the words but is not among the hearers the speaker saw",
              behind and h and d not in h[0]["hearers"] and c in h[0]["hearers"], (behind, h), fatal=False)
     # Retention: the lines a mind integrated leave with their rows; a played character's stay.
     upto = max(r["id"] for r in s.rows(f"SELECT id FROM experience WHERE observer = {a}"))
-    before = len(s.rows(f"SELECT * FROM heard WHERE speaker = {a}"))
+    before = len(s.rows(f"SELECT * FROM line_heard WHERE speaker = {a}"))
     s.call("mind_consolidated", a, upto)
-    after = len(s.rows(f"SELECT * FROM heard WHERE speaker = {a}"))
+    after = len(s.rows(f"SELECT * FROM line_heard WHERE speaker = {a}"))
     s.expect("heard: a mind's lines go when it has integrated them (mind_consolidated)", before >= 3 and after == 0, (before, after), fatal=False)
     s.expect("heard: a played character's lines stay", len(p.sql("SELECT * FROM my_heard")) == len(mh), None, fatal=False)
 
@@ -420,7 +420,7 @@ def channels(s):
     s.expect("whisper: the player, e, d and the deer get nothing at all", not any(got[w] and any(x["subject"] == a for x in got[w]) for w in (p.id, e, d, deer)), {w: got[w] for w in (p.id, e, d, deer)}, fatal=False)
     s.expect("whisper: the speaker's row reads `You whispered to …`", [x["text"] for x in got[a] if x["kind"] == "said"] == ["You whispered to a stranger: “The tally is short tonight.”"], got[a], fatal=False)
     said = [x for x in got[a] if x["kind"] == "said"]
-    h = s.rows(f"SELECT * FROM heard WHERE line = {said[0]['id']}") if said else []
+    h = s.rows(f"SELECT * FROM line_heard WHERE line = {said[0]['id']}") if said else []
     s.expect("whisper: heard lists b alone, way whisper", h and h[0]["hearers"] == [b] and h[0]["way"] == "whisper", h, fatal=False)
     chron = [x["text"] for x in s.rows("SELECT * FROM chronicle WHERE kind = 'speech'") if x["at_ms"] >= t and x["a"] == a]
     s.expect("whisper: the chronicle (audit) keeps the words and the way", chron == [f"{names[a]} (whisper) to {names[b]}: “The tally is short tonight.”"], chron, fatal=False)
@@ -523,7 +523,7 @@ def crowd(s):
             table = k.split('table_name="', 1)[1].split('"', 1)[0] if 'table_name="' in k else k
             rows[table] = rows.get(table, 0) + v
     exp = [r for who in people for r in s.rows(f"SELECT kind, at_ms FROM experience WHERE observer = {who}")]
-    heard_rows = [r for r in s.rows("SELECT * FROM heard")] if not s.baseline else []
+    heard_rows = [r for r in s.rows("SELECT * FROM line_heard")] if not s.baseline else []
     report = {"way": way or "say (before ways)", "population": n, "square_m": side, "density_per_m2": round(n / (side * side), 3), "lines": lines, "line_every_s": every,
               "lines_per_min": round(60 / every, 1), "calls_counted": calls,
               "wasm_us_per_line": round(pick("reducer_wasm_time_usec", "mind_say") / max(calls, 1), 1),

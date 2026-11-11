@@ -9,6 +9,7 @@ Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-
   - `player-speak3` 12 of 12 was before refusals moved to the script.
   - `player-speak4` failed only the second call: its facts and SQL took 5.7 s before the second call was sent, past the 6 s gap, so the reducer accepted it. It now sends at once and asks the client's check about the same moment.
 - After merging origin/main (`93019a3`): `player-speak6` 15 of 15.
+- After merging origin/main (`48cd022`): `player-speak9` 15 of 15.
 
 ## 2026-11-11 speech-1: human_speak (Spark)
 
@@ -16,6 +17,15 @@ Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-s
 
 - `speak.py` (new): `player-speak2` 8 of 8: `speech_card` read anonymously; `human_say`, `human_speak(…, "say")` and `human_speak(…, "")` spoken; their `said` rows in `my_experience`; `my_heard` rows joined by `line`, listing the resident; refused "no way of speaking called `shout`" and "speaking too fast", writing nothing. The shipped script has one way, so the card's `needs_to`, `reach` and gap loops had nothing to drive.
 - `player-speak1` failed only the too-fast check: the first line's row reached `my_experience` at the next frame, during the check's count. The check now waits 0.8 s before counting.
+
+## 2026-11-11 fov-1: perceiving by facing (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `player-fov1-m` (after merging `origin/main` `accf27c8`): `fov.py` 18 of 18.
+- `player-fov1-d` (the final build before the merge): `fov.py` 18 of 18 (`fov.json`). `player-fov1-a` (the build before): 18 of 18. Two runs in between (`-b`, `-c`) wrote no `fov.json`, because the driver's output was piped into `head`, which closed it. The first attempt failed the field's edge and "R behind not in view" with R 4 m off, because the keep metre widens the 3 m near ring and the 3.7 m daytime side vision past 4 m. R is now 5.5 m off.
+- Not run on this change: the other player scripts (`appraise`, `approach`, `combat`, `gesture`, `deal`, `drop`, `new_skill`, `told`, `host`, `command`).
+
 
 
 ## 2026-11-11 rules-offers: trade offers a player receives (Spark)

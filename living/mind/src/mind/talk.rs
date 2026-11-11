@@ -753,7 +753,7 @@ impl Minds {
         let told = e.as_ref().map(|e| e.text.split_once(": “").map_or(e.text.as_str(), |(head, _)| head).to_string()).unwrap_or_default();
         let way = match &e {
             Some(e) if e.kind == "whisper" => "whisper".to_string(),
-            Some(e) => self.conn.db.heard().iter().find(|h| h.speaker == heard.speaker && h.at_ms == e.at_ms).map(|h| h.way).unwrap_or_else(|| "say".into()),
+            Some(e) => self.conn.db.line_heard().iter().find(|h| h.speaker == heard.speaker && h.at_ms == e.at_ms).map(|h| h.way).unwrap_or_else(|| "say".into()),
             None => "say".into(),
         };
         (way, told)

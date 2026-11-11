@@ -7,11 +7,14 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
 pub struct Heard {
-    pub line: u64,
-    pub speaker: u32,
-    pub way: String,
-    pub hearers: Vec<u32>,
-    pub at_ms: u64,
+    pub key: u64,
+    pub viewer: __sdk::Identity,
+    pub listener: u32,
+    pub target: u32,
+    pub kind: String,
+    pub bearing: u8,
+    pub band: u8,
+    pub since_ms: u64,
 }
 
 impl __sdk::InModule for Heard {
@@ -22,22 +25,28 @@ impl __sdk::InModule for Heard {
 ///
 /// Provides typed access to columns for query building.
 pub struct HeardCols {
-    pub line: __sdk::__query_builder::Col<Heard, u64>,
-    pub speaker: __sdk::__query_builder::Col<Heard, u32>,
-    pub way: __sdk::__query_builder::Col<Heard, String>,
-    pub hearers: __sdk::__query_builder::Col<Heard, Vec<u32>>,
-    pub at_ms: __sdk::__query_builder::Col<Heard, u64>,
+    pub key: __sdk::__query_builder::Col<Heard, u64>,
+    pub viewer: __sdk::__query_builder::Col<Heard, __sdk::Identity>,
+    pub listener: __sdk::__query_builder::Col<Heard, u32>,
+    pub target: __sdk::__query_builder::Col<Heard, u32>,
+    pub kind: __sdk::__query_builder::Col<Heard, String>,
+    pub bearing: __sdk::__query_builder::Col<Heard, u8>,
+    pub band: __sdk::__query_builder::Col<Heard, u8>,
+    pub since_ms: __sdk::__query_builder::Col<Heard, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for Heard {
     type Cols = HeardCols;
     fn cols(table_name: &'static str) -> Self::Cols {
         HeardCols {
-            line: __sdk::__query_builder::Col::new(table_name, "line"),
-            speaker: __sdk::__query_builder::Col::new(table_name, "speaker"),
-            way: __sdk::__query_builder::Col::new(table_name, "way"),
-            hearers: __sdk::__query_builder::Col::new(table_name, "hearers"),
-            at_ms: __sdk::__query_builder::Col::new(table_name, "at_ms"),
+            key: __sdk::__query_builder::Col::new(table_name, "key"),
+            viewer: __sdk::__query_builder::Col::new(table_name, "viewer"),
+            listener: __sdk::__query_builder::Col::new(table_name, "listener"),
+            target: __sdk::__query_builder::Col::new(table_name, "target"),
+            kind: __sdk::__query_builder::Col::new(table_name, "kind"),
+            bearing: __sdk::__query_builder::Col::new(table_name, "bearing"),
+            band: __sdk::__query_builder::Col::new(table_name, "band"),
+            since_ms: __sdk::__query_builder::Col::new(table_name, "since_ms"),
         }
     }
 }
@@ -46,16 +55,16 @@ impl __sdk::__query_builder::HasCols for Heard {
 ///
 /// Provides typed access to indexed columns for query building.
 pub struct HeardIxCols {
-    pub line: __sdk::__query_builder::IxCol<Heard, u64>,
-    pub speaker: __sdk::__query_builder::IxCol<Heard, u32>,
+    pub key: __sdk::__query_builder::IxCol<Heard, u64>,
+    pub viewer: __sdk::__query_builder::IxCol<Heard, __sdk::Identity>,
 }
 
 impl __sdk::__query_builder::HasIxCols for Heard {
     type IxCols = HeardIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         HeardIxCols {
-            line: __sdk::__query_builder::IxCol::new(table_name, "line"),
-            speaker: __sdk::__query_builder::IxCol::new(table_name, "speaker"),
+            key: __sdk::__query_builder::IxCol::new(table_name, "key"),
+            viewer: __sdk::__query_builder::IxCol::new(table_name, "viewer"),
         }
     }
 }

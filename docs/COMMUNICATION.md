@@ -425,7 +425,7 @@ Each item is a law, a skill spec or a primitive, with the verification surface i
 | 1 | Client: an empty cursor speaks to the room (`to` = 0); Tab gains an "everyone" stop; the box labels the room and "others nearby hear". | Client only | Game client (owner play-test; no UI skill yet); `verify-player` unchanged |
 | 2 | Merge `exp-greet` and make the `gr1` winner the default: law `speech_audience` on, `LIVING_GREET` and `LIVING_PARK` defaults. | Law and mind switches | `verify-minds` (greet, alongside), `verify-core` (scene audience), `verify-client` (audience private) |
 | 3 | **Built** (`speech-1`, section 13). `introduced` experience row when a name is news. | Primitive (one row in `speak`) | `verify-core` (speech scene), `verify-knowledge` (names), `verify-minds` (consolidation anchors the name) |
-| 4 | **Built** (`speech-1`, section 13). `heard` table and `my_heard` view (hearers the speaker perceives). | Primitive and view | `verify-client` (scoped to the caller, refused to others), `verify-player`, `verify-minds` |
+| 4 | **Built** (`speech-1`, section 13). `heard` table (built as `line_heard`) and `my_heard` view (hearers the speaker perceives). | Primitive and view | `verify-client` (scoped to the caller, refused to others), `verify-player`, `verify-minds` |
 | 5 | **Built** (`speech-1`, section 13). Ways of speaking: `<way>_speech()` specs, `<way>_check`, `speak(…, way)`, `human_speak`, `mind_say` and graph `say` with a way, the public `speech_card` table (fields in section 8), ways in the world text. Shipped `say` identical to today. Then the laptop builds the chips. | Primitive and script | `verify-core`, `verify-player`, `verify-client`, `verify-minds`, `verify-llm` (reply JSON) |
 | 6 | **Built** (`speech-2`, section 14). Whisper: the `whisper` way, `whispered` rows, the reply in kind in talk.rs, refusal "too far to whisper". Privacy checks: a bystander's experience rows, talk and deliberation prompts in the journal, Neo4j memories and `my_experience` hold none of the words. | Script and mind | `verify-minds` (whisper case), `verify-knowledge` (bystander's graph), `verify-player` (refusal), `verify-client` (another identity's views) |
 | 7 | **Built** (`speech-2`, section 14). Call: the `call` way, animals hear shouting, the talk prompt gives distance and ways. | Script | `verify-core`, `verify-minds` |
@@ -452,7 +452,7 @@ Built 2026-11-11 on `speech-1` from `a107fdf`. Source: `living/authority/src/spe
   - a way named like a skill;
   - words `only_to` the addressee without `to: "required"`;
   - a `noticed.kind` that is a kind carrying words.
-- The keys are `about`, `label`, `order`, `to` (`optional`/`required`), `words` (`hearing` share or `within_m`, `only_to`), `noticed` (`within_m`, `seen`, `kind`, `text`, `salience`), the row templates (`said`, `said_to`, `heard`, `heard_to`, `heard_to_you`), `kind`, `animals`, `gap_s`, `max_chars`, `needs`, `reach`, `needs_sight`, `introduces` and `salience` (`addressed`, `overheard`).
+- The keys are `about`, `label`, `order`, `to` (`optional`/`required`), `words` (`hearing` share or `within_m`, `only_to`), `noticed` (`within_m`, `seen`, `kind`, `text`, `salience`), the row templates (`said`, `said_to`, `line_heard`, `heard_to`, `heard_to_you`), `kind`, `animals`, `gap_s`, `max_chars`, `needs`, `reach`, `needs_sight`, `introduces` and `salience` (`addressed`, `overheard`).
 - Not accepted yet, so that no way can claim what the engine does not do: `cost`, `channel` (mind or sight), `to: "known"`, `names` (item 10) and `shows`.
 - A script without ways speaks by the built-in `say` (`WaySpec::say()`, equal field for field to the shipped `say_speech()`, unit test `ways_of_speaking_are_read_from_the_script`). Once any way is declared, `say` must be one of them.
 - An optional `<way>_check(a)` gets the speaker, the addressee as `a.target` and the line as `a.text` (`act::way_ctx`, the fields its plan reads).
@@ -462,7 +462,7 @@ Built 2026-11-11 on `speech-1` from `a107fdf`. Source: `living/authority/src/spe
 
 - "no way of speaking called `X`";
 - "speaking too fast" (2 s across all ways, as before);
-- "too soon to `<way>` again: wait N s" (a way's `gap_s` above 2 s, read from the speaker's `heard` rows);
+- "too soon to `<way>` again: wait N s" (a way's `gap_s` above 2 s, read from the speaker's `line_heard` rows);
 - "a `<way>` needs someone to `<way>` to";
 - "you don't know `<technique>`";
 - "too far to `<way>`: step closer" (an absent or dead addressee is refused the same way, so ids cannot be probed);
@@ -487,13 +487,15 @@ Listeners are gathered once within the way's widest carry (`WaySpec::widest`). T
 - The row follows the `speech` row that carried the name.
 - The mind's consolidation sees it tagged `{Name=#id}`, the anchor `person:<id>`. `names.py` shows the memory graph's node for the person named after it.
 
-**`heard` and `my_heard` (item 4).**
+**`line_heard` and `my_heard` (item 4).**
 
-- `heard` (private): `line: u64` (primary key, the speaker's `said` experience id), `speaker: u32` (btree), `way: String`, `hearers: Vec<u32>`, `at_ms: u64`. `way` is an addition to the agreed shape. It lets a client draw a whisper's "heard by" differently, and it is where a way's own gap is read.
+- **The table's name is `line_heard`.** The agreed name `heard` was taken on main by fov-1's "heard, not seen" sounds (its `heard` table and `heard_sounds` view) before this merged. The view keeps the name agreed with the laptop, `my_heard`; its rows' type is `LineHeard` in the bindings, with the same columns.
+
+- `line_heard` (private): `line: u64` (primary key, the speaker's `said` experience id), `speaker: u32` (btree), `way: String`, `hearers: Vec<u32>`, `at_ms: u64`. `way` is an addition to the agreed shape. It lets a client draw a whisper's "heard by" differently, and it is where a way's own gap is read.
 - It is written in the same transaction as the `said` row whenever one is written (no row for a speaker with no reader, such as an infant or a benchmark body). `hearers` are the people who received the words and whom the speaker saw at that moment, nearest first: the sight rule with the hearer's glow (`perception::in_sight` and `common::sight_to`, as the perceived sets use). An empty list means "no one you saw heard it".
 - Retention: the row goes when its `said` row leaves the speaker's window. That is the trim in `perceive::percept`, `mind_consolidated` (a mind's integrated lines) and `forget_dead`. A played character's rows stay as its experience rows do.
-- `my_heard` (public, per sender, `primary_key = line`): the current character's rows by one point lookup on `heard.speaker`, so it re-runs only for one's own lines.
-- The mind service subscribes `heard` as the owner. A `said` line in every prompt and consolidation reads "… (heard by Bram and a stranger)", or "(no one you saw heard it)" (`Minds::heard_by`, names only where known).
+- `my_heard` (public, per sender, `primary_key = line`): the current character's rows by one point lookup on `line_heard.speaker`, so it re-runs only for one's own lines.
+- The mind service subscribes `line_heard` as the owner. A `said` line in every prompt and consolidation reads "… (heard by Bram and a stranger)", or "(no one you saw heard it)" (`Minds::heard_by`, names only where known).
 
 **`speech_card` (public, item 5).** One row per way, rewritten at every install:
 
@@ -542,10 +544,10 @@ The scene (`speech.py crowd`): 20 minded people (no mind service) in a 10 × 10 
 | WASM time | 741 µs | 757 µs |
 | Fuel | 1,919,162 | 1,944,417 (+1.3%) |
 | Reducer + query | 0.88 ms | 0.94 ms |
-| Rows inserted | experience 17.87, mind_state 17.2 (updates), chronicle 1, thought 1 | the same, and `heard` 1 |
-| Listeners receiving the words | 16.2 | 16.2 (16.2 listed in `heard`) |
+| Rows inserted | experience 17.87, mind_state 17.2 (updates), chronicle 1, thought 1 | the same, and `line_heard` 1 |
+| Listeners receiving the words | 16.2 | 16.2 (16.2 listed in `line_heard`) |
 
-- A line costs one extra row (`heard`) and one sight-line test per receiver, for `hearers`. The two gathers became one. The difference is within what one run of each can tell apart.
+- A line costs one extra row (`line_heard`) and one sight-line test per receiver, for `hearers`. The two gathers became one. The difference is within what one run of each can tell apart.
 - `mind_say` writes a `thought` row of its own, so the speech itself is a little below these figures.
 - This is not a scale result. Twenty people, no mind service, no subscribers to `my_heard` (one view re-run per line of a played speaker is the added per-player load), and no other load. The talking-crowd workload belongs in the 216-character gate, as the gap list says.
 
@@ -583,8 +585,8 @@ Results (2026-11-11, the trial server and its Neo4j):
 ### SpacetimeDB, re-checked for what this relies on (2.14.1 source)
 
 - `#[spacetimedb::view(..., primary_key = line)]`: the view macro takes any column as the view's primary key (`spacetimedb-bindings-macro-2.14.1/src/view.rs`, `ViewPrimaryKeyArg`). A view may return a table's own row type (`Vec<Heard>`), as `my_vitals` returns `Vitals`.
-- A `Vec<u32>` column (`heard.hearers`) is an ordinary SATS array, as `MindState.active: Vec<u16>` already is.
-- `heard`, `speech_card` and the reducer `human_speak` are additions. Automatic migration allows new tables, and a new reducer leaves `human_say` working for old clients. `mind_say` gained an argument: a changed reducer signature gives an old mind service a runtime error ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations)), so the mind service and the module move together. The bindings in this branch are regenerated from the module (`spacetime generate`, the pinned image, as `just living-generate` does).
+- A `Vec<u32>` column (`line_heard.hearers`) is an ordinary SATS array, as `MindState.active: Vec<u16>` already is.
+- `line_heard`, `speech_card` and the reducer `human_speak` are additions. Automatic migration allows new tables, and a new reducer leaves `human_say` working for old clients. `mind_say` gained an argument: a changed reducer signature gives an old mind service a runtime error ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations)), so the mind service and the module move together. The bindings in this branch are regenerated from the module (`spacetime generate`, the pinned image, as `just living-generate` does).
 - `experience` and `line_seen` are untouched, so the type that `line_seen.line` embeds is unchanged (section 6).
 
 ## 14. Built: items 6, 7, 8 and 10 (branch `speech-2`)
@@ -609,7 +611,7 @@ What each one gets:
 | Onlookers within 6 m who see the speaker | `whispered`, "A stranger whispers something to Bram.", 0.3 | no |
 | Everyone else, and animals | nothing | — |
 | The speaker | `said`, "You whispered to Bram: “…”" | its own |
-| `heard` | `hearers = [the addressee]`, `way = "whisper"` | — |
+| `line_heard` | `hearers = [the addressee]`, `way = "whisper"` | — |
 | The chronicle (audit) | "Ilsa (whisper) to Bram: “…”" | yes |
 
 Refusals are `whisper_check(a)`'s words (see "Refusals are the script's" below): "a whisper needs someone to whisper to", and "too far to whisper: step closer", also for an addressee who is absent or dead. A whispered self-introduction teaches only the addressee.
@@ -642,7 +644,7 @@ A way's refusal is the words of its `<way>_check(a)`, and the reducer returns ex
 - **One context builder.** Both sides build the check's context with `living_rules::script::speech::check_ctx(way, actor, addressee, text, since_ms)`:
   - `a.target` is the addressee: class `none` for the room; one who is absent or dead is a creature not alive and 1e9 m away, so a check cannot tell the two apart and ids cannot be probed;
   - `a.text` is the line;
-  - `a.qty` is the milliseconds since the speaker's last line in this way. The authority reads it from the speaker's `heard` rows, and a client can take the latest `my_heard.at_ms` of that way. It is 4,000,000,000 if never.
+  - `a.qty` is the milliseconds since the speaker's last line in this way. The authority reads it from the speaker's `line_heard` rows, and a client can take the latest `my_heard.at_ms` of that way. It is 4,000,000,000 if never.
 - **Only the engine's refusals are Rust:** "no way of speaking called `X`", and "speaking too fast" (2 s across all ways). Neither belongs to a way.
 - **The install holds the check to its spec.** Each way that requires an addressee, a reach, a technique or a gap above 2 s must have a `<way>_check` that refuses a sample line breaking it (to no one; 0.5 m beyond the reach; absent or dead; not knowing the technique; 1 s inside the gap). It must also accept a line that breaks nothing, or the install is refused (`check.rs` `ways`).
 - **A safety net that is never reached.** The primitive still enforces the spec, and its words name the check that let the line through. A script that passed the install never reaches it. The words of a whisper go only to the addressee within 1.5 m whatever the check says.
@@ -696,11 +698,11 @@ The same `speech.py crowd` scene on a wider square: 30 minded people on a 6 m gr
 | Fuel | 1,378,186 | 2,511,034 |
 | Reducer + query | 0.54 ms | 0.99 ms |
 | Experience rows inserted | 7.4 | 23.5 |
-| `heard.hearers` (those the speaker saw) | 5.7 | 6.2 |
+| `line_heard.hearers` (those the speaker saw) | 5.7 | 6.2 |
 
 - A call costs about 1.8 times a say here. That is in proportion to the people it reaches, with one row and one hearing mark each. The gather is wider, but the chunk cache keeps it local.
 - The 6 s gap bounds one caller to 10 calls a minute.
-- A whisper writes the said row, one `whisper` row, the noticers' `whispered` rows and `heard`. Its gather is within 6 m, so it is cheaper than a say.
+- A whisper writes the said row, one `whisper` row, the noticers' `whispered` rows and `line_heard`. Its gather is within 6 m, so it is cheaper than a say.
 - The crowd scene does not drive whispers, because room lines cannot be whispered.
 - As before, this is no scale result. The talking crowd belongs in the 216-character gate.
 
@@ -717,10 +719,10 @@ On the Spark, the trial server (`slop-trials-stdb`, 2.14.1), the trial Neo4j for
 - **`verify-minds`:**
   - `privacy.py` passes for every way: `minds-privacy2-say`, `minds-privacy4-whisper`, `minds-privacy4-call`, and the control `minds-privacy2-ctl`.
   - In the whisper run, the bystander mind and the near player were each told four times "… whispers something to …", with no words.
-  - The `speech` case: `minds-speech10` passes: a reply with `"way": "say"` spoken; `"shout"` said aloud; a whispered question from 1 m answered "(whisper)" with no way named (the prompt says it was whispered); a call from 15 m answered "(call)" (the prompt reads "MindsTeller calls out to you from about 14 m. An ordinary voice carries 9 m …" and lists the ways); `introduced`, `heard` and the tagged consolidation as on `speech-1`. Earlier attempts on `speech-2` failed on the case's own scripting: `-2b` (the fake's rules matched an earlier line kept in the conversation; the latest line's rule comes first now); `-5` (a listener takes at most its stamina's turns per exchange, so the call now waits out the 90 s quiet); `-6` and `-7` (lines that asked nothing were answered only by chance; the lines are questions now); `-8` and `-9` (the distance was missing from the prompt; the mind now quotes its own row's words, then the assertion allowed only 15 m against the 14 m measured)..
+  - The `speech` case: `minds-speech10` passes: a reply with `"way": "say"` spoken; `"shout"` said aloud; a whispered question from 1 m answered "(whisper)" with no way named (the prompt says it was whispered); a call from 15 m answered "(call)" (the prompt reads "MindsTeller calls out to you from about 14 m. An ordinary voice carries 9 m …" and lists the ways); `introduced`, `line_heard` and the tagged consolidation as on `speech-1`. Earlier attempts on `speech-2` failed on the case's own scripting: `-2b` (the fake's rules matched an earlier line kept in the conversation; the latest line's rule comes first now); `-5` (a listener takes at most its stamina's turns per exchange, so the call now waits out the 90 s quiet); `-6` and `-7` (lines that asked nothing were answered only by chance; the lines are questions now); `-8` and `-9` (the distance was missing from the prompt; the mind now quotes its own row's words, then the assertion allowed only 15 m against the 14 m measured)..
 - **`verify-knowledge` `names.py`** (`minds-names2-mara`): 7 of 7 with the two-word name "Mara Quill", learned from "I am Mara".
 
-After merging origin/main (`93019a3`) into `speech-2`, all of these pass again: the check, the regression diff, `channels`, `speak.py`, the minds case, the whisper privacy test and the client suite.
+After merging origin/main (`93019a3`, then `b004e6e`, then `48cd022` with fov-1's facing sight and its own `heard` table, hence `line_heard`) into `speech-2`, all of these pass again: the check, the regression diff, `channels`, `speak.py`, the minds case, the whisper privacy test and the client suite.
 
 Not covered:
 

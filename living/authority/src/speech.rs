@@ -28,7 +28,7 @@ fn way_name(way: &str) -> &str {
 
 /// How long ago `speaker` last said a line of `way` (its `heard` rows), when it has.
 fn since_ms(ctx: &ReducerContext, speaker: u32, way: &str, now: u64) -> Option<u64> {
-    ctx.db.heard().speaker().filter(speaker).filter(|h| h.way == way).map(|h| h.at_ms).max().map(|at| now.saturating_sub(at))
+    ctx.db.line_heard().speaker().filter(speaker).filter(|h| h.way == way).map(|h| h.at_ms).max().map(|at| now.saturating_sub(at))
 }
 
 /// The way's own refusal of a line, in the script's words (`<way>_check`), as a client sees it
@@ -138,8 +138,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     if to != 0 && !hearers.iter().any(|(c, _, _)| c.id == to) {
         let seen = ctx.db.character().id().find(to).filter(|c| c.alive).and_then(|_| ctx.db.body().id().find(to)).is_some_and(|tb| {
             let p = pos(&tb, now);
-            let sight = common::sight_to(ctx, common::sight_for(ctx, speaker, &world, now), to, &world, now);
-            crate::perception::in_sight(&common::map(ctx), at, p, common::dist(at, p), sight)
+            crate::perception::in_sight(ctx, &common::map(ctx), speaker, at, common::heading_at(&b, now), to, p, common::dist(at, p), &world, now, false)
         });
         let text = if seen {
             let louder = sc.ways().iter().filter(|o| o.public() && o.carry_for(1.0) > w.carry_for(1.0) && o.needs.is_empty()).max_by(|a, b| a.carry_for(1.0).total_cmp(&b.carry_for(1.0)));
@@ -159,6 +158,11 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     let addressee = (to != 0 && w.names).then(|| ctx.db.character().id().find(to)).flatten().filter(|t| t.kind == "person" && mentions(&text, &t.name));
     let addressee_at = addressee.as_ref().and_then(|t| ctx.db.body().id().find(t.id)).map(|tb| pos(&tb, now));
     let map = common::map(ctx);
+    // Whether creature `id`, standing at `eye`, sees `target` at `p` (the one sight rule, with
+    // its facing when the world's law gives it a field).
+    let sees = |id: u32, eye: (f32, f32), target: u32, p: (f32, f32)| {
+        ctx.db.body().id().find(id).is_some_and(|ob| crate::perception::in_sight(ctx, &map, id, eye, common::heading_at(&ob, now), target, p, common::dist(eye, p), &world, now, false))
+    };
     for (c, d, p) in hearers.iter().copied() {
         let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
         let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || mentions(&text, &c.name)));
@@ -171,7 +175,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
             percept(ctx, c, now, "introduced", speaker, 0, at, format!("{} told you their name.", common::label_cap(ctx, c, speaker)), 0.55);
         }
         if let (Some(t), Some(tp)) = (&addressee, addressee_at) {
-            if c.id != t.id && crate::perception::sees(ctx, c.id, *p, tp, &world, &map, now) && crate::perception::introduce(ctx, c.id, t.id, now) {
+            if c.id != t.id && sees(c.id, *p, t.id, tp) && crate::perception::introduce(ctx, c.id, t.id, now) {
                 let caller = common::label_for(ctx, c, speaker);
                 percept(ctx, c, now, "introduced", t.id, speaker, tp, format!("You heard {caller} call {} by name.", t.name), 0.55);
             }
@@ -189,7 +193,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     // words, no name.
     if let Some(n) = &w.noticed {
         for (c, dist, p) in near.iter().filter(|(c, d, _)| &*c.kind == "person" && *d <= n.within_m && c.id != to && !hearers.iter().any(|(h, _, _)| h.id == c.id)) {
-            if n.seen && !crate::perception::sees(ctx, c.id, *p, at, &world, &map, now) {
+            if n.seen && !sees(c.id, *p, speaker, at) {
                 continue;
             }
             percept(ctx, c, now, &n.kind, speaker, to, at, fill(ctx, &n.text, c, speaker, to, *dist), n.salience);
@@ -198,14 +202,13 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     // Who heard: those who received the words and whom the speaker saw (the sight rule), with
     // the line, in this transaction.
     if let Some(line) = said_id {
-        let sight = common::sight_for(ctx, speaker, &world, now);
         let mut seen: Vec<(f32, u32)> = hearers
             .iter()
-            .filter(|(c, d, p)| crate::perception::in_sight(&map, at, *p, *d, common::sight_to(ctx, sight, c.id, &world, now)))
+            .filter(|(c, d, p)| crate::perception::in_sight(ctx, &map, speaker, at, common::heading_at(&b, now), c.id, *p, *d, &world, now, false))
             .map(|(c, d, _)| (*d, c.id))
             .collect();
         seen.sort_by(|a, b| a.0.total_cmp(&b.0));
-        ctx.db.heard().insert(Heard { line, speaker, way: w.name.clone(), hearers: seen.into_iter().map(|(_, id)| id).collect(), at_ms: now });
+        ctx.db.line_heard().insert(LineHeard { line, speaker, way: w.name.clone(), hearers: seen.into_iter().map(|(_, id)| id).collect(), at_ms: now });
     }
     Ok(())
 }
@@ -265,7 +268,7 @@ mod tests {
 
 /// A speaker's lines left its window (trimmed or consolidated): their `heard` rows go too.
 pub fn forget_line(ctx: &ReducerContext, line: u64) {
-    ctx.db.heard().line().delete(line);
+    ctx.db.line_heard().line().delete(line);
 }
 
 /// Rewrite `speech_card` from a skill script: one row per way of speaking. Rows of ways the
@@ -301,6 +304,6 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
 /// `line` = the `said` row's id). One point lookup on `heard.speaker`: it re-runs only when my
 /// own lines are heard or leave my window, never on anyone else's speech.
 #[spacetimedb::view(accessor = my_heard, public, primary_key = line)]
-pub fn my_heard(ctx: &ViewContext) -> Vec<Heard> {
-    crate::perception::current(ctx).map(|c| ctx.db.heard().speaker().filter(c.id).collect()).unwrap_or_default()
+pub fn my_heard(ctx: &ViewContext) -> Vec<LineHeard> {
+    crate::perception::current(ctx).map(|c| ctx.db.line_heard().speaker().filter(c.id).collect()).unwrap_or_default()
 }
