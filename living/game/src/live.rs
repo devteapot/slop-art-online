@@ -343,6 +343,7 @@ fn bodies(
     input: Res<Input>,
     combat: Res<crate::combat::Combat>,
     town: Res<crate::town::Town>,
+    rules: NonSend<crate::verbs::Rules>,
     mut live: ResMut<Live>,
     mut q: Query<Drawn>,
     mut fades: Query<&mut crate::fade::Fade>,
@@ -588,6 +589,15 @@ fn bodies(
         motion.now_ms = scene.now_ms;
         motion.reverse = reverse;
         motion.twist = twist;
+        // On a road the rules speed a body up (`road_speed`, by the share of road ahead): the
+        // gait is chosen at its own pace, so walking onto a road doesn't break into a run.
+        motion.pace = match (person, heading) {
+            (true, Some(t)) if speed > MOVING => {
+                let road = rules.scripts.as_ref().map_or(living_rules::steer::Tuning::default().road_speed, |sc| sc.laws().road_speed);
+                1.0 + (road - 1.0) * living_rules::steer::road_share(&island.land.map, (p.x, p.y), t)
+            }
+            _ => 1.0,
+        };
     }
 }
 

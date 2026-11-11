@@ -431,6 +431,7 @@ fn record(
             "yaw": yaw,
             "twist": motions.get(e).ok().map(|m| m.twist.to_degrees()),
             "reverse": motions.get(e).ok().map(|m| m.reverse),
+            "pace": motions.get(e).ok().map(|m| m.pace),
             // Connected play: the authority time my body is drawn at, and its segment then.
             "mine_ms": scene.as_ref().map(|s| s.mine_ms),
             // The game camera's eye and its pitch below the horizon (degrees).

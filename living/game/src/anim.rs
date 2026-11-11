@@ -102,11 +102,15 @@ pub struct Motion {
     /// How far the upper body turns from the legs toward where the body looks (radians, sim
     /// sense: counter-clockwise seen from above is positive), spread over the spine (`twist.rs`).
     pub twist: f32,
+    /// How much faster than its own pace the ground makes the body go (the rules' road speed on
+    /// a road; 1 elsewhere). The gait is chosen at `speed / pace`, so a walk on a road stays a
+    /// walk, and steps at the body's real speed, so its feet stay planted.
+    pub pace: f32,
 }
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0 }
+        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, pace: 1.0 }
     }
 }
 
@@ -553,7 +557,7 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
     let covered = want.is_some_and(|x| !set.upper.contains_key(x.clip));
     let stepping = !covered && if a.moving > 0.0 && a.settle.is_none() { m.speed > STEP_OFF } else { m.speed > STEP_ON };
     let moving = if stepping {
-        let b = set.gaits.blend(m.speed, m.stride, |i| set.gait_len(i));
+        let b = set.gaits.blend(m.speed / m.pace.max(0.5), m.stride, |i| set.gait_len(i));
         if a.moving <= 0.0 {
             // From standing: the leading gait's right mid-stance (its pose nearest standing: the
             // planted foot under the hips, the other one stepping off).
