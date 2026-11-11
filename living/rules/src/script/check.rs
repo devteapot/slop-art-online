@@ -173,6 +173,12 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     daylight(&mut p)?;
     life_years(s)?;
     ways(&mut p)?;
+    if s.has("seasons_text") {
+        let d = p.raw("seasons_text", (), &|| String::new())?;
+        if !d.is_string() {
+            return Err("install refused: `seasons_text()` must return a text".into());
+        }
+    }
     Ok(p.report)
 }
 

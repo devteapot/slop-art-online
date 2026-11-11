@@ -68,6 +68,10 @@ def make_seed(run):
     t = seed["towns"][0]
     t["residents"] = residents
     t["homes"] = {k: v for k, v in town["homes"].items() if k in houses}
+    # The plan's household stores belong to households (`owner: "household:<key>"`); a seed that
+    # names a household with nobody in it is refused, so keep only the eight's.
+    for p in seed["map"]["params"]["plans"]:
+        p["structures"] = [st for st in p.get("structures", []) if not st.get("owner") or st["owner"].removeprefix("household:") in houses]
     seed["run"] = "cullet-rhythm"
     seed["day_minutes"] = 12
     seed["setting"] = "A scene world: Cullet's plan, laws and ways with eight of its cast on a 12-minute day (verify-core rhythm.py)."
