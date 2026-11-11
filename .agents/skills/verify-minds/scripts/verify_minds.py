@@ -178,16 +178,26 @@ def drop_case(run):
     return {'status': 'pass', 'told': told}
 
 
+# A line of `prompts::own_timings` ("- strike: winds up 350 ms …") or its heading.
+OWN_TIMING = re.compile(r'- [a-z_]+: (winds up \d|a dash at once|raised at once|takes effect at once)|How long the fighting moves you know take')
+
+
 def timings_told(run, actor, sent, fire_bolt):
     """A mind is told the timing of the fighting moves its character knows, in its own prompt,
     and never of one it does not know (LIVING_SKILL_TIMINGS; docs/COMBAT_MIND.md §3.7): bowshot
     needs no technique, fire bolt needs fire_bolt. The shared system prompt states no timings."""
     knows = {k['technique'] for k in run.private(f'SELECT * FROM know_how WHERE actor = {actor}', 'know-how')}
     assert ('fire_bolt' in knows) == fire_bolt, knows
+    if os.environ.get('LIVING_SKILL_TIMINGS', '').strip().lower() in ('0', 'off', 'false'):
+        # The switch off: no timing line anywhere in what was sent.
+        assert sent and not any(OWN_TIMING.search(json.dumps(e['body'])) for e in sent), 'timings sent with LIVING_SKILL_TIMINGS off'
+        return
     users = ['\n'.join(m.get('content', '') for m in e['body'].get('messages', []) if m.get('role') == 'user') for e in sent]
     assert users and all('- bowshot: winds up 300 ms' in u and '- strike: winds up 350 ms' in u for u in users), users[0][-3000:]
     assert all(('- firebolt: winds up 450 ms' in u) == fire_bolt for u in users), [u.count('firebolt') for u in users]
-    assert not any('winds up' in system_text(e['body']) for e in sent), 'timings in the shared system prompt'
+    # The shared system prompt carries no one's own timings. (The world rules' COMBAT law says
+    # "An attack winds up for about 0.6-0.75 s": the script's own law text, not a skill's timing line.)
+    assert not any(OWN_TIMING.search(system_text(e['body'])) for e in sent), 'timings in the shared system prompt'
 
 
 def run_case(run, case):

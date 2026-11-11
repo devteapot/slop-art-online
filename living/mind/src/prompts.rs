@@ -259,6 +259,11 @@ pub fn own_timings(body: Option<&living_rules::species::Species>, knows: impl Fn
     if !timings_on() {
         return String::new();
     }
+    own_timings_of(body, knows)
+}
+
+/// `own_timings` whatever the switch says.
+fn own_timings_of(body: Option<&living_rules::species::Species>, knows: impl Fn(&str) -> bool) -> String {
     let (t, shapes, skills) = (timings(), shapes(), living_rules::catalog::skills());
     let lines: Vec<String> = living_rules::ui::offered(&skills, body)
         .into_iter()
@@ -1105,10 +1110,10 @@ mod tests {
         assert!(!t.contains_key("yield") && !t.contains_key("tend") && !t.contains_key("threaten"), "only timed skills: {:?}", t.keys().collect::<Vec<_>>());
         assert!(t.values().all(|w| !w.contains("then 0 ms")), "{t:?}");
         // A character's own moves only, by the techniques it knows; the shared reference has none.
-        let archer = own_timings(None, |t| t != "fire_bolt");
+        let archer = own_timings_of(None, |t| t != "fire_bolt");
         assert!(archer.contains("- bowshot: winds up 300 ms") && archer.contains("- strike: winds up 350 ms"), "{archer}");
         assert!(!archer.contains("- firebolt:"), "fire bolt's timing for one who does not know it: {archer}");
-        let caster = own_timings(None, |_| true);
+        let caster = own_timings_of(None, |_| true);
         assert!(caster.contains("- firebolt: winds up 450 ms"), "{caster}");
         assert!(!skills_help().contains("timing") && !skills_help().contains("winds up 350"), "the shared reference states no timings");
     }
