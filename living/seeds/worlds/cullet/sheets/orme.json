@@ -1,0 +1,155 @@
+{
+  "Benedikt Orme": {
+    "narrative": "I have lived alone in the Readers' House for thirty years, and the tablets are my company. The children come to me in the mornings for their letters, and in the afternoons I walk to the Lintel with a tablet or two, hoping to find the key to its dark glass. Otto Brandt asked me last week where the old graves lie, and I have not been able to put the question out of my mind since.",
+    "values": [
+      "understanding",
+      "patience",
+      "the past",
+      "solitude",
+      "teaching"
+    ],
+    "goals": [
+      "To decipher the Lintel and the hardest tablets.",
+      "To see Alder Fenwick become a reader.",
+      "To keep the graves on the Crown undisturbed."
+    ],
+    "pastimes": [
+      "Sitting by the Lintel with a tablet, tracing the script with my finger.",
+      "Playing counters with Anselm Faro at dawn, though I rarely win.",
+      "Walking the Crown at dusk, reading the names on the glass markers."
+    ],
+    "calling": "The work I love is the slow unravelling of the old script, and the moment a child's face lights up when they read their first word.",
+    "mood": "Preoccupied and quietly excited; a question has taken hold of me.",
+    "traits": {
+      "caution": 65,
+      "sociability": 30,
+      "empathy": 60,
+      "curiosity": 95,
+      "ambition": 40,
+      "introspection": 85,
+      "temper": 20,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Sabine Quill",
+        "trust": 80,
+        "affinity": 70,
+        "label": "pupil",
+        "note": "The brightest I have taught; she will read the hard tablets before I do."
+      },
+      {
+        "name": "Alder Fenwick",
+        "trust": 70,
+        "affinity": 60,
+        "label": "pupil",
+        "note": "Eager as a pup, and he wants it more than the others."
+      },
+      {
+        "name": "Otto Brandt",
+        "trust": 50,
+        "affinity": 40,
+        "label": "acquaintance",
+        "note": "He asked me where the old graves lie, and I have not stopped thinking on it."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 60,
+        "affinity": 50,
+        "label": "friend",
+        "note": "She has laid out more of the dead than I have names for, and she never flinches."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 55,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "A precise man with the ledger; we share a love of order, if not of questions."
+      },
+      {
+        "name": "Anselm Faro",
+        "trust": 70,
+        "affinity": 60,
+        "label": "counters partner",
+        "note": "We play at dawn when the night is done; he is better at the board than I am at the tablets."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 50,
+        "affinity": 30,
+        "label": "acquaintance",
+        "note": "She has no patience for old glass that does not melt, but she listens when I speak of the Lintel."
+      },
+      {
+        "name": "Marit Sedge",
+        "trust": 45,
+        "affinity": 35,
+        "label": "neighbour",
+        "note": "She guards her trees as I guard my tablets; we understand each other without agreeing."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: I read the burial service over nine graves in a month, and the ground was so hard we had to build fires to dig.",
+        "salience": 0.9,
+        "about": [
+          "Mirren Quill",
+          "Vessa Pontil",
+          "Ingrid Morrow"
+        ]
+      },
+      {
+        "gist": "The day I first read a whole ship-day tablet aloud to my teacher, and he said I had the gift.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Last autumn's storm took the roof off the Readers' House porch, and Gwil Stannard patched it with slates from Mid Row 3.",
+        "salience": 0.7,
+        "about": [
+          "Gwil Stannard"
+        ]
+      },
+      {
+        "gist": "Otto Brandt came to me last week and asked where the old graves lie on the Crown, and I have wondered why ever since.",
+        "salience": 0.6,
+        "about": [
+          "Otto Brandt"
+        ]
+      },
+      {
+        "gist": "The first time I sat by the Lintel at dusk and felt the dark glass cold under my hand, and knew it was not made by any glassmaker in Cullet.",
+        "salience": 0.9,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_lintel_must_be_understood",
+        "value": 0.9,
+        "why": "It is the oldest thing we have, and it was made by someone who knew more than we do."
+      },
+      {
+        "key": "the_graves_are_sacred",
+        "value": 0.85,
+        "why": "The dead are named and remembered, and the Crown is not a quarry."
+      },
+      {
+        "key": "teaching_is_a_duty",
+        "value": 0.8,
+        "why": "If the young cannot read, the tablets will be lost forever."
+      },
+      {
+        "key": "the_ships_will_not_return",
+        "value": 0.7,
+        "why": "Eighty-three years is long enough to know a thing is finished."
+      },
+      {
+        "key": "patience_outlasts_force",
+        "value": 0.75,
+        "why": "A tablet yields to the eye that waits, not the hand that strikes."
+      }
+    ],
+    "secret": ""
+  }
+}

@@ -3,8 +3,9 @@
 //!
 //! - **Capture.** A click in the window captures the cursor: the system cursor is locked and
 //!   hidden, and the game draws its own, moved by the mouse's or trackpad's motion. Esc gives it
-//!   back once nothing else is open (a list, the pack or know-how, the text box close first, by
-//!   their own Esc), and so does the window losing focus. On macOS only `Locked` grabs
+//!   back once nothing else is open (the game UI's Esc order closes the top window first, then
+//!   opens Menu and asks for the cursor back, [`Pointer::release`]), and so does the window
+//!   losing focus. Over a window, two-finger swipes scroll it ([`Pointer::scroll_px`]). On macOS only `Locked` grabs
 //!   (`Confined` is unsupported), and a locked cursor reports a frozen position, so the game's
 //!   cursor is virtual: [`Pointer::pos`] is what every reader uses (the camera's ground ray,
 //!   facing, the aim), and the UI's picking is fed from it while captured.
@@ -83,6 +84,11 @@ pub struct Pointer {
     pub tapped: bool,
     /// A script's tap (headless), through the same path.
     pub scripted_tap: bool,
+    /// The game UI asks to give the system cursor back (Esc with nothing open, `ui/win.rs`).
+    pub release: bool,
+    /// Two-finger scroll over a window this frame (logical px, positive up), and a script's.
+    pub scroll_px: f32,
+    pub scripted_scroll: f32,
     left: Left,
     /// A tap's strike was pressed this frame; let go of it next frame.
     release_next: bool,
@@ -122,6 +128,7 @@ fn update(
     p.zoom = std::mem::replace(&mut p.scripted_zoom, 1.0);
     p.align = false;
     p.tapped = false;
+    p.scroll_px = std::mem::take(&mut p.scripted_scroll);
     if p.release_next {
         buttons.release(MouseButton::Left);
         p.release_next = false;
@@ -148,12 +155,14 @@ fn update(
     if lost {
         capture = false;
     }
-    // Esc: the text box, a list and the panels close first, by their own Esc; then the cursor goes.
-    if keys.just_pressed(KeyCode::Escape) && !input.chat_open && !ui.menu && !ui.keyboard {
+    // Esc frees the cursor only once nothing else is open: the game UI decides that, and asks
+    // (`ui/win.rs`: the Esc order closes the top window first, then opens Menu and frees it).
+    if std::mem::take(&mut p.release) {
         capture = false;
     }
+    let _ = (&keys, &input);
     // The left button: a tap, a hold or a drag (lists and panels take clicks as they are).
-    let free = !ui.pointer && !ui.menu;
+    let free = !ui.over() && !ui.menu;
     for e in raw.read() {
         let pick_button = match e.button {
             MouseButton::Left => Some(PointerButton::Primary),
@@ -173,7 +182,7 @@ fn update(
             continue;
         }
         match e.state {
-            ButtonState::Pressed if !p.captured && !ui.pointer => {
+            ButtonState::Pressed if !p.captured && !ui.over() => {
                 // The click that takes the cursor does nothing else.
                 capture = true;
                 buttons.reset(MouseButton::Left);
@@ -227,13 +236,18 @@ fn update(
                     }
                     TouchPhase::Moved => {}
                 }
-                if !p.coasting {
+                if p.coasting {
+                } else if ui.over() {
+                    // Over a window, two fingers scroll it instead of turning the view.
+                    p.scroll_px += e.y / win.scale_factor();
+                } else {
                     p.turn_px += e.x / win.scale_factor() * PAN_GAIN;
                 }
                 if matches!(e.phase, TouchPhase::Ended | TouchPhase::Canceled) {
                     p.coasting = false;
                 }
             }
+            MouseScrollUnit::Line if ui.over() => p.scroll_px += e.y * 24.0,
             MouseScrollUnit::Line => p.zoom *= 1.0 - WHEEL_STEP * e.y.clamp(-3.0, 3.0),
         }
     }

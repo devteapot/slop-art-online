@@ -426,6 +426,10 @@ pub struct ResourceNode {
     pub max: f32,
     pub regen: f32,
     pub at_ms: u64,
+    /// A spot that draws on another node's stock (a fishing ground's shared limit): the id of
+    /// the node holding it, whose amount, max and regrowth count for both (0: its own).
+    #[default(0u64)]
+    pub pool: u64,
 }
 
 #[derive(Clone)]
@@ -441,6 +445,11 @@ pub struct Structure {
     pub chunk: u32,
     pub owner: u32,
     pub built_ms: u64,
+    /// A fire that burns fuel (its kind `burns`): the moment its fuel runs out at its kind's
+    /// rate. Lit while this is in the future; the fuel left is the time left times the rate
+    /// (living_rules::fire). Written only when it is fed or drawn on. 0: out, or not such a fire.
+    #[default(0u64)]
+    pub lit_until_ms: u64,
 }
 
 /// When a creature's remains (a `remains` structure) are gone: `due_ms` is its `built_ms` plus

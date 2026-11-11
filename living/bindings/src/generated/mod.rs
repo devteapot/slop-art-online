@@ -151,6 +151,7 @@ pub mod persona_type;
 pub mod place_at_reducer;
 pub mod place_in_type;
 pub mod place_near_reducer;
+pub mod place_resource_reducer;
 pub mod place_structure_reducer;
 pub mod place_table;
 pub mod place_type;
@@ -399,6 +400,7 @@ pub use persona_type::Persona;
 pub use place_at_reducer::place_at;
 pub use place_in_type::PlaceIn;
 pub use place_near_reducer::place_near;
+pub use place_resource_reducer::place_resource;
 pub use place_structure_reducer::place_structure;
 pub use place_table::*;
 pub use place_type::Place;
@@ -605,6 +607,14 @@ pub enum Reducer {
         id: u32,
         near: u32,
     },
+    PlaceResource {
+        near: u32,
+        kind: String,
+        dx: f32,
+        dy: f32,
+        max: f32,
+        pool: u64,
+    },
     PlaceStructure {
         near: u32,
         kind: String,
@@ -691,6 +701,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::OwnHabits => "own_habits",
             Reducer::PlaceAt { .. } => "place_at",
             Reducer::PlaceNear { .. } => "place_near",
+            Reducer::PlaceResource { .. } => "place_resource",
             Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::PurgeDead => "purge_dead",
             Reducer::ReleaseSkill { .. } => "release_skill",
@@ -861,6 +872,21 @@ impl __sdk::Reducer for Reducer {
                     near: near.clone(),
                 })
             }
+            Reducer::PlaceResource {
+                near,
+                kind,
+                dx,
+                dy,
+                max,
+                pool,
+            } => __sats::bsatn::to_vec(&place_resource_reducer::PlaceResourceArgs {
+                near: near.clone(),
+                kind: kind.clone(),
+                dx: dx.clone(),
+                dy: dy.clone(),
+                max: max.clone(),
+                pool: pool.clone(),
+            }),
             Reducer::PlaceStructure { near, kind } => {
                 __sats::bsatn::to_vec(&place_structure_reducer::PlaceStructureArgs {
                     near: near.clone(),

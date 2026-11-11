@@ -24,7 +24,7 @@ The fixed suite runs it last, on `ClientSecond` (joined over HTTP, so no connect
 .agents/skills/verify-client/scripts/run.py --run "$R"
 ```
 
-It holds probe connections open in threads (`presence-one` for 8 s, `presence-two` for 3 s), reads the presence and character rows as the owner at each step, waits up to 45 s for the takeover, then connects once more (`presence-back`).
+It holds probe connections open in threads (`presence-one` for 30 s, `presence-two` for 6 s), and at each step waits up to 15 s for the expected count before it reads the presence and character rows as the owner (fixed sleeps lost the second connection on a loaded dev-box, 2026-11-11), waits up to 45 s for the takeover, then connects once more (`presence-back`).
 
 ## Gotchas
 

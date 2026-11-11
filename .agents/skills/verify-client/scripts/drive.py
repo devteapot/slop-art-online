@@ -96,6 +96,8 @@ ADMIN = {
     'grant_repertoires': [], 'purge_dead': [], 'kill': [0, 'probe'],
     'set_background': [0, '{}'], 'grant_items': [0, 'berries', 0],
     'place_structure': [0, 'shelter'], 'set_behavior': [0, '{"wait":30}'],
+    # Scene setup: a resource node beside a character (2026-11-11, goods-1).
+    'place_resource': [0, 'tree', 0.0, 0.0, 0.0, 0],
     'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
     'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
     'spawn_newcomer': ['probe'],
@@ -462,6 +464,16 @@ class Run:
         write(self.directory / 'visibility.json', visibility)
         self.check('private table visibility', all(v['pass'] for v in visibility), 'visibility.json',
                    f'{len(visibility)} tables ({self.mode} build)')
+        # What a client reads to show a fire burning and a shared stock (2026-11-11, goods-1):
+        # `structure.lit_until_ms` and `resource_node.pool` are public in every build, while the
+        # inventory a fire's fuel would otherwise be is private when scoped.
+        try:
+            fires, stocks, error = self.sql_rows('SELECT id, kind, lit_until_ms FROM structure'), self.sql_rows('SELECT id, kind, pool FROM resource_node'), ''
+        except RuntimeError as e:
+            fires, stocks, error = [], [], str(e)
+        write(self.directory / 'fire-signal.json', {'error': error, 'structures': fires[:20], 'resource_nodes': stocks[:20], 'counts': [len(fires), len(stocks)]})
+        self.check('fire and shared-stock signals public to anonymous SQL', not error and fires and stocks and
+                   all('lit_until_ms' in r for r in fires) and all('pool' in r for r in stocks), 'fire-signal.json', error[:120])
         # The minds' thoughts, raw replies included, never reach a client without the owner's token.
         leaked = self.probe('privacy-thought', ['SELECT * FROM thought'])
         self.check('anonymous thought privacy', leaked['status'] == 'rejected' and 'private' in leaked.get('error', '').lower(),
@@ -710,17 +722,25 @@ class Run:
             t.start()
             return t
 
-        one = hold('presence-one', 8)
-        time.sleep(3.0)
+        def settle(n, secs=15.0):
+            # A probe's hold counts from its own start, and starting one takes seconds on a busy
+            # host: wait for the count rather than for a fixed time (it stays wrong only if
+            # presence is wrong).
+            deadline = time.monotonic() + secs
+            while time.monotonic() < deadline and row()['connections'] != n:
+                time.sleep(0.25)
+
+        one = hold('presence-one', 30)
+        settle(1)
         r1, _ = step('one connection')
-        two = hold('presence-two', 3)
-        time.sleep(2.0)
+        two = hold('presence-two', 6)
+        settle(2)
         r2, _ = step('two connections')
-        two.join(timeout=20)
-        time.sleep(0.5)
+        two.join(timeout=30)
+        settle(1)
         r3, _ = step('one closed')
-        one.join(timeout=20)
-        time.sleep(0.5)
+        one.join(timeout=40)
+        settle(0)
         r4, c4 = step('both closed')
         self.check('presence counts each open connection of the person', r1['present'] and r1['connections'] == 1 and r2['connections'] == 2 and r3['present'] and r3['connections'] == 1,
                    'presence.json', f"{r1['connections']} → {r2['connections']} → {r3['connections']}")

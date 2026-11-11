@@ -93,13 +93,6 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
             Pickable::IGNORE,
         ))
         .with_children(|root| {
-            // Interaction hint.
-            root.spawn((HintRoot, Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(9.0), margin: UiRect::bottom(Val::Px(18.0)), padding: UiRect::new(Val::Px(6.0), Val::Px(14.0), Val::Px(5.0), Val::Px(5.0)), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(999.0)), ..default() }, theme::panel(999.0)))
-                .with_children(|h| {
-                    h.spawn((Node { width: Val::Px(26.0), height: Val::Px(26.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(1.5)), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, BackgroundColor(theme::INK_SOLID), BorderColor::all(theme::GOLD)))
-                        .with_child((HintKey, Text::new("F"), f.body(14.0, 800), TextColor(theme::GOLD)));
-                    h.spawn((HintLabel, Text::new(""), f.body(15.0, 650), TextColor(theme::TEXT)));
-                });
             // A plate behind the bars and the skill bar, so they read as one cluster rather than
             // lines over the world (play-test 1). Absolute and first, so it sits behind them.
             root.spawn((
@@ -243,7 +236,7 @@ pub fn vitals(
     for mut b in &mut flash {
         set_bg(&mut b, Color::srgba(1.0, 0.95, 0.9, me.hurt * 0.35));
     }
-    let n = format!("{:.0} / {:.0}", me.hp.max(0.0).ceil(), me.max_hp);
+    let n = super::hp_text(me.hp, me.max_hp);
     for mut t in &mut hp_text {
         set_text(&mut t, &n);
     }

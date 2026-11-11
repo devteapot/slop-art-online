@@ -46,8 +46,11 @@ const CURSOR_THING_M: f32 = 1.6;
 const NEAR_M: f32 = 3.0;
 /// F reaches no further than this (m): an act walks into reach, but not across the map.
 const FAR_M: f32 = 30.0;
-/// A skill with more item options than this gets its own list.
-const GROUP_OVER: usize = 2;
+/// A list shows this many rows before More (toward a thing; toward a person, the likely acts).
+const FOLDED: usize = 4;
+/// A skill with more item options than this gets its own list (interface D: two or more, so
+/// Give › is a list of what I carry, as the design shows).
+const GROUP_OVER: usize = 1;
 /// How often the hint's options are recomputed (s).
 const HINT_EVERY_S: f64 = 0.25;
 /// Most the hint's checks take in one frame (a unit is one or two script calls of about 50 µs);
@@ -151,11 +154,13 @@ pub struct Choice {
     /// A request in words rather than a skill (asking to be taught).
     pub say: Option<String>,
     pub label: String,
+    /// How many of its item I carry (0: not an item of my pack, or no item).
+    pub have: u32,
 }
 
 impl Choice {
     fn new(skill: &str, label: String) -> Self {
-        Self { skill: skill.to_string(), item: None, want: None, words: false, say: None, label }
+        Self { skill: skill.to_string(), item: None, want: None, words: false, say: None, label, have: 0 }
     }
 
     /// The `human_act` node for this choice toward `aim`.
@@ -332,7 +337,7 @@ fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill,
     let have = me.actor.inv.iter().find(|(k, _)| k == item).map(|(_, n)| *n);
     let count = have.filter(|_| !me.actor.knows.iter().any(|k| k == item)).map(|n| format!(" ×{n}")).unwrap_or_default();
     let label = format!("{} {}{count}{}", pretty(skill), pretty(item), if words { " …" } else { "" });
-    let c = Choice { item: Some(item.to_string()), words, ..Choice::new(skill, label) };
+    let c = Choice { item: Some(item.to_string()), words, have: have.filter(|_| !me.actor.knows.iter().any(|k| k == item)).unwrap_or(0), ..Choice::new(skill, label) };
     // A trade or terms name what I ask in return: one choice per thing to ask for.
     if plan.asks {
         for w in catalog::item_names().into_iter().chain(spec.items.iter().cloned()).filter(|w| w != item) {
@@ -345,10 +350,10 @@ fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill,
 
 /// Requests in words to a person: to be taught what I don't know.
 fn requests(me: &Me) -> Vec<Choice> {
-    catalog::TECHNIQUES
-        .iter()
-        .filter(|t| !me.actor.knows.iter().any(|k| k == t.name))
-        .map(|t| Choice { say: Some(format!("Would you teach me {}?", pretty(t.name))), label: format!("ask to be taught {}", pretty(t.name)), ..Choice::new("ask", String::new()) })
+    catalog::technique_names()
+        .into_iter()
+        .filter(|t| !me.actor.knows.iter().any(|k| k == t))
+        .map(|t| Choice { say: Some(format!("Would you teach me {}?", pretty(&t))), label: format!("ask to be taught {}", pretty(&t)), ..Choice::new("ask", String::new()) })
         .collect()
 }
 
@@ -357,6 +362,26 @@ fn requests(me: &Me) -> Vec<Choice> {
 pub enum Row {
     Pick(Choice),
     Group { name: String, label: String, count: usize },
+    /// The game UI's own rows toward a person: talk to them, open their window, introduce
+    /// yourself (an editable line to them); and More, for the acts the list keeps folded.
+    Talk,
+    Window,
+    Introduce,
+    More,
+}
+
+impl Row {
+    /// What the list shows for the row.
+    pub fn label(&self) -> String {
+        match self {
+            Row::Pick(c) => c.label.clone(),
+            Row::Group { label, .. } => label.clone(),
+            Row::Talk => "talk".into(),
+            Row::Window => "their window".into(),
+            Row::Introduce => "introduce yourself".into(),
+            Row::More => "more…".into(),
+        }
+    }
 }
 
 pub fn rows(choices: &[Choice], group: Option<&str>) -> Vec<Row> {
@@ -429,6 +454,12 @@ pub struct Menu {
     pub group: Option<String>,
     /// Shown only for this item (opened from the inventory).
     pub item: Option<String>,
+    /// Toward a person: the list starts with Talk and their window.
+    pub person: bool,
+    /// Unfolded: every act, not only the likely ones.
+    pub more: bool,
+    /// Where the game UI puts it (UI px), if not over its target.
+    pub at: Option<Vec2>,
 }
 
 impl Menu {
@@ -437,7 +468,32 @@ impl Menu {
             Some(i) => self.choices.iter().filter(|c| c.item.as_deref() == Some(i)).cloned().collect(),
             None => self.choices.clone(),
         };
-        rows(&list, self.group.as_deref())
+        let mut out = rows(&list, self.group.as_deref());
+        if self.group.is_some() || self.item.is_some() {
+            return out;
+        }
+        if self.person {
+            out.insert(0, Row::Talk);
+            out.insert(1, Row::Window);
+            out.insert(2, Row::Introduce);
+        }
+        // Folded: the acts a player wants in the moment; the rest behind More (play-test 4: the
+        // list ran "Threaten, Conceive, Host…").
+        if !self.more {
+            let likely = |r: &Row| match r {
+                Row::Talk | Row::Window => true,
+                Row::Group { name, .. } => matches!(name.as_str(), "give" | "offer"),
+                Row::Pick(c) => matches!(c.skill.as_str(), "wave" | "appraise"),
+                _ => false,
+            };
+            let keep: Vec<Row> = if self.person { out.iter().filter(|r| likely(r)).cloned().collect() } else { out.iter().take(FOLDED).cloned().collect() };
+            if keep.len() < out.len() {
+                let mut keep = keep;
+                keep.push(Row::More);
+                return keep;
+            }
+        }
+        out
     }
 }
 
@@ -478,6 +534,28 @@ pub struct Verbs {
     pub clicked_item: Option<String>,
     /// A choice waiting for words (the text box is open).
     pub compose: Option<(Aim, Choice)>,
+    /// Open the list of acts on myself (Menu › Character, until the character window exists).
+    pub open_self: bool,
+    /// The game UI's requests (`ui/people.rs`, `ui/pack.rs`): work out every choice toward a
+    /// person (kept in `toward`), open a person's list at a group (Trade… opens `offer`), send
+    /// choices, and an item let go on a person.
+    pub want_toward: Option<u32>,
+    pub toward: Option<(u32, Vec<Choice>)>,
+    pub open_group: Option<(u32, String)>,
+    pub send: Vec<(Aim, Choice)>,
+    pub drop_item: Option<(u32, String)>,
+    /// Asked of the game UI: open this person's window (the list's "Their window").
+    pub open_window: Option<u32>,
+    /// A script's `panel:none`: close the pack and the know-how windows (`panel:inventory` and
+    /// `panel:know-how` set `inventory` and `know_how`, which open them).
+    pub close_panels: bool,
+    /// Where the game UI wants the next list opened (UI px), as beside a pack cell.
+    pub place_next: Option<Vec2>,
+    /// The list's Introduce yourself (`ui/people.rs` puts the line in their box).
+    pub introduce: Option<u32>,
+    pub want_intro: Option<u32>,
+    /// Open every act toward a person, unfolded, at a place (a person window's More…).
+    pub open_list: Option<(u32, Option<Vec2>)>,
     composing: bool,
     pending: Vec<Pending>,
     last: HashMap<String, Choice>,
@@ -592,6 +670,15 @@ fn things(conn: &DbConnection, now_ms: f64) -> Vec<(&'static str, String, Vec2, 
 }
 
 /// What `id` is called, as I perceive it.
+/// A list's title for what it acts on (a person's is `looks.rs`'s).
+fn label_of_aim(conn: &DbConnection, aim: &Aim) -> String {
+    match aim {
+        Aim::Me => "Yourself".into(),
+        Aim::Thing { kind, .. } => crate::ui::label(&pretty(kind)),
+        Aim::Creature { id } => crate::ui::label(&label_of(conn, *id)),
+    }
+}
+
 fn label_of(conn: &DbConnection, id: u32) -> String {
     conn.db.seen_characters().id().find(&id).map_or_else(|| "someone".into(), |c| c.label)
 }
@@ -804,10 +891,11 @@ pub fn input(
     mut wants: ResMut<crate::hud::UiWants>,
     time: Res<Time>,
     mut v: ResMut<Verbs>,
+    (binds, looks, mut talk): (Res<crate::keys::Binds>, Res<crate::looks::Looks>, Option<ResMut<crate::talk::Talk>>),
 ) {
     let now = time.elapsed_secs_f64();
     let now_ms = scene.now_ms;
-    wants.menu = v.menu.is_some() || v.inventory || v.know_how;
+    wants.menu = v.menu.is_some();
     let (Some(conn), Some(me), Some(me3), Some(sc)) = (net.conn.as_ref(), net.my_id, target.0, rules.scripts.as_ref()) else {
         v.menu = None;
         return;
@@ -818,19 +906,21 @@ pub fn input(
     let pressed = |k: KeyCode| free && keys.just_pressed(k);
     let all = || things(conn, now_ms);
     let facts = |_: &Aim| me_facts(conn, me, now_ms, sc, weather.authority.map(|(r, _)| r), &all(), my_at);
+    let is_person = |aim: &Aim| matches!(aim, Aim::Creature { id } if conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == "person"));
     let open = |v: &mut Verbs, aim: Aim, item: Option<String>| {
-        let (title, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
-        v.menu = Some(Menu { aim, title, choices, group: None, item });
+        let (_, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
+        let title = match &aim {
+            Aim::Creature { id } => looks.cap(*id),
+            _ => label_of_aim(conn, &aim),
+        };
+        let person = is_person(&aim);
+        let at = v.place_next.take();
+        v.menu = Some(Menu { aim, title, choices, group: None, item, person, at, more: false });
     };
     let mut pick: Option<usize> = None;
 
     // Panels.
-    if pressed(INVENTORY) {
-        v.inventory = !v.inventory;
-    }
-    if pressed(KNOW_HOW) {
-        v.know_how = !v.know_how;
-    }
+    // I and K are the game UI's windows (`ui/win.rs`): the pack and skills and know-how.
     if v.know_how && free {
         let n = rules.skills.len().max(1);
         if keys.just_pressed(KeyCode::ArrowDown) {
@@ -846,15 +936,23 @@ pub fn input(
     }
 
     // F: tap acts, hold opens the list.
-    if v.menu.is_none() && pressed(INTERACT) {
+    let interact = |k: &ButtonInput<KeyCode>| binds.just_pressed(crate::keys::Act::Interact, k);
+    if v.menu.is_none() && free && interact(&keys) {
         v.f_down = Some(now);
     }
     if let Some(t0) = v.f_down {
-        let released = keys.just_released(INTERACT) || !keys.pressed(INTERACT);
+        let released = binds.just_released(crate::keys::Act::Interact, &keys) || !binds.pressed(crate::keys::Act::Interact, &keys);
         let held = now - t0 >= HOLD_S;
         if held || released {
             v.f_down = None;
-            if let Some(aim) = v.aim.clone() {
+            // A tap of F on a peaceful person talks to them; held, it lists the acts.
+            let person = v.aim.as_ref().filter(|a| is_person(a)).and_then(|a| match a {
+                Aim::Creature { id } => Some(*id),
+                _ => None,
+            });
+            if let (Some(id), false, Some(t)) = (person.filter(|id| !crate::combat::hostile_to_me(conn, *id, me, now_ms)), held, talk.as_mut()) {
+                t.open_to = Some(id);
+            } else if let Some(aim) = v.aim.clone() {
                 match v.likely.clone().filter(|_| !held) {
                     Some(c) if c.words => v.compose = Some((aim, c)),
                     Some(c) => send(&net, conn, sc, &aim, &c, None, now_ms, &mut v, &mut controls),
@@ -874,23 +972,65 @@ pub fn input(
         v.menu = None;
     }
     // C: acts on myself.
-    if pressed(SELF_ACTS) {
+    if std::mem::take(&mut v.open_self) {
+        open(&mut v, Aim::Me, None);
+    }
+    // The game UI's requests.
+    if let Some(id) = v.want_toward.take() {
+        let aim = Aim::Creature { id };
+        let (_, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
+        v.toward = Some((id, choices));
+    }
+    if let Some((id, at)) = v.open_list.take() {
+        v.place_next = at;
+        open(&mut v, Aim::Creature { id }, None);
+        if let Some(m) = v.menu.as_mut() {
+            m.more = true;
+        }
+    }
+    if let Some((id, group)) = v.open_group.take() {
+        open(&mut v, Aim::Creature { id }, None);
+        if let Some(m) = v.menu.as_mut() {
+            if m.rows().iter().any(|r| matches!(r, Row::Group { name, .. } if *name == group)) {
+                m.group = Some(group);
+            } else {
+                v.toasts.push(Toast { text: format!("Nothing to {} with {}", pretty(&group), looks.of(id).unwrap_or("them")), ok: None, at: now });
+                v.menu = None;
+            }
+        }
+    }
+    for (aim, c) in std::mem::take(&mut v.send) {
+        if c.words {
+            v.compose = Some((aim, c));
+        } else {
+            send(&net, conn, sc, &aim, &c, None, now_ms, &mut v, &mut controls);
+        }
+    }
+    if let Some((id, item)) = v.drop_item.take() {
+        let aim = Aim::Creature { id };
+        let (_, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
+        let force = |s: &str| sc.shapes().get(s).is_some_and(|s| s.hostile || s.force || s.menace);
+        match choices.iter().find(|c| c.item.as_deref() == Some(item.as_str()) && c.want.is_none() && c.say.is_none() && !c.words && c.have > 0 && !force(&c.skill)) {
+            Some(c) => {
+                let c = c.clone();
+                info!("verbs: {} let go on #{id}: {}", item, c.label);
+                send(&net, conn, sc, &aim, &c, None, now_ms, &mut v, &mut controls);
+            }
+            None => {
+                info!("verbs: {} let go on #{id}: nothing the rules allow", item);
+                v.toasts.push(Toast { text: format!("Nothing to do with {} for {}", pretty(&item), looks.of(id).unwrap_or("them")), ok: Some(false), at: now });
+            }
+        }
+    }
+    if free && binds.just_pressed(crate::keys::Act::Character, &keys) {
         if v.menu.as_ref().is_some_and(|m| m.aim == Aim::Me) {
             v.menu = None;
         } else {
             open(&mut v, Aim::Me, None);
         }
     }
-    if free && keys.just_pressed(KeyCode::Escape) {
-        match v.menu.as_mut() {
-            Some(m) if m.group.is_some() => m.group = None,
-            Some(_) => v.menu = None,
-            None => {
-                v.inventory = false;
-                v.know_how = false;
-            }
-        }
-    }
+    let _ = (SELF_ACTS, INTERACT);
+    // Esc is the game UI's (`ui/win.rs`: a list closes first).
     if v.menu.is_some() && free {
         const DIGITS: [KeyCode; 10] = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9, KeyCode::Digit0];
         pick = DIGITS.iter().position(|k| keys.just_pressed(*k));
@@ -933,10 +1073,7 @@ pub fn input(
         match p {
             "inventory" => v.inventory = true,
             "know-how" | "knowhow" => v.know_how = true,
-            _ => {
-                v.inventory = false;
-                v.know_how = false;
-            }
+            _ => v.close_panels = true,
         }
     }
     for (skill, item, at) in std::mem::take(&mut scripted.acts) {
@@ -964,6 +1101,29 @@ pub fn input(
                 if let Some(mm) = v.menu.as_mut() {
                     mm.group = Some(name.clone());
                 }
+            }
+            Some(Row::Talk) => {
+                if let (Aim::Creature { id }, Some(t)) = (&m.aim, talk.as_mut()) {
+                    t.open_to = Some(*id);
+                }
+                v.menu = None;
+            }
+            Some(Row::More) => {
+                if let Some(mm) = v.menu.as_mut() {
+                    mm.more = true;
+                }
+            }
+            Some(Row::Introduce) => {
+                if let Aim::Creature { id } = &m.aim {
+                    v.introduce = Some(*id);
+                }
+                v.menu = None;
+            }
+            Some(Row::Window) => {
+                if let Aim::Creature { id } = &m.aim {
+                    v.open_window = Some(*id);
+                }
+                v.menu = None;
             }
             Some(Row::Pick(c)) => {
                 let key = m.aim.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
@@ -1002,7 +1162,7 @@ pub fn input(
             v.menu = None;
         }
     }
-    wants.menu = v.menu.is_some() || v.inventory || v.know_how;
+    wants.menu = v.menu.is_some();
 }
 
 /// The authority's word on what I sent: my `act` experiences and refused calls.

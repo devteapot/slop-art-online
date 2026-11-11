@@ -1,196 +1,137 @@
-//! The verbs' UI (`verbs.rs`): the F hint, the list of acts, the notes of what the authority
-//! said, and the inventory (I) and know-how (K) panels. All hidden until they matter
-//! (docs/GAME_BRIEF.md, HUD: only relevant information on screen).
+//! The verbs' UI in interface D (`verbs.rs` decides what is offered; this draws it): the list of
+//! acts and the notes of what the authority said of my acts.
 //!
-//! - The list sits over the bar, numbered 1–9 and 0; a click picks any row.
-//! - Notes rise just over the hint and fade, edged green when done, red when refused (the
-//!   authority's reason), grey when begun.
-//! - The inventory lists what I carry; clicking an item lists what I can do with it myself.
-//! - Know-how: the techniques I know (and how I came by them), then every skill in the rules,
-//!   with what the selected one takes and gives (the world's `skill_io`). Up/Down or a click
-//!   selects.
+//! - **The list** (hold F on something, C on oneself, a click on a pack item) sits beside its
+//!   target's head, or beside the pack cell it was opened from: a walnut frame with the target's
+//!   name over parchment rows, each with its icon and key. Toward a person it starts with Talk
+//!   and Their window. A skill with many items ("Give ›") opens its own list beside
+//!   it ("from your pack"). A click or 1–9 picks a row; Esc closes the sub-list, then the list.
+//! - **Notes** rise over the cluster and fade: parchment, marked green when done, red when
+//!   refused (the authority's reason), plain when begun.
 
+use super::hit::{Block, Hot, Tag, UiPointer};
+use super::icons::{Glyph, Icons, Mark};
+use super::kit::{self, Lit};
 use super::model::*;
-use super::theme::{self, Fonts};
-use super::{label, set_bg, set_color, set_text, show, HudRoot};
+use super::theme::Fonts;
+use super::win::Z_LIST;
+use super::{label, set_text, show, wood, HudRoot};
 use crate::net::Net;
 use crate::verbs::{Row, Rules, Verbs};
-use bevy::picking::events::{PointerClick, PointerOver};
 use bevy::prelude::*;
+use bevy::ui::{BackgroundGradient, GlobalZIndex};
 use living_bindings::*;
 use spacetimedb_sdk::Table;
 
-const MENU_ROWS: usize = 16;
+const ROWS: usize = 18;
 const TOASTS: usize = 3;
-const INV_ROWS: usize = 18;
-const SKILL_ROWS: usize = 14;
 
 #[derive(Component)]
-pub struct MenuRoot;
+pub struct ListRoot(u8);
 #[derive(Component)]
-pub struct MenuTitle;
+pub struct ListTitle(u8);
 #[derive(Component)]
-pub struct MenuRow(usize);
+pub struct ListNote(u8);
 #[derive(Component)]
-pub struct MenuText(usize);
+pub struct ListRow(u8, usize);
+#[derive(Component)]
+pub struct ListIcon(u8, usize);
+#[derive(Component)]
+pub struct ListText(u8, usize);
+#[derive(Component)]
+pub struct ListKey(u8, usize);
+#[derive(Component)]
+pub struct ListKeyText(u8, usize);
+#[derive(Component)]
+pub struct ListMore(u8, usize);
 #[derive(Component)]
 pub struct ToastRow(usize);
 #[derive(Component)]
+pub struct ToastMark(usize);
+#[derive(Component)]
 pub struct ToastText(usize);
-#[derive(Component)]
-pub struct InvRoot;
-#[derive(Component)]
-pub struct InvHead;
-#[derive(Component)]
-pub struct InvRow(usize);
-#[derive(Component)]
-pub struct InvText(usize);
-/// A pack row's count and its worth as food, right-aligned beside the name.
-#[derive(Component)]
-pub struct InvQty(usize);
-#[derive(Component)]
-pub struct InvNote(usize);
-/// How much of what I can carry I carry.
-#[derive(Component)]
-pub struct InvCarry;
-#[derive(Component)]
-pub struct KnowRoot;
-#[derive(Component)]
-pub struct KnowTech;
-#[derive(Component)]
-pub struct KnowRow(usize);
-#[derive(Component)]
-pub struct KnowText(usize);
-#[derive(Component)]
-pub struct KnowDetail(u8);
 
-/// The first skill shown in the know-how list (a window round the selected one).
-fn window_start(selected: usize, n: usize) -> usize {
-    selected.saturating_sub(SKILL_ROWS / 2).min(n.saturating_sub(SKILL_ROWS))
-}
-
-pub fn spawn(mut commands: Commands, fonts: Res<Fonts>) {
-    let f = fonts.clone();
-    // The list, over the bar.
-    commands
-        .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), bottom: Val::Px(262.0), justify_content: JustifyContent::Center, ..default() }, Pickable::IGNORE))
-        .with_children(|root| {
-            root.spawn((MenuRoot, Node { min_width: Val::Px(240.0), max_width: Val::Px(380.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(7.0), Val::Px(8.0)), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(12.0)), display: Display::None, ..default() }, theme::panel(12.0)))
-                .with_children(|m| {
-                    m.spawn((MenuTitle, Text::new(""), f.title(17.0), TextColor(theme::GOLD), Node { margin: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(1.0), Val::Px(4.0)), ..default() }, Pickable::IGNORE));
-                    m.spawn((Node { height: Val::Px(1.0), margin: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(0.0), Val::Px(4.0)), ..default() }, BackgroundColor(theme::GOLD_DIM), Pickable::IGNORE));
-                    for i in 0..MENU_ROWS {
-                        m.spawn((MenuRow(i), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(9.0), padding: UiRect::axes(Val::Px(6.0), Val::Px(3.0)), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, BackgroundColor(Color::NONE)))
+pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
+    let f = &*fonts;
+    // The list (0) and its sub-list (1).
+    for k in 0..2u8 {
+        commands
+            .spawn((HudRoot, ListRoot(k), Block, Node { position_type: PositionType::Absolute, width: Val::Px(if k == 0 { 250.0 } else { 196.0 }), flex_direction: FlexDirection::Column, padding: UiRect::bottom(Val::Px(6.0)), border: wood::b(3.0), border_radius: wood::r(12.0), display: Display::None, ..default() }, wood::wood(), GlobalZIndex(Z_LIST)))
+            .with_children(|m| {
+                m.spawn(wood::rim(9.0));
+                m.spawn((Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Baseline, padding: UiRect::new(Val::Px(12.0), Val::Px(10.0), Val::Px(6.0), Val::Px(5.0)), column_gap: Val::Px(8.0), ..default() }, Pickable::IGNORE)).with_children(|h| {
+                    h.spawn((ListTitle(k), Text::new(""), wood::title(f, 17.0), TextLayout::new(Justify::Left, LineBreak::NoWrap), Pickable::IGNORE));
+                    h.spawn((ListNote(k), Text::new(""), wood::on_wood(f, 11.0, 700), Pickable::IGNORE));
+                });
+                m.spawn((Node { flex_direction: FlexDirection::Column, margin: UiRect::horizontal(Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(8.0), overflow: Overflow::clip(), ..default() }, BackgroundColor(wood::surface()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|list| {
+                    for i in 0..ROWS {
+                        list.spawn((ListRow(k, i), Hot, Tag(format!("acts:{k}:{i}")), kit::Paint::Row, Lit(false), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(9.0), padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)), display: Display::None, ..default() }, BackgroundGradient::default()))
                             .with_children(|r| {
-                                r.spawn((Node { width: Val::Px(18.0), height: Val::Px(18.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(5.0)), ..default() }, BackgroundColor(theme::INK_SOLID), BorderColor::all(theme::EDGE_STRONG), Pickable::IGNORE))
-                                    .with_child((Text::new(if i < 9 { format!("{}", i + 1) } else if i == 9 { "0".into() } else { String::new() }), f.body(11.0, 800), TextColor(theme::TEXT), Pickable::IGNORE));
-                                r.spawn((MenuText(i), Text::new(""), f.body(15.0, 650), TextColor(theme::TEXT), Pickable::IGNORE));
-                            })
-                            .observe(move |_: On<PointerClick>, mut v: ResMut<Verbs>| v.clicked = Some(i))
-                            .observe(move |_: On<PointerOver>, mut q: Query<(&MenuRow, &mut BackgroundColor)>| {
-                                for (r, mut bg) in &mut q {
-                                    set_bg(&mut bg, if r.0 == i { theme::with_alpha(theme::GOLD, 0.16) } else { Color::NONE });
-                                }
+                                r.spawn((ListIcon(k, i), Node { width: Val::Px(16.0), height: Val::Px(16.0), flex_shrink: 0.0, ..default() }, ImageNode::new(icons.get(Glyph::Ui(Mark::Dots))).with_color(wood::glyph_tint()), Pickable::IGNORE));
+                                r.spawn((ListText(k, i), Text::new(""), wood::ink(f, 15.0, 800), Node { flex_grow: 1.0, ..default() }, TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                                r.spawn((ListMore(k, i), Text::new(""), f.body(13.0, 700), TextColor(wood::muted()), Pickable::IGNORE));
+                                r.spawn((ListKey(k, i), Node { padding: UiRect::axes(Val::Px(5.0), Val::Px(0.0)), min_width: Val::Px(22.0), height: Val::Px(20.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(2.0), border_radius: wood::r(6.0), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::surface()), BorderColor::all(wood::edge()), wood::hard_shadow(2.0, 0.5), Pickable::IGNORE))
+                                    .with_child((ListKeyText(k, i), Text::new(""), f.body(11.0, 900), TextColor(wood::text()), Pickable::IGNORE));
                             });
                     }
                 });
-        });
-    // Notes, just over the hint.
+            });
+    }
+    // Notes, over the cluster.
     commands
-        .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), bottom: Val::Px(214.0), flex_direction: FlexDirection::ColumnReverse, align_items: AlignItems::Center, row_gap: Val::Px(4.0), ..default() }, Pickable::IGNORE))
+        .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), bottom: Val::Px(196.0), flex_direction: FlexDirection::ColumnReverse, align_items: AlignItems::Center, row_gap: Val::Px(6.0), ..default() }, Pickable::IGNORE))
         .with_children(|root| {
             for i in 0..TOASTS {
-                root.spawn((ToastRow(i), Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(4.0)), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(999.0)), max_width: Val::Px(560.0), display: Display::None, ..default() }, theme::panel(999.0), Pickable::IGNORE))
-                    .with_child((ToastText(i), Text::new(""), f.body(14.0, 650), TextColor(theme::TEXT), Pickable::IGNORE));
-            }
-        });
-    // Inventory, right.
-    commands
-        .spawn((HudRoot, Node { position_type: PositionType::Absolute, right: Val::Px(22.0), top: Val::Percent(24.0), ..default() }, Pickable::IGNORE))
-        .with_children(|root| {
-            root.spawn((InvRoot, Node { width: Val::Px(230.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(1.0), padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(8.0), Val::Px(9.0)), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(12.0)), display: Display::None, ..default() }, theme::panel(12.0)))
-                .with_children(|p| {
-                    p.spawn((InvHead, Text::new("Pack"), f.title(17.0), TextColor(theme::GOLD), Node { margin: UiRect::bottom(Val::Px(4.0)), ..default() }, Pickable::IGNORE));
-                    p.spawn((Node { height: Val::Px(4.0), margin: UiRect::bottom(Val::Px(6.0)), border_radius: BorderRadius::all(Val::Px(2.0)), overflow: Overflow::clip(), ..default() }, BackgroundColor(theme::TRACK), Pickable::IGNORE))
-                        .with_child((InvCarry, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(0.0), ..default() }, BackgroundColor(theme::GOLD_DIM), Pickable::IGNORE));
-                    for i in 0..INV_ROWS {
-                        p.spawn((InvRow(i), Node { padding: UiRect::axes(Val::Px(5.0), Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(6.0)), justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, column_gap: Val::Px(8.0), ..default() }, BackgroundColor(Color::NONE)))
-                            .with_children(|r| {
-                                r.spawn((InvText(i), Text::new(""), f.body(14.0, 600), TextColor(theme::TEXT), Pickable::IGNORE));
-                                r.spawn((Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }, Pickable::IGNORE)).with_children(|right| {
-                                    right.spawn((InvNote(i), Text::new(""), f.body(12.0, 600), TextColor(theme::MUTED), Pickable::IGNORE));
-                                    right.spawn((InvQty(i), Text::new(""), f.body(14.0, 800), TextColor(theme::GOLD), Pickable::IGNORE));
-                                });
-                            })
-                            .observe(move |_: On<PointerClick>, model: Res<HudModel>, mut v: ResMut<Verbs>| {
-                                if let Some(r) = model.verbs.inventory.as_ref().and_then(|inv| inv.rows.get(i)) {
-                                    v.clicked_item = Some(r.0.clone());
-                                }
-                            });
-                    }
-                });
-        });
-    // Know-how, left.
-    commands
-        .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(22.0), top: Val::Percent(14.0), ..default() }, Pickable::IGNORE))
-        .with_children(|root| {
-            root.spawn((KnowRoot, Node { width: Val::Px(420.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(1.0), padding: UiRect::new(Val::Px(12.0), Val::Px(12.0), Val::Px(9.0), Val::Px(11.0)), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(12.0)), display: Display::None, ..default() }, theme::panel(12.0)))
-                .with_children(|p| {
-                    p.spawn((Text::new("Know-how"), f.title(17.0), TextColor(theme::GOLD), Pickable::IGNORE));
-                    p.spawn((KnowTech, Text::new(""), f.body(13.0, 600), TextColor(theme::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { margin: UiRect::vertical(Val::Px(4.0)), ..default() }, Pickable::IGNORE));
-                    p.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(12.0), ..default() }).with_children(|cols| {
-                        cols.spawn(Node { width: Val::Px(120.0), flex_direction: FlexDirection::Column, ..default() }).with_children(|list| {
-                            for i in 0..SKILL_ROWS {
-                                list.spawn((KnowRow(i), Node { padding: UiRect::axes(Val::Px(5.0), Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(5.0)), ..default() }, BackgroundColor(Color::NONE)))
-                                    .with_child((KnowText(i), Text::new(""), f.body(13.0, 650), TextColor(theme::TEXT), Pickable::IGNORE))
-                                    .observe(move |_: On<PointerClick>, model: Res<HudModel>, mut v: ResMut<Verbs>| {
-                                        if let Some(k) = model.verbs.know_how.as_ref() {
-                                            v.selected = k.start + i;
-                                        }
-                                    });
-                            }
-                        });
-                        cols.spawn(Node { flex_grow: 1.0, flex_basis: Val::Px(0.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(5.0), ..default() }).with_children(|d| {
-                            d.spawn((KnowDetail(0), Text::new(""), f.body(16.0, 800), TextColor(theme::TEXT), Pickable::IGNORE));
-                            d.spawn((KnowDetail(1), Text::new(""), f.body(13.0, 550), TextColor(theme::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
-                            d.spawn((KnowDetail(2), Text::new(""), f.body(13.0, 600), TextColor(theme::TEXT), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
-                            d.spawn((KnowDetail(3), Text::new(""), f.body(13.0, 600), TextColor(theme::FRIENDLY), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
-                        });
+                root.spawn((ToastRow(i), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(8.0), Val::Px(12.0), Val::Px(5.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(10.0), max_width: Val::Px(600.0), display: Display::None, ..default() }, BackgroundColor(wood::surface()), BorderColor::all(wood::edge()), wood::hard_shadow(3.0, 0.45), Pickable::IGNORE))
+                    .with_children(|t| {
+                        t.spawn((ToastMark(i), Node { width: Val::Px(8.0), height: Val::Px(8.0), border_radius: BorderRadius::all(Val::Percent(50.0)), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::muted()), Pickable::IGNORE));
+                        t.spawn((ToastText(i), Text::new(""), wood::ink(f, 14.0, 800), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
                     });
-                });
+            }
         });
 }
 
-/// Fill the verbs' part of the model: the hint, the list, the notes and the panels.
-pub fn fill(mut model: ResMut<HudModel>, v: Res<Verbs>, rules: NonSend<Rules>, net: NonSend<Net>, time: Res<Time>) {
-    let now = time.elapsed_secs_f64();
-    model.verbs.toasts = v.toasts.iter().rev().map(|t| (t.text.clone(), t.ok, (now - t.at) as f32)).collect();
-    model.verbs.menu = v.menu.as_ref().map(|m| {
-        let rows = m.rows().into_iter().take(MENU_ROWS).map(|r| match r {
-            Row::Pick(c) => label(&c.label),
-            Row::Group { label: l, .. } => label(&l),
-        });
-        let title = match (&m.group, &m.item) {
-            (Some(g), _) => format!("{} · {}", label(&m.title), label(g)),
-            (None, Some(i)) => format!("{} · {}", label(&m.title), label(i)),
-            _ => label(&m.title),
-        };
-        MenuView { title, rows: rows.collect() }
-    });
-    if model.death.is_none() && v.menu.is_none() && v.compose.is_none() {
-        if let Some(c) = &v.likely {
-            model.hint = Some(Hint { key: "F".into(), label: label(&c.label) });
-        } else if v.aim.is_some() && v.has_options {
-            model.hint = Some(Hint { key: "F".into(), label: format!("{} ▸", label(&v.aim_name)) });
-        }
+fn row_view(r: &Row) -> MenuRowView {
+    match r {
+        Row::Pick(c) => MenuRowView { label: label(&wood::readable(&c.label)), skill: c.skill.clone(), group: false, have: c.have },
+        Row::Group { name, label: l, .. } => MenuRowView { label: label(l.trim_end_matches(" ›")), skill: name.clone(), group: true, have: 0 },
+        Row::Talk => MenuRowView { label: "Talk".into(), skill: "talk".into(), group: false, have: 0 },
+        Row::Window => MenuRowView { label: "Their window".into(), skill: "window".into(), group: false, have: 0 },
+        Row::Introduce => MenuRowView { label: "Introduce yourself".into(), skill: "introduce".into(), group: false, have: 0 },
+        Row::More => MenuRowView { label: "More…".into(), skill: "more".into(), group: false, have: 0 },
     }
+}
+
+/// Fill the verbs' part of the model: the list, the notes, and the pack's and know-how's views
+/// while their windows are open.
+pub fn fill(mut model: ResMut<HudModel>, v: Res<Verbs>, rules: NonSend<Rules>, net: NonSend<Net>, time: Res<Time>, ws: Res<super::win::Windows>) {
+    let now = time.elapsed_secs_f64();
+    model.verbs.toasts = v.toasts.iter().rev().map(|t| (wood::readable(&t.text), t.ok, (now - t.at) as f32)).collect();
+    model.verbs.menu = v.menu.as_ref().map(|m| {
+        let main = crate::verbs::Menu { group: None, ..m.clone() };
+        let rows = main.rows().iter().take(ROWS).map(row_view).collect();
+        let sub = m.group.as_ref().map(|g| {
+            let title = if g == "offer" { "Trade".to_string() } else { label(g) };
+            (title, m.rows().iter().take(ROWS).map(row_view).collect())
+        });
+        // One line: a long label is shortened rather than wrapped.
+        let title = wood::fit(&match &m.item {
+            Some(i) => label(&i.replace('_', " ")),
+            None => label(&m.title),
+        }, 24);
+        let person = match m.aim {
+            crate::verbs::Aim::Creature { id } => Some(id),
+            _ => None,
+        };
+        MenuView { title, rows, sub, person, at: m.at }
+    });
     let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else {
         model.verbs.inventory = None;
         model.verbs.know_how = None;
         return;
     };
     let sc = rules.scripts.as_ref();
-    model.verbs.inventory = v.inventory.then(|| {
+    model.verbs.inventory = ws.is_open(super::win::Win::Pack).then(|| {
         let mut rows: Vec<(String, u32, String)> = Vec::new();
         for r in conn.db.my_inventory().iter().filter(|r| r.owner == me as u64 && r.qty > 0) {
             match rows.iter_mut().find(|(k, _, _)| *k == r.item) {
@@ -211,144 +152,186 @@ pub fn fill(mut model: ResMut<HudModel>, v: Res<Verbs>, rules: NonSend<Rules>, n
         let limit = sc.map_or(0.0, |s| s.num_of("carry_limit", &kind, 0.0)) as u32;
         InventoryView { rows, carried, limit }
     });
-    model.verbs.know_how = v.know_how.then(|| {
+    model.verbs.know_how = ws.is_open(super::win::Win::Skills).then(|| {
         let techniques = conn.db.my_know_how().iter().filter(|k| k.actor == me).map(|k| (k.technique, k.source)).collect();
-        // Every skill the world's rules have.
         let all = &rules.skills;
         let n = all.len();
         let selected = v.selected.min(n.saturating_sub(1));
-        let start = window_start(selected, n);
-        let skills = all.iter().skip(start).take(SKILL_ROWS).map(|s| label(&s.name)).collect();
+        let skills = all.iter().map(|s| label(&s.name)).collect();
         let detail = all.get(selected).map_or_else(SkillDetail::default, |spec| {
             let (takes, gives) = sc.and_then(|s| s.skill_io(&spec.name)).unwrap_or_default();
             SkillDetail { name: label(&spec.name), help: spec.help.clone(), takes, gives }
         });
-        KnowHowView { techniques, skills, selected, start, detail }
+        KnowHowView { techniques, skills, selected, start: 0, detail }
     });
 }
 
-#[allow(clippy::type_complexity)]
+/// A row's icon and key, by what it does.
+fn icon_key(skill: &str, binds: &crate::keys::Binds) -> (Option<Mark>, String) {
+    use crate::keys::Act;
+    match skill {
+        "talk" => (Some(Mark::Talk), binds.first(Act::Interact)),
+        "window" => (Some(Mark::People), String::new()),
+        "give" => (Some(Mark::Give), String::new()),
+        "offer" | "offer_terms" | "accept" => (Some(Mark::Trade), String::new()),
+        "wave" => (Some(Mark::Wave), binds.first(Act::Wave)),
+        "nod" => (Some(Mark::Wave), binds.first(Act::Nod)),
+        "appraise" => (Some(Mark::Eye), binds.first(Act::LookOver)),
+        "teach" | "ask" | "read" | "write" => (Some(Mark::Book), String::new()),
+        "introduce" => (Some(Mark::Person), String::new()),
+        _ => (None, String::new()),
+    }
+}
+
+/// Clicks on the list's rows: the list's own pick (a row of the sub-list, or of the list with
+/// the sub-list closed first), through `verbs.rs`'s path.
+pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut v: ResMut<Verbs>) {
+    let Some(t) = kit::clicked(&ui, &tags) else {
+        // A press elsewhere closes the list.
+        if ui.pressed_elsewhere && v.menu.is_some() {
+            v.menu = None;
+        }
+        return;
+    };
+    // `acts:K:WHAT:I`: list K (0 the list, 1 its sub-list), row I (WHAT names it for scripts).
+    let Some(rest) = t.strip_prefix("acts:") else { return };
+    let parts: Vec<&str> = rest.split(':').collect();
+    let (Some(k), Some(i)) = (parts.first().and_then(|k| k.parse::<u8>().ok()), parts.last().and_then(|i| i.parse::<usize>().ok())) else { return };
+    if k == 0 {
+        if let Some(m) = v.menu.as_mut() {
+            m.group = None;
+        }
+    }
+    v.clicked = Some(i);
+}
+
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn menu(
     model: Res<HudModel>,
-    mut root: Query<&mut Node, (With<MenuRoot>, Without<MenuRow>)>,
-    mut title: Query<&mut Text, (With<MenuTitle>, Without<MenuText>)>,
-    mut rows: Query<(&MenuRow, &mut Node), Without<MenuRoot>>,
-    mut texts: Query<(&MenuText, &mut Text), Without<MenuTitle>>,
+    icons: Res<Icons>,
+    binds: Res<crate::keys::Binds>,
+    cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    ui: Res<UiPointer>,
+    mut roots: Query<(&ListRoot, &mut Node), Without<ListRow>>,
+    mut rows: Query<(&ListRow, &mut Node, &mut Tag), (Without<ListRoot>, Without<ListKey>)>,
+    mut keys: Query<(&ListKey, &mut Node), (Without<ListRoot>, Without<ListRow>, Without<ListIcon>)>,
+    mut iconq: Query<(&ListIcon, &mut Node, &mut ImageNode), (Without<ListRoot>, Without<ListRow>, Without<ListKey>)>,
+    mut texts: ParamSet<(Query<(&ListTitle, &mut Text)>, Query<(&ListNote, &mut Text)>, Query<(&ListText, &mut Text)>, Query<(&ListKeyText, &mut Text)>, Query<(&ListMore, &mut Text)>)>,
+    roots_size: Query<(&ListRoot, &bevy::ui::ComputedNode)>,
 ) {
     let m = model.verbs.menu.as_ref().filter(|_| model.death.is_none());
-    for mut n in &mut root {
-        show(&mut n, m.is_some());
+    let lists: [Option<(String, String, &Vec<MenuRowView>)>; 2] = match m {
+        Some(m) => {
+            let note = if m.person.is_some() && wood::t().chips { format!("hold {}", binds.first(crate::keys::Act::Interact)) } else { String::new() };
+            [Some((m.title.clone(), note, &m.rows)), m.sub.as_ref().map(|(t, r)| (t.clone(), if m.sub.as_ref().is_some_and(|s| s.1.iter().any(|r| r.have > 0)) { "from your pack".to_string() } else { String::new() }, r))]
+        }
+        None => [None, None],
+    };
+    // Beside the person's head, else where the UI put it, else over the cluster.
+    let screen = cams.iter().find_map(|(c, _)| c.logical_viewport_size()).unwrap_or(Vec2::new(1600.0, 900.0)) / ui.ui_scale.max(0.01);
+    let head = m.and_then(|m| m.person).and_then(|id| model.actors.iter().find(|a| a.id == id as u64)).and_then(|a| cams.iter().find_map(|(c, t)| c.world_to_viewport(t, a.head).ok())).map(|p| ui.val(p) + Vec2::new(40.0, -20.0));
+    let base = m.and_then(|m| m.at).or(head).unwrap_or(Vec2::new(screen.x / 2.0 - 112.0, screen.y - 520.0));
+    // Sizes in UI units (physical px times the node's inverse scale).
+    let size0 = roots_size.iter().find(|(r, _)| r.0 == 0).map_or(Vec2::new(224.0, 300.0), |(_, n)| n.size() * n.inverse_scale_factor());
+    let (w0, h0) = (size0.x, size0.y);
+    let x0 = base.x.clamp(10.0, (screen.x - w0 - 200.0).max(10.0));
+    let y0 = base.y.clamp(10.0, (screen.y - h0 - 160.0).max(10.0));
+    for (r, mut n) in &mut roots {
+        let on = lists[r.0 as usize].is_some();
+        show(&mut n, on);
+        let (x, y) = if r.0 == 0 { (x0, y0) } else { (x0 + w0 + 8.0, y0 + 110.0) };
+        let (l, t) = (Val::Px(x.round()), Val::Px(y.round()));
+        if n.left != l {
+            n.left = l;
+        }
+        if n.top != t {
+            n.top = t;
+        }
     }
-    let Some(m) = m else { return };
-    for mut t in &mut title {
-        set_text(&mut t, &m.title);
+    let row = |k: u8, i: usize| lists[k as usize].as_ref().and_then(|l| l.2.get(i));
+    for (r, mut n, mut tag) in &mut rows {
+        let v = row(r.0, r.1);
+        show(&mut n, v.is_some());
+        // Named for scripts by what it does: `acts:0:give:2`, `acts:1:berries:0`.
+        let what = v.map(|v| if r.0 == 1 { v.label.split_once(' ').map_or(v.label.clone(), |(_, it)| it.split(" ×").next().unwrap_or(it).to_lowercase().replace(' ', "_")) } else { v.skill.clone() }).unwrap_or_default();
+        let want = format!("acts:{}:{what}:{}", r.0, r.1);
+        if tag.0 != want {
+            tag.0 = want;
+        }
     }
-    for (r, mut n) in &mut rows {
-        show(&mut n, r.0 < m.rows.len());
+    for (t, mut text) in &mut texts.p0() {
+        if let Some(l) = &lists[t.0 as usize] {
+            set_text(&mut text, &l.0);
+        }
     }
-    for (r, mut t) in &mut texts {
-        if let Some(s) = m.rows.get(r.0) {
-            set_text(&mut t, s);
+    for (t, mut text) in &mut texts.p1() {
+        if let Some(l) = &lists[t.0 as usize] {
+            set_text(&mut text, &l.1);
+        }
+    }
+    for (t, mut text) in &mut texts.p2() {
+        if let Some(r) = row(t.0, t.1) {
+            // In the sub-list, the item alone (its skill is the list's title).
+            let s = if t.0 == 1 { r.label.split_once(' ').map_or(r.label.clone(), |(_, rest)| label(rest.split(" ×").next().unwrap_or(rest))) } else { r.label.clone() };
+            set_text(&mut text, &s);
+        }
+    }
+    for (t, mut text) in &mut texts.p4() {
+        if let Some(r) = row(t.0, t.1) {
+            let s = if r.group { "›".to_string() } else if t.0 == 1 && r.have > 0 { format!("×{}", r.have) } else { String::new() };
+            set_text(&mut text, &s);
+        }
+    }
+    for (t, mut text) in &mut texts.p3() {
+        if let Some(r) = row(t.0, t.1) {
+            set_text(&mut text, &icon_key(&r.skill, &binds).1);
+        }
+    }
+    for (k, mut n) in &mut keys {
+        show(&mut n, row(k.0, k.1).is_some_and(|r| !icon_key(&r.skill, &binds).1.is_empty()));
+    }
+    for (k, mut n, mut img) in &mut iconq {
+        let Some(r) = row(k.0, k.1) else { continue };
+        let g = if k.0 == 1 { r.label.split_once(' ').map(|(_, it)| Glyph::Item(super::icons::item_mark(&it.to_lowercase().replace(' ', "_")))) } else { icon_key(&r.skill, &binds).0.map(Glyph::Ui) };
+        show(&mut n, g.is_some());
+        if let Some(g) = g {
+            let h = icons.get(g);
+            if img.image != h {
+                img.image = h;
+            }
         }
     }
 }
 
 #[allow(clippy::type_complexity)]
-pub fn toasts(model: Res<HudModel>, mut rows: Query<(&ToastRow, &mut Node, &mut BackgroundColor, &mut BorderColor)>, mut texts: Query<(&ToastText, &mut Text, &mut TextColor)>) {
+pub fn toasts(model: Res<HudModel>, mut rows: Query<(&ToastRow, &mut Node, &mut BackgroundColor, &mut BorderColor), Without<ToastMark>>, mut marks: Query<(&ToastMark, &mut BackgroundColor), Without<ToastRow>>, mut texts: Query<(&ToastText, &mut Text, &mut TextColor)>) {
     let t = &model.verbs.toasts;
     // Fade over the last second.
     let alpha = |age: f32| (4.5 - age).clamp(0.0, 1.0);
     for (r, mut n, mut bg, mut border) in &mut rows {
-        let on = r.0 < t.len() && model.death.is_none();
-        show(&mut n, on);
-        if let Some((_, ok, age)) = t.get(r.0) {
-            set_bg(&mut bg, theme::with_alpha(theme::INK, alpha(*age)));
-            let edge = match ok {
-                Some(true) => theme::FRIENDLY,
-                Some(false) => theme::HOSTILE,
-                None => theme::EDGE_STRONG,
-            };
-            let c = theme::with_alpha(edge, 0.7 * alpha(*age));
+        show(&mut n, r.0 < t.len() && model.death.is_none());
+        if let Some((_, _, age)) = t.get(r.0) {
+            super::set_bg(&mut bg, wood::alpha(wood::surface(), alpha(*age)));
+            let c = wood::alpha(wood::edge(), alpha(*age));
             if border.top != c {
                 *border = BorderColor::all(c);
             }
         }
     }
-    for (r, mut text, mut color) in &mut texts {
-        if let Some((s, ok, age)) = t.get(r.0) {
-            // Done or refused shows in the edge's colour; the words are the authority's.
-            let _ = ok;
-            set_text(&mut text, s);
-            set_color(&mut color, theme::with_alpha(theme::TEXT, alpha(*age)));
-        }
-    }
-}
-
-#[allow(clippy::type_complexity)]
-pub fn panels(
-    model: Res<HudModel>,
-    mut nodes: ParamSet<(Query<&mut Node, With<InvRoot>>, Query<(&InvRow, &mut Node)>, Query<&mut Node, With<KnowRoot>>, Query<(&KnowRow, &mut Node, &mut BackgroundColor)>)>,
-    mut texts: ParamSet<(Query<&mut Text, With<InvHead>>, Query<(&InvText, &mut Text)>, Query<&mut Text, With<KnowTech>>, Query<(&KnowText, &mut Text)>, Query<(&KnowDetail, &mut Text)>, Query<(&InvQty, &mut Text)>, Query<(&InvNote, &mut Text)>)>,
-    mut carry: Query<&mut Node, (With<InvCarry>, Without<InvRoot>, Without<InvRow>, Without<KnowRoot>, Without<KnowRow>)>,
-) {
-    let alive = model.death.is_none();
-    let inv = model.verbs.inventory.as_ref().filter(|_| alive);
-    for mut n in &mut nodes.p0() {
-        show(&mut n, inv.is_some());
-    }
-    if let Some(inv) = inv {
-        for (r, mut n) in &mut nodes.p1() {
-            show(&mut n, r.0 < inv.rows.len().max(1));
-        }
-        for mut t in &mut texts.p0() {
-            let head = if inv.limit > 0 { format!("Pack  {} / {}", inv.carried, inv.limit) } else { format!("Pack  {}", inv.carried) };
-            set_text(&mut t, &head);
-        }
-        for mut n in &mut carry {
-            super::set_width(&mut n, Val::Percent(if inv.limit > 0 { (inv.carried as f32 / inv.limit as f32).clamp(0.0, 1.0) * 100.0 } else { 0.0 }));
-        }
-        for (r, mut t) in &mut texts.p1() {
-            let s = match inv.rows.get(r.0) {
-                Some((item, _, _)) => label(item),
-                None if r.0 == 0 => "Nothing".to_string(),
-                None => String::new(),
+    for (r, mut bg) in &mut marks {
+        if let Some((_, ok, age)) = t.get(r.0) {
+            let c = match ok {
+                Some(true) => Color::srgb_u8(0x5f, 0xa8, 0x4a),
+                Some(false) => wood::HOSTILE,
+                None => wood::muted(),
             };
-            set_text(&mut t, &s);
-        }
-        for (r, mut t) in &mut texts.p5() {
-            set_text(&mut t, &inv.rows.get(r.0).map_or(String::new(), |(_, n, _)| format!("×{n}")));
-        }
-        for (r, mut t) in &mut texts.p6() {
-            set_text(&mut t, &inv.rows.get(r.0).map_or(String::new(), |(_, _, note)| note.clone()));
+            super::set_bg(&mut bg, wood::alpha(c, alpha(*age)));
         }
     }
-    let know = model.verbs.know_how.as_ref().filter(|_| alive);
-    for mut n in &mut nodes.p2() {
-        show(&mut n, know.is_some());
-    }
-    let Some(k) = know else { return };
-    let start = k.start;
-    for (r, mut n, mut bg) in &mut nodes.p3() {
-        show(&mut n, r.0 < k.skills.len());
-        set_bg(&mut bg, if start + r.0 == k.selected { theme::with_alpha(theme::GOLD, 0.18) } else { Color::NONE });
-    }
-    for mut t in &mut texts.p2() {
-        // How a newcomer's own techniques came is no news; a technique learnt says from whom.
-        let s = if k.techniques.is_empty() { "You know no techniques yet.".to_string() } else { format!("You know  {}", k.techniques.iter().map(|(t, src)| if src.is_empty() || src == "seed" || src.contains("newcomer") { label(t) } else { format!("{} ({src})", label(t)) }).collect::<Vec<_>>().join(" · ")) };
-        set_text(&mut t, &s);
-    }
-    for (r, mut t) in &mut texts.p3() {
-        if let Some(s) = k.skills.get(r.0) {
-            set_text(&mut t, s);
+    for (r, mut text, mut color) in &mut texts {
+        if let Some((s, _, age)) = t.get(r.0) {
+            set_text(&mut text, s);
+            super::set_color(&mut color, wood::alpha(wood::text(), alpha(*age)));
         }
-    }
-    for (d, mut t) in &mut texts.p4() {
-        let s = match d.0 {
-            0 => k.detail.name.clone(),
-            1 => k.detail.help.clone(),
-            2 => if k.detail.takes.is_empty() { String::new() } else { format!("Takes: {}", k.detail.takes) },
-            _ => if k.detail.gives.is_empty() { String::new() } else { format!("Gives: {}", k.detail.gives) },
-        };
-        set_text(&mut t, &s);
     }
 }
