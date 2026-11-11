@@ -12,6 +12,8 @@ living/tools/blender/gen_cullet.sh             # every model, fixtures.json and 
 python3 living/tools/cullet_kit_check.py       # the checks, on the GLB files themselves
 ```
 
+Two runs on one machine give byte-identical files (all 263: the models, `fixtures.json` and `report.json`; dev-box, Blender 5.2.2). Another machine or Blender version has not been compared: the geometry and colours follow from the plan alone, but the exporter's bytes are Blender's. A machine without Blender can take the dev-box's generated folder as a tarball instead (unpack it at the repository's root).
+
 `gen_cullet.sh --only cone,low_4,retaining_wall` builds some models (ids or folders). `--out DIR` writes elsewhere; `--figure` stands a 1.75 m figure by each model, for contact sheets only. `just living-game-assets` runs the generator with the other kits. The output, `living/game/assets/envs/cullet/`, is git-ignored: the scripts are the asset.
 
 ## How it is built
