@@ -44,6 +44,8 @@ python3 living/tools/characters/media.py .local/cap .local/page .local/town .loc
 python3 living/tools/characters/page.py .local/page
 ```
 
+A pass is also published through the asset board, the record of which version the owner accepted (`docs/ASSET_BOARD.md` and `living/tools/board/board.py`, on branch `tool-6` at the time of writing). Pass 1 is there as the `character:*` families' versions `20261111-0df94138-…`, each beside the spike's accepted version and the VRoid control; its records are in `living/assets/board/`.
+
 `gen_person.sh` needs Blender and, for clips, the Kimodo library's takes (`KIMODO_DIR`, default `.local/kimodo/outputs/library`); it bakes the whole library unless `ONLY` names clips. The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and the whole library (34 clips) about a minute. 64 people with `idle` and `walk` and their photographs took under 4 minutes on eight cores (dev-box, 2026-11-11).
 
 ## A person's parameters
