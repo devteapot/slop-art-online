@@ -370,27 +370,47 @@ impl Map {
         self.open_between(a, b) || self.sight_walk(a, b)
     }
 
-    /// The tile walk behind [`Map::sight_clear`].
+    /// The tile walk behind [`Map::sight_clear`]. Where the segment passes exactly through a
+    /// tile corner it goes straight into the diagonal tile and touches the two tiles beside the
+    /// corner only at that point: it is stopped there only when both of them are opaque (two
+    /// walls meeting at the corner), never by one wall's corner alone. So the walk is the same
+    /// both ways: who sees someone across a corner is seen by them.
     fn sight_walk(&self, a: (f32, f32), b: (f32, f32)) -> bool {
         let (mut tx, mut ty) = (a.0.floor() as i32, a.1.floor() as i32);
         let end = (b.0.floor() as i32, b.1.floor() as i32);
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let (sx, sy) = (dx.signum() as i32, dy.signum() as i32);
-        // Parameter t along the segment at the next vertical and horizontal tile edge.
-        let next = |p: f32, d: f32, t: i32| if d > 0.0 { (t as f32 + 1.0 - p) / d } else if d < 0.0 { (t as f32 - p) / d } else { f32::INFINITY };
-        let (mut tmx, mut tmy) = (next(a.0, dx, tx), next(a.1, dy, ty));
-        let (tdx, tdy) = (if dx != 0.0 { 1.0 / dx.abs() } else { f32::INFINITY }, if dy != 0.0 { 1.0 / dy.abs() } else { f32::INFINITY });
+        // Parameter t along the segment at the next vertical and horizontal tile edge, each
+        // from its edge's own coordinate (not summed step by step): a corner the segment passes
+        // through exactly is a tie both ways, as two exact quotients that are equal round alike.
+        let at = |p: f32, d: f32, edge: i32| if d != 0.0 { (edge as f32 - p) / d } else { f32::INFINITY };
+        let (mut ex, mut ey) = (tx + (sx > 0) as i32, ty + (sy > 0) as i32);
+        let clear = |x: i32, y: i32| self.passable_missile(x as f32 + 0.5, y as f32 + 0.5);
         let mut guard = (end.0 - tx).abs() + (end.1 - ty).abs() + 2;
         while (tx, ty) != end && guard > 0 {
             guard -= 1;
+            let (tmx, tmy) = (at(a.0, dx, ex), at(a.1, dy, ey));
             if tmx < tmy {
                 tx += sx;
-                tmx += tdx;
-            } else {
+                ex += sx;
+            } else if tmy < tmx {
                 ty += sy;
-                tmy += tdy;
+                ey += sy;
+            } else {
+                // Through the corner itself (both edges at once). A segment that ends on the
+                // corner ends in its end tile, which may be one beside it.
+                if (tx + sx, ty) == end || (tx, ty + sy) == end {
+                    break;
+                }
+                if !clear(tx + sx, ty) && !clear(tx, ty + sy) {
+                    return false;
+                }
+                tx += sx;
+                ty += sy;
+                ex += sx;
+                ey += sy;
             }
-            if (tx, ty) != end && !self.passable_missile(tx as f32 + 0.5, ty as f32 + 0.5) {
+            if (tx, ty) != end && !clear(tx, ty) {
                 return false;
             }
         }
@@ -698,6 +718,69 @@ mod tests {
         c.set(3, 4, Terrain::Wall);
         c.set(4, 3, Terrain::Wall);
         assert!(!c.sight_clear((2.5, 5.5), (5.5, 2.5)), "two walls meeting at a corner hide");
+        assert!(!c.sight_clear((5.5, 2.5), (2.5, 5.5)), "both ways");
+    }
+
+    /// One wall's corner does not hide: someone standing in a gateway is seen from the tile
+    /// diagonally beside it across the wall's end, and sees back (the verify-minds `dealings`
+    /// scene: a demander placed beside a guard in a city gate, 2026-11-11). Before, the walk
+    /// broke an exact corner tie toward one side, so one of the two saw the other and not back.
+    #[test]
+    fn sight_across_one_walls_corner_is_the_same_both_ways() {
+        let mut m = Map { w: 16, h: 16, tiles: vec![Terrain::Grass as u8; 256], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        // A city wall along y = 8 with a gateway at x = 6.
+        for x in 0..16 {
+            if x != 6 {
+                m.set(x, 8, Terrain::Wall);
+            }
+        }
+        let gate = (6.5, 8.5);
+        for beside in [(7.5, 7.5), (7.5, 9.5), (5.5, 7.5), (5.5, 9.5)] {
+            assert!(m.sight_clear(beside, gate) && m.sight_clear(gate, beside), "{beside:?} and the gateway see each other");
+        }
+        // Where `place_near` puts someone beside a body in the gateway (the free tile nearest
+        // the one east of it, which is wall): in plain view of it, and it of them.
+        for (taken, label) in [(None, "east of it is wall"), (Some((7, 7)), "and the first diagonal is taken")] {
+            let at = m.nearest_free(gate.0 + 1.0, gate.1, 6.0, true, Some(gate), |x, y| Some((x, y)) == taken || (x, y) == (6, 8)).unwrap();
+            assert!((at.0 - gate.0).hypot(at.1 - gate.1) < 1.5, "{label}: {at:?}");
+            assert!(m.sight_clear(at, gate) && m.sight_clear(gate, at), "{label}: {at:?} and the gateway see each other");
+        }
+        // Across the wall from beside the gateway (no gap between them): hidden both ways.
+        assert!(!m.sight_clear((7.5, 7.5), (7.5, 9.5)) && !m.sight_clear((7.5, 9.5), (7.5, 7.5)));
+        assert!(!m.sight_clear((7.5, 7.5), (8.5, 9.5)) && !m.sight_clear((8.5, 9.5), (7.5, 7.5)));
+        // Diagonally through the open gateway, past a wall's corner on each side of it; shut,
+        // the gate hides.
+        assert!(m.sight_clear((7.5, 7.5), (5.5, 9.5)) && m.sight_clear((5.5, 9.5), (7.5, 7.5)));
+        m.blocked.insert(8 * 16 + 6);
+        assert!(!m.sight_clear((7.5, 7.5), (5.5, 9.5)) && !m.sight_clear((5.5, 9.5), (7.5, 7.5)));
+        // A segment ending exactly on a corner ends in its own tile, beside the corner, not in
+        // the wall diagonally past it.
+        let mut c = Map { w: 16, h: 16, tiles: vec![Terrain::Grass as u8; 256], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        c.set(4, 4, Terrain::Wall);
+        assert!(c.sight_walk((5.5, 3.5), (5.0, 4.0)));
+    }
+
+    /// Sight between tile centres (where bodies are placed, and where exact corner crossings
+    /// happen) is symmetric over random walls and rock.
+    #[test]
+    fn sight_between_tile_centres_is_symmetric() {
+        let mut m = Map { w: 48, h: 48, tiles: vec![Terrain::Grass as u8; 48 * 48], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        let mut r: u64 = 0x9e37_79b9_7f4a_7c15;
+        let mut next = || {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            r
+        };
+        for _ in 0..500 {
+            let (x, y) = ((next() % 48) as i32, (next() % 48) as i32);
+            m.set(x, y, if next() % 2 == 0 { Terrain::Wall } else { Terrain::Rock });
+        }
+        for _ in 0..20_000 {
+            let a = ((next() % 48) as f32 + 0.5, (next() % 48) as f32 + 0.5);
+            let b = (((a.0 as i64 + (next() % 17) as i64 - 8).clamp(0, 47)) as f32 + 0.5, ((a.1 as i64 + (next() % 17) as i64 - 8).clamp(0, 47)) as f32 + 0.5);
+            assert_eq!(m.sight_walk(a, b), m.sight_walk(b, a), "{a:?} <-> {b:?}");
+        }
     }
 
     #[test]

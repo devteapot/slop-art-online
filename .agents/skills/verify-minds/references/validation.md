@@ -5,6 +5,22 @@
 
 Branch `mind-skill-timings` at c6af2ff6, the trial service (port 3320), fake model. Scoped maintain-verification-skill pass on `features/deliberation.md`: its citations brought to the current lines (`perceive.rs:270`, `mind.rs:1286`, `:1812`, authority `mind.rs:360`, `:409`, `brain.rs:517`), the `timings` case and `LIVING_SKILL_TIMINGS` mapped. Live: `minds-time3-234118` `roundtrip`, `acts`, `timings` pass, `minds-time3-off-234118-roundtrip` passes with the switch off; `reasons` passed in `minds-time3-233156`, and its later attempts stopped in the suite's own `cargo test -p living-mind` on two timing tests of `llm.rs` (`a_failed_poll_keeps_the_batch…`, `unreachable_provider_holds_calls`; the file is main's) at a load average of 76 on 20 cores.
 
+## 2026-11-12 fix-dealings: `dealings` passes again on main (dev-box)
+
+Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14.1, port 3332, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 4–72 from other work.
+
+- **Reproduced on main** (`minds-fixdeal-r1`, and by hand on scratch worlds): the demander's `demand` was refused with "no #1 in sight", so no record was made.
+- **Breaking merge: fix-place-free (`e3f0527f0`).** `place_near` now takes the nearest free walkable tile. Beside the default world's first adult, a guard standing in the north gate (404,338) with walls east and west of it, that tile is the diagonal (405,337), across the wall's end.
+  - `Map::sight_walk` broke an exact corner tie toward y, so the demander's line entered the wall tile (405,338) while the guard's line back went through open ground. The guard saw the demander and not the reverse.
+  - Before fix-place-free, `place_near` put the demander inside the wall tile east of the gate, and an end tile never blocks. Probes (no mind) at 3c73d835, e3f0527f0, 28c8e7b0 and e417c08e, with the guard in the north gate, show where it lands. At the east gate (420,354) the tile east of her is open ground and the demand is made, at fix-place-free's parent and at fix-place-free alike.
+  - The candidate merges after 46fa9db3 (exp-greet, look-2, hearth-1, fix-store-scrub-5, fix-look-label) do not take part.
+- **Second cause, in the driver:** neither adult was held before placing, so the guard walked to her post and the demander to the berry bushes while the mind service started (`r1`: the demander last saw the guard 10 m away).
+- **Fix:** the corner rule in the rules crate (verify-core record of the same date). The case now holds both adults before `place_near`, as `answers` does, and keeps recipes-1's ask/met race fix (`f08665f2f`).
+- **Results:**
+  - `dealings`: 3/3 (`minds-fixdeal-d1`–`d3`). In 20 more runs (`n01`–`n20`) the case passed 19 times. n18 failed before the case, in the runner's unit tests: `llm::tests::unreachable_provider_holds_calls` measured the gate's 2 s pause from the first call's return, a few ms after the failure that starts it (1.9966 s under load). Its clock now starts before the first call. The n18 slot rerun (`n18b`) passes, unit tests included: 20 of 20 case runs pass.
+  - `sight` and `fov` pass (`minds-fixdeal-m1`).
+  - `takeover` failed once in `m1`: its "in flight" think came within `think_min_s` of the second takeover's own deliberation (22:57:08 against 22:57:06–:14), so the authority asked nothing. That is the cadence race recipes-1 fixed in `dealings`, not sight. It passed alone (`minds-fixdeal-t2`). Not fixed here.
+
 ## 2026-11-11 greeting switches on by default (exp-greet after main 990ab80, Spark)
 
 Branch `exp-greet` with origin/main and `greet-result` merged. The defaults are now `LIVING_GREET=nearest`, `LIVING_PARK=concurrent` and the law `speech_audience` on. Trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, host load 24–32 from other batches.

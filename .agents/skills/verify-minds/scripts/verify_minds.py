@@ -594,6 +594,11 @@ def dealings_case(run):
     acts the rules mark for talk (offer_terms, demand)."""
     people = prepare(run)
     actor, other = [p['id'] for p in people]
+    # Both are held still before the demander is placed beside the other (as `answers` does):
+    # their own instinct graphs would otherwise walk them apart while the mind service starts
+    # (the default world's first adult is a guard on its way to the north gate).
+    run.admin('set_behavior', other, json.dumps({'wait': 120}))
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
     run.admin('place_near', other, actor)
     run.admin('grant_items', actor, 'stone', 2)
     pay = basic_reply(acts=[{'do': 'give', 'target': {'id': other}, 'item': 'stone', 'qty': 1}])
@@ -603,9 +608,7 @@ def dealings_case(run):
     models = model(run, script)
     run.start(models, [actor])
     accepted_before = len(run.thoughts(actor))
-    # The demander is held still (its own instinct graph could keep its body busy) and acts as its
-    # mind would decide.
-    run.admin('set_behavior', other, json.dumps({'wait': 120}))
+    # The demander, held still beside it, acts as its mind would decide.
     run.admin('mind_act', other, [json.dumps({'do': 'demand', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'text': 'verify dealing'})], 'verify-minds')
     try:
         demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 60)[0]
