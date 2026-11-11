@@ -724,6 +724,13 @@ The fake run shows the mechanics. Whether residents then greet, watch or talk ab
 - First contact by class: 12 of 12 and 7 of 10 `question`, the scripted line. The control's 3 others were `approach, no line`.
 - Crowding: `converge_60s` 11 in `arrive-all` and 4 in control, both `runs_3plus`. Every resident saying the same line at once is what the measure should catch.
 
+`af4` (2026-11-11, after merging main and `fix-stale-reasons`): `arrive` and `arrive-answer` × control and `arrive-all`, one run each, 9 minutes, concurrency 64, the same proof-only fake script.
+
+- All four ran to their duration with `thoughts_all.jsonl` recorded (`record.thoughts`).
+- With the fix, residents' deliberations re-used no reason: `carried_again` was 0 of 42–62 reasons per run (`detail.reasons`). One-time reasons repeated from a resident's earlier prompt (`reused_events`) were 0–1 per run, against 8–90 in `af1` before the fix.
+- In `arrive-answer` × `arrive-all` the player answered Lio 7.8 s after his line: the player looks every 2 s while it walks and stands. Lio replied in 1.5 s, and Teodor joined.
+- In `arrive-answer` × control nobody's line reached the player's ear, so it never answered.
+
 Driving the laws on a scratch world: `scenes.py newcomers` on a hamlet run (`core-arrive-n3`) passed 18 of 18 checks. Shipped: the crowd hides the newcomer; the first sight is 0.45, not near home, and asks for no thought. On: seen in the crowd, "near your home", 0.7 (persona-less, temperament 50); asks for a thought; the scene marks them and no neighbour; wonders about them 20 s later and about no neighbour.
 
 ### The paid batch, planned

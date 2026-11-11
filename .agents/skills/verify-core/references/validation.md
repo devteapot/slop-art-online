@@ -1,6 +1,10 @@
 # Core validation record
 
 
+## 2026-11-11 exp-arrive after merging main 62d861f and fix-stale-reasons 0209eb4 (Spark)
+
+`newcomers` 18 of 18 on the merged build (`core-arrive-n6`, hamlet; launch kept the seed's laws again, see verify-minds' record), and 18 of 18 after main alone (`core-arrive-n5`, whose launch had exited 1 installing the plain script before the fix). `just living-check` exits 0 (`.local/living/arrive/living-check-3.log`).
+
 ## 2026-11-11 exp-arrive: the newcomer laws (Spark)
 
 Branch `exp-arrive` from main `fba1778`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`. New scene `newcomers` (features/sight.md) on hamlet runs: `core-arrive-n3` 18 of 18, and `core-arrive-n4` 18 of 18 again after the glimpse rows were bounded like other familiarity rows. The earlier attempts were scene defects:

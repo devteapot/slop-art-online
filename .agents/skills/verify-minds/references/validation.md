@@ -1,5 +1,11 @@
 # Internal mind validation
 
+## 2026-11-11 exp-arrive after merging main 62d861f and fix-stale-reasons 0209eb4 (Spark)
+
+- `reasons`, `conversation` and `roundtrip` pass (`minds-arrive-m4-185828`). The first attempt (`minds-arrive-m3-185610`) failed all three at launch, before any check ran: main's `skills.rhai` is 133,155 bytes, past the 128 KiB a single command-line argument may be (`OSError: Argument list too long` from `spacetime call install_script`). `verify.py launch` now installs it over HTTP with the owner's token. Main's `1b3b5dd` had also dropped the launch's keeping of a seed's own laws (it started from an older copy of `verify.py`); restored.
+- Trials: `af4` (`arrive` and `arrive-answer` × control and `arrive-all`, 9 minutes, `--fake-script living/trials/fake/arrive-answer.json`, concurrency 64): all ran to their duration. `carried_again` (from `detail.reasons`) was 0 in every run; the player answered once, and the resident replied.
+- `af3` before the merge: `arrive-answer`, concurrency 64 in `mind-env.json` and the summary, `LIVING_ONLY` without Tobin and the player's groups chosen among the minds.
+
 ## 2026-11-11 exp-arrive: the arrival trial and the newcomer laws (Spark)
 
 Branch `exp-arrive` from main `fba1778`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake model only. The mind service is unchanged; the authority gained the newcomer laws (off by default), and the trial runner gained the scripted arrival player, `record` options, `subject.join.after_s`, `--fake-script` and worktree module names (features/trials.md).

@@ -184,7 +184,12 @@ def launch(a):
     if st["seed_laws"]:
         log(st, "the seed carries its own laws: kept as installed at creation (no install_script)")
     else:
-        stdb("call", "-s", "local", st["db"], "install_script", json.dumps((LIVING / "scripts/skills.rhai").read_text()))
+        # Over HTTP with the owner's token: the script (133 KB since main's goods) is longer than
+        # one command-line argument may be (128 KiB), so `spacetime call` cannot carry it.
+        code, body = http(f"/v1/database/{st['db']}/call/install_script", [(LIVING / "scripts/skills.rhai").read_text()], admin_token())
+        if code != 200:
+            save(st)
+            sys.exit(f"install_script failed: HTTP {code} {body.strip()[-2000:]}")
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)
