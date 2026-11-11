@@ -55,11 +55,14 @@ pub struct Action {
     /// none): a move plays only its motion, timed to the rules' windup ([`timing`]).
     pub from: f32,
     pub cut: Option<f32>,
+    /// A whole-body clip that lets the gait go on stepping under it (a moving jump's take, so the
+    /// gait is in stride when the take fades at landing; `anim.rs`).
+    pub gait: bool,
 }
 
 impl Default for Action {
     fn default() -> Self {
-        Self { clip: "", rate: 1.0, start_ms: 0.0, hold: None, face: None, from: 0.0, cut: None }
+        Self { clip: "", rate: 1.0, start_ms: 0.0, hold: None, face: None, from: 0.0, cut: None, gait: false }
     }
 }
 

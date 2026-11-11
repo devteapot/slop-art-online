@@ -42,6 +42,7 @@ mod sight;
 mod sightedge;
 mod sightfield;
 mod sky;
+mod takes;
 mod talk;
 mod style;
 mod terrain;

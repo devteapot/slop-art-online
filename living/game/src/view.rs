@@ -126,6 +126,8 @@ pub struct Item {
     /// The clip to play while not photographing a clip.
     first_clip: usize,
     graph: Option<(Handle<Gltf>, Vec<AnimationNodeIndex>, Entity)>,
+    /// The model's own turn to face the camera (VRM 0.x models face −Z).
+    turn: Quat,
 }
 
 #[derive(Resource)]
@@ -141,6 +143,10 @@ pub struct ViewState {
     batch: (usize, usize, f32),
     reports: Vec<serde_json::Value>,
     started: f32,
+    /// Batch: how the model in focus is turned (radians about +Y) and moved (m) for the frame
+    /// photographed, as the game moves a body for its clip: a turn take turns along its curve,
+    /// a take with its own track moves along it, a gait on its belt moves at its speed.
+    shift: (f32, Vec3),
 }
 
 /// Resolve the requested files to paths under the asset folder.
@@ -278,7 +284,7 @@ pub fn setup(
         let shots = parse_shots(&spec, &clips, &shown, file);
         let first_clip = shown.first().copied().unwrap_or(0);
         let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(file.clone()), vec![], Entity::PLACEHOLDER));
-        let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph }, WorldAssetRoot(handle), Transform::from_rotation(turn), Visibility::Hidden));
+        let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph, turn }, WorldAssetRoot(handle), Transform::from_rotation(turn), Visibility::Hidden));
         if let Some(r) = recipe {
             // A recipe's character: rigged for its face, shaped, recoloured and sprung.
             e.insert(crate::characters::Character { recipe: r, stride: 1.0 });
@@ -295,6 +301,7 @@ pub fn setup(
         batch: (0, 0, 0.0),
         reports: vec![],
         started: 0.0,
+        shift: (0.0, Vec3::ZERO),
     });
 }
 
@@ -341,9 +348,11 @@ pub fn layout(state: Res<ViewState>, mut items: Query<(&Item, &Fitted, &mut Tran
         let w = fit.size.x.max(fit.size.z) + 1.5;
         let at = if batch { 0.0 } else { x + w / 2.0 };
         x += w;
-        let c = tf.rotation * fit.center;
-        tf.translation.x = at - c.x;
-        tf.translation.z = -c.z;
+        let (yaw, off) = if batch && item.index == state.focus { state.shift } else { (0.0, Vec3::ZERO) };
+        tf.rotation = Quat::from_rotation_y(yaw) * item.turn;
+        let c = item.turn * fit.center;
+        tf.translation.x = at - c.x + off.x;
+        tf.translation.z = -c.z + off.z;
         *vis.into_inner() = if !batch || item.index == state.focus { Visibility::Inherited } else { Visibility::Hidden };
     }
 }
@@ -487,6 +496,9 @@ pub fn batch(
                 pl.stop_all();
                 pl.play(*node).seek_to(t).pause();
             }
+            state.shift = shift_of(&file, &item.clips[clip].0, t);
+        } else {
+            state.shift = (0.0, Vec3::ZERO);
         }
         if shot.clip.is_some() { format!("clip-{}", shot.name) } else { shot.name.clone() }
     } else {
@@ -538,6 +550,22 @@ pub fn batch(
         crate::capture::shot(&mut commands, target.as_deref(), dir.join(format!("{step:02}-{name}.png")));
         state.batch = (i, step + 1, now + 0.3);
     }
+}
+
+/// How the game turns and moves a body for `clip` at `t` s (see [`ViewState::shift`]), facing
+/// +Z: its left is +X, and a turn to the right (the game's sense) turns it clockwise from above.
+fn shift_of(file: &str, clip: &str, t: f32) -> (f32, Vec3) {
+    let gaits = crate::gait::of(file);
+    let Some(info) = gaits.info(clip) else { return (0.0, Vec3::ZERO) };
+    let len = info.seconds.max(1e-3);
+    let yaw = -info.turned(t / len);
+    let o = info.path_at(t);
+    let mut off = Vec3::new(o.x, 0.0, o.y);
+    if let Some((speed, deg)) = crate::gait::belt(file, clip) {
+        let d = deg.to_radians();
+        off += Vec3::new(-d.sin(), 0.0, d.cos()) * speed * t;
+    }
+    (yaw, off)
 }
 
 fn sanitize(s: &str) -> String {
