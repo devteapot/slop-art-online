@@ -5,6 +5,7 @@
                                                         # store, its minds and the game client
     python3 living/tools/play.py SCENE --fresh          # delete the current world first (says what, asks)
     python3 living/tools/play.py SCENE --no-minds       # the world and the client only (no model calls)
+    python3 living/tools/play.py SCENE --now            # do not wait for heavy jobs already running
     python3 living/tools/play.py SCENE --no-client --minds-without-client [--minutes N]
                                                         # minds with nobody playing (paid; prints $/hour)
     python3 living/tools/play.py SCENE --status         # what is running, and the run's cost so far
@@ -14,6 +15,9 @@
 
 `just living-play SCENE [options]` runs the same. SCENE is a directory holding `play.json` (or the
 path of such a file); docs/LIVING_CORE.md "Play with one command" documents the format.
+
+While the game is open the launcher holds the laptop's build lock (.local/build-slots/session),
+so build-slot starts no new heavy job; before opening it, it waits for jobs already running.
 
 When the client exits, whether the player quit or it crashed, the launcher:
   1. pauses the world (the offline takeover does not fire while it is paused);
@@ -45,6 +49,9 @@ from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent
 REPORT = TOOLS / "play_report.py"
+# The laptop's heavy-job slots (.local/bin/build-slot). While a game is open the launcher holds
+# <slots>/session/{pid,since}; build-slot starts no new heavy job while that pid lives.
+BUILD_SLOTS = Path(os.environ.get("PLAY_BUILD_SLOTS", "/Users/carlid/dev/slop-art-online/.local/build-slots"))
 JWT = re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
 # Never ours to start or stop: the shared lab store holds the paused reference worlds' minds.
 SHARED_NEO4J = {"sao-living-neo4j-1"}
@@ -196,9 +203,16 @@ class Scene:
     def journal_dir(self, run):
         return self.minds["root"] / ".local/living/journal" / run if self.minds else None
 
+    @staticmethod
+    def _matches(pattern, name):
+        rx = re.escape(pattern).replace(re.escape("{stamp}"), r"\d{8}-\d{6}")
+        return bool(re.fullmatch(rx, name or ""))
+
     def db_ok(self, db):
-        prefix = self.db_pattern.split("{stamp}")[0]
-        return db.startswith("verify-") and db.startswith(prefix)
+        return db.startswith("verify-") and self._matches(self.db_pattern, db)
+
+    def run_ok(self, run):
+        return self._matches(self.run_pattern, run)
 
 
 # ---------------------------------------------------------------- processes
@@ -316,8 +330,13 @@ class World:
         return code, (data[0]["rows"] if data else [])
 
     def exists(self, db):
+        """True if the database answers, False only on 404; any other answer is an error, not 'gone'."""
         code, _ = self.sql(db, "SELECT paused FROM world")
-        return code == 200
+        if code == 200:
+            return True
+        if code == 404:
+            return False
+        raise Refuse(f"SpacetimeDB answered HTTP {code} for {db}; cannot tell whether it exists")
 
     def paused(self, db):
         code, rows = self.sql(db, "SELECT paused FROM world")
@@ -564,6 +583,99 @@ def cost_line(t, label):
     return s
 
 
+# ---------------------------------------------------------------- the build lock
+
+
+def held_slots():
+    """Heavy jobs running now: build-slot's slot-N directories whose pid lives."""
+    out = []
+    for d in sorted(BUILD_SLOTS.glob("slot-*")):
+        try:
+            pid = int((d / "pid").read_text().split()[0])
+        except (OSError, ValueError, IndexError):
+            continue
+        if alive(pid):
+            label = (d / "label").read_text().strip() if (d / "label").is_file() else "?"
+            since = (d / "since").read_text().strip() if (d / "since").is_file() else "?"
+            out.append(f"{d.name}: {label} (pid {pid}, since {since})")
+    return out
+
+
+def lock_builds(pid):
+    """Hold the build lock for a play session (pid = the launcher). Returns what happened."""
+    if not BUILD_SLOTS.is_dir():
+        return f"no build slots at {BUILD_SLOTS}; nothing to hold"
+    lock = BUILD_SLOTS / "session"
+    for _ in range(2):
+        try:
+            lock.mkdir()
+        except FileExistsError:
+            try:
+                other = int((lock / "pid").read_text().split()[0])
+            except (OSError, ValueError, IndexError):
+                other = None
+            if other and other != pid and alive(other):
+                return f"build lock already held by pid {other} (another session); builds stay held"
+            for f in lock.glob("*"):          # stale: its launcher is dead
+                f.unlink()
+            lock.rmdir()
+            continue
+        (lock / "pid").write_text(f"{pid}\n")
+        (lock / "since").write_text(time.strftime("%H:%M:%S") + "\n")
+        return f"build lock held ({lock}, pid {pid}): no new heavy job starts until the game closes"
+    return "could not take the build lock"
+
+
+def repoint_builds(old, new):
+    """The warden takes over the lock when the launcher dies while the game still runs."""
+    f = BUILD_SLOTS / "session" / "pid"
+    try:
+        if int(f.read_text().split()[0]) == old:
+            f.write_text(f"{new}\n")
+            return True
+    except (OSError, ValueError, IndexError):
+        pass
+    return False
+
+
+def unlock_builds(pids):
+    """Remove the build lock if one of `pids` (the launcher, the warden) holds it."""
+    lock = BUILD_SLOTS / "session"
+    try:
+        holder = int((lock / "pid").read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        return "build lock: not held"
+    if holder not in [p for p in pids if p]:
+        return f"build lock: held by pid {holder}, not this session; left alone"
+    for f in lock.glob("*"):
+        f.unlink()
+    lock.rmdir()
+    return "build lock released: heavy jobs may start again"
+
+
+def wait_for_builds(log, now):
+    """Before the game opens: let heavy jobs already running finish (the lock stops new ones)."""
+    jobs = held_slots()
+    if not jobs:
+        return
+    if now:
+        log(f"--now: starting while {len(jobs)} heavy job(s) run; the frame rate may suffer: " + "; ".join(jobs))
+        return
+    log(f"waiting for {len(jobs)} heavy job(s) to finish before the game opens (--now to start anyway; "
+        "the frame rate may suffer):")
+    for j in jobs:
+        log("  " + j)
+    start = shown = time.time()
+    last = jobs
+    while jobs:
+        time.sleep(5)
+        jobs = held_slots()
+        if jobs and (jobs != last or time.time() - shown >= 60):
+            log(f"  still waiting ({(time.time() - start) / 60:.0f} min): {len(jobs)} running: " + "; ".join(jobs))
+            shown, last = time.time(), jobs
+    log("heavy jobs finished; starting")
+
+
 # ---------------------------------------------------------------- the session
 
 
@@ -584,6 +696,8 @@ class Session:
         self.mind = None
         self.dir = None
         self.capture = None
+        self.locked = False
+        self.pending = []          # log lines from before the session directory exists
 
     # -- state
     def save(self):
@@ -593,9 +707,11 @@ class Session:
 
     def log(self, msg):
         say(msg)
+        self.pending.append(f"{utc()} {msg}\n")
         if self.dir:
             with open(self.dir / "launcher.log", "a") as f:
-                f.write(f"{utc()} {msg}\n")
+                f.writelines(self.pending)
+            self.pending = []
 
     # -- preflight
     def preflight(self, want_minds, want_client):
@@ -632,8 +748,9 @@ class Session:
     def choose_world(self):
         s, w = self.s, self.w
         cur = read_json(s.current_file)
-        if cur and not s.db_ok(cur.get("db", "")):
-            raise Refuse(f"{s.current_file} names {cur.get('db')!r}, which is not this scene's pattern {s.db_pattern}")
+        if cur and not (s.db_ok(cur.get("db", "")) and s.run_ok(cur.get("run", ""))):
+            raise Refuse(f"{s.current_file} names {cur.get('db')!r} / {cur.get('run')!r}, which are not this scene's "
+                         f"patterns {s.db_pattern} / {s.run_pattern}")
         if self.a.fresh and cur:
             db, run = cur["db"], cur["run"]
             jd = s.journal_dir(run)
@@ -680,7 +797,7 @@ class Session:
             return
         cmd = [self.s.fill(x, db=db, seed=self.s.seed or "", outdir=self.dir) for x in self.s.laws_check]
         with open(self.dir / "laws_check.log", "w") as f:
-            r = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, cwd=self.s.dir)
+            r = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, cwd=self.s.dir, env=scrub_env({}))
         if r.returncode:
             raise Refuse(f"the laws read-back failed ({self.dir / 'laws_check.log'}); the world was left paused. "
                          "Start with --fresh for a new world")
@@ -768,12 +885,22 @@ class Session:
             if is_same(prior.get("launcher_pid"), prior.get("launcher_ident")):
                 raise Refuse(f"a session of this scene is running (launcher pid {prior['launcher_pid']}); "
                              f"quit its client, or run with --stop")
+            if is_same(prior.get("client_pid"), prior.get("client_ident"), prior.get("client_bin")):
+                raise Refuse(f"a game of this scene is still open (client pid {prior['client_pid']}; its warden closes "
+                             "the session when it exits). Quit it, or run with --stop")
             self.log("the previous session did not close; closing it first")
             if teardown(s, prior, why="left over from a previous launch") is None:
                 end = time.time() + 180          # its warden is closing it: wait for that
                 while time.time() < end and (read_json(Path(prior["session_dir"]) / "session.json") or {}).get("status") != "closed":
                     time.sleep(1)
         self.preflight(want_minds, want_client)
+        if want_client:
+            # Builds stop while the owner plays: hold the lock first (no new heavy job starts), then
+            # let the ones already running finish, before anything paid starts.
+            self.lock_note = lock_builds(os.getpid())
+            self.log(self.lock_note)
+            self.locked = True
+            wait_for_builds(self.log, self.a.now)
 
         db, run, created = self.choose_world()
         st = stamp()
@@ -786,7 +913,8 @@ class Session:
         self.info = {"scene": str(s.file), "db": db, "run": run, "session_dir": str(self.dir), "status": "starting",
                      "started_ms": now_ms(), "started_utc": utc(), "created_world": created,
                      "launcher_pid": os.getpid(), "launcher_ident": proc_identity(os.getpid()),
-                     "minds": want_minds, "client": want_client, "report_tool": str(report)}
+                     "minds": want_minds, "client": want_client, "report_tool": str(report),
+                     "build_lock": getattr(self, "lock_note", None)}
         self.save()
         self.start_warden()
         # The world stays paused until the client's connection is open, so no takeover fires for the
@@ -914,11 +1042,19 @@ def teardown(scene, info, why, client=None, mind=None, report=True):
     ended_ms = now_ms()
     out = []
 
+    def note(msg):
+        say(msg)
+        try:
+            with open(sdir / "launcher.log", "a") as f:
+                f.write(f"{utc()} [teardown pid {os.getpid()}] {msg.strip()}\n")
+        except OSError:
+            pass
+
     def step(msg):
         out.append(msg)
-        say("  " + msg)
+        note("  " + msg)
 
-    say(f"session ending ({why}):")
+    note(f"session ending ({why}):")
     # The client first if it is still up (the launcher was told to stop).
     if info.get("client_pid"):
         if client is not None and client.poll() is not None:
@@ -943,6 +1079,9 @@ def teardown(scene, info, why, client=None, mind=None, report=True):
                 done["recorder"] = stop_pid(int(rec), proc_identity(int(rec)), Path(cmd.split()[0]).name,
                                             label="session recorder (record-stop left it)")
         step(f"session recorder: {done['recorder']}")
+    if info.get("client"):
+        done["build_lock"] = unlock_builds([info.get("launcher_pid"), info.get("warden_pid"), os.getpid()])
+        step(done["build_lock"])
     # 1. Pause the world: no takeover of the player's character, no ticks, until the next start.
     try:
         if w.exists(db):
@@ -990,7 +1129,7 @@ def teardown(scene, info, why, client=None, mind=None, report=True):
     if cur and cur.get("session_dir") == info["session_dir"]:
         write_json(scene.session_file, info)
     logs = [n for n in ("client.log", "mind.log", "launcher.log") if (sdir / n).is_file()]
-    say(f"  logs: {sdir} ({', '.join(logs)})")
+    note(f"  logs: {sdir} ({', '.join(logs)})")
     # 5. Tool 1's report.
     if report:
         run_report(scene, info, sdir)
@@ -1007,7 +1146,7 @@ def run_report(scene, info, sdir):
     if info.get("capture"):
         cmd += ["--capture", info["capture"]]
     with open(sdir / "report.log", "w") as f:
-        r = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+        r = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, env=scrub_env({}))
     if r.returncode == 0 and (sdir / "report/index.html").is_file():
         say(f"  report: {sdir / 'report/index.html'}")
     else:
@@ -1029,6 +1168,8 @@ def warden(scene, session_dir):
             if is_same(info.get("client_pid"), info.get("client_ident"), info.get("client_bin")):
                 if not waiting:
                     say(f"{utc()} launcher pid {info.get('launcher_pid')} is gone; waiting for client pid {info['client_pid']}")
+                    if repoint_builds(info.get("launcher_pid"), os.getpid()):
+                        say(f"{utc()} build lock now held by the warden (pid {os.getpid()})")
                     waiting = True
                 time.sleep(1)
                 continue
@@ -1069,8 +1210,9 @@ def status(scene):
         return 0
     db, run = cur["db"], cur["run"]
     ex = w.exists(db)
-    say(f"{scene.name}: world {db} (run {run}, created {cur.get('created_utc')}): "
-        + (("paused" if w.paused(db) else "RUNNING, ticks " + str(w.ticks(db))) if ex else "GONE"))
+    p = w.paused(db) if ex else None
+    state = "GONE" if not ex else "paused" if p else f"RUNNING, ticks {w.ticks(db)}" if p is False else "unknown (SQL failed)"
+    say(f"{scene.name}: world {db} (run {run}, created {cur.get('created_utc')}): {state}")
     info = read_json(scene.session_file)
     if info and info.get("status") != "closed":
         say(f"  session {info['session_dir']}: {info.get('status')}, launcher pid {info.get('launcher_pid')} "
@@ -1101,6 +1243,7 @@ def main(argv=None):
     ap.add_argument("--minds-without-client", action="store_true", help="allow paid minds with no client")
     ap.add_argument("--minutes", type=float, help="end a run without a client after this many minutes")
     ap.add_argument("--client-env", action="append", metavar="K=V", help="extra client environment (e.g. a scripted plan)")
+    ap.add_argument("--now", action="store_true", help="open the game without waiting for heavy jobs already running")
     ap.add_argument("--no-record", action="store_true", help="do not run tool 1's session recorder")
     ap.add_argument("--no-screen", action="store_true", help="record the session's rows but not the game window")
     ap.add_argument("--report-tool", metavar="PATH", help=argparse.SUPPRESS)  # tool 1 from elsewhere (tests)
@@ -1167,6 +1310,8 @@ def main(argv=None):
     finally:
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             signal.signal(sig, signal.SIG_IGN)
+        if sess.locked and not sess.info.get("session_dir"):
+            say(unlock_builds([os.getpid()]))
         if sess.info.get("session_dir"):
             teardown(scene, sess.info, why, client=sess.client, mind=sess.mind, report=code == 0 or bool(sess.client))
             say(f"next time: just living-play {scene.dir} (resumes {sess.info['db']}); --fresh for a new world")

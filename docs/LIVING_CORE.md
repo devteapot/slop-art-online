@@ -498,29 +498,37 @@ The session ends when the client exits, whether you close the window or it crash
 - **Prints the session's cost.** The cost is read from the run's journal at `living/tools/trials.py`'s prices. A model with no price there, such as the fake model server, is counted and named, not priced.
 - **Runs tool 1's report** (`living/tools/play_report.py`), when that file exists. While a session runs, the report tool's recorder keeps the authority's rows, and the client gets `LIVING_GAME_RECORD`.
 
+**Builds stop while you play.** While a game is open, the launcher holds the laptop's build lock, `.local/build-slots/session/{pid,since}` in the main checkout, and `build-slot` starts no new heavy job while that pid lives.
+- **Order.** The launcher takes the lock before the world or the minds start. If heavy jobs already hold slots, it lists them and waits for them to finish, printing a progress line every minute. Nothing paid runs while it waits. `--now` opens the game anyway, and the frame rate may suffer.
+- **Release.** The lock is removed in the same teardown that pauses the world. A killed launcher's lock is ignored by `build-slot`, because its pid is dead, unless the warden has taken it over to cover a game that is still running.
+
 A detached warden does the same steps if the launcher itself dies. It leaves a running game alone and closes the session when the game exits.
 
 ```bash
 just living-play .local/play3                      # create or resume the world, then play
 just living-play .local/play3 --fresh              # delete the current world first; says what it deletes, asks (--yes)
 just living-play .local/play3 --no-minds           # the world and the client only; no model calls
+just living-play .local/play3 --now                # do not wait for heavy jobs already running
+just living-play .local/play3 --name Diego         # the character's name at its first join (later starts are the same character)
 just living-play .local/play3 --status             # world, session, mind and store state, the run's cost so far
 just living-play .local/play3 --stop               # close a session left open (by its recorded PIDs)
 python3 living/tools/play.py --cost <journal dir>  # price any journal (an evidence folder holding journal/ works too)
 ```
 
 **Resume and fresh.**
-- **Resume.** Each start resumes the world named in `<scene>/current.json`, with the same `LIVING_RUN`, the same Neo4j volume and the same player token. That means the same world, the same minds and the same character. The world stays paused until the client's connection opens, so a pending takeover is cancelled rather than fired.
+- **Resume.** Each start resumes the world named in `<state>/current.json`, with the same `LIVING_RUN`, the same Neo4j volume and the same player token. That means the same world, the same minds and the same character. The world stays paused until the client's connection opens, so a pending takeover is cancelled rather than fired.
 - **`--fresh`.** It lists what it will delete: the database and everything in it. It also lists what it keeps: the run's logs, the journal, and the old run's nodes in the store (minds are keyed by run). From a terminal it asks before deleting; otherwise it needs `--yes`.
 - **Refusals.**
   - A start refuses a world whose laws read-back fails; use `--fresh`.
-  - A start refuses while another session of the scene is open.
+  - A start refuses while another session of the scene is open: its launcher lives, or its game is still running under the warden.
+  - A start refuses a `current.json` whose database or run does not match the scene's `db` and `run` patterns (`{stamp}` is `YYYYMMDD-HHMMSS`).
+  - An SpacetimeDB answer other than 200 or 404 is reported as an error, never taken to mean the world is gone.
 
 **The cost guard.** A scene with minds refuses `--no-client`, because paid minds would run with nobody playing. With `--minds-without-client` it runs anyway, shows the scene's cost per hour (and the rate measured on the world's earlier sessions), and prints the cost so far every 5 minutes. It runs until Ctrl-C, `--stop` or `--minutes N`. A scene without minds has nothing to guard.
 
-**Logs.** Each session keeps its logs in `<scene>/runs/<run>/sessions/<stamp>/`:
-- `client.log` (the client's stderr) and `mind.log`;
-- `launcher.log` and `warden.log`;
+**Logs.** Each session keeps its logs in `<state>/runs/<run>/sessions/<stamp>/`, where `<state>` is the scene directory unless `play.json` sets `"state"`:
+- `client.log` (the client's stdout and stderr) and `mind.log`;
+- `launcher.log` (every launcher line, the teardown's steps included) and `warden.log`;
 - `session.json` and `teardown.json`, which record what was stopped and how;
 - `cost.json`;
 - the laws read-back;
@@ -528,7 +536,20 @@ python3 living/tools/play.py --cost <journal dir>  # price any journal (an evide
 
 The journal stays under the mind root at `.local/living/journal/<run>/`.
 
-**Scene config.** A scene is a directory holding `play.json`. Relative paths are relative to that directory. `{scene}` and `{state}` expand anywhere. `{db}`, `{seed}` and `{outdir}` (the session directory) expand in `laws_check`, and `{db}` and `{session}` in client environment values.
+**Scene config.** A scene is a directory holding `play.json`. Relative paths are relative to that directory.
+
+Placeholders expand only in these fields:
+- `{scene}` and `{state}`: every path field, `laws_check`, `client.token` and the `env` values.
+- `{server}`, `{db}`, `{seed}` and `{outdir}` (the session directory): `laws_check`.
+- `{db}`: `client.token`.
+- `{db}` and `{session}`: client `env` values and `--client-env`.
+- `{db}`, `{run}` and `{session}`: `minds.env` values.
+
+Names such as `db`, `run`, `neo4j.container` and `neo4j.volume` are taken literally, except for `{stamp}`. Optional keys:
+- `"state"`: where `current.json`, `session.json`, `runs/` and `tokens/` live. The default is the scene directory.
+- `"server"`: default `http://127.0.0.1:3300`.
+- `"stdb_container"`: default `sao-living_spacetimedb_1`.
+- `neo4j.heap` and `neo4j.pagecache`: default `1G` and `512M`.
 
 ```json
 {
@@ -553,6 +574,11 @@ The journal stays under the mind root at `.local/living/journal/<run>/`.
 - **`minds.root`** is a checkout at the build's commit. The mind reads `living/seeds/species.json` there, along with its `.env`, and writes its journal there. `dotenv` links that checkout's `.env` when it has none. `seed` is passed relative to it. `minds.env` adds settings, for example `LIVING_MODELS` pointing at the fake model server for a free test.
 - **`neo4j`** names the scene's own container. The shared lab store (`sao-living-neo4j-1`, `:7689`) is refused. The password is generated into `password_file` (mode 600) at first start and passed only through child environments.
 - **A walk (world only).** Leave out `minds` and `neo4j`, and `seed` and `laws_check` if there is no laws overlay to check. The world is created or resumed, the client runs, and the world is paused when the client exits.
+
+Options for tests and captures:
+- `--client-env K=V` adds client environment, for example a scripted `LIVING_GAME_LIVE_PLAN` with `LIVING_GAME_LIVE={session}/live` for a headless run that quits by itself.
+- `--no-record` skips tool 1's recorder, and `--no-screen` keeps its rows but not the screen.
+- `--cost DIR --json` prints the totals as JSON.
 
 The launcher clears inherited `LIVING_*` and `TRIALS_*` variables from the shell before starting children. The admin token, the store's password and provider keys reach the children only through their environments; they are never printed or logged.
 
