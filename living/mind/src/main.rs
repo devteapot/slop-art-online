@@ -135,6 +135,11 @@ async fn main() -> Result<()> {
                 queries.push(lived);
                 queries.push("SELECT * FROM settlement".into());
             }
+            // Who heard each line and how they stood (private, kept a minute), for the
+            // conversation switches that need it (`LIVING_GREET`).
+            if mind::greet_audience() {
+                queries.push("SELECT * FROM audience".into());
+            }
             c.subscription_builder()
                 .on_applied(move |_| {
                     if let Some(tx) = ready.lock().unwrap().take() {

@@ -553,6 +553,17 @@ pub fn pos(b: &Body, now: u64) -> (f32, f32) {
     (x, y)
 }
 
+/// Which way a body faces at `now`, radians (+x east, +y south): its heading, turned as far
+/// as its current turn has carried it.
+pub fn heading(b: &Body, now: u64) -> f32 {
+    if b.turn == 0.0 || b.turn_s <= 0.0 {
+        return b.heading;
+    }
+    let t = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
+    let (_, _, h) = living_rules::steer::pose(b.x, b.y, b.heading, (b.vx * b.vx + b.vy * b.vy).sqrt(), b.turn, b.turn_s, t);
+    h
+}
+
 pub fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
     ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
 }

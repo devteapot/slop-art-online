@@ -50,6 +50,10 @@ fn laws() {
         // sets this in its seed's `rules`, like any law here. Every person has a mind: no law
         // turns minds off (docs/SEEDED_LIVES.md, "Every person a mind").
         cry_prompts_carers: true,
+        // Speech records who heard each line, how far and how far off the speaker's facing
+        // (the private `audience` table, kept a minute), for the minds' conversation rules
+        // (LIVING_GREET). Off: nothing is written.
+        speech_audience: false,
     }
 }
 
@@ -1813,5 +1817,6 @@ fn laws_about(l) {
         spawn_energy: `and energy ${short(l.spawn_energy)}`,
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
         cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
+        speech_audience: if l.speech_audience { "who heard each line, and how they stood toward the speaker, is kept for a minute" } else { "who heard a line is not kept" },
     }
 }

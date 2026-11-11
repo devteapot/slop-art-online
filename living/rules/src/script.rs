@@ -383,6 +383,9 @@ pub struct Laws {
     pub pasture_per_tile: f32,
     /// A crying infant makes its carers think about it; false: the cry is only heard.
     pub cry_prompts_carers: bool,
+    /// Speech records who heard each line and how they stood toward the speaker (the private
+    /// `audience` table), for the mind service's conversation rules; off by default.
+    pub speech_audience: bool,
 }
 
 
@@ -424,6 +427,7 @@ impl Default for Laws {
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
             cry_prompts_carers: true,
+            speech_audience: false,
         }
     }
 }
@@ -1418,6 +1422,7 @@ impl Scripts {
             spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
             cry_prompts_carers: flag("cry_prompts_carers", l.cry_prompts_carers),
+            speech_audience: flag("speech_audience", l.speech_audience),
         };
         Ok(l)
     }
@@ -1960,6 +1965,8 @@ mod tests {
         assert_eq!(over("fire_warmth", serde_json::json!(5)).unwrap().fire_warmth, 5.0);
         assert!(over("mindz", serde_json::json!(false)).unwrap_err().starts_with("`mindz` is not a law of this world"));
         assert!(over("cry_prompts_carers", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
+        // Who heard a line is kept only where a world asks for it.
+        assert!(!sc.laws().speech_audience && over("speech_audience", serde_json::json!(true)).unwrap().speech_audience);
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));
