@@ -6450,7 +6450,7 @@
   }
  ],
  "household_stores": {
-  "note": "Not placed: residents do not exist yet (phase 5). When the cast lands, each household's home holds the other 3 days of food for its people, and peat for its hearth beyond the hearth's first fill; with the Store's 3 days that is the 6 days of §2.",
+  "note": "Not placed yet. Each household's home holds the other 3 days of food for its people, and peat for its hearth beyond the hearth's first fill; with the Store's 3 days that is the 6 days of §2. The cast exists (towns[].residents, homes), but a household's store must be its own (the theft law reads a store's owner), and a plan's structures have no owner yet: a general `owner` (a household key) on `structures[]` would place these.",
   "per_person": {
    "smoked_fish": 4,
    "roots": 5

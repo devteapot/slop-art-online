@@ -602,7 +602,7 @@ for where, note in LAMPS:
 assert len([s_ for s_ in structures if s_["kind"] == "lamp"]) == 7
 
 # Stores: six days of food for 64 residents at the start (§2), half in the Store (the common
-# store, now) and half in the households (when the cast lands). Kept food: smoked fish for the
+# store) and half in the households (once a plan's structure can belong to a household). Kept food: smoked fish for the
 # fish share and roots for the roots' and the greens' (greens do not keep), counted raw (14).
 RESIDENTS = 64
 STORE_DAYS = 6
@@ -618,7 +618,7 @@ for l in lots:
     if l["id"] == "store":
         l["contents"] = COMMON_STORE
 HOUSEHOLD_STORES = {
-    "note": f"Not placed: residents do not exist yet (phase 5). When the cast lands, each household's home holds the other {STORE_DAYS / 2:g} days of food for its people, and peat for its hearth beyond the hearth's first fill; with the Store's {STORE_DAYS / 2:g} days that is the {STORE_DAYS} days of §2.",
+    "note": f"Not placed yet. Each household's home holds the other {STORE_DAYS / 2:g} days of food for its people, and peat for its hearth beyond the hearth's first fill; with the Store's {STORE_DAYS / 2:g} days that is the {STORE_DAYS} days of §2. The cast exists (towns[].residents, homes), but a household's store must be its own (the theft law reads a store's owner), and a plan's structures have no owner yet: a general `owner` (a household key) on `structures[]` would place these.",
     "per_person": food_for(1, STORE_DAYS / 2),
     "by_household": {l["household"]: {"lot": l["id"], "people": l["people"], **food_for(l["people"], STORE_DAYS / 2)} for l in lots if l.get("household")},
 }
