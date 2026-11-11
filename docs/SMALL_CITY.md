@@ -710,7 +710,9 @@ Each phase ends with something the owner can look at. "Touches" names what chang
 
 **Order and overlap.** Phase 1 can start today. Phases 2 and 4 do not depend on each other. Phase 3 needs phases 1 and 2. Phase 5's bible can be written during phase 3. The client-feel work runs alongside all of it and is not in this plan.
 
-**Phase 2, engine part (2026-11-11, branch `plan-1`).** A land seed can now carry hand-authored plans (`map.params.plans`): levels at exact heights, streets, stairs, a square, a harbour and lots with explicit models and heights, drawn as grey boxes until the kit exists. Households bind to lots (`homes`). See [authored plans](AUTHORED_PLANS.md). The full 65-lot plan is the next task; `living/seeds/cullet.json` is a rough first version.
+**Phase 2, engine part (2026-11-11, branch `plan-1`).** A land seed can now carry hand-authored plans (`map.params.plans`): levels at exact heights, streets, stairs, a square, a harbour and lots with explicit models and heights, drawn as grey boxes until the kit exists. Households bind to lots (`homes`). See [authored plans](AUTHORED_PLANS.md). The full plan followed in phase 2's second part (below).
+
+**Phase 2, the grey city (2026-11-11, branch `plan-2`).** The plan of all 65 buildings (93 lots), the Wrack's land and the grey boxes, walkable in the real client: [Cullet's plan](AUTHORED_PLANS.md#cullets-plan). The generator could not make this island from its parameters (its coast follows a random range, its sand is a strip at the water's edge, and resources could not be put at named points), so three general seed fields were added: an authored coastline and relief stamps (height, region kind, ground) in `map.params.relief`, and `resources` in a plan. Measured: the quay end to end in 58 s, the Fish Steps to the Crown in about 80 s (not the 2 minutes of §2), the Lintel in about 4 minutes. From the game camera's height the five landmarks are seen from 75 to 99% of the town's streets; the rules' own sight, blocked by the terrace drops, sees them from 2 to 19%.
 
 **What could stop it:**
 

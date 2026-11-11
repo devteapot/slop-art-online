@@ -30,6 +30,8 @@ pub struct Hosted {
     pub lots: Vec<PlannedLot>,
     /// The roads as a graph, for the stages of a known way (`town::seat`); dropped with the rest.
     pub ways: living_rules::ways::Ways,
+    /// Planned settlements' authored resources (`PlanSpec::resources`): kind and point.
+    pub resources: Vec<(String, (f32, f32))>,
 }
 
 pub struct Planned {
@@ -107,6 +109,7 @@ pub fn params_of(m: &SeedMap) -> Result<(u32, LandParams), String> {
     let params: LandParams = if m.params.is_null() { LandParams::default() } else { serde_json::from_value(m.params.clone()).map_err(|e| format!("map.params: {e}"))? };
     // Hand-authored plans are refused here, before anything is generated or written.
     living_rules::settle::validate_plans(&params.plans, size).map_err(|e| format!("map.params.plans: {e}"))?;
+    living_rules::land::validate_relief(&params.relief).map_err(|e| format!("map.params.relief: {e}"))?;
     Ok((size, params))
 }
 
@@ -252,7 +255,8 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
     };
     // Built by the planner's last step; a land made otherwise (none today) builds it here.
     let ways = land.ways.clone().unwrap_or_else(|| living_rules::ways::Ways::of(land));
-    Ok(Hosted { map, info, settlements, lots, ways })
+    let resources = land.plans.iter().flat_map(|p| p.resources.iter().cloned()).collect();
+    Ok(Hosted { map, info, settlements, lots, ways, resources })
 }
 
 /// The seed's settlement entry for each planned settlement. An entry of a site kind (`site`, or

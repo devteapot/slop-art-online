@@ -65,6 +65,19 @@ pub struct PlanSpec {
     pub sea: Vec<[f32; 2]>,
     #[serde(default)]
     pub lots: Vec<LotSpec>,
+    /// Resources at authored points (fishing spots on a quay's edge, trees in a copse), in the
+    /// plan's frame; they may lie outside its levels. The authority places those of kinds the
+    /// rules know when the world is created ([`Laid::resources`]); the others wait, unplaced,
+    /// for their kinds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<ResourceSpec>,
+}
+
+/// A resource at a point ([`PlanSpec::resources`]).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResourceSpec {
+    pub kind: String,
+    pub at: [f32; 2],
 }
 
 /// A ground level: a polygon at an exact height.
@@ -271,6 +284,7 @@ pub(crate) struct Resolved {
     pub(crate) paved: bool,
     pub(crate) sea: Vec<V2>,
     pub(crate) lots: Vec<PlanLot>,
+    pub(crate) resources: Vec<(String, V2)>,
     pub(crate) drop: f32,
     pub(crate) skirt: f32,
     pub(crate) blend: f32,
@@ -463,6 +477,13 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
         }
         lots.push(PlanLot { id: l.id.clone(), kind: l.kind, name: l.name.clone(), rect, level: li, model: l.model.clone().filter(|m| !m.is_empty()), height, landmark: l.landmark, spots });
     }
+    let mut resources = Vec::new();
+    for (i, rs) in s.resources.iter().enumerate() {
+        if rs.kind.is_empty() || !finite(&[rs.at]) {
+            return Err(format!("plan {id}: resources[{i}] needs a kind and a place"));
+        }
+        resources.push((rs.kind.clone(), f.pt(rs.at)));
+    }
     let n = square.len() as f32;
     let centre = square.iter().fold((0.0, 0.0), |a, q| add(a, mul(*q, 1.0 / n)));
     let all: Vec<V2> = levels.iter().flat_map(|l| l.poly.iter().copied()).collect();
@@ -485,6 +506,7 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
         paved: s.square.paved,
         sea,
         lots,
+        resources,
         drop: s.drop_m,
         skirt: s.skirt_m,
         blend: s.blend_m,
@@ -570,6 +592,9 @@ pub fn validate(s: &PlanSpec, size: u32) -> Result<(), String> {
         off(format!("stair {}", st.id), &st.rect.corners())?;
     }
     off("the square".into(), &r.square)?;
+    for (i, q) in r.resources.iter().enumerate() {
+        off(format!("resources[{i}] ({})", q.0), &[q.1])?;
+    }
     off("the sea".into(), &r.sea)?;
     for l in &r.lots {
         off(format!("lot {}", l.id), &l.rect.corners())?;
@@ -764,6 +789,8 @@ pub struct Laid {
     pub lots: Vec<LaidLot>,
     /// Road ids of its streets and their paving.
     pub streets: Vec<(u32, Option<String>)>,
+    /// Its authored resources: kind and point on the land ([`PlanSpec::resources`]).
+    pub resources: Vec<(String, V2)>,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -821,7 +848,7 @@ pub(crate) fn build(land: &Land, r: Resolved, idx: u16, site: u16, first_road: u
     let sq = &r.square;
     let near_square = |q: V2| poly_outside(sq, q) < 1.0;
     let mut roads = Vec::new();
-    let mut laid = Laid { id: r.id.clone(), settlement: idx, ..Laid::default() };
+    let mut laid = Laid { id: r.id.clone(), settlement: idx, resources: r.resources.clone(), ..Laid::default() };
     for (i, st) in r.streets.iter().enumerate() {
         // Points at most 2 m apart, each at the ground's height: the street lies on the plan.
         let pts = dedup(resample(&st.points, 2.0));
@@ -1062,6 +1089,55 @@ mod tests {
         v["lots"][0]["keepsake"] = "a caged gull".into();
         let s: PlanSpec = serde_json::from_value(v).expect("unknown fields ignored");
         validate(&s, 1024).expect("still valid");
+    }
+
+    /// `seeds/cullet.json` (docs/SMALL_CITY.md, written by `living/tools/cullet_plan.py`): the plan
+    /// and the authored land are valid, every building door is reachable, its five landmarks are
+    /// the Cone, the Counting House, the Heron, the Watchglass and the Lintel, and the sea, the
+    /// Hanger's forest and the Wrack Strand's sand are where the plan puts them.
+    #[test]
+    fn the_cullet_seed_is_valid_and_reachable() {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../../seeds/cullet.json")).expect("cullet.json");
+        let p: LandParams = serde_json::from_value(v["map"]["params"].clone()).expect("map.params");
+        let size = v["map"]["size"].as_u64().unwrap() as u32;
+        validate_all(&p.plans, size).unwrap();
+        crate::land::validate_relief(&p.relief).unwrap();
+        let l = land::generate(v["seed"].as_u64().unwrap(), size, &p);
+        let (m, h) = crate::host::hosted_map(&l, &p);
+        assert_eq!(stranded_doors(&l, &m, &h.reachable), Vec::<String>::new());
+        let laid = &l.plans[0];
+        let mut marks: Vec<&str> = laid.lots.iter().filter(|q| l.lots[q.lot as usize].landmark).map(|q| q.key.as_str()).collect();
+        marks.sort();
+        assert_eq!(marks, ["cone", "counting_house", "heron", "lintel", "watchglass"]);
+        let f = Frame::of(&p.plans[0]);
+        let at = |x: f32, y: f32| m.get(f.pt([x, y]).0 as i32, f.pt([x, y]).1 as i32);
+        assert_eq!(at(0.0, -40.0), Terrain::Water, "the harbour");
+        assert_eq!(at(0.0, -200.0), Terrain::Water, "the sea beyond the Combs");
+        assert_eq!(at(-220.0, 30.0), Terrain::Sand, "the Wrack Strand");
+        assert!(l.lakes.is_empty() && l.rivers.is_empty(), "no lake or river on a rock that drinks rain");
+        let forest = m.tiles.iter().filter(|t| **t == Terrain::Forest as u8).count();
+        assert!(forest > 500 && l.regions.len() > 0, "the Hanger: {forest} forest tiles");
+    }
+
+    /// Authored resources are kept on the land at their points, for the authority to place; one
+    /// off the land or without a kind is refused.
+    #[test]
+    fn the_test_plans_resources_are_kept_on_the_land() {
+        let (l, _, _) = plan_land();
+        let s = spec();
+        assert!(!s.resources.is_empty());
+        let f = Frame::of(&s);
+        let laid = &l.plans[0];
+        assert_eq!(laid.resources.len(), s.resources.len());
+        for (rs, (kind, at)) in s.resources.iter().zip(&laid.resources) {
+            assert_eq!(&rs.kind, kind);
+            assert!(dist(f.pt(rs.at), *at) < 1e-4, "{kind} at {at:?}");
+        }
+        let mut bad = s.clone();
+        bad.resources[0].at = [0.0, 2000.0];
+        assert!(validate(&bad, 1024).unwrap_err().contains("resources[0]"));
+        bad.resources[0].kind.clear();
+        assert!(validate(&bad, 1024).unwrap_err().contains("needs a kind"));
     }
 
     /// The test plan stands as written: its site and id, lots on their levels at exact
