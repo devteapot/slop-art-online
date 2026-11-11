@@ -7,6 +7,7 @@ Branch `kit-1` (origin/main `a107fdfa` merged at `cba7d89b` for the runs below; 
 
 - `generation-kit1b-20261111-165531` (`--feature worlds --seeds cullet,plan-test`): cullet 65 and plan-test 72 checks pass; `land` digests equal `floor_preview`'s; original seeds unchanged. Before the merge, `generation-kit1-20261111-163847`: cullet 64, plan-test 71.
 - The real game client connected to `verify-kit1-cullet-170011`, and after merging `view-1` to `verify-kit1-cullet-172154` (a fresh player, headless): digests matched (tiles `07290076efd70ae6`, heights `bc0680832fd92c40`, layout `bc262d3ed04f5cb2`), the `lot` rows' models drew, none reported as not on disk.
+- After merging main again (`ee477fbc`: Cullet's 64 residents compiled into the seed, ui-1, the asset board), `generation-kit1c-20261111-173034` (same features and seeds): cullet 301 and plan-test 72 checks pass; original seeds unchanged. The seed then has both the residents and the lots' models (`cullet_plan.py --check` passes).
 - Not covered: `authored`, `guards`, the other seeds (unchanged by this branch).
 
 ## 2026-11-11 drop-1: drop (8) and low (9) tiles (dev-box)
