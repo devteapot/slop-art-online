@@ -343,6 +343,8 @@ class Batches(unittest.TestCase):
             dest = os.path.join(t, "fetched")
             path = store.fetch_batch(be, "l9", dest, unpack=True)
             self.assertEqual(path, "batches/test/l9")
+            be.publish("runs", out, store.unit_path("session", "pt9", "test"), "session pt9")
+            self.assertEqual(store.fetch_batch(be, "pt9", os.path.join(t, "fs"), top="sessions"), "sessions/test/pt9")
             back = os.path.join(dest, "l9")
             self.assertTrue(os.path.exists(os.path.join(back, "life-iter11-r1", "journal", "Arlen.jsonl")))
             self.assertTrue(os.path.exists(os.path.join(back, "life-iter11-r2", "samples.jsonl")))

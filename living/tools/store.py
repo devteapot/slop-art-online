@@ -1953,17 +1953,17 @@ def unit_path(kind, name, machine):
     raise Refused(kind)
 
 
-def fetch_batch(backend, name, dest, machine=None, unpack=False):
-    prefix = "batches/"
+def fetch_batch(backend, name, dest, machine=None, unpack=False, top="batches"):
+    prefix = top + "/"
     hits = [p for p in backend.list("runs", prefix) if p.split("/")[2:3] == [name]]
     machines = sorted({p.split("/")[1] for p in hits})
     if machine:
         machines = [m for m in machines if m == machine]
     if not machines:
-        raise Refused(f"no batch {name} in the runs repository")
+        raise Refused(f"no {top[:-2] if top.endswith('es') else top[:-1]} {name} in the runs repository")
     if len(machines) > 1:
-        raise Refused(f"batch {name} exists on several machines ({', '.join(machines)}); pass --machine")
-    path = f"batches/{machines[0]}/{name}"
+        raise Refused(f"{name} exists on several machines ({', '.join(machines)}); pass --machine")
+    path = f"{top}/{machines[0]}/{name}"
     packed = os.path.join(dest, "packed") if unpack else dest
     backend.fetch("runs", path, packed)
     if unpack:
@@ -2277,11 +2277,12 @@ def cmd_fetch(a, cfg, machine):
             raise Refused(f"{dest} is read-only on this machine")
         wrote, kept = fetch_motion(backend, dest, force=a.force)
         print(f"{wrote} take(s) written, {kept} already there: {tilde(dest)}")
-    elif a.what == "batch":
+    elif a.what in ("batch", "session"):
         if not a.name:
-            raise Refused("fetch batch NAME")
-        dest = a.dest or os.path.join(REPO, ".local", "living", "store", "batches", a.name)
-        path = fetch_batch(backend, a.name, dest, machine=a.machine, unpack=a.unpack)
+            raise Refused(f"fetch {a.what} NAME")
+        top = a.what + ("es" if a.what == "batch" else "s")
+        dest = a.dest or os.path.join(REPO, ".local", "living", "store", top, a.name)
+        path = fetch_batch(backend, a.name, dest, machine=a.machine, unpack=a.unpack, top=top)
         print(f"{path} → {tilde(dest)}")
 
 
@@ -2354,7 +2355,7 @@ def main(argv=None):
     pb.add_argument("--root")
     pb.add_argument("--yes-publish", action="store_true")
     f = sub.add_parser("fetch")
-    f.add_argument("what", choices=["motion-library", "batch"])
+    f.add_argument("what", choices=["motion-library", "batch", "session"])
     f.add_argument("name", nargs="?")
     f.add_argument("--backend", choices=["local", "hf"], default="local")
     f.add_argument("--root")
