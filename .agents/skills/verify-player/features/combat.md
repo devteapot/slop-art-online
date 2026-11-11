@@ -38,7 +38,7 @@ $V cleanup --run $R
 - Energy is a real requirement: a character worn out by earlier scenes is refused "too tired". Use `--fresh`.
 - Place a dummy before setting its graph: a teleport drops an approach its graph already started.
 - A missile strikes the first body on its line, which may be an earlier scene's dummy or a resident at its post: the arrival spot is inside a town, with a building and residents in fixed lines (the diagonal fire bolt struck a wall on 2026-11-10). The bow and bolt scenes place their dummy in the first direction whose line is clear of wall, rock and other bodies (terrain from the public `terrain_chunk` rows), aim at where it actually stands, and check the health of the body the impact names (a bystander who walked in counts; one the shot killed counts as burned).
-- `my_combat` rows stay 1.5 s for the two involved (a refusal 4 s, an onlooker's 300 ms; the dead one's death and witnesses until it joins again); filter by `at_ms` per scene and read soon after the act.
+- `my_combat` rows stay 4 s for the two involved and for a refusal (an onlooker's 300 ms; the dead one's death and witnesses until it joins again); filter by `at_ms` per scene and read soon after the act.
 - SQL returns `Ready` rows positionally: `[skill, from_ms, at_ms]`.
 - Presentation codes are `skill_card.code`, kept stable across script installs by the authority's private `skill_code` table; they are the world's codes, so read them from `skill_card`, never hard-code a number.
 - How `use_skill` aims a skill comes from its script shape (`aim`: creature, self_or_ally, point, facing, dash), not its name; the refusal text "no one there to <skill>" names the skill.

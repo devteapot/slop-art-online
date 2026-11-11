@@ -125,7 +125,7 @@ All are per-sender (`ViewContext`), take no arguments, declare `primary_key = id
 
 "My characters" are the caller's characters with `ai = false`. A mind service's identity controls AI characters (`ai = true`), so these views return nothing to it; it reads the tables as the owner.
 
-The existing `my_combat`, `my_readiness`, `my_skill_uses` and `my_deliberations` are unchanged in shape. Since the fourth change an onlooker's `my_combat` rows are written at its frame and stay 300 ms; the two involved get theirs at once, for 1.5 s (a refusal 4 s); only the one who died keeps its death and its witnesses for two minutes, until it joins again ([frames](#frames-what-others-do-reaches-a-player-once-per-frame)).
+The existing `my_combat`, `my_readiness`, `my_skill_uses` and `my_deliberations` are unchanged in shape. Since the fourth change an onlooker's `my_combat` rows are written at its frame and stay 300 ms; the two involved get theirs at once and keep them 4 s, as before frames (1.5 s for a while lost a polling reader's events); only the one who died keeps its death and its witnesses for two minutes, until it joins again ([frames](#frames-what-others-do-reaches-a-player-once-per-frame)).
 
 ### Frames: what others do reaches a player once per frame
 
