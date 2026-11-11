@@ -211,6 +211,8 @@ The owner's rule: resources come from the world, and nothing spawns by magic. So
 
 - **Goods.** The catalog has berries, fish and meat. Cullet needs kelp, ash, sand, glass, roots, greens, peat and lamp oil, with their recipes. The owner's "traits, not lists" decision suggests goods should become data with properties, so that food is anything with nutrition and fuel is anything that burns.
 - **Fire that eats fuel.** A furnace or hearth is lit only while it is fed.
+
+  *Built 2026-11-11 on `goods-1`:* goods, fires that eat fuel, recipes and shared fishing stocks, with Cullet's goods as data in its laws file, `living/seeds/worlds/cullet/laws.rhai` ([world rules](WORLD_RULES.md#goods-recipes-and-fuel)). Placing Cullet's nodes and fires is the authored plan's.
 - **Decay and upkeep.** Panes break and need glass. The owner has asked for this, as Rhai laws.
 - **Fish as a stock.** Today a fishing spot regrows. The owner wants fish to be animals eventually. For this test, regrowing spots with a shared limit are enough.
 - **Tide** (optional, recommended). A law that gives the water's state from the clock, shifting about 50 minutes later each day. It gates the Weirs and the wrack. It changes no terrain.
@@ -711,6 +713,8 @@ Each phase ends with something the owner can look at. "Touches" names what chang
 **Phase 2, engine part (2026-11-11, branch `plan-1`).** A land seed can now carry hand-authored plans (`map.params.plans`): levels at exact heights, streets, stairs, a square, a harbour and lots with explicit models and heights, drawn as grey boxes until the kit exists. Households bind to lots (`homes`). See [authored plans](AUTHORED_PLANS.md). The full plan followed in phase 2's second part (below).
 
 **Phase 2, the grey city (2026-11-11, branch `plan-2`).** The plan of all 65 buildings (93 lots), the Wrack's land and the grey boxes, walkable in the real client: [Cullet's plan](AUTHORED_PLANS.md#cullets-plan). The generator could not make this island from its parameters (its coast follows a random range, its sand is a strip at the water's edge, and resources could not be put at named points), so three general seed fields were added: an authored coastline and relief stamps (height, region kind, ground) in `map.params.relief`, and `resources` in a plan. Measured: the quay end to end in 58 s, the Fish Steps to the Crown in about 80 s (not the 2 minutes of §2), the Lintel in about 4 minutes. From the game camera's height the five landmarks are seen from 75 to 99% of the town's streets; the rules' own sight, blocked by the terrace drops, sees them from 2 to 19%.
+
+**Phase 5, the bible and the cast (2026-11-11, branch `bible-1`).** [`bible.md`](../living/seeds/worlds/cullet/bible.md) and [`cast.json`](../living/seeds/worlds/cullet/cast.json): the 64 residents of §3 in 22 households, each household on its plan lot, each person with §3's want and what is going on as anchors, kin both ways, ties, a starting rhythm, and the secrets on their knowers' entries only; 20 situations with every side's view, and the 11 tensions. `author_world.py cullet --check` checks them without a model, and `--dry-run` builds the 22 prompts and estimates the paid run (53 calls with DeepSeek V4.1 Flash, about €0.16 to €0.39); no sheets are drafted yet ([authored worlds](AUTHORED_WORLDS.md#cullet-cullet-cast-by-hand-with-anchors)). To fill kin, the bible adds the fever winter six years ago and a few family links that §3 does not give; the owner reviews them before the run.
 
 **What could stop it:**
 

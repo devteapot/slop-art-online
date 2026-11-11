@@ -156,6 +156,7 @@ pub fn fill(
                 stance: if is_hostile { Stance::Hostile } else { Stance::Neutral },
                 hp: if is_hostile { Some(0.62) } else { None },
                 exact: if is_hostile && s.lowhp { Some((31.0, 50.0)) } else { None },
+                kind_person: true,
             }
         })
         .collect();
@@ -284,5 +285,5 @@ pub fn fill(
             Poi { kind: PoiKind::Place, at: Vec2::new(36.0, 64.0) },
         ],
     };
-    model.map = MapInfo { me: me3.map(|m| Vec2::new(m.x, m.z)), facing: input.look.or(roam.map(|r| r.facing)), yaw: cam.shown_yaw, pois };
+    model.map = MapInfo { me: me3.map(|m| Vec2::new(m.x, m.z)), facing: input.look.or(roam.map(|r| r.facing)), yaw: cam.shown_yaw, pois, place: Some("Brackenford square".into()) };
 }

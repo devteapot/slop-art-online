@@ -200,22 +200,35 @@ fn wall(x: i32, y: i32, season: Season) -> Rgba {
     }
 }
 
+/// A drop between two ground levels (a terrace's edge): a steep earth bank in bands, open to
+/// the eye but not to the foot.
+fn ledge(x: i32, y: i32, season: Season) -> Rgba {
+    let band = y.rem_euclid(4);
+    let mut c = shade(mix(rgb(118, 96, 70), rgb(138, 114, 84), vnoise(x, y, 6, 74)), if band == 0 { 0.78 } else { 1.0 });
+    if season == Season::Winter {
+        c = mix(c, rgb(226, 230, 236), 0.35);
+    }
+    c
+}
+
 fn base(t: Terrain, x: i32, y: i32, depth: u8, season: Season) -> Rgba {
     match t {
         Terrain::Road => road(x, y, season),
-        Terrain::Wall => wall(x, y, season),
+        // A low thing's footprint (a well, a cart) is drawn as the wall it was before.
+        Terrain::Wall | Terrain::Low => wall(x, y, season),
         Terrain::Grass => grass(x, y, season),
         Terrain::Forest => forest_floor(x, y, season),
         Terrain::Water => water(x, y, depth, season),
         Terrain::Sand => sand(x, y, season),
         Terrain::Rock => rock(x, y, season),
         Terrain::Dirt => dirt(x, y, season),
+        Terrain::Drop => ledge(x, y, season),
     }
 }
 
-/// Tiles built by people keep crisp borders (no dithered blending).
+/// Tiles built by people, and drops, keep crisp borders (no dithered blending).
 fn built(t: Terrain) -> bool {
-    matches!(t, Terrain::Road | Terrain::Wall)
+    matches!(t, Terrain::Road | Terrain::Wall | Terrain::Drop | Terrain::Low)
 }
 
 /// Distance (in tiles, capped at 3) from each water tile to the nearest land.
@@ -561,6 +574,8 @@ fn overview(ctx: &egui::Context, map: &Map, depth: &[u8], season: Season) -> Tex
                         c = if sy == 0 { rgb(150, 146, 140) } else { rgb(64, 62, 60) };
                     } else if t == Terrain::Road {
                         c = rgb(184, 164, 126);
+                    } else if t == Terrain::Drop {
+                        c = rgb(122, 100, 74);
                     }
                     if t == Terrain::Forest {
                         let tones = foliage(season, crown(tx, ty).3);

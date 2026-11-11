@@ -139,6 +139,54 @@ pub struct LandParams {
     /// as written; the generator steps aside for them. Empty: the land is as before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plans: Vec<settle::PlanSpec>,
+    /// What hides what is behind it where the land is hosted ([`Sight`]): the eye height, and
+    /// per kind of lot or prop how high it hides. Default: 1.6 m, and each model's own height.
+    #[serde(default, skip_serializing_if = "Sight::is_default")]
+    pub sight: Sight,
+}
+
+/// Which built things hide what is behind them, for sight lines on the hosted tiles
+/// (`host::hosted_map`, docs/ISLAND_AUTHORITY.md "Sight over low things"). A lot or prop that
+/// blocks walking hides only what it stands above the eye: its footprint becomes `Wall` when it
+/// rises above `eye_m`, else `Low` (blocks the foot, not the eye). How high it rises is its
+/// model's height (`height_m`, from `data/buildings.json`), unless `hides_m` names its kind.
+/// Why land data, not a Rhai law: which tiles block is decided when the land is hosted, in this
+/// crate, without the world's script; and the game client rebuilds the same hosted land for its
+/// own sight test (sight-2). The authority and the client must compute blocking from the same
+/// input, and the only input both have is the seed's land data. Defaults come from each kind's
+/// own definition (its model's height); `hides_m` only overrides them.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Sight {
+    /// Eye height (metres above the ground): what rises above it hides what is behind.
+    pub eye_m: f32,
+    /// Per kind (a lot kind's or a prop kind's id: `market_stall`, `well`, `cart`, `fountain`…),
+    /// how high it hides (metres), in place of its model's height: `{"market_stall": 0}` makes an
+    /// open-sided stall see-through, `{"well": 0.95}` sees over a well's rim under its roof.
+    /// Empty: every model hides up to its own height.
+    pub hides_m: std::collections::BTreeMap<String, f32>,
+}
+
+impl Default for Sight {
+    fn default() -> Self {
+        Self { eye_m: 1.6, hides_m: Default::default() }
+    }
+}
+
+impl Sight {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Whether a thing of `kind` whose model is `height_m` tall hides what is behind it. A kind
+    /// named in `hides_m` hides by that value; otherwise by its model's height, and a thing with
+    /// no height known (0: no model) hides, as walls did before.
+    pub fn hides(&self, kind: &str, height_m: f32) -> bool {
+        match self.hides_m.get(kind) {
+            Some(&h) => h > self.eye_m,
+            None => height_m <= 0.0 || height_m > self.eye_m,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -380,7 +428,7 @@ pub struct SiteSpec {
 
 impl Default for LandParams {
     fn default() -> Self {
-        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default(), metro: None, plans: Vec::new() }
+        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default(), metro: None, plans: Vec::new(), sight: Sight::default() }
     }
 }
 
@@ -2565,6 +2613,8 @@ fn place_spec(c: &SiteCtx, slope: &dyn Fn(usize) -> f32, sp: &SiteSpec, placed: 
 fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_hold: bool) -> (u32, u32) {
     let n = tiles.len();
     let walk = |t: u8| Terrain::from_u8(t).walkable();
+    // Walls and drops (`walls_hold`) are never cut through: they are built, or the ground's own.
+    let holds = |t: u8| walls_hold && (t == Terrain::Wall as u8 || t == Terrain::Drop as u8);
     let nb4 = |k: usize| {
         let (x, y) = (k % w, k / w);
         [(x > 0).then(|| k - 1), (x + 1 < w).then(|| k + 1), (y > 0).then(|| k - w), (y + 1 < w).then(|| k + w)]
@@ -2629,7 +2679,7 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_ho
         let d = dist[k];
         for (dir, q) in nb4(k).into_iter().enumerate() {
             let Some(q) = q else { continue };
-            if walls_hold && tiles[q] == Terrain::Wall as u8 {
+            if holds(tiles[q]) {
                 continue;
             }
             let cost = (!walk(tiles[q])) as u16;
@@ -2675,7 +2725,7 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_ho
                             continue;
                         }
                         let b = by as usize * w + bx as usize;
-                        if !walk(tiles[b]) && !(walls_hold && tiles[b] == Terrain::Wall as u8) {
+                        if !walk(tiles[b]) && !holds(tiles[b]) {
                             tiles[b] = if tiles[b] == Terrain::Water as u8 { Terrain::Sand as u8 } else { Terrain::Dirt as u8 };
                             opened += 1;
                         }
@@ -2687,7 +2737,7 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_ho
     (opened, closed)
 }
 
-/// Link pockets that walls cut off, through water or rock but never through a wall.
+/// Link pockets that walls cut off, through water or rock but never through a wall or a drop.
 pub(crate) fn connect_walled(tiles: &mut [u8], w: usize) -> (u32, u32) {
     connect(tiles, w, 0, &[], true)
 }

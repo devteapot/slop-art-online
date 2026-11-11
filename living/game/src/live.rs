@@ -79,7 +79,7 @@ impl Plugin for LivePlugin {
             .add_systems(Update, (land, lots, bodies, me).chain().in_set(Phase::Present).after(crate::combat::actions).after(crate::town::shows))
             .add_systems(
                 Update,
-                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
+                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, crate::envs::reach, report)
                     .chain()
                     .in_set(Phase::Present)
                     .after(me)
@@ -87,7 +87,7 @@ impl Plugin for LivePlugin {
             )
             .add_systems(Update, ground_cursor.in_set(Phase::Camera).after(crate::camera::follow).run_if(island));
         if let Some(s) = Script::from_env() {
-            app.insert_resource(s).add_systems(Update, script.in_set(Phase::Input).before(crate::controls::movement));
+            app.insert_resource(s).add_systems(Update, script.in_set(Phase::Input).before(crate::controls::movement).before(crate::ui::UiInput));
         }
     }
 }
@@ -244,6 +244,7 @@ fn land(
     mut cams: Query<&mut DistanceFog, With<Camera3d>>,
     mut clear: ResMut<ClearColor>,
     mut roam: ResMut<Roam>,
+    mut draw: ResMut<crate::world::Draw>,
 ) {
     if island.is_some() || net.mode != Mode::Land {
         return;
@@ -284,6 +285,9 @@ fn land(
     let mine = defs.iter().find(|d| d.world.as_ref().is_some_and(|w| w.seed == row.seed && w.size == row.size));
     if let Some(def) = mine.or_else(|| defs.iter().find(|d| d.world.is_some())) {
         crate::envs::apply_mood(&def.mood, &mut style, &mut look, &mut lights, &mut cams, &mut clear);
+        // The camera's fog, and how far landmarks are drawn, follow this mood (`world::Draw`).
+        draw.mood(&def.mood);
+        info!("land: mood {} (fog {:.0}–{:.0} m)", def.id, def.mood.fog_start, def.mood.fog_end);
     }
     live.hosted = Some(built.hosted);
     let arrive = Vec2::new(row.arrive_x, row.arrive_y);
@@ -309,19 +313,37 @@ fn regenerate(row: &LandInfo) -> Result<Built, String> {
     })
 }
 
-/// Buildings from the `lot` rows in the window, near enough to see.
-fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, assets: Res<AssetServer>, mut live: ResMut<Live>, roam: Res<Roam>) {
+/// Buildings from the `lot` rows in the window, near enough to see, and the landmarks.
+///
+/// - **Ordinary lots** are drawn within [`LOT_FAR`] of me, fading out over the last few metres
+///   (`envs::Reach`), and dropped past [`LOT_DROP`].
+/// - **Landmarks** (`Lot::landmark` in the regenerated land: Cullet's Cone, Counting House, Heron,
+///   Watchglass and Lintel) are drawn out to where the mood's fog is complete
+///   (`world::Draw::landmark_reach`, 600 m on Cullet), so they can be seen across the town. Lots
+///   never change and the land is the authority's (its digests are checked), so a landmark past
+///   the `lot` window (±184 m, `net.rs`) is drawn from the land itself; ids are the land's lot
+///   indices, as the authority writes them (`island::build_lots`).
+fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, assets: Res<AssetServer>, mut live: ResMut<Live>, roam: Res<Roam>, draw: Res<crate::world::Draw>) {
     let (Some(island), Some(conn)) = (island, net.conn.as_ref()) else { return };
     let here = roam.pos;
-    let gone: Vec<u32> = live.lots.keys().copied().filter(|id| conn.db.lot().id().find(id).is_none_or(|l| Vec2::new(l.x, l.y).distance(here) > LOT_DROP)).collect();
+    let far = if crate::perf::has("nofar") { LOT_FAR } else { draw.landmark_reach().max(LOT_FAR) };
+    let land = &island.land;
+    let landmark = |id: u32| land.lots.get(id as usize).is_some_and(|l| l.landmark);
+    let reach = |id: u32| if landmark(id) { far } else { LOT_FAR };
+    let at = |id: u32| conn.db.lot().id().find(&id).map(|l| Vec2::new(l.x, l.y)).or_else(|| landmark(id).then(|| land.lots[id as usize].centre).map(|c| Vec2::new(c.0, c.1)));
+    let gone: Vec<u32> = live.lots.keys().copied().filter(|id| at(*id).is_none_or(|p| p.distance(here) > reach(*id) + (LOT_DROP - LOT_FAR))).collect();
     for id in gone {
         for e in live.lots.remove(&id).unwrap_or_default() {
             commands.entity(e).despawn();
         }
     }
-    let mut todo: Vec<(f32, Lot)> = conn.db.lot().iter().filter(|l| !live.lots.contains_key(&l.id)).map(|l| (Vec2::new(l.x, l.y).distance(here), l)).filter(|(d, _)| *d < LOT_FAR).collect();
-    todo.sort_by(|a, b| a.0.total_cmp(&b.0));
-    for (_, l) in todo.into_iter().take(LOTS_PER_FRAME) {
+    let mut todo: Vec<(f32, LotRow)> = Vec::new();
+    let fresh: Vec<Lot> = conn.db.lot().iter().filter(|l| !live.lots.contains_key(&l.id)).collect();
+    for l in fresh {
+        let d = Vec2::new(l.x, l.y).distance(here);
+        if d >= reach(l.id) {
+            continue;
+        }
         let set = conn.db.settlement().id().find(&l.settlement);
         let site = set.as_ref().and_then(|s| crate::island::site_kind(&s.kind));
         let (Some(site), Some(kind)) = (site, living_rules::settle::LotKind::from_id(&l.kind)) else {
@@ -329,12 +351,44 @@ fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, 
             continue;
         };
         let env = set.as_ref().map_or(site.env(), |s| living_rules::settle::env_of(&s.style));
-        let row = LotRow { id: l.id, site, kind, at: Vec2::new(l.x, l.y), yaw: l.yaw, floor_m: l.floor_m, height_m: l.height_m, width_m: l.width_m, depth_m: l.depth_m, model: l.model.clone(), env };
+        todo.push((d, LotRow { id: l.id, site, kind, at: Vec2::new(l.x, l.y), yaw: l.yaw, floor_m: l.floor_m, height_m: l.height_m, width_m: l.width_m, depth_m: l.depth_m, model: l.model.clone(), env }));
+    }
+    // Landmarks beyond the window, from the land.
+    for (i, l) in land.lots.iter().enumerate().filter(|(_, l)| l.landmark) {
+        let id = i as u32;
+        let d = Vec2::new(l.centre.0, l.centre.1).distance(here);
+        if d < far && !live.lots.contains_key(&id) && conn.db.lot().id().find(&id).is_none() {
+            if let Some(row) = LotRow::of_land(land, id) {
+                todo.push((d, row));
+            }
+        }
+    }
+    todo.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for (d, row) in todo.into_iter().take(LOTS_PER_FRAME) {
         let es = island.spawn_lot(&mut commands, &assets, &row);
-        live.lots.insert(l.id, es);
+        if let (Some(&root), false) = (es.first(), landmark(row.id)) {
+            commands.entity(root).insert((crate::envs::Reach(LOT_FAR), crate::envs::Reach::fade_at(LOT_FAR, d)));
+        }
+        if landmark(row.id) && !es.is_empty() {
+            debug!("lots: landmark {} ({}) drawn at {d:.0} m", row.id, row.kind.id());
+        }
+        live.lots.insert(row.id, es);
     }
 }
 
+
+/// The recipe a person is drawn from: seeded by the land and their id, in the folk and dress
+/// of the projection (`ui/looks.rs` names strangers by it). Mine is `LIVING_GAME_PLAYER` if set.
+pub fn recipe_for(land_seed: u64, c: &SeenCharacter, mine: bool) -> crate::characters::Recipe {
+    let seed = land_seed.wrapping_mul(0x9E37_79B9).wrapping_add(c.id as u64);
+    if mine {
+        return std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| crate::characters::Recipe::parse(&r)).unwrap_or_else(|| crate::characters::Recipe::random(seed, "adult"));
+    }
+    match folk_of(c) {
+        (folk, Some(style)) => crate::characters::Recipe::random_in(seed, folk, &style),
+        (folk, None) => crate::characters::Recipe::random(seed, folk),
+    }
+}
 
 /// Folk and dress style as anyone sees them: the authority's projection (`seen_characters`
 /// `folk` and `style`, from the settlement the character lives in; no home position is sent).
@@ -476,15 +530,7 @@ fn bodies(
             let size = character.as_ref().map_or(1.0, |c| stage_scale(c.stage));
             let (entity, height, person, beast) = if body.kind == "person" {
                 let c = character.as_ref().unwrap();
-                let seed = island.land.seed.wrapping_mul(0x9E37_79B9).wrapping_add(id as u64);
-                let mut recipe = if mine {
-                    std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| crate::characters::Recipe::parse(&r)).unwrap_or_else(|| crate::characters::Recipe::random(seed, "adult"))
-                } else {
-                    match folk_of(c) {
-                        (folk, Some(style)) => crate::characters::Recipe::random_in(seed, folk, &style),
-                        (folk, None) => crate::characters::Recipe::random(seed, folk),
-                    }
-                };
+                let mut recipe = recipe_for(island.land.seed, c, mine);
                 recipe.height *= stage_scale(c.stage);
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
                 (e, recipe.height, true, false)
@@ -785,13 +831,22 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   window would report it (`KeyE`, `KeyQ`, `Enter`, `ShiftLeft`, …), read by every input
 ///   system this frame; `chat:open|close` opens or closes the text box, as Enter and Esc do;
 ///   `tap` is a left tap as the pointer reports one (a strike, or talk to a peaceful person);
+///   `click:X,Y` clicks there (fractions of the picture; `@NAME` is a tagged node of the game
+///   UI, `ui/hit.rs` `Tag`), `slide:A>B[:SECS]` holds the click at A and slides to B (a
+///   title-bar drag, an item onto someone), `scroll:PX` swipes
+///   two fingers over a window, `point:ID` puts the cursor on someone (hovering them),
+///   `dodge:W|A|S|D` double-taps a direction, and `dump:NAME`
+///   writes the game UI's state to `<dir>/NAME.json` (`ui::dump`);
 ///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
 ///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
-/// A key of the `key:` step.
+/// A key of the `key:` step: any the bindings know (`keys.rs`), by its `KeyCode` name.
 fn key_code(name: &str) -> Option<KeyCode> {
+    if let Some(k) = crate::keys::key_named(name) {
+        return Some(k);
+    }
     Some(match name {
         "KeyQ" => KeyCode::KeyQ,
         "KeyE" => KeyCode::KeyE,
@@ -820,6 +875,12 @@ pub struct Script {
     steps: Vec<String>,
     at: usize,
     since: f32,
+    /// Frames into this step (1 on its first), and when a slide's button went down (s).
+    frames: u32,
+    held: f32,
+    pts: Option<(Vec2, Vec2)>,
+    /// `point:ID`: the cursor follows this character.
+    pointing: Option<u64>,
     started: Option<u32>,
 }
 
@@ -828,7 +889,7 @@ impl Script {
         let dir = std::env::var("LIVING_GAME_LIVE").ok().filter(|d| !d.is_empty())?;
         std::fs::create_dir_all(&dir).ok()?;
         let plan = std::env::var("LIVING_GAME_LIVE_PLAN").unwrap_or_else(|_| "ready;wait:3;shot:join;walk:0:6;shot:street;say:Good morning!;wait:1;shot:say;wait:20;shot:later;quit".into());
-        Some(Self { dir: dir.into(), steps: plan.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(), at: 0, since: 0.0, started: None })
+        Some(Self { dir: dir.into(), steps: plan.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(), at: 0, since: 0.0, frames: 0, held: 0.0, pts: None, pointing: None, started: None })
     }
 }
 
@@ -848,12 +909,34 @@ fn script(
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
     target: Option<Res<crate::capture::Target>>,
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
-    time: Res<Time>,
-    mut exit: MessageWriter<AppExit>,
+    (mut dump, mut taps, ui): (ResMut<crate::ui::Dump>, ResMut<crate::keys::DoubleTap>, Res<crate::ui::hit::UiPointer>),
+    (time, mut exit, cams): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>),
 ) {
+    // A point: X,Y as fractions of the picture, or @NAME, a tagged node of the game UI.
+    let frac = |v: &str| match v.strip_prefix('@') {
+        Some(tag) => {
+            // Exactly, else the first tag it begins (`@acts:0:give` finds `acts:0:give:3`).
+            let at = ui.tags.get(tag).copied().or_else(|| ui.tags.iter().find(|(k, _)| k.starts_with(&format!("{tag}:"))).map(|(_, v)| *v));
+            if at.is_none() {
+                warn!("live script: no UI node tagged {tag} is shown");
+            }
+            at
+        }
+        None => v.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?))),
+    };
     let dt = time.delta_secs();
+    if let Some(id) = s.pointing {
+        let at = hud.actors.iter().find(|a| a.id == id).and_then(|a| {
+            let ground = island.as_ref().map_or(a.head - Vec3::Y * 1.9, |i| Vec3::new(a.head.x, i.height(a.head.x, a.head.z) + 0.3, a.head.z));
+            cams.iter().find_map(|(c, t)| Some((c.world_to_viewport(t, ground).ok()?, c.logical_viewport_size()?)))
+        });
+        if let Some((p, size)) = at {
+            pointer.scripted = Some(p / size);
+        }
+    }
     let Some(step) = s.steps.get(s.at).cloned() else { return };
     s.since += dt;
+    s.frames += 1;
     let mine = net.my_id.and_then(|id| scene.shown.get(&id).map(|p| (id, p.0)));
     let mut parts = step.splitn(2, ':');
     let (verb, arg) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
@@ -915,6 +998,7 @@ fn script(
             true
         }
         "cursor" => {
+            s.pointing = None;
             pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
             true
         }
@@ -922,6 +1006,94 @@ fn script(
             // A left tap, as the pointer reports one (`pointer.rs`): a strike, or on a peaceful
             // person the text box to them (`combat.rs`).
             pointer.scripted_tap = true;
+            true
+        }
+        "click" => {
+            // A left click on the game UI at X,Y (fractions of the picture): the cursor goes
+            // there and the button goes down, and up on the next frame (`ui/hit.rs`).
+            // The cursor first: the pointer places it at the start of the next frame.
+            match s.frames {
+                1 => {
+                    s.pointing = None;
+                    pointer.scripted = frac(arg);
+                    false
+                }
+                2 => {
+                    buttons.press(MouseButton::Left);
+                    false
+                }
+                _ => {
+                    buttons.release(MouseButton::Left);
+                    true
+                }
+            }
+        }
+        "slide" => {
+            // Hold the click at X1,Y1 and slide to X2,Y2 over SECS (default 0.5), then let go:
+            // a title-bar drag, an item dragged onto someone (a three-finger drag is the same).
+            // Points are separated by '>' (tags contain ':'): `slide:@pack:berries>0.5,0.5:0.6`.
+            let (pts, secs_s) = match arg.rsplit_once(':').filter(|(_, t)| t.parse::<f32>().is_ok()) {
+                Some((p, t)) => (p, t),
+                None => (arg, ""),
+            };
+            let a: Vec<&str> = pts.split('>').collect();
+            // Resolved once, on the step's first frame: a dragged window moves its own tags.
+            if s.frames == 1 {
+                s.pts = a.first().and_then(|v| frac(v)).zip(a.get(1).and_then(|v| frac(v)));
+            }
+            let (from, to) = (s.pts.map(|p| p.0), s.pts.map(|p| p.1));
+            let secs: f32 = secs_s.parse().unwrap_or(0.5);
+            match (from, to) {
+                (Some(f), Some(t)) => {
+                    if s.frames == 1 {
+                        s.pointing = None;
+                        pointer.scripted = Some(f);
+                        false
+                    } else if s.frames == 2 {
+                        buttons.press(MouseButton::Left);
+                        s.held = s.since;
+                        false
+                    } else if s.since - s.held < secs + 0.1 {
+                        let k = ((s.since - s.held - 0.05) / secs).clamp(0.0, 1.0);
+                        pointer.scripted = Some(f.lerp(t, k));
+                        false
+                    } else {
+                        pointer.scripted = Some(t);
+                        buttons.release(MouseButton::Left);
+                        true
+                    }
+                }
+                _ => {
+                    warn!("live script: slide wants A>B[:SECS], got {arg}");
+                    true
+                }
+            }
+        }
+        "point" => {
+            // Keep the cursor on character ID as drawn (their feet, where the cursor's ground
+            // point finds them), frame after frame as the camera eases: hovering them, as a
+            // player keeps pointing. Until a `cursor:` step or another `point:`.
+            s.pointing = arg.parse().ok();
+            true
+        }
+        "scroll" => {
+            pointer.scripted_scroll += arg.parse::<f32>().unwrap_or(0.0);
+            true
+        }
+        "dump" => {
+            // The game UI's state as JSON (`ui::dump`): open windows, anchors, rectangles.
+            dump.0 = Some(s.dir.join(format!("{arg}.json")));
+            true
+        }
+        "dodge" => {
+            // A double tap of a direction key (W, A, S or D), as the dodge's default binding.
+            let a = match arg {
+                "W" | "w" | "forward" => crate::keys::Act::Forward,
+                "S" | "s" | "back" => crate::keys::Act::Back,
+                "A" | "a" | "left" => crate::keys::Act::Left,
+                _ => crate::keys::Act::Right,
+            };
+            taps.scripted = Some(a);
             true
         }
         "pan" | "drag" => {
@@ -1047,8 +1219,8 @@ fn script(
             true
         }
         "chat" => {
-            // As Enter opens it and Esc closes it (the script's own keys may land after the
-            // chat's system has looked this frame).
+            // As Enter opens it and Enter with nothing typed closes it, keeping its window (the
+            // script's own keys may land after the chat's system has looked this frame).
             input.chat_open = arg == "open";
             input.chat.clear();
             true
@@ -1078,5 +1250,6 @@ fn script(
         }
         s.at += 1;
         s.since = 0.0;
+        s.frames = 0;
     }
 }

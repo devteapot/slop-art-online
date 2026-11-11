@@ -47,7 +47,7 @@ living-token:
 # Update the module in place (keeps world data) and install the current skill rules.
 living-publish: living-build
     {{living_stdb}} publish -s local -b /wasm/living_authority.wasm {{living_db}} -y
-    {{living_stdb}} call -s local {{living_db}} install_script "$(python3 -c 'import json,sys; print(json.dumps(open("living/scripts/skills.rhai").read()))')"
+    python3 living/tools/install_script.py {{living_db}}
     just living-token
 
 # Choose the active seed (living/seeds/<name>.json → world.json); takes effect at the next reset.
@@ -71,6 +71,10 @@ living-floor name db=living_db:
 
 living-sql query:
     {{living_stdb}} sql -s local {{living_db}} "{{query}}"
+
+# One command to play a scene (world, memory store, minds, client); paid parts stop when the client exits.
+living-play scene *args:
+    python3 living/tools/play.py {{scene}} {{args}}
 
 living-mind:
     living/tools/run-mind.sh
@@ -118,6 +122,14 @@ living-game-assets:
     living/tools/blender/gen_buildings.sh
     living/tools/blender/gen_city.sh
     living/tools/blender/gen_anim.sh
+
+# The asset board (docs/ASSET_BOARD.md): every generated family photographed in the game's own
+# renderer beside the version the owner accepted, with decisions and history in
+# living/assets/board/ and media in ~/archive/asset-board/. `just living-board publish ...`,
+# `decide`, `status`, `build`, `check`, `pack`.
+[positional-arguments]
+living-board *args:
+    python3 living/tools/board/board.py "$@"
 
 # The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
 # (numpy and Pillow through uv): `--set ground` (the default) the ground's layers for
