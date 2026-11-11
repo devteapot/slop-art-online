@@ -68,6 +68,9 @@ pub struct ActorFacts {
     pub community: u64,
     /// Where the actor's household lives (`"x,y"`, whole tiles; empty: no home).
     pub home: String,
+    /// The actor stands in lamplight: within the `lights` radius of a structure that gives
+    /// light (`structure_traits()`).
+    pub lit: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -117,7 +120,11 @@ pub struct SkillCtx {
     pub target: TargetFacts,
     pub item: String,
     pub qty: u32,
+    /// It is night: the `daylight` law below one half (`Scripts::is_night`).
     pub night: bool,
+    /// How dark it is, 0 (full day) to 1 (full night): one minus the `daylight` law, in steps
+    /// of 1/20 so that laws kept per state share answers (`a.daylight` in the script).
+    pub dark: f32,
     pub hour: f32,
     pub season: String,
     pub text: String,
@@ -198,6 +205,9 @@ pub struct RegardIn {
     /// The observer is looking at itself.
     pub own: bool,
     pub night: bool,
+    /// How far the target is, in whole metres (rounded up); 0 unless the law reads `p.dist`
+    /// (`Scripts::regard_reads_dist`), so the key stays small for a law that does not.
+    pub dist: u16,
 }
 
 /// How precisely a field is perceived.
@@ -437,22 +447,33 @@ pub struct Senses {
 }
 
 /// The farthest anyone's senses reach (`reach` in `senses_law()`): by day and by night, and
-/// hearing. The engine gathers onlookers and listeners within these before testing each one's
-/// own senses, and holds every answer of the law to them.
+/// hearing; and `glow`, the farthest anyone is seen by a light on them (the `glow` law; 0 when
+/// the script has none). The engine gathers onlookers and listeners within these before testing
+/// each one's own senses, and holds every answer of the laws to them.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Reach {
     pub day: f32,
     pub night: f32,
     pub hearing: f32,
+    pub glow: f32,
 }
 
 impl Reach {
-    pub fn sight(&self, night: bool) -> f32 {
-        if night {
+    /// The farthest anyone sees at darkness `dark` (0 day, 1 night; in twilight the wider of
+    /// the two, since a law may ease between them).
+    pub fn sight(&self, dark: f32) -> f32 {
+        if dark <= 0.0 {
+            self.day
+        } else if dark >= 1.0 {
             self.night
         } else {
-            self.day
+            self.day.max(self.night)
         }
+    }
+
+    /// The farthest anything is seen at darkness `dark`: by an eye, or by a light on it.
+    pub fn seen(&self, dark: f32) -> f32 {
+        self.sight(dark).max(self.glow)
     }
 }
 
@@ -566,6 +587,11 @@ pub enum NeedLaw {
         /// (`wet_energy`, `cold_hp`) is divided.
         appetite_gene: String,
         hardiness_gene: String,
+        /// Real minutes' worth of the law's unit: the law writes its rates per game hour
+        /// (`per: "hour"`) and the engine turns them into rates per real minute for the world's
+        /// day length (60,000 ms over the real ms of a game hour); 1 for a law written per real
+        /// minute (`per: "minute"`, or no `per`, as scripts were before day lengths varied).
+        per_min: f64,
     },
     /// A script whose `rates(a)` returns the finished rates (`hunger`, `energy`, `hp`).
     Final(Rates),
@@ -587,7 +613,7 @@ impl NeedLaw {
     pub fn rates(&self, a: &ActorFacts) -> Rates {
         match self {
             NeedLaw::Final(r) => *r,
-            NeedLaw::Params { hunger, energy, starving_at, starving_hp, fed_below, rested_above, healing_hp, spent_at, spent_hp, healing, tiring_gene, healing_gene, wet_energy, cold_hp, appetite_gene, hardiness_gene } => {
+            NeedLaw::Params { hunger, energy, starving_at, starving_hp, fed_below, rested_above, healing_hp, spent_at, spent_hp, healing, tiring_gene, healing_gene, wet_energy, cold_hp, appetite_gene, hardiness_gene, per_min } => {
                 let (h, e) = (a.hunger as f64, a.energy as f64);
                 let mut hp = 0.0f64;
                 if h >= *starving_at {
@@ -612,7 +638,11 @@ impl NeedLaw {
                 let hardy = gene(hardiness_gene).max(0.1);
                 energy += wet_energy / hardy;
                 hp += cold_hp / hardy;
-                Rates { hunger_per_min: (*hunger * gene(appetite_gene)) as f32, energy_per_min: energy as f32, hp_per_min: hp as f32 }
+                // Into the engine's unit, a real minute, last: on the 12-minute day a game hour
+                // is half a real minute, a factor of exactly 2, so the rates are the same numbers
+                // as when the law was written per real minute.
+                let k = *per_min;
+                Rates { hunger_per_min: (*hunger * gene(appetite_gene) * k) as f32, energy_per_min: (energy * k) as f32, hp_per_min: (hp * k) as f32 }
             },
         }
     }
@@ -644,6 +674,12 @@ pub struct Scripts {
     /// `senses(a)` and `motion(a)` the same way.
     senses: RefCell<HashMap<Vec<u8>, Senses>>,
     moves: RefCell<HashMap<Vec<u8>, Moves>>,
+    /// `glow(a)` the same way.
+    glows: RefCell<HashMap<Vec<u8>, f32>>,
+    /// The world's game hour in real milliseconds (its day length over 24).
+    hour_ms: f64,
+    /// `daylight(hour)` by game minute of the day (NaN: not asked yet).
+    daylight: RefCell<Vec<f32>>,
     /// Every law the script declares (`<law>_law()`), by name.
     laws: std::collections::BTreeMap<String, LawSpec>,
     /// The farthest senses reach (from `senses_law()`).
@@ -665,6 +701,8 @@ pub struct StructureTraits {
     pub warms: bool,
     /// A roof: near it counts as sheltered.
     pub roof: bool,
+    /// It gives light: those within this many metres stand in lamplight (`a.actor.lit`; 0: none).
+    pub lights: f32,
 }
 
 /// Largest script source accepted. `skills.rhai` is about 56 KB; compile time and memory grow
@@ -677,6 +715,8 @@ pub const MAX_SOURCE: usize = 256 * 1024;
 pub const MAX_OPERATIONS: u64 = 2_000;
 /// Distinct states whose rates are kept before the memo starts over.
 const NEEDS_MEMO: usize = 4_096;
+/// Minutes in a game day: `daylight` is read at each.
+const DAY_MINUTES: usize = 24 * 60;
 
 /// The engine's limits on one call (Rhai's sandbox): operations, call depth, expression depth
 /// (outside and inside functions) and the size of strings, arrays and maps a script makes.
@@ -713,6 +753,13 @@ fn engine_with(l: Limits) -> Engine {
         e.disable_symbol(symbol);
     }
     e
+}
+
+/// The world's day for its laws: `hour_ms()`, real milliseconds in a game hour, and
+/// `day_minutes()`, real minutes in a game day.
+fn register_day(e: &mut Engine, hour_ms: f64) {
+    e.register_fn("hour_ms", move || hour_ms);
+    e.register_fn("day_minutes", move || hour_ms * 24.0 / 60_000.0);
 }
 
 /// Constant laws the engine looks up by a name, and the names it asks them for.
@@ -754,11 +801,22 @@ fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
 }
 
 impl Scripts {
+    /// The script for a world with the shipped day length ([`crate::DEFAULT_DAY_MS`]).
     pub fn new(source: &str) -> Result<Self, String> {
+        Self::with_day(source, crate::DEFAULT_DAY_MS)
+    }
+
+    /// The script for a world whose day lasts `day_ms` real milliseconds. Laws written per game
+    /// hour (`rates` with `per: "hour"`) are turned into real time by it, and a law may read it:
+    /// `hour_ms()` (real milliseconds in a game hour) and `day_minutes()` (real minutes in a day).
+    pub fn with_day(source: &str, day_ms: u64) -> Result<Self, String> {
         if source.len() > MAX_SOURCE {
             return Err(format!("script source exceeds {} KiB", MAX_SOURCE / 1024));
         }
-        let engine = engine();
+        let day_ms = day_ms.max(24);
+        let hour_ms = day_ms as f64 / 24.0;
+        let mut engine = engine();
+        register_day(&mut engine, hour_ms);
         let mut ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
         // A script from before a required law existed runs on the shipped script's functions,
         // with its own on top, until it is installed again.
@@ -768,12 +826,16 @@ impl Scripts {
             let base = engine.compile(SHIPPED).map_err(|e| format!("shipped script compile: {e}"))?.clone_functions_only();
             ast = base.merge(&ast);
         }
-        let fns = ast.iter_functions().map(|f| f.name.to_string()).collect();
-        let unary = ast.iter_functions().filter(|f| f.params.len() == 1).map(|f| f.name.to_string()).collect();
-        let nullary = ast.iter_functions().filter(|f| f.params.is_empty()).map(|f| f.name.to_string()).collect();
+        // A floor's overlay keeps each base function it replaces as `base_NAME` (`floors::compose`):
+        // only the overlay calls those, so the engine never takes one for a law, a skill's part or
+        // a declaration of its own (`base_sleep_duration` is not the rules of a skill `base_sleep`).
+        let own = |name: &str| !name.starts_with("base_");
+        let fns = ast.iter_functions().filter(|f| own(f.name)).map(|f| f.name.to_string()).collect();
+        let unary = ast.iter_functions().filter(|f| own(f.name) && f.params.len() == 1).map(|f| f.name.to_string()).collect();
+        let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
-        let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), source: source.to_string(), law_errors: Default::default() };
+        let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), source: source.to_string(), law_errors: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -939,11 +1001,15 @@ impl Scripts {
         let mut out = HashMap::new();
         for (k, v) in m {
             let t = v.try_cast::<Map>().ok_or_else(|| format!("structure_traits: `{k}` must be a map of traits"))?;
-            if let Some(x) = t.keys().find(|x| !["warms", "roof"].contains(&x.as_str())) {
-                return Err(format!("structure_traits: unknown trait `{x}` of `{k}` (traits are warms, roof)"));
+            if let Some(x) = t.keys().find(|x| !["warms", "roof", "lights"].contains(&x.as_str())) {
+                return Err(format!("structure_traits: unknown trait `{x}` of `{k}` (traits are warms, roof, lights)"));
             }
             let flag = |x: &str| t.get(x).is_some_and(|v| v.as_bool().unwrap_or(false));
-            out.insert(k.to_string(), StructureTraits { warms: flag("warms"), roof: flag("roof") });
+            let lights = match t.get("lights") {
+                None => 0.0,
+                Some(v) => number(v).ok_or_else(|| format!("structure_traits: `{k}.lights` must be a number of metres"))?.clamp(0.0, 64.0) as f32,
+            };
+            out.insert(k.to_string(), StructureTraits { warms: flag("warms"), roof: flag("roof"), lights });
         }
         Ok(out)
     }
@@ -951,6 +1017,11 @@ impl Scripts {
     /// What a kind of structure does for those near it.
     pub fn structure(&self, kind: &str) -> StructureTraits {
         self.structures.get(kind).copied().unwrap_or_default()
+    }
+
+    /// The farthest any kind of structure gives light (0: none does).
+    pub fn widest_light(&self) -> f32 {
+        self.structures.values().map(|t| t.lights).fold(0.0, f32::max)
     }
 
     /// A list of words a law of one name gives (`occupation_knows("fisher")`); empty when the
@@ -1030,7 +1101,9 @@ impl Scripts {
         let m = self.law_map("senses_law")?;
         let r = m.get("reach").and_then(|r| r.clone().try_cast::<Map>()).ok_or("senses_law: `reach` is a map of day, night and hearing (metres)")?;
         let g = |k: &str| r.get(k).and_then(number).map(|v| (v as f32).clamp(0.0, 256.0)).ok_or_else(|| format!("senses_law: `reach.{k}` must be a number of metres"));
-        Ok(Reach { day: g("day")?, night: g("night")?, hearing: g("hearing")? })
+        // `glow` bounds the `glow` law, and is needed only with one.
+        let glow = if self.has("glow") { g("glow").map_err(|e| format!("{e} (the script has a `glow` law)"))? } else { 0.0 };
+        Ok(Reach { day: g("day")?, night: g("night")?, hearing: g("hearing")?, glow })
     }
 
     /// Every law the script declares, by name.
@@ -1141,7 +1214,67 @@ impl Scripts {
     pub fn senses_unshared(&self, ctx: &SkillCtx) -> Result<Senses, String> {
         let m = context::map(ctx, "", &self.plan("senses"));
         let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "senses", (m,)).map_err(|e| format!("senses: {e}"))?;
-        decode_senses(d, &self.reach, ctx.night)
+        decode_senses(d, &self.reach, ctx.dark)
+    }
+
+    /// How far a creature is seen from by a light on it (`glow(a)`, kept per state like
+    /// senses; 0 when the script has no such law): an onlooker sees it within the wider of its
+    /// own sight and this.
+    pub fn glow(&self, ctx: &SkillCtx) -> Result<f32, String> {
+        if !self.has("glow") {
+            return Ok(0.0);
+        }
+        self.per_state("glow", &self.glows, ctx, || self.glow_unshared(ctx))
+    }
+
+    /// The same, asking the law every time.
+    #[doc(hidden)]
+    pub fn glow_unshared(&self, ctx: &SkillCtx) -> Result<f32, String> {
+        decode_glow(self.call("glow", ctx)?, &self.reach)
+    }
+
+    /// The length of this world's game hour, in real milliseconds (its day over 24).
+    pub fn hour_ms(&self) -> f64 {
+        self.hour_ms
+    }
+
+    /// How light it is at `hour` (0..24): the `daylight(hour)` law, 0 (night) to 1 (day), read
+    /// once per game minute of the day and kept for the script revision, so asking it costs a
+    /// lookup. A script without the law has the shipped day: light from 06:00 to 20:00.
+    pub fn daylight(&self, hour: f32) -> f32 {
+        let minute = ((hour.rem_euclid(24.0) * 60.0) as usize).min(DAY_MINUTES - 1);
+        if let Some(v) = self.daylight.borrow().get(minute).copied().filter(|v| !v.is_nan()) {
+            return v;
+        }
+        let h = minute as f64 / 60.0;
+        let v = if self.has("daylight") {
+            self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "daylight", (h,)).ok().and_then(|d| number(&d)).map(|v| (v as f32).clamp(0.0, 1.0))
+        } else {
+            None
+        }
+        .unwrap_or(if (6.0..20.0).contains(&h) { 1.0 } else { 0.0 });
+        let mut t = self.daylight.borrow_mut();
+        if t.is_empty() {
+            t.resize(DAY_MINUTES, f32::NAN);
+        }
+        t[minute] = v;
+        v
+    }
+
+    /// How dark it is at `hour`, in the steps laws see it (`SkillCtx::dark`).
+    pub fn dark(&self, hour: f32) -> f32 {
+        ((1.0 - self.daylight(hour)) * 20.0).round() / 20.0
+    }
+
+    /// Whether it is night at `hour`: less than half light.
+    pub fn is_night(&self, hour: f32) -> bool {
+        self.daylight(hour) < 0.5
+    }
+
+    /// Whether `perceived_of` reads how far the target is (`p.dist`): only then does the engine
+    /// give it the distance, and project a target again as it comes nearer or goes farther.
+    pub fn regard_reads_dist(&self) -> bool {
+        self.has("perceived_of") && self.fields.of("perceived_of", 1).and_then(|u| u.first()).is_none_or(|u| u.all || !u.by_param.is_empty() || u.keys.contains_key("dist"))
     }
 
     /// What others see of a skill and what it means to them (`<skill>_shows()`), read once
@@ -1314,7 +1447,7 @@ impl Scripts {
     pub fn rates_unshared(&self, ctx: &SkillCtx) -> Result<Rates, String> {
         let m = context::map(ctx, self.shapes.knack(&ctx.skill), &self.plan("rates"));
         let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "rates", (m,)).map_err(|e| format!("rates: {e}"))?;
-        Ok(NeedLaw::from_dynamic(d)?.rates(&ctx.actor))
+        Ok(NeedLaw::from_dynamic(d, self.hour_ms)?.rates(&ctx.actor))
     }
 
     /// What `rates(a)` says for the actor's state.
@@ -1326,7 +1459,7 @@ impl Scripts {
             return Ok(l.clone());
         }
         let m = context::map(ctx, self.shapes.knack(&ctx.skill), &plan);
-        let law = NeedLaw::from_dynamic(self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "rates", (m,)).map_err(|e| format!("rates: {e}"))?)?;
+        let law = NeedLaw::from_dynamic(self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "rates", (m,)).map_err(|e| format!("rates: {e}"))?, self.hour_ms)?;
         let mut memo = self.needs.borrow_mut();
         if memo.len() >= NEEDS_MEMO {
             memo.clear();
@@ -1502,10 +1635,14 @@ fn decode_moves(d: Dynamic) -> Result<Moves, String> {
     })
 }
 
-fn decode_senses(d: Dynamic, reach: &Reach, night: bool) -> Result<Senses, String> {
+fn decode_senses(d: Dynamic, reach: &Reach, dark: f32) -> Result<Senses, String> {
     let m = d.try_cast::<Map>().ok_or("senses must return a map of sight and hearing")?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("senses: `{k}` must be a number of metres"));
-    Ok(Senses { sight: g("sight")?.clamp(0.0, reach.sight(night)), hearing: g("hearing")?.clamp(0.0, reach.hearing) })
+    Ok(Senses { sight: g("sight")?.clamp(0.0, reach.sight(dark)), hearing: g("hearing")?.clamp(0.0, reach.hearing) })
+}
+
+fn decode_glow(d: Dynamic, reach: &Reach) -> Result<f32, String> {
+    Ok((number(&d).ok_or("glow must return a number of metres")? as f32).clamp(0.0, reach.glow))
 }
 
 fn number(d: &Dynamic) -> Option<f64> {
@@ -1575,11 +1712,18 @@ fn decode_effects(f: &str, d: Dynamic) -> Result<Vec<Effect>, String> {
 }
 
 impl NeedLaw {
-    /// Decode what `rates(a)` returned.
-    pub fn from_dynamic(d: Dynamic) -> Result<NeedLaw, String> {
+    /// Decode what `rates(a)` returned, in a world whose game hour lasts `hour_ms` real
+    /// milliseconds (its `per` says whether the law writes per game hour or per real minute).
+    pub fn from_dynamic(d: Dynamic, hour_ms: f64) -> Result<NeedLaw, String> {
         let m = d.try_cast::<Map>().ok_or("rates must return a map")?;
+        let per_min = match m.get("per").map(|v| v.clone().into_string()) {
+            None => 1.0,
+            Some(Ok(u)) if u == "minute" => 1.0,
+            Some(Ok(u)) if u == "hour" => 60_000.0 / hour_ms.max(1.0),
+            Some(_) => return Err("rates: `per` is \"hour\" (a game hour) or \"minute\" (a real minute)".into()),
+        };
         if !m.contains_key("starving_at") {
-            let g = |k: &str| m.get(k).and_then(number).unwrap_or(0.0) as f32;
+            let g = |k: &str| (m.get(k).and_then(number).unwrap_or(0.0) * per_min) as f32;
             return Ok(NeedLaw::Final(Rates { hunger_per_min: g("hunger"), energy_per_min: g("energy"), hp_per_min: g("hp") }));
         }
         let n = |k: &str| m.get(k).and_then(number).ok_or_else(|| format!("rates: `{k}` must be a number"));
@@ -1601,6 +1745,7 @@ impl NeedLaw {
             cold_hp: n("cold_hp")?,
             appetite_gene: m.get("appetite_gene").and_then(|v| v.clone().into_string().ok()).unwrap_or_default(),
             hardiness_gene: m.get("hardiness_gene").and_then(|v| v.clone().into_string().ok()).unwrap_or_default(),
+            per_min,
         })
     }
 }
@@ -1632,6 +1777,7 @@ fn regard_map(p: &RegardIn) -> Map {
     m.insert("target".into(), t.into());
     m.insert("self".into(), p.own.into());
     m.insert("night".into(), p.night.into());
+    m.insert("dist".into(), Dynamic::from_float(p.dist as f64));
     m
 }
 
@@ -1824,7 +1970,7 @@ mod tests {
         assert_eq!(with(|k| k.moving), "eat signal wait");
         assert_eq!(with(|k| k.moment), "flee follow graze rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
-        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (StructureTraits { warms: true, roof: true }, StructureTraits { warms: true, roof: false }, StructureTraits { warms: false, roof: true }, StructureTraits::default()));
+        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (StructureTraits { warms: true, roof: true, lights: 0.0 }, StructureTraits { warms: true, roof: false, lights: 0.0 }, StructureTraits { warms: false, roof: true, lights: 0.0 }, StructureTraits::default()));
         assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
         assert_eq!((s.num_of("kept_spoil", "storage", 0.0), s.num_of("planted_max", "berry_bush", 0.0)), (1.0 / 3.0, 5.0));
         assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.num_of("remains_s", "deer", 0.0), s.num_of("dodge_speed", "person", 0.0)), (55.0, 1.8, 1800.0, 5.2));
@@ -1883,7 +2029,7 @@ mod tests {
             (v.sight, v.hearing)
         }).collect();
         assert_eq!(got, vec![(11.0, 9.0), (6.0, 9.0), (9.0, 9.0), (11.0, 9.0)]);
-        assert_eq!(s.reach(), Reach { day: 11.0, night: 9.0, hearing: 9.0 });
+        assert_eq!(s.reach(), Reach { day: 11.0, night: 9.0, hearing: 9.0, glow: 0.0 });
         assert_eq!(s.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()], "the key is what the law reads");
         let spec = &s.law_specs()["senses"];
         assert_eq!((spec.cadence, spec.topic.as_str()), (Cadence::Hot, "senses"));

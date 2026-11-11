@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-11 rules-1: a world's own day and laws (dev-box)
+
+Branch `rules-1`, own container `rules1-stdb` (2.14.1, port 3312), private `CARGO_TARGET_DIR`, no minds. Baseline `core-rules1-base` (default seed): cargo checks (rules 138, authority 12, mind 82, viewer sync 5) and tick, needs, food, refusal, seize, sight, senses, moves: 45 of 45. New `laws` scene on `cullet-laws` (`core-rules1-cullet`): day and rates, 48 m by day, names within 24 m pass; the first night attempt saw nothing (`laws-attempt3.txt`: the HTTP player had been taken over by the world's minds after `takeover_s`), fixed by a player call before each snapshot; the night rerun passed (14 m, a torch at 44 m, lamplight at 21 m, no cold harm). Two earlier attempts failed on the scene itself (a regex for `sight_in`'s `_` arm; no 54-tile east-west line on the 96 m map, replaced by `open_ray`).
+
 ## 2026-11-11 plan-1 (dev-box)
 
 Branch `plan-1` (hand-authored plans, docs/AUTHORED_PLANS.md; it adds `lot:<id>` place kinds in `town::seat` and seed `homes`, unused by the island), own container `plan1-stdb` (2.14.1, port 3311), private `CARGO_TARGET_DIR`. `town.py` `core-plan1-town-20261111-135920` on the island: 22 of 23; the failure is the recorded flake "a resident faces someone who comes up behind them" (Cuth Marrow, player stopped 1.6 tiles away). Not run: the baseline scenes, skirmish, dealings, lives, infant, lifecycle, wildlife.

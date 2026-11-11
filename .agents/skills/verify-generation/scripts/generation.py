@@ -18,16 +18,20 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
-SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "floor-megacity-2k", "floor-megacity-4k")
+SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "floor-megacity-2k", "floor-megacity-4k", "cullet-laws", "cullet-laws-floor")
 # Seeds derived from a tracked seed in the run's directory (published through `--seed` with an
 # absolute path): the megacity floor (docs/FLOORS.md) at 2048 m, created inside `init` from a
 # compiled seed, and at 4096 m as a floor: a module built without a seed (`--seed none`) given
 # the seed at runtime by `create_floor`, which creates the land in scheduled steps (`genesis`).
 DERIVED = {"floor-megacity-2k": ("floor-megacity", {"size": 2048}), "floor-megacity-4k": ("floor-megacity", {"size": 4096})}
-FLOORS = ("floor-megacity-4k",)
+FLOORS = ("floor-megacity-4k", "cullet-laws-floor")
+# Seeds with their own day and laws (`day_minutes`, `laws_file`; docs/CULLET_RULES.md): compiled in
+# (`cullet-laws`, its laws file read in by build.rs) and given to a floor module (`cullet-laws-floor`,
+# the same seed sent as living/tools/seed_text.py sends it). Both are created in the one call.
+LAWS_FLOORS = {"cullet-laws-floor": "cullet-laws"}
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
-          "place", "routine", "relation", "acquaintance", "world_law")
+          "place", "routine", "relation", "acquaintance", "world_law", "script")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
@@ -144,6 +148,31 @@ def create_floor(run, d, seed):
     return checks
 
 
+def seed_text(path):
+    """A seed as `create_floor` takes it: its `laws_file` read into `laws` (living/tools/seed_text.py)."""
+    sys.path.insert(0, str(ROOT / "living/tools"))
+    import seed_text as st
+    return st.resolved(path)
+
+
+def create_floor_laws(run, d, seed):
+    """Give a floor module a seed with its own day and laws, created in this call; returns the
+    checks. On the way: a seed naming a laws file without its text, laws that fail the install
+    checks, and a day out of range are refused, and nothing is written."""
+    checks = []
+    for label, change, words in [("laws-file-unread", {"laws": ""}, "was not read into `laws`"),
+                                 ("laws-broken", {"laws": "fn rates(a) { 1 }"}, "seed laws"),
+                                 ("day-zero", {"day_minutes": 0}, "day_minutes is between")]:
+        bad = dict(seed, **change)
+        code = harness("call", run, d / f"create-floor-{label}.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", words)
+        checks.append({"check": f"create_floor refuses a seed: {label}", "pass": code == 0})
+    code = harness("call", run, d / "create-floor.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin")
+    checks.append({"check": "create_floor accepted the seed with its laws", "pass": code == 0})
+    again = harness("call", run, d / "create-floor-again.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin", "--expect-refusal", "already has its seed")
+    checks.append({"check": "a second create_floor is refused", "pass": again == 0})
+    return checks
+
+
 def snapshot(run, tables):
     directory = BASE / run
     result = {}
@@ -173,6 +202,15 @@ def check_seed(seed, rows):
         checks.append({"check": name, "pass": bool(condition), "detail": detail})
 
     w = rows["world"][0]
+    # The seed's day and its own laws (docs/CULLET_RULES.md): the world's day, and the installed
+    # script is the shipped one with the overlay composed over it.
+    equal("world day length", w["day_ms"], round(seed.get("day_minutes", 12) * 60000))
+    script = (rows.get("script") or [{}])[0].get("source", "")
+    if str(seed.get("laws") or "").strip():
+        parts = script.split("// ---- floor overlay ----", 1)
+        present("the seed's laws are composed over the shipped script", len(parts) == 2 and parts[1].strip() == seed["laws"].strip() and "fn base_rates(a)" in parts[0], {"chars": len(script)})
+    else:
+        present("the installed script is the shipped one", "// ---- floor overlay ----" not in script and script.strip() == (ROOT / "living/scripts/skills.rhai").read_text().strip())
     m = seed.get("map", {})
     if m.get("kind") == "land":
         size = [m.get("size") or max(m.get("w", 0), m.get("h", 0))] * 2
@@ -683,9 +721,12 @@ def suite(args):
                 derived["run"] = seed_name
                 seed_path = directory / f"{seed_name}.json"
                 write(seed_path, derived)
+            elif seed_name in LAWS_FLOORS:
+                seed_path = ROOT / f"living/seeds/{LAWS_FLOORS[seed_name]}.json"
             else:
                 seed_path = directory / "malformed.json" if seed_name == "malformed" else ROOT / f"living/seeds/{seed_name}.json"
-            write(d / "seed.json", json.loads(seed_path.read_text()))
+            # As the world receives it: a laws file read in (build.rs, seed_text.py).
+            write(d / "seed.json", seed_text(seed_path) if seed_name != "malformed" else json.loads(seed_path.read_text()))
             database = "verify-" + active_run
             seed_arg = "none" if seed_name in FLOORS else str(seed_path.with_suffix("")) if seed_name == "malformed" or seed_name in DERIVED else seed_name
             # A seed's `rules` are world laws kept at creation (`world_law`), not compiled in.
@@ -726,7 +767,7 @@ def suite(args):
                     continue
                 if launch_code:
                     raise RuntimeError(f"launch failed; read {d}/launch.log")
-                floor_checks = create_floor(active_run, d, json.loads(seed_path.read_text())) if seed_name in FLOORS else []
+                floor_checks = create_floor_laws(active_run, d, seed_text(seed_path)) if seed_name in LAWS_FLOORS else create_floor(active_run, d, json.loads(seed_path.read_text())) if seed_name in FLOORS else []
                 if floor_checks and not all(c["pass"] for c in floor_checks):
                     write(d / "checks.json", floor_checks)
                     raise RuntimeError(f"floor creation failed; read {d}/create-floor.log and genesis-final.json")

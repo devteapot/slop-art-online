@@ -250,6 +250,7 @@ Most of a per-character call is building the facts map (`script.rs:690-694`), no
   fn sight_in(light) { if light == "day" { 7.0 } else { base_sight_in(light) } }
   ```
 
+- **From the seed (built 2026-11-11, `rules-1`).** A seed's `laws` (Rhai source) or `laws_file` (a path under `living/seeds`) is the floor's overlay: composed, validated for the world's day and installed when the world is created, by `init` or `create_floor`, whose signature is unchanged ([Cullet's rules](CULLET_RULES.md#a-seeds-own-laws)). Cullet's is `living/seeds/worlds/cullet/laws.rhai`.
 - **Test** (`floors::tests::one_build_two_floors_two_sets_of_laws`): one build, two composed scripts.
   - Laws: fire warmth 3.5 → 5, day sight 11 → 7 (night sight unchanged); untouched laws keep the base's values.
   - The base's `rates(a)` reaches the floor's `cold(a)`: a person away from fire by day heals on the base and loses health on the frozen floor; by a fire the two agree.

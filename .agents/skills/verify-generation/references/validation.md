@@ -1,5 +1,9 @@
 # Validation record (generation)
 
+## 2026-11-11 rules-1: a seed's own day and laws (dev-box)
+
+Branch `rules-1`, own container `rules1-stdb` (2.14.1, port 3312). `generation-rules1-135536 --feature worlds --seeds cullet-laws,cullet-laws-floor`: `cullet-laws` (compiled, `laws_file` read in by `build.rs`) 41 of 41 and `cullet-laws-floor` (`create_floor` with the seed from `seed_text.py`; refusals of an unread laws file, broken laws and a zero day) 46 of 46; cleanups and original seeds pass. The other seeds were not rerun with the new day and script checks.
+
 ## 2026-11-11 plan-1: hand-authored plans (dev-box)
 
 Branch `plan-1` (from `6593f725`), own container `plan1-stdb` (2.14.1, port 3311, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. A maintain pass of this skill ran with it (new [plans](../features/plans.md) feature; drift fixed in seeded-world, floors, seed-guards, authored-worlds, repeatability and SKILL.md).
