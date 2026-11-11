@@ -30,6 +30,11 @@
           "stairs": [
             {"id": "the steps", "from": "quay", "to": "row", "foot": [32, 18], "head": [32, 28], "width_m": 2.4, "rise_m": 4.0}
           ],
+          "resources": [
+            {"kind": "fishing_spot", "at": [-6, 0.6], "where": "the quay's edge"},
+            {"kind": "fishing_spot", "at": [6, 0.6], "where": "the quay's edge"},
+            {"kind": "kelp", "at": [-36, 1.0], "where": "a kind the rules do not know yet: kept, not placed"}
+          ],
           "lots": [
             {"id": "store", "kind": "workshop", "name": "the Store", "at": [-30, 14], "size": [8, 9], "facing": "south", "level": "quay", "model": "cullet/workshop/store.glb", "height_m": 7.5, "wear": {"salt": 0.7}},
             {"id": "loft", "kind": "barn", "at": [-20, 14], "size": [7, 9], "facing": "south", "level": "quay", "model": "cullet/barn/loft.glb", "height_m": 9.0},
