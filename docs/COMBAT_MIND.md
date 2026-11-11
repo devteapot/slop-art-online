@@ -281,10 +281,23 @@ Nothing below was run this turn. Free runs first; paid runs only when authorized
 | Run | What it shows | Tier | Command / setup | Cost |
 |---|---|---|---|---|
 | **R0** (done) | What existing minds do in fights | read-only | §2.1 | none |
-| **R1** | The pipeline's floor: from a blow to an installed revision with an instant model, so the model's share of §2.1's latency is known | free, `--fake` | in a trials checkout ([the Spark setup](TRIALS.md#the-spark-setup)): `trials.py build wolves`, `trials.py run --batch cm0 wolves --replicates 4 --fake`, then `fight_mind_audit.py .local/living/trials/cm0/wolves-*` | none |
+| **R1** (done 2026-11-11, §5.1) | The pipeline's floor: from a blow to an installed revision with an instant model, so the model's share of §2.1's latency is known | free, `--fake` | in a trials checkout ([the Spark setup](TRIALS.md#the-spark-setup)): `trials.py build wolves`, `trials.py run --batch cm0 wolves --replicates 4 --fake`, then `fight_mind_audit.py .local/living/trials/cm0/wolves-*` | none |
 | **R2** | With nothing changed: against the heavy-telegraph and kiter fixtures, does a mind on main notice the pattern within a fight, change, and prepare routines for it? Measure 1 with today's machinery | small paid | two trial files (`arena-heavy`, `arena-kiter`): the island seed, a spawned subject with a bow and spear, one fixture placed 6 m away after 60 s; 10 minutes; 6 replicates each on `default`. `trials.py run --batch cm1 arena-heavy arena-kiter --replicates 6` | about 12 runs × $0.05–0.10 (b5 averaged $0.04 a run, wolves the dearest) ≈ **$1** |
 | **R3** | Across fights with what exists: fixture A met four times over two game days with sleep between, then B, against fresh subjects meeting B (Measure 2) | small paid | a life-length trial (`arena-veteran`) with timeline steps placing A at four times and B at the end, `life.stop_on_death: false`; fresh arm = the same file without the A steps; 4 replicates per arm, 60 minutes | about 8 runs × $0.15 ≈ **$1.20** |
 | **R4** | Each change of §3 against R2 and R3, as arms with their switches | free first (`--fake`, plumbing), then small paid | after each change is built and verified on its surface skill | about **$2** per change |
+
+### 5.1 R1: the pipeline's floor (2026-11-11)
+
+Batch `cm0`: `wolves`, 4 replicates, `--fake` (every model call answered at once by the fake server), built from `design-combat-mind` at 2f74f801 (main 4b76ef41 plus docs). Two of the four subjects were attacked: 5 fights, one death. Measured from each fight's first blow (`at_ms` of the `attacked` experience) to the first think reply (journal) and to the first installed plan (the deliberate thought row), against the same measure over the 32 real-model runs of §2.1:
+
+| From the first blow | Fake model (R1), n = 5: p50 / max | Real models (b4–b6b), n = 24 / 23: p50 |
+|---|---:|---:|
+| to the think reply | 0.7 / 1.4 s | 3.8 s |
+| to the plan installed | 1.4 / 2.2 s | 8.6 s |
+
+- **The model is about 84% of the delay** from a blow to a new plan (7.2 of 8.6 s at p50). The rest, about 1.4 s, is the pipeline: the authority's reason, the deliberation request, the mind's pickup, two calls and the install. That floor is four times a strike's windup, so no deliberation, however fast its model, answers inside an exchange; it is the budget a fast lane (§3.4) starts from.
+- **Against the table in §2.3:** R1 confirms the "change approach while the fight is on" row's cause: the shortfall is mostly the model's time, not the plumbing. A fast lane with one call at about 2 s would put a new routine about 3 s after a blow, inside the 19 s p90 fight, where the two-call path at 8.6 s p50 mostly is not. The rows about noticing, carrying lessons and using stances cannot be shown with a fake model (its replies are fixed); R1 shows nothing about them, by design.
+- **Evidence:** `.local/living/trials/cm0/` and `.local/living/combat-mind/fight_audit-cm0-fake.json` on the Spark (git-ignored); `fight_mind_audit.py --fake` reads them. The batch's databases and minds were removed with `trials.py clean --batch cm0`; the evidence stays.
 
 R2 and R3 need the trial files written (fixtures only); this turn is docs-only, so they are described, not added. R2 before any of §3 is built: if minds already prepare and use routines for a pattern, §3.5 is not needed yet, and §3.2–3.4 are judged by how much they add.
 

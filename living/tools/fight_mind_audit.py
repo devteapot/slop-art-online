@@ -53,9 +53,9 @@ def fights_of(exps, t0_ms, gap=20.0):
     return out
 
 
-def audit(d: Path, kind_word: str):
+def audit(d: Path, kind_word: str, fake_ok=False):
     s = json.loads((d / "summary.json").read_text())
-    if s.get("fake"):
+    if s.get("fake") and not fake_ok:
         return None
     exps = load(d / "experiences.jsonl")
     samples = load(d / "samples.jsonl")
@@ -88,6 +88,10 @@ def audit(d: Path, kind_word: str):
         during = [c for c in calls if lo <= c["start"] <= end]
         finished = [c for c in during if c["end"] <= end]
         revs = [g for g in graphs if a <= g["t"] <= end]
+        # From the first blow: the first model reply (think or compile) and the first graph
+        # revision installed after it, whenever they came (the pipeline's latency, R1).
+        first_reply = min((c["end"] for c in calls if c["end"] >= a), default=None)
+        first_rev = min((g["t"] for g in graphs if g["t"] >= a), default=None)
         stances, how = [], []
         for c in calls:
             if c["purpose"] != "think" or not (lo <= c["end"] <= end + 120):
@@ -115,6 +119,8 @@ def audit(d: Path, kind_word: str):
             "calls_started": len(during), "calls_finished_in_fight": len(finished),
             "latency_s": sorted(round(c["latency_s"], 1) for c in during),
             "graph_revisions_in_fight": len(revs),
+            "first_reply_after_blow_s": None if first_reply is None else round(first_reply - a, 1),
+            "first_revision_after_blow_s": None if first_rev is None else round(first_rev - a, 1),
             "stances_naming_opponent": stances, "thoughts_on_how_it_fights": how,
         })
     # Intention -> compiled graph -> body, for ranged force: does a think that means to shoot
@@ -146,8 +152,9 @@ def main():
     ap.add_argument("dirs", nargs="+")
     ap.add_argument("--kind", default="wolf", help="word naming the opponent's kind in stances and thoughts")
     ap.add_argument("--json")
+    ap.add_argument("--fake", action="store_true", help="also read --fake runs (the pipeline's floor, no real model)")
     a = ap.parse_args()
-    out = [r for r in (audit(Path(x), a.kind) for x in a.dirs) if r]
+    out = [r for r in (audit(Path(x), a.kind, a.fake) for x in a.dirs) if r]
     tot = {"runs": len(out), "fights": 0, "fights_with_call_finished": 0, "calls_started": 0, "calls_finished": 0, "revisions": 0, "lengths": [], "latencies": [], "stances": 0, "how": 0, "deaths_in_fight": 0, "repeat_fights": 0, "carried": 0}
     for r in out:
         for k, f in enumerate(r["fights"]):
@@ -168,7 +175,9 @@ def main():
     for k in ("ranged_tried_lines", "ranged_outcome_lines", "melee_outcome_lines"):
         tot[k] = sum(r["intent_to_body"][k] for r in out)
     tot["runs_trying_ranged"] = sum(r["intent_to_body"]["ranged_tried_lines"] > 0 for r in out)
-    for k in ("lengths", "latencies"):
+    tot["reply_after_blow"] = [f["first_reply_after_blow_s"] for r in out for f in r["fights"] if f["first_reply_after_blow_s"] is not None]
+    tot["revision_after_blow"] = [f["first_revision_after_blow_s"] for r in out for f in r["fights"] if f["first_revision_after_blow_s"] is not None]
+    for k in ("lengths", "latencies", "reply_after_blow", "revision_after_blow"):
         v = sorted(tot[k])
         tot[k] = {"n": len(v), "p50": v[len(v) // 2] if v else None, "p90": v[int(len(v) * 0.9)] if v else None, "max": v[-1] if v else None}
     report = {"totals": tot, "runs": out}
