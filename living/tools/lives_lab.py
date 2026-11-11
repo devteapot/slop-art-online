@@ -208,6 +208,14 @@ def analyze(a):
     rep["deaths_cold"] = sum(1 for c in deaths if c.get("cause") == "cold and exposure")
     rep["births"] = sum(1 for c in chars.values() if c["kind"] == "person" and c["id"] not in first_alive and c["alive"])
 
+    # Hunger by game day (each body's hunger projected to the sample time).
+    hunger_days = defaultdict(list)
+    for s in S:
+        day, _ = game(world, s["clock"])
+        for v in s["vitals"]:
+            if v["id"] in persons:
+                hunger_days[day].append(min(100.0, v["hunger"] + v["hunger_rate"] * max(0, s["clock"] - v["at_ms"]) / 60000))
+    rep["hunger"] = [{"day": d, "p50": round(pct(xs, 0.5), 1), "p90": round(pct(xs, 0.9), 1), "max": round(max(xs), 1), "share_hungry_50": round(sum(1 for x in xs if x > 50) / len(xs), 3), "share_starving_90": round(sum(1 for x in xs if x >= 90) / len(xs), 4)} for d, xs in sorted(hunger_days.items())]
     # Shelter entry at dusk.
     by_day = defaultdict(dict)  # day -> id -> entry hours after 16:00
     sheltered_at_16 = defaultdict(set)
@@ -373,8 +381,8 @@ def analyze(a):
             else:
                 segs.append({"key": key, "from": (day, hour), "to": (day, hour)})
         segs = [x for x in segs if (x["to"][0] - x["from"][0]) * 24 + x["to"][1] - x["from"][1] >= 0.5 or x["key"][0].startswith("social")]
-        tl = [f"d{x['from'][0]} {x['from'][1]:05.2f}-{x['to'][1]:05.2f} {x['key'][0]} @ {x['key'][1]}" for x in segs[:60]]
-        th = [f"d{game(world, t['at_ms'])[0]} {game(world, t['at_ms'])[1]:05.2f} {t['kind']}: {t['summary'][:140]}" for t in sorted(thoughts[i], key=lambda t: t["at_ms"])[:20]]
+        tl = [f"d{x['from'][0]} {x['from'][1]:05.2f}-{x['to'][1]:05.2f} {x['key'][0]} @ {x['key'][1]}" for x in segs]
+        th = [f"d{game(world, t['at_ms'])[0]} {game(world, t['at_ms'])[1]:05.2f} {t['kind']}: {t['summary'][:140]}" for t in sorted(thoughts[i], key=lambda t: t["at_ms"])]
         r = rhythm.get(i)
         lines.append({"id": i, "name": c["name"], "rhythm": {"rise": round(r["rise_h"], 2), "bed": round(r["bed_h"] % 24, 2), "evening_h": round(r["evening_h"], 1)} if r else None, "timeline": tl, "thoughts": th})
     rep["timelines"] = lines
@@ -383,6 +391,8 @@ def analyze(a):
     md += [f"- Deaths: {rep['deaths']} (starvation {rep['deaths_starvation']}, cold {rep['deaths_cold']}); births {rep['births']}.",
            f"- In step: {rep['in_step']}", f"- Time use (all samples): {rep['time_use_share']}", f"- Awake: {rep['awake_share']}",
            f"- Speech lines per person per game day: {rep['speech_lines_per_person_game_day']} ({rep['speakers']} speakers)", f"- Plans: {rep.get('plans')}", ""]
+    md += ["## Hunger by game day", "", "| day | p50 | p90 | max | share over 50 | share at 90+ |", "|---:|---:|---:|---:|---:|---:|"]
+    md += [f"| {x['day']} | {x['p50']} | {x['p90']} | {x['max']} | {x['share_hungry_50']} | {x['share_starving_90']} |" for x in rep["hunger"]] + [""]
     md += ["## Shelter entry from 16:00", "", "| day | entered | sheltered at 16:00 | p10 | median | p90 | IQR h | sd h | most in one 30 min |", "|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     md += [f"| {x['day']} | {x['entered']} | {x['already_sheltered_at_16']} | {x['p10_h']} | {x['median_h']} | {x['p90_h']} | {x['iqr_h']} | {x['sd_h']} | {x['max_30min_share']} |" for x in rep["shelter_entry"]]
     if "minds" in rep:

@@ -728,7 +728,7 @@ impl Llm {
         if !per_min.is_finite() || per_min < 0.0 || (per_min > 0.0 && per_min < 0.01) || per_min > 60000.0 {
             return Err(anyhow!("LIVING_LLM_PER_MIN must be 0 or between 0.01 and 60000"));
         }
-        let concurrency = std::env::var("LIVING_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(64).max(1);
+        let concurrency = std::env::var("LIVING_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(192).max(1);
         let scheduler = Scheduler::new(&models, concurrency, per_min);
         Ok(Self { http, models, keys, journal, scheduler, systems: Default::default() })
     }

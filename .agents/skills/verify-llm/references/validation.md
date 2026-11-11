@@ -1,5 +1,10 @@
 # Model integration validation
 
+
+## 2026-11-11 default concurrency 192 (lives-2, dev-box)
+
+Branch `lives-2`, own container `lives2-stdb` (2.14.1, port 3461), private `CARGO_TARGET_DIR`, fake provider only. The mind service's default `LIVING_CONCURRENCY` went from 64 to 192 (a full island of minds queued routine calls up to a minute at 64; docs/SEEDED_LIVES.md, "Every person a mind"), and the models file's `woken` route is gone. `llm-l2c-034535`: 16 of 16 (basic, routing by group, assignment, rotation, child, default, overflow, retry-fallback, error-overflow, outage, repair, deliberation-retry, retry-exhausted, timeout, missing-default-key, mix). `cargo test -p living-mind` 82 passed.
+
 ## 2026-11-10 rules2-r2 fixes (dev-box)
 
 On the dev-box worktree `~/dev/slop-mind-small`, branch `fix-mind-small`, own container `mind-small-stdb` (2.14.1, port 3427, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only: docs/MIND_HARNESS.md, "Fixes from the rules2-r2 review".
