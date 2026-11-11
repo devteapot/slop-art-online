@@ -186,6 +186,11 @@ pub struct Anim {
 }
 
 impl Anim {
+    /// Stopping: the gait runs on to its next double support before standing.
+    pub fn settling(&self) -> bool {
+        self.settle.is_some()
+    }
+
     /// Where in their cycle the gaits are sampled (0–1).
     pub fn clip_phase(&self) -> f32 {
         if self.reverse {
@@ -541,7 +546,12 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
         }
         a.reverse = m.reverse;
     }
-    let stepping = if a.moving > 0.0 && a.settle.is_none() { m.speed > STEP_OFF } else { m.speed > STEP_ON };
+    // A whole-body one-shot asked for (a dodge's dash, a death) covers the legs: no gait starts
+    // under it, so its first frames don't show a sprint while it fades in.
+    // My own body is drawn ahead of the display clock that times one-shots, so its dash can
+    // move before its clip starts: asked for is enough.
+    let covered = want.is_some_and(|x| !set.upper.contains_key(x.clip));
+    let stepping = !covered && if a.moving > 0.0 && a.settle.is_none() { m.speed > STEP_OFF } else { m.speed > STEP_ON };
     let moving = if stepping {
         let b = set.gaits.blend(m.speed, m.stride, |i| set.gait_len(i));
         if a.moving <= 0.0 {

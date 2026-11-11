@@ -174,6 +174,8 @@ const STARTLE: (&str, f64) = ("startle", 420.0);
 const STARTLE_V: f32 = 4.0;
 const STILL_S: f32 = 1.0;
 
+/// How fast a drawn gait takes up a slower segment's speed (1/s): about 95% in 0.15 s.
+const SLOWING: f32 = 20.0;
 /// How fast drawn yaw takes up a new facing (1/s): about 90% in 0.15 s.
 const YAW_RATE: f32 = 16.0;
 /// Walking while looking more than this far from the travel (radians), a person walks
@@ -470,19 +472,20 @@ fn bodies(
             }
         }
         // The gait takes up the displayed segment's speed at once when it rises: the authority
-        // starts a body at full speed, and an eased speed slid the feet as it set off. It eases
-        // down as before, so a stop finishes its step (the planted foot held) rather than
-        // freezing mid-stride and blending to standing, which slid both feet (foot_slide, 2026-11-10).
-        // A body held or catching up (getting up, a startle) is drawn off its segment: its gait
-        // follows the drawn motion.
+        // starts a body at full speed, and an eased speed slid the feet as it set off. A slower
+        // segment is taken up within about 0.15 s, and a standing one at once: the gait then
+        // finishes its step at its own rate (`anim.rs`, settling at double support) instead of
+        // stepping on the spot for most of a second while its speed eased down (play-test 1:
+        // 0.8 s of gait after the body stood). A body held or catching up (getting up, a
+        // startle) is drawn off its segment: its gait follows the drawn motion.
         let on_segment = held.is_none() && s.drawn == p;
         let v = (s.drawn - before).length() / dt;
         let p = s.drawn;
         let ground = island.height(p.x, p.y);
         let v = if v.is_finite() && v < 20.0 { v } else { 0.0 };
         match scene.speeds.get(&id) {
-            Some(&seg) if on_segment && seg >= s.speed => s.speed = seg,
-            Some(&seg) if on_segment => s.speed += (seg - s.speed) * (1.0 - (-dt * 8.0).exp()),
+            Some(&seg) if on_segment && (seg >= s.speed || seg <= 0.0) => s.speed = seg.max(0.0),
+            Some(&seg) if on_segment => s.speed += (seg - s.speed) * (1.0 - (-dt * SLOWING).exp()),
             _ => s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp()),
         }
         // A person walking one way while looking another (my cursor, a move's aim): the legs keep
