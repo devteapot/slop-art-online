@@ -1064,7 +1064,7 @@ impl<'a> Ev<'a> {
         let wolf_arrived = wolf_near && self.st.alerts & WOLF_NEAR == 0;
         self.st.alerts = if wolf_near { self.st.alerts | WOLF_NEAR } else { self.st.alerts & !WOLF_NEAR };
         let mut announced = 0;
-        for c in cands {
+        for c in &cands {
             if announced >= 2 {
                 break;
             }
@@ -1078,7 +1078,7 @@ impl<'a> Ev<'a> {
             let prev = self.familiarity(FAM_CREATURE | c.id as u64);
             let Some(ch) = self.ctx.db.character().id().find(c.id) else { continue };
             let who = common::label_for(self.ctx, &self.me, c.id);
-            let doing = self.ctx.db.activity().id().find(c.id).map(|a| format!(", {}", a.label)).unwrap_or_default();
+            let doing = crate::perception::doing_of(self.ctx, c.id, (self.me.id, &me_kind, at), &cands, now).map(|d| format!(", {d}")).unwrap_or_default();
             let place = format!("{:.0} tiles {}{doing}", c.dist, direction(at, c.pos));
             let (text, sal) = match prev {
                 None if ch.kind == "person" || ch.kind == self.me.kind => (format!("For the first time you see {who}, {place}."), 0.45),

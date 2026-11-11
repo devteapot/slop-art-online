@@ -14,7 +14,9 @@ use bevy::render::{
         binding_types::{sampler, texture_2d, texture_depth_2d, uniform_buffer},
         *,
     },
+    render_asset::RenderAssets,
     renderer::{RenderContext, RenderDevice, ViewQuery},
+    texture::{FallbackImage, GpuImage},
     view::ViewTarget,
     RenderApp, RenderStartup,
 };
@@ -49,9 +51,18 @@ pub struct Edges {
     pub sight_look: Vec4,
     /// rgb: the fog's colour (linear), a: how far not seen now is flattened toward it.
     pub sight_fog: Vec4,
-    /// x: where limited view is fully fogged, times the radius.
+    /// x: where limited view is fully fogged, times the radius; y: how far limited view fogs
+    /// what lies behind something (0–1).
     pub sight_far: Vec4,
+    /// Where my sight lines reach (`sightfield.rs`): xy the world x, z of the field texture's
+    /// corner, z one over its side (m), w 1 when it holds a field.
+    pub sight_field: Vec4,
 }
+
+/// The sight field's texture (`sightfield.rs`), on the camera beside its [`Edges`].
+#[derive(Component, Clone, ExtractComponent)]
+#[extract_app(RenderApp)]
+pub struct SightTexture(pub Handle<Image>);
 
 /// Feed the finishing pass from the style profile, the sun and the camera.
 #[allow(clippy::type_complexity)]
@@ -130,7 +141,7 @@ pub struct PostPlugin;
 impl Plugin for PostPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "edges.wesl");
-        app.add_plugins((ExtractComponentPlugin::<Edges>::default(), UniformComponentPlugin::<Edges>::default()));
+        app.add_plugins((ExtractComponentPlugin::<Edges>::default(), UniformComponentPlugin::<Edges>::default(), ExtractComponentPlugin::<SightTexture>::default()));
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else { return };
         render_app.add_systems(RenderStartup, init_pipeline).add_systems(Core3d, draw.in_set(Core3dSystems::PostProcess));
     }
@@ -155,6 +166,8 @@ fn init_pipeline(mut commands: Commands, render_device: Res<RenderDevice>, asset
                 texture_depth_2d(),
                 texture_2d(TextureSampleType::Float { filterable: false }),
                 uniform_buffer::<Edges>(true),
+                texture_2d(TextureSampleType::Float { filterable: true }),
+                sampler(SamplerBindingType::Filtering),
             ),
         ),
     );
@@ -177,8 +190,11 @@ fn init_pipeline(mut commands: Commands, render_device: Res<RenderDevice>, asset
     commands.insert_resource(EdgesPipeline { layout, sampler, ldr, hdr });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw(
-    view: ViewQuery<(&ViewTarget, &ViewPrepassTextures, &DynamicUniformIndex<Edges>)>,
+    view: ViewQuery<(&ViewTarget, &ViewPrepassTextures, &DynamicUniformIndex<Edges>, Option<&SightTexture>)>,
+    images: Res<RenderAssets<GpuImage>>,
+    fallback: Res<FallbackImage>,
     pipeline: Option<Res<EdgesPipeline>>,
     pipeline_cache: Res<PipelineCache>,
     uniforms: Res<ComponentUniforms<Edges>>,
@@ -186,7 +202,10 @@ fn draw(
     mut ctx: RenderContext,
 ) {
     let Some(pipeline) = pipeline else { return };
-    let (target, prepass, index) = view.into_inner();
+    let (target, prepass, index, field) = view.into_inner();
+    // The sight field, or a white texel until it is uploaded (the pass reads it only when
+    // `sight_field.w` says it holds one).
+    let field = field.and_then(|f| images.get(&f.0)).unwrap_or(&fallback.d2);
     let id = if target.main_texture_format() == TextureFormat::Rgba16Float { pipeline.hdr } else { pipeline.ldr };
     let Some(render_pipeline) = pipeline_cache.get_render_pipeline(id) else { return };
     let (Some(depth), Some(normal), Some(binding)) = (prepass.depth_only_view(), prepass.normal_view(), uniforms.uniforms().binding()) else { return };
@@ -194,7 +213,7 @@ fn draw(
     let bind_group = render_device.create_bind_group(
         "edges_bind_group",
         &pipeline_cache.get_bind_group_layout(&pipeline.layout),
-        &BindGroupEntries::sequential((post.source, &pipeline.sampler, depth, normal, binding.clone())),
+        &BindGroupEntries::sequential((post.source, &pipeline.sampler, depth, normal, binding.clone(), &field.texture_view, &field.sampler)),
     );
     let mut pass = ctx.command_encoder().begin_render_pass(&RenderPassDescriptor {
         label: Some("edges_pass"),
