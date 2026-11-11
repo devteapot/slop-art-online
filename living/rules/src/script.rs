@@ -2901,6 +2901,22 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         assert!(s.check("teach", &c).unwrap_err().contains("don't know cloak yourself"));
     }
 
+    /// Every know-how can be taught, not only what experimenting can reveal: fire_bolt and
+    /// wound_tending (learned only from someone or from writing) were refused as "no technique".
+    #[test]
+    fn every_know_how_can_be_taught() {
+        let s = scripts();
+        let names: Vec<String> = s.tables().names("know_how").to_vec();
+        assert!(names.iter().any(|n| n == "fire_bolt") && names.iter().any(|n| n == "wound_tending"), "{names:?}");
+        for t in &names {
+            let mut c = ctx();
+            c.item = t.clone();
+            c.actor.knows = names.clone();
+            c.target = TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "adult".into(), knows: s.tables().words("know_how", t, "requires"), ..Default::default() };
+            assert_eq!(s.check("teach", &c), Ok(()), "teach {t}");
+        }
+    }
+
     #[test]
     fn gifts_must_fit_the_receivers_pack() {
         let s = scripts();

@@ -8,7 +8,11 @@ main's line, a protected checkout, an untagged evidence folder, a folder with a 
 CACHEDIR.TAG, a symlink and a nested repository stay; a target holding a log keeps the log.
 The machine's protected paths: worktrees named in ~/.config/slop-disk/protect.txt or with
 --protect, and a target holding a protected path, stay and are reported with their source;
-an invalid protect file stops the run with nothing removed.
+an invalid protect file stops the run with nothing removed. A glob line in the protect file
+protects what it matches (an evidence folder's build inside an idle worktree, an outside
+target). Of the target folders outside the worktrees that targets.txt names, an idle one
+goes; a protected, an active and a busy one stay, and a matching folder that is no Cargo
+target is untouched; without targets.txt none is a candidate.
 Touches nothing outside the temporary directory. Usage: disk_clean_selftest.py
 """
 import json
@@ -136,7 +140,16 @@ def main():
         os.makedirs(f"{home}/.config/slop-disk")
         with open(f"{home}/.config/slop-disk/protect.txt", "w") as f:
             f.write("# never touch these on this machine\n\n~/dev/slop-trials   # 14 GB, the trials\n"
-                    f"{wts}/holds/living/target/release/keep-me\n")
+                    f"{wts}/holds/living/target/release/keep-me\n~/wt/*/.local/living\n~/slop-runs-*-target\n~/nothing-*-here\n")
+        # target folders outside the worktrees (private CARGO_TARGET_DIRs), named by a glob
+        with open(f"{home}/.config/slop-disk/targets.txt", "w") as f:
+            f.write("~/slop-*-target   # the agents' private targets\n")
+        for name, hours in (("slop-idle-target", 50), ("slop-runs-x-target", 50), ("slop-fresh-target", 0.1), ("slop-busy-target", 50)):
+            target(f"{home}/{name}")
+            age(f"{home}/{name}", hours)
+        os.makedirs(f"{home}/slop-notcargo-target")
+        open(f"{home}/slop-notcargo-target/notes.txt", "w").write("keep\n")
+        age(f"{home}/slop-notcargo-target", 50)
         # a target with a file written "after" the scan started: idle 0.0 h, never negative
         sh(f"git worktree add -q -b now {wts}/now origin/main", repo)
         target(f"{wts}/now/.local/t")
@@ -157,6 +170,7 @@ def main():
         target(f"{nested}/target")
         for w in ("done", "busy", "fresh"):
             age(f"{wts}/{w}/.local", 3)
+        target(f"{wts}/old/.local/living/verify/run1/target")  # a verify run's build inside evidence
         age(f"{wts}/old/.local", 50)
         idx = sh("git rev-parse --absolute-git-dir", f"{wts}/old").strip()
         for f in ("index", "logs/HEAD", "HEAD"):
@@ -167,6 +181,7 @@ def main():
         age(f"{home}/dev/slop-game/living/target", 100)
         age(nested, 100)
         busy = subprocess.Popen(["sleep", "300"], cwd=f"{wts}/busy/.local/t/debug")
+        busy2 = subprocess.Popen(["sleep", "300"], cwd=f"{home}/slop-busy-target/debug")
         protect = ["--protect", "~/dev/slop-play"]  # expanded by disk_clean, not by a shell
         try:
             bad = subprocess.run([sys.executable, CLEAN, "--apply", "--repo", repo, "--floor-gb", "0", "--target-gb", "0", "--protect-file", f"{home}/bad-protect.txt"],
@@ -180,8 +195,19 @@ def main():
             dry = subprocess.run([sys.executable, CLEAN, "--repo", repo, "--floor-gb", "0", "--target-gb", "0", *protect], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
             expect("dry run removes nothing", all(os.path.isdir(f"{wts}/{w}/.local/t/debug") for w in ("done", "busy", "fresh", "old")), dry)
             out = subprocess.run([sys.executable, CLEAN, "--apply", "--repo", repo, "--floor-gb", "0", "--target-gb", "0", *protect], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
+            nofile = subprocess.run([sys.executable, CLEAN, "--repo", repo, "--floor-gb", "0", "--target-gb", "0", "--targets-file", f"{home}/none.txt", *protect],
+                                    env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
         finally:
             busy.kill()
+            busy2.kill()
+        expect("without targets.txt no outside folder is a candidate", "outside the worktrees" not in nofile, nofile)
+        expect("a protect-file glob: the evidence build in an idle worktree stays", os.path.isdir(f"{wts}/old/.local/living/verify/run1/target/debug")
+               and "~/wt/old/.local/living (~/.config/slop-disk/protect.txt, line 5: ~/wt/*/.local/living)" in out, out)
+        expect("outside target idle 50 h: removed", not os.path.exists(f"{home}/slop-idle-target"), out)
+        expect("outside target matched by a protect glob: never", os.path.isdir(f"{home}/slop-runs-x-target/debug") and "protected: ~/slop-runs-x-target" in out, out)
+        expect("outside target active: kept", os.path.isdir(f"{home}/slop-fresh-target/debug"), out)
+        expect("outside target with a process inside: kept", os.path.isdir(f"{home}/slop-busy-target/debug"), out)
+        expect("outside folder that is no Cargo target: untouched", os.path.isfile(f"{home}/slop-notcargo-target/notes.txt"), out)
         expect("merged and idle: removed", not os.path.exists(f"{wts}/done/.local/t"), out)
         expect("a process inside: kept", os.path.isdir(f"{wts}/busy/.local/t/debug") and "in use" in out, out)
         expect("fresh worktree on main's line: kept", os.path.isdir(f"{wts}/fresh/.local/t/debug"), out)

@@ -999,14 +999,10 @@ fn close_check(a) { if a.target.kind != "gate" { return "that is not a gate"; } 
 fn close_duration(a) { 1500 }
 fn close_done(a) { [#{ op: "gate", open: 0.0 }] }
 
-// Every technique there is: whatever experimenting with some material can reveal.
-fn techniques() {
-    let all = [];
-    for m in ["stone", "wood", "clay", "fiber", "hide", "berries", "meat", "fish"] {
-        for t in discoveries(m) { if !all.contains(t) { all.push(t); } }
-    }
-    all
-}
+// Every technique there is: the world's know-how table (its own entries included, such as a
+// seed's glassmaking), not only what experimenting with a material can reveal (`discoveries`):
+// fire_bolt and wound_tending are learned only from someone or from writing.
+fn techniques() { names_of("know_how") }
 fn teach_check(a) {
     let all = techniques();
     if !all.contains(a.item) {

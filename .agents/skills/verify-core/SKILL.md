@@ -33,6 +33,7 @@ python3 "$C/scenes.py" tick --run "$R" > "$E/tick.txt" 2>&1
 python3 "$C/scenes.py" needs --run "$R" > "$E/needs.txt" 2>&1
 python3 "$C/scenes.py" food --run "$R" > "$E/food.txt" 2>&1
 python3 "$C/scenes.py" refusal --run "$R" > "$E/refusal.txt" 2>&1
+python3 "$C/scenes.py" teach --run "$R" > "$E/teach.txt" 2>&1
 python3 "$C/scenes.py" seize --run "$R" > "$E/seize.txt" 2>&1
 python3 "$C/scenes.py" sight --run "$R" > "$E/sight.txt" 2>&1
 python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
