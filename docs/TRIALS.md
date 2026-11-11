@@ -264,6 +264,27 @@ The six scripted trials, glm-flash (`default`), 4 replicates each, `trials-1` 1f
 - **Cheaper per game day** in four of six trials (theft 153k against 207k–219k; hungry 186k against 158k–232k); wolves is dearer (363k), because the fight is decided turn by turn.
 - Invalid deliberations: 6 of 374. Spread is wide in every trial (first meal 0.4–13 min in theft); 4 replicates is the floor for comparisons against this baseline.
 
+### Long lives and the social baseline on main 445db098 (`l6`, `s11`, 2026-11-11)
+
+**`l6`:** the life presets (island `life`, `life-ruin`, `life-pressure`), glm-flash, 3 replicates each, planned for 6 hours. Since `arrival-1`, every one of them puts the newcomer on the first town's square. **8 of 9 newcomers starved, at minutes 38–120;** the ninth (a ruin life) was alive at minute 174 when this was written. Last night's six-hour lives (`la1`, main 47e82a3, arrival outside the gate by the bushes) all lived. Eating is unchanged since 47e82a3 (berries 12, fish 16, …), so this is the arrival, not the food rules.
+
+| Run | Died at | Lines (people) | Gathers, meals | Cost | Last goal |
+| --- | --- | --- | --- | --- | --- |
+| island r1 | 120 min | 37 (10) | 19, 16 | $0.24 | "eat today — by my own hands or a knocked door" |
+| island r2 | 53 | 20 (6) | 2, 3 | $0.08 | "feed myself by my own hands today — fish, fire, cooked food" |
+| island r3 | 83 | 37 (10) | 7, 7 | $0.13 | "eat today — berries, fish, anything, before any other work" |
+| pressure r1 | 38 | 8 (3) | 0, 2 | $0.06 | "eat before anything else" |
+| pressure r2 | 40 | 18 (2) | 0, 3 | $0.07 | "eat before anything else tomorrow" |
+| pressure r3 | 57 | 24 (9) | 6, 3 | $0.11 | "eat today by my own work before anything else" |
+| ruin r2 | 89 | 47 (13) | 24, 4 | $0.17 | "eat before I promise anything more" |
+| ruin r3 | 106 | 77 (15) | 13, 8 | $0.25 | "eat today—ask #3, #74, #73 by the fire, mending offered free" |
+
+How these lives went (`life_story.py l6`): within the first hour every goal list becomes "eat today"; the mind searches for the nearest bush or tree in the town, where none is in sight ("ranging for wood since none grows by the hall"), most often failing "gather → nearest tree: not in sight" (13–20 times in a life), and never walks out. Nothing is built or learned (one campfire, one gift of berries to a hungry child, in `ruin r3`); relationships do not form beyond first meetings (0–15 people spoken to, then the persona's people list is emptied at death). Cost is low because the lives are short: $0.12–0.14 per hour.
+
+**`s11`:** the social preset (seeds 7, 11, 13 and 7 again), glm-flash, 120 min, 4 replicates, $7.84. 2 of 4 newcomers starved (minute 92, both); the two that lived went outside the walls (54% of one's samples, 94 m past the edge) or gathered 32 times and took 5 from stores. Asks heard 13.8 (6–27) per run, food given 0.8, no lesson, lodging, agreement or demand. It replaces `s10`/`i9` as the social reference.
+
+**`l7`:** because island lives now end within two hours, the "player playing the game" view comes from the valley (`life-valley`, stage3-village, arrival at the map centre), 3 × 6 hours, started 04:17. Iteration 10 tests the island failure directly.
+
 ### Tokens and cost
 
 | Batch | Calls | Tokens | Cost |
