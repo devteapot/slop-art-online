@@ -1466,6 +1466,8 @@ structure_models = [
 for _id, _size, _h, _cause in (
         ("hearth", [1.3, 0.8], 0.9, "a household's hearth, which the engine stands at its door: a basalt fire box with a pot on it, peat beside it"),
         ("lamp", [0.6, 0.6], 3.2, "one of the plan's seven lamps: the quay lamp, iron on a basalt block, odd panes"),
+        ("house_store", [1.2, 1.2], 0.95, "a household's store (rules-3), which the engine stands at its home: a tarred sea chest with a creel on it"),
+        ("yard_store", [3.2, 2.9], 1.35, "the Cone yard's peat store (rules-3): the covered handcart, crates and barrels of the common store"),
         ("furnace", [2.8, 1.2], 1.5, "the Cone's furnace, which the engine stands at the front mouth: the stoker's rake and shovel in their stand, a barrow of peat"),
         ("oven", [1.5, 0.8], 1.0, "the Batch's oven, which the engine stands at the oven mouth: the cooling trestle with the morning's loaves, the ember pan"),
         ("smokehouse", [1.6, 0.8], 1.7, "a smokehouse's fire, which the engine stands at its door: the smoulder pot and a rack of split fish")):

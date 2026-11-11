@@ -4415,6 +4415,23 @@ def gen_hearth(k, rng, lot):
     return dict(ridge_m=0.92, glow="GlowEmber")
 
 
+def gen_house_store(k, rng, lot):
+    """A household's store, for the engine's `house_store` at a home's door: a tarred sea chest
+    with rope beckets and an iron hasp, a creel on it. Low and against the wall's side, so a
+    door is not blocked by a shed."""
+    put(k, box((-0.5, -0.02, 0.0), (0.5, 0.5, 0.06)), jit(P.drift, rng))
+    put(k, box((-0.48, 0.0, 0.06), (0.48, 0.48, 0.5), bevel=0.015), lambda co, n, c=jit(mix(P.tar, P.drift, 0.2), rng): mix(c, P.drift, 0.3) if n.z > 0.5 else c)
+    put(k, box((-0.5, -0.02, 0.5), (0.5, 0.5, 0.56), bevel=0.012), jit(mix(P.tar, P.drift, 0.3), rng))
+    for x in (-0.3, 0.3):
+        put(k, box((x - 0.03, -0.012, 0.06), (x + 0.03, 0.0, 0.56)), mix(P.iron, P.rust, 0.55))
+    put(k, box((-0.05, -0.03, 0.36), (0.05, -0.01, 0.5)), mix(P.iron, P.rust, 0.6))
+    for sx in (-1, 1):
+        put(k, tube([(sx * 0.49, 0.14, 0.34), (sx * 0.56, 0.24, 0.26), (sx * 0.49, 0.34, 0.34)], 0.014, 4, caps=False), ROPE, closed=False)
+    creel(k, rng, Matrix.Translation((0.2, 0.26, 0.56)), 0.2, 0.36, sides=8, rows=4)
+    found(k, 0.4)
+    return dict(ridge_m=0.92)
+
+
 def gen_furnace(k, rng, lot):
     """The Cone's furnace, for the engine's `furnace` at the front mouth (the mouth itself is the
     Cone's): the stoker's rake and shovel in their iron stand, a shovel of live coals, and a
@@ -4517,7 +4534,7 @@ GEN = dict(
     # Pass 2.
     heron=(gen_heron, 9000), heron_jib=(gen_heron_jib, 1500), lamp_house=(gen_cottage, 3500),
     lehr_house=(gen_lehr_house, 8000), pot_house=(gen_pot_house, 6000), ash_house=(gen_ash_house, 5000), store=(gen_store, 6000), readers_house=(gen_readers_house, 6000),
-    smoke_shed=(gen_smokehouse, 3500), smokehouse=(gen_smoke_fire, 1500), hearth=(gen_hearth, 1500), lamp=(gen_quay_lamp, 1500), furnace=(gen_furnace, 1500), oven=(gen_oven, 1500), cistern_house=(gen_cistern_house, 3000), peat_barn=(gen_peat_barn, 6000), batch=(gen_batch, 4000),
+    smoke_shed=(gen_smokehouse, 3500), smokehouse=(gen_smoke_fire, 1500), hearth=(gen_hearth, 1500), house_store=(gen_house_store, 1500), yard_store=(gen_storage, 2500), lamp=(gen_quay_lamp, 1500), furnace=(gen_furnace, 1500), oven=(gen_oven, 1500), cistern_house=(gen_cistern_house, 3000), peat_barn=(gen_peat_barn, 6000), batch=(gen_batch, 4000),
     wash_house=(gen_wash_house, 4000), cullet_shed=(gen_cullet_shed, 5000), boatshed=(gen_boatshed, 6000), dry_dock=(gen_dry_dock, 6000), cistern=(gen_cistern, 3000),
     thorn=(gen_thorn, 1500), crown_bench=(gen_crown_bench, 600), root_plot=(gen_root_plot, 1500), cone_yard=(gen_cone_yard, 2500), slip=(gen_slip, 2500), graveyard=(gen_graveyard, 2500),
     blowpipe_rack=(gen_blowpipe_rack, 1500), crucible_stack=(gen_crucible_stack, 1500), cullet_heap=(gen_cullet_heap, 1500), ash_sacks=(gen_ash_sacks, 1500), handcart=(gen_handcart, 1500),

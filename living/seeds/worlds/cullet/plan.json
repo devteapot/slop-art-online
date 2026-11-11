@@ -28081,6 +28081,58 @@
    }
   },
   {
+   "id": "house_store",
+   "kind": "house_store",
+   "model": "cullet/house_store/house_store.glb",
+   "size": [
+    1.2,
+    1.2
+   ],
+   "height_m": 0.95,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 50232,
+   "cause": "a household's store (rules-3), which the engine stands at its home: a tarred sea chest with a creel on it",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
+   "id": "yard_store",
+   "kind": "yard_store",
+   "model": "cullet/yard_store/yard_store.glb",
+   "size": [
+    3.2,
+    2.9
+   ],
+   "height_m": 1.35,
+   "facing": "south",
+   "at": [
+    0,
+    0
+   ],
+   "seed": 96035,
+   "cause": "the Cone yard's peat store (rules-3): the covered handcart, crates and barrels of the common store",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 0.6,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 118 m from the Cone at bearing 262; front faces 180"
+   }
+  },
+  {
    "id": "furnace",
    "kind": "furnace",
    "model": "cullet/furnace/furnace.glb",

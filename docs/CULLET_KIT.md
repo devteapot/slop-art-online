@@ -2,7 +2,7 @@
 
 Started 2026-11-11 (branch `kit-1`, phase 3 of [the small city](SMALL_CITY.md#8-build-plan)). Fable 5.2 wrote it, starting from its A/B arm (`ab-arm1`), as the owner decided (decision 12). Pass 1 was the P0 list of SMALL_CITY §6; pass 2 (branch `kit-2`, the same day) is the ground and most of the P1 list.
 
-**Status.** 432 models, about 480,000 triangles, built for their places from [Cullet's plan](AUTHORED_PLANS.md#cullets-plan). All 432 pass the checks below. Judged in the game's renderer, in look-dev (the land of `living/seeds/cullet.json`, the `cullet` mood) at 13:00, dusk and 21:30. Not yet walked by the owner in this state. Not a performance result: no frame times were measured. The ground is Cullet's own since the laptop's `ground-1` (on main) draws what this pass paints and maps ([the ground](#the-ground)).
+**Status.** 434 models, about 482,000 triangles, built for their places from [Cullet's plan](AUTHORED_PLANS.md#cullets-plan). All 434 pass the checks below. Judged in the game's renderer, in look-dev (the land of `living/seeds/cullet.json`, the `cullet` mood) at 13:00, dusk and 21:30. Not yet walked by the owner in this state. Not a performance result: no frame times were measured. The ground is Cullet's own since the laptop's `ground-1` (on main) draws what this pass paints and maps ([the ground](#the-ground)).
 
 ## Run it
 
@@ -13,7 +13,7 @@ python3 living/tools/cullet_kit_check.py       # the checks, on the GLB files th
 just living-game-textures --set all            # the ground's painted layers, with Cullet's nine
 ```
 
-Two runs on one machine give byte-identical files (all 464: the models, `fixtures.json`, `ground.json`, `report.json` and the footprint sidecars; dev-box, Blender 5.2.2), and a second full run leaves `living/rules/data/buildings.json` as it is. Another machine or Blender version has not been compared: the geometry and colours follow from the plan alone, but the exporter's bytes are Blender's. A machine without Blender can take the dev-box's generated folder as a tarball instead (unpack it at the repository's root).
+Two runs on one machine give byte-identical files (all 466: the models, `fixtures.json`, `ground.json`, `report.json` and the footprint sidecars; dev-box, Blender 5.2.2), and a second full run leaves `living/rules/data/buildings.json` as it is. Another machine or Blender version has not been compared: the geometry and colours follow from the plan alone, but the exporter's bytes are Blender's. A machine without Blender can take the dev-box's generated folder as a tarball instead (unpack it at the repository's root).
 
 `gen_cullet.sh --only cone,low_4,retaining_wall` builds some models (ids or folders). `--out DIR` writes elsewhere; `--figure` stands a 1.75 m figure by each model, for contact sheets only. Only a full run into the game's own folder touches the footprint table. `just living-game-assets` runs the generator with the other kits. The output, `living/game/assets/envs/cullet/`, is git-ignored: the scripts are the asset.
 
@@ -62,7 +62,7 @@ Two runs on one machine give byte-identical files (all 464: the models, `fixture
 | The Rows' backs, the Ladder's corners, walled gardens and the rest of layout pass 1's enclosures | 114 | 78,576 | 3,641 | layout-1 | Layout pass 1's 114 fixtures ([Cullet's layout](CULLET_LAYOUT.md)): walls and what stands inside them, each written out by the plan. Built by `gen_enclosure`; they go through the same export passes and checks. |
 | The Hanger's trees and stumps | 9 | 4,246 | 716 | 2 | Six wind-bent forms, all leaning north-east, and three stumps of the old wood, round the woodward's yard. |
 | The open lots' own ground | 21 | 13,000 | 1,060 | 2 | No floors (the ground is the plan's): a root plot's ridges of root tops, the Cone yard's kerb, ruts and ash, the slip's skids and capstan, the graveyard's glass markers (one cobalt). Without a model the client draws an open lot as a pale slab. |
-| The engine's structures in Cullet's look | 8 | 4,403 | 1,426 | 2 | The kerb sign, the covered cart of the common store, the fire basket, a household's fire box, the lamp, and what stands at the Cone's mouth, the Batch's oven and a smokehouse's door. |
+| The engine's structures in Cullet's look | 10 | 6,195 | 1,426 | 2 | The kerb sign, the covered cart of the common store (and of the Cone yard's peat store), the fire basket, a household's fire box and its sea chest, the lamp, and what stands at the Cone's mouth, the Batch's oven and a smokehouse's door. |
 
 3 lots have no model yet and are drawn as grey boxes: turf house, hanger cottage, lintel. Every open lot has a model now (without one the client draws it as a pale slab).
 
@@ -72,11 +72,13 @@ A lot's model is found as before: the plan's `model` goes into the land and the 
 
 A **fixture** is a model that stands at a point of the land and is not a lot. The plan lists them (`fixtures`, written by `cullet_plan.py`, kept out of the seed). The generator builds each and writes `envs/cullet/fixtures.json` in land metres. The game client places them ([authored plans, the game client](AUTHORED_PLANS.md#the-game-client)). **Open lots people walk on are fixtures too**: the Fish Steps and the Marver's terrace (the client keeps its camera out of every lot's model and fades a low one when you stand by it). **So is the Heron's jib**: it reaches 9 m out over the harbour, past the lot, and a lot's model must stand inside its lot. Pass 2's dressing is all fixtures, each placed by `cullet_plan.py` from the lots and spots it belongs to, so it followed them when layout pass 1 moved 59 lots. That pass ([Cullet's layout](CULLET_LAYOUT.md)) walled the yards behind the Rows and filled them (privies, lean-tos, butts, washing, hens, beds, canes: `gen_enclosure`), so the lean-tos, privies, rain butts, washing lines, hen coops and canes this pass had built for the same ground were taken out again: one yard cannot hold both.
 
-A **structure model** is what the client draws for one of the engine's own structures in this environment (`plan.json` `structures`; `envs/cullet/<kind>/*.glb`, origin on the ground at the structure's place, front to the street). The laptop's `ground-1` adds the lookup (a structure on a land world takes its settlement's environment's model, else the old procedural mesh). The kit supplies three, after the laptop's walk found the generic ones reading as brown huts:
+A **structure model** is what the client draws for one of the engine's own structures in this environment (`plan.json` `structures`; `envs/cullet/<kind>/*.glb`, origin on the ground at the structure's place, front to the street). The laptop's `ground-1` adds the lookup (a structure on a land world takes its settlement's environment's model, else the old procedural mesh). The kit supplies ten. Three after the laptop's walk found the generic ones reading as brown huts:
 
 - `sign/sign.glb`: a painted board hanging from an iron bracket on a spar at the kerb, its back (+Y) to the building. It is a kerb sign and not a board on the wall because the engine stands a sign 0.5 m outside its building's lot and 1.5 m east of the lot's middle, and Cullet's walls stand 0.5 to 0.95 m inside their lots (the Cone's is round): a board modelled against a wall would float before most of them. A true wall sign needs the sign's distance to the wall per building; the buildings that should carry their name on the façade can take it in their own models instead.
 - `storage/storage.glb`: the common store in the Counting House yard: a handcart under a tarred cloth, crates and two barrels.
 - `campfire/campfire.glb`: an iron fire basket on three stones, peat in it; the fire is on `GlowAmber`, for the client's lit rule.
+
+And seven for the structures rates-2 and rules-3 place from the plan, each in the folder of its exact kind: `hearth` (a basalt fire box with a pot, at a home's door), `house_store` (a tarred sea chest with a creel on it), `yard_store` (the covered cart again, for the Cone yard's peat), `lamp` (the quay lamp), `furnace` (the stoker's rake and shovel in their stand and a barrow of peat, at the Cone's front mouth), `oven` (the cooling trestle with the morning's loaves, at the Batch's mouth) and `smokehouse` (a smoulder pot and a rack of split fish, at a smokehouse's door). Because `smokehouse` is the engine's fire, the smokehouses' own buildings are in `cullet/smoke_shed/`. `house_store` and `yard_store` were added after the last merge and are not on the asset board or in a connected still yet.
 
 The rules and the authority know nothing of fixtures, so:
 
@@ -152,15 +154,15 @@ On the quay (`sight_census`, eye at the arrival point (540.5, 766.5), 48 m, eye 
 
 | Check | How | Result (2026-11-11, pass 2) |
 |---|---|---|
-| Coplanar | No two triangles of a model lie in one plane (within 1 mm) and overlap | 432 of 432 |
+| Coplanar | No two triangles of a model lie in one plane (within 1 mm) and overlap | 434 of 434 |
 | Doors | Each door is 0.9 × 2.0 m, and the mesh has the leaf's four corners there | 40 of 40 |
-| Footprint | Nothing above the floor stands more than 0.1 m outside the lot's, fixture's or structure's rectangle | 432 of 432 |
+| Footprint | Nothing above the floor stands more than 0.1 m outside the lot's, fixture's or structure's rectangle | 434 of 434 |
 | Height | The ridge is within 0.1 m of the plan's `height_m` (lots) | 88 of 88 |
-| Materials | Only `Body` and `Glow*` | 432 of 432 |
-| Palette | Every vertex colour is a palette colour within 0.056, or lies between two | 432 of 432 |
-| Same seed, same output | A second generation is byte-identical | 432 of 432 |
-| Surfaces | At least 90% of lit triangles carry a surface tag | 432 of 432 |
-| Triangles | Within the budget of SMALL_CITY §6 (ground pieces and dressing: §7's prop budgets) | 432 of 432 |
+| Materials | Only `Body` and `Glow*` | 434 of 434 |
+| Palette | Every vertex colour is a palette colour within 0.056, or lies between two | 434 of 434 |
+| Same seed, same output | A second generation is byte-identical | 434 of 434 |
+| Surfaces | At least 90% of lit triangles carry a surface tag | 434 of 434 |
+| Triangles | Within the budget of SMALL_CITY §6 (ground pieces and dressing: §7's prop budgets) | 434 of 434 |
 
 How four of them are read:
 
@@ -249,9 +251,9 @@ Published 2026-11-11 (track `kit-2`). The head moved while the board photographe
 
 ## Verification (2026-11-11, pass 2)
 
-All on the dev-box. The kit's own checks and `living-check` are on the final tree (`a34e317f`, `origin/main` merged through `25c1fb92`); the generation, sight and connected runs are on the merge before it (`8e52115f`, main through layout-1), and the last merge touched none of the kit's files, the seed or the model table.
+All on the dev-box. The kit's own checks and `living-check` are on the final tree (`origin/main` merged through rules-3, `4b76ef41`); the generation, sight and connected runs are on the merge with layout-1 (`8e52115f`). The two merges after it changed nothing the kit builds for a lot or a fixture (the kit was regenerated after each and compared byte for byte; the model table did not change); rules-3 changed the plan's structures and the rules, which those earlier generation runs do not cover.
 
-- `gen_cullet.sh` twice and `cullet_kit_check.py --again`: 432 of 432 on every check, the coplanar check and byte identity among them. Layout pass 1's 114 fixtures are in that count and pass the coplanar check after the export passes.
+- `gen_cullet.sh` twice and `cullet_kit_check.py --again`: 434 of 434 on every check, the coplanar check and byte identity among them. Layout pass 1's 114 fixtures are in that count and pass the coplanar check after the export passes.
 - `cullet_plan.py --check` and `author_world.py cullet --check` (0 errors): the seed keeps its 64 residents, 22 homes, the ways and town life and rates-2's 34 structures.
 - `set -o pipefail; just living-check` exits 0 on the final tree (authority WASM, mind, both observers, the game client, the script gate, `cargo test -p living-rules`), with a private target directory and 12 jobs; it also passed on each of the two merges before.
 - verify-generation on the dev-box's own container (`kit2-stdb`, SpacetimeDB 2.14.1, port 3322), because the model table changed. `generation-kit2-20261111-195631` (`--feature worlds --seeds island,plan-test,cullet,floor-megacity-2k,floor-megacity-4k`, before layout-1): island 979, plan-test 78, floor-megacity-2k 77 and floor-megacity-4k 92 checks pass, their `land` digests equal `floor_preview`'s. Cullet failed 4 of 317 there, and the same 4 on a clean checkout of `origin/main` (`6a31176a`): four residents dead of old age six seconds after creation and the laws overlay not matching, which main fixed the same evening (goods-2: the verify launch keeps a seed's laws again). On the final tree, `generation-kit2c-20261111-204204` (`--seeds cullet,plan-test`): **cullet 317 of 317 and plan-test 78 of 78**, original seeds unchanged. Among Cullet's checks: its 93 lots in order with their kinds, sizes, models, heights and level floors; blocking lots on wall, low or drop tiles; land digests and the arrival point equal to the native generator's.
