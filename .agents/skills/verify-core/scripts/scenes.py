@@ -2715,7 +2715,8 @@ def making(s):
     a spear in the old words until they know how; then smokes meat and crafts a spear. Cooking at
     a fire that eats fuel draws none of it."""
     src = s.rows("SELECT source FROM script")[0]["source"]
-    s.expect("the world was made with Cullet's laws over the shipped recipes", "base_recipes() +" in src and "fn craft_making()" in src)
+    overlay = src.split("---- floor overlay ----")[-1]
+    s.expect("the world was made with Cullet's laws over the shipped recipes", "for r in base_recipes()" in overlay and "fn craft_making()" in src)
     hearth = next(r for r in s.rows("SELECT * FROM structure", "seeded-structures") if r["kind"] == "hearth")
 
     def now():
@@ -2816,10 +2817,11 @@ def workplace(s):
     s.wait(lambda: heard(a, "did not work out", t0), seconds=30)
     s.expect("rendering oil without a vessel is refused, naming it", heard(a, "lamp_oil is made with a vessel in your pack, not used up", t0), heard(a, "", t0))
     s.call("grant_items", a, "pot", 1)
+    before = s.inventory(a, "before-oil")
     s.act(a, {"do": "make", "item": "lamp_oil", "target": {"nearest": "hearth"}})
-    s.wait(lambda: s.inventory(a).get("lamp_oil", 0) >= 1, seconds=60)
+    s.wait(lambda: s.inventory(a).get("lamp_oil", 0) > before.get("lamp_oil", 0), seconds=60)
     inv = s.inventory(a, "after-oil")
-    s.expect("two fish rendered to lamp oil with a pot, the pot kept", inv.get("lamp_oil") == 1 and inv.get("fish") == 2 and inv.get("pot") == 1, inv)
+    s.expect("two fish rendered to lamp oil with a pot, the pot kept", inv.get("lamp_oil", 0) == before.get("lamp_oil", 0) + 1 and inv.get("fish", 0) == before.get("fish", 0) - 2 and inv.get("pot") == 1, {"before": before, "after": inv})
 
 
 SCENES["goods"] = goods

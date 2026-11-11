@@ -550,11 +550,11 @@ What the world has is data in the script, each a list of maps with a `name`, rea
 
 | Table | Required | What its traits are |
 | --- | --- | --- |
-| `items()` | yes | `cooks_to`, `smokes_to` (what cooking or smoking makes), `fuel` (units a fire that burns `fuel` gets from one), and any trait a world's recipes read (`alkali`, `bakes_to`, `oil`) |
-| `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `lights` (metres of lamplight, rules-1), `burns` (below), `holds` (a store: the most things it holds in all; rules-3) and `like` (the kind it counts as wherever a kind is asked by name; rules-3); other traits are the rules' data. A script with `structure_traits()` (from before, or a world's own) has its `warms`, `roof` and `lights` stand over the listed kinds' |
+| `items()` | yes | `cooks_to`, `smokes_to` (what cooking or smoking makes), `fuel` (units a fire that burns `fuel` gets from one), `carry` (what one counts for in a pack; none: 1) and `room` (what holding one adds to the pack's limit) since goods-3, and any trait a world's recipes read (`alkali`, `bakes_to`, `oil`, `vessel`); data for the goods audit: `seeded`, `kept_for` ([goods](GOODS.md)) |
+| `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `lights` (metres of lamplight, rules-1), `burns` (below), `holds` (a store: the most things it holds in all; rules-3) and `like` (the kind it counts as wherever a kind is asked by name; rules-3); `seeded` and `kept_for` are the goods audit's data (goods-3); other traits are the rules' data. A script with `structure_traits()` (from before, or a world's own) has its `warms`, `roof` and `lights` stand over the listed kinds' |
 | `resources()` | yes (new) | `yields`, `regrow_per_h` (units a game hour of growing time; `regrow`, a real minute, before rates-2), `regrow_by_season` (the share of that rate in each season; rules-3), `max`, `ground` and `by_water` (where a settlement's promised nodes go), `gather_ms` |
 | `know_how()` | yes (new) | `help` (what someone taught or reading is told), `requires` |
-| `recipes()` | no (none) | below; since recipes-1 the shipped script's holds crafting, cooking and smoking ([one table](#one-table-of-what-is-made-recipes-1)) |
+| `recipes()` | no (none) | below; since recipes-1 the shipped script's holds crafting, cooking and smoking ([one table](#one-table-of-what-is-made-recipes-1)), and since goods-3 building and paving (`by: "build"`, `"pave"`; [goods](GOODS.md#building-is-recipes)) |
 
 These replace the Rust constants `catalog::RESOURCES`, `STRUCTURES` and `TECHNIQUES`, and the Rhai switches `yield_of`, `regrow` and `requires`, which now read the tables. The shipped tables hold exactly what the constants and switches held. Requirements match by trait:
 
@@ -592,7 +592,8 @@ A structure kind with a `burns` trait is a fire that eats fuel:
 | `fuel` | units the heat draws from the fire it is made at (a fire that needs no feeding gives its heat free) |
 | `knows`, `ms` | the technique it needs; how long it takes (8,000 ms) |
 | `by` (recipes-1) | the skill that makes it: `make` (the default), `craft`, `cook`, `smoke`, or a world's own way |
-| `tools` (reserved) | `#{ name or trait: qty }` held and not used up; read into the recipe's parts and words, not yet checked (goods-3) |
+| `tools` | `#{ name or trait: qty }` held and not used up, matched like `takes`; the making check refuses a missing one after the inputs, in the way's `tools` words (goods-3, [goods](GOODS.md#tools)) |
+| `beside`, `apart` (build) | built on the tile beside one that one points at (a wall, a gate, a bridge); not where one is already near a `fire` or a `shelter` (goods-3) |
 
 Before recipes-1 the shipped world had no recipes and no fires that burn fuel, so `make` and `feed` are not offered to its people (`listed` is computed from the tables), and its minds' world text is unchanged. A world with them gets a "Fires that burn fuel" and "Made at workplaces" sentence in its making section (`workplaces_law`), built from the same tables.
 
@@ -732,6 +733,18 @@ No whole-World scan was added. A fire costs nothing while it burns: no per-tick 
 - **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest; 282 since goods-2), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
 - **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here. After merging rules-1 and plan-1 (main `6a905c31`): rates 8,566, rates-law 212,202 (still the only law over budget), strike 274,209, cooldown 1,704, perceived 70,038, hook 450,841, senses 3,143, senses-law 41,866, moves 1,956.
 - **Not measured:** tick time and subscription volume at population. A fire changes one public row per feeding or recipe made; at Cullet's 64 residents that is a few rows a game hour.
+
+## Goods from the world (goods-3)
+
+Built 2026-11-12 on branch `goods-3` ([goods](GOODS.md), Cullet's content in [Cullet's rules](CULLET_RULES.md#where-cullets-goods-come-from-goods-3), proposals in [goods proposals](GOODS_PROPOSALS.md)):
+
+- **The goods audit** (`living-rules` `goods_audit`, a rules test, `just living-goods`): every item and structure kind of a world, where it comes from and what it is for, from the rules and the seed; it fails for a thing with no source or no use that the world's laws do not mark (`seeded`, `kept_for`).
+- **Building is recipes** (`by: "build"`, `"pave"`): `cost`, `build_check`, `build_duration` and `build_spec` read the table; a world adds its own builds.
+- **Tools** on recipes, held and not used up, enforced by the making check; `RecipeParts.tools` is filled.
+- **The carry count** by each item's `carry` (an arrow and a mark 0.1) and the `room` an item adds (a basket's 20); `carry_of(item)` is a law the engine samples.
+- **A fire to cook at** (`fire_kind`) burns fuel and warms; a lamp is none.
+- **Compile-time reads** (tables, specs, ways, laws' descriptions, declarations) run under `script::COMPILE_OPERATIONS` (20,000); calls while the world runs keep 2,000.
+- The island changes only by the carry count (`goods_check`, 4,312,560 states).
 
 ## Storage by kind, household stores, regrowth by season (rules-3)
 

@@ -2577,12 +2577,12 @@ fn know_how_law() {
 }
 
 // What counts for less (or more) than one thing in a pack, from the items' `carry`: " (an arrow
-// counts as 0.1, a mark 0.1)".
+// counts as 0.1, a mark 0.1)". (`a_kind`: "a" or "an" before a name.)
 fn carry_text() {
     let parts = [];
     for i in having("items", "carry") {
         let c = carry_of(i);
-        if c != 1.0 { parts.push(if parts.is_empty() { `a ${i} counts as ${short(c)}` } else { `a ${i} ${short(c)}` }); }
+        if c != 1.0 { parts.push(if parts.is_empty() { `${a_kind(i)} counts as ${short(c)}` } else { `${a_kind(i)} ${short(c)}` }); }
     }
     if parts.is_empty() { "" } else { ` (${list(parts)})` }
 }

@@ -336,6 +336,82 @@ Worked through before any soak by [`living/tools/cullet_winter.py`](../living/to
 - **Under Cullet's winter shares the town does not go hungry.** A winter gives 0.63 of what is eaten (fish 1,905 points a day, greens 346, roots none), so a winter costs 2,602 points from the stores and the standing land instead of 7,104. A year's land gives 1.13 times what is eaten: 3,793 points a year to lay by. Eating from the land and laying nothing by, no winter in 12 years is hungry; the stores fall by spoiling and by winter about 2,300 points a year. Laying by in autumn, they fall about 1,300 a year and never below 18,000. Only the worst case, every winter coming to bare land and nobody ever restocking, is hungry, in the 7th winter, by 284 points (a tenth of a day).
 - **No value was changed after this.** What would close the last gap is behaviour, not regrowth: smoking fish and storing roots in autumn (and the summer's surplus, which is lost when a node is full), which the stores have room for (4,972 things of food). Laying by is the people's choice; it is not a rule here.
 
+## Where Cullet's goods come from (goods-3)
+
+Built on branch `goods-3`, 2026-11-12. The [goods audit](GOODS.md) reads Cullet's laws and seed and lists every item and structure kind: where it comes from and what it is for. On main it found 18 gaps. With the content below there are none; the tables are in [goods](GOODS.md#the-generated-tables). Everything here is Cullet's own content, in its laws file. The general rules it uses are in [goods](GOODS.md#general-rules-every-world): building is recipes, tools on recipes, the carry count, a lamp is no fire to cook at.
+
+### Glass is for something
+
+| Made at the Cone | From | Makes | Tool | Why |
+| --- | --- | ---: | --- | --- |
+| `glass` | 1 alkali (ash), 2 sand, 1 fuel | 1 | a crucible | Glass is melted in a pot; the pot maker makes them (bible: "crucible stack" on Cinder Row) |
+| `pane` | 1 glass, 0.25 fuel | 2 | — | Nobody can make a large sheet, and every pane is small (bible). Panes are rolled on the marver, not blown |
+| `float` | 1 glass, 0.25 fuel | 2 | a blowpipe | The Tarns' floats and the nets' floats (SMALL_CITY §1 props) |
+| `bottle` | 1 glass, 0.25 fuel | 1 | a blowpipe | The bible's bottles; a `vessel` |
+| `mark` (drops) | 1 glass, 0.25 fuel | 4 | the mould | "Drops … cast at the Cone in the Counting House's own mould" (bible). A drop is worth about a smoked fish: a quarter of a glass is about a kelp, half a sand and a third of a peat, near a smoked fish's fish and half a peat |
+
+The rules do not encode who may cast drops. The bible's "only when the tally keeper asks the Glassmaster" is the town's custom, not a rule. Anyone who knows glassmaking and holds a mould can cast them, and a second mould can be fired at the Batch. That is a tension the people can act on.
+
+Where glass goes:
+
+- Panes go into lamps (4 each), halls (8), inns (6) and workshops (2).
+- Floats go into nets: Cullet's net is 3 fiber and 2 floats, replacing the shipped 3 fiber.
+- Bottles are vessels for rendering oil.
+- Drops are money.
+
+The **spyglass** of SMALL_CITY §5 is not built. Its use, double sight in a 30° cone, would raise the senses law's `reach.day` from 48 to 96 m, which doubles the onlooker gather radius for everyone. That is §5's unsolved scale cost. A spyglass nothing reads would fail the audit.
+
+### Tools
+
+| Tool | Made of | Where | Knowing | Who holds one at the start | Why |
+| --- | --- | --- | --- | --- | --- |
+| `crucible` | 3 clay, 0.5 fuel | the Batch's oven | toolmaking | Vessa Pontil, Corvin Hollin, Imre Sarro | Fired clay. Otto Brandt, the pot maker, knows toolmaking. Glass needs one |
+| `pot` (a `vessel`) | 2 clay, 0.5 fuel | the oven | toolmaking | Livia Faro (oil renderer) | So rendering oil needs a vessel by trait, a bottle or a pot, and the renderer is not stopped on day 1 |
+| `mould` | 1 clay, 0.25 fuel | the oven | toolmaking | Aldous Quill (tally keeper): the Counting House's mould | Drops are cast in it |
+| `blowpipe` | — (**seed-only**) | — | — | Vessa Pontil, Corvin Hollin, Imre Sarro, Halvard Dunmore | Iron. "The island's iron is the ships' fittings and none is new." The Cone's pipes are what the ships left (`seeded`, with that reason). A smithy that reforges ship iron is [proposal 2](GOODS_PROPOSALS.md#2-weapons-and-metal) |
+
+- The toolmaking brief reads "axe, pick; pots, crucibles and drop moulds of fired clay". The glassmaking brief adds "and panes, floats, bottles and drops".
+- No technique was added, so no resident's know-how changed.
+- The seeded tools are in the cast (`cast.json`). `cullet.json` is compiled from it with `author_world.py cullet --compile-only`, and only those six inventories changed.
+- A tool is held, not used up, and matched by name or by trait, like a recipe's inputs. Decay of tools, like decay of panes, is later.
+
+### Building Cullet's fires, workplaces and stores
+
+| Built | From | Knowing | Time | Why |
+| --- | --- | --- | ---: | --- |
+| `hearth` | 4 stone, 2 clay | masonry | 20 s | A stone hearth set in clay |
+| `oven` | 8 stone, 4 clay | masonry | 40 s | |
+| `furnace` | 24 stone, 12 clay | masonry | 120 s | The Cone is brick on a basalt plinth. Clay stands for the brick |
+| `smokehouse` | 4 stone, 6 wood | carpentry | 30 s | A timber house on a stone footing |
+| `lamp` | 2 stone, 4 panes | glassmaking | 15 s | Lantern glass. The glazier knows glassmaking |
+| `hall` | 30 stone, 12 wood, 8 panes | masonry | 120 s | |
+| `inn` | 20 stone, 10 wood, 6 panes | masonry | 90 s | |
+| `workshop` | 12 stone, 8 wood, 2 panes | carpentry | 60 s | |
+| `market` | 4 stone, 8 wood | carpentry | 30 s | Stalls. Kept for trade: no rule reads it |
+| `store` | 16 stone, 8 wood | masonry | 60 s | |
+| `peat_barn` | 10 stone, 6 wood | masonry | 40 s | |
+| `yard_store` | 8 stone, 4 wood | masonry | 30 s | |
+| `house_store` | 5 wood | carpentry | 12 s | A household's chest, a little more than the shipped crate (4 wood) |
+
+Cullet's building materials:
+
+- **Stone.** The town is basalt (SMALL_CITY §1). Cullet's only stone now is the wild boulders (`resource_scale` 0.4). The quarry face is not a resource yet; see [proposal 1](GOODS_PROPOSALS.md#1-minerals-living-things-regrow-minerals-do-not).
+- **Clay.** From the one clay bank.
+- **Wood.** From the Hanger's 70 trees, which are scarce.
+- **Panes.** From the Cone.
+
+Only Gwil Stannard knows masonry, and six people know carpentry. The numbers are first guesses for the soak. Everything Cullet builds comes to about 160 stone.
+
+### Other content choices
+
+- **Cloak.** Cullet has no game, so no hides. Its cloak is an oilskin: 3 fiber and 1 lamp oil, knowing basketry. Two people know basketry (the net mender and the line maker). It stands in the shipped cloak's place in `recipes()`. The 51 cloaks the cast carries now have a source.
+- **Drops' label.** `mark` is labelled "drop" in Cullet (SMALL_CITY: "mechanically they are the existing marks item"). Minds still see the item's name, `mark`.
+- **A lamp is no fire to cook at.** The audit showed that cooking, smoking, ash and oil could be made at a lamp, because any kind that burns counted as a fire. Only a fire that warms counts now.
+
+### The island
+
+The island changes only by the carry count; the comparison is in [goods](GOODS.md#the-island-what-changed-and-the-evidence).
+
 ## The labs are unchanged
 
 - **Storage by kind, regrowth by season, rules-3.** `rules3_check::rules3_is_bit_identical` (`living/rules/src/rules3_check.rs`, ignored: it reads main's `93019a37` script from `LIVING_OLD_SKILLS`) compares 63,753 states (63,754 after merging main `25c1fb92`, compared then against that main's script, which still has `storage_holds`): the store and take checks' answers for every structure kind (and a creature, and an unknown kind) at 12 fills round 120, storing 1 to 25 and taking 1 to 3, with and without the item; every skill's words (`about`, `takes`, `gives`) and every law's; the minds' world text with the seasons line built as the mind service builds it; and 52,920 node amounts for every shipped resource kind across every season, four amounts each, on the 12-minute and 48-minute days and on 1,000,003 ms, in years of 8, 10 and 7 days, the old `growing_ms` formula against the new `regrowth_ms` with the kind's shares. None differs (`rules3-bit-identical.txt` in the evidence). The shipped kinds have no `regrow_by_season` (`regrowth_by_season_is_a_value_on_each_kind` checks every one is at `GROWING`), and `regrowth_ms` with those shares takes the old path, `growing_ms`.
