@@ -120,10 +120,13 @@ def code_of(st, skill):
     return c[0] if c else 0
 
 
-def dummy(st, near, dx, dy, graph='{"wait":60}', name_hint=None):
+def dummy(st, near, dx, dy, graph='{"wait":60}', name_hint=None, room=0.0):
     """A resident to fight: a living adult other than me, set to `graph`, placed (dx, dy) from
     `near`. Adults only (`stage` 2 or more): a child's strike is refused ("too young to fight"),
-    so an attacker scene with a child as the attacker saw no blow at all."""
+    so an attacker scene with a child as the attacker saw no blow at all. Staged on a tile
+    `free_spots` knows is free (with `room` metres of open ground beyond it), and read back:
+    `place_at` takes the nearest free walkable tile, which can be out of reach when the tile
+    asked for is taken."""
     mine = me(st)
     rows = sql(st, "SELECT id, stage FROM character WHERE kind = 'person' AND alive = true")
     for r in rows:
@@ -134,10 +137,45 @@ def dummy(st, near, dx, dy, graph='{"wait":60}', name_hint=None):
         if b is None or h is None or h < 50:
             continue
         # Placed first: a teleport drops whatever approach the new graph had started.
-        call(st, "place_at", [r["id"], near[0] + dx, near[1] + dy], "admin")
+        spots = free_spots(st, near, dx, dy, skip={r["id"]}, room=room) or [(near[0] + dx, near[1] + dy)]
+        for at in spots[:4]:
+            call(st, "place_at", [r["id"], at[0], at[1]], "admin")
+            got = body(st, r["id"])
+            if got and math.dist(got, at) < 0.05:
+                break
         call(st, "set_behavior", [r["id"], graph], "admin")
         return r["id"]
     raise RuntimeError("no resident to use as a dummy")
+
+
+WALK_BLOCKED = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low: not walkable (`Terrain::walkable`)
+
+
+def free_spots(st, near, dx, dy, skip=(), room=0.0):
+    """Tile centres to stage a body (dx, dy) from `near` on, nearest the asked point first:
+    walkable, no body but those in `skip` on the tile (so `place_at`, which since 2026-11-11
+    takes the nearest free walkable tile, keeps the body there), and as far from `near` as the
+    offset within 0.6 m (a strike's reach is 1.6 m and its lunge 0.6 m). With `room`, the
+    ground from `near` through the spot is walkable for `room` metres (0.2 m clearance), so a
+    jump or a dash toward it has somewhere to land."""
+    want, length = (near[0] + dx, near[1] + dy), math.hypot(dx, dy)
+    span = max(length, room) + 2
+    t = tiles(st, (near[0] - span, near[0] + span), (near[1] - span, near[1] + span))
+    walk = lambda x, y: t.get((math.floor(x), math.floor(y)), 4) not in WALK_BLOCKED
+    taken = {(math.floor(r["x"]), math.floor(r["y"])) for r in sql(st, "SELECT id, x, y FROM body") if r["id"] not in skip}
+    out = []
+    for ty in range(math.floor(near[1] - span), math.floor(near[1] + span) + 1):
+        for tx in range(math.floor(near[0] - span), math.floor(near[0] + span) + 1):
+            c = (tx + .5, ty + .5)
+            d = math.dist(c, near)
+            if d < 0.5 or abs(d - length) > 0.6 or not walk(*c) or (tx, ty) in taken:
+                continue
+            u = ((c[0] - near[0]) / d, (c[1] - near[1]) / d)
+            if room and not all(walk(near[0] + u[0] * k / 4 + ox, near[1] + u[1] * k / 4 + oy)
+                                for k in range(1, int(room * 4) + 1) for ox, oy in ((0, 0), (.2, .2), (-.2, .2), (.2, -.2), (-.2, -.2))):
+                continue
+            out.append(c)
+    return sorted(out, key=lambda c: math.dist(c, want))
 
 
 OPAQUE = {4, 7}  # rock, wall (living_rules::map::Terrain): a building where it is solid at eye height; a drop (8) and a low or open thing (9: a cart, an open stall, a well, a building's overhang) are see-through
@@ -347,9 +385,9 @@ def scene_bolt(st):
     check(st, "a fire bolt burns the creature it meets", u and "struck" in u["outcome"] and h0 is not None and h1 is not None and h1 < h0, f"{u and u['outcome']} (#{hit}{', the dummy' if hit == d else ', in the path'}) hp {h0}->{h1}")
 
 
-def attacker(st, cid, p, dx):
+def attacker(st, cid, p, dx, room=0.0):
     g = json.dumps({"seq": [{"do": {"skill": "strike", "target": {"id": cid}}}, {"wait": 30}]})
-    return dummy(st, p, dx, 0.0, g)
+    return dummy(st, p, dx, 0.0, g, room=room)
 
 
 def guard_then_strike(st, cid, toward):
@@ -429,7 +467,7 @@ def scene_jump(st):
     t0 = int(time.time() * 1000)  # the attacker is the earlier scenes' resident: their rows stay 4 s
     cid = me(st)
     p = body(st, cid)
-    a = attacker(st, cid, p, 1.1)
+    a = attacker(st, cid, p, 1.1, room=2.0)  # the hop (1.6 m) lands on open ground
     strike = code_of(st, "strike")
     t = time.time() + 3
     started = False
@@ -447,7 +485,7 @@ def scene_jump(st):
     ev = [e for e in seen(st) if e["target"] == cid and e["actor"] == a and e["kind"] in (2, 3, 5) and e["at_ms"] >= t0]
     moved = p2 and math.dist(p, p2)
     u = last_use(st, "jump")
-    check(st, "a jump hops about 1.6 m and the blow is not dodged (HIT or MISS, never DODGED)", started and moved and 0.8 < moved < 2.2 and ev and all(e["kind"] != 5 for e in ev) and u and u["outcome"] == "made way", f"moved {moved and round(moved, 2)} m, events {[e['kind'] for e in ev]}, outcome {u and u['outcome']}")
+    check(st, "a jump hops about 1.6 m and the blow is not dodged (HIT or MISS, never DODGED)", started and moved and 0.8 < moved < 2.2 and ev and all(e["kind"] != 5 for e in ev) and u and u["outcome"] == "made way", f"windup seen {started}, attacker at {q and (round(q[0] - p[0], 2), round(q[1] - p[1], 2))}, moved {moved and round(moved, 2)} m, events {[e['kind'] for e in ev]}, outcome {u and u['outcome']}")
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
 
 

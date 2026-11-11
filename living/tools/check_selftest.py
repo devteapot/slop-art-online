@@ -153,7 +153,9 @@ fuel = json.loads(sys.argv[-1]) if sys.argv[-1].startswith("{") else {}
 laws = sys.argv[sys.argv.index("--laws") + 1].split(",")
 for law in laws:
     if law in fuel:
-        print(json.dumps({"engine": "rhai", "law": law, "fuel_per_call": fuel[law], "fuel_seeds": [fuel[law] - 5, fuel[law] + 5], "p50_ns": 1000.0}))
+        # a number: key set 0's fuel, with two other sets around it; a list: every set's fuel
+        seeds = fuel[law] if isinstance(fuel[law], list) else [fuel[law], fuel[law] - 5, fuel[law] + 5]
+        print(json.dumps({"engine": "rhai", "law": law, "fuel_per_call": sum(seeds) / len(seeds), "fuel_seeds": seeds, "p50_ns": 1000.0}))
 """
 
 
@@ -180,6 +182,10 @@ def gate_judge_cases(home, repo):
     rc, out, v = judge({"rates": 8588, "rates-law": 250000})
     expect("gate.py: a law over its budget fails, naming the law, its fuel and its budget",
            rc == 1 and v and not v["ok"] and "rates-law takes 250,000 fuel a call, over its budget of 245,000" in out, out)
+    # Judged on key set 0, the game's own keys (HASHING_SEED), not the mean over the sets.
+    rc, out, v = judge({"rates": 8588, "rates-law": [246000, 200000, 200000]})
+    expect("gate.py: judges the game's key set, not the mean (over budget there, under on the mean)",
+           rc == 1 and v and not v["ok"] and "rates-law takes 246,000 fuel a call, over its budget of 245,000" in out, out)
     rc, out, v = judge({"rates": 8588})
     expect("gate.py: a budgeted law not measured fails", rc == 1 and "not measured: rates-law" in out, out)
 

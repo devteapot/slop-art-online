@@ -177,9 +177,9 @@ fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, cards: Res<Car
         };
         // How the skill looks here (`skill_card` names its code).
         let lk = cards.by_code(r.skill).map(look);
-        let bolt = lk.is_some_and(|l| l.bolt);
+        let bolt = lk.as_ref().is_some_and(|l| l.bolt);
         match r.kind {
-            seen::RELEASE if lk.is_some_and(|l| l.slash) => {
+            seen::RELEASE if lk.as_ref().is_some_and(|l| l.slash) => {
                 let p = scene.shown.get(&r.actor).map_or(at2, |s| s.0);
                 let beast = kinds.get(&r.actor).is_some_and(|k| k != "person");
                 let from = chest(r.actor, p) + Vec3::new(dir.x, 0.0, dir.y) * 0.25;

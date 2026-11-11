@@ -35,6 +35,7 @@
 use crate::common::{self, pos, NearCreature};
 use crate::tables::*;
 use living_rules::map::Map;
+use living_rules::combat::HealthSeen;
 use living_rules::script::{Precision, Regard, RegardIn, Scripts};
 use spacetimedb::rand::Rng;
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, ViewContext};
@@ -372,14 +373,32 @@ fn dress(ctx: &ReducerContext, c: &Character) -> (String, String) {
 pub fn project(ctx: &ReducerContext, observer: &Character, target: &Character, now: u64) -> Projection {
     let r = regard(ctx, observer, target, now);
     let (folk, style) = dress(ctx, target);
-    let (hp, max_hp) = ctx.db.vitals().id().find(target.id).map(|v| (common::needs(&v, now).hp, v.max_hp)).unwrap_or((0.0, 0.0));
-    let (band, hp, max_hp) = match r.health {
-        Precision::None => (255, -1.0, -1.0),
-        Precision::Band => (living_rules::combat::band(hp, max_hp), -1.0, -1.0),
-        Precision::Exact => (living_rules::combat::band(hp, max_hp), hp.max(0.0).round(), max_hp.round()),
+    let (band, hp, max_hp) = match health_as(ctx, r.health, target.id, now) {
+        None => (255, -1.0, -1.0),
+        Some(HealthSeen { band, exact: None }) => (band, -1.0, -1.0),
+        Some(HealthSeen { band, exact: Some((hp, max)) }) => (band, hp.max(0.0).round(), max.round()),
     };
     let label = if r.name { target.name.clone() } else { stranger(&target.kind, target.stage) };
     Projection { name: if r.name { target.name.clone() } else { String::new() }, label, kind: target.kind.clone(), stage: target.stage, folk, style, band, hp, max_hp }
+}
+
+/// How `observer` perceives `target`'s health now, as the `perceived_of` law grants it: the
+/// band everyone sees, exact for oneself or while a reveal (`appraise`) is in force for this
+/// observer, `None` where the law hides it. Every text that tells a mind or a player about
+/// another's health goes through this (the projection, the scene, fight reports, graph
+/// conditions), never through the target's `vitals`.
+pub fn health_seen(ctx: &ReducerContext, observer: &Character, target: &Character, now: u64) -> Option<HealthSeen> {
+    health_as(ctx, regard(ctx, observer, target, now).health, target.id, now)
+}
+
+fn health_as(ctx: &ReducerContext, precision: Precision, id: u32, now: u64) -> Option<HealthSeen> {
+    let (hp, max_hp) = ctx.db.vitals().id().find(id).map(|v| (common::needs(&v, now).hp, v.max_hp)).unwrap_or((0.0, 0.0));
+    let band = living_rules::combat::band(hp, max_hp);
+    match precision {
+        Precision::None => None,
+        Precision::Band => Some(HealthSeen { band, exact: None }),
+        Precision::Exact => Some(HealthSeen { band, exact: Some((hp, max_hp)) }),
+    }
 }
 
 /// How `observer` refers to `id` (the projection's label).

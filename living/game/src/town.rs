@@ -290,7 +290,8 @@ pub fn input(
             Some(t) => serde_json::json!({"do": act.skill, "target": {"id": t}}),
             None => serde_json::json!({"do": act.skill}),
         };
-        let r = conn.reducers.human_act_then(node.to_string(), net.on_reply(act.skill));
+        let node = node.to_string();
+        let r = conn.reducers.human_act_then(node.clone(), net.on_reply(act.skill, "human_act", || serde_json::json!({"node": node})));
         net.report(act.skill, r);
         if let Some(t) = to {
             // I turn to whom I greet or look over (the authority turns my body too; my look

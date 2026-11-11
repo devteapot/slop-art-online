@@ -41,6 +41,8 @@ python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
 python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
+# Another's health in fight reports and health_of: the band, exact only while appraised (features/combat.md).
+python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
 python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
@@ -105,7 +107,8 @@ python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
 
 # Rhythms at any hour and Cullet's trades (about 17 min): a night stoker rising at 14:00 and
 # working the night, the day watch feeding the furnace and making glass, a baker's second sleep,
-# Cullet's life stages (features/town.md, features/laws.md, docs/SEEDED_LIVES.md).
+# Cullet's life stages, and five trades at the places of the plan's open lots in their hours
+# (features/town.md, features/laws.md, docs/SEEDED_LIVES.md, docs/CULLET_LAYOUT.md pass 2).
 Y=$R-rhythm
 mkdir -p ".local/living/verify/$Y"
 python3 "$C/rhythm.py" seed --run "$Y" > ".local/living/verify/$Y/seed.txt" 2>&1

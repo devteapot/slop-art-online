@@ -336,6 +336,121 @@ def death_names(s):
              {"death": deaths[bystander], "remains": remains[bystander]}, fatal=False)
 
 
+def health_seen(s):
+    """Another's health reaches a fighter as the band everyone sees, never as a number, except
+    while the fighter's own appraisal of them holds (docs/PERCEPTION.md, `perception::health_seen`).
+
+    Strangers fight in pairs; the scene plays the mind's part by reading each pending
+    `deliberation` (fight reports, `act::fight_report`, arrive there) and skipping it, so the
+    next report can come. Pair one fights once (band words); then a graph's `health_of` on it
+    reads the band's middle, and B's exact health once A appraises B. Pair two: C appraises D
+    and they fight within the 20 s reveal (exact for C, band for D), then fight again after it
+    ends (band). Each pair fights at most twice so no one dies of the scene."""
+    thought = {"kind": "verify", "summary": "scripted acknowledgement, no model",
+               "detail": "", "latency_ms": 0, "tokens": 0, "model": "none", "reference": "verify-core-health-seen"}
+    a, b, c, d = s.people(4)
+    s.call("place_near", b, a)
+    s.call("place_near", c, a)
+    s.call("place_near", d, c)
+    reports, seen = [], set()
+    exact_re = re.compile(r"they have (\d+) of (\d+) health\.$")
+    words = ("unhurt", "scratched", "hurt", "badly hurt", "barely standing")
+    pair = {a: b, b: a, c: d, d: c}
+
+    def drain(phase):
+        for row in s.rows(f"SELECT * FROM deliberation WHERE actor = {a} OR actor = {b} OR actor = {c} OR actor = {d}"):
+            for line in row["reason"].splitlines():
+                key = (row["actor"], line, row["updated_ms"])
+                if line.startswith("The fight with") and key not in seen:
+                    seen.add(key)
+                    reports.append({"phase": phase, "actor": row["actor"], "text": line, "at_ms": row["updated_ms"],
+                                    "revealed": [r["what"] for r in s.rows(f"SELECT * FROM reveal WHERE observer = {row['actor']}")]})
+            s.call("mind_skip", row["actor"], row["updated_ms"], thought)
+
+    def fight(x, y, phase, want, seconds=40):
+        s.graph(x, {"first": [{"do": {"skill": "attack", "target": {"id": y}}}, {"wait": 1}]})
+        s.graph(y, {"first": [{"do": {"skill": "attack", "target": {"id": x}}}, {"wait": 1}]})
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and not want():
+            drain(phase)
+            time.sleep(0.4)
+        for z in (x, y):
+            s.graph(z, {"wait": 120})
+        time.sleep(1.5)
+        drain(phase)
+
+    def of(phase, actor):
+        return [r for r in reports if r["phase"] == phase and r["actor"] == actor]
+
+    def band_only(r):
+        return any(r["text"].endswith(f"they look {w}.") for w in words) and not exact_re.search(r["text"]) and "%" not in r["text"]
+
+    def alive(*ids):
+        return all(s.rows(f"SELECT alive FROM character WHERE id = {i}")[0]["alive"] for i in ids)
+
+    drain("before")
+    fight(a, b, "band", lambda: of("band", a) and of("band", b))
+    s.expect("fight reports reach both fighters", of("band", a) and of("band", b), reports, fatal=False)
+    s.expect("without an appraisal, fight reports carry the band's words, no number",
+             of("band", a) and all(band_only(r) for r in reports if r["phase"] == "band"), [r["text"] for r in reports], fatal=False)
+
+    s.act(c, {"do": "appraise", "target": {"id": d}})
+    look = s.wait(lambda: s.told(c, "over:", "appraise"), seconds=20)
+    reveal = s.wait(lambda: s.rows(f"SELECT * FROM reveal WHERE observer = {c} AND target = {d}", "reveal"), seconds=10)[0]
+    s.expect("appraise tells exact health and starts a 20 s reveal",
+             re.search(r"over: \d+ of \d+ health\.$", look[-1]["text"]) is not None, look[-1]["text"])
+    max_d = round(s.vitals(d)["max_hp"])
+    fight(c, d, "appraised", lambda: of("appraised", c), seconds=16)
+    inside = [r for r in of("appraised", c) if r["at_ms"] < reveal["until_ms"]]
+    s.expect("while C's appraisal holds, C's fight report gives D's exact health",
+             inside and all(exact_re.search(r["text"]) and int(exact_re.search(r["text"]).group(2)) == max_d for r in inside),
+             {"reports": [r["text"] for r in of("appraised", c)], "until_ms": reveal["until_ms"]}, fatal=False)
+    s.expect("D, who appraised no one, still gets only C's band", all(band_only(r) for r in of("appraised", d)),
+             [r["text"] for r in of("appraised", d)], fatal=False)
+    s.wait(lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"] > reveal["until_ms"] + 1500, seconds=30)
+    s.wait(lambda: not s.rows(f"SELECT * FROM reveal WHERE observer = {c}"), seconds=10)
+    s.expect("C and D alive for the fight after the reveal", alive(c, d))
+    fight(c, d, "after", lambda: of("after", c), seconds=40)
+    s.expect("after the reveal ends, C's reports are back to the band", of("after", c) and all(band_only(r) for r in of("after", c)),
+             [r["text"] for r in of("after", c)], fatal=False)
+    (s.out / f"{s.name}-reports.json").write_text(json.dumps(reports, indent=2) + "\n")
+    print(json.dumps([[r["phase"], r["actor"], r["text"]] for r in reports], indent=2), flush=True)
+
+    # A graph's health_of reads the same perception: a threshold between B's exact share and
+    # its band's middle tells which one the condition saw. A person's non-urgent think is
+    # dropped within its think_min_s (20 s) of the last deliberation unless one is pending:
+    # wait it out once, then leave the request pending so the second ask joins it.
+    time.sleep(21)
+    s.expect("A and B alive for health_of", alive(a, b))
+    v = s.vitals(b)
+    pct = s.needs(b, "health-of-b")["hp"] / v["max_hp"] * 100
+    band = 4 if pct >= 90 else 3 if pct >= 65 else 2 if pct >= 40 else 1 if pct >= 20 else 0
+    middle = {4: 95, 3: 77, 2: 52, 1: 30, 0: 10}[band]
+    if abs(middle - pct) < 4 or min(abs(pct - e) for e in (20, 40, 65, 90)) < 2:
+        s.expect("health_of: B's exact share is clear of its band's edges and middle", False,
+                 {"pct": pct, "middle": middle}, fatal=False, known=True)
+        return
+    thr = (pct + middle) / 2
+    exact_says = "below" if pct < thr else "above"
+    band_says = "below" if middle < thr else "above"
+
+    def asked(label):
+        s.graph(a, {"if": {"cond": {"health_of": {"target": {"id": b}, "below": thr}},
+                           "then": {"think": f"verify health_of {label} below"},
+                           "else": {"think": f"verify health_of {label} above"}}})
+        row = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM deliberation WHERE actor = {a}") if f"verify health_of {label}" in r["reason"]], seconds=30)[0]
+        s.graph(a, {"wait": 120})
+        return "below" if f"verify health_of {label} below" in row["reason"] else "above"
+    plain = asked("plain")
+    s.expect("health_of without an appraisal reads the band's middle", plain == band_says,
+             {"pct": round(pct, 1), "band": band, "middle": middle, "below": round(thr, 1), "said": plain}, fatal=False)
+    s.act(a, {"do": "appraise", "target": {"id": b}})
+    s.wait(lambda: s.rows(f"SELECT * FROM reveal WHERE observer = {a} AND target = {b}"), seconds=20)
+    shown = asked("appraised")
+    s.expect("health_of during an appraisal reads exact health", shown == exact_says,
+             {"pct": round(pct, 1), "below": round(thr, 1), "said": shown}, fatal=False)
+
+
 def lifecycle(s):
     w = s.rows("SELECT * FROM world", "world")[0]
     s.expect("compressed lifecycle seed selected", w["run"] == "s1-acts" and w["life_pace"] < 0.1)
@@ -2022,6 +2137,40 @@ def say(s):
         s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40)
 
 
+
+def alarms(s):
+    """A body's alarms are the world's `status_of` law's (docs/WORLD_RULES.md, "The body: meters
+    and statuses"): an overlay adds a status with an alarm to every body; a person the minds hold
+    is told it once while it lasts (a `body` line), asked to think with its words ("Your body:
+    …"), and told again only after it has ended and begun again. A meter naming a field the vitals
+    row lacks is refused at install. The shipped script is installed again at the end."""
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    word = "You feel the verify alarm."
+    status = 'fn status_of(a) { let out = base_status_of(a); out.push(#{ name: "verify", tone: "warn", text: "Verify", alarm: "%s", salience: 0.6, think: "always" }); out }' % word
+    on = compose(shipped, {"status_of": status})
+    a = s.people(1)[0]
+    try:
+        s.expect("the shipped law gives no such alarm", not s.told(a, word, "body"))
+        s.call("install_script", on)
+        s.wait(lambda: s.told(a, word, "body"), seconds=30)
+        time.sleep(6)
+        once = s.told(a, word, "body")
+        s.expect("an alarm the law gives is told once while it lasts", len(once) == 1, once)
+        reasons = s.rows(f"SELECT reason FROM deliberation WHERE actor = {a}", "alarm-requests")
+        s.expect("think: always asks the mind to think, in the alarm's words", any(f"Your body: {word}" in r["reason"] for r in reasons), reasons)
+        s.call("install_script", shipped)
+        time.sleep(5)
+        s.call("install_script", on)
+        s.wait(lambda: len(s.told(a, word, "body")) >= 2, seconds=30)
+        s.expect("ended and begun again, it is told again", len(s.told(a, word, "body")) == 2, s.told(a, word, "body"))
+        bad = compose(shipped, {"meters": 'fn meters() { base_meters() + [#{ name: "stamina", value: "stamina", max: 100.0 }] }'})
+        r = s.call("install_script", bad, check=False)
+        out = (r.stdout or "") + (r.stderr or "")
+        s.expect("a meter naming a field the vitals row lacks is refused at install", r.returncode != 0 and "not a my_vitals field" in out, out[-300:])
+    finally:
+        s.call("install_script", shipped)
+
+
 def world_tiles(s):
     """This world's tiles (`terrain_chunk`) and a walkable test by tile code (water, rock,
     wall, drop and low tiles are not walkable; off the map is rock)."""
@@ -2135,38 +2284,6 @@ def placement(s):
              {"request": deep, "exit": r.returncode, "error": out[-300:]})
 
 
-def alarms(s):
-    """A body's alarms are the world's `status_of` law's (docs/WORLD_RULES.md, "The body: meters
-    and statuses"): an overlay adds a status with an alarm to every body; a person the minds hold
-    is told it once while it lasts (a `body` line), asked to think with its words ("Your body:
-    …"), and told again only after it has ended and begun again. A meter naming a field the vitals
-    row lacks is refused at install. The shipped script is installed again at the end."""
-    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
-    word = "You feel the verify alarm."
-    status = 'fn status_of(a) { let out = base_status_of(a); out.push(#{ name: "verify", tone: "warn", text: "Verify", alarm: "%s", salience: 0.6, think: "always" }); out }' % word
-    on = compose(shipped, {"status_of": status})
-    a = s.people(1)[0]
-    try:
-        s.expect("the shipped law gives no such alarm", not s.told(a, word, "body"))
-        s.call("install_script", on)
-        s.wait(lambda: s.told(a, word, "body"), seconds=30)
-        time.sleep(6)
-        once = s.told(a, word, "body")
-        s.expect("an alarm the law gives is told once while it lasts", len(once) == 1, once)
-        reasons = s.rows(f"SELECT reason FROM deliberation WHERE actor = {a}", "alarm-requests")
-        s.expect("think: always asks the mind to think, in the alarm's words", any(f"Your body: {word}" in r["reason"] for r in reasons), reasons)
-        s.call("install_script", shipped)
-        time.sleep(5)
-        s.call("install_script", on)
-        s.wait(lambda: len(s.told(a, word, "body")) >= 2, seconds=30)
-        s.expect("ended and begun again, it is told again", len(s.told(a, word, "body")) == 2, s.told(a, word, "body"))
-        bad = compose(shipped, {"meters": 'fn meters() { base_meters() + [#{ name: "stamina", value: "stamina", max: 100.0 }] }'})
-        r = s.call("install_script", bad, check=False)
-        out = (r.stdout or "") + (r.stderr or "")
-        s.expect("a meter naming a field the vitals row lacks is refused at install", r.returncode != 0 and "not a my_vitals field" in out, out[-300:])
-    finally:
-        s.call("install_script", shipped)
-
 
 def outcomes(s):
     """Whoever strikes or shoots is told how it came out (the `force_outcomes` law,
@@ -2219,7 +2336,7 @@ def outcomes(s):
     s.expect("with force_outcomes off, a hit is not told", after == before, {"before": before, "after": after})
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "outcomes": outcomes}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "outcomes": outcomes}
 
 
 def goods(s):

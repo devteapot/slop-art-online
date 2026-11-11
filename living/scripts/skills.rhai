@@ -1358,12 +1358,25 @@ fn tend_combat() { #{ aim: "creature" } }
 fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump"] }
 // How a skill is presented to a player: `<skill>_ui()`, read once when the script is installed
 // (docs/INTERFACE.md). It only shows: what a skill may do is its spec, shape and check. A skill
-// that declares nothing is presented by how the rules aim it; these three look otherwise.
-fn strike_ui() { #{ look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" } } }
+// that declares nothing is presented by how the rules aim it. The bar's seven say where each
+// sits, the input it takes and its named look (step 2): Q blocks, E heals, R casts the fire bolt
+// (1–3 are their twins); Space jumps; a double tap of a direction dodges.
+fn strike_ui() { #{ label: "Strike", place: "primary", look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" }, running: #{ show: "windup" } } }
+fn bowshot_ui() { #{ label: "Bow shot", place: "secondary", input: "aim_point", marker: "line", look: #{ icon: "bow", clip: "shoot", effect: "arrow" }, running: #{ show: "windup" } } }
+fn block_ui() { #{ label: "Block", place: "skill", order: 0, input: "hold", marker: "arc", look: #{ icon: "shield", clip: "guard", effect: "guard_arc" }, running: #{ show: "held" } } }
+fn heal_ui() { #{ label: "Heal", place: "skill", order: 1, look: #{ icon: "heal", clip: "cast" }, running: #{ show: "windup" } } }
+fn firebolt_ui() { #{ label: "Fire bolt", place: "skill", order: 2, input: "aim_point", look: #{ icon: "fire", clip: "cast", effect: "bolt" }, running: #{ show: "windup" } } }
+fn dodge_ui() { #{ label: "Dodge", place: "dodge", look: #{ icon: "dodge", clip: "dash" } } }
+fn jump_ui() { #{ label: "Jump", place: "jump", look: #{ icon: "jump", clip: "jump" } } }
+// Accept is also an answer on an offer's card (its window): toward the offer's maker.
+fn accept_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
 fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }
 fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
+// A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
+// theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
+fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
-fn decline_ui() { #{ look: #{ icon: "trade" } } }
+fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }
