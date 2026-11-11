@@ -2017,7 +2017,6 @@
        ],
        "district": "the Strand",
        "building": false,
-       "model": "cullet/fish_steps/fish_steps.glb",
        "seed": 96817,
        "wear": {
         "salt": 1.0,
@@ -3445,7 +3444,6 @@
        ],
        "district": "the Rows",
        "building": false,
-       "model": "cullet/marver_terrace/marver_terrace.glb",
        "seed": 40878,
        "wear": {
         "salt": 0.0,

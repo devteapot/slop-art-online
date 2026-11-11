@@ -878,8 +878,10 @@ def gen_glasshouse(k, rng, lot):
     roof = {(p_.i, p_.j): p_ for p_ in panes if p_.where == "roof"}
     front = {(p_.i, p_.j): p_ for p_ in panes if p_.where == "front"}
     holes = [[roof[(2, 4)], roof[(3, 4)], roof[(3, 5)]], [roof[(9, 6)], roof[(10, 6)]], [roof[(13, 2)]], [front[(4, 2)], front[(5, 2)]]]
+    sh = lot["seed"] % 9  # where the storm's holes fell along this house: its own, from its seed
+    holes = [[roof[((p_.i + sh) % 24, p_.j)] for p_ in hole if p_.where == "roof" and ((p_.i + sh) % 24, p_.j) in roof] or [front[((p_.i + sh) % 24, p_.j)] for p_ in hole] for hole in holes]
     if state == "sound":  # kept whole: one pane out, waiting for glass
-        holes = [[roof[(3, 5)]]]
+        holes = [[roof[((3 + sh) % 24, 5)]]]
     elif state == "broken":  # last autumn's storm came in from the south-west and took the west half
         holes = [[roof[(i, j)] for i in range(0, 9) for j in range(2, 8) if nz(i * 0.9, j * 0.9, lot["seed"] * 0.01) > -0.25 and (i, j) in roof],
                  [roof[(i, j)] for i in range(10, 15) for j in range(3, 7) if nz(i * 1.1, j * 1.1, lot["seed"] * 0.01 + 5) > 0.1 and (i, j) in roof],
@@ -1446,10 +1448,10 @@ def gen_wall(k, rng, lot):
         if z < 1.1 and w["salt"] > 0.05 and nz(a * 0.9, z * 2.2, 4.0) > 0.25 - 0.3 * w["salt"]:
             c = mix(c, P.pale, 0.55 * w["salt"])
         if z > fall * 0.45 and nz(a * 0.55, z * 0.8, 9.0 + lot["seed"] * 0.01) > 0.62 - 0.5 * exposed:
-            c = mix(c, P.lichen, 0.24)
+            c = mix(c, P.lichen, 0.14)
         for wa, wz in weeps:
             if abs(a - wa) < 0.3 and z < wz:
-                c = mix(c, P.kelp, 0.4)
+                c = mix(c, P.kelp, 0.22)
         return c
     masonry(k, rng, pt, -Y, -L / 2, L / 2, -0.25, fall, P.basalt, shade)
     raw(k, [([pt(a - 0.07, z), pt(a + 0.07, z), pt(a + 0.07, z + 0.1), pt(a - 0.07, z + 0.1)], P.tar) for a, z in weeps])
@@ -2691,6 +2693,20 @@ def _near_segment(c, a, b):
     return max(abs(x) for x in (a.lerp(b, t) - c)) <= 0.056
 
 
+def scale_figure(k, it, folder):
+    """A 1.75 m figure beside a model, for the contact sheet: before its front, or on top of a
+    piece of ground (a quay's coping, the mole, a landing)."""
+    hw, hd = it["size"][0] / 2, it["size"][1] / 2
+    at = {"quay": (0.9, hd - 0.4), "mole": (0.0, 0.0), "fish_steps": (1.5, 0.0), "marver_terrace": (2.0, 0.6)}.get(folder, (min(hw - 0.3, 1.6), -hd - 0.8))
+    M = Matrix.Translation((at[0], at[1], 0.12 if folder in ("quay", "mole") else 0.05 if folder in ("fish_steps", "marver_terrace") else 0.0))
+    c = on(P.drift, "cloth")
+    for e in (-1, 1):
+        put(k, lathe([(0.07, 0.0), (0.085, 0.5), (0.1, 0.9)], 8, M @ Matrix.Translation((e * 0.1, 0, 0))), c)
+        put(k, lathe([(0.045, 0.82), (0.055, 1.2), (0.065, 1.42)], 6, M @ Matrix.Translation((e * 0.25, 0, 0))), c)
+    put(k, lathe([(0.2, 0.86), (0.17, 1.1), (0.21, 1.4), (0.13, 1.47), (0.06, 1.5)], 10, M), c)
+    put(k, moved(sphere((0, 0, 0), 0.115, 1), M @ Matrix.Translation((0, 0, 1.635))), on(P.oldlime, "cloth"))
+
+
 def neighbours(plan):
     """Who stands against whom: a terrace's houses east to west (the plan's `terraces`), and the
     rank of net lofts. Each lot learns the lot on its west (-X) and east (+X) party wall."""
@@ -2709,6 +2725,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--plan", default=PLAN)
     ap.add_argument("--only", help="comma-separated ids or folders (default: everything the kit can build)")
+    ap.add_argument("--figure", action="store_true", help="stand a 1.75 m figure by each model: for contact sheets only, never for the kit's own folder")
     a = ap.parse_args(argv)
     plan = json.load(open(a.plan))
     os.makedirs(a.out, exist_ok=True)
@@ -2740,6 +2757,8 @@ def main():
         DOORS.clear()
         it["near"] = near.get(it["id"], {})
         extra = gen(k, rng, it) or {}
+        if a.figure:
+            scale_figure(k, it, folder)
         # buildings.py centres a model on its bounds; a lot's model keeps the lot's own centre.
         xs, ys = [v.co.x for v in k.b.bm.verts], [v.co.y for v in k.b.bm.verts]
         cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2

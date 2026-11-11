@@ -208,6 +208,10 @@ lots = []
 # folder per kind of thing, so a lot whose model is not built yet finds no other model of its
 # folder and stays a grey box. Ids with a number share their folder (net_loft_3 -> net_loft).
 ROW_FOLDER = "row_house"
+# Open lots people walk on are built as fixtures (below), not as lot models: the game client
+# keeps its camera out of every lot's model and fades a low one when you stand by it, which
+# suits a building and not a landing or a terrace. The lots stay, for their names and spots.
+WALKED_ON = {"fish_steps": 0.9, "marver_terrace": 2.6}  # id -> what stands on it, in metres
 
 
 def model_path(id):
@@ -234,7 +238,7 @@ def lot(id, kind, name, at, size, facing, level, height, building=True, age=0.6,
         l["spots"] = [{"name": n, "at": [r2(p[0]), r2(p[1])]} for n, p in spots]
     l["district"] = district
     l["building"] = building
-    if kind not in ("garden", "field"):
+    if kind not in ("garden", "field") and id not in WALKED_ON:
         l["model"] = model_path(id)
     l["seed"] = seed_of(id)
     l["wear"] = wear(at, H[level], facing, age, repair, empty, sheltered)
@@ -669,6 +673,12 @@ for st in stairs:
     slug = st["id"].lower().replace("the ", "").replace(",", "").replace(" ", "_")
     fixture(f"stairs_{slug}", "stairs", ((foot[0] + head[0]) / 2, (foot[1] + head[1]) / 2), (st["width_m"], run), down, H[st["from"]], st["rise_m"] + 0.25,
             f"{st['id']}: {st['rise_m']:g} m in {round(st['rise_m'] / 0.18)} treads", age=1.0, repair=0.5, rise_m=st["rise_m"], treads=round(st["rise_m"] / 0.18), stair=st["id"], wall_d=WALL_D)
+
+# The open lots people walk on (WALKED_ON): the Fish Steps' landing and flight, the Marver's
+# terrace. Each stands on its lot's rectangle.
+for l in [l for l in lots if l["id"] in WALKED_ON]:
+    f = fixture(l["id"], l["id"], l["at"], l["size"], l["facing"], H[l["level"]], WALKED_ON[l["id"]], f"{l['name']}: {l['note']}", lot=l["id"])
+    f["wear"] = l["wear"]
 
 # Plot walls: dry stone round each root plot, 0.45 m thick and 1.0 m high, with a gate gap on the
 # side of the Crown path (south).

@@ -1386,7 +1386,6 @@
    ],
    "district": "the Strand",
    "building": false,
-   "model": "cullet/fish_steps/fish_steps.glb",
    "seed": 96817,
    "wear": {
     "salt": 1.0,
@@ -2814,7 +2813,6 @@
    ],
    "district": "the Rows",
    "building": false,
-   "model": "cullet/marver_terrace/marver_terrace.glb",
    "seed": 40878,
    "wear": {
     "salt": 0.0,
@@ -11828,6 +11826,62 @@
    "wall_d": 0.6
   },
   {
+   "id": "fish_steps",
+   "kind": "fish_steps",
+   "model": "cullet/fish_steps/fish_steps.glb",
+   "at": [
+    0,
+    -1.5
+   ],
+   "size": [
+    8,
+    3
+   ],
+   "facing": "south",
+   "floor_m": 2.0,
+   "height_m": 0.9,
+   "seed": 96817,
+   "cause": "the Fish Steps: stone steps down into the harbour; the catch is divided here each morning",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.42,
+    "age": 1.0,
+    "repair": 0.3,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 151 m from the Cone at bearing 257; front faces 180"
+   },
+   "lot": "fish_steps"
+  },
+  {
+   "id": "marver_terrace",
+   "kind": "marver_terrace",
+   "model": "cullet/marver_terrace/marver_terrace.glb",
+   "at": [
+    58.0,
+    63.25
+   ],
+   "size": [
+    12,
+    6.5
+   ],
+   "facing": "south",
+   "floor_m": 9.5,
+   "height_m": 2.6,
+   "seed": 40878,
+   "cause": "the Marver's terrace: tables over the harbour",
+   "wear": {
+    "salt": 0.0,
+    "soot": 0.0,
+    "wind": 0.51,
+    "age": 0.5,
+    "repair": 0.6,
+    "empty": 0.0,
+    "cause": "+9.5 m above the sea; 94 m from the Cone at bearing 289; front faces 180"
+   },
+   "lot": "marver_terrace"
+  },
+  {
    "id": "plot_wall_1",
    "kind": "plot_wall",
    "model": "cullet/plot_wall/plot_wall_1.glb",
@@ -13207,7 +13261,9 @@
    "boat": 1,
    "bollard": 9,
    "creels": 2,
+   "fish_steps": 1,
    "floats": 2,
+   "marver_terrace": 1,
    "mole": 5,
    "net_rack": 3,
    "peat_stack": 1,

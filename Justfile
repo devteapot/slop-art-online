@@ -117,6 +117,7 @@ living-game-assets:
     living/tools/blender/gen_nature.sh
     living/tools/blender/gen_buildings.sh
     living/tools/blender/gen_city.sh
+    living/tools/blender/gen_cullet.sh
     living/tools/blender/gen_anim.sh
 
 # The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
