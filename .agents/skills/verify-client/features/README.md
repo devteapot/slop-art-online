@@ -5,7 +5,7 @@
 | Ad-hoc query for client triage, initial rows and live changes | [triage.md](triage.md) | `adhoc-suite.jsonl`, query-specific `.jsonl` |
 | The observer's owner subscriptions and inspected-character queries | [subscriptions.md](subscriptions.md) | `observer-base.json`, `anonymous-base.json`, `inspected-character.json` |
 | Private-table refusals (anonymous and player), and the open (diagnostic) build's public tables | [visibility.md](visibility.md) | `visibility.json`, `privacy-*.json`, `open-build-tables.json` |
-| Perception: `seen_*` views in sight, beyond sight and behind a wall; `seen_characters` as the `perceived_of` projection; `my_*` own-state views | [perception.md](perception.md) | `sight.json`, `sight-*.json`, `seen-characters.json`, `own-*.json` |
+| Perception: `seen_*` views in sight, beyond sight and behind a wall; `seen_characters` as the `perceived_of` projection; `my_*` own-state views; `my_offers` (an offer reaches its maker as outgoing and its addressee as incoming, no one else) | [perception.md](perception.md) | `sight.json`, `sight-*.json`, `seen-characters.json`, `own-*.json`, `offers.json`, `offers-*.json` |
 | Presence: connections counted, a takeover after `takeover_s` with no connection, the handback on a new connection; presence private | [presence.md](presence.md) | `presence.json`, `presence-*.json` |
 | Identity-scoped `my_deliberations` view | [deliberations.md](deliberations.md) | `view-*.json` |
 | Reducer permissions and allowed effects for each identity | [permissions.md](permissions.md) | `reducers.md`, `reducers.json`, `reducer-effects.json` |

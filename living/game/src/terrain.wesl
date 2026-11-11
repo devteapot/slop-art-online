@@ -18,10 +18,10 @@ import living_game::toon_light::{
 
 // terrain.rs `GroundParams`.
 struct Ground {
-    // Per layer, 1 / tile size (1/m), four layers per vector.
-    scale: array<vec4<f32>, 4>,
+    // Per layer, 1 / tile size (1/m), four layers per vector (25 layers: 7 vectors).
+    scale: array<vec4<f32>, 7>,
     // Per layer, detail strength.
-    amount: array<vec4<f32>, 4>,
+    amount: array<vec4<f32>, 7>,
     // x: full detail until (m), y: none from (m), z: macro variation, w: 1 on, 0 plain look.
     fade: vec4<f32>,
     // x: height-blend depth, y: N.y below which slopes turn to rock, z: N.y of all rock,
@@ -38,8 +38,8 @@ var layer_sampler: sampler;
 
 const ROCK: u32 = 6u;
 // Blocking rock (terrain.rs `Layer::Cliff`): its weight is the vertex alpha, not a blend weight.
-const CLIFF: u32 = 15u;
-const LAYERS: u32 = 16u;
+const CLIFF: u32 = 24u;
+const LAYERS: u32 = 25u;
 // terrain.rs `BLOCKED_ALPHA`: the vertex alpha where every tile round a vertex blocks.
 const BLOCKED_ALPHA: f32 = 0.5;
 // Cliff stone (linear; sRGB about 92, 86, 82), its strata's bed height (m), and the rim's
@@ -57,6 +57,8 @@ struct GroundVertex {
     @location(9) blend_b: vec4<f32>,
     @location(10) blend_c: vec4<f32>,
     @location(11) blend_d: vec4<f32>,
+    @location(12) blend_e: vec4<f32>,
+    @location(13) blend_f: vec4<f32>,
 }
 
 struct GroundOut {
@@ -69,6 +71,8 @@ struct GroundOut {
     @location(9) blend_b: vec4<f32>,
     @location(10) blend_c: vec4<f32>,
     @location(11) blend_d: vec4<f32>,
+    @location(12) blend_e: vec4<f32>,
+    @location(13) blend_f: vec4<f32>,
 }
 
 @vertex
@@ -84,6 +88,8 @@ fn vertex(v: GroundVertex) -> GroundOut {
     out.blend_b = v.blend_b;
     out.blend_c = v.blend_c;
     out.blend_d = v.blend_d;
+    out.blend_e = v.blend_e;
+    out.blend_f = v.blend_f;
     return out;
 }
 
@@ -113,7 +119,8 @@ fn layer_amount(k: u32) -> f32 {
 // or with each other.
 fn sample_layer(k: u32, p: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, bw: vec3<f32>) -> vec4<f32> {
     let s = layer_scale(k);
-    // The cliff keeps the turn and patches it had as layer 12, before the arid layers came.
+    // The cliff keeps the turn and patches it had as layer 12, before the arid and the authored
+    // towns' layers came.
     let kf = select(f32(k), 12.0, k == CLIFF);
     let a = kf * 2.39996 + 0.6;
     let r = mat2x2<f32>(cos(a), sin(a), -sin(a), cos(a));
@@ -195,7 +202,12 @@ fn fragment(g: GroundOut, @builtin(front_facing) is_front: bool) -> FragmentOutp
     // Detail: the strongest four layers here, blended by their height channel.
     var height = 0.5;
     if (fade > 0.0) {
-        var w = array<f32, 16>(g.blend_a.x, g.blend_a.y, g.blend_a.z, g.blend_a.w, g.blend_b.x, g.blend_b.y, g.blend_b.z, g.blend_b.w, g.blend_c.x, g.blend_c.y, g.blend_c.z, g.blend_c.w, g.blend_d.x, g.blend_d.y, g.blend_d.z, 0.0);
+        var w = array<f32, 25>(
+            g.blend_a.x, g.blend_a.y, g.blend_a.z, g.blend_a.w, g.blend_b.x, g.blend_b.y, g.blend_b.z, g.blend_b.w,
+            g.blend_c.x, g.blend_c.y, g.blend_c.z, g.blend_c.w, g.blend_d.x, g.blend_d.y, g.blend_d.z, g.blend_d.w,
+            g.blend_e.x, g.blend_e.y, g.blend_e.z, g.blend_e.w, g.blend_f.x, g.blend_f.y, g.blend_f.z, g.blend_f.w,
+            0.0
+        );
         // Steep slopes show rock, whatever grows on the flat.
         let steep = 1.0 - smoothstep(ground.blend.z, ground.blend.y, N.y);
         if (steep > 0.0) {
