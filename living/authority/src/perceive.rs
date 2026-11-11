@@ -87,12 +87,20 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
         let mut named = crate::perception::labels(ctx, &c, &ids, now).into_iter();
         let a = named.next().unwrap_or_default();
         let b = named.next().unwrap_or_default();
-        let first = if template.starts_with("{a}") { common::capitalized(&a) } else { a.clone() };
-        let text = template.replacen("{a}", &first, 1).replace("{a}", &a).replace("{b}", &b);
+        let text = rendered(template, &a, &b, object != 0 && c.id == object);
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
         percept(ctx, &c, now, kind, subject, object, at, text, sal);
     }
+}
+
+/// A witnessed event's words for one onlooker: `{a}` and `{b}` become `a` and `b` (the first
+/// `{a}` capitalized when it begins the sentence). The one it was done to reads it as done to
+/// them: "was killed by you", "from your storage", not their own name in the third person.
+fn rendered(template: &str, a: &str, b: &str, to_object: bool) -> String {
+    let t = if to_object { template.replace("{b}'s", "your").replace("{b}", "you") } else { template.to_string() };
+    let first = if t.starts_with("{a}") { common::capitalized(a) } else { a.to_string() };
+    t.replacen("{a}", &first, 1).replace("{a}", a).replace("{b}", b)
 }
 
 /// A species signal: heard by every mind within the signal's range.
@@ -763,5 +771,18 @@ mod tests {
         assert!(!cry_prompt_due(&cry, 2, 130_000, true));
         assert!(!cry_prompt_due(&cry, 2, 250_000, true));
         assert!(cry_prompt_due(&cry, 2, 130_000, false));
+    }
+
+    #[test]
+    fn the_one_an_event_was_done_to_reads_it_as_done_to_them() {
+        let death = "{a} was killed by {b} after yielding";
+        assert_eq!(rendered(death, "a stranger", "Bram", false), "A stranger was killed by Bram after yielding");
+        assert_eq!(rendered(death, "Edda", "a stranger", false), "Edda was killed by a stranger after yielding");
+        assert_eq!(rendered(death, "a stranger", "Bram", true), "A stranger was killed by you after yielding");
+        assert_eq!(rendered("{a} was killed by {b}", "Edda", "Bram", true), "Edda was killed by you");
+        let took = "{a} took 4 berries from {b}'s storage";
+        assert_eq!(rendered(took, "a stranger", "Bortha", false), "A stranger took 4 berries from Bortha's storage");
+        assert_eq!(rendered(took, "a stranger", "Bortha", true), "A stranger took 4 berries from your storage");
+        assert_eq!(rendered("{a} gives in, guard down and hands raised", "a child", "", false), "A child gives in, guard down and hands raised");
     }
 }
