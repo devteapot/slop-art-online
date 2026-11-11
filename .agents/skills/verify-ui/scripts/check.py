@@ -212,21 +212,34 @@ def items(run, c):
     c.check(s, "and both reached them (their gift experiences)", len(gifts) == 2, f"{len(gifts)} gifts")
 
 
+THEMES = ["glass", "clear", "night", "linen", "walnut"]  # F4's order (`ui::wood::Name::ALL`)
+
+
 def themes(run, c):
     s = "themes"
-    plan = ("ready;wait:2;key:KeyL:tap;wait:0.3;key:KeyI:tap;wait:0.5;dump:01;shot:01_first;key:F4:tap;wait:0.8;shot:02_next;dump:02;key:F4:tap;wait:0.8;shot:03_next;dump:03;key:F4:tap;wait:0.8;shot:04_next;dump:04;"
-            "click:@menu;wait:0.3;click:@menu:Settings;wait:0.6;click:@settings:theme:linen;wait:0.8;shot:05_linen;dump:05;quit")
+    n = len(THEMES)
+    # A fresh settings file and no LIVING_GAME_THEME: the client starts in the default, Glass.
+    if not THEME:
+        out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", "themes-default")
+        st0 = os.path.join(out0, "settings.json")
+        if os.path.exists(st0):
+            os.remove(st0)
+        out0, code0, text0 = drive(run, "themes-default", "ready;wait:2;key:KeyI:tap;wait:0.5;dump:01;shot:01_default;quit")
+        c.check(s, "a fresh settings file starts in Glass", ((dump(out0, "01") or {}).get("extra") or {}).get("theme") == "glass", str(((dump(out0, "01") or {}).get("extra") or {}).get("theme")))
+    keys = [f"{i + 1:02d}" for i in range(n)]
+    steps = ";".join(f"key:F4:tap;wait:0.8;shot:{k}_next;dump:{k}" for k in keys[1:])
+    plan = (f"ready;wait:2;key:KeyL:tap;wait:0.3;key:KeyI:tap;wait:0.5;dump:01;shot:01_first;{steps};"
+            f"click:@menu;wait:0.3;click:@menu:Settings;wait:0.6;click:@settings:theme:linen;wait:0.8;shot:{n + 1:02d}_linen;dump:{n + 1:02d};quit")
     out, code, text = drive(run, s, plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05"]}
-    names = [((d[k] or {}).get("extra") or {}).get("theme") for k in ["01", "02", "03", "04"]]
-    order = ["clear", "night", "linen", "walnut"]
+    d = {k: dump(out, k) for k in keys + [f"{n + 1:02d}"]}
+    names = [((d[k] or {}).get("extra") or {}).get("theme") for k in keys]
     first = names[0]
-    want = [order[(order.index(first) + i) % 4] for i in range(4)] if first in order else []
-    c.check(s, "F4 cycles the themes in order", names == want, str(names))
-    c.check(s, "each change is named on screen", len(re.findall(r"ui: Theme: \w+  ·  F4 changes it", log(out))) >= 3)
-    c.check(s, "windows stay where they were through a change", all(sorted(wins(d[k])) == [("Log", "Left"), ("Pack", "Right")] for k in ["01", "02", "03", "04"]), str([wins(d[k]) for k in ["01", "02", "03", "04"]]))
-    c.check(s, "Settings › Play › Look sets it", ((d["05"] or {}).get("extra") or {}).get("theme") == "linen")
+    want = [THEMES[(THEMES.index(first) + i) % n] for i in range(n)] if first in THEMES else []
+    c.check(s, "F4 cycles every theme in order", names == want, str(names))
+    c.check(s, "each change is named on screen", len(re.findall(r"ui: Theme: \w+  ·  F4 changes it", log(out))) >= n - 1)
+    c.check(s, "windows stay where they were through a change", all(sorted(wins(d[k])) == [("Log", "Left"), ("Pack", "Right")] for k in keys), str([wins(d[k]) for k in keys]))
+    c.check(s, "Settings › Play › Look sets it", ((d[f"{n + 1:02d}"] or {}).get("extra") or {}).get("theme") == "linen")
     st = os.path.join(out, "settings.json")
     saved = json.load(open(st)).get("theme") if os.path.exists(st) else None
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
