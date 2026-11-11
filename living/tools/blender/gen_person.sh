@@ -18,7 +18,7 @@ variants=("$@")
 [ ${#variants[@]} -gt 0 ] || variants=(man youth elder woman)
 mkdir -p "$src/anim"
 for v in "${variants[@]}"; do
-  name=own-$v
+  name=own-${v//:/-}
   log=$(mktemp)
   if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- --variant "$v" --out "$src/$name.glb" > "$log" 2>&1; then
     grep -v OpenColorIO "$log" | tail -30; rm -f "$log"; exit 1

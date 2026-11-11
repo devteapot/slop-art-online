@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Spike (branch char-spike): turn capture.sh's frames into the comparison page's media.
 
-    python3 living/tools/char_spike/media.py CAPTURE_DIR PAGE_DIR
+    python3 living/tools/char_spike/media.py CAPTURE_DIR PAGE_DIR [CAST_DIR]
 
 CAPTURE_DIR holds one folder per character (`ours`, `vroid`, `vroid-smith`, and optional
 variants) as capture.sh writes them. PAGE_DIR gets:
@@ -9,6 +9,7 @@ variants) as capture.sh writes them. PAGE_DIR gets:
 - `img/game-<character>.png`: the game-camera frame's middle, enlarged four times without
   smoothing, since a character is only a few dozen pixels tall there;
 - `clips/<clip>-<view>.mp4`: ours beside the VRoid control, the same frames at the same times;
+- `img/cast-lineup.jpg`, `img/cast-faces.jpg` and `cast.json` from cast.py's CAST_DIR, if given;
 - `stats.json`: what each character file holds (triangles by part, bones, materials, textures,
   morph targets, spring groups, bytes).
 Needs Pillow and ffmpeg.
@@ -121,6 +122,11 @@ def main():
             run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i", os.path.join(a, "%03d.png"), "-framerate", str(fps), "-i", os.path.join(b, "%03d.png"),
                  "-frames:v", str(n * loop), "-filter_complex", filt, "-map", "[v]", "-c:v", "libopenh264", "-b:v", "3500k", "-movflags", "+faststart", out])
             print(f"clip {out}: {n} frames x{loop} at {fps} fps")
+    if len(sys.argv) > 3:
+        import shutil
+
+        for src, dst in (("lineup.jpg", "img/cast-lineup.jpg"), ("faces.jpg", "img/cast-faces.jpg"), ("cast.json", "cast.json")):
+            shutil.copy(os.path.join(sys.argv[3], src), os.path.join(page, dst))
     stats = {c: glb_stats(os.path.join(ANIM, f + ".glb")) for c, f in FILES.items() if os.path.exists(os.path.join(ANIM, f + ".glb"))}
     with open(os.path.join(page, "stats.json"), "w") as f:
         json.dump(stats, f, indent=1)

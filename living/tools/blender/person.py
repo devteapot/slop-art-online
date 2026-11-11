@@ -6,7 +6,11 @@ knitted jersey, a patched oilskin coat, wool trousers and sea boots.
 
 Run headless:
     blender -b -P living/tools/blender/person.py -- --out living/game/assets/lookdev/own-man.glb \
-        [--blend man.blend] [--seed 3] [--no-coat] [--body]
+        [--variant man|youth|elder|woman|<seed>:<kind>] [--body] [--no-shade] [--blend man.blend]
+
+`--variant` picks the person: a named entry of VARIANTS, or a seeded resident of a kind (man,
+woman, elder_man, elder_woman, boy, girl), drawn by `resident()`. gen_person.sh runs this and
+then the steps every base goes through (animate.py, merge_primitives.py, face_normals.py).
 
 The output follows the conventions the VRoid bases brought, so the rest of the pipeline is
 unchanged (animate.py, merge_primitives.py, face_normals.py, characters.rs, lookdev.rs):
@@ -23,15 +27,18 @@ unchanged (animate.py, merge_primitives.py, face_normals.py, characters.rs, look
 
 How it is made:
 - **Colour** is per face corner (COLOR_0) on white materials, as for the environment kits and the
-  outfit pieces. There are no textures.
+  outfit pieces. There are no textures. `bake_shade` multiplies in how closed-in each vertex is
+  in the rest pose, and cloth takes a slow mottle: the soft light is painted into the colours.
 - **Clothes and limbs** are low cages lofted from rings (a superellipse torso, tubes for arms,
   legs and boots) with the weights written ring by ring, mirrored, then subdivided once
   (Catmull-Clark carries weights and the ring parameters). Garments are the body's form plus an
   offset, so layers share their weights and move together.
 - **The head** is a cube-sphere projected radially onto a signed distance field (cranium, face,
   jaw, chin, cheekbones, brow, nose, lips), denser toward the face. Eyes, lashes, brows and the
-  mouth are thin shells laid on that surface, as VRoid's are.
-- **Hair** is a cap over the scalp and tapered locks that follow the head's surface.
+  mouth are thin shells laid on that surface, as VRoid's are, in one mesh with the two morph
+  targets the game drives (`Fcl_EYE_Close`, `Fcl_MTH_A`).
+- **Hair** is a cap over the scalp and tapered clumps that follow the head's surface. Beards,
+  kerchiefs and caps are the head's own quads pushed out, their edge snapped to a smooth line.
 - **Hands** are a lofted palm and five finger tubes with two rings round every joint.
 
 Skin exists only where it shows (head, neck, hands); `--body` builds the unclothed form instead,
@@ -65,6 +72,16 @@ def mix(a, b, t):
 
 def lerp(a, b, t):
     return a + (b - a) * t
+
+
+def mottle(c, co, amount=0.07, scale=1.0):
+    """Cloth is never one flat colour: a slow, soft variation in value over the surface (and a
+    little toward the weathered side of the hue), from the point's position."""
+    x, y, z = co[0] * scale, co[1] * scale, co[2] * scale
+    n = math.sin(23.0 * x + 1.3 + 2.1 * math.sin(17.0 * z)) * math.sin(19.0 * z + 0.7 + 1.7 * math.sin(13.0 * y)) * math.cos(21.0 * y + 2.9)
+    n += 0.5 * math.sin(47.0 * x + 31.0 * z + 5.0 * math.sin(29.0 * y))
+    k = 1.0 + amount * n / 1.5
+    return tuple(min(max(v * k, 0.0), 1.0) for v in c)
 
 
 def smooth(x):
@@ -107,6 +124,8 @@ LINES = 0.0  # age lines (0 none, 1 an old face)
 RECEDE = 0.0  # how far the front hairline has moved back, m
 LASH_K, BROW_W, BROW_UP, LIP_TINT = 1.0, 0.0074, 0.0, 0.5
 LIMB_K = 1.0  # girth of arms and legs
+GIRTH = 1.0  # girth of the torso
+LONG = 0.07  # how far a bob hangs below the hairline, m
 
 MAT = dict(
     face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye_white="M00_000_00_EyeWhite_00_EYE",
@@ -384,6 +403,7 @@ def torso_w(z, x, skirt=False, front=False):
 def torso_point(z, k, d=0.0, skirt=0.0, n=NT, edge=None):
     """Column k (0 front, n/4 the left side, n/2 back) of the torso's ring at height z, offset d."""
     a, b, cy = table(TORSO, z)
+    a, b = a * lerp(1.0, GIRTH, smooth((1.40 - z) / 0.08)), b * GIRTH
     if skirt:
         fa, fb = table(SKIRT, z)
         a, b = a + fa * skirt, b + fb * skirt
@@ -1384,24 +1404,36 @@ def make_hair(arm, seed, pos, quads, style="tousled", covered=None):
         cols.append(mix(HAIR, (0, 0, 0), 0.25))
     faces += [list(f) for f in cf]
 
-    def lock(az0, el0, az1, el1, w0, lift, tip_out=0.0, sweep=0.0, segs=7, shade=0.0, base=0.008):
+    def lock(az0, el0, az1, el1, w0, lift, tip_out=0.0, sweep=0.0, segs=7, shade=0.0, base=0.008, hang=0.0):
         """A clump: a flat, tapering leaf that follows the head from one direction to another
         (degrees round the head from the front, + toward the character's left; degrees up),
-        `lift` off the scalp along its middle and `tip_out` at its point."""
+        `lift` off the scalp along its middle and `tip_out` at its point. `hang` metres more
+        fall straight down from where it leaves the head (longer hair)."""
         ts = [i / segs for i in range(segs + 1)]
         dirs = np.array([head_dir(lerp(az0, az1, t) + sweep * math.sin(PI * t), lerp(el0, el1, t)) for t in ts])
         dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
         rad = head_radius(dirs)
         pts = [Vector(ORIGIN) + Vector(d) * (r + base + lift * math.sin(PI * min(t * 1.15, 1.0)) + tip_out * t * t) for t, d, r in zip(ts, dirs, rad)]
+        outs = [Vector(d) for d in dirs]
+        if hang > 0:
+            flat = Vector((outs[-1].x, outs[-1].y, 0.0))
+            flat = flat.normalized() if flat.length > 1e-6 else Vector((0, -1, 0))
+            steps = max(2, round(hang / 0.022))
+            for k in range(1, steps + 1):
+                f = k / steps
+                pts.append(pts[segs] + Vector((0, 0, -hang * f)) + flat * (0.010 * math.sin(PI * f * 0.8)))
+                outs.append(flat)
+        total = len(pts) - 1
         first = len(verts)
         tone = rng.uniform(-0.10, 0.10) + shade
         across = (-1.0, -0.5, 0.0, 0.5, 1.0)
-        for i, t in enumerate(ts[:-1]):
+        for i in range(total):
+            t = i / total
             tan = (pts[i + 1] - pts[max(i - 1, 0)]).normalized()
-            out = Vector(dirs[i])
+            out = outs[i]
             side = tan.cross(out).normalized()
             out = side.cross(tan).normalized()
-            w = w0 * (1 - t ** 2.4) * (0.72 + 0.28 * smooth(t / 0.3))
+            w = w0 * (1 - t ** (2.4 if hang <= 0 else 4.0)) * (0.72 + 0.28 * smooth(t / 0.3))
             th = 0.15 * w + 0.0015
             c = pts[i]
             col = mix(HAIR, HAIR_TIP, smooth(t * 1.1))
@@ -1415,30 +1447,40 @@ def make_hair(arm, seed, pos, quads, style="tousled", covered=None):
         verts.append(hw(pts[-1]))
         cols.append(HAIR_TIP)
         nr = len(across) + 1
-        for i in range(segs - 1):
+        for i in range(total - 1):
             a, b = first + nr * i, first + nr * (i + 1)
             for k in range(nr):
                 faces.append((a + k, a + (k + 1) % nr, b + (k + 1) % nr, b + k))
-        a = first + nr * (segs - 1)
+        a = first + nr * (total - 1)
         for k in range(nr):
             faces.append((a + k, a + (k + 1) % nr, tip))
 
     u = rng.uniform
-    # Under layer: the sides and back, hanging from mid-height to the hairline.
+    long = style in ("bob", "bob_parted")
+    # Under layer: the sides and back, hanging from mid-height to the hairline (and past it, for
+    # a bob).
     for i in range(15):
         az = 52 + 256 * i / 14
         a = az if az <= 180 else az - 360
         if style == "kerchief" and abs(a) > 84:
             continue
         low = math.degrees(math.asin(max(min(hairline(a) / 0.10, 1), -1)))
-        lock(a + u(-4, 4), 42 + u(-5, 5), a + u(-3, 3) + (8 if a > 0 else -8) * (1 if abs(a) < 120 else 0), low - 6 + u(-4, 3), 0.058 + u(-0.005, 0.006), 0.006 + u(0, 0.003), 0.003, base=0.007)
-    if style == "tousled":
+        if long:
+            lock(a + u(-4, 4), 44 + u(-5, 5), a + u(-3, 3), min(low, -8) - 4 + u(-3, 3), 0.062 + u(-0.004, 0.006), 0.007 + u(0, 0.003), 0.004, base=0.008, hang=LONG + u(-0.012, 0.012))
+        else:
+            lock(a + u(-4, 4), 42 + u(-5, 5), a + u(-3, 3) + (8 if a > 0 else -8) * (1 if abs(a) < 120 else 0), low - 6 + u(-4, 3), 0.058 + u(-0.005, 0.006), 0.006 + u(0, 0.003), 0.003, base=0.007)
+    if style in ("tousled", "short", "bob", "bob_parted"):
         # Over layer: from the crown down over the under layer's roots, all round.
         for i in range(13):
             az = -180 + 360 * (i + 0.5) / 13
-            if abs(az) < 40:
+            if abs(az) < (40 if style != "short" else 0):
                 continue
-            lock(az * 0.9 + u(-8, 8), 82 + u(-4, 4), az + u(-6, 6), 22 + u(-8, 8), 0.060 + u(-0.006, 0.006), 0.007 + u(0, 0.004), 0.004 + u(0, 0.004), base=0.011, shade=0.03)
+            end = 22 + u(-8, 8) if not long else -2 + u(-6, 6)
+            if style == "short" and abs(az) < 62:
+                end = math.degrees(math.asin(max(min((hairline(az) + 0.012) / 0.11, 1), -1))) + u(-2, 4)
+            lock(az * 0.9 + u(-8, 8), 82 + u(-4, 4), az + u(-6, 6), end, 0.060 + u(-0.006, 0.006), 0.007 + u(0, 0.004), 0.004 + u(0, 0.004), base=0.011, shade=0.03,
+                 hang=(LONG * 0.55 + u(-0.01, 0.01)) if long and abs(az) > 50 else 0.0)
+    if style == "tousled":
         # The fringe: from the crown forward, swept to the character's right, ending above the
         # brows at uneven lengths.
         for i in range(8):
@@ -1448,12 +1490,18 @@ def make_hair(arm, seed, pos, quads, style="tousled", covered=None):
         # A few tufts that break the outline.
         for az, el in ((150, 62), (-120, 66), (40, 70), (-30, 78)):
             lock(az + u(-10, 10), 84, az + u(-10, 10), el + u(-5, 5), 0.036, 0.012, 0.014 + u(0, 0.006), base=0.013, shade=0.06, segs=5)
-    elif style == "kerchief":
-        # A fringe parted in the middle, falling to the temples from under the scarf's edge.
+    elif style == "bob":
+        # A straight fringe to the brows.
+        for i in range(7):
+            az = -48 + 96 * i / 6
+            lock(az * 0.5 + u(-4, 4), 76 + u(-4, 4), az + u(-3, 3), 33 + 5 * abs(az) / 48 + u(-2, 3), 0.046 + u(-0.003, 0.006), 0.011 + u(0, 0.003), 0.004, base=0.012)
+    elif style in ("kerchief", "bob_parted"):
+        # A fringe parted in the middle, falling to the temples (from under a scarf's edge).
         for side in (-1, 1):
             for i in range(4):
                 az = side * (6 + 15 * i)
-                lock(az * 0.5 + u(-3, 3), 60 + u(-3, 3), az + side * (12 + 8 * i) + u(-3, 3), 34 - 8 * i + u(-3, 3), 0.040 + u(-0.004, 0.006), 0.009 + u(0, 0.003), 0.004, sweep=side * 6, base=0.008)
+                root = 60 if style == "kerchief" else 80
+                lock(az * 0.5 + u(-3, 3), root + u(-3, 3), az + side * (12 + 8 * i) + u(-3, 3), 34 - 8 * i + u(-3, 3), 0.040 + u(-0.004, 0.006), 0.009 + u(0, 0.003), 0.004, sweep=side * 6, base=0.008 if style == "kerchief" else 0.012)
             # Longer locks in front of the ears, to the jaw.
             for az, el in ((62, -22), (74, -30)):
                 lock(side * (az - 14) + u(-3, 3), 40 + u(-4, 4), side * az + u(-2, 2), el + u(-4, 4), 0.034, 0.006, 0.006, base=0.008, segs=8)
@@ -1717,7 +1765,7 @@ def jersey_colour(base):
         c = mix(base, (0, 0, 0), 0.16 * rib)
         if tag in (2, 3):
             c = mix(c, (0, 0, 0), 0.12)
-        return c
+        return mottle(c, co, 0.06)
 
     return colour
 
@@ -1736,7 +1784,7 @@ def coat_colour(base, patches):
             c = mix(PAL["old_lime"], PAL["driftwood"], 0.15 + 0.25 * smooth((0.75 - co.z) / 0.3))
         elif tag == 9:  # its band
             c = mix(PAL["old_lime"], PAL["driftwood"], 0.6)
-        return c
+        return mottle(c, co, 0.09)
 
     return colour
 
@@ -1791,10 +1839,71 @@ DEFAULTS = dict(
 )
 
 
-def configure(name):
-    """Set the generator's numbers for a variant; returns its build options."""
+SKINS = [(0.90, 0.73, 0.63), (0.86, 0.66, 0.54), (0.82, 0.62, 0.49), (0.74, 0.54, 0.41), (0.60, 0.42, 0.31), (0.44, 0.30, 0.23)]
+HAIRS = [(0.085, 0.07, 0.065), (0.115, 0.09, 0.08), (0.19, 0.13, 0.09), (0.28, 0.17, 0.10), (0.36, 0.17, 0.10), (0.46, 0.33, 0.19), (0.58, 0.46, 0.27)]
+GREYS = [(0.40, 0.40, 0.41), (0.56, 0.56, 0.55), (0.70, 0.70, 0.68)]
+IRISES = [(0.34, 0.47, 0.56), (0.42, 0.50, 0.52), (0.36, 0.46, 0.34), (0.38, 0.27, 0.16), (0.25, 0.17, 0.11), (0.46, 0.38, 0.20)]
+KINDS = ("man", "woman", "elder_man", "elder_woman", "boy", "girl")
+
+
+def resident(seed, kind):
+    """A seeded person of a kind: the numbers a resident's sheet would otherwise give. Men and
+    women differ in the torso, limbs and face; elders in hair, lines and hairline; children are
+    the young face (the game's recipe gives them a child's proportions)."""
+    r = random.Random(seed * 7919 + KINDS.index(kind) * 104729 + 17)
+    u = r.uniform
+    male, old, child = kind in ("man", "elder_man", "boy"), kind.startswith("elder"), kind in ("boy", "girl")
+    cloth = dict(
+        oilskin=mix(PAL["mustard"], PAL["driftwood"], u(0.15, 0.45)), tarred=mix(PAL["tar"], PAL["slate"], u(0.25, 0.5)), olive=mix(PAL["kelp"], PAL["driftwood"], u(0.2, 0.5)),
+        canvas=mix(PAL["driftwood"], PAL["old_lime"], u(0.1, 0.4)), blue=mix(PAL["slate"], PAL["chalk_blue"], u(0.2, 0.5)), red=mix(PAL["oxblood"], PAL["peat"], u(0.2, 0.5)),
+        green=mix(PAL["sea_green"], PAL["slate"], u(0.2, 0.5)), cream=mix(PAL["old_lime"], PAL["driftwood"], u(0.1, 0.35)), navy=mix(PAL["iron"], PAL["slate"], u(0.3, 0.6)),
+        heather=mix((0.50, 0.34, 0.48), PAL["slate"], u(0.4, 0.7)),
+    )
+    pick = lambda names: cloth[r.choice(names)]
     spec = dict(DEFAULTS)
-    spec.update(VARIANTS[name])
+    spec.update(seed=seed, beard=False, STUBBLE_K=0.0, SKIN=r.choices(SKINS, weights=(3, 5, 4, 2, 1, 1))[0], IRIS=r.choice(IRISES), GIRTH=u(0.95, 1.10), LONG=u(0.05, 0.10))
+    hair = r.choice(GREYS) if old else r.choices(HAIRS, weights=(2, 4, 4, 3, 2, 2, 1))[0]
+    spec.update(HAIR=hair, HAIR_TIP=mix(hair, (0.92, 0.86, 0.74), u(0.12, 0.22)))
+    spec.update(jersey=pick(("green", "cream", "blue", "red", "navy", "olive")), patches=(cloth["canvas"], cloth["olive"], cloth["red"]))
+    if child:
+        spec.update(FACE=dict(jaw=u(0.84, 0.90), chin=u(0.80, 0.90), brow=0.3, nose=u(0.70, 0.80), lips=u(1.0, 1.15)), EYE=(0.0200, u(0.0124, 0.0134), 0.0074, 0.0112),
+                    BROW_W=0.0050, LIMB_K=0.92, GIRTH=u(0.94, 1.02))
+        if kind == "boy":
+            spec.update(hair=r.choice(("tousled", "tousled", "short")), coat=r.choice((None, None, "smock")), hem=0.74, apron=False, coat_colour=pick(("canvas", "olive", "blue", "oilskin")))
+        else:
+            spec.update(TORSO=MAN_TORSO, hair=r.choice(("bob", "bob", "bob_parted")), coat="smock", hem=0.58, apron=r.random() < 0.5, coat_colour=pick(("blue", "red", "heather", "green", "canvas")),
+                        LASH_K=1.25, LIP_TINT=0.65)
+    elif male:
+        spec.update(FACE=dict(jaw=u(0.93, 1.06), chin=u(0.90, 1.10), brow=u(0.80, 1.15), nose=u(0.90, 1.16), lips=u(0.85, 1.05)),
+                    EYE=(u(0.0172, 0.0186), u(0.0086, 0.0104), 0.0060, u(0.0090, 0.0098)), BROW_W=u(0.0064, 0.0090), LIMB_K=u(0.95, 1.08))
+        spec.update(beard=r.random() < (0.7 if old else 0.45), RECEDE=u(0.010, 0.022) if old else u(0.0, 0.007), LINES=u(0.8, 1.1) if old else r.choice((0.0, 0.0, 0.0, 0.35, 0.5)))
+        spec["STUBBLE_K"] = 0.0 if spec["beard"] else u(0.2, 1.0)
+        spec["hair"] = r.choices(("tousled", "short", "sides"), weights=(2, 3, 5) if old else (5, 4, 1))[0]
+        spec["head"] = "cap" if spec["hair"] == "sides" or r.random() < 0.15 else None
+        if spec["head"] == "cap" and spec["hair"] == "tousled":
+            spec["hair"] = "short"
+        spec["headwear"] = pick(("tarred", "olive", "navy", "canvas"))
+        spec.update(coat=r.choices(("coat", "smock", None), weights=(5, 3, 2))[0], hem=0.74, apron=False, coat_colour=pick(("oilskin", "oilskin", "tarred", "olive", "canvas", "navy")))
+    else:
+        spec.update(TORSO=WOMAN_TORSO, LIMB_K=u(0.82, 0.90), FACE=dict(jaw=u(0.78, 0.87), chin=u(0.74, 0.86), brow=u(0.2, 0.4), nose=u(0.76, 0.90), lips=u(1.10, 1.35)),
+                    EYE=(u(0.0192, 0.0204), u(0.0112, 0.0126), 0.0070, u(0.0102, 0.0110)), LASH_K=u(1.3, 1.6), BROW_W=u(0.0040, 0.0050), BROW_UP=u(0.001, 0.003), LIP_TINT=u(0.7, 0.9))
+        spec["LINES"] = u(0.7, 1.0) if old else r.choice((0.0, 0.0, 0.0, 0.3))
+        spec["hair"] = r.choices(("kerchief", "bob", "bob_parted"), weights=(6, 2, 2) if old else (4, 3, 3))[0]
+        spec["head"] = "kerchief" if spec["hair"] == "kerchief" else None
+        spec["headwear"] = pick(("red", "blue", "cream", "heather", "green"))
+        spec.update(coat=r.choices(("smock", "coat"), weights=(8, 2))[0], hem=r.choice((0.50, 0.50, 0.58)), apron=r.random() < 0.7, coat_colour=pick(("blue", "red", "heather", "green", "canvas", "tarred")))
+    return spec
+
+
+def configure(name):
+    """Set the generator's numbers for a variant (a VARIANTS name) or a seeded resident
+    (`<seed>:<kind>`); returns its build options."""
+    if ":" in name:
+        seed, kind = name.split(":")
+        spec = resident(int(seed), kind)
+    else:
+        spec = dict(DEFAULTS)
+        spec.update(VARIANTS[name])
     g = globals()
     for k, v in spec.items():
         if k.isupper() and k != "EYE":
@@ -1858,12 +1967,14 @@ def build_person(arm, spec, body=False):
             obs.append(make_buttons(arm))
         elif coat == "smock":
             # A pull-over smock to the knee, an apron tied over it.
-            zs = [0.50, 0.58, 0.66, 0.74, 0.82, 0.90, 0.98, 1.06, 1.13, 1.20, 1.26, 1.32]
+            zs = [z for z in (0.50, 0.58, 0.66, 0.74, 0.82, 0.90, 0.98, 1.06, 1.13, 1.20, 1.26, 1.32) if z >= spec.get("hem", 0.50) - 1e-6]
+            band = zs.index(1.06)
+            apron = spec.get("apron", True)
 
             def stag(kind, k, r):
-                if kind == "torso" and r == 7:
+                if apron and kind == "torso" and r == band:
                     return 9
-                if kind == "torso" and k <= 2 and r < 7:
+                if apron and kind == "torso" and k <= 2 and r < band:
                     return 8
                 if kind == "sleeve" and r in (3, 4):
                     return 4
@@ -1876,14 +1987,14 @@ def build_person(arm, spec, body=False):
             obs.append(build(p, arm, MAT["coat"], coat_colour(spec["coat_colour"], spec["patches"])))
         # Trousers, tucked into the boots.
         p = trousers(Part("Trousers"), 0.012).mirrored()
-        obs.append(build(p, arm, MAT["trousers"], lambda tag, u, v, co, n: mix(PAL["iron"], PAL["slate"], 0.25 + 0.10 * (int(u * 44) % 2))))
+        obs.append(build(p, arm, MAT["trousers"], lambda tag, u, v, co, n: mottle(mix(PAL["iron"], PAL["slate"], 0.25 + 0.10 * (int(u * 44) % 2)), co, 0.08)))
         # Sea boots: tarred leather, a paler folded top, a dark sole.
         def boot_colour(tag, u, v, co, n):
             if co.z < 0.022:
                 return (0.055, 0.05, 0.045)  # the sole
             if tag == 1:
                 return mix(PAL["peat"], PAL["driftwood"], 0.22)
-            return mix(PAL["tar"], PAL["peat"], 0.75 + 0.25 * smooth((co.z - 0.05) / 0.3))
+            return mottle(mix(PAL["tar"], PAL["peat"], 0.75 + 0.25 * smooth((co.z - 0.05) / 0.3)), co, 0.10)
 
         def flat_sole(bm):
             # A flat sole with a welt standing proud of the upper.
@@ -1918,6 +2029,68 @@ def build_person(arm, spec, body=False):
     elif spec["head"] == "cap":
         obs += make_cap(arm, pos, quads, spec["headwear"])
     return obs
+
+
+# ---------------------------------------------------------------------------------------------
+# Painted shade: how closed-in each vertex is, multiplied into its colour.
+
+AO_FLAT = ("FaceParts", "Lip", "FaceShade")  # thin shells on the face: neither shade nor are shaded
+AO_SOFT = {"Face": 0.45, "Neck": 0.7, "Hands": 0.6, "EarL": 0.5, "EarR": 0.5}
+
+
+def bake_shade(obs, strength=0.50, reach=0.11):
+    """Darken each vertex's colour by how much of the sky its neighbours hide in the rest pose
+    (under the collar and the coat's skirt, inside cuffs, between the legs, under the fringe).
+    The game lights with two flat bands, so this is the only soft shading the clothes get: the
+    light painted into the colours, as the art direction asks."""
+    from mathutils.bvhtree import BVHTree
+
+    verts, polys = [], []
+    for ob in obs:
+        if ob.name in AO_FLAT:
+            continue
+        base = len(verts)
+        verts += [v.co.copy() for v in ob.data.vertices]
+        polys += [tuple(base + i for i in p.vertices) for p in ob.data.polygons]
+    tree = BVHTree.FromPolygons(verts, polys, all_triangles=False)
+    # A fixed fan of directions over the hemisphere, as (sideways, sideways, outward).
+    fan = []
+    for ring, (elev, count) in enumerate(((75, 4), (48, 7), (20, 9))):
+        for k in range(count):
+            a = 2 * PI * (k + 0.5 * ring) / count
+            e = math.radians(elev)
+            fan.append((math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e)))
+    weight = sum(d[2] for d in fan)
+    for ob in obs:
+        if ob.name in AO_FLAT:
+            continue
+        me = ob.data
+        k_ob = strength * AO_SOFT.get(ob.name, 1.0)
+        shade = []
+        for v in me.vertices:
+            n = v.normal
+            t = n.orthogonal().normalized()
+            b = n.cross(t)
+            o = v.co + n * 0.006
+            hit = 0.0
+            for dx, dy, dz in fan:
+                d = t * dx + b * dy + n * dz
+                h = tree.ray_cast(o, d, reach)
+                if h[0] is not None:
+                    hit += dz * (1.0 - 0.5 * h[3] / reach)
+            shade.append(1.0 - k_ob * min(hit / weight, 1.0))
+        attr = me.color_attributes["Color"]
+        data = np.empty(len(me.loops) * 4, dtype=np.float32)
+        attr.data.foreach_get("color", data)
+        data = data.reshape(-1, 4)
+        idx = np.empty(len(me.loops), dtype=np.int32)
+        me.loops.foreach_get("vertex_index", idx)
+        k = np.array(shade, dtype=np.float32)[idx]
+        # Shade keeps a little warmth instead of going to grey.
+        data[:, 0] *= k ** 0.90
+        data[:, 1] *= k
+        data[:, 2] *= k ** 1.05
+        attr.data.foreach_set("color", data.ravel())
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1965,14 +2138,17 @@ def main():
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", required=True)
-    ap.add_argument("--variant", default="man", choices=sorted(VARIANTS))
+    ap.add_argument("--variant", default="man", help=f"one of {sorted(VARIANTS)}, or a seeded resident `<seed>:<kind>` with kind in {KINDS}")
     ap.add_argument("--body", action="store_true", help="the unclothed form instead of the clothes")
+    ap.add_argument("--no-shade", action="store_true", help="leave out the painted shade (bake_shade)")
     ap.add_argument("--blend")
     a = ap.parse_args(argv)
     bpy.ops.wm.read_factory_settings(use_empty=True)
     spec = configure(a.variant)
     arm = make_armature()
     obs = build_person(arm, spec, body=a.body)
+    if not a.no_shade:
+        bake_shade(obs)
     tris = {}
     for ob in obs:
         ob.data.calc_loop_triangles()

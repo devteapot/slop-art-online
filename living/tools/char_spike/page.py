@@ -86,7 +86,7 @@ def main():
 
 <div class="verdict">
 <p><b>Verdict: replace VRoid for Cullet's residents, knowing the faces will be plainer.</b></p>
-<p>One script, <code>living/tools/blender/person.py</code>, now builds a whole adult man (body form, face, hands with fingers, hair, beard, jersey, patched oilskin coat, trousers, sea boots) with no VRoid base, no downloaded mesh and no texture, and the existing pipeline animates and shades him unchanged.</p>
+<p>One script, <code>living/tools/blender/person.py</code>, now builds a whole adult man (body form, face, hands with fingers, hair, beard, jersey, patched oilskin coat, trousers, sea boots) with no VRoid base, no downloaded mesh and no texture, and the existing pipeline animates and shades him unchanged. The same script drew a first-pass cast of 64 from seeds in three minutes (section 7).</p>
 <p>In the close face shot he loses to the VRoid sample clearly: its face and hair are a class above. At the game camera that difference is not visible, and he is a man of Cullet, which the VRoid bases cannot give without the owner making new bases by hand.</p>
 <p>If the close face shot matters more than independence, the fallback is the middle option: keep VRoid bases and generate only hair and outfits. Staying as we are is the one option the pictures argue against: see the third column.</p>
 </div>
@@ -138,10 +138,10 @@ def main():
 <tr><td>Triangles by part</td><td>{parts_row(o)}</td><td>{parts_row(v)}</td></tr>
 <tr><td>Skeleton</td><td>{o['bip_bones']} <code>J_Bip</code> bones (the same names and T-pose, identity rest rotations) under a <code>Root</code>; no spring bones</td><td>{v['bip_bones']} <code>J_Bip</code> bones, {v['spring_bones']} spring bones in {v['spring_groups']} groups (hair, skirt, bust)</td></tr>
 <tr><td>Skin weights</td><td>Written ring by ring in the script (no automatic weights), at most four bones a vertex</td><td>VRoid Studio's</td></tr>
-<tr><td>Colour</td><td>Vertex colours only (COLOR_0 per face corner) on {len(o['materials'])} white materials; <b>{o['textures']} textures</b></td><td>{v['textures']} textures, {kib(v['texture_bytes'])}, on {len(v['materials'])} materials</td></tr>
+<tr><td>Colour</td><td>Vertex colours only (COLOR_0 per face corner) on {len(o['materials'])} white materials; <b>{o['textures']} textures</b>. Soft shade is painted into the colours by the script: how closed-in each vertex is in the rest pose (under the collar, inside cuffs, under the coat's skirt), and a slow mottle on cloth</td><td>{v['textures']} textures, {kib(v['texture_bytes'])}, on {len(v['materials'])} materials</td></tr>
 <tr><td>Face</td><td>Skin with flattened normals and a shadow map from <code>face_normals.py</code>, unchanged; eyes, lashes, brows and mouth as thin shells; {o['morph_targets']} morph targets (blink, mouth open)</td><td>The same shading; {v['morph_targets']} morph targets (expressions and visemes)</td></tr>
 <tr><td>File</td><td class="n">{kib(o['bytes'])} with {len(o['clips'])} clips</td><td class="n">{kib(v['bytes'])} with {len(v['clips'])} clips</td></tr>
-<tr><td>Made by</td><td><code>person.py</code>, about 1.5 s in Blender 5.2, then <code>animate.py</code>, <code>merge_primitives.py</code>, <code>face_normals.py</code> as for any base (about 5 s)</td><td>A person in VRoid Studio (a GUI); the two CC0 samples are both young women</td></tr>
+<tr><td>Made by</td><td><code>person.py</code>, about 5 s in Blender 5.2 (most of it the painted shade), then <code>animate.py</code>, <code>merge_primitives.py</code>, <code>face_normals.py</code> as for any base (about 5 s)</td><td>A person in VRoid Studio (a GUI); the two CC0 samples are both young women</td></tr>
 </table>
 <p>How ours is modelled: the head is a cube-sphere projected onto a signed distance field (cranium, jaw, chin, cheekbones, brow, nose, lips), denser toward the face. Torso, arms, legs, boots and every garment are low cages lofted from rings and subdivided once, so elbows, knees and the shoulder have proper edge loops. Garments are the body's form plus an offset and share its weights, so layers do not poke through each other. Hair is a cap and about forty tapered clumps that follow the head. The beard, the kerchief and the cap are the head's own quads pushed out, with their edge snapped to a smooth line.</p>
 <p>Skin exists only where it shows (head, neck, hands). Under the clothes there is the form the garments are offsets of, not a mesh; <code>person.py --body</code> builds it for inspection.</p>
@@ -158,7 +158,7 @@ def main():
 <li><b>The hands are simple.</b> Finger tubes intersect the palm; no nails or knuckles.</li>
 <li><b>The beard is a shell.</b> From the side it is a smooth mask with a hard edge.</li>
 <li><b>The neck and face shade differently.</b> The face takes the game's face shadow map and the neck does not, so a line shows under the jaw. VRoid files have the same seam, hidden by hair and collars.</li>
-<li><b>Woman, elder and children are first passes</b> (section 7). They prove the levers work, not that the cast is done.</li>
+<li><b>Women, elders and children are first passes</b> (section 7). They prove the levers work, not that the cast is done. Their faces are the weakest part of the whole spike.</li>
 <li><b>Not measured:</b> frame cost in a crowd. The triangle count is below VRoid's and the materials share by content as VRoid's do, but no crowd was run.</li>
 </ul>
 </div>
@@ -180,10 +180,12 @@ def main():
 <tr><td>13:43</td><td><b>Attempt 4.</b> The boots had been inside-out since attempt 1 (Blender's normal recalculation guessed wrong on an open tube): what looked like a blurry outline and a claw toe. Fixed with an orientation rule per piece.</td></tr>
 <tr><td>13:45</td><td><b>Attempt 5.</b> The beard rebuilt from the face's own quads; the boot's folded top as its own band.</td></tr>
 <tr><td>13:50–13:58</td><td>Variants: woman, elder, lad, and recipes for a boy and a heavy man.</td></tr>
-<tr><td>14:00</td><td><b>Attempt 6</b> (the one shown). Broader shoulders, calmer eyes, blink and mouth morph targets.</td></tr>
+<tr><td>14:00</td><td><b>Attempt 6.</b> Broader shoulders, calmer eyes, blink and mouth morph targets.</td></tr>
+<tr><td>14:20</td><td><b>Attempt 7</b> (the one shown). Shade painted into the vertex colours and a mottle on cloth, because the clothes were flat.</td></tr>
+<tr><td>14:21–14:27</td><td>Seeded residents: 64 files built, animated and photographed in 3 minutes on six cores, then re-photographed twice to fix the sheets.</td></tr>
 <tr><td>{a.finished or '…'}</td><td>Captures, this page.</td></tr>
 </table>
-<p><b>About half an hour from the first run to the man shown, in six attempts (nine runs of the generator), by one agent session</b>; the whole spike, reading and page included, took well under the half day allowed. That speed is the main finding besides the pictures: a new person or garment is a change to a script and a 7-second rebuild, judged in the game's renderer. What it does not buy is taste. The remaining weaknesses are not bugs to grind through; they need someone to say what a Cullet face should look like.</p>
+<p><b>About 50 minutes from the first run to the man shown, in seven attempts, by one agent session</b>; half an hour of that got him to within a pass of what you see. The whole spike, reading and page included, took well under the half day allowed. That speed is the main finding besides the pictures: a new person or garment is a change to a script and a 7-second rebuild, judged in the game's renderer. What it does not buy is taste. The remaining weaknesses are not bugs to grind through; they need someone to say what a Cullet face should look like.</p>
 
 <h2>7. How 64 residents would vary</h2>
 <p>Three levers, all exercised in this spike. Each figure below is at its recipe's height.</p>
@@ -191,11 +193,16 @@ def main():
 <div class="grid g6">{"".join(fig(f"img/{k}-face.jpg", html.escape(c.split(':')[0].split(' (')[0])) for k, c in variants)}</div>
 <table>
 <tr><th>Lever</th><th>What it changes</th><th>Cost</th><th>State after this spike</th></tr>
-<tr><td><b>The generator's numbers</b> (<code>VARIANTS</code> in <code>person.py</code>)</td><td>The torso's cross-sections (a woman's waist, hips and chest), limb girth, the face's jaw, chin, brow, nose and lips, eye size, lashes and brows, age lines, hairline, stubble, skin, hair and eye colours</td><td>A dictionary entry; 1.5 s to build, 5 s to animate</td><td>Works. Four entries: man, youth, elder, woman. The woman and the youth are first passes: the faces differ too little from the man's.</td></tr>
-<tr><td><b>Garments and hair</b> (functions in <code>person.py</code>)</td><td>Jersey, open coat with patches, pull-over smock with apron, trousers, sea boots; beard; flat cap, kerchief; three hair layouts</td><td>A new garment is 20 to 60 lines on the shared rings; it inherits weights</td><td>Of the plan's <code>cullet</code> set: jersey, oilskin smock, patched coat, sea boots, flat cap and headscarf exist. Missing: leather apron, clogs, shawl, child's smock, long hair.</td></tr>
+<tr><td><b>The generator's numbers</b> (<code>VARIANTS</code> in <code>person.py</code>)</td><td>The torso's cross-sections (a woman's waist, hips and chest), limb girth, the face's jaw, chin, brow, nose and lips, eye size, lashes and brows, age lines, hairline, stubble, skin, hair and eye colours</td><td>A dictionary entry or a seed; 5 s to build, 5 s to animate</td><td>Works. Four named entries (man, youth, elder, woman) and seeded residents of six kinds. Everything but the man is a first pass: the faces differ too little.</td></tr>
+<tr><td><b>Garments and hair</b> (functions in <code>person.py</code>)</td><td>Jersey, open coat with patches, pull-over smock (short, or to the knee with an apron), trousers, sea boots; beard; flat cap, kerchief; six hair layouts (tousled, short, sides under a cap, a fringe under a kerchief, two bobs)</td><td>A new garment is 20 to 60 lines on the shared rings; it inherits weights</td><td>Of the plan's <code>cullet</code> set: jersey, oilskin smock, patched coat, sea boots, flat cap and headscarf exist. Missing: leather apron, clogs, shawl, hair longer than a bob. The flat cap is too low to read as one.</td></tr>
 <tr><td><b>The game's recipes</b> (<code>recipes.json</code>, unchanged code)</td><td>Height, proportions (legs, arms, torso, head, shoulders, hips, build, hands, feet), and colours by slot: hair, eyes, skin, jersey, trousers, boots, coat</td><td>A JSON entry, no build</td><td>Works on our files as on VRoid's: the heavy man and the boy above are recipes only. Children are an adult file with child proportions, as the small folk already are.</td></tr>
 </table>
-<p>For the cast in <code>docs/SMALL_CITY.md</code> §3 (50 adults, 6 of them elders, and 14 children in 22 households) I would build about 12 to 16 files (men and women at two or three ages, each with two or three hair and garment sets) and 64 recipes over them, one per resident, with household colours from the sheets. Not done here: the 64 themselves, and the residents' sheets do not exist yet.</p>
+<h3>A seeded cast of 64</h3>
+<p>The residents' sheets do not exist yet, so this is not Cullet's cast. It is 64 people drawn from seeds in the cast's numbers (<code>docs/SMALL_CITY.md</code> §3: 50 adults, 6 of them elders, and 14 children): 22 men, 22 women, 3 old men, 3 old women, 7 boys, 7 girls. Each is its own file (<code>person.py --variant &lt;seed&gt;:&lt;kind&gt;</code>) with its own recipe for height and, for children, proportions by age. Nobody has looked at them one by one or tuned them: this is what the generator gives unreviewed. One scale for all, from the front, 24° down.</p>
+{fig("img/cast-lineup.jpg", "Rows: 16 men; 6 men, 3 old men, 7 boys; 16 women; 6 women, 3 old women, 7 girls. Open the image for full size (3248 px wide).") if have("img/cast-lineup.jpg") else ""}
+<p>Their faces, in the same order:</p>
+{fig("img/cast-faces.jpg", "The same 64, close. This is where the approach is weakest: the faces differ by skin, hair, beard and lines, but the features are one face with small changes, and the women's and children's faces are blank.") if have("img/cast-faces.jpg") else ""}
+<p>What the line-up shows: at the distance the game is played, the cast reads as one village with enough variety in build, age, hair, headwear and dress. What it also shows: every stance is the same clip, garments are few (coat, smock, jersey, apron, cap, kerchief), and the faces need a person's eye. With the sheets, each resident would get a line of numbers instead of a seed, and household colours.</p>
 
 <h2>8. What the three options cost</h2>
 <table>
@@ -209,7 +216,7 @@ def main():
 <ul>
 <li><b>The cached clip library is incomplete.</b> The cache at <code>~/dev/slop-game/.local/kimodo/outputs/library</code> (read only, not copied) has 27 motions; <code>clips.json</code> now lists eight more that are not there (gather, work, eat, play, sit_ground_down, sit_ground, stand_up_ground, dodge). I built only the 13 clips this page needs and generated nothing.</li>
 <li><b>No crowd or frame-time measurement,</b> no spring bones, no outfit slots, no level of detail.</li>
-<li><b>The 64 residents and a line-up of them</b> were not made.</li>
+<li><b>Cullet's actual 64 residents</b> were not made: their sheets do not exist. The line-up in section 7 is drawn from seeds.</li>
 <li><b>The VRoid control</b> is the CC0 sample <code>Sendagaya_Shino</code> fetched by <code>living/tools/lookdev_assets.sh</code>, animated by the unchanged <code>gen_anim.sh</code> steps from the same cache.</li>
 <li>The file carries an <code>extensions.VRM</code> block (VRM 0.x is an open format) because that is how the game recognises a character file. It is written as plain JSON by <code>person.py</code>; nothing of VRoid's is in it.</li>
 <li>To reproduce: <code>KIMODO_DIR=… living/tools/blender/gen_person.sh</code>, then <code>living/tools/char_spike/capture.sh</code>, <code>media.py</code> and <code>page.py</code>.</li>
