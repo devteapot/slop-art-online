@@ -39,7 +39,7 @@ def residents(run, n=2):
 THEME = os.environ.get("LIVING_GAME_THEME", "")
 
 
-def drive(run, name, plan, places=(), syncs=(), extra=()):
+def drive(run, name, plan, places=(), syncs=(), extra=(), free=()):
     # A run per theme keeps its own evidence (`LIVING_GAME_THEME=night check.py …`).
     name = f"{name}-{THEME}" if THEME else name
     cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "420"]
@@ -47,6 +47,8 @@ def drive(run, name, plan, places=(), syncs=(), extra=()):
         cmd += ["--place", p]
     for s in syncs:
         cmd += ["--sync", s]
+    for p in free:
+        cmd += ["--place-free", p]
     cmd += list(extra)
     r = subprocess.run(cmd, capture_output=True, text=True)
     out = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
@@ -127,20 +129,21 @@ def talk(run, c):
             "key:Enter:tap;wait:0.4;tab;wait:0.4;dump:07a;tab;wait:0.4;dump:07b;tab;wait:0.4;dump:07c;tab;wait:0.4;dump:07d;tab;wait:0.4;dump:07e;tab;wait:0.4;dump:07f;tab;wait:0.4;dump:07g;tab;wait:0.4;dump:07h;shot:07_tab;key:Escape:tap;wait:0.4;dump:08;"
             "key:KeyL:tap;wait:0.4;click:@log:tab:1;wait:0.4;shot:09_people;click:@log:person:0;wait:0.6;shot:10_window;dump:10;"
             "menu:f@id:{A};wait:0.5;click:@acts:0:window;wait:0.5;click:@person:more;wait:0.5;shot:11_more;dump:11m;click:@acts:0:introduce;wait:0.5;shot:11_intro;dump:11;quit").replace("{A}", str(a))
-    # Placed apart across the view, and placed again just before the cursor goes to A: in the
-    # 11 s of the room's note they may walk (town life), once onto one spot, stacked on screen.
-    wait = json.dumps(json.dumps({"wait": 600}))
-    # Open ground on either side of the arrival stall (`place_at` snaps to the nearest walkable
-    # tile: spots in the stall put both on one tile, stacked exactly on screen).
-    hold = f"hold=place_at|{a}|(mx-3.0)|(my-1.0);set_behavior|{a}|{wait};place_at|{b}|(mx+2.0)|(my-2.0);set_behavior|{b}|{wait}"
-    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:2.0:-2.0"], syncs=[hold])
+    # On free walkable tiles 1.5-3 m from the player, in sight, across the view (`--place-free`:
+    # since fix-place-free `place_at` moves a body off a taken or blocked tile, up to 6 m), and
+    # put back there just before the cursor goes to A (town life may walk them off).
+    out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], syncs=["hold=refree"])
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    # The scene first: the two stand apart where they landed, and on screen, before the pick.
+    # The scene first: each resident where it landed is 1.5-3 m from me and in view, and they
+    # stand apart on screen, before the pick and the Tab checks.
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
-    at = (sc.get("placed_at") or {}).get("hold") or {}
+    me_at = ((sc.get("placed_at") or {}).get("hold") or {}).get(str(sc.get("me"))) or sc.get("me_at")
+    at = (sc.get("placed_at") or {}).get("hold") or sc.get("placed") or {}
     pa, pb = at.get(str(a)), at.get(str(b))
-    apart_m = ((pa[0] - pb[0]) ** 2 + (pa[1] - pb[1]) ** 2) ** 0.5 if pa and pb else 0
+    near = lambda p: p is not None and me_at is not None and 1.4 <= ((p[0] - me_at[0]) ** 2 + (p[1] - me_at[1]) ** 2) ** 0.5 <= 3.1
     seen = {x["id"]: x for x in (dump(out, "04p") or {}).get("seen") or []}
+    c.check(s, "scene: both residents are 1.5-3 m from me and in view", near(pa) and near(pb) and a in seen and b in seen, f"me {me_at}, {a} at {pa}, {b} at {pb}, in view {sorted(seen)}")
+    apart_m = ((pa[0] - pb[0]) ** 2 + (pa[1] - pb[1]) ** 2) ** 0.5 if pa and pb else 0
     if a in seen and b in seen:
         fa, fb = seen[a]["feet"], seen[b]["feet"]
         ppm = abs(seen[a]["feet"][1] - seen[a]["head"][1]) / 1.75
@@ -161,7 +164,18 @@ def talk(run, c):
     c.check(s, "their window stays after saying it", d["06"] and (f"Person{a}", "Left") in wins(d["06"]) and not d["06"]["typing"])
     # Up to eight: as many may be within earshot at a busy hour, nearest first, then the room.
     tabs = [(dump(out, f"07{k}") or {}).get("typing") or {} for k in "abcdefgh"]
-    c.check(s, "Tab: someone else in earshot (the window follows) and the room", any(t.get("to") not in (None, a) and t.get("window") == f"Person{t.get('to')}" for t in tabs) and any(t.get("to") is None and t.get("window") == "Log" for t in tabs), json.dumps(tabs))
+    # Who is in earshot, as the client has it (nearest first, Tab's order): B among them, then
+    # each Tab the next after whom the box addressed, its window following, then the room.
+    ear = ((d["06"] or {}).get("typing") or {}).get("earshot") or (tabs[0].get("earshot") if tabs else None) or []
+    c.check(s, "who is in earshot: both residents beside me", a in ear and b in ear, f"earshot {ear}")
+    want, cur = [], a
+    for _ in tabs:
+        i = ear.index(cur) if cur in ear else -1
+        cur = ear[i + 1] if cur is not None and 0 <= i < len(ear) - 1 else (None if cur is not None else (ear[0] if ear else None))
+        want.append(cur)
+    got = [t.get("to") for t in tabs]
+    n = (want.index(None) + 1) if None in want else len(want)
+    c.check(s, "Tab goes to the next in earshot each time, nearest first, the window following, then the room", got[:n] == want[:n] and None in want and all(t.get("window") == (f"Person{t['to']}" if t.get("to") else "Log") for t in tabs[:n]), f"earshot {ear}; tabs {got[:n]}; expected {want[:n]}")
     c.check(s, "Esc closes the box and its window", d["08"] and wins(d["08"]) == [] and not d["08"]["typing"], str(wins(d["08"])))
     c.check(s, "Log › People lists them; a click opens a person's window", d["10"] and any(w.startswith("Person") for w, _ in wins(d["10"])), str(wins(d["10"])))
     t11 = (d["11"] or {}).get("typing") or {}

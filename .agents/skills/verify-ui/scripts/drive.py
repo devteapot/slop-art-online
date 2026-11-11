@@ -28,6 +28,9 @@
   (LIVING_GAME_ADMIN_TOKEN_FILE, `.local/living/verify/RUN/private/`, mode 600, deleted when the
   drive ends), as the play launcher does for a scene with `"law_toggle": true`: the client's
   second, admin-only connection switches facing sight (`set_world_law("fov_on", …)`, F5).
+- `--place-free ID:DX:DY` puts a resident near that offset on a free walkable tile 1.5-3 m from
+  the player with nothing opaque between (chosen from the terrain and the bodies, so where it
+  lands is known: `scene.json` `free_spots`); `--sync NAME=refree` puts them back there.
 - `--expect REGEX` (repeatable) must match client.log, else the run fails (exit 1).
 
 Exit code: the client's, or 1 when an expectation fails or the client never joined.
@@ -76,6 +79,47 @@ def admin_token():
     sys.exit("could not read the admin token from `spacetime login show --token`")
 
 
+WALK_BLOCKED = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low (`Terrain::walkable`)
+OPAQUE = {4, 7}  # rock, wall
+
+
+def vsql(run, q):
+    """Owner SQL through verify.py, as JSON rows."""
+    r = subprocess.run([sys.executable, os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py"), "sql", "--run", run, q], capture_output=True, text=True)
+    i = r.stdout.find("[")
+    return json.loads(r.stdout[i:]) if i >= 0 else []
+
+
+def free_tiles(run, me_at, wants, keep=(1.5, 3.0)):
+    """A tile centre for each asked offset from me: walkable, no body on it, keep[0]..keep[1] m
+    from me with no rock or wall between, apart from the others chosen, nearest the asked point
+    (`place_at` since fix-place-free takes the nearest free tile; this picks it first, so where
+    each lands is known)."""
+    import math
+    xs, ys = (me_at[0] - 6, me_at[0] + 6), (me_at[1] - 6, me_at[1] + 6)
+    t = {}
+    for cy in range(int(ys[0]) // 16, int(ys[1]) // 16 + 1):
+        for cx in range(int(xs[0]) // 16, int(xs[1]) // 16 + 1):
+            row = vsql(run, f"SELECT tiles FROM terrain_chunk WHERE id = {(cy << 16) | cx}")
+            if row:
+                b = row[0]["tiles"]
+                b = bytes.fromhex(b) if isinstance(b, str) else bytes(b)
+                for k, v in enumerate(b):
+                    t[(cx * 16 + k % 16, cy * 16 + k // 16)] = v
+    taken = {(math.floor(r["x"]), math.floor(r["y"])) for r in vsql(run, "SELECT id, x, y FROM body")}
+    def clear(c):
+        n = int(math.dist(me_at, c) * 4) + 1
+        return all(t.get((math.floor(me_at[0] + (c[0] - me_at[0]) * i / n), math.floor(me_at[1] + (c[1] - me_at[1]) * i / n))) not in OPAQUE for i in range(n + 1))
+    out = []
+    for dx, dy in wants:
+        want = (me_at[0] + dx, me_at[1] + dy)
+        cands = [(tx + .5, ty + .5) for tx in range(int(xs[0]), int(xs[1]) + 1) for ty in range(int(ys[0]), int(ys[1]) + 1)]
+        cands = [c for c in cands if keep[0] <= math.dist(c, me_at) <= keep[1] and t.get((math.floor(c[0]), math.floor(c[1])), 4) not in WALK_BLOCKED
+                 and (math.floor(c[0]), math.floor(c[1])) not in taken and all(math.dist(c, o) >= 1.5 for o in out) and clear(c)]
+        out.append(min(cands, key=lambda c: math.dist(c, want)) if cands else want)
+    return out
+
+
 def body(db, cid):
     _, out = stdb("sql", "-s", "local", db, f"SELECT x, y FROM body WHERE id = {cid}")
     m = re.findall(r"^\s*([-\d.]+)\s*\|\s*([-\d.]+)\s*$", out, re.M)
@@ -88,6 +132,7 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--plan", required=True)
     ap.add_argument("--place", action="append", default=[])
+    ap.add_argument("--place-free", action="append", default=[], help="ID:DX:DY near that offset, on a free walkable tile in sight 1.5-3 m from me")
     ap.add_argument("--sync", action="append", default=[])
     ap.add_argument("--size", default="1600x900")
     ap.add_argument("--client")
@@ -109,6 +154,7 @@ def main():
     if not os.path.exists(client):
         sys.exit(f"no client at {client}: build it with cargo build --release -p living-game")
     places = [tuple(p.split(":")) for p in a.place]
+    free_places = [tuple(p.split(":")) for p in a.place_free]
     syncs = {}
     for s in a.sync:
         name, calls = s.split("=", 1)
@@ -132,14 +178,14 @@ def main():
             f.write(admin_token())
         env["LIVING_GAME_ADMIN_TOKEN_FILE"] = secret
     try:
-        run_client(a, db, out, client, env, places, syncs)
+        run_client(a, db, out, client, env, places, syncs, free_places)
     finally:
         if secret and os.path.exists(secret):
             os.remove(secret)
             print("admin token file deleted", flush=True)
 
 
-def run_client(a, db, out, client, env, places, syncs):
+def run_client(a, db, out, client, env, places, syncs, free_places=()):
     log_path = os.path.join(out, "client.log")
     log = open(log_path, "w")
     p = subprocess.Popen([client], env=env, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT)
@@ -163,6 +209,13 @@ def run_client(a, db, out, client, env, places, syncs):
             for i, dx, dy in places:
                 scene["calls"].append(call(db, "place_at", i, at[0] + float(dx), at[1] + float(dy)))
                 scene["calls"].append(call(db, "set_behavior", i, json.dumps(json.dumps({"wait": 600}))))
+            if free_places:
+                spots = free_tiles(a.run, at, [(float(dx), float(dy)) for _, dx, dy in free_places])
+                scene["free_spots"] = {i: list(c) for (i, _, _), c in zip(free_places, spots)}
+                for (i, _, _), c in zip(free_places, spots):
+                    scene["calls"].append(call(db, "place_at", i, c[0], c[1]))
+                    scene["calls"].append(call(db, "set_behavior", i, json.dumps(json.dumps({"wait": 600}))))
+                places = places + free_places
             time.sleep(1.0)
             # Where each landed: `place_at` snaps to the nearest walkable tile, so two asked-for
             # spots in a stall can share one.
@@ -172,6 +225,10 @@ def run_client(a, db, out, client, env, places, syncs):
         for name, calls in list(syncs.items()):
             if me is not None and f"{name}.go" in text and "waiting for" in text:
                 at = body(db, me)
+                # `refree`: put the free-placed residents back on their own tiles (town life may
+                # have walked them off).
+                if calls == [["refree"]]:
+                    calls = [c for i, xy in scene.get("free_spots", {}).items() for c in (["place_at", i, str(xy[0]), str(xy[1])], ["set_behavior", i, json.dumps(json.dumps({"wait": 600}))])]
                 sub = lambda s: str(eval(s[1:-1], {"mx": at[0], "my": at[1], "me": me})) if s.startswith("(") else s.replace("{me}", str(me))
                 for c in calls:
                     if c[0] == "sql":
