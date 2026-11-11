@@ -115,6 +115,8 @@ class Text(unittest.TestCase):
         self.assertGone("Quillfeather", "Quillfeather wrote", "owner-name")
         out, acc = self.run_text("Ada killed Cuth Marrow")
         self.assertEqual(out, "Player killed Cuth Marrow")
+        out, acc = self.run_text("see experience_ada.txt and ADA_NOTES")
+        self.assertEqual(out, "see experience_player.txt and PLAYER_NOTES")
         out, acc = self.run_text("Ada killed Cuth Marrow", {"owner_first_name": "include"})
         self.assertEqual(out, "Ada killed Cuth Marrow")
         out = self.assertGone("/home/adaq", "cd /home/adaq/dev/slop && ls", "home-path")
@@ -242,7 +244,7 @@ class OwnerLines(unittest.TestCase):
             rep = data["diagnosis/REPORT.md"].decode()
             self.assertNotIn("hi there", rep)
             self.assertNotIn("wassup", rep)
-            self.assertIn("[owner line]", rep)
+            self.assertTrue("[owner line]" in rep or "[line dropped" in rep)
             self.assertGreaterEqual(totals.counts["owner-line"], 2)
             dec = store.decision_report(t, s, rows, totals)
             self.assertEqual(dec["owner_lines"]["distinct_lines"], 2)
@@ -255,7 +257,8 @@ class OwnerLines(unittest.TestCase):
             j = data["session/journal/Linnet_Abbot.jsonl"].decode()
             self.assertNotIn("wassup mate", j)
             self.assertNotIn("hi there", j)
-            self.assertIn("welcome", j)              # a resident's line stays
+            self.assertIn("Evening.", j)             # the talk entry stays, its prompt redacted
+            self.assertTrue(any("think" in d["where"] for d in s2.dropped))   # its reply repeated the line
             self.assertNotIn("/home/adaq", j)
             self.assertNotIn("192.168.7.42", j)
             self.assertNotIn("Quillfeather", j)
@@ -500,6 +503,170 @@ class Manifest(unittest.TestCase):
             self.assertIn("| `trial-batch` |", md)
             est = store.layout(items)
             self.assertEqual(est["runs"]["batches"]["units"], 1)
+
+
+class Token(unittest.TestCase):
+    """The store token comes from ~/.config/slop-store/hf_token only, and never reaches output."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = self.tmp.name
+        self.saved = {k: os.environ.get(k) for k in ("HOME", "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "STORE_CONFIG",
+                                                     "HF_HUB_DISABLE_IMPLICIT_TOKEN", "HF_TOKEN_PATH")}
+        os.environ["HOME"] = self.home
+        self.file_tok = "hf" + "_" + _fake(_ALNUM, 34)
+        self.env_tok = "hf" + "_" + _fake(_ALNUM, 34)
+        os.environ["HF_TOKEN"] = self.env_tok
+        write(self.home, ".cache/huggingface/token", "hf" + "_" + _fake(_ALNUM, 34))
+        self.tp = write(self.home, ".config/slop-store/hf_token", self.file_tok + "\n")
+        os.chmod(self.tp, 0o600)
+
+    def tearDown(self):
+        for k, v in self.saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        sys.modules.pop("huggingface_hub", None)
+        self.tmp.cleanup()
+
+    def test_only_source(self):
+        self.assertEqual(store.read_token(), self.file_tok)
+        os.chmod(self.tp, 0o644)
+        with self.assertRaises(store.Refused):
+            store.read_token()
+        os.remove(self.tp)
+        with self.assertRaises(store.Refused):     # HF_TOKEN and the hf cache are not used
+            store.read_token()
+
+    def test_never_in_output(self):
+        seen = {}
+        tok = self.file_tok
+
+        class FakeHfApi:
+            def __init__(self, token=None):
+                seen["token"] = token
+
+            def create_repo(self, *a, **k):
+                raise RuntimeError(f"401 for token {tok} at /api/repos/create")
+
+        fake = types.ModuleType("huggingface_hub")
+        fake.HfApi = FakeHfApi
+        sys.modules["huggingface_hub"] = fake
+        conf = write(self.home, ".config/slop-store/config.json",
+                     json.dumps({"publish_enabled": True, "backends": {"hf": {"namespace": "someone"}}}))
+        os.environ["STORE_CONFIG"] = conf
+        src = os.path.join(self.home, "l9")
+        fake_batch(src)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = store.main(["publish", "batch", src, "--backend", "hf", "--yes-publish"])
+        self.assertEqual(rc, 2)
+        self.assertEqual(seen["token"], tok)                 # the file's token, passed explicitly
+        self.assertNotIn("HF_TOKEN", os.environ)              # no other token left for the library
+        self.assertEqual(os.environ.get("HF_HUB_DISABLE_IMPLICIT_TOKEN"), "1")
+        for text in (out.getvalue(), err.getvalue()):
+            self.assertNotIn(tok, text)
+            self.assertNotIn(self.env_tok, text)
+        self.assertIn("[redacted:token]", err.getvalue())
+        # and the scrubber treats it as a known secret
+        idn = store.Identity.from_runtime({"never_touch": {}, "never_touch_names": []}, "test")
+        self.assertIn(tok, idn.secrets)
+
+
+class Echoes(unittest.TestCase):
+    LINES = {"ssssssssshi", "wassup", "hi", "I come from the northern hills"}
+
+    def find(self, text):
+        return store.EchoMatcher(self.LINES).find(text)
+
+    def test_found(self):
+        for text in ("demeanour: babbles nonsense ('sssshi', 'wassup'), does not flee",
+                     "The stranger who said 'hi' to the crowd killed Cuth",
+                     "Said hi, then set on my mother before the whole crowd.",
+                     "He only babbled wassup and would not leave",
+                     "he said he comes from the northern hills, far off"):
+            self.assertTrue(self.find(text), text)
+
+    def test_not_found(self):
+        for text in ('{"say": "Hi! Are you new here? I\'m Bram Fenner"}', "Hi there, friend, welcome",
+                     "the hill path north", "shining high above", "I greet her and sound her out"):
+            self.assertFalse(self.find(text), text)
+
+
+class SessionDrop(unittest.TestCase):
+    def test_drop_and_learn(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            talk = "# You and a stranger (#26)\n\n# What you are answering\na stranger: “wassup”"
+            write(t, "session/journal/Mercy.jsonl",
+                  journal_entry("Mercy", "talk", talk, '{"say": "Don\'t \'wassup\' me."}') + "\n" +
+                  journal_entry("Mercy", "think", "the square at noon", '{"thought": "a quiet day"}') + "\n" +
+                  journal_entry("Mercy", "consolidate", "notes", '{"demeanour": "babbles (\'wasssup\')"}') + "\n")
+            mem = ("# Who you are (Ada)\n(played by a person: who they are shows only in what they do)\n"
+                   "- [1188] day 1 09:15 You said to a child: “a line nobody heard” {someone=#11}")
+            write(t, "session/journal/Ada.jsonl",
+                  journal_entry("Ada", "internalize", mem, '{"edges": [{"props": {"what": "a line nobody heard"}}]}') + "\n")
+            write(t, "rows.jsonl", json.dumps({"subject": 9, "text": "A stranger said: “wassup” {someone=#26}"}) + "\n" +
+                  json.dumps({"subject": 9, "text": "Bram waved"}) + "\n")
+            write(t, "notes.txt", "first line\nhe kept saying wassup\nlast line\n")
+            write(t, "report/index.html", "<p>&ldquo;wassup&rdquo;</p>")
+            write(t, "FEEDBACK.md", "mine")
+            s = scrubber({"model_exchanges": "include", "owner_notes": "hold"}, kind="play-session")
+            rows, totals, data = store.scrub_source(t, s, keep_data=True)
+            self.assertIn("a line nobody heard", s.owner_lines)
+            st = {r["path"]: r["status"] for r in rows}
+            self.assertEqual(st["FEEDBACK.md"], "excluded")
+            self.assertEqual(st["report/index.html"], "excluded")
+            m = data["session/journal/Mercy.jsonl"].decode().splitlines()
+            self.assertEqual(len(m), 1)                       # the talk and the consolidation dropped
+            self.assertIn("a quiet day", m[0])
+            self.assertNotIn("nobody heard", "".join(v.decode() for v in data.values()))
+            r = data["rows.jsonl"].decode().splitlines()
+            self.assertEqual(len(r), 1)
+            self.assertIn("Bram waved", r[0])
+            self.assertNotIn("wassup", data["notes.txt"].decode())
+            self.assertIn("first line", data["notes.txt"].decode())
+            self.assertGreaterEqual(len(s.dropped), 4)
+            for d in s.dropped:
+                self.assertNotIn("wassup", d["why"])
+                self.assertNotIn("nobody heard", d["why"])
+            man = {"files": [{"path": p, "status": v} for p, v in st.items()]}
+            store.check_publishable(man, s)                   # held-by-owner files do not block
+
+
+class Gates(unittest.TestCase):
+    def test_models(self):
+        cfg = store.load_config(local_config="/nonexistent/config.json")
+        store.check_models({"models": {"zai-glm-5-3-flash": 3, "deepseek-v4-1-flash-1017": 1, "fake-trials": 2}}, cfg)
+        for bad in ("mistral-small-latest", "gpt-6-luna", "ministral-8b-latest", "something-new"):
+            with self.assertRaises(store.Refused):
+                store.check_models({"models": {"zai-glm-5-3-flash": 3, bad: 1}}, cfg)
+
+    def test_complete(self):
+        with tempfile.TemporaryDirectory() as t:
+            fake_batch(t)
+            store.check_batch_complete(t)
+            os.remove(os.path.join(t, "life-iter11-r2", "summary.json"))
+            with self.assertRaises(store.Refused):
+                store.check_batch_complete(t)
+
+    def test_sessions_held(self):
+        old = os.environ.get("STORE_CONFIG")
+        with tempfile.TemporaryDirectory() as t:
+            conf = write(t, "c.json", json.dumps({"publish_enabled": True}))
+            os.environ["STORE_CONFIG"] = conf
+            try:
+                err = io.StringIO()
+                with redirect_stderr(err), redirect_stdout(io.StringIO()):
+                    rc = store.main(["publish", "session", t, "--backend", "local", "--root", t])
+                self.assertEqual(rc, 2)
+                self.assertIn("publish_sessions", err.getvalue())
+            finally:
+                if old is None:
+                    os.environ.pop("STORE_CONFIG", None)
+                else:
+                    os.environ["STORE_CONFIG"] = old
 
 
 if __name__ == "__main__":

@@ -1,8 +1,6 @@
 ---
-# DRAFT, not published. The owner has not agreed to publishing, the licence or the decision
-# categories below (docs/STORE.md). store.py refuses to publish while publishing is switched off.
-pretty_name: Slop Art Online runs (DRAFT)
-license: mit            # DRAFT: proposed to match the MIT code repository; the owner decides
+pretty_name: Slop Art Online runs
+license: mit
 language:
 - en
 tags:
@@ -23,83 +21,99 @@ configs:
   data_files: "batches/*/*/rows.jsonl.gz"
 - config_name: prompts
   data_files: "batches/*/*/prompts.jsonl.gz"
-- config_name: session_calls
-  data_files: "sessions/*/*/calls.jsonl.gz"
-- config_name: session_rows
-  data_files: "sessions/*/*/rows.jsonl.gz"
 ---
 
-# Slop Art Online runs (DRAFT)
+# Slop Art Online runs
 
-> **Draft.** Nothing here is published. This card is the proposal in `docs/STORE.md`; the owner
-> decides the licence and the categories marked "owner decides" before any upload.
+Records from a **research build** of [Slop Art Online](https://github.com/devteapot/slop-art-online),
+a persistent world in which language-model minds and people share one set of rules. This is
+not a finished game: the rules, prompts and models changed from batch to batch, and many
+batches were run to find faults.
 
-Evidence from [Slop Art Online](https://github.com/devteapot/slop-art-online), a persistent world
-in which language-model minds and people share one set of rules. A **run** is one of:
+**Much of the text here is AI-generated.** Model replies, and the thoughts, plans, memories and
+spoken lines in the world rows, were written by language models (see "Models"). They must not be
+presented as human writing.
 
-- a **trial batch** (`batches/<machine>/<batch>/`): `trials.py` puts one character, the subject,
-  in a scripted world with a real model mind and everything else on scripts and behaviour graphs.
-  It runs several trials, variants and replicates in parallel and records what the mind saw, said,
-  planned and did. See `docs/TRIALS.md` in the code repository.
-- a **play session** (`sessions/<machine>/<name>/`): the owner playing a character among residents
-  that are all model minds.
-- **verification evidence** (`verify/<machine>/…`): scratch worlds driven by the verification skills.
+## What a run is
 
-A seed does not make inference repeatable. Replicates are separate runs and should be compared side
-by side, not averaged into one.
+A **trial batch** (`batches/<machine>/<batch>/`) is one run of `living/tools/trials.py`. Each trial
+puts one character, the subject, in a scripted world with a real model mind, while everything else
+follows scripts and behaviour graphs. A batch runs several trials, mind variants and replicates in
+parallel, and records what the mind perceived, said, planned and did. `docs/TRIALS.md` in the code
+repository describes the format.
+
+A seed does not make inference repeatable. Replicates are separate runs: compare them side by
+side rather than averaging them into one.
 
 ## Files of a batch
 
 | File | One row per | Columns |
 | --- | --- | --- |
-| `instances.jsonl.gz` | trial instance (`<trial>-<variant>-r<k>`) | `batch`, `instance`, and `summary`, `cast`, `state`, `models`, `mind_env` as JSON text (`summary.json` holds the probes: survival, hunger, lines said, relations, tokens…) |
-| `calls.jsonl.gz` | model call in the mind's journal | `batch`, `instance`, `file`, `seq`, `actor`, `at_ms`, `purpose`, `model`, `tokens`, `latency_ms`, `error`, and `entry`: the journal line, holding the actual request messages and the reply |
+| `instances.jsonl.gz` | trial instance (`<trial>-<variant>-r<k>`) | `batch`, `instance`, and as JSON text: `summary` (the probes: survival, hunger, lines said, relations, tokens…), `cast`, `state`, `models`, `mind_env` |
+| `calls.jsonl.gz` | model call in the mind's journal | `batch`, `instance`, `file`, `seq`, `actor`, `at_ms`, `purpose`, `model`, `tokens`, `latency_ms`, `error`, and `entry`: the journal line with the actual request messages and the reply |
 | `prompts.jsonl.gz` | distinct system prompt | `batch`, `instance`, `ref` (what a call's `content_ref` names), `text` |
 | `rows.jsonl.gz` | row of a recorded stream | `batch`, `instance`, `stream` (`samples`, `thoughts`, `experiences`, `chronicle`, `graphs`, `mind_rows`, `events`, `census`), `seq`, `at_ms`, `row` (JSON text) |
 | `files.tar.gz` | – | everything else: the batch report, runner and mind logs, `final.json`, snapshots |
-| `MANIFEST.json` | – | every source file with its status (published, held, refused) and the redactions applied, by category |
+| `MANIFEST.json` | – | every source file with its status and the redactions applied by category; the models used; the tool's commit |
 
-`store.py fetch batch <name> --unpack` rebuilds the `trials.py` evidence layout from these files.
+`python3 living/tools/store.py fetch batch <name> --unpack` (in the code repository) rebuilds the
+`trials.py` evidence layout from these files.
 
-## Where the text comes from
+## Reproducing a run
 
-- **Model output.** `reply` and much of `thoughts`, `experiences` and `chronicle` (plans, spoken
-  lines, memories) were written by models served through Mistral AI's API: `zai-glm-5-3-flash`
-  (Z.ai GLM), `deepseek-v4-1-flash-1017` (DeepSeek) and, in some batches, Mistral's
-  `ministral-*`. They are **AI-generated** and must not be presented as human writing.
-- **Prompts** are built by the mind service from the world's rows and the project's prompt frames.
-- **World rows** are written by the game's authority (SpacetimeDB module) from its rules.
+1. Read the batch's `batch.json` in `files.tar.gz`: `commit` is the code it ran on (`dirty: true`
+   means local changes on top of it), plus `trials`, `variants`, `replicates`, `minutes`, `fake`,
+   `parallel` and `sample_s`.
+2. Check out that commit of the code repository.
+3. Run `python3 living/tools/trials.py up`, then `trials.py build <trials…>`, then
+   `trials.py run --batch <new name> <trials…> --variants <…> --replicates <n>`, with the same
+   arguments.
+4. Real variants call models through Mistral AI's API and need your own key. `--fake` answers
+   them from the verification fake server instead.
 
-## Redactions (always)
+The same commit and arguments give the same world and script. The model's replies will differ.
 
-API keys and tokens of every format, JWTs (SpacetimeDB tokens), bearer headers, `.env` contents,
-the owner's name and email address, home folders (`/home/<user>`, `/Users/<user>` become `~`),
-private network addresses and host names. Secrets files, browser profiles, macOS metadata files,
-build output and folders the machines must not touch are refused whole. See `MANIFEST.json`.
+## Models
 
-## Owner decides (before any upload)
+| Model id in the journals | Served by | Weights and licence | Status |
+| --- | --- | --- | --- |
+| `zai-glm-5-3-flash` | Mistral AI API | Z.ai [GLM-5.3-Flash](https://huggingface.co/zai-org/GLM-5.3-Flash), MIT (the API id is matched to the weights by name) | verified 2026-11-11 |
+| `deepseek-v4-1-flash-1017` | Mistral AI API | [DeepSeek-V4.1-Flash-1017](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017), MIT | verified 2026-11-11 |
+| `fake-*` | the verification fake server | no model | – |
+| `ministral-*-latest` | Mistral AI API | which release `-latest` serves was not established | **UNVERIFIED**: batches with these calls are not published |
+| `mistral-small-latest` | Mistral AI API | release and licence behind the alias not read | **UNVERIFIED**: not published |
+| `gpt-6-luna` | a private endpoint | provider terms not read | **UNVERIFIED**: not published |
 
-- `model_exchanges`: publish the journals' requests and replies, or not.
-- `owner_lines`: the owner's own typed lines in play sessions. Default **excluded**: each is
-  replaced by `[owner line]` wherever it recurs.
-- `owner_first_name`: the player character carries the owner's first name. Default **redacted** to `Player`.
-- `owner_notes`: the owner's written feedback files.
-- `session_media`: play-session stills and video (they show typed lines as drawn).
+Mistral AI's [Commercial Terms of Service](https://legal.mistral.ai/terms/commercial-terms-of-service)
+(effective 2026-09-25) give the customer ownership of Output (s.3.1) and forbid implying that a
+human generated it (s.3.2). Its [Additional Product Terms](https://legal.mistral.ai/terms/additional-terms)
+(s.6) leave the rights in third-party models with their licensors.
 
-## Licences of what this derives from (DRAFT notes, not legal advice)
+## What was removed
 
-- **Model outputs.** Mistral's Commercial Terms of Service (effective 2026-09-25) give the customer
-  ownership of Output (s.3.1) and forbid implying a human wrote it (s.3.2). Its Additional Product
-  Terms (s.6) treat GLM and DeepSeek as third-party models whose rights stay with their licensors.
-  GLM open weights are MIT (checked on the GLM-4.5 card). DeepSeek's model licence (v1.0) says it
-  "claims no rights in the Output". The exact versions behind `zai-glm-5-3-flash`,
-  `deepseek-v4-1-flash-1017` and `ministral-*-latest` were not checked; see `docs/STORE.md`.
-- **SpacetimeDB** (BSL 1.1) and **Neo4j** (GPLv3) are software licences. The exported JSON rows
-  here are data written by the game's own module and minds, not copies of either program.
-- **The game's code and rules** are MIT.
+- **Always:**
+  - API keys and tokens of every format, JWTs (SpacetimeDB tokens) and bearer headers;
+  - `.env` contents;
+  - the owner's name and email address;
+  - home folders (`/home/<user>` and `/Users/<user>` become `~`);
+  - private network addresses and host names.
+- **Refused whole:** secrets files, browser profiles, macOS metadata files, build output, and
+  folders the machines must not touch.
+- **Per file:** `MANIFEST.json` lists every file and its redactions.
+
+The world's own content (names of residents, places, the rules) is fiction and is kept.
+
+## Licence
+
+MIT, like the code. The game's code and rules are MIT. Model outputs are covered by the terms
+above. The exported rows are data written by the game's own SpacetimeDB module and its mind
+service; they are not copies of SpacetimeDB (BSL 1.1) or Neo4j (GPLv3).
 
 ## Not included
 
-Database replicas and WAL, Neo4j stores, trial modules (`.wasm`), derived seeds, Cargo build
-folders and caches. They are regenerable in minutes from the code repository, or they are
-replicas of what is published here.
+Not included, because they are regenerable in minutes from the code repository or are replicas of
+what is published here:
+- database replicas and WAL;
+- Neo4j stores;
+- trial modules (`.wasm`) and derived seeds;
+- Cargo build folders and caches.
