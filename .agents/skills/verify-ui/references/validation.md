@@ -1,5 +1,14 @@
 # verify-ui: last real run
 
+**2026-11-11, branch `sight-shade-2` (the shade look as the default; on fov-senses).**
+- **Setup:** world `verify-ui-shade2-1111-233028`.
+- **Full suite: 198/199** (`checks-full.json`):
+  - field 28/28 (the note is now a pill at the top: `extra.facing_note`);
+  - look-walk 69/69, pick 8/8, bar 11/11, offers 23/23;
+  - talk 15/16.
+- **The talk failure:** the Tab check needs exactly one other person in earshot and the room. In the full run Tab reached three different people; a re-run of talk had the scene's two residents placed 6 m apart and off screen, which also failed "at least 1.5 m apart … on screen". Both are scene placement (`place_at`; the Spark's fix is queued), not the shade.
+- **Stills:** `/Users/carlid/dev/slop-art-online/.local/living/fov-client/shade-stills-3/`, by day and by night, with facing sight on and off, from an open spot. At the arrival spot the camera's cutaway hides the player behind a stall.
+
 **2026-11-11, branch `ui-1-step4` (interface D step 4 = INTERFACE.md step 2: the cluster and skill bar on the rules' `bar_places`, sheathe and draw, offer cards, face out of the lists).** Laptop, Docker SpacetimeDB 2.14.1, private `CARGO_TARGET_DIR`, builds through `build-slot`; no mind service, no model calls. Final code `668585d3` (origin/main merged through stairs-place and look-walk). New scenarios `bar` (11 checks) and `offers` (23 checks); `talk` gained the scene's 1.5 m check and "More… leaves out face"; `pick` gained two bodies stacked on one spot.
 - **Clear, every scenario but support** on a fresh `verify-ui-h` (`$V launch --run ui-h --seed island`, doctor ok): **102 passed, 0 failed** (`ui-h/ui/checks-clear.json`). After the last merge: windows, themes and look-walk **85 passed, 4 failed** on a loaded laptop (37 frames over 50 ms; look-walk's leg-easing and crossing checks); look-walk again on main's client (`9c6ca13c`) and on this branch's: **69 passed, 0 failed** each (`checks-lookwalk-main.json`, `checks-lookwalk-step4.json`).
 - **Themes:** Night, Linen and Walnut: windows, items, bar and offers, **55 passed, 0 failed** each (`verify-ui-g`, `checks-<theme>.json`).
