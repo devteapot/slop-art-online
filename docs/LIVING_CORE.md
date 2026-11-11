@@ -479,6 +479,8 @@ LIVING_LOD=1 just living-mind                          # minds with the level of
 python3 living/tools/mind_load.py <db> <run>           # model load per person, extrapolated, and off stage
 ```
 
+Checking, merging and disk cleanup (`just living-check`, `just living-merge`, the disk timer) are described in [tooling](TOOLING.md).
+
 `just living-publish` updates the module in place and installs the current skill rules. LLM exchanges are journaled to `.local/living/journal/<run>/<name>.jsonl`.
 
 **Public observer: retired (2026-11-09).** The public observer at `https://sos.carlid.dev` is gone. The user stopped and disabled its services on the dev-box (`sao-tunnel.service`, the Cloudflare tunnel, and `sao-observer-web.service`, which served the static bundle on 127.0.0.1:8331), and the site returns 530. After the perception work, the observer reads private developer truth as the database owner, which a public page cannot do without handing admin rights to every visitor ([perception](PERCEPTION.md#the-mind-service-and-the-observer)). The lab observer is local: `just living-web`, opened with the owner's token in the page fragment (`#token=…`). `just living-web-dist` still builds the optimized bundle into `.local/living/web`; nothing serves it.
