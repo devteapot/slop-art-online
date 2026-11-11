@@ -24,6 +24,7 @@ Two runs on one machine give byte-identical files (all 263: the models, `fixture
 - **Compass.** A model's front looks along its lot's `facing`. `Env` turns compass bearings into the lot's own frame, so lichen and flaked lime lie on the faces the south-westerly strikes, whichever way the lot faces.
 - **Terraces are built as rows.** Each house is its own model on its own lot, laid out with its neighbours: they share a party wall (each model carries its half) and the stack on it (half each, as high as the taller roof needs). A house's width is its household's size, its storeys its family's, its door its household's colour, and what stands by the door is the household's keepsake from the plan. The Rows follow the slope's contours, so a row's floors are level; the roof line steps where storeys differ. The rank of net lofts is built the same way.
 - **Glow** was set in the game, not in Blender. The game's emission is the material's strength times exposure times the hour's `glow` (three times stronger at night). `buildings.py`'s strength of 2.6 does not show on daytime glass colours. The kit's strengths (220 for oil lamps, 300 for the furnace, 240 for the Watchglass) read as lit at 21:30 and leave a pane its own colour at 13:00.
+- **A glasshouse's light is its one lantern's** (the dev-box coordinator's call, 2026-11-11: glow is sparse and true to what is lit). Every pane within 1.0 m of the lantern strip is lit; out to 2.4 m fewer and fewer catch a dimmer light (`GlowDim`, 80); beyond it a pane keeps its glass colour. That is 8 to 12 lit and 15 to 21 dim panes of 342 in a worked house, and none in a broken one. The two distances are generator parameters: `gen_cullet.sh --lantern-core M --lantern-reach M`. The first version lit every pane within 2.6 m of two pools, which was nearly the whole of a sound house.
 
 ## What pass 1 builds
 
@@ -35,7 +36,7 @@ Two runs on one machine give byte-identical files (all 263: the models, `fixture
 | The mole | 5 | 15,766 | Root, three 13.3 m sections of the arm, tip. Sea walls with the tide line, a wave wall east, ship's bollards west, the tip's rail with its south spans gone. |
 | Row houses | 24 | 51,338 | Six terraces: 17 lived in, 4 empty and sound, 3 roofless shells (one with a tree). 1,120 to 3,245 each. |
 | The Marver and its terrace | 2 | 7,580 | Three serving hatches, the hearth, the figurehead; tables, benches and an anchor over the drop. |
-| Glasshouses | 14 | 95,624 | One generator, three states from `repair`: 3 sound, 8 patched, 3 broken. The panes round the lanterns of worked houses glow. |
+| Glasshouses | 14 | 95,624 | One generator, three states from `repair`: 3 sound, 8 patched, 3 broken. The panes near a worked house's lantern glow. |
 | Net lofts | 6 | 7,888 | One rank. Double doors of two 0.9 × 2.0 m leaves. |
 | Quay wall and edge | 28 | 20,608 | Lengths of at most 12 m. The face stands 0.5 m out over the water. |
 | The Fish Steps | 1 | 904 | The landing stands on the lot; the flight goes down into the water south of it. A fixture (below). |
@@ -85,7 +86,7 @@ How three of them are read:
 Seen in the game's renderer on 2026-11-11:
 
 - **The ground is not Cullet's.** Streets are yellow cobbles and everything else is bright lawn. The kit's basalt and lime stand on a meadow. The Cone's yard should be cinders, the Strand wet flags, the Crown moor grass. Ground textures are on §6's P0 list and were not in this pass.
-- **Glasshouses are opaque.** Panes are drawn solid in pale aqua, so the plants inside show only through holes, vents and the door. Lit panes at dusk go nearly white. See-through glass is a client feature.
+- **Glasshouses are opaque.** Panes are drawn solid in pale aqua, so the plants inside show only through holes, vents and the door. See-through glass is a client feature.
 - **Patched glasshouses are alike.** The eight share one pane census. Their holes fall in different bays by seed, but from the game camera they read as one model eight times.
 - **A lit pane is paler by day** than its unlit neighbours. The game's emission has a day to night ratio of 3; a pane that glows at night keeps a little of it at noon.
 - **Row houses are plain behind.** Backs have two windows and no yards, lean-tos or privies (P1).
@@ -127,7 +128,7 @@ In this order:
 | `building:marver` (new) | `marver`, `terrace` |
 | `prop:ground` (new) | `quay`, `fish_steps`, `wall`, `stairs`, `plot_wall` |
 
-The board's night shots are the asset view's first of this kit. The sound glasshouse glows over nearly all its panes there, which may be too much; the owner has not decided on any of these versions.
+The board's night shots are the asset view's first of this kit. They showed the sound glasshouse glowing over nearly all its panes; `building:glasshouse` was published again from `78b8f3a2` with the lantern's falloff. The owner has not decided on any of these versions.
 
 Open questions for the owner's walk: whether the retaining walls' 0.4 m coping should be a 1 m parapet; whether lit windows should be this many (every lived-in house shows one to three).
 
