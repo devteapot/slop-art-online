@@ -556,6 +556,67 @@ fn seed_land(path: &str) -> Result<(u64, u32, LandParams), String> {
     Ok((seed, size, params))
 }
 
+/// A structure's model (`world::things`, connected): from the kit of the planned settlement it
+/// stands in (`envs/<env>/<kind>/`, the environment `settle::env_of` names for the settlement's
+/// style, the folder alone, not `shared/`), at its real size, with its origin on the ground and its
+/// front (+Z) toward the street; a sign's front faces away from the lot at whose door it stands.
+/// None elsewhere (generated towns' structures keep their drawn shapes: their environments'
+/// models are sized for look-dev slots, not to real size), or when the kit has no such model.
+pub fn structure_model(land: &Land, kind: &str, at: Vec2) -> Option<(String, f32)> {
+    let env = structure_env(land, at)?;
+    let own = format!("envs/{env}/{kind}/");
+    let files: Vec<String> = crate::envs::assets_for(env, kind).into_iter().filter(|f| f.starts_with(&own)).collect();
+    if files.is_empty() {
+        return None;
+    }
+    let file = files[(hash(at.x.to_bits(), at.y.to_bits()) * files.len() as f32) as usize % files.len()].clone();
+    let yaw = structure_front(land, kind, at).map_or_else(|| hash(at.x.to_bits(), at.y.to_bits()) * std::f32::consts::TAU, |f| f.x.atan2(f.y));
+    Some((file, yaw))
+}
+
+/// The environment of the planned settlement a point is in (within 1.15 of its radius, the
+/// nearest such settlement).
+fn structure_env(land: &Land, at: Vec2) -> Option<&'static str> {
+    land.settlements
+        .iter()
+        .filter(|s| s.planned)
+        .map(|s| (Vec2::new(s.centre.0, s.centre.1).distance(at), s))
+        .filter(|(d, s)| *d <= s.radius_m * 1.15)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, s)| living_rules::settle::env_of(&s.style))
+}
+
+/// Which way a structure's front faces on the land: a sign away from the nearest lot within
+/// [`SIGN_LOT`] (it stands at its door); anything else toward the nearest street point within
+/// [`STRUCTURE_STREET`].
+fn structure_front(land: &Land, kind: &str, at: Vec2) -> Option<Vec2> {
+    if kind == "sign" {
+        let lot = land.lots.iter().map(|l| Vec2::new(l.centre.0, l.centre.1)).filter(|c| c.distance(at) <= SIGN_LOT).min_by(|a, b| a.distance(at).total_cmp(&b.distance(at)));
+        if let Some(c) = lot {
+            return (at - c).try_normalize();
+        }
+    }
+    let mut best: Option<(f32, Vec2)> = None;
+    for r in &land.roads {
+        for w in r.points.windows(2) {
+            let (a, b) = (Vec2::new(w[0].0, w[0].1), Vec2::new(w[1].0, w[1].1));
+            let d = b - a;
+            let t = if d.length_squared() > 1e-9 { ((at - a).dot(d) / d.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+            let q = a + d * t;
+            let dist = q.distance(at);
+            if dist <= STRUCTURE_STREET && best.is_none_or(|(bd, _)| dist < bd) {
+                best = Some((dist, q));
+            }
+        }
+    }
+    best.and_then(|(_, q)| (q - at).try_normalize())
+}
+
+/// A sign stands at a lot's door: the lot it belongs to is within this (m, to its centre).
+const SIGN_LOT: f32 = 14.0;
+/// How far a structure looks for its street (m).
+const STRUCTURE_STREET: f32 = 40.0;
+
 /// What the client draws of an authority `lot` row (connected mode).
 #[derive(Clone, Debug)]
 pub struct LotRow {
@@ -1305,6 +1366,42 @@ mod tests {
     fn top(b: &Blend) -> Layer {
         let k = b.0.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).unwrap().0;
         Layer::ALL[k]
+    }
+
+    #[test]
+    fn structures_take_their_planned_settlements_kit_and_face_the_street() {
+        let (land, _) = cullet();
+        let town = land.settlements.iter().find(|s| s.planned).expect("Cullet is planned");
+        let c = Vec2::new(town.centre.0, town.centre.1);
+        assert_eq!(structure_env(&land, c), Some("cullet"));
+        assert_eq!(structure_env(&land, Vec2::new(5.0, 5.0)), None, "outside any settlement");
+        // A sign at a lot's door faces away from the lot, out of its front.
+        let centre = |l: &living_rules::settle::Lot| Vec2::new(l.centre.0, l.centre.1);
+        let mut tried = 0;
+        for lot in &land.lots {
+            let (lc, lf) = (centre(lot), Vec2::new(lot.front.0, lot.front.1));
+            let sign = lc + lf * (lot.depth_m * 0.5 + 0.6);
+            let nearest = land.lots.iter().map(|l| centre(l).distance(sign)).fold(f32::MAX, f32::min);
+            if nearest < lc.distance(sign) || lc.distance(sign) > SIGN_LOT {
+                continue;
+            }
+            let f = structure_front(&land, "sign", sign).expect("a front");
+            assert!(f.dot(lf) > 0.99, "sign at {sign} faces {f}, its lot's front {lf}");
+            tried += 1;
+        }
+        assert!(tried > 20, "{tried} lots");
+        // Anything else turns toward the nearest street within reach.
+        let road = land.roads.iter().find(|r| r.points.len() >= 2).expect("a street");
+        let (a, b) = (Vec2::new(road.points[0].0, road.points[0].1), Vec2::new(road.points[1].0, road.points[1].1));
+        let side = (b - a).perp().normalize() * 0.5;
+        let near = (a + b) * 0.5 + side;
+        let f = structure_front(&land, "storage", near).expect("a street nearby");
+        assert!(f.dot(-side.normalize()) > 0.99, "faces {f}, the street is toward {}", -side);
+        // A generated land's towns are not planned: their structures keep their drawn shapes.
+        let gen = living_rules::land::generate(7, 512, &LandParams::default());
+        for s in &gen.settlements {
+            assert_eq!(structure_model(&gen, "sign", Vec2::new(s.centre.0, s.centre.1)), None);
+        }
     }
 
     #[test]

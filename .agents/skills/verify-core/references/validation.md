@@ -11,6 +11,7 @@ Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-
 - `speech.py crowd` with `--way` (30 people in a 30 m square, 60 lines at one every 0.5 s): `core-speech2-crowd-say` and `-call`; the whisper run records that a crowd of room lines does not drive a way that needs someone. Numbers in docs/COMMUNICATION.md §14.
 - Not run: the rest of the baseline.
 - After merging origin/main (`93019a3`) into `speech-2`: `just living-check` passes; `core-speech6-regress` is identical to the base except the `introduced` rows; `core-speech6-channels` 22 of 22.
+- After merging origin/main again (`b004e6e`, the rules' UI declarations): `just living-check` passes; `core-speech8-regress` is identical to the base except the `introduced` rows; `core-speech8-channels` 22 of 22; verify-player `player-speak8` 15 of 15. The UI test `a_way_of_speaking_is_presented_in_the_box` declared its own `whisper_speech()` over the shipped script; it now presents the shipped whisper (its assertions unchanged).
 
 ## 2026-11-11 speech-1: ways of speaking (Spark)
 
