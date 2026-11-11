@@ -132,6 +132,16 @@ impl Blend {
         }
     }
 
+    /// This blend moved a share `t` (0–1) of the way to one layer alone.
+    pub fn toward(mut self, layer: Layer, t: f32) -> Self {
+        let sum: f32 = self.0.iter().sum::<f32>().max(1e-6);
+        for w in &mut self.0 {
+            *w *= 1.0 - t;
+        }
+        self.add(layer, sum * t);
+        self
+    }
+
     /// Normalised and packed into the four attributes' bytes.
     pub fn pack(&self) -> [[u8; 4]; 4] {
         let sum: f32 = self.0.iter().sum::<f32>().max(1e-6);

@@ -978,6 +978,43 @@ Branch `feel-5`, after play-test 2 (`.local/living/playtest-2/FEEDBACK.md`). Evi
 - The settings menu belongs to the interface redesign.
 - The strike was not captured turning to its aim: the scratch square had no one in reach, so the rules refused it ("no one there to strike").
 
+## View distance and the grey city (2026-11-11)
+
+Branch `view-1`, for the owner's walk through Cullet's grey city ([small city](SMALL_CITY.md) §5 and §6, [authored plans](AUTHORED_PLANS.md#the-game-client)). Evidence is in `.local/living/view-1/` and the walk's stills in `.local/walk/runs/` (both git-ignored, in the main checkout). Captures were headless runs of the real client on scratch Cullet worlds (`verify-view1-*`, no residents, no mind service), and offline look-dev. Client only: no authority, rules, bindings or seed changes, and no SpacetimeDB feature used in a new way.
+
+- **The fog follows the mood** (`camera.rs`, `world::Draw`):
+  - The camera fogged from its own draw radius on every world: 50 to 105 m for an adult. Since `plan-1` the land picks its mood (`envs/<id>.json` whose `world` names the land's seed and size), and the camera now fogs by that mood's `fog_start` and `fog_end`, scaled by the character's size. The atmosphere still scales it after (night and fog close it in, `daylight::apply`).
+  - The island's mood is 70 to 160 m; the town square looks as before, a little clearer at the far end. Cullet's is 180 to 600 m. Tile worlds and the character line-up keep the old fog.
+  - The sight edge's limited view still wins: it fogs from your sight and brings the far plane in (`sightedge::far`).
+- **Landmarks drawn far** (`live.rs` `lots`, `island.rs` `stream`):
+  - Lots with `landmark: true` in the regenerated land (Cullet's Cone, Counting House, Heron, Watchglass and Lintel) are drawn out to the mood's `fog_end` (600 m on Cullet). The `lot` window reaches only ±184 m, so a landmark beyond it is drawn from the regenerated land (the land's lot indices are the rows' ids). Ordinary lots stay at 190 m.
+  - Past the detailed ground (170 m) and out to `fog_end`, the ground and the sea are drawn coarse: a vertex every 4 m, no scatter or props. Four sea quads round the map end a long view over the water in fog, not at the map's edge.
+  - Ordinary things (lots, chunk props, scatter) fade out, dithered, over the last 25 m of their draw distance (`envs::Reach`), because Cullet's fog no longer hides that edge.
+  - The far plane stays past the landmark reach (1000 m by default; at least 1.1 × the reach + 50 m). Bevy 0.20's perspective is infinite reverse-Z on a 32-bit float depth buffer, so the far plane only culls: at 600 m one depth step is about 0.04 mm.
+- **Lots without a model** (`island.rs` `lot_item`):
+  - **Cause of the bare ground:** building lots were already grey boxes. The bare lots were Cullet's 23 open lots of no height: the Fish Steps, the slip, the Cone yard, the Marver's terrace and the graveyard are `lamp` lots of height 0, which `spawn_lot` skipped, and the 18 root plots are `garden` lots, which have no model kind. So the Fish Steps' notch was a grass tongue. (The other open lots have a height and were boxes: the dry dock 8 m, the cistern 2.6 m, the thorn 4.5 m, the Crown bench 0.5 m.) `envs::assets_for` returned nothing from another environment (`shared/` has no building kinds), and no connected path was skipped.
+  - A planned settlement's lot now draws its own model when it is on disk, else a grey box of its footprint and height, else, for an open lot of no height (the 23 above), a slab 2.5 cm high of its footprint in a darker, muted stone (sRGB 132, 128, 120 against the boxes' 168, 168, 172), casting no shadow. It never borrows another model of its kind, so an empty or missing `envs/cullet/` gives the grey city cleanly. Generated towns still sample their kind's models.
+  - Connected and look-dev use the same rule. Grey boxes now carry their box as `lookdev::Fitted`: the camera's keep-out query needs it, so connected boxes, though `Solid`, could hold the eye inside them. Look-dev's lot boxes and models are `Solid` too.
+- **The quay face** (`island.rs` `face_share`):
+  - **Cause:** no relief stamp covers the quay, so its tiles are the level's grass. A quay stands out of the sea within half a metre (`settle::plan::Ground`), from +2 m to the 6 m deep bed. The 1 m ground mesh's smoothed normals round that step into a slope that the shader's slope test (rock below N.y 0.72) left as grass.
+  - The ground mesh now moves a vertex's layers to rock, and its colour to stone, by its steepest step to a neighbour (from 0.9 to 1.6 m per metre). Stairs climb 0.55 m per metre and are untouched. Steep generated slopes on the island get the same stone, as the shader already intended.
+  - **Not in the rules' data:** the quay's top surface. Levels carry no surface for clients (streets have `surface`, the square `paved`), and a stamp's `ground` of `rock` would make the tiles block walking. The Strand street covers the quay to its edge, so only the face showed; a paved quay beyond its streets would need a client field such as `levels[].surface`.
+
+**Frame cost** on Cullet by day (`verify-view1-c`, built from `f2d803fa` with this branch; no residents). One binary, with and without the long view (`LIVING_GAME_PERF=nofar`: no coarse ring, no landmarks past 190 m), two interleaved runs each, 24 s at each spot, one headless 1600×900 window, under a load average of 15 to 20 from other agents' builds. Median of 2 s windows:
+
+| Spot | Without | With | Drawn with |
+|---|---:|---:|---|
+| The Ladder's west end, looking east over the town | 18.3, 18.3 ms | 20.1, 22.6 ms | 38 detailed and 176 coarse chunks, 969 meshes (651 without) |
+| The Crown, looking south over the town | 18.3, 18.9 ms | 19.1, 18.7 ms | 39 + 201, 1,073 meshes (695) |
+| The arrival point, looking east along the quay | 18.4, 18.6 ms | 18.2, 18.3 ms | 40 + 173, 1,039 meshes (729) |
+
+The long view costs about 2 to 4 ms where most of the screen is far ground (the Ladder's view east covers about 600 m of land), and nothing measurable elsewhere. Headless frames here do not go below about 18 ms, so a real window may show the difference differently. If it costs too much in play, the first thing to try is a cheaper material for the coarse chunks (they are drawn with the painted ground shader).
+
+**Not done:**
+- The coarse ring meets the detailed ground with T-junctions (a crack of a few centimetres at 170 m is possible, not seen in the captures).
+- People beyond sight are still not drawn (that is the rules' sight, 48 m by day on Cullet).
+- Coarse chunks draw no props, so the Lintel stands alone on its headland.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**
