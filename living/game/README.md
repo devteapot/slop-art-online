@@ -21,6 +21,7 @@ python3 $V cleanup --run game-1                          # when done
 | `LIVING_GAME_NAME` | `Wanderer` | your character's name on first join |
 | `LIVING_GAME_TOKEN` | `.local/living/game/<db>.token` | where your identity token is kept, so you return to the same character |
 | `LIVING_GAME_DEMO` | unset | a directory: run the scripted demo, write screenshots there, then quit |
+| `LIVING_GAME_CONTROL` | `travel` | the control scheme to start in: `travel` (face where you walk) or `cursor` (face the cursor); F3 switches |
 
 ## Look-dev mode
 
@@ -114,7 +115,8 @@ The simulation logs its cost every 3 s. A 78-joint character costs about 9 µs o
 | A click in the window | captures the cursor: the system cursor is locked and hidden and the game draws its own (`pointer.rs`); the click does nothing else |
 | Esc | closes the text box, a list (a sub-list first) or the panels; with nothing open, gives the cursor back. Losing focus gives it back too |
 | WASD, Shift | move relative to the camera, run (`human_move`). Shift is also the dodge (an open question) |
-| Mouse or one finger on a trackpad | the cursor: where you face and aim. Moving, your legs keep to your travel (backwards beyond 110°) and your upper body turns toward it (`twist.rs`) |
+| Mouse or one finger on a trackpad | the cursor: where you aim. Facing where you walk (the default), you turn to it only while a skill key is held on an aimed skill, a guard is up or a move is under way. Facing the cursor (F3), you face it always: moving, your legs keep to your travel (backwards beyond 110°) and your upper body turns toward it (`twist.rs`); standing, your upper body turns first and your legs follow beyond 55° |
+| F3 | switch the control scheme: facing where you walk, or facing the cursor (a note names it; a first-time hint names it on arrival) |
 | Left click (tap) / left held | the strike (on release for a tap, after 0.22 s held for aiming). A tap on a person who is not hostile to you (not hurting you in the last 15 s, no move aimed at you) does not strike: you turn to them and the text box opens to them. Striking them takes a held press |
 | Left drag (mouse or trackpad press-and-move), two-finger pan, middle drag, `[` / `]` | turn the view; the cursor stays on its ground point, so where you face doesn't change |
 | Pinch, mouse wheel | zoom, within 0.6–1.4 of the view's distance |

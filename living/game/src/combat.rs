@@ -114,6 +114,9 @@ pub struct Combat {
     /// Which skill key is held (indicators), and since when.
     pub aiming: Option<String>,
     pub guarding: bool,
+    /// A move is being aimed at the cursor now: a key held on a skill aimed at a creature or a
+    /// point, or a guard up (`controls::Control::Travel` turns my body to the cursor only then).
+    pub aims: bool,
     /// The direction a raised guard was sent toward (sim, unit): the authority keeps the aim
     /// of the press, so the arc shows that, not the cursor.
     guard_dir: Option<Vec2>,
@@ -344,6 +347,12 @@ pub fn pick(net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res
         .map(|(id, _)| id);
 }
 
+/// Whether a skill aimed this way turns the body toward the cursor while it is aimed: at a
+/// creature, a point or a guard's facing; not a dash, a heal on oneself or an ally, or none.
+pub fn aims_at_cursor(aim: &str) -> bool {
+    matches!(aim, "creature" | "point" | "facing")
+}
+
 /// Where I aim: the cursor's ground point (sim), else ahead of me.
 fn aim_point(cam: &Cam, me: Vec2, input: &Input) -> Vec2 {
     cam.cursor_ground.map(|c| Vec2::new(c.x, c.z)).unwrap_or_else(|| me + input.look.unwrap_or(Vec2::Y).normalize_or(Vec2::Y) * 4.0)
@@ -466,6 +475,7 @@ pub fn input(
     } else if input.demo {
         c.aiming = None;
     }
+    c.aims = c.guarding || c.aiming.as_ref().and_then(|s| cards.by_name(s)).is_some_and(|k| aims_at_cursor(&k.aim));
     for (skill, spec) in std::mem::take(&mut scripted.press) {
         if let Some(card) = cards.on_bar(&skill) {
             let (aim, tgt) = scripted_aim(conn, &scene, me_id, me, &spec, input.look);
@@ -484,9 +494,11 @@ pub fn input(
         let (target_id, point) = match card.aim.as_str() {
             "creature" => (tgt.or(c.target).or_else(|| nearest(&scene, me_id, me, aim, card.reach + 0.4)).unwrap_or(0), aim),
             "self_or_ally" => (tgt.or(c.target.filter(|t| !hostile(conn, *t, me_id))).unwrap_or(0), aim),
-            // A dash goes the way I move, else back from where I face (a jump: toward it).
+            // A dash goes the way I move, else back from where I face (a jump: toward it). Facing
+            // where I walk and not aiming, that is the facing drawn, not the cursor.
             "dash" => {
-                let back = (me - aim).normalize_or(Vec2::NEG_Y);
+                let drawn = input.face.filter(|_| !input.faces_cursor(c.aims));
+                let back = drawn.map_or((me - aim).normalize_or(Vec2::NEG_Y), |f| -f.normalize_or(Vec2::Y));
                 let d = if input.dir != Vec2::ZERO { input.dir } else if skill == "jump" { -back } else { back };
                 (0, me + d * 2.0)
             }
@@ -654,7 +666,9 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
             // confirmed move (`live.rs` times one-shots on the display clock).
             if let Some((skill, t)) = c.predicted.clone().filter(|(s, _)| cards.by_name(s).is_none_or(|k| k.aim != "dash")) {
                 if let Some(a) = clip_of(cards.by_name(&skill), c.strikes, None) {
-                    out.insert(id, Action { start_ms: t, face: input.look, ..a });
+                    // Faces the cursor while it waits for the authority, if it is aimed there.
+                    let face = input.look.filter(|_| cards.by_name(&skill).is_some_and(|k| aims_at_cursor(&k.aim)));
+                    out.insert(id, Action { start_ms: t, face, ..a });
                     continue;
                 }
             }
