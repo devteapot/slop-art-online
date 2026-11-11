@@ -47,6 +47,25 @@ Two runs on one machine give byte-identical files (all 263: the models, `fixture
 
 22 lots have no model yet and are drawn as grey boxes: the Heron, the two smokehouses, the Store, the boatshed, the dry dock, the wash-house, the lehr house, the pot house, the cullet shed, the ash house, the lamp house, the Batch, the cistern and its house, the Readers' House, the thorn, the Crown bench, the peat barn, the turf house, the Hanger cottage and the Lintel. The slip, the Cone yard and the graveyard are open lots with no model and no height, so nothing is drawn there.
 
+## Layout pass 1: enclosures
+
+Added 2026-11-11 (branch `layout-1`, [Cullet's layout](CULLET_LAYOUT.md)). The plan now writes 114 **enclosures**: a rectangle, its walls and its contents, each with its cause. One generator, `gen_enclosure`, builds exactly what is written. It is a section of its own in `cullet.py` and changes none of the functions above it.
+
+- **Walls** (`e_wall`): `dry` (rough basalt, each stone its own height), `coped` (coursed, with a coping) or `stub` (a pulled-down house's wall, falling along its length, old limewash on its inner face), with gaps, driftwood gates and boarded gaps. One quad a stone. Neighbouring enclosures share a wall: each builds its west wall, and its east wall only at a terrace's end, so no two faces lie in one plane.
+- **Contents** (35 kinds, `c_privy` to `c_ash_sacks`): privies, lean-tos, a shed roofed with an upturned boat, peat stacks, rain butts, washing (blown north-east), hen runs with hens, dug beds, herb and flower squares, boats on trestles, nets on poles, wrack heaps and racks, cold frames, slates, cut stone, crucibles, cullet crates and a cullet-edged bed, timber and ship's knees, a handcart, a barrow, barrels, creels, benches, weeds, rubble, a standing hearth, flags, the bread board, a sundial, a trough, the ropewalk, cane wigwams, a door step, ash sacks.
+
+| Folder | Models | Triangles | Budget each |
+|---|---:|---:|---:|
+| `yard` | 30 | 24,872 | 3,000 |
+| `back_plot` | 39 | 21,478 | 3,000 |
+| `toft` | 5 | 5,954 | 3,500 |
+| `walled_garden` | 7 | 10,884 | 3,500 |
+| `oven_court` | 1 | 1,314 | 3,500 |
+| `drying_green` | 2 | 4,882 | 4,000 |
+| `wind_wall`, `ladder_corner`, `ropewalk`, `quarry_bench`, `graveyard_wall`, `sill`, `wynd_washing` | 30 | 11,176 | 600 to 3,000 |
+
+The plan now has 102 lengths of retaining wall (was 116: fewer and shorter drops) and 19 flights (was 17). The kit is 363 models and about 401,000 triangles (was 261 and 338,000). All 363 pass the checks. An enclosure's `ground` field (setts, earth, worked soil, quay flags) is for the ground pass to read; nothing reads it yet. Weak: walls do not block (fixtures never do); hens stand still; washing is stiff; the courts' privies are all one privy.
+
 ## Lots and fixtures
 
 A lot's model is found as before: the plan's `model` goes into the land and the `lot` row, and the client draws that file when it is on disk. Each kind of thing has its own folder, so an unbuilt lot never borrows another's model.
