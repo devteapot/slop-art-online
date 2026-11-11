@@ -344,11 +344,20 @@ pub struct DumpExtra<'w> {
     prefs: Res<'w, crate::keys::Prefs>,
     binds: Res<'w, crate::keys::Binds>,
     theme: Res<'w, ThemeState>,
+    pointer: Res<'w, crate::pointer::Pointer>,
+    cam: Res<'w, crate::camera::Cam>,
 }
 
 impl DumpExtra<'_> {
     fn json(&self) -> serde_json::Value {
-        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key()})
+        // The game's cursor (logical px in the window, and fractions of the picture), the view's
+        // yaw and zoom, and the ground point under the cursor (x, height, y): what a view turn or
+        // a zoom keeps or changes.
+        let size = crate::capture::size().as_vec2();
+        let cursor = self.pointer.pos.map(|p| serde_json::json!({"x": p.x, "y": p.y, "fx": p.x / size.x, "fy": p.y / size.y}));
+        let ground = self.cam.cursor_ground.map(|g| serde_json::json!([g.x, g.y, g.z]));
+        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
+            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground})
     }
 }
 
