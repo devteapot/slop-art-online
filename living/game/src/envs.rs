@@ -589,6 +589,7 @@ pub fn cutaway(
     cam: Query<&Transform, (With<Camera3d>, Without<Occluder>)>,
     mut q: Query<(Entity, &Transform, &Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>, Has<Landmark>)>,
     mut held: Local<std::collections::HashMap<Entity, f32>>,
+    mut under: Local<std::collections::HashSet<Entity>>,
 ) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
     if crate::perf::has("nocutaway") {
@@ -618,8 +619,13 @@ pub fn cutaway(
                 fade.target = 0.0;
             }
             held.remove(&e);
+            // For checks (`RUST_LOG=living_game::envs=debug`): once each time I come onto it.
+            if under.insert(e) {
+                debug!("cutaway: {} holds me up; not faded (me at {:.1}, {:.1}, {:.1})", model.map_or("a box", |m| m.file.as_str()), me.x, me.y, me.z);
+            }
             continue;
         }
+        under.remove(&e);
         let inside = { let l = local(eye).abs(); l.x < half.x + 0.6 && l.y < half.y + 0.6 && l.z < half.z + 0.6 };
         let pad = Vec3::splat(0.25);
         // How far the eye is from the box's nearest point.
