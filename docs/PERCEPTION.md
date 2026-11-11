@@ -374,7 +374,7 @@ SpacetimeDB documentation consulted (2026-11-11, crates and service pinned at 2.
   - It sends a look on changes over 4°, at most every 0.1 s, and a release when "face where you walk" stops aiming.
   - Until dev-box's look-2, it sends looks only while standing and releases the look while a direction is held (`controls::FACE_WHILE_MOVING`): before look-2 a look bent the walk itself, which play-test 5 felt as slower walking with a sideways drift. With look-2 a look no longer touches the travel, so the switch can let looks through while walking.
   - A look the bucket refused is retried. Any other refusal is not.
-  - The client draws its field from the heading on its own motion row (`steer::pose`), never from the cursor, so the field shows what the authority decides ([game brief](GAME_BRIEF.md), "Facing sight"). Since look-2 the authority's sight reads the facing, so the field should be drawn from `steer::facing` over the row's `face_*` fields ("Drawing it" above); with no look held the two are the same.
+  - The client draws its field from the facing on its own motion row: `steer::facing` over `steer::pose`'s travel heading and the row's `face_*` fields ("Drawing it" above), as the authority's `facing_at` (`sightfield::my_heading`, `fov-facing`). It never draws from the cursor, so the field shows what the authority decides ([game brief](GAME_BRIEF.md), "Facing sight").
 - **Data paths:** `human_face` reads the player's `steer` and `body` rows by key, and writes `steer` and `body` only on a change past the slack. The body update reaches the players who perceive it through their frames, as any turn does.
 
 #### Heard, not seen

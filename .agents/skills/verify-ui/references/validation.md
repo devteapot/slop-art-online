@@ -14,6 +14,12 @@
   - Frame cost of the bands (one more node fill per loose text).
   - Linen and Walnut on bar and offers.
 
+**2026-11-11, branch `fov-facing` (the field from look-2's facing; on main `28c8e7b0`).**
+- **Setup:** world `verify-ui-facing-1111-235055`, from main's look-2 authority.
+- **field 28/28:** the authority's perceived set against the client's field at four looks, with both sides read through the facing (`facing_at`).
+- **look-walk 66/69:** three steady-segment leg-crossing frames (head 45° 4/196, head 135° 11/221, loose 90° 3/97). That's look-2's legs; fov-facing changes only `sightfield.rs` and the field check.
+- **Not covered:** a walking look aside. With `FACE_WHILE_MOVING` off (look-walk's look-3 owns it), the client sends no look while walking, so `face_off` stays 0 while walking.
+
 **2026-11-11, branch `fov-senses` (my own senses from `my_senses`; on main `c8dbf60d`).**
 - **Setup:** world `verify-ui-shade-1111-230826`, island seed, real assets.
 - **Full suite: 198/199** (`checks-senses-full.json`). field 28/28, with the new check that the client's sight and five values equal the `character_senses` row after F5. The one failure is pick's new "two bodies stacked on one spot" check, which also fails on main `9ddd2b6d` and is routed to its owner.
