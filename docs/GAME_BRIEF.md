@@ -747,6 +747,59 @@ A review of the client at `6c8d1002` found six causes of poor feel. Five are fix
 
 New measurement aids: the feet log (`LIVING_GAME_FEET`) also records the authority time my body is drawn at, its segment, the one-shot asked of it and the camera's eye and pitch; the live script has `key:`, `mouse:` and `chat:` steps that drive the input systems as the window does.
 
+## Play-test 1 and feel pass 2 (2026-11-11)
+
+The owner played the island and found it hard to play. They reported:
+- walking like "an ice cube shifting on a table";
+- animations that glitch;
+- no jump;
+- things popping in and out of view;
+- a camera they could not turn;
+- a poor interface.
+
+A diagnosis came first. Its stills, logs and measurements are in `.local/living/playtest-1/` (git-ignored). Branch `feel-2` then fixed the client-side causes, one commit per fix. Before and after clips and measurements are in `.local/living/feel-2/`. Captures were headless runs of the real client on `verify-play-1`, plus scratch worlds for the jump. Presentation and input only, except the jump.
+
+- **Facing the cursor while walking** (`live.rs`, `twist.rs`, `anim.rs`):
+  - The clips have only forward gaits, so a body facing the cursor while it strafed or backed up slid its planted foot at 1.4–2 times its speed. Foot IK then let go every step.
+  - Now the legs keep to the travel: forward, or backward with the gaits reversed beyond 110° (forward again under 80°). The spine, chest, neck and head turn the rest of the way.
+  - Foot slid per metre walked: sideways 1.08 → 0.05 m, backwards 1.27 → 0.08 m, diagonally back 1.56 → 0.07 m. IK jumps per segment: 65/29/41 → 0/1/1.
+- **Stops** (`live.rs`, `ik.rs`, `anim.rs`):
+  - The legs walked on the spot for 0.5–0.8 s after the body stood. A held foot snapped up to 22 cm in one frame as the stop blended into the idle (the lock let go at its limit), then glided into place.
+  - Now the gait takes up a standing segment at once. A held foot more than 6 cm from the clip's place steps there (0.22 s, a 5 cm lift).
+  - Skating after a stop: median 72 → 20 cm. The standing clip shows 484 → 207 ms after the body stands. Stops with a snap over 10 cm: 19 → 6 of 19 (the rest are swing feet in the brake's glide).
+- **Dodge:** no fast-run frame before the dash, and no 0.6 s walk after a standing dodge.
+- **A walk on a road** (`anim.rs` `Motion::pace`):
+  - The rules speed bodies up on roads (`road_speed` 1.4), so a road walk played the run clip.
+  - The gait is now chosen at the body's own pace and steps at its real speed. Road walks at about 4 m/s: fast run 799 frames → brisk walk 838 frames, with the same slide (3–4% of the body's speed).
+- **Pop-in of buildings and scenery** (`fade.rs`, `envs::cutaway`, the toon shaders):
+  - The old cut-away hid outright anything tall within 5 m of you on the camera's side. The camera also sat inside walls it missed.
+  - Now a dithered fade follows a sight-line test against each thing's turned box. Things in the way fade to 20% drawn, and fully when the camera is inside them.
+  - It works through Bevy's visibility-range dither, so the prepasses drop the same pixels. An abrupt range gets no dither variant, so the never-cutting range ends in a crossfade.
+- **People** fade in and out of sight and into their houses. The sight rule itself (11 tiles by day) is untouched: laws-2 and lives-2 own it.
+- **Turning the view without turning you** (`pointer.rs`):
+  - A left drag, a two-finger pan or a middle drag turns the view, and the cursor stays on its ground point. In a headless run, facing held at 128° while the view turned +76° and then −109°.
+  - A pinch or the wheel zooms within 0.6–1.4 of the distance. A two-finger double tap aligns.
+  - A click captures the cursor: it is locked and hidden, and the game draws its own and feeds the UI's picking. Esc gives it back once panels are closed.
+  - A tap strikes on release; a press held 0.22 s strikes and aims.
+  - Facts checked in Bevy 0.20.1 and winit 0.30.13: macOS supports `Locked` only; a locked cursor reports a frozen position; a pan arrives as `MouseWheel` in pixels with touch phases; its coast is not marked.
+  - **Not driven on hardware:** capture, Esc release and the drawn cursor need a window and real input.
+- **Jump on Space** (`skills.rhai` `jump_*`, the rules' new `evades` trait, `jump.rs`):
+  - The rules, as proposals for the owner: a 1.6-tile hop the way you move or face, at 3.6 tiles/s; 2 energy; 0.6 s cooldown. It stops short of walls as a dodge does, and it doesn't evade.
+  - The height (0.45 m) is drawn only: a crouch, an arc with the legs drawn up, a landing dip, and no foot IK in the air.
+  - verify-player has a `jump` scene: the body moved 1.6 m and the blow landed.
+- **HUD:**
+  - Type is 10% larger than its 1080p design and never under 0.9 of it (it was 0.67 at 720p).
+  - F's tap never offers a gesture (`_shows().faces`), so it gathers from a berry bush instead of "face".
+
+**Open for the owner:**
+- the jump's rules above;
+- Shift is both run and the dodge (each run start also dodges);
+- the authority's 0.3 s brake glide after a player lets go;
+- whether a tap's strike on release (a click's length later) is acceptable, or the strike should leave the left button;
+- people appearing at 10–16 m while the view shows about 100 m (sight is a rule);
+- the zoom band, and whether a flick should coast;
+- jump and strafe takes in the clip pipeline would replace the procedural jump and the upper-body twist.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**
