@@ -11,6 +11,7 @@ mod clock;
 #[allow(dead_code)]
 mod sync;
 
+mod actions;
 mod anim;
 mod bodies;
 mod camera;
@@ -185,6 +186,8 @@ fn main() {
         app.add_plugins(sightfield::SightFieldPlugin);
         // A record of the session for the play report, when LIVING_GAME_RECORD names a directory.
         app.add_plugins(record::RecordPlugin);
+        // Every reducer call and its reply, when LIVING_GAME_ACTIONS names a file (actions.rs).
+        app.add_plugins(actions::ActionsPlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }
