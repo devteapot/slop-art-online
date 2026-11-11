@@ -17,11 +17,14 @@ use std::collections::HashMap;
 
 /// Uses of combat skills kept per character in `skill_use`.
 pub const USES_KEPT: usize = 24;
-/// How long a perceived event stays in `combat_seen` for the two involved (ms): the client
-/// reads each row once, by id. A refusal stays longer (`REFUSED_MS`), and a death and its
-/// witnesses longer still, for the death screen. Onlookers' rows stay `frame::ONLOOKER_MS`
-/// from their frame.
-const SEEN_MS: u64 = 1_500;
+/// How long a perceived event stays in `combat_seen` for the two involved (ms), as before
+/// frames: a subscribed client reads each row once, by id, but a reader that polls (a scripted
+/// player, verify-player's combat scenes) reads a second or more after the event, and 1.5 s
+/// lost the dodge scene's events on a busy host. Their rows are few (a fighter's own blows and
+/// those aimed at it), so the longer window costs little. A refusal stays as long
+/// (`REFUSED_MS`), and a death and its witnesses longer, for the death screen. Onlookers' rows
+/// stay `frame::ONLOOKER_MS` from their frame.
+const SEEN_MS: u64 = 4_000;
 const REFUSED_MS: u64 = 4_000;
 const DEATH_SEEN_MS: u64 = 120_000;
 
