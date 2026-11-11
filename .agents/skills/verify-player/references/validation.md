@@ -8,6 +8,14 @@ Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb`
 - `player-sso-island-215136` (island): `combat.py --scene death` 4 of 4: killed by a wolf, a `death` row with code `killed` and the wolf's id in `other`, its line "You were killed by …".
 - Earlier on the branch: `player-senses-204918` (senses 7 of 7, then 9 of 9 after the death case and a wait after a handback), `player-outcomes-210154` (outcomes 6 of 7, then 7 of 7 after waiting for the `own` line, which can come up to one release after its row).
 
+## 2026-11-11 ui-1 step 4: the bar, offer cards, face out of the lists (laptop)
+
+Branch `ui-1-step4` (origin/main merged at `5cd546da`), on the laptop's Docker SpacetimeDB 2.14.1, `scoped`, no model calls; world `verify-player-ui1d` (`$V launch --run player-ui1d --seed island`, joined as `Verifier`). The step changes no authority code; the rules are identical with every `_ui()` stripped (`living_rules` test), and its acts go through `human_act` and `use_skill` as before.
+
+- `offers.py` 17 of 17, `answers.py` 9 of 9 (the decline told to the walker, the player's outcome), `gesture.py` 10 of 10.
+- `offers.py` now has the walker ask for hide, not berries: the island's newcomer arrives with berries, so "accept without the goods" was accepted at once on a fresh world (an earlier run here: 13 of 17).
+- `combat.py --scene all`: 26 of 26 on `player-ui1c` before origin/main's `fix-place-free` (e3f0527f); 16 of 26 on `player-ui1d` after it. Every failure is a staged fight: the target is put on the nearest free tile, out of a strike's reach ("refused: out of reach"), and the jump finds "no room to jump". Not this branch's: its scenes need placing for the new `place_at`. Evidence `.local/living/verify/player-ui1d/combat.txt`.
+
 ## 2026-11-11 speech-2: whisper and call, refusals in the script's words (Spark)
 
 Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.

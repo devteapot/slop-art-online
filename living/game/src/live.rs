@@ -962,7 +962,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
 ///   (a headless run has no cursor); `lookwalk:PRESET[,key=value…]` sets how the body looks aside
 ///   while walking (`twist::LookWalk::parse`); `cursor:X,Y` puts the game's cursor there (fractions of the
-///   picture; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
+///   picture, or `@NAME`, a tagged node; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
 ///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
 ///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
@@ -990,7 +990,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   UI, `ui/hit.rs` `Tag`), `slide:A>B[:SECS]` holds the click at A and slides to B (a
 ///   title-bar drag, an item onto someone), `scroll:PX` swipes
 ///   two fingers over a window, `point:ID[:H]` puts the cursor on someone (hovering them; H m above their feet, default 0.3, e.g. 1.3 for the chest),
-///   `dodge:W|A|S|D` double-taps a direction, and `dump:NAME`
+///   `dodge:W|A|S|D` double-taps a direction, `weapon:toggle|draw|sheathe` is X, and `dump:NAME`
 ///   writes the game UI's state to `<dir>/NAME.json` (`ui::dump`);
 ///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
 ///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
@@ -1065,7 +1065,7 @@ fn script(
     target: Option<Res<crate::capture::Target>>,
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     (mut dump, mut taps, ui): (ResMut<crate::ui::Dump>, ResMut<crate::keys::DoubleTap>, Res<crate::ui::hit::UiPointer>),
-    (time, mut exit, cams, mut lw): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::twist::LookWalk>),
+    (time, mut exit, cams, mut weapon, mut lw): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::weapon::Weapon>, ResMut<crate::twist::LookWalk>),
 ) {
     // A point: X,Y as fractions of the picture, or @NAME, a tagged node of the game UI.
     let frac = |v: &str| match v.strip_prefix('@') {
@@ -1153,8 +1153,9 @@ fn script(
             true
         }
         "cursor" => {
+            // X,Y (fractions of the picture) or @NAME (a tagged node: hovering a slot, a button).
             s.pointing = None;
-            pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
+            pointer.scripted = frac(arg);
             true
         }
         "tap" => {
@@ -1232,6 +1233,15 @@ fn script(
                 Some((id, h)) => id.parse().ok().map(|id| (id, h.parse().unwrap_or(0.3))),
                 None => arg.parse().ok().map(|id| (id, 0.3)),
             };
+            true
+        }
+        "weapon" => {
+            // As X: `weapon:toggle` (or `draw`, `sheathe`).
+            weapon.scripted = Some(match arg {
+                "draw" => true,
+                "sheathe" => false,
+                _ => !weapon.drawn,
+            });
             true
         }
         "scroll" => {

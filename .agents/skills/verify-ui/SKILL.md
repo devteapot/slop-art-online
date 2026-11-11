@@ -1,6 +1,6 @@
 ---
 name: verify-ui
-description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), what you stand on never fading (stairs, terraces, the quay's edge, on a Cullet world), the cursor while the view turns or zooms (a two-finger pan, a pinch, a left drag), looking aside while walking (head, then chest, then the body on a curve; the look-walk presets), and later the skill bar with sheathe and draw, and Settings. Use when changing living/game/src/ui/*, the camera's fade (envs.rs cutaway), camera.rs, keys.rs, looks.rs, heard.rs, talk.rs, verbs.rs, pointer.rs, twist.rs, how live.rs turns a walking body's legs and upper body, or the live script, or when the screen shows something other than what the client received.
+description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), what you stand on never fading (stairs, terraces, the quay's edge, on a Cullet world), the cursor while the view turns or zooms (a two-finger pan, a pinch, a left drag), looking aside while walking (head, then chest, then the body on a curve; the look-walk presets), the cluster and skill bar (the rules' places, sheathe and draw, refusals, the tooltip), offers to the player (cards, Accept, Decline, terms, my own), and Settings. Use when changing living/game/src/ui/*, the camera's fade (envs.rs cutaway), camera.rs, keys.rs, looks.rs, heard.rs, talk.rs, verbs.rs, pointer.rs, pick.rs, combat.rs, weapon.rs, twist.rs, the skills' `_ui()` declarations, how live.rs turns a walking body's legs and upper body, or the live script, or when the screen shows something other than what the client received.
 ---
 
 # Verify the game interface
@@ -30,7 +30,7 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 
 ```bash
 S=.agents/skills/verify-ui/scripts
-$S/check.py --run $R                       # all scenarios: windows talk items themes pick turns look-walk (PASS/FAIL per check)
+$S/check.py --run $R                       # all scenarios but support: windows talk items themes pick turns look-walk bar offers (PASS/FAIL per check)
 LIVING_GAME_THEME=night $S/check.py --run $R windows talk items   # the same in a theme; evidence in <scenario>-night/
 $S/check.py --run $R windows               # one
 $S/check.py --run $R support               # on a Cullet world (`--seed cullet`): what you stand on never fades
@@ -46,8 +46,10 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | `slide:A>B[:SECS]` | Holds the click at A, slides to B, lets go: a title-bar drag, an item carried onto someone (a three-finger drag is the same press and move) |
 | `key:NAME:tap\|down\|up` | Any key by its `KeyCode` name (`KeyI`, `Escape`, `Enter`, `Tab`, `Digit1`, `AltLeft`) |
 | `type:TEXT`, `enter`, `tab`, `chat:open\|close` | Words in the box, said to whom it addresses; Tab; the box opened or closed (closing keeps its window) |
-| `dump:NAME` | Writes `NAME.json`: open windows (top last) with anchors and rectangles, the Menu list, the list of acts, the box and whom it addresses, settings, every tagged node shown with its centre, and the cursor pick: `under` (who is under the cursor, `living/game/src/pick.rs`), `hovered` (id, label: the nameplates shown as hovered), `targeted` (the target plate) and `seen` (each body's feet and head on screen, its depth and its distance from the cursor's ground point) |
+| `dump:NAME` | Writes `NAME.json`: open windows (top last) with anchors and rectangles, the Menu list, the list of acts, the box and whom it addresses, the notes shown, settings with the weapon (`extra.drawn`), the bar's slots (`extra.slots`) and the tooltip (`extra.tooltip`), every tagged node shown with its centre, and the cursor pick: `under` (who is under the cursor, `living/game/src/pick.rs`), `hovered` (id, label: the nameplates shown as hovered), `targeted` (the target plate) and `seen` (each body's feet and head on screen, its depth and its distance from the cursor's ground point) |
 | `point:ID[:H]` | Keeps the game's cursor on character ID as drawn, H m above their feet (default 0.3; 1.3 is the chest), frame after frame, until `cursor:` or another `point:` |
+| `cursor:X,Y` / `cursor:@TAG` | The game's cursor there (a slot, to hover it); `cursor:` takes it away |
+| `weapon:toggle\|draw\|sheathe`, `tap` | As X; a left tap on the world (a strike, or talk to a peaceful person) |
 | `menu:f@id:N`, `sync:NAME`, `shot:NAME`, `scroll:PX`, `dodge:W` | F's list on someone; wait for a scene; a photograph; two-finger scroll; a double tap |
 | `walk:DEG:S`, `hold:DEG`, `stop`, `look:DEG`, `lookwalk:SPEC` | Walk a compass direction for S seconds, or hold it until `stop`; look a compass direction (the cursor scheme's look, until `look:`); set the look-walk preset (`twist::LookWalk::parse`: `chest`, `head,body_s=0.3`) |
 | `cursor:X,Y`, `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | The cursor at fractions of the picture; a two-finger pan, a left drag or a pinch through the pointer's paths; no framing contexts (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
@@ -55,7 +57,8 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:0:give` finds `acts:0:give:3`):
 - buttons and Menu: `pack`, `menu`, `menu:Character|Skills|Log|Settings|Leave`;
 - windows: `win:<Win>:head`, `win:<Win>:close` with `<Win>` `Pack`, `Log`, `Skills`, `Settings` or `Person<ID>`;
-- a person window: `person:give|wave|appraise|more:<ID>` (More… opens every act, Trade… and Introduce yourself among them), its Give rows `person:gift:<ID>:<I>`, and its box `input:Person<ID>` (the log's `input:Log`);
+- a person window: `person:give|wave|appraise|more:<ID>` (More… opens every act, Trade… and Introduce yourself among them), its Give rows `person:gift:<ID>:<I>`, its offer cards' acts `person:offer:<ID>:<CARD>:<ACT>` (ACT 0 is the first skill on `offer`, Accept) and `person:dismiss:<ID>:<CARD>`, and its box `input:Person<ID>` (the log's `input:Log`);
+- the cluster: `bar:Primary|Secondary|Skill1|Skill2|Skill3|Jump|Dodge|Weapon|Extra4…Extra9`;
 - the log: `log:tab:0|1|2` (Heard, People, Events), `log:person:<I>`;
 - the list of acts: `acts:0:<skill>:<I>` (`talk`, `window`, `introduce`, `give`, `more`, …), its sub-list `acts:1:<item>:<I>`;
 - the pack: `pack:<item>:<I>`; know-how: `skill:<I>`; the tip: `tip:ok`, `tip:all`;

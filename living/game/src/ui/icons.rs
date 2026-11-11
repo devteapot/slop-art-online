@@ -120,7 +120,7 @@ impl Icons {
 pub fn build(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let mut icons = Icons::default();
     let mut all: Vec<(Glyph, u32)> = vec![(Glyph::MouseL, 48), (Glyph::MouseR, 48), (Glyph::Arrow, 64)];
-    for s in [SkillIcon::Sword, SkillIcon::Bow, SkillIcon::Fire, SkillIcon::Shield, SkillIcon::Dodge, SkillIcon::Heal, SkillIcon::Empty] {
+    for s in [SkillIcon::Sword, SkillIcon::Bow, SkillIcon::Fire, SkillIcon::Shield, SkillIcon::Dodge, SkillIcon::Heal, SkillIcon::Jump, SkillIcon::Empty] {
         all.push((Glyph::Skill(s), 128));
     }
     for s in [StatusKind::Hungry, StatusKind::Starving, StatusKind::Tired, StatusKind::Exhausted, StatusKind::Wasting, StatusKind::Recovering, StatusKind::InCombat, StatusKind::Talking] {
@@ -284,6 +284,14 @@ fn sdf(g: Glyph, p: Vec2) -> f32 {
         Glyph::Skill(SkillIcon::Heal) | Glyph::Status(StatusKind::Recovering) => {
             let plus = rbox(p, v(0.0, 0.0), v(0.2, 0.62), 0.12).min(rbox(p, v(0.0, 0.0), v(0.62, 0.2), 0.12));
             plus.min(circle(p, v(0.68, 0.68), 0.11)).min(circle(p, v(-0.66, -0.7), 0.08))
+        }
+        Glyph::Skill(SkillIcon::Jump) => {
+            // An arrow rising from a short stretch of ground, the arc of the leap beside it.
+            let ground = seg(p, v(-0.7, -0.74), v(0.7, -0.74), 0.07);
+            let shaft = seg(p, v(-0.12, -0.5), v(-0.12, 0.34), 0.09);
+            let head = tri(p, v(-0.5, 0.26), v(0.26, 0.26), v(-0.12, 0.82));
+            let leap = arc(p, v(0.62, -0.06), 0.42, 0.06, PI * 0.55, PI * 1.25);
+            ground.min(shaft).min(head).min(leap)
         }
         Glyph::Skill(SkillIcon::Empty) => seg(p, v(-0.3, 0.0), v(0.3, 0.0), 0.055).min(seg(p, v(0.0, -0.3), v(0.0, 0.3), 0.055)),
         Glyph::Status(StatusKind::Hungry) | Glyph::Status(StatusKind::Starving) => {
