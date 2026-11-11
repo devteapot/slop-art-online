@@ -14,8 +14,13 @@
 //!   them ("A wolf attacked you. Your weapon is drawn.").
 //! - **Shaped to be sent.** Residents will react to a drawn weapon once the authority has a
 //!   per-body `drawn` state, set through an act and carried in the projection (the Spark
-//!   coordinator's). [`Weapon::act`] is that act's node; [`send`] is the one place it would be
-//!   sent, and sends nothing until the act exists.
+//!   coordinator's; docs/INTERFACE.md example 1: `draw_spec`, `draw_ui`, a `stance` trait).
+//!   [`Weapon::act`] is that act's node; [`send`] is the one place it would be sent, and sends
+//!   nothing until the act exists.
+//! - **A restriction only.** Kept on this client until then, it can only stop this player's
+//!   own presses (an attack while sheathed draws instead); it grants nothing and changes nothing
+//!   the authority decides. The greyed skills are the rules' `hostile` ones until a `stance`
+//!   trait names them.
 
 use crate::net::Net;
 use bevy::prelude::*;
@@ -59,9 +64,10 @@ impl Weapon {
         send(net, self);
     }
 
-    /// The act that would tell the authority (not in the rules yet).
+    /// The act that will tell the authority, in the shape docs/INTERFACE.md example 1 gives
+    /// (`draw` taking the state as its item); not in the rules yet, so never sent.
     pub fn act(&self) -> serde_json::Value {
-        serde_json::json!({"do": if self.drawn { "draw" } else { "sheathe" }})
+        serde_json::json!({"do": "draw", "item": if self.drawn { "drawn" } else { "sheathed" }})
     }
 }
 

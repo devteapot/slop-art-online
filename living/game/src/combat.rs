@@ -112,8 +112,9 @@ pub struct Combat {
     predicted: Option<(String, f64)>,
     /// When I last pressed each skill (display ms), for the HUD until readiness arrives.
     pub pressed: HashMap<String, f64>,
-    /// The last refusal (why, display ms).
+    /// The last refusal (why, display ms), and of which skill.
     pub refusal: Option<(String, f64)>,
+    pub refused_skill: Option<String>,
     /// Which skill key is held (indicators), and since when.
     pub aiming: Option<String>,
     pub guarding: bool,
@@ -168,66 +169,45 @@ impl Cards {
     }
 }
 
-/// The bar's places and the rules' skills on them (interface D): which skill each key uses,
-/// chosen by how the rules aim and shape each bar skill, never by its name, so a skill the
-/// rules add takes a place without a client change.
-/// - `main`: LMB, RMB, then the three skill keys (Q E R, with 1–3 as twins): the first bar
-///   skill aimed at a creature; at a point with a small missile (an arrow); at its facing (a
-///   guard); at oneself or an ally (a heal); at a point with a wide missile (a bolt).
-/// - `jump`: a dash that does not evade; `dodge`: a dash that does.
-/// - `extra`: every other bar skill, in the bar's order, on 4–9.
+/// The bar's places and the rules' skills on them: `living_rules::ui::bar_places` (declared
+/// places first, then by aim), with the bar skills the rules call hostile (greyed while the
+/// weapon is sheathed, `weapon.rs`, until the rules' `stance` replaces it).
 #[derive(Resource, Default, Clone, Debug, PartialEq)]
 pub struct Roles {
-    pub main: [Option<String>; 5],
-    pub jump: Option<String>,
-    pub dodge: Option<String>,
-    pub extra: Vec<String>,
-    /// Bar skills the rules call hostile (attack skills: greyed while the weapon is sheathed).
+    pub bar: living_rules::ui::Bar,
     pub hostile: Vec<String>,
+    /// Each bar skill's label (`<name>_ui()`'s, else its name as words).
+    pub labels: HashMap<String, String>,
 }
 
 impl Roles {
-    pub fn of(cards: &Cards, shapes: Option<&living_rules::combat::Shapes>) -> Roles {
-        let mut bar: Vec<&SkillCard> = cards.all.iter().filter(|c| c.slot != NOT_ON_BAR).collect();
-        bar.sort_by_key(|c| c.slot);
-        let shape = |s: &str| shapes.and_then(|sh| sh.get(s));
-        let mut r = Roles::default();
-        let mut used: Vec<String> = Vec::new();
-        let take = |want: &dyn Fn(&SkillCard) -> bool, used: &mut Vec<String>| -> Option<String> {
-            let c = bar.iter().find(|c| !used.contains(&c.skill) && want(c))?;
-            used.push(c.skill.clone());
-            Some(c.skill.clone())
-        };
-        r.main[0] = take(&|c| c.aim == "creature", &mut used);
-        r.main[1] = take(&|c| c.aim == "point" && c.radius < BOLT_RADIUS, &mut used);
-        r.main[2] = take(&|c| c.aim == "facing", &mut used);
-        r.main[3] = take(&|c| c.aim == "self_or_ally", &mut used);
-        r.main[4] = take(&|c| c.aim == "point", &mut used);
-        r.jump = take(&|c| c.aim == "dash" && shape(&c.skill).is_some_and(|s| !s.evades), &mut used);
-        r.dodge = take(&|c| c.aim == "dash", &mut used);
-        r.extra = bar.iter().filter(|c| !used.contains(&c.skill)).take(crate::keys::EXTRA as usize).map(|c| c.skill.clone()).collect();
-        r.hostile = bar.iter().filter(|c| shape(&c.skill).is_some_and(|s| s.hostile)).map(|c| c.skill.clone()).collect();
-        r
-    }
-
     /// The skill a binding uses, if any.
     pub fn skill(&self, a: crate::keys::Act) -> Option<&str> {
         use crate::keys::Act;
+        use living_rules::ui::BarPlace;
         match a {
-            Act::Primary => self.main[0].as_deref(),
-            Act::Secondary => self.main[1].as_deref(),
-            Act::Skill1 => self.main[2].as_deref(),
-            Act::Skill2 => self.main[3].as_deref(),
-            Act::Skill3 => self.main[4].as_deref(),
-            Act::Extra(i) => self.extra.get(i as usize).map(|s| s.as_str()),
-            Act::Jump => self.jump.as_deref(),
-            Act::Dodge => self.dodge.as_deref(),
+            Act::Primary => self.bar.at(BarPlace::Primary, 0),
+            Act::Secondary => self.bar.at(BarPlace::Secondary, 0),
+            Act::Skill1 => self.bar.at(BarPlace::Skill, 0),
+            Act::Skill2 => self.bar.at(BarPlace::Skill, 1),
+            Act::Skill3 => self.bar.at(BarPlace::Skill, 2),
+            Act::Extra(i) => self.bar.at(BarPlace::Extra, i as usize),
+            Act::Jump => self.bar.at(BarPlace::Jump, 0),
+            Act::Dodge => self.bar.at(BarPlace::Dodge, 0),
             _ => None,
         }
     }
 
     pub fn is_hostile(&self, skill: &str) -> bool {
         self.hostile.iter().any(|h| h == skill)
+    }
+
+    pub fn dodge(&self) -> Option<&str> {
+        self.bar.dodge.as_deref()
+    }
+
+    pub fn extra(&self) -> &[String] {
+        &self.bar.extra
     }
 }
 
@@ -237,21 +217,39 @@ pub const BAR_ACTS: [crate::keys::Act; 13] = {
     [Primary, Secondary, Skill1, Skill3, Skill2, Extra(0), Extra(1), Extra(2), Extra(3), Extra(4), Extra(5), Jump, Dodge]
 };
 
-fn read_roles(cards: Res<Cards>, rules: NonSend<crate::verbs::Rules>, mut roles: ResMut<Roles>, mut names: ResMut<crate::ui::settings::SkillNames>) {
-    let r = Roles::of(&cards, rules.scripts.as_ref().map(|s| s.shapes()));
-    if *roles != r {
-        info!("combat: bar places {:?}, jump {:?}, dodge {:?}, more {:?}", r.main, r.jump, r.dodge, r.extra);
-        let n = crate::ui::settings::SkillNames { slots: r.main.clone(), extra: (0..crate::keys::EXTRA as usize).map(|i| r.extra.get(i).cloned()).collect(), jump: r.jump.clone(), dodge: r.dodge.clone() };
-        *names = n;
-        *roles = r;
+fn read_roles(rules: NonSend<crate::verbs::Rules>, mut roles: ResMut<Roles>, mut names: ResMut<crate::ui::settings::SkillNames>, mut revision: Local<Option<u32>>) {
+    // Once per compile of the world's rules.
+    let Some(sc) = rules.scripts.as_ref() else { return };
+    if *revision == Some(rules.revision) {
+        return;
     }
+    *revision = Some(rules.revision);
+    let bar = living_rules::ui::bar_places(sc);
+    let shapes = sc.shapes();
+    let hostile = bar.iter().filter(|(_, _, n)| shapes.get(n).is_some_and(|s| s.hostile)).map(|(_, _, n)| n.to_string()).collect();
+    let labels: HashMap<String, String> = bar.iter().map(|(_, _, n)| (n.to_string(), sc.ui(n).map_or_else(|| living_rules::ui::label_of(n), |u| u.label.clone()))).collect();
+    if let Ok(mut g) = LOOK_NAMES.write() {
+        *g = Some(sc.ui_specs().map(|u| (u.name.clone(), u.look.clone())).collect());
+    }
+    for e in sc.ui_errors() {
+        warn!("rules: {e} (shown with its defaults)");
+    }
+    use living_rules::ui::BarPlace;
+    info!("combat: bar places primary {:?}, secondary {:?}, keys {:?}, jump {:?}, dodge {:?}, more {:?}", bar.primary, bar.secondary, bar.skill, bar.jump, bar.dodge, bar.extra);
+    *names = crate::ui::settings::SkillNames {
+        slots: [bar.at(BarPlace::Primary, 0), bar.at(BarPlace::Secondary, 0), bar.at(BarPlace::Skill, 0), bar.at(BarPlace::Skill, 1), bar.at(BarPlace::Skill, 2)].map(|s| s.map(|n| labels.get(n).cloned().unwrap_or_else(|| n.to_string()))),
+        extra: (0..crate::keys::EXTRA as usize).map(|i| bar.at(BarPlace::Extra, i).map(|n| labels.get(n).cloned().unwrap_or_else(|| n.to_string()))).collect(),
+        jump: bar.jump.as_ref().map(|n| labels.get(n).cloned().unwrap_or_else(|| n.clone())),
+        dodge: bar.dodge.as_ref().map(|n| labels.get(n).cloned().unwrap_or_else(|| n.clone())),
+    };
+    *roles = Roles { bar, hostile, labels };
 }
 
 /// How a skill looks on this client.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Look {
     /// Clips its move plays (one per press, in turn), their rate, and a pose to hold.
-    pub clips: &'static [&'static str],
+    pub clips: Vec<&'static str>,
     pub rate: f32,
     pub hold: Option<f32>,
     /// Its release draws a slash.
@@ -261,33 +259,73 @@ pub struct Look {
     pub icon: SkillIcon,
 }
 
-/// A missile at least this wide is drawn as a bolt.
-const BOLT_RADIUS: f32 = 0.25;
 
-/// How a skill looks: the skills drawn for by name, any other from how the rules aim it.
-pub fn look(card: &SkillCard) -> Look {
-    let l = |clips: &'static [&'static str], rate: f32, hold: Option<f32>, icon: SkillIcon| Look { clips, rate, hold, slash: false, bolt: false, icon };
-    match card.skill.as_str() {
-        "strike" => Look { slash: true, ..l(&["sword_slash", "sword_overhead", "sword_thrust"], 2.8, None, SkillIcon::Sword) },
-        "attack" => Look { slash: true, ..l(&["sword_slash"], 2.0, None, SkillIcon::Sword) },
-        "bowshot" | "shoot" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
-        "throw" => l(&["attack"], 1.3, None, SkillIcon::Sword),
-        "firebolt" => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
-        "heal" => l(&["cast"], 2.6, None, SkillIcon::Heal),
-        "block" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
+/// The names each skill's look is made of (its `<name>_ui()` look, or the defaults by aim:
+/// `living_rules::ui`), read when the rules compile (`read_roles`). Kept outside the ECS so the
+/// draw paths that take a card (`clip_of`, `vfx.rs`, the bar) read it as they read the card.
+static LOOK_NAMES: std::sync::RwLock<Option<HashMap<String, living_rules::ui::Look>>> = std::sync::RwLock::new(None);
+
+/// The client's theme table for clip families (docs/INTERFACE.md §4: the client maps a family to
+/// its clips, rates and held pose; `BEATS` times them to the windup).
+fn clip_family(name: &str) -> (&'static [&'static str], f32, Option<f32>) {
+    match name {
+        "slash" => (&["sword_slash"], 2.8, None),
+        "overhead" => (&["sword_overhead"], 2.8, None),
+        "thrust" => (&["sword_thrust"], 2.8, None),
+        "shoot" => (&["bow_shoot"], 3.4, None),
+        "throw" => (&["attack"], 1.3, None),
+        "cast" => (&["cast"], 2.2, None),
+        "guard" => (&["block"], 2.2, Some(0.42)),
         // The dash on the rules' track (2.6 m at 5.2 m/s): the clip carries no travel of its own.
-        "dodge" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
+        "dash" => (&["dodge"], 1.0, None),
         // Drawn by jump.rs over whatever the body plays (no jump take yet).
-        "jump" => l(&[crate::jump::CLIP], 1.0, None, SkillIcon::Dodge),
-        _ => match card.aim.as_str() {
-            "point" if card.radius >= BOLT_RADIUS => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
-            "point" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
-            "facing" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
-            "dash" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
-            "self_or_ally" => l(&["cast"], 2.6, None, SkillIcon::Heal),
-            "creature" => Look { slash: true, ..l(&["sword_slash"], 2.0, None, SkillIcon::Sword) },
-            _ => l(&[], 1.0, None, SkillIcon::Empty),
-        },
+        "jump" => (&[crate::jump::CLIP], 1.0, None),
+        _ => (&[], 1.0, None),
+    }
+}
+
+/// The client's theme table for skill icons.
+fn icon_named(name: Option<&str>) -> SkillIcon {
+    match name {
+        Some("sword") => SkillIcon::Sword,
+        Some("bow") => SkillIcon::Bow,
+        Some("fire") => SkillIcon::Fire,
+        Some("shield") => SkillIcon::Shield,
+        Some("dodge") => SkillIcon::Dodge,
+        Some("heal") => SkillIcon::Heal,
+        _ => SkillIcon::Empty,
+    }
+}
+
+/// How a skill looks on this client: its look names through the theme tables. No skill name is
+/// matched: a skill the rules add, or restyle, shows by its declaration.
+pub fn look(card: &SkillCard) -> Look {
+    let names = LOOK_NAMES.read().ok().and_then(|g| g.as_ref().and_then(|m| m.get(&card.skill).cloned()));
+    let names = names.unwrap_or_else(|| by_card(card));
+    let mut clips: Vec<&'static str> = Vec::new();
+    let (mut rate, mut hold) = (1.0, None);
+    for (i, f) in names.clips.iter().enumerate() {
+        let (c, r, h) = clip_family(f);
+        clips.extend_from_slice(c);
+        if i == 0 {
+            (rate, hold) = (r, h);
+        }
+    }
+    Look { clips, rate, hold, slash: names.effect == Some("slash"), bolt: names.effect == Some("bolt"), icon: icon_named(names.icon) }
+}
+
+/// Before the rules compile here: the look by the card's aim, as `living_rules::ui::look_by_aim`
+/// gives it.
+fn by_card(card: &SkillCard) -> living_rules::ui::Look {
+    let l = |icon: &'static str, clip: &'static str, effect: Option<&'static str>| living_rules::ui::Look { icon: Some(icon), clips: vec![clip], effect };
+    match card.aim.as_str() {
+        "point" if card.radius >= living_rules::ui::BOLT_RADIUS => l("fire", "cast", Some("bolt")),
+        "point" => l("bow", "shoot", Some("arrow")),
+        "facing" => l("shield", "guard", None),
+        "dash" => l("dodge", "dash", None),
+        "self_or_ally" => l("heal", "cast", None),
+        "creature" => l("sword", "slash", Some("slash")),
+        _ => living_rules::ui::Look::default(),
     }
 }
 
@@ -392,6 +430,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
             }
             seen::REFUSED => {
                 c.refusal = Some((r.note.clone(), now));
+                c.refused_skill = cards.by_code(r.skill).map(|k| k.skill.clone());
                 if c.predicted.as_ref().is_some_and(|(s, _)| cards.code(s) == r.skill) {
                     c.predicted = None;
                 }
@@ -522,7 +561,7 @@ pub fn input(
             }
         }
         // The dodge's default: a double tap of a direction key, that way.
-        if let (Some(v), Some(s)) = (taps.fired, roles.dodge.as_deref()) {
+        if let (Some(v), Some(s)) = (taps.fired, roles.dodge()) {
             let (up, right) = cam.control_axes();
             let d = (up * v.y + right * v.x).normalize_or_zero();
             presses.push((s.to_string(), Some(me + d * 2.0), None));

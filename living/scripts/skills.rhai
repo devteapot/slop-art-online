@@ -1183,6 +1183,18 @@ fn seize_combat() { #{ aim: "creature", dares: true } }
 fn tend_combat() { #{ aim: "creature" } }
 // The player's skill bar, in order (the game binds LMB, RMB, Q, E, R, Shift, Space).
 fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump"] }
+// How the bar's skills are presented (docs/INTERFACE.md, step 2): where each sits, the input it
+// takes and its named look. Presentation only: it grants nothing, and what a skill may do stays
+// in its `_combat()` and `_check`. Q blocks, E heals, R casts the fire bolt (1–3 are their
+// twins); Space jumps; a double tap of a direction dodges.
+fn strike_ui() { #{ label: "Strike", on: "bar", place: "primary", look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" }, running: #{ show: "windup" } } }
+fn bowshot_ui() { #{ label: "Bow shot", on: "bar", place: "secondary", input: "aim_point", marker: "line", look: #{ icon: "bow", clip: "shoot", effect: "arrow" }, running: #{ show: "windup" } } }
+fn block_ui() { #{ label: "Block", on: "bar", place: "skill", order: 0, input: "hold", marker: "arc", look: #{ icon: "shield", clip: "guard" }, running: #{ show: "held" } } }
+fn heal_ui() { #{ label: "Heal", on: "bar", place: "skill", order: 1, look: #{ icon: "heal", clip: "cast" }, running: #{ show: "windup" } } }
+fn firebolt_ui() { #{ label: "Fire bolt", on: "bar", place: "skill", order: 2, input: "aim_point", marker: "circle", look: #{ icon: "fire", clip: "cast", effect: "bolt" }, running: #{ show: "windup" } } }
+fn dodge_ui() { #{ label: "Dodge", on: "bar", place: "dodge", look: #{ icon: "dodge", clip: "dash" } } }
+fn jump_ui() { #{ label: "Jump", on: "bar", place: "jump", look: #{ icon: "dodge", clip: "jump" } } }
+
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }

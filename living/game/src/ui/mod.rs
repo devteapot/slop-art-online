@@ -26,6 +26,7 @@ pub mod model;
 mod numbers;
 mod overhead;
 mod pack;
+pub mod prim;
 pub mod people;
 mod prompt;
 mod sample;
@@ -80,15 +81,16 @@ impl Plugin for UiPlugin {
             .init_resource::<people::Hints>()
             .init_resource::<prompt::Tip>()
             .init_resource::<pack::Carrying>()
+            .init_resource::<prim::Slots>()
             .configure_sets(Update, UiInput.in_set(crate::phase::Phase::Input).before(crate::controls::movement))
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
             .init_resource::<ThemeState>()
             // The UI's trees are spawned once the theme is known, and again on each new theme.
-            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
+            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, prim::spawn_tooltip, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
-        let widgets = (cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
-        let windows = (people::update, people::hints, prompt::update, say::update, pack::update);
+        let widgets = ((cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
+        let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
         } else {
