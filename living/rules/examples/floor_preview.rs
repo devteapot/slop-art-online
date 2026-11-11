@@ -144,11 +144,11 @@ fn main() {
     }
     let _ = writeln!(out, "props {}: {props:?}", land.props.len());
     let _ = writeln!(out, "rivers {}, dry beds {}, lakes {}, sites {}", land.rivers.len(), land.dry_beds.len(), land.lakes.len(), land.sites.len());
-    let mut tiles = [0usize; 8];
+    let mut tiles = [0usize; 10];
     for &t in &hosted.tiles {
         tiles[t as usize] += 1;
     }
-    let _ = writeln!(out, "hosted tiles by class (grass forest water sand rock dirt road wall): {tiles:?}");
+    let _ = writeln!(out, "hosted tiles by class (grass forest water sand rock dirt road wall drop low): {tiles:?}");
     // Places worth a look: each style's first square, the middle of the widest roads, gates.
     let mut seen = Vec::new();
     for s in &land.settlements {
