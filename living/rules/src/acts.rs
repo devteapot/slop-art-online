@@ -77,4 +77,23 @@ mod tests {
         assert!(parse(json!({"do": "goto", "target": {"place": "camp"}}), None, &Default::default()).is_ok());
         assert!(parse(json!({"first": [{"do": "eat", "item": "food"}]}), None, &Default::default()).is_err());
     }
+
+    /// An answer names the offer or proposal it answers; without one it is the act it always
+    /// was, stored the same.
+    #[test]
+    fn answers_carry_what_they_name() {
+        let shapes = Default::default();
+        let plain = parse(json!({"do": "accept", "target": {"id": 4}}), None, &shapes).unwrap();
+        assert_eq!((plain.offer, plain.record), (None, None));
+        assert_eq!(to_json(&plain), r#"{"do":{"skill":"accept","target":{"id":4}}}"#);
+        let a = parse(json!({"do": "accept", "target": {"id": 4}, "offer": 17}), None, &shapes).unwrap();
+        assert_eq!(a.offer, Some(17));
+        assert_eq!(from_json(&to_json(&a)).unwrap(), a);
+        let d = parse(json!({"do": "decline", "target": {"id": 4}, "record_id": "12"}), None, &shapes).unwrap();
+        assert_eq!((d.skill.as_str(), d.offer, d.record), ("decline", None, Some(12)));
+        assert_eq!(parse(json!({"do": "decline", "target": {"id": 4}, "offer": 0}), None, &shapes).unwrap().offer, None);
+        assert!(parse(json!({"do": "accept", "target": {"id": 4}, "offer": "the fish"}), None, &shapes).unwrap_err().contains("the id of the trade offer"));
+        // A skill that answers nothing ignores the words, as it did.
+        assert_eq!(parse(json!({"do": "give", "target": {"id": 4}, "item": "fish", "offer": "the fish"}), None, &shapes).unwrap().offer, None);
+    }
 }

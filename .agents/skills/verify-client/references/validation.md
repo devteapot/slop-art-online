@@ -1,5 +1,19 @@
 # Client protocol validation
 
+## 2026-11-11 speech-2 (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `run.py` `client-speech4`: every check passes (33), with three `speech_card` rows. `client-speech2` ran on a module rebuilt in the middle of the refusal refactor and is superseded.
+- After merging origin/main (`93019a3`): `client-speech6`, every check passes (34, `my_offers` and `my_heard` both in the own-state views).
+- After merging origin/main (`48cd022`, fov-1): `client-speech9`, every check passes (39); `heard` (fov-1's) and `line_heard` (who heard a line) both private, `heard_sounds` and `my_heard` both scoped.
+
+## 2026-11-11 speech-1: heard, my_heard, speech_card (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `run.py` (`client-speech1`): every check passes, including the new "speech_card is public (the ways of speaking)" and "my_heard holds each player's own lines, and none for an anonymous client" (each identity 2 lines). The reducer matrix had 221 calls, 0 mismatches: `human_speak` is accepted for a joined identity, refused for an unknown way, and refused for an anonymous one. Private table visibility covers 71 tables, `heard` among them. The probe's target dir was linked to the worker's own (`.local/living/verify/target-client` → `$CARGO_TARGET_DIR/client`).
+
 ## 2026-11-11 fov-1: the field of view (dev-box)
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).

@@ -27,6 +27,7 @@ LIVING_STDB_URL to its published port on 127.0.0.1 (bound to 127.0.0.1 or 0.0.0.
 """
 import argparse
 import glob
+import hashlib
 import json
 import os
 import signal
@@ -39,6 +40,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 LIVING = ROOT / "living"
+# The seed's script, composed as the authority composes a seed's laws at creation (one Python
+# copy of `floors::compose`, shared with living/tools/trials.py).
+sys.path.insert(0, str(LIVING / "tools"))
+from install_script import OVERLAY_MARK, installed, same_script, seed_json, seed_script, without_world_laws  # noqa: E402
 STDB = str(LIVING / "tools/stdb")
 URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
 # The shared server, or a worker's own (LIVING_STDB_CONTAINER, with LIVING_STDB_URL naming its
@@ -177,21 +182,35 @@ def launch(a):
     stdb("publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y")
     # A seed with its own laws (`laws` or `laws_file`, a Rhai overlay) had them composed over the
     # shipped script and installed when its world was created; installing the plain script now
-    # would drop them. Every other world gets the working tree's script, as before.
-    seed_file = Path(a.seed if a.seed.startswith("/") else LIVING / "seeds" / a.seed).with_suffix(".json") if a.seed != "none" else None
-    seed_json = json.loads(seed_file.read_text()) if seed_file and seed_file.exists() else {}
-    st["seed_laws"] = bool(str(seed_json.get("laws") or "").strip() or seed_json.get("laws_file"))
+    # would drop them. Every other world gets the working tree's script, as before. `none` (a
+    # floor module) gets it too; `create_floor` composes the laws of the seed it is given.
+    # `seed_script` is the seed's script as the authority composes it (install_script.py, the one
+    # Python copy of `floors::compose`, shared with trials.py): the read-back below checks it.
+    source, overlay = seed_script(a.seed)
+    st["seed_laws"] = bool(overlay)
+    owner = admin_token()
     if st["seed_laws"]:
-        log(st, "the seed carries its own laws: kept as installed at creation (no install_script)")
+        how = "the seed carries its own laws: kept as installed at creation (no install_script)"
     else:
         # Over HTTP: the script is past the 128 KiB a command-line argument may hold.
-        code, body = http(f"/v1/database/{st['db']}/call/install_script", [(LIVING / "scripts/skills.rhai").read_text()], admin_token(), timeout=180)
+        code, body = http(f"/v1/database/{st['db']}/call/install_script", [source], owner, timeout=180)
         if code != 200:
+            save(st)
             sys.exit(f"install_script failed: {code} {body.strip()[-4000:]}")
+        how = "installed skills.rhai"
+    # Read back what the world runs: the seed's laws composed over the working tree's script (or
+    # that script alone). A fresh world with laws that fails this composed them otherwise than
+    # install_script.compose_laws; a --keep-data world keeps the script of its creation, which an
+    # edit of skills.rhai or the laws since makes stale (install_script.py DB --seed SEED renews it).
+    if not same_script(installed(st["db"], owner), source):
+        save(st)
+        sys.exit(f"{st['db']} does not run seed {a.seed}'s script ({'its laws composed over ' if overlay else ''}living/scripts/skills.rhai) read back from its `script` row"
+                 + ("; with --keep-data run `python3 living/tools/install_script.py " + st["db"] + " --seed " + a.seed + "`" if overlay and keep else ""))
+    st["script_sha256"] = hashlib.sha256(source.encode()).hexdigest()
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)
-    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, perception {st['perception']}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''})")
+    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, perception {st['perception']}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''}); {how}; the `script` row read back is the seed's script (sha256 {st['script_sha256'][:12]})")
 
 
 def doctor(a):
@@ -219,6 +238,7 @@ def doctor(a):
         time.sleep(4)
         t1 = ticks()
         checks[f"world is ticking (paused={paused}, ticks {t0} -> {t1} in 4 s)"] = not paused and None not in (t0, t1) and t1 > t0
+        laws_check(st, owner, checks)
     wasm = wasm_mount() / st.get("wasm", "living_authority.wasm")
     src = max((p.stat().st_mtime for d in ("authority/src", "rules/src") for p in (LIVING / d).rglob("*.rs")), default=0)
     checks["published module is newer than authority and rules sources"] = wasm.exists() and wasm.stat().st_mtime >= src
@@ -227,6 +247,39 @@ def doctor(a):
     for k, v in checks.items():
         print(("ok   " if v else "FAIL ") + k)
     sys.exit(0 if all(checks.values()) else 1)
+
+
+def laws_check(st, owner, checks):
+    """Whether the world runs its seed's laws: the installed `script` row read back ends with the
+    seed's overlay (worlds/cullet/laws.rhai on Cullet), or, for a seed without laws, carries no
+    overlay; and a seed's `day_minutes` is the world's day. A scene that installed its own script
+    since launch fails this on purpose: the world no longer runs its seed's laws."""
+    seed = st.get("seed", "world")
+    if seed == "none":
+        checks["seed laws: a floor module (seed none) gets its laws from create_floor; not checked"] = True
+        return
+    sj = seed_json(seed)
+    if sj is None:
+        checks[f"seed {seed} found under living/seeds"] = False
+        return
+    _, overlay = seed_script(sj)
+    made = installed(st["db"], owner)
+    body = without_world_laws(made or "").rstrip("\n")
+    if overlay:
+        laws = sj.get("laws_file") or "laws"
+        ok = OVERLAY_MARK in body and body.endswith(overlay.rstrip("\n"))
+        checks[f"installed script carries seed {seed}'s laws ({laws}, {len(overlay)} bytes)"] = ok
+    else:
+        checks[f"installed script is the shipped one without a floor overlay (seed {seed} has no laws)"] = made is not None and OVERLAY_MARK not in body
+    if sj.get("day_minutes") is not None:
+        day = q_rows(st["db"], owner, "SELECT day_ms FROM world")
+        got = day[0][0] if day else None
+        checks[f"world day is the seed's day_minutes {sj['day_minutes']} (day_ms {got})"] = got == round(float(sj["day_minutes"]) * 60000)
+
+
+def q_rows(db, token, text):
+    code, body = http(f"/v1/database/{db}/sql", text, token, raw=True)
+    return json.loads(body)[0]["rows"] if code == 200 else []
 
 
 def player(a):
