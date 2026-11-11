@@ -1,6 +1,14 @@
 # Validation record (generation)
 
 
+## 2026-11-11 kit-1: Cullet's lots name their models (dev-box)
+
+Branch `kit-1` (origin/main `a107fdfa` merged, head `cba7d89b` plus the docs commit), own container `kit1-stdb` (2.14.1, port 3316, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. Evidence under the worktree's `.local/living/verify/`. The seed changed only in its plan lots' content: 73 lots carry `model` (`cullet/<folder>/<id>.glb`), every lot a `seed`, and three glasshouses a `repair` of 0.9; no shape changed, so no maintain pass.
+
+- `generation-kit1b-20261111-165531` (`--feature worlds --seeds cullet,plan-test`): cullet 65 and plan-test 72 checks pass; `land` digests equal `floor_preview`'s; original seeds unchanged. Before the merge, `generation-kit1-20261111-163847`: cullet 64, plan-test 71.
+- The real game client connected to `verify-kit1-cullet-170011` (a fresh player, headless): digests matched (tiles `07290076efd70ae6`, heights `bc0680832fd92c40`, layout `bc262d3ed04f5cb2`), the `lot` rows' models drew, none reported as not on disk.
+- Not covered: `authored`, `guards`, the other seeds (unchanged by this branch).
+
 ## 2026-11-11 drop-1: drop (8) and low (9) tiles (dev-box)
 
 Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).

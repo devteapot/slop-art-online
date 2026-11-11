@@ -115,7 +115,7 @@ Open questions for the owner's walk: whether the retaining walls' 0.4 m coping s
 ## Verification (2026-11-11)
 
 - `gen_cullet.sh` twice and `cullet_kit_check.py --again`: 261 of 261 on every check.
-- `set -o pipefail; just living-check`: see the branch's report.
-- verify-generation on the changed seed: see the branch's report.
+- `set -o pipefail; just living-check` exits 0 after merging `origin/main` (bible-1, goods-1, drop-1): authority WASM, mind, both observers, the game client; `cargo test -p living-rules` 155 passed, 8 ignored.
+- verify-generation `--feature worlds --seeds cullet,plan-test` on the dev-box's own container (`kit1-stdb`, SpacetimeDB 2.14.1, port 3316), run `generation-kit1b-20261111-165531`: cullet 65 and plan-test 72 checks pass, `land` digests equal `floor_preview`'s, original seeds unchanged. The seed changed only in what its lots carry (a model path and a seed each, the glasshouses' repair).
 - The game client, headless, connected to a scratch Cullet world on the dev-box's own container (`kit1-stdb`, SpacetimeDB 2.14.1): the land's digests matched the authority's, the 75 `lot` rows drew their models or boxes and the fixtures stood with them, on the quay, Low Row, a wynd, the Cone and the mole.
 - The game client, headless, look-dev: stills of the quay, the net lofts, a wynd, each Row, the Crown, the Cone, the mole and the Ladder at 13:00, 18:30 and 21:30; a contact sheet of 31 models through the asset view with a 1.75 m figure. The page is `.local/kit-1/index.html` on the dev-box.
