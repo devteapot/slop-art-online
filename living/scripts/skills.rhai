@@ -6,7 +6,6 @@
 
 fn laws() {
     #{
-        sight_day: 11.0, sight_night: 6.0, sight_torch: 9.0, hearing: 9.0,
         fire_warmth: 3.5, shelter_warmth: 2.5,
         gestation_days: 1.0, bond_window_s: 120.0,
         crowd: 6, danger_near: 8.0, danger_far: 12.0,
@@ -29,6 +28,36 @@ fn laws() {
         // Seconds a played character stands with no connection of its person before the
         // world's minds take it over (it keeps living; the person takes it back on return).
         takeover_s: 30.0,
+    }
+}
+
+// ---- senses (a law per creature, on the hot path) -----------------------------------
+// Distances are in tiles, and a tile is one metre. The engine asks `senses(a)` for a creature's
+// state and keeps the answer for every creature in the same state: the key is only what the
+// law reads (here, whether it is night and whether the creature carries a torch). A passive or
+// a skill that changes how far someone sees or hears is a line here, at no cost per look, as
+// long as `reach` below still bounds it.
+
+// How far one sees in each light: by day, at night with a lit torch in the pack, at night.
+fn sight_in(light) { switch light { "day" => 11.0, "torch" => 9.0, _ => 6.0 } }
+// How far speech carries to the ear.
+fn hearing_of_people() { 9.0 }
+fn light_of(a) { if !a.night { "day" } else if inv(a, "torch") > 0 { "torch" } else { "night" } }
+
+fn senses(a) { #{ sight: sight_in(light_of(a)), hearing: hearing_of_people() } }
+
+// A whole number of metres without its ".0" (for descriptions).
+fn metres(x) { if x == x.floor() { `${x.to_int()}` } else { `${x}` } }
+
+fn senses_law() {
+    let night_most = if sight_in("torch") > sight_in("night") { sight_in("torch") } else { sight_in("night") };
+    #{
+        cadence: "hot",
+        topic: "senses",
+        // The farthest anyone sees by day and by night, and hears: the engine gathers onlookers
+        // within these before testing each one's own senses, and holds every answer to them.
+        reach: #{ day: sight_in("day"), night: night_most, hearing: hearing_of_people() },
+        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${metres(sight_in("day"))} m; at night ${metres(sight_in("night"))} m, or ${metres(sight_in("torch"))} m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries ${metres(hearing_of_people())} m.`,
     }
 }
 

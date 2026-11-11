@@ -175,6 +175,57 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
     }
 }
 
+/// The context for a law of a creature on the hot path (`senses`), with only the fields its
+/// plan reads: a law that reads whether it is night and one item of the pack costs a clock read
+/// and one inventory lookup, not a whole [`facts`].
+pub fn law_ctx(ctx: &ReducerContext, id: u32, w: &World, now: u64, plan: &living_rules::script::context::Plan) -> SkillCtx {
+    use living_rules::script::context::{Keys, ACTOR, TOP};
+    let top = |f: &str| plan.top & (1 << TOP.iter().position(|t| *t == f).expect("a top-level field")) != 0;
+    let mut c = SkillCtx { night: common::night(w, now), ..Default::default() };
+    if top("hour") {
+        c.hour = common::hour(w, now);
+    }
+    if top("season") {
+        c.season = common::season(ctx, now).into();
+    }
+    if top("raining") {
+        c.raining = crate::town::raining(ctx);
+    }
+    if !top("actor") {
+        return c;
+    }
+    let reads = |f: &str| plan.actor & (1 << ACTOR.iter().position(|t| *t == f).expect("an actor field")) != 0;
+    // Fields only `facts` (or a skill's context) works out: take them all.
+    const CHEAP: [&str; 11] = ["id", "kind", "inv", "knows", "stage", "age", "life", "speed", "strength", "endurance", "vitality"];
+    if ACTOR.iter().any(|f| !CHEAP.contains(f) && reads(f)) {
+        c.actor = facts(ctx, id, now);
+        return c;
+    }
+    c.actor.id = id;
+    if ["kind", "stage", "age", "life"].iter().any(|f| reads(f)) {
+        if let Some(ch) = ctx.db.character().id().find(id) {
+            let age = common::age_days(&ch, w, now);
+            c.actor.stage = common::stage_of(&ch, w, now).name().to_string();
+            c.actor.life = common::life_of(&ch.kind).fraction(age, common::pace(w));
+            c.actor.age = age;
+            c.actor.kind = ch.kind;
+        }
+    }
+    if reads("inv") {
+        c.actor.inv = match &plan.actor_inv {
+            Keys::Only(keys) => keys.iter().map(|k| (k.clone(), common::inv_count(ctx, id as u64, k))).filter(|(_, n)| *n > 0).collect(),
+            Keys::All => common::inv_list(ctx, id as u64),
+        };
+    }
+    if reads("knows") {
+        c.actor.knows = common::knows(ctx, id);
+    }
+    if ["speed", "strength", "endurance", "vitality"].iter().any(|f| reads(f)) {
+        c.actor.genes = (*common::genes_of(ctx, id)).clone();
+    }
+    c
+}
+
 pub fn body_state(ctx: &ReducerContext, id: u32, now: u64) -> Result<living_rules::script::BodyState, String> {
     common::scripts(ctx).body_state(&living_rules::script::SkillCtx {
         actor: facts(ctx, id, now),
@@ -1201,11 +1252,6 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                             crate::woken::engage(ctx, s.owner, me, "theft", true, now);
                         }
                         witnessed(ctx, now, at, "took", me, s.owner, &format!("{{a}} took {qty} {item} from {{b}}'s {}", s.kind), 0.5, &[me]);
-                        if let Some(owner) = ctx.db.character().id().find(s.owner) {
-                            if owner.alive && ctx.db.body().id().find(owner.id).map_or(false, |b| dist(pos(&b, now), at) <= living_rules::SIGHT) {
-                                // The owner sees it happen (already included in witnesses).
-                            }
-                        }
                     }
                 }
             }

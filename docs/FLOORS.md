@@ -243,14 +243,15 @@ Most of a per-character call is building the facts map (`script.rs:690-694`), no
   }
   fn laws() {
       let l = base_laws();
-      l.sight_day = 7.0;
       l.fire_warmth = 5.0;
       l
   }
+  // Sight is the per-creature `senses` law since laws-2 (docs/WORLD_RULES.md, "Laws").
+  fn sight_in(light) { if light == "day" { 7.0 } else { base_sight_in(light) } }
   ```
 
 - **Test** (`floors::tests::one_build_two_floors_two_sets_of_laws`): one build, two composed scripts.
-  - Laws: sight 11 → 7, fire warmth 3.5 → 5; untouched laws keep the base's values.
+  - Laws: fire warmth 3.5 → 5, day sight 11 → 7 (night sight unchanged); untouched laws keep the base's values.
   - The base's `rates(a)` reaches the floor's `cold(a)`: a person away from fire by day heals on the base and loses health on the frozen floor; by a fire the two agree.
   - Overlays can add functions, cannot define `base_` names, and must compile.
 

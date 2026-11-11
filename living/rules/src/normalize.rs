@@ -655,7 +655,10 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                         (other, _) => other,
                     };
                     let num = |k: &str| o.get(k).and_then(|x| x.as_u64());
-                    let mut c = json!({"of": of, "within": o.get("within").and_then(|w| w.as_f64()).unwrap_or(crate::SIGHT as f64)});
+                    let mut c = json!({"of": of});
+                    if let Some(w) = o.get("within").and_then(|w| w.as_f64()) {
+                        c["within"] = json!(w);
+                    }
                     if let Some(a) = num("at_least").or_else(|| num("min")) {
                         c["at_least"] = json!(a);
                     }

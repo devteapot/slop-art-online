@@ -214,7 +214,7 @@ pub fn draw(
             ui.add(egui::Slider::new(&mut sight.cone, 30.0..=180.0).text("cone half-angle °"));
             ui.add(egui::Slider::new(&mut sight.close, 0.0..=6.0).text("all-round (tiles)"));
             ui.checkbox(&mut sight.remember, "remember seen ground");
-            ui.label(egui::RichText::new("Client-only: the authority still sends everything (its laws: day 11, night 6, torch 9, hearing 9).").small().weak());
+            ui.label(egui::RichText::new("Client-only: the authority still sends everything (its senses law: day 11 m, night 6, a torch 9, hearing 9).").small().weak());
         });
     }
 

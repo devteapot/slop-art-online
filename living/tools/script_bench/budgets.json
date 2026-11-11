@@ -1,11 +1,13 @@
 {
-  "about": "Fuel (WASM instructions) per call under SpacetimeDB 2.14.1's wasmtime config, for gate.sh. Set 2026-11-09 on rhai-1 from the measured numbers with about 25% headroom: rates 7,031 (the authority's call: one answer per state, finished per body), rates-law 127,454 (the law itself), strike 247,041 (check + done), cooldown 1,694 (a number by name), perceived 59,088. Before rhai-1: rates 309,451, strike 578,264, cooldown 20,656, perceived 61,121. Raise a budget only with the measurement that justifies it (docs/SCRIPT_ENGINES.md). Added 2026-11-10 on rules-2: hook 446,967 (on_give over a giver's agreement, demand and regard; docs/WORLD_RULES.md), budget 560,000. The same run measured rates 7,183, rates-law 138,010, strike 274,912 and perceived 62,671 against main's 7,024, 127,901, 269,046 and 60,601 on the same Mac: the new context fields cost up to 5% on the rates path and the larger script 2-3% per call.",
+  "about": "Fuel (WASM instructions) per call under SpacetimeDB 2.14.1's wasmtime config, for gate.sh. Set 2026-11-09 on rhai-1 from the measured numbers with about 25% headroom: rates 7,031 (the authority's call: one answer per state, finished per body), rates-law 127,454 (the law itself), strike 247,041 (check + done), cooldown 1,694 (a number by name), perceived 59,088. Before rhai-1: rates 309,451, strike 578,264, cooldown 20,656, perceived 61,121. Raise a budget only with the measurement that justifies it (docs/SCRIPT_ENGINES.md). Added 2026-11-10 on rules-2: hook 446,967 (on_give over a giver's agreement, demand and regard; docs/WORLD_RULES.md), budget 560,000. The same run measured rates 7,183, rates-law 138,010, strike 274,912 and perceived 62,671 against main's 7,024, 127,901, 269,046 and 60,601 on the same Mac: the new context fields cost up to 5% on the rates path and the larger script 2-3% per call. Added 2026-11-11 on laws-2: senses 3,100 (the authority's call: one answer per state, by night and a torch in the pack), budget 4,000; senses-law 43,497 (the law itself, asked only when a state is new), budget 55,000. The same dev-box run measured rates 7,322, rates-law 120,429, strike 257,207, cooldown 1,704, perceived 53,123 and hook 432,458 against main's 7,312, 120,208, 256,303, 1,694, 52,953 and 431,135 (the script grew by the senses section).",
   "fuel_per_call": {
     "rates": 9000,
     "rates-law": 160000,
     "strike": 310000,
     "cooldown": 2200,
     "perceived": 75000,
-    "hook": 560000
+    "hook": 560000,
+    "senses": 4000,
+    "senses-law": 55000
   }
 }

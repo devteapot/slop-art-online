@@ -425,7 +425,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                     let mut max_dt = if target_moving { look } else { laws.steer_s };
                     // A creature one smells is followed by its scent as far as that reaches.
                     let scent = common::scent_of(&b.kind).filter(|s| s.reaches(&tb.kind, d)).map_or(0.0, |s| s.radius);
-                    if d > (common::sight(ctx, &w, now) * 1.4).max(scent) {
+                    if d > (common::sight_for(ctx, b.id, &w, now) * 1.4).max(scent) {
                         ev = Some(Event::Lost("lost sight of them".into()));
                     } else if d <= st.keep + 0.3 && st.flags & FLAG_EARLY != 0 {
                         ev = Some(Event::Arrived);

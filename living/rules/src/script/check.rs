@@ -93,9 +93,12 @@ fn describe(c: &SkillCtx) -> String {
 /// The functions the engine calls with a context: `<skill>_check`, `_duration`, `_done`, `_hit`,
 /// `_missile`, and the need laws.
 pub const SKILL_PARTS: [&str; 5] = ["_check", "_duration", "_done", "_hit", "_missile"];
-pub const CTX_LAWS: [&str; 3] = ["rates", "body_state", "move_speed"];
+pub const CTX_LAWS: [&str; 4] = ["rates", "body_state", "move_speed", "senses"];
 
 pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
+    if let Some(f) = s.borrowed.first() {
+        return Err(format!("install refused: the script has no `{f}(a)` law (the engine asks it; see the shipped script)"));
+    }
     // Every law reads only fields the engine provides.
     for f in s.ctx_laws() {
         Plan::of(&f, s.fields.of(&f, 1).and_then(|u| u.first()), true).map_err(|e| format!("install refused: {e}"))?;
@@ -166,6 +169,19 @@ fn needs(p: &mut Probe) -> Result<(), String> {
             if s.has("move_speed") {
                 let d = p.ctx("move_speed", &c)?;
                 super::number(&d).ok_or_else(|| format!("install refused: move_speed must return a number ({})", describe(&c)))?;
+            }
+            // Senses, with and without a torch in the pack: within the law's own reach.
+            for torch in [false, true] {
+                let mut c = c.clone();
+                if torch {
+                    c.actor.inv.push(("torch".into(), 1));
+                }
+                let d = p.ctx("senses", &c)?;
+                let reach = s.reach();
+                let wide = super::decode_senses(d.clone(), &super::Reach { day: f32::MAX, night: f32::MAX, hearing: f32::MAX }, c.night).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                if wide.sight > reach.sight(c.night) || wide.hearing > reach.hearing {
+                    return Err(format!("install refused: senses gives sight {} and hearing {} {}, beyond senses_law's reach ({} by {}, hearing {}): raise the reach with the law", wide.sight, wide.hearing, describe(&c), reach.sight(c.night), if c.night { "night" } else { "day" }, reach.hearing));
+                }
             }
         }
     }

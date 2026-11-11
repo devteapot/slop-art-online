@@ -1,8 +1,8 @@
 //! What a character perceives (docs/PERCEPTION.md): the one sight rule, what an observer
 //! perceives of another character, and what a human player's client may receive.
 //!
-//! - **The sight rule** ([`in_sight`]): within the observer's sight (day, night, or night with a
-//!   torch: `common::sight_for`) and with a clear sight line (`Map::sight_clear`: walls, rock and
+//! - **The sight rule** ([`in_sight`]): within the observer's sight (the script's per-creature
+//!   `senses` law: day, night, a torch; `common::sight_for`) and with a clear sight line (`Map::sight_clear`: walls, rock and
 //!   shut gates hide). Players' perceived sets, minds' percepts and scenes, behaviour graphs and
 //!   the combat feed all see by it.
 //! - **What an observer perceives of a target** ([`project`]): the target's record through the
@@ -120,9 +120,10 @@ pub fn visible(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u
     common::creatures_near(ctx, at, sight, now).into_iter().filter(|c| c.id != id && map.sight_clear(at, c.pos)).collect()
 }
 
-/// The largest sight anyone has now (for gathering onlookers before each one's own test).
+/// The largest sight anyone has now (for gathering onlookers before each one's own test): the
+/// `senses` law's reach.
 pub fn widest_sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
-    common::sight(ctx, w, now).max(common::laws(ctx).sight_torch)
+    common::widest_sight(ctx, w, now)
 }
 
 // ---- what an observer perceives of a target (the `perceived_of` law) ----------------------

@@ -283,12 +283,15 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, decided: b
         let when = if ago_s < 5 { "just now".to_string() } else { format!("{ago_s} s ago") };
         percept(ctx, &me, now, "repeat", speaker, to, at, format!("You said almost the same thing {when}: “{said}”."), 0.3);
     }
-    // Animals hear a voice, not words.
-    for (c, _) in minds_near(ctx, at, common::laws(ctx).hearing, now, &[speaker]).into_iter().filter(|(c, _)| &*c.kind != "person") {
+    // Each listener hears as far as its own senses reach (gathered within the farthest anyone
+    // hears). Animals hear a voice, not words.
+    let w = common::world(ctx);
+    let hears = |id: u32, d: f32| d <= common::hearing_for(ctx, id, &w, now);
+    for (c, _) in minds_near(ctx, at, common::widest_hearing(ctx), now, &[speaker]).into_iter().filter(|(c, d)| &*c.kind != "person" && hears(c.id, *d)) {
         let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
         percept(ctx, &c, now, "signal", speaker, 0, at, format!("You hear a person's voice, {dir}."), 0.25);
     }
-    let hearers = people_near(ctx, at, common::laws(ctx).hearing, now, &[speaker]);
+    let hearers: Vec<(Character, f32)> = people_near(ctx, at, common::widest_hearing(ctx), now, &[speaker]).into_iter().filter(|(c, d)| hears(c.id, *d)).collect();
     // Silence is information: calling someone out of earshot (far away, or dead) gets no answer.
     if to != 0 && !hearers.iter().any(|(c, _)| c.id == to) {
         let who = common::label_for(ctx, &me, to);

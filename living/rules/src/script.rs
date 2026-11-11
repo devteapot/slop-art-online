@@ -315,10 +315,6 @@ impl Effect {
 /// function), so they cost nothing per tick; defaults apply to anything a script omits.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Laws {
-    pub sight_day: f32,
-    pub sight_night: f32,
-    pub sight_torch: f32,
-    pub hearing: f32,
     pub fire_warmth: f32,
     pub shelter_warmth: f32,
     pub gestation_days: f32,
@@ -377,10 +373,6 @@ impl Laws {
 impl Default for Laws {
     fn default() -> Self {
         Self {
-            sight_day: crate::SIGHT,
-            sight_night: crate::NIGHT_SIGHT,
-            sight_torch: crate::TORCH_SIGHT,
-            hearing: crate::HEARING,
             fire_warmth: 3.5,
             shelter_warmth: 2.5,
             gestation_days: 1.0,
@@ -411,6 +403,79 @@ impl Default for Laws {
         }
     }
 }
+
+/// What a creature senses now (`senses(a)`): how far it sees and hears, in tiles (a tile is
+/// one metre).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Senses {
+    pub sight: f32,
+    pub hearing: f32,
+}
+
+/// The farthest anyone's senses reach (`reach` in `senses_law()`): by day and by night, and
+/// hearing. The engine gathers onlookers and listeners within these before testing each one's
+/// own senses, and holds every answer of the law to them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Reach {
+    pub day: f32,
+    pub night: f32,
+    pub hearing: f32,
+}
+
+impl Reach {
+    pub fn sight(&self, night: bool) -> f32 {
+        if night {
+            self.night
+        } else {
+            self.day
+        }
+    }
+}
+
+/// How often the engine runs a law, which decides how it is cached.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cadence {
+    /// Read once when the script compiles (constants, tables, descriptions).
+    Compile,
+    /// Run when something happens: an act starts or ends, a hook, a record falls due.
+    Event,
+    /// Asked for a creature on the hot path (every look, every step), and kept for every
+    /// creature in the same state: the key is only the fields the law reads.
+    Hot,
+}
+
+impl Cadence {
+    fn parse(s: &str) -> Option<Cadence> {
+        match s {
+            "compile" => Some(Cadence::Compile),
+            "event" => Some(Cadence::Event),
+            "hot" => Some(Cadence::Hot),
+            _ => None,
+        }
+    }
+}
+
+/// A law's declaration (`<law>_law()`): what it is, for models, and how the engine runs it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LawSpec {
+    pub name: String,
+    /// What the law says, written for a mind; the minds' world text is built from these.
+    pub about: String,
+    pub cadence: Cadence,
+    /// The section of the minds' world text it belongs to (empty: not part of it).
+    pub topic: String,
+}
+
+/// The traits of a law's declaration.
+pub const LAW_TRAITS: &[&str] = &["about", "cadence", "topic", "reach"];
+
+/// Laws the engine asks for that a script installed before they existed may lack: such a script
+/// runs with the shipped script's functions underneath its own until its next install, and an
+/// install without them is refused.
+pub const REQUIRED_LAWS: &[&str] = &["senses"];
+
+/// Distinct states whose senses are kept before the memo starts over.
+const SENSES_MEMO: usize = 1_024;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Rates {
@@ -504,6 +569,14 @@ pub struct Scripts {
     names: RefCell<HashMap<String, HashMap<String, Option<f64>>>>,
     /// `rates(a)` by the values of the fields it reads: bodies in the same state share it.
     needs: RefCell<HashMap<Vec<u8>, NeedLaw>>,
+    /// `senses(a)` the same way.
+    senses: RefCell<HashMap<Vec<u8>, Senses>>,
+    /// Every law the script declares (`<law>_law()`), by name.
+    laws: std::collections::BTreeMap<String, LawSpec>,
+    /// The farthest senses reach (from `senses_law()`).
+    reach: Reach,
+    /// Required laws the script lacks, taken from the shipped script (an install refuses them).
+    borrowed: Vec<String>,
 }
 
 /// Largest script source accepted. `skills.rhai` is about 56 KB; compile time and memory grow
@@ -595,12 +668,21 @@ impl Scripts {
             return Err(format!("script source exceeds {} KiB", MAX_SOURCE / 1024));
         }
         let engine = engine();
-        let ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
+        let mut ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
+        // A script from before a required law existed runs on the shipped script's functions,
+        // with its own on top, until it is installed again.
+        let borrowed: Vec<String> = REQUIRED_LAWS.iter().filter(|f| !ast.iter_functions().any(|d| d.name == **f)).map(|f| f.to_string()).collect();
+        if !borrowed.is_empty() {
+            const SHIPPED: &str = include_str!("../../scripts/skills.rhai");
+            let base = engine.compile(SHIPPED).map_err(|e| format!("shipped script compile: {e}"))?.clone_functions_only();
+            ast = base.merge(&ast);
+        }
         let fns = ast.iter_functions().map(|f| f.name.to_string()).collect();
         let unary = ast.iter_functions().filter(|f| f.params.len() == 1).map(|f| f.name.to_string()).collect();
         let nullary = ast.iter_functions().filter(|f| f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default() };
+        let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0 };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default(), senses: Default::default(), laws: Default::default(), reach, borrowed };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -612,6 +694,8 @@ impl Scripts {
         s.shapes = s.read_shapes()?;
         s.shows = s.read_shows()?;
         s.skills = std::sync::Arc::new(s.read_specs(&declared)?);
+        s.laws = s.read_laws()?;
+        s.reach = s.read_reach()?;
         for (f, names) in name_laws(&s) {
             for n in names {
                 s.num_of(&f, &n, 0.0);
@@ -735,6 +819,87 @@ impl Scripts {
     /// Every skill the script declares.
     pub fn skills(&self) -> &std::sync::Arc<crate::catalog::Skills> {
         &self.skills
+    }
+
+    /// What each law is (`<law>_law()`), read once here.
+    fn read_laws(&self) -> Result<std::collections::BTreeMap<String, LawSpec>, String> {
+        let mut out = std::collections::BTreeMap::new();
+        for f in self.nullary.iter().filter(|f| f.ends_with("_law")) {
+            let law = f.trim_end_matches("_law");
+            if law.is_empty() {
+                continue;
+            }
+            let m = self.law_map(f)?;
+            if let Some(k) = m.keys().find(|k| !LAW_TRAITS.contains(&k.as_str())) {
+                return Err(format!("{f}: unknown trait `{k}` (traits are {})", LAW_TRAITS.join(", ")));
+            }
+            let text = |k: &str| m.get(k).map_or(Ok(String::new()), |v| v.clone().into_string().map_err(|_| format!("{f}: `{k}` must be a string")));
+            let about = text("about")?;
+            if about.trim().is_empty() {
+                return Err(format!("{f}: `about` says what the law is, for a mind (in the world's units: one tile is one metre)"));
+            }
+            let cadence = Cadence::parse(&text("cadence")?).ok_or_else(|| format!("{f}: `cadence` is compile, event or hot"))?;
+            out.insert(law.to_string(), LawSpec { name: law.to_string(), about, cadence, topic: text("topic")? });
+        }
+        Ok(out)
+    }
+
+    fn law_map(&self, f: &str) -> Result<Map, String> {
+        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))
+    }
+
+    /// The farthest senses reach, from `senses_law()`.
+    fn read_reach(&self) -> Result<Reach, String> {
+        let m = self.law_map("senses_law")?;
+        let r = m.get("reach").and_then(|r| r.clone().try_cast::<Map>()).ok_or("senses_law: `reach` is a map of day, night and hearing (metres)")?;
+        let g = |k: &str| r.get(k).and_then(number).map(|v| (v as f32).clamp(0.0, 256.0)).ok_or_else(|| format!("senses_law: `reach.{k}` must be a number of metres"));
+        Ok(Reach { day: g("day")?, night: g("night")?, hearing: g("hearing")? })
+    }
+
+    /// Every law the script declares, by name.
+    pub fn law_specs(&self) -> &std::collections::BTreeMap<String, LawSpec> {
+        &self.laws
+    }
+
+    /// The farthest anyone's senses reach.
+    pub fn reach(&self) -> Reach {
+        self.reach
+    }
+
+    /// Required laws this script lacks and runs with from the shipped script.
+    pub fn borrowed(&self) -> &[String] {
+        &self.borrowed
+    }
+
+    /// The fields of its context a law reads (the engine gathers only these for a hot law).
+    pub fn law_plan(&self, f: &str) -> Rc<context::Plan> {
+        self.plan(f)
+    }
+
+    /// A creature's senses (`senses(a)`): kept per state, by the values of the fields the law
+    /// reads, so creatures in the same state share one call. Held to the reach.
+    pub fn senses(&self, ctx: &SkillCtx) -> Result<Senses, String> {
+        let plan = self.plan("senses");
+        let mut key = Vec::with_capacity(16);
+        context::key(ctx, "", &plan, &mut key);
+        if let Some(v) = self.senses.borrow().get(&key) {
+            return Ok(*v);
+        }
+        let v = self.senses_unshared(ctx)?;
+        let mut memo = self.senses.borrow_mut();
+        if memo.len() >= SENSES_MEMO {
+            memo.clear();
+        }
+        memo.insert(key, v);
+        Ok(v)
+    }
+
+    /// The same, asking the law every time (benchmarks and install checks).
+    #[doc(hidden)]
+    pub fn senses_unshared(&self, ctx: &SkillCtx) -> Result<Senses, String> {
+        let m = context::map(ctx, "", &self.plan("senses"));
+        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "senses", (m,)).map_err(|e| format!("senses: {e}"))?;
+        decode_senses(d, &self.reach, ctx.night)
     }
 
     /// What others see of a skill and what it means to them (`<skill>_shows()`), read once
@@ -945,10 +1110,6 @@ impl Scripts {
         let Ok(m) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws", ()).map(|d| d.try_cast::<Map>().unwrap_or_default()) else { return l };
         let g = |k: &str, d: f32| m.get(k).and_then(number).map(|v| v as f32).unwrap_or(d);
         l = Laws {
-            sight_day: g("sight_day", l.sight_day),
-            sight_night: g("sight_night", l.sight_night),
-            sight_torch: g("sight_torch", l.sight_torch),
-            hearing: g("hearing", l.hearing),
             fire_warmth: g("fire_warmth", l.fire_warmth),
             shelter_warmth: g("shelter_warmth", l.shelter_warmth),
             gestation_days: g("gestation_days", l.gestation_days),
@@ -1020,6 +1181,12 @@ impl Scripts {
         }
         self.call(f, ctx).ok().and_then(|d| number(&d)).unwrap_or(default)
     }
+}
+
+fn decode_senses(d: Dynamic, reach: &Reach, night: bool) -> Result<Senses, String> {
+    let m = d.try_cast::<Map>().ok_or("senses must return a map of sight and hearing")?;
+    let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("senses: `{k}` must be a number of metres"));
+    Ok(Senses { sight: g("sight")?.clamp(0.0, reach.sight(night)), hearing: g("hearing")?.clamp(0.0, reach.hearing) })
 }
 
 fn number(d: &Dynamic) -> Option<f64> {
@@ -1275,6 +1442,45 @@ mod tests {
 
     fn scripts() -> Scripts {
         Scripts::new(include_str!("../../scripts/skills.rhai")).expect("skills compile")
+    }
+
+    fn creature(night: bool, torch: bool) -> SkillCtx {
+        let inv = if torch { vec![("torch".to_string(), 1)] } else { Vec::new() };
+        SkillCtx { actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), inv, ..Default::default() }, night, ..Default::default() }
+    }
+
+    /// Sight and hearing are a law per creature in the script, with the values the engine had
+    /// as constants (11 m by day, 6 at night, 9 with a torch; hearing 9), shared by every
+    /// creature in the same state and held to the law's reach.
+    #[test]
+    fn senses_are_a_law_per_creature() {
+        let s = scripts();
+        let got: Vec<(f32, f32)> = [(false, false), (true, false), (true, true), (false, true)].iter().map(|(n, t)| {
+            let v = s.senses(&creature(*n, *t)).unwrap();
+            (v.sight, v.hearing)
+        }).collect();
+        assert_eq!(got, vec![(11.0, 9.0), (6.0, 9.0), (9.0, 9.0), (11.0, 9.0)]);
+        assert_eq!(s.reach(), Reach { day: 11.0, night: 9.0, hearing: 9.0 });
+        assert_eq!(s.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()], "the key is what the law reads");
+        let spec = &s.law_specs()["senses"];
+        assert_eq!((spec.cadence, spec.topic.as_str()), (Cadence::Hot, "senses"));
+        assert!(spec.about.contains("By day one sees 11 m; at night 6 m, or 9 m carrying a torch") && spec.about.contains("Speech carries 9 m"), "{}", spec.about);
+        // A passive that extends sight is a line of script; past the reach it is refused.
+        let src = include_str!("../../scripts/skills.rhai");
+        let keen = format!("{}\nfn senses(a) {{ #{{ sight: sight_in(light_of(a)) + if knows(a, \"torch\") {{ 2.0 }} else {{ 0.0 }}, hearing: 9.0 }} }}", src.replace("fn senses(a)", "fn senses_base(a)"));
+        let k = Scripts::new(&keen).unwrap();
+        let mut c = creature(true, false);
+        c.actor.knows = vec!["torch".into()];
+        assert_eq!(k.senses(&c).unwrap().sight, 8.0);
+        let err = k.validate().unwrap_err();
+        assert!(err.contains("beyond senses_law's reach"), "{err}");
+        // A script from before the law runs with the shipped one, and an install refuses it.
+        let old = Scripts::new(&src.replace("fn senses(a)", "fn senses_gone(a)")).unwrap();
+        assert_eq!(old.borrowed(), ["senses".to_string()]);
+        assert_eq!(old.senses(&creature(false, false)).unwrap().sight, 11.0);
+        assert!(old.validate().unwrap_err().contains("has no `senses(a)` law"));
+        // A law declared without a description is refused.
+        assert!(Scripts::new(&format!("{src}\nfn odd_law() {{ #{{ cadence: \"event\" }} }}")).err().unwrap().contains("odd_law: `about`"));
     }
 
     #[test]

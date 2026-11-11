@@ -462,13 +462,15 @@ pub fn age_days(c: &Character, w: &World, now: u64) -> f32 {
     c.birth_age_days + now.saturating_sub(c.born_ms) as f32 / w.day_ms.max(1) as f32
 }
 
-pub fn sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
-    let l = laws(ctx);
-    if night(w, now) {
-        l.sight_night
-    } else {
-        l.sight_day
-    }
+/// The farthest anyone sees now (the `senses` law's reach by day or by night): onlookers are
+/// gathered within it before each one's own sight is tested.
+pub fn widest_sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
+    scripts(ctx).reach().sight(night(w, now))
+}
+
+/// The farthest anyone hears.
+pub fn widest_hearing(ctx: &ReducerContext) -> f32 {
+    scripts(ctx).reach().hearing
 }
 
 // ---- bodies ---------------------------------------------------------------------
@@ -682,13 +684,49 @@ pub fn season(ctx: &ReducerContext, now: u64) -> &'static str {
     living_rules::SEASONS[living_rules::season_of(now, epoch, day, year)]
 }
 
-/// Sight for a particular creature: a torch pushes back the night.
+/// How far a creature sees now (the `senses` law: day, night, a torch, whatever the world's
+/// rules say).
 pub fn sight_for(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
-    if night(w, now) && inv_count(ctx, id as u64, "torch") > 0 {
-        laws(ctx).sight_torch
-    } else {
-        sight(ctx, w, now)
+    senses_of(ctx, id, w, now).sight
+}
+
+/// How far a creature hears now.
+pub fn hearing_for(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
+    senses_of(ctx, id, w, now).hearing
+}
+
+thread_local! {
+    /// Senses by creature for one moment (`now`): every look in a tick asks the same few
+    /// creatures again. Cleared when the moment or the script revision changes.
+    static SENSES: RefCell<(u64, u32, HashMap<u32, living_rules::script::Senses>)> = RefCell::new((0, 0, HashMap::new()));
+}
+
+/// A creature's senses now: the `senses` law over the few facts it reads (gathered by its plan),
+/// kept per state by the scripts and per creature for this moment here.
+pub fn senses_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> living_rules::script::Senses {
+    let rev = scripts_rev(ctx);
+    if let Some(s) = SENSES.with(|c| {
+        let c = c.borrow();
+        (c.0 == now && c.1 == rev).then(|| c.2.get(&id).copied()).flatten()
+    }) {
+        return s;
     }
+    let sc = scripts(ctx);
+    let plan = sc.law_plan("senses");
+    let c = crate::act::law_ctx(ctx, id, w, now, &plan);
+    let s = sc.senses(&c).unwrap_or_else(|e| {
+        log::warn!("senses for {id}: {e}");
+        let r = sc.reach();
+        living_rules::script::Senses { sight: r.sight(c.night), hearing: r.hearing }
+    });
+    SENSES.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.0 != now || c.1 != rev {
+            *c = (now, rev, HashMap::new());
+        }
+        c.2.insert(id, s);
+    });
+    s
 }
 
 /// Techniques a character knows, by their current names (a row a world kept from before a

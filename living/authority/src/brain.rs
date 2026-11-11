@@ -667,7 +667,7 @@ impl<'a> Ev<'a> {
             living_rules::catalog::KindClass::Terrain => {
                 // The nearest tile of that ground within sight.
                 let map = common::map(self.ctx);
-                let sight = if common::night(&self.w, self.now) { living_rules::NIGHT_SIGHT } else { living_rules::SIGHT };
+                let sight = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
                 let r = sight as i32;
                 let (cx, cy) = (self.at.0.floor() as i32, self.at.1.floor() as i32);
                 let mut best: Option<((f32, f32), f32)> = None;
@@ -716,7 +716,7 @@ impl<'a> Ev<'a> {
             }
             Cond::Sees(t) => match t {
                 Target::Place(_) | Target::At(_) | Target::Home => {
-                    let r = common::sight(self.ctx, &self.w, self.now);
+                    let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
                     self.resolve(t).map_or(false, |p| dist(self.at, p.at) <= r)
                 }
                 _ => self.resolve(t).is_some(),
@@ -734,7 +734,7 @@ impl<'a> Ev<'a> {
                 let scene = self.scene.as_ref().expect("scene built");
                 let mut n = 0u32;
                 for x in &scene.creatures {
-                    if dist(at, x.pos) > c.within || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
+                    if c.within.is_some_and(|w| dist(at, x.pos) > w) || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
                         continue;
                     }
                     if let Some(rel) = &c.of.relation {

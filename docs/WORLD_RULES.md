@@ -103,6 +103,36 @@ The newcomer kit's know-how `mending` was the `heal` skill's wound-closing, and 
 
 Recorded: "I know how to coax a fire and mend what's torn". Renamed: "nothing but a knack for fire and for closing wounds"; one renamed narrative still added "I'll watch, mend what's broken". 48 calls; 88k prompt and 17k completion tokens, about $0.02. A first attempt with the same calls failed to parse its replies, so the spend was about $0.04 in all.
 
+## Laws
+
+**Status:** built on branch `laws-2`, 2026-11-11. The owner's principles: world rules are Rhai laws, like skills, and Rust only exposes primitives; laws are cached by how often they run; each law has a description models can read.
+
+**A law's declaration.** Each law the engine asks is declared by `<law>_law()`, read once when the script compiles (`Scripts::law_specs`):
+
+| Trait | Meaning |
+| --- | --- |
+| `about` | What the law says, written for a mind, in the world's units (one tile is one metre). Required. |
+| `cadence` | `compile` (read once per script revision), `event` (run when something happens) or `hot` (asked per creature on the hot path, and kept for every creature in the same state). Required. |
+| `topic` | The section of the minds' world text it belongs to. |
+| `reach` | For `senses`: the farthest anyone sees by day and by night, and hears. |
+
+A declaration without `about` or `cadence` is refused when the script compiles.
+
+**Senses** (`senses(a)`, hot): how far a creature sees and hears, a map of `sight` and `hearing` in metres. The shipped law keeps the values the engine had as constants (`SIGHT`, `NIGHT_SIGHT`, `TORCH_SIGHT`, `HEARING`, now gone): 11 m by day, 6 at night, 9 at night with a torch in the pack, hearing 9 m. Its description: "By day one sees 11 m; at night 6 m, or 9 m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries 9 m." The numbers in it come from the same functions as the law (`sight_in`, `hearing_of_people`), so the text follows the law. A passive is a line of the law (`+ if knows(a, "…") { 2.0 }`); `reach` must still bound it.
+
+**How it stays cheap.**
+
+- **Per state.** The field analysis (`Scripts::law_plan`) says the shipped law reads `night` and `actor.inv[torch]`. `Scripts::senses` keeps one answer per value of those fields (at most 1,024 states, then the memo starts over), like `rates`.
+- **Only what it reads.** The authority builds the law's context from its plan (`act::law_ctx`): here the clock and one inventory lookup, not a whole `facts()`. A law that reads costly fields (warmth, terrain, vitals) gets the whole facts.
+- **Per moment.** `common::senses_of` keeps each creature's answer for the current moment, so the many looks within one tick ask once per creature.
+- **Reach.** Onlookers (`widest_sight`) and listeners (`widest_hearing`) are gathered within the reach, then each one's own senses are tested. The engine holds every answer to the reach; an install refuses a law whose answer passes it on the samples (`senses gives sight 13 … beyond senses_law's reach`).
+
+**Fuel** (`just living-script-gate`, dev-box, deterministic): the authority's call `senses` 3,100 per call (0.16 µs); the law itself `senses-law` 43,497 (4.2 µs), asked only when a state is new. Budgets 4,000 and 55,000. The other laws on this branch against main: rates 7,322 / 7,312, rates-law 120,429 / 120,208, strike 257,207 / 256,303, perceived 53,123 / 52,953, hook 432,458 / 431,135.
+
+**Where the constants were read:** `common::sight` and `sight_for` (graphs' scenes, perceived sets, witnesses, the combat feed), `perceive` speech (hearing), `perception::widest_sight`. Three readers skipped the laws and are fixed: the nearest tile of a terrain used the crate's `SIGHT`/`NIGHT_SIGHT` and ignored the torch (`brain.rs`); a chase was lost beyond 1.4 × the world's sight, not the chaser's (`motion.rs`); an empty `if` compared a theft against `SIGHT` (`act.rs`, removed). A graph's `count` with no `within` used to be given 11 at normalization; it now counts everyone in sight (the count already read only the scene).
+
+**Old scripts.** A script installed before a required law existed (`REQUIRED_LAWS`: `senses`) runs with the shipped script's functions underneath its own until its next install, and `install_script` refuses a script without it. An old `laws()` with `sight_day` and the rest is ignored: those keys are no longer read.
+
 ## Primitives
 
 Four engine primitives, with no engine code per kind of social state:
