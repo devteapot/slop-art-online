@@ -675,5 +675,78 @@ class Gates(unittest.TestCase):
                     os.environ["STORE_CONFIG"] = old
 
 
+class ManyBatches(unittest.TestCase):
+    def test_deterministic_pack(self):
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "l9")
+            fake_batch(src)
+            dec = {"model_exchanges": "include"}
+            store.pack_batch(src, os.path.join(t, "a"), scrubber(dec), machine="test")
+            store.pack_batch(src, os.path.join(t, "b"), scrubber(dec), machine="test")
+            for n in store.PACK_FILES:
+                if n == "MANIFEST.json":
+                    continue
+                with open(os.path.join(t, "a", n), "rb") as f1, open(os.path.join(t, "b", n), "rb") as f2:
+                    self.assertEqual(f1.read(), f2.read(), n)
+
+    def test_publish_batches_in_few_commits(self):
+        with tempfile.TemporaryDirectory() as t:
+            srcs = []
+            for name in ("ba", "bb", "bc", "bd"):
+                src = os.path.join(t, "src", name)
+                fake_batch(src)
+                srcs.append(src)
+            # bd called an unverified model: held
+            write(srcs[3], "life-iter11-r1/journal/Arlen.jsonl",
+                  json.dumps({"actor": "Arlen", "purpose": "think", "model": "mistral-small-latest",
+                              "request": {"messages": []}, "reply": "{}"}) + "\n")
+            lst = write(t, "list.txt", "\n".join(srcs) + "\n")
+            calls = []
+
+            class Api:
+                def create_repo(self, *a, **k):
+                    calls.append("create_repo")
+
+                def create_commit(self, **k):
+                    calls.append(("commit", sorted({o["path_in_repo"].split("/")[2] for o in k["operations"]})))
+                    return "url"
+            cfg = store.load_config(local_config="/nonexistent/config.json")
+            cfg.update({"publish_enabled": True})
+            cfg["backends"] = {"hf": {"namespace": "someone"}}
+            cfg["decisions"] = dict(cfg["decisions"], model_exchanges="include")
+            be = store.HFBackend(cfg, yes_publish=True, api=Api(), op=lambda **k: k)
+            old = store.make_backend
+            store.make_backend = lambda *a, **k: be
+            idn_old = store.Identity.from_runtime
+            store.Identity.from_runtime = classmethod(lambda cls, *a, **k: ident())
+            try:
+                args = types.SimpleNamespace(list=lst, stage=os.path.join(t, "stage"), per_commit=2,
+                                             backend="hf", yes_publish=True, root=None)
+                with redirect_stdout(io.StringIO()) as out:
+                    store.cmd_publish_batches(args, cfg, "test")
+            finally:
+                store.make_backend = old
+                store.Identity.from_runtime = idn_old
+            commits = [c for c in calls if c != "create_repo"]
+            self.assertEqual(commits, [("commit", ["ba", "bb"]), ("commit", ["bc"])])
+            self.assertIn("held bd", out.getvalue())
+            self.assertIn("mistral-small-latest", out.getvalue())
+
+    def test_packed_must_match(self):
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "l9")
+            fake_batch(src)
+            cfg = store.load_config(local_config="/nonexistent/config.json")
+            out = os.path.join(t, "p")
+            store.pack_batch(src, out, scrubber({"model_exchanges": "include"}), machine="test")
+            store.verify_pack(out, src, cfg, "test")
+            other = os.path.join(t, "l10")
+            fake_batch(other)
+            with self.assertRaises(store.Refused):
+                store.verify_pack(out, other, cfg, "test")
+            with self.assertRaises(store.Refused):
+                store.verify_pack(out, src, cfg, "laptop")
+
+
 if __name__ == "__main__":
     unittest.main()

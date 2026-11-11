@@ -1415,9 +1415,11 @@ def dry_run_markdown(src, kind, rows, totals, decisions, scrubber):
 # --------------------------------------------------------------------------------------------
 
 def _jsonl_gz(path, rows):
-    with gzip.open(path, "wt", encoding="utf-8", compresslevel=9) as f:
+    """Deterministic gzip (no name, mtime 0): the same rows give the same bytes."""
+    with open(path, "wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0,
+                                                compresslevel=9) as gz:
         for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n")
+            gz.write((json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8"))
 
 
 def _tar_add(tf, name, data):
@@ -1440,7 +1442,7 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
     os.makedirs(out_dir, exist_ok=True)
     instances, calls, streams, prompts = {}, [], [], []
     tar_buf = io.BytesIO()
-    with tarfile.open(fileobj=tar_buf, mode="w:gz") as tf:
+    with tarfile.open(fileobj=tar_buf, mode="w", format=tarfile.PAX_FORMAT) as tf:
         for rel in sorted(data):
             body = data[rel]
             pub = scrubber.publish_path(rel)
@@ -1492,7 +1494,7 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
     _jsonl_gz(os.path.join(out_dir, "rows.jsonl.gz"), streams)
     _jsonl_gz(os.path.join(out_dir, "prompts.jsonl.gz"), prompts)
     with open(os.path.join(out_dir, "files.tar.gz"), "wb") as f:
-        f.write(tar_buf.getvalue())
+        f.write(gzip.compress(tar_buf.getvalue(), compresslevel=9, mtime=0))
     man = {"format": FORMAT, "unit": "batch", "name": name, "machine": machine,
            "source": scrubber.scrub_text(tilde(src), Findings()),
            "packed": _dt.datetime.now().isoformat(timespec="seconds"), "tool_commit": _git("rev-parse", "--short", "HEAD"),
@@ -1614,6 +1616,12 @@ class Backend:
 class LocalBackend(Backend):
     """A directory per repository: <root>/<repo>/<path>. For tests and for a machine-local mirror."""
     name = "local"
+
+    def publish_units(self, repo, units, message):
+        """Several (path_in_repo, local_dir) units in one commit."""
+        for path_in_repo, local_dir in units:
+            self.publish(repo, local_dir, path_in_repo, message)
+        return os.path.join(self.root, repo)
 
     def __init__(self, root):
         self.root = expand(root)
@@ -1769,6 +1777,25 @@ class HFBackend(Backend):
             out = self._call(api.create_commit, repo_id=rid, repo_type=self.repo_type, operations=ops,
                              commit_message=f"{message} ({k}/{len(chunks)})")
         return out
+
+    def publish_units(self, repo, units, message):
+        """Several (path_in_repo, local_dir) units in one commit."""
+        self.gate()
+        api = self.api()
+        rid = self.repo_id(repo)
+        self._call(api.create_repo, rid, repo_type=self.repo_type, private=self.private, exist_ok=True)
+        op = self._op
+        if op is None:
+            from huggingface_hub import CommitOperationAdd as op
+        ops = []
+        for path_in_repo, local_dir in units:
+            for root, _, names in os.walk(local_dir):
+                for n in sorted(names):
+                    f = os.path.join(root, n)
+                    ops.append(op(path_in_repo=f"{path_in_repo.rstrip('/')}/{os.path.relpath(f, local_dir)}",
+                                  path_or_fileobj=f))
+        return self._call(api.create_commit, repo_id=rid, repo_type=self.repo_type, operations=ops,
+                          commit_message=message)
 
     def put_file(self, repo, local_file, path_in_repo, message):
         self.gate()
@@ -2107,6 +2134,14 @@ def cmd_publish(a, cfg, machine):
         raise Refused("play sessions are held: publish_sessions is not set in the machine-local config")
     if a.kind == "batch":
         check_batch_complete(src)
+    if getattr(a, "packed", None):
+        # an existing pack, uploaded unchanged (so a fetch can be compared with it byte for byte)
+        if a.kind != "batch":
+            raise Refused("--packed is for batches")
+        name = a.name or os.path.basename(src.rstrip("/"))
+        man = verify_pack(a.packed, src, cfg, machine)
+        print(backend.publish("runs", a.packed, unit_path("batch", name, machine), f"batch {name} from {machine}"))
+        return
     sc, _ = _scrubber_for(src, cfg, machine, {"session": "play-session"}.get(a.kind, a.kind), a.player)
     stage = tempfile.mkdtemp(prefix="store-stage-")
     try:
@@ -2121,6 +2156,65 @@ def cmd_publish(a, cfg, machine):
         print(where)
     finally:
         shutil.rmtree(stage, ignore_errors=True)
+
+
+PACK_FILES = ("instances.jsonl.gz", "calls.jsonl.gz", "rows.jsonl.gz", "prompts.jsonl.gz", "files.tar.gz",
+              "MANIFEST.json")
+
+
+def verify_pack(packed, src, cfg, machine):
+    """The checks publish runs on a fresh pack, run on an existing one."""
+    names = sorted(os.listdir(packed))
+    if names != sorted(PACK_FILES):
+        raise Refused(f"{packed}: expected exactly {', '.join(PACK_FILES)}, found {', '.join(names)}")
+    with open(os.path.join(packed, "MANIFEST.json"), encoding="utf-8") as f:
+        man = json.load(f)
+    if man.get("unit") != "batch" or man.get("name") != os.path.basename(src.rstrip("/")):
+        raise Refused(f"{packed}: MANIFEST names {man.get('unit')} {man.get('name')}, not this batch")
+    if man.get("machine") != machine:
+        raise Refused(f"{packed}: packed on {man.get('machine')}, this is {machine}")
+    held = [f["path"] for f in man.get("files", []) if f.get("status") == "held"]
+    if held:
+        raise Refused(f"{packed}: {len(held)} held file(s)")
+    check_models(man, cfg)
+    return man
+
+
+def cmd_publish_batches(a, cfg, machine):
+    """Pack many batches, then upload them in a few commits of whole batches."""
+    backend = make_backend(a.backend, cfg, yes_publish=a.yes_publish, root=a.root)
+    if isinstance(backend, HFBackend):
+        backend.gate()
+    with open(os.path.expanduser(a.list), encoding="utf-8") as f:
+        srcs = [os.path.abspath(os.path.expanduser(l.strip())) for l in f if l.strip() and not l.startswith("#")]
+    stage = os.path.abspath(os.path.expanduser(a.stage))
+    os.makedirs(stage, exist_ok=True)
+    ready, held = [], []
+    for src in srcs:
+        name = os.path.basename(src.rstrip("/"))
+        out = os.path.join(stage, name)
+        try:
+            if is_never_touch(src, cfg, machine):
+                raise Refused("never-touch folder")
+            check_batch_complete(src)
+            if not (os.path.isdir(out) and sorted(os.listdir(out)) == sorted(PACK_FILES)):
+                shutil.rmtree(out, ignore_errors=True)
+                sc, _ = _scrubber_for(src, cfg, machine, "trial-batch")
+                man = pack_batch(src, out, sc, machine=machine)
+                check_publishable(man, sc)
+            man = verify_pack(out, src, cfg, machine)
+            ready.append((name, out, man))
+            print(f"packed {name}: {man['counts']['calls']} calls, {man['counts']['rows']} rows", flush=True)
+        except Refused as e:
+            held.append((name, str(e)))
+            shutil.rmtree(out, ignore_errors=True)
+            print(f"held {name}: {e}", flush=True)
+    groups = [ready[i:i + a.per_commit] for i in range(0, len(ready), a.per_commit)]
+    for k, group in enumerate(groups, 1):
+        msg = f"{len(group)} batches from {machine} ({k}/{len(groups)}): {', '.join(n for n, _, _ in group)}"
+        where = backend.publish_units("runs", [(unit_path("batch", n, machine), out) for n, out, _ in group], msg)
+        print(f"commit {k}/{len(groups)}: {where}", flush=True)
+    print(json.dumps({"published": [n for n, _, _ in ready], "held": held}, indent=1))
 
 
 def cmd_fetch(a, cfg, machine):
@@ -2199,6 +2293,14 @@ def main(argv=None):
             q.add_argument("--backend", choices=["local", "hf"], required=True)
             q.add_argument("--root", help="local backend root")
             q.add_argument("--yes-publish", action="store_true")
+            q.add_argument("--packed", help="upload this existing pack of SRC unchanged (batches)")
+    pb = sub.add_parser("publish-batches")
+    pb.add_argument("--list", required=True, help="file with one batch folder per line")
+    pb.add_argument("--stage", required=True, help="where the packs are written (kept; reused when complete)")
+    pb.add_argument("--per-commit", type=int, default=15)
+    pb.add_argument("--backend", choices=["local", "hf"], required=True)
+    pb.add_argument("--root")
+    pb.add_argument("--yes-publish", action="store_true")
     f = sub.add_parser("fetch")
     f.add_argument("what", choices=["motion-library", "batch"])
     f.add_argument("name", nargs="?")
@@ -2216,7 +2318,8 @@ def main(argv=None):
         cfg = load_config()
         machine = machine_name(cfg)
         {"manifest": cmd_manifest, "scrub": cmd_scrub, "pack": cmd_pack, "publish": cmd_publish,
-         "fetch": cmd_fetch, "layout": cmd_layout, "card": cmd_card}[a.cmd](a, cfg, machine)
+         "fetch": cmd_fetch, "layout": cmd_layout, "card": cmd_card,
+         "publish-batches": cmd_publish_batches}[a.cmd](a, cfg, machine)
     except Refused as e:
         print(f"store: refused: {e}", file=sys.stderr)
         return 2
