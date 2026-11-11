@@ -49,6 +49,8 @@ pub struct Talk {
     was_open: bool,
     next_ask: f32,
     seen: HashSet<u64>,
+    /// Someone has spoken to me this session (the talk hint shows again the first time).
+    heard_to_me: bool,
 }
 
 pub struct TalkPlugin;
@@ -167,17 +169,39 @@ fn address(
     }
 }
 
-/// What the authority told me of my speech: no answer from someone out of earshot.
-fn told(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut talk: ResMut<Talk>, mut verbs: ResMut<crate::verbs::Verbs>) {
+/// What the authority told me of my speech: no answer from someone out of earshot. And the
+/// talk hint: on arrival, once the first load's cover lifts, and again the first time someone
+/// speaks to me.
+#[allow(clippy::too_many_arguments)]
+fn told(
+    net: NonSend<Net>,
+    scene: NonSend<Scene>,
+    time: Res<Time>,
+    target: Res<crate::controls::Target>,
+    loading: Option<Res<crate::loading::Loading>>,
+    mut talk: ResMut<Talk>,
+    mut verbs: ResMut<crate::verbs::Verbs>,
+    mut tips: Option<ResMut<crate::ui::tips::Tips>>,
+) {
     let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else { return };
     let now = time.elapsed_secs_f64();
-    for e in conn.db.my_experience().iter().filter(|e| e.observer == me && e.kind == "silence") {
+    if target.0.is_some() && crate::loading::Loading::clear(loading.as_deref()) {
+        if let Some(t) = tips.as_mut() {
+            t.once(crate::ui::tips::TALK, now);
+        }
+    }
+    for e in conn.db.my_experience().iter().filter(|e| e.observer == me && (e.kind == "silence" || e.kind == "speech")) {
         if !talk.seen.insert(e.id) {
             continue;
         }
         let fresh = e.at_ms as f64 + FRESH_MS >= scene.now_ms;
-        if fresh {
+        if e.kind == "silence" && fresh {
             verbs.toasts.push(crate::verbs::Toast { text: e.text.clone(), ok: Some(false), at: now });
+        } else if e.kind == "speech" && fresh && !talk.heard_to_me && e.text.contains(" said to you:") {
+            talk.heard_to_me = true;
+            if let Some(t) = tips.as_mut() {
+                t.show(crate::ui::tips::TALK, now);
+            }
         }
     }
     if talk.seen.len() > 1024 {
