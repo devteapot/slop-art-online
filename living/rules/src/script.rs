@@ -20,7 +20,9 @@ use std::rc::Rc;
 mod check;
 pub mod context;
 pub mod fields;
+pub mod speech;
 mod ui;
+pub use ui::UiWork;
 pub use check::Report;
 
 #[derive(Clone, Debug, Default)]
@@ -151,6 +153,27 @@ pub struct SkillCtx {
     pub records: Vec<crate::records::RecordFacts>,
     /// The record at hand: the one falling due (`on_expire`).
     pub record: Option<crate::records::RecordFacts>,
+    /// What an answer (accept, decline) names: a trade offer's id, a record's id (0: none).
+    pub offer_id: u64,
+    pub record_id: u64,
+    /// The trade offer at hand (filled only for a law that reads it): the one the act names, or,
+    /// when that one is gone or none is named, the target's standing offer to the actor.
+    pub offer: Option<OfferFacts>,
+}
+
+/// A trade offer as the rules see it (`a.offer`): `#{ id, from, to, give, give_qty, want,
+/// want_qty, open, left_s }`. `open` is false once it can no longer be accepted.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OfferFacts {
+    pub id: u64,
+    pub from: u32,
+    pub to: u32,
+    pub give: String,
+    pub give_qty: u32,
+    pub want: String,
+    pub want_qty: u32,
+    pub open: bool,
+    pub left_s: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -297,8 +320,12 @@ pub enum Effect {
     Plant,
     /// Propose a trade to the target.
     Offer,
-    /// Accept the target's standing offer.
-    Accept,
+    /// Accept the target's trade offer to the actor: the one with this id, or (0) the one
+    /// standing.
+    Accept { offer: u64 },
+    /// End the target's trade offer to the actor without a trade: the one with this id, or (0)
+    /// the one standing.
+    Decline { offer: u64 },
     Found,
     Join,
     Welcome,
@@ -764,6 +791,8 @@ pub struct Scripts {
     shows: crate::social::Shows,
     /// Every skill the script declares (`<skill>_spec()`).
     skills: std::sync::Arc<crate::catalog::Skills>,
+    /// The ways of speaking (`<way>_speech()`), in their order.
+    ways: Vec<speech::WaySpec>,
     /// Functions of no parameter.
     nullary: HashSet<String>,
     /// What each function reads of its parameters.
@@ -1020,7 +1049,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1042,6 +1071,7 @@ impl Scripts {
         skills.structures = s.kinds_of("structures");
         skills.techniques = s.read_know_how()?;
         s.skills = std::sync::Arc::new(skills);
+        s.ways = s.read_ways()?;
         s.structures = s.read_structures()?;
         s.laws = s.read_laws()?;
         s.reach = s.read_reach()?;
@@ -1168,6 +1198,49 @@ impl Scripts {
         }
         list.sort_by_key(|k: &crate::catalog::SkillSpec| (declared(&k.name), k.name.clone()));
         Ok(crate::catalog::Skills::new(list))
+    }
+
+    /// The ways of speaking (`<way>_speech()`), read once here, in their `order` (then the
+    /// source's). A script that declares none speaks by the shipped `say` (today's speech), so a
+    /// world installed before ways were declared keeps speaking until its next install.
+    fn read_ways(&self) -> Result<Vec<speech::WaySpec>, String> {
+        let mut ways = Vec::new();
+        for f in self.nullary.iter().filter(|f| f.ends_with("_speech")) {
+            let way = f.trim_end_matches("_speech");
+            if way.is_empty() {
+                continue;
+            }
+            if !way.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                return Err(format!("{f}: a way's name is lowercase letters and _"));
+            }
+            if self.skills.get(way).is_some() || self.shapes.get(way).is_some() {
+                return Err(format!("{f}: `{way}` is a skill already; a way of speaking needs a name of its own"));
+            }
+            let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+            let w = speech::way_of(way, &m)?;
+            if !w.needs.is_empty() && !self.skills.techniques.iter().any(|t| t.name == w.needs) {
+                return Err(format!("{f}: `needs` names a technique of `know_how()`, not `{}`", w.needs));
+            }
+            ways.push(w);
+        }
+        if ways.is_empty() {
+            ways.push(speech::WaySpec::say());
+        }
+        if !ways.iter().any(|w| w.name == speech::SAY) {
+            return Err("the script's ways of speaking need `say_speech()` (every line said without a way is said by it)".into());
+        }
+        ways.sort_by_key(|w| (w.order, self.source_at(&format!("fn {}_speech(", w.name)), w.name.clone()));
+        Ok(ways)
+    }
+
+    /// The ways of speaking, in their order.
+    pub fn ways(&self) -> &[speech::WaySpec] {
+        &self.ways
+    }
+
+    /// A way of speaking by name.
+    pub fn way(&self, name: &str) -> Option<&speech::WaySpec> {
+        self.ways.iter().find(|w| w.name == name)
     }
 
     /// Every skill the script declares.
@@ -1439,6 +1512,10 @@ impl Scripts {
             let mut parts: Vec<String> = laws.iter().filter(|l| &l.topic == topic).map(|l| l.about.trim().to_string()).collect();
             if let Some((_, t)) = world.iter().find(|(k, _)| k == topic) {
                 parts.push(t.trim().to_string());
+            }
+            // The ways of speaking, each in its own words, in their order.
+            if topic == "speech" {
+                parts.extend(self.ways.iter().map(|w| format!("{} = {}", w.name, w.about.trim())));
             }
             if parts.is_empty() {
                 continue;
@@ -1783,8 +1860,14 @@ impl Scripts {
     /// Whether a skill's rules read the actor's records: on its way (`performing` false) its
     /// check and duration; once performed, its check, effects and hook too.
     pub fn skill_reads_records(&self, skill: &str, performing: bool) -> bool {
+        self.skill_reads(skill, "records", performing)
+    }
+
+    /// Whether a skill's rules read a top-level field of the context (`records`, `offer`): on its
+    /// way its check and duration; once performed, its check, effects and hook too.
+    pub fn skill_reads(&self, skill: &str, field: &str, performing: bool) -> bool {
         let parts: &[&str] = if performing { &["_check", "_duration", "_done"] } else { &["_check", "_duration"] };
-        parts.iter().any(|p| self.reads(&format!("{skill}{p}"), "records")) || (performing && self.reads(&format!("on_{skill}"), "records"))
+        parts.iter().any(|p| self.reads(&format!("{skill}{p}"), field)) || (performing && self.reads(&format!("on_{skill}"), field))
     }
 
     fn effects(&self, f: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {
@@ -2424,7 +2507,8 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "read" => Effect::Read,
         "plant" => Effect::Plant,
         "offer" => Effect::Offer,
-        "accept" => Effect::Accept,
+        "accept" => Effect::Accept { offer: n("offer").max(0.0) as u64 },
+        "decline" => Effect::Decline { offer: n("offer").max(0.0) as u64 },
         "found" => Effect::Found,
         "join" => Effect::Join,
         "welcome" => Effect::Welcome,
@@ -2473,11 +2557,90 @@ mod tests {
     /// orders, with the world's own sections (seasons, life) where they belong; every law the
     /// engine asks and every world constant must be described, or an install is refused.
     #[test]
+    fn ways_of_speaking_are_read_from_the_script() {
+        let s = scripts();
+        let names: Vec<&str> = s.ways().iter().map(|w| w.name.as_str()).collect();
+        assert_eq!(names, ["say", "whisper", "call"]);
+        let whisper = s.way("whisper").unwrap();
+        assert_eq!((whisper.carry, whisper.only_to, whisper.reach, whisper.kind.as_str(), whisper.names, whisper.animals.as_str()), (speech::Carry::Within(1.5), true, 1.5, "whisper", false, ""));
+        let noticed = whisper.noticed.as_ref().unwrap();
+        assert_eq!((noticed.within_m, noticed.seen, noticed.kind.as_str(), noticed.text.as_str()), (6.0, true, "whispered", "{a} whispers something to {b}."));
+        let call = s.way("call").unwrap();
+        assert_eq!((call.carry_for(9.0), call.max_chars, call.gap_s, call.animals.as_str(), call.public()), (22.5, 80, 6.0, "a person shouting", true));
+        assert!(call.about.contains("within 22.5 m"), "{}", call.about);
+        // The shipped `say` is today's speech, field for field (the regression baseline).
+        let mut say = s.way("say").unwrap().clone();
+        assert_eq!(say.about, speech::WaySpec::say().about);
+        say.about = speech::WaySpec::say().about;
+        assert_eq!(say, speech::WaySpec::say());
+        assert!(s.world_text(&[]).contains("SPEAKING: say = Speak aloud."));
+        let src = include_str!("../../scripts/skills.rhai");
+        let with = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap());
+        // A way the engine cannot keep is refused, naming the key.
+        let e = with("fn shout_speech() { #{ about: \"x\", cost: #{ energy: 2.0 } } }").err().unwrap();
+        assert!(e.contains("unknown trait `cost`"), "{e}");
+        let e = with("fn hush_speech() { #{ about: \"x\", words: #{ within_m: 1.5, only_to: true } } }").err().unwrap();
+        assert!(e.contains("need `to: \"required\"`"), "{e}");
+        let e = with("fn wave_speech() { #{ about: \"x\" } }").err().unwrap();
+        assert!(e.contains("is a skill already"), "{e}");
+        let e = with("fn say_speech() { #{ about: \"x\", needs: \"telepathy\" } }").err().unwrap();
+        assert!(e.contains("names a technique"), "{e}");
+        // A second way comes in its order, and its words for one ear reach no animal.
+        let two = with("fn hush_speech() { #{ about: \"Hush.\", order: 1, to: \"required\", words: #{ within_m: 1.5, only_to: true }, heard_to_you: \"{a} hushes to you\" } }").unwrap();
+        let w = two.way("hush").unwrap();
+        assert_eq!(two.ways().iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["say", "whisper", "hush", "call"]);
+        assert_eq!((w.carry, w.only_to, w.animals.as_str(), w.label.as_str()), (speech::Carry::Within(1.5), true, "", "Hush"));
+        assert_eq!((w.carry_for(9.0), w.widest(9.0)), (1.5, 1.5));
+        assert!(two.world_text(&[]).contains("say = Speak aloud. Everyone within earshot hears you, also when you speak to one person. whisper = Whisper to someone beside you (within 1.5 m)."));
+        // A script with no ways at all speaks by today's `say`.
+        let none = Scripts::new(&src.replace("_speech()", "_speech_old()")).unwrap();
+        assert_eq!(none.way("say"), Some(&speech::WaySpec::say()));
+    }
+
+    #[test]
+    fn ways_refuse_in_their_checks_words() {
+        use speech::check_way;
+        let s = scripts();
+        let me = ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), ..Default::default() };
+        let them = |dist: f32, alive: bool| Some(TargetFacts { class: "creature".into(), id: 2, kind: "person".into(), alive, dist, ..Default::default() });
+        let check = |way: &str, to, since| check_way(&s, way, me.clone(), to, "hello", since);
+        // The words a client shows before sending are the reducer's (both call `check_way`).
+        assert_eq!(check("whisper", None, None), Err("a whisper needs someone to whisper to".into()));
+        assert_eq!(check("whisper", them(3.0, true), None), Err("too far to whisper: step closer".into()));
+        assert_eq!(check("whisper", them(1.0, false), None), Err("too far to whisper: step closer".into()), "absent or dead reads as too far: ids cannot be probed");
+        assert_eq!(check("whisper", them(1.0, true), None), Ok(()));
+        assert_eq!(check("call", None, Some(3_000)), Err("too soon to call out again: wait a few seconds".into()));
+        assert_eq!(check("call", None, Some(6_000)), Ok(()));
+        assert_eq!(check("call", None, None), Ok(()));
+        assert_eq!(check("say", them(30.0, true), Some(0)), Ok(()), "say has no check of its own");
+        assert_eq!(check("", None, None), Ok(()), "no way named is say");
+        assert_eq!(check("shout", None, None), Err("no way of speaking called `shout`".into()), "the engine's own refusal, in the reducer's words");
+        // A way whose spec requires something must refuse it in its check, or the install is refused.
+        let src = include_str!("../../scripts/skills.rhai");
+        let install = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap()).and_then(|s| s.validate().map(|_| ()));
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }").unwrap_err();
+        assert!(e.contains("has no `hush_check(a)`"), "{e}");
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }\nfn hush_check(a) { if a.target.class == \"none\" { return \"hush to whom?\"; } \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to someone 1.5 m away"), "{e}");
+        let e = install("fn whisper_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to no one"), "{e}");
+        let e = install("fn call_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("a second line 5000 ms after the first"), "{e}");
+        let e = install("fn say_check(a) { \"no\" }").unwrap_err();
+        assert!(e.contains("refuses a line that breaks nothing"), "{e}");
+        // A check reads only what `check_way` gives, which a client can give too.
+        let e = install("fn say_check(a) { if a.hour > 30.0 { return \"never\"; } \"\" }").unwrap_err();
+        assert!(e.contains("`say_check` reads `a.hour`"), "{e}");
+        let e = Scripts::new(&crate::floors::compose(src, "fn sign_speech() { #{ about: \"Sign.\", needs_sight: true } }").unwrap()).err().unwrap();
+        assert!(e.contains("`needs_sight` is not built yet"), "{e}");
+    }
+
+    #[test]
     fn world_text_is_built_from_the_laws() {
         let s = scripts();
         let t = s.world_text(&[("seasons", "a year is 8 days.".into()), ("life", "a person lives about 70 years.".into())]);
         let heads: Vec<&str> = t.lines().map(|l| l.split(':').next().unwrap_or("")).collect();
-        assert_eq!(heads[1..].join(" "), "SENSES MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
+        assert_eq!(heads[1..].join(" "), "SENSES SPEAKING MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
         assert!(t.starts_with("One day lasts 12 real minutes; night is 20:00-06:00.\nSENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m; at night 6 m, or 9 m carrying a torch."), "{t}");
         assert!(t.contains("FOOD: berries 12, fish 16, meat 20, cooked_fish 34, cooked_meat 42, smoked_fish 24, smoked_meat 30 (hunger points). Cook raw fish or meat at a campfire"), "{t}");
         assert!(t.contains("BODY: hunger rises ~1.2/min (100 = starving") && t.contains("within reach (about 2 m; a wolf's leap about 3.2)") && t.contains("for 20 s you do not strike back") && t.contains("Deer can be hunted (5 meat)"), "{t}");
@@ -3147,7 +3310,7 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         assert!(matches!(&fx[0], Effect::Amend { id: 5, status: Some(st), due_h: Some(h), .. } if st == "agreed" && (*h - 30.0).abs() < 1e-3), "{fx:?}");
         assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t.ends_with("by dusk tomorrow.")), "{fx:?}");
         // Without terms standing it is an ordinary trade's accept.
-        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..c.clone() }).unwrap(), vec![Effect::Accept]);
+        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..c.clone() }).unwrap(), vec![Effect::Accept { offer: 0 }]);
         // The newcomer stores 10 wood in the resident's household store: its part is done and the
         // resident is told what it owes.
         let store = TargetFacts { class: "structure".into(), kind: "storage".into(), id: 77, owner: 3, home: "10,10".into(), dist: 1.0, ..Default::default() };
@@ -3186,6 +3349,69 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         // How a party reads its records.
         let regard = RecordFacts { kind: "regard".into(), parties: vec![("holder".into(), crate::records::COMMUNITY | 2), ("toward".into(), crate::records::COMMUNITY | 3)], me: "holder".into(), terms: serde_json::json!({"label": "rival town", "value": -35, "why": "the broken match"}).as_object().unwrap().clone(), ..Default::default() };
         assert_eq!(s.record_text(&regard).unwrap(), format!("your people hold {{id:{}}} as rival town (the broken match)", crate::records::COMMUNITY | 3));
+    }
+
+    /// An answer (accept, decline) takes exactly what it names, a trade offer or a proposal, or
+    /// is refused with the reason; without a name, accept takes what it always took (terms
+    /// first, then the trade) and decline ends that same one. The maker is told of a decline.
+    #[test]
+    fn answers_take_what_they_name() {
+        use crate::records::RecordFacts;
+        let s = scripts();
+        let person = |id: u64| TargetFacts { class: "creature".into(), id, kind: "person".into(), alive: true, dist: 1.0, stage: "adult".into(), ..Default::default() };
+        let tells = |fx: &[Effect]| fx.iter().filter_map(|e| if let Effect::Tell { to, text, .. } = e { Some((*to, text.clone())) } else { None }).collect::<Vec<_>>();
+        let terms = serde_json::json!({"from_gives": "berries", "from_qty": 3, "to_gives": "wood", "to_qty": 10, "from_done": 0, "to_done": 0, "from_home": "", "to_home": "", "words": ""}).as_object().unwrap().clone();
+        let proposal = |id: u64, status: &str, open: bool, from: u64, me: &str| RecordFacts { id, kind: "agreement".into(), status: status.into(), open, terms: terms.clone(), parties: vec![("from".into(), from), ("to".into(), if me == "to" { 9 } else { 1 })], me: me.into(), by: from as u32, ..Default::default() };
+        let offer = |id: u64, to: u32, open: bool| Some(OfferFacts { id, from: 1, to, give: "fish".into(), give_qty: 2, want: "hide".into(), want_qty: 1, open, left_s: 60.0 });
+        // 9 is asked by 1: terms (record 5) and a trade (offer 41).
+        let base = SkillCtx { actor: ActorFacts { id: 9, kind: "person".into(), stage: "adult".into(), ..Default::default() }, target: person(1), hour: 7.0, records: vec![proposal(5, "offered", true, 1, "to")], offer: offer(41, 9, true), ..Default::default() };
+        for skill in ["accept", "decline"] {
+            let c = SkillCtx { skill: skill.into(), ..base.clone() };
+            let refused = |offer_id: u64, record_id: u64, records: Vec<RecordFacts>, at_hand: Option<OfferFacts>| s.check(skill, &SkillCtx { offer_id, record_id, records, offer: at_hand, ..c.clone() }).err().unwrap_or_default();
+            assert_eq!(s.check(skill, &c), Ok(()), "{skill} with no name");
+            assert_eq!(refused(41, 0, c.records.clone(), c.offer.clone()), "", "{skill} offer 41");
+            assert_eq!(refused(0, 5, c.records.clone(), None), "", "{skill} record 5");
+            // Refusals: gone, changed, not addressed to you, expired, already agreed, both named.
+            assert_eq!(refused(41, 0, vec![], None), "that offer is gone");
+            assert_eq!(refused(41, 0, vec![], offer(42, 9, true)), "they have changed their offer: now their 2 fish for your 1 hide");
+            assert_eq!(refused(41, 0, vec![], offer(41, 7, true)), "that offer is not addressed to you");
+            assert_eq!(refused(41, 0, vec![], offer(41, 9, false)), "that offer has expired");
+            assert_eq!(refused(0, 6, vec![], None), "that proposal is gone");
+            assert_eq!(refused(0, 6, vec![proposal(5, "offered", true, 1, "to")], None), "they have changed their terms: now you give 10 wood, they give 3 berries");
+            assert_eq!(refused(0, 5, vec![proposal(5, "offered", true, 1, "from")], None), "that proposal is not addressed to you");
+            assert_eq!(refused(0, 5, vec![proposal(5, "offered", true, 4, "to")], None), "that proposal is not addressed to you");
+            assert_eq!(refused(0, 5, vec![proposal(5, "agreed", true, 1, "to")], None), "you have already agreed to it");
+            assert_eq!(refused(0, 5, vec![proposal(5, "not taken", false, 1, "to")], None), "that proposal has expired");
+            assert_eq!(refused(0, 5, vec![proposal(5, "declined", false, 1, "to")], None), "that proposal was declined");
+            assert_eq!(refused(41, 5, c.records.clone(), c.offer.clone()), "name one thing to answer: the offer or the proposal");
+        }
+        // accept: the named offer is taken even with terms standing (before, the terms won).
+        let acc = SkillCtx { skill: "accept".into(), ..base.clone() };
+        assert_eq!(s.done("accept", &SkillCtx { offer_id: 41, ..acc.clone() }).unwrap(), vec![Effect::Accept { offer: 41 }]);
+        assert!(matches!(&s.done("accept", &SkillCtx { record_id: 5, ..acc.clone() }).unwrap()[0], Effect::Amend { id: 5, status: Some(st), .. } if st == "agreed"));
+        // Without a name, as before: the terms, then (none standing) the trade.
+        assert!(matches!(&s.done("accept", &acc).unwrap()[0], Effect::Amend { id: 5, .. }));
+        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..acc.clone() }).unwrap(), vec![Effect::Accept { offer: 0 }]);
+        // decline: a proposal is closed as declined and its maker told; onlookers see it.
+        let dec = SkillCtx { skill: "decline".into(), ..base.clone() };
+        for c in [SkillCtx { record_id: 5, ..dec.clone() }, dec.clone()] {
+            let fx = s.done("decline", &c).unwrap();
+            assert!(matches!(&fx[0], Effect::Close { id: 5, status, .. } if status == "declined"), "{fx:?}");
+            assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t == "{actor} declined your terms: you give 3 berries, they give 10 wood."), "{fx:?}");
+            assert!(fx.iter().any(|e| matches!(e, Effect::Witness { .. })), "{fx:?}");
+        }
+        // ... a trade offer is ended, its maker told what was declined.
+        for c in [SkillCtx { offer_id: 41, ..dec.clone() }, SkillCtx { records: vec![], ..dec.clone() }] {
+            let fx = s.done("decline", &c).unwrap();
+            assert_eq!(fx[0], Effect::Decline { offer: 41 }, "{fx:?}");
+            assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t == "{actor} declined your offer of 2 fish for 1 hide."), "{fx:?}");
+        }
+        // ... and with nothing standing the engine is asked, and refuses.
+        assert_eq!(s.done("decline", &SkillCtx { records: vec![], offer: None, ..dec.clone() }).unwrap(), vec![Effect::Decline { offer: 0 }]);
+        // The rules read the offer only for the skills that answer.
+        assert!(s.skill_reads("accept", "offer", false) && s.skill_reads("decline", "offer", true) && !s.skill_reads("give", "offer", true));
+        // A proposal to the reader names its id, for the answer.
+        assert!(s.record_text(&proposal(5, "offered", true, 1, "to")).unwrap().ends_with("accept or decline (toward them, record 5)"));
     }
 
     #[test]

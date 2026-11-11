@@ -21,6 +21,9 @@ __pycache__/
 /.local/living/
 # The Kimodo clip library (fetched from the Spark; docs/GAME_BRIEF.md, animation)
 /.local/kimodo/
+# The VRoid reference taken apart (docs/CHARACTER_REFERENCE.md): third-party files and their figures
+/.local/ref/
+/.local/ref-1.tar.gz
 /living/viewer/dist/
 /living/game/assets/lookdev/
 /living/game/assets/view/
