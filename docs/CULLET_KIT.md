@@ -227,35 +227,35 @@ In this order:
 
 **On the asset board** ([asset board](ASSET_BOARD.md); `living/assets/board/`, tracks `kit-1` and `kit-2`). Pass 2 is the latest version of the eleven families pass 1 left on the board, and starts nine more (layout pass 1's `place:` families are its own):
 
-| Family | Members |
-|---|---|
-| `building:cone`, `building:counting-house`, `building:watchglass` | one model each; unchanged in design (hidden and coplanar faces removed) |
-| `building:glasshouse` | `glasshouse` (4, now with Cora's flowers), `glasshouse_sound`, `glasshouse_broken`, `glasshouse_tree` (9, Jory's tree; new member) |
-| `building:row-low` | `row`: Low Row's east terrace joined for the board (`gen_cullet.sh --join "Low Row east"`) |
-| `building:row-houses` | `tarn`, `pontil`, `greave`, `morrow`, `empty`, `shell` (Low Row 9, the thorn), and new members `marl` (the night stoker's lit house) and `shell_plain` (Mid Row 3) |
-| `building:mole`, `building:net-loft`, `building:marver`, `prop:strand` | as pass 1 |
-| `prop:ground` | `quay`, `fish_steps`, `wall` (now with its parapet), `stairs`, `plot_wall`, and new member `wall_coping` |
-| `building:heron` (new) | `heron`, `jib` |
-| `building:lamp-house` (new) | `lamp_house` |
-| `building:cinder-row` (new) | `lehr_house`, `pot_house`, `cullet_shed`, `ash_house`, `wash_house` |
-| `prop:cinder-row` (new) | `blowpipe_rack`, `crucible_stack`, `heap_aqua`, `heap_amber`, `ash_sacks`, `handcart`, `trough`, `bench` |
-| `building:strand-works` (new) | `batch`, `smokehouse`, `store`, `boatshed`, `dry_dock` |
-| `building:crown` (new) | `readers_house`, `cistern`, `cistern_house`, `peat_barn`, `thorn`, `bench` |
-| `prop:open-lots` (new) | `root_plot`, `cone_yard`, `slip`, `graveyard` |
-| `prop:hanger` (new) | `tree_1` to `tree_6`, `stump` |
-| `prop:structures` (new) | `sign`, `storage`, `campfire`, `hearth`, `lamp`, `furnace`, `oven`, `smokehouse_fire` |
+| Family | Members | Version |
+|---|---|---|
+| `building:cone`, `building:counting-house`, `building:watchglass` | one model each; unchanged in design (hidden and coplanar faces removed) | `20261111-8e52115f-7152a8`, `20261111-a34e317f-32e347`, `20261111-a34e317f-011b51` |
+| `building:glasshouse` | `glasshouse` (4, now with Cora's flowers), `glasshouse_sound`, `glasshouse_broken`, `glasshouse_tree` (9, Jory's tree; new member) | `20261111-8e52115f-6abbf4` |
+| `building:row-low` | `row`: Low Row's east terrace joined for the board (`gen_cullet.sh --join "Low Row east"`) | `20261111-8e52115f-6348e5` |
+| `building:row-houses` | `tarn`, `pontil`, `greave`, `morrow`, `empty`, `shell` (Low Row 9, the thorn), and new members `marl` (the night stoker's lit house) and `shell_plain` (Mid Row 3) | `20261111-a34e317f-a7055b` |
+| `building:mole`, `building:net-loft`, `building:marver`, `prop:strand` | as pass 1 | `20261111-a34e317f-74267b`, `20261111-a34e317f-3e2521`, `20261111-a34e317f-6fae4b`, `20261111-8e52115f-0ce8b2` |
+| `prop:ground` | `quay`, `fish_steps`, `wall` (now with its parapet), `stairs`, `plot_wall`, and new member `wall_coping` | `20261111-a34e317f-1766b6` |
+| `building:heron` (new) | `heron`, `jib` | `20261111-a34e317f-610498` |
+| `building:lamp-house` (new) | `lamp_house` | `20261111-a34e317f-51f128` |
+| `building:cinder-row` (new) | `lehr_house`, `pot_house`, `cullet_shed`, `ash_house`, `wash_house` | `20261111-a34e317f-b12d95` |
+| `prop:cinder-row` (new) | `blowpipe_rack`, `crucible_stack`, `heap_aqua`, `heap_amber`, `ash_sacks`, `handcart`, `trough`, `bench` | `20261111-a34e317f-8d7d33` |
+| `building:strand-works` (new) | `batch`, `smokehouse`, `store`, `boatshed`, `dry_dock` | `20261111-a34e317f-d2942a` |
+| `building:crown` (new) | `readers_house`, `cistern`, `cistern_house`, `peat_barn`, `thorn`, `bench` | `20261111-a34e317f-04bf80` |
+| `prop:open-lots` (new) | `root_plot`, `cone_yard`, `slip`, `graveyard` | `20261111-a34e317f-74a372` |
+| `prop:hanger` (new) | `tree_1` to `tree_6`, `stump` | `20261111-a34e317f-a49e68` |
+| `prop:structures` (new) | `sign`, `storage`, `campfire`, `hearth`, `lamp`, `furnace`, `oven`, `smokehouse_fire` | `20261111-a34e317f-312562` |
 
-Published 2026-11-11 from commit `8e52115f`. The owner has not decided on any of these versions.
+Published 2026-11-11 (track `kit-2`). The head moved while the board photographed, so `building:cone`, `building:glasshouse`, `building:row-low` and `prop:strand` record commit `8e52115f` and the other sixteen `a34e317f`; the generator is the same file in all twenty (one sha256). The board photographed the accepted versions of the four families that have one again with the same renderer, so their pages compare models and not clients; `just living-board check` finds no missing link. The owner has not decided on any of these versions.
 
 ## Verification (2026-11-11, pass 2)
 
-All on the dev-box, on the tree with `origin/main` merged (through layout-1, `3c73d835`).
+All on the dev-box. The kit's own checks and `living-check` are on the final tree (`a34e317f`, `origin/main` merged through `25c1fb92`); the generation, sight and connected runs are on the merge before it (`8e52115f`, main through layout-1), and the last merge touched none of the kit's files, the seed or the model table.
 
 - `gen_cullet.sh` twice and `cullet_kit_check.py --again`: 432 of 432 on every check, the coplanar check and byte identity among them. Layout pass 1's 114 fixtures are in that count and pass the coplanar check after the export passes.
 - `cullet_plan.py --check` and `author_world.py cullet --check` (0 errors): the seed keeps its 64 residents, 22 homes, the ways and town life and rates-2's 34 structures.
-- `set -o pipefail; just living-check` exits 0 (authority WASM, mind, both observers, the game client, the script gate, `cargo test -p living-rules`), with a private target directory and 12 jobs.
+- `set -o pipefail; just living-check` exits 0 on the final tree (authority WASM, mind, both observers, the game client, the script gate, `cargo test -p living-rules`), with a private target directory and 12 jobs; it also passed on each of the two merges before.
 - verify-generation on the dev-box's own container (`kit2-stdb`, SpacetimeDB 2.14.1, port 3322), because the model table changed. `generation-kit2-20261111-195631` (`--feature worlds --seeds island,plan-test,cullet,floor-megacity-2k,floor-megacity-4k`, before layout-1): island 979, plan-test 78, floor-megacity-2k 77 and floor-megacity-4k 92 checks pass, their `land` digests equal `floor_preview`'s. Cullet failed 4 of 317 there, and the same 4 on a clean checkout of `origin/main` (`6a31176a`): four residents dead of old age six seconds after creation and the laws overlay not matching, which main fixed the same evening (goods-2: the verify launch keeps a seed's laws again). On the final tree, `generation-kit2c-20261111-204204` (`--seeds cullet,plan-test`): **cullet 317 of 317 and plan-test 78 of 78**, original seeds unchanged. Among Cullet's checks: its 93 lots in order with their kinds, sizes, models, heights and level floors; blocking lots on wall, low or drop tiles; land digests and the arrival point equal to the native generator's.
-- `sight_census` on `living/seeds/cullet.json` before and after the table change (1,225 and 1,182 hidden of 4,241; heights and layout digests equal). Run before layout-1 moved the lots; not repeated after.
+- `sight_census` on `living/seeds/cullet.json`: 1,225 hidden by height and 1,182 by shape of 4,241 on pass 1's plan; 1,371 and 1,321 of 4,187 after layout pass 1.
 - The game client connected to a scratch Cullet world on the same container, from the merged tree, through verify-ui's driver (`ui-kit2c-1111-204510`, a fresh player, no minds): the client's log says the land's three digests match the authority's; stills of the Counting House yard, the Batch, Low Row and Mid Row show the lots, fixtures, ground and the engine's structures in the kit's models. A walk for pictures, not a run of verify-ui's scenarios.
 - The game client, headless, look-dev: stills of the quay, the Strand, a wynd, each Row, the Batch, the Crown, the Cone, Cinder Row, the mole and the Ladder at 13:00, 18:30 and 21:30, beside pass 1's; a contact sheet of 49 models through the asset view with a 1.75 m figure; Mid Row 4's gable before and after. The page is `.local/kit-2/index.html` on the dev-box.
 
