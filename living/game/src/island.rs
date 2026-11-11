@@ -92,19 +92,32 @@ struct Item {
     /// A plain box (width, height, depth) instead of a model: a lot or a planned settlement's
     /// stair tread or retaining wall whose model is not on disk ([`GreyBox`]).
     size: Option<Vec3>,
+    /// A box that is a building: the camera keeps out of it (`envs::Solid`).
+    solid: bool,
+    /// A box that marks an open lot's footprint ([`MARKER`]) rather than a grey building.
+    marker: bool,
 }
 
-/// A plain box standing for a model not on disk yet (a hand-authored settlement before its
-/// kit, docs/AUTHORED_PLANS.md): its footprint × its height, in one pale stone grey. The mesh
-/// and material are added by [`grey_boxes`]; the entity's scale is the box's size.
-#[derive(Component)]
-pub struct GreyBox;
+/// A planned settlement's open lot of no height (steps, a slip, a yard, root plots) with no
+/// model on disk: a slab of its footprint this high (m), in a muted stone, so the plan reads in
+/// the grey city. Buildings' boxes are [`GREY`].
+pub const MARKER_H: f32 = 0.025;
+const MARKER: [u8; 3] = [132, 128, 120];
+const GREY: [u8; 3] = [168, 168, 172];
 
-/// Give new grey boxes the shared unit cube and grey toon material.
-pub fn grey_boxes(mut commands: Commands, q: Query<Entity, (With<GreyBox>, Without<Mesh3d>)>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>, mut toons: ResMut<Assets<crate::style::Toon>>, style: Res<crate::style::Style>, mut unit: Local<Option<Handle<Mesh>>>) {
-    for e in &q {
+/// A plain box standing for a model not on disk yet (a hand-authored settlement before its
+/// kit, docs/AUTHORED_PLANS.md): its footprint × its height, in one pale stone grey, or an open
+/// lot's footprint slab in a darker stone ([`MARKER_H`]). The mesh and material are added by
+/// [`grey_boxes`]; the entity's scale is the box's size. It carries its box as `Fitted`, as a
+/// fitted model does, so the camera's "keep out of buildings" and the cut-away see it.
+#[derive(Component)]
+pub struct GreyBox(pub [u8; 3]);
+
+/// Give new grey boxes the shared unit cube and their toon material.
+pub fn grey_boxes(mut commands: Commands, q: Query<(Entity, &GreyBox), Without<Mesh3d>>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>, mut toons: ResMut<Assets<crate::style::Toon>>, style: Res<crate::style::Style>, mut unit: Local<Option<Handle<Mesh>>>) {
+    for (e, b) in &q {
         let mesh = unit.get_or_insert_with(|| meshes.add(Cuboid::new(1.0, 1.0, 1.0))).clone();
-        let mat = palette.color(&mut toons, &style, [168, 168, 172], false);
+        let mat = palette.color(&mut toons, &style, b.0, false);
         commands.entity(e).insert((Mesh3d(mesh), MeshMaterial3d(mat)));
     }
 }
@@ -287,38 +300,11 @@ impl Island {
         let mut site_items: HashMap<(i32, i32), Vec<Item>> = HashMap::new();
         let mut put = |it: Item| site_items.entry(chunk_of(it.at)).or_default().push(it);
         let pick = |files: &[String], n: usize, salt: u32| files[(hash(n as u32, salt) * files.len() as f32) as usize % files.len()].clone();
-        // Buildings on the planner's lots.
-        for (li, lot) in land.lots.iter().enumerate().filter(|_| planned) {
-            let st = &land.settlements[lot.settlement as usize];
-            let Some(kind) = lot.kind.model() else { continue };
-            // By style (a steampunk town is steampunk_city), and the kind folder its model is in.
-            let env = living_rules::settle::env_of(&st.style);
-            let kind = lot.model_file.as_deref().and_then(living_rules::settle::asset_kind).unwrap_or(kind);
-            let files = crate::envs::assets_for(env, kind);
-            if files.is_empty() {
-                // No model of its kind on disk (a planned settlement before its kit): a box.
-                if lot.height_m > 0.0 {
-                    put(Item { kind: kind.to_string(), at: Vec2::new(lot.centre.0, lot.centre.1), yaw: lot.yaw, height: lot.height_m, k: li, floor: Some(lot.floor_m), size: Some(Vec3::new(lot.width_m, lot.height_m, lot.depth_m)), ..default() });
-                }
-                continue;
+        // Buildings on the planner's lots, by the same rule as the authority's lot rows.
+        for li in (0..land.lots.len()).filter(|_| planned) {
+            if let Some(it) = LotRow::of_land(&land, li as u32).and_then(|row| lot_item(&envs, &land, &row)) {
+                put(it);
             }
-            let slot = envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == kind));
-            // The exact model the planner sized the lot for, when it is on disk.
-            let exact = lot.model_file.as_ref().map(|f| format!("envs/{f}")).filter(|f| files.contains(f));
-            let height = if exact.is_some() { lot.height_m } else { slot.map_or(6.0, |s| s.height[1]) };
-            put(Item {
-                kind: kind.to_string(),
-                file: exact.unwrap_or_else(|| pick(&files, li, 11)),
-                at: Vec2::new(lot.centre.0, lot.centre.1),
-                yaw: lot.yaw,
-                height,
-                glow: slot.and_then(|s| s.glow),
-                k: li,
-                floor: Some(lot.floor_m),
-                native: true,
-                person: None,
-                size: None,
-            });
         }
         // Street props, stairs and retaining walls: derived from the layout on both sides, not
         // stored by the authority, so connected mode places them too.
@@ -412,40 +398,12 @@ impl Island {
         Self { land, climate, envs, site_items, ground: HashMap::new(), small: HashMap::new(), coarse: HashMap::new(), ocean: Vec::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false, flights }
     }
 
-    /// A building on an authority `lot` row (connected): the row's model file when it is on
-    /// disk, else one of its kind from the settlement's environment. The model's origin stands
-    /// on the lot's floor, facing its yaw. Returns the entities to despawn with it.
+    /// A building on an authority `lot` row (connected), by [`lot_item`]: its model, a grey
+    /// box, or an open lot's footprint marker. Returns the entities to despawn with it.
     pub fn spawn_lot(&self, commands: &mut Commands, assets: &AssetServer, lot: &LotRow) -> Vec<Entity> {
-        let Some(kind) = lot.kind.model() else { return Vec::new() };
-        // The row's model names its folder (`steampunk_city/clocktower/...`): a town in its own
-        // style uses its own assets.
-        let env = lot.model.split('/').next().filter(|_| !lot.model.is_empty()).unwrap_or(lot.env);
-        let kind = living_rules::settle::asset_kind(&lot.model).unwrap_or(kind);
-        let files = crate::envs::assets_for(env, kind);
-        let exact = Some(format!("envs/{}", lot.model)).filter(|f| !lot.model.is_empty() && files.contains(f));
-        if exact.is_none() && files.is_empty() {
-            // No model of its kind on disk (a planned settlement before its kit): a box of its
-            // footprint and height.
-            if lot.height_m <= 0.0 {
-                return Vec::new();
-            }
-            let it = Item { kind: kind.to_string(), at: lot.at, yaw: lot.yaw, height: lot.height_m, k: lot.id as usize, floor: Some(lot.floor_m), size: Some(Vec3::new(lot.width_m, lot.height_m, lot.depth_m)), ..default() };
-            let es = spawn_item(commands, assets, &self.land, &it);
-            if let Some(&root) = es.first() {
-                commands.entity(root).insert(crate::envs::Solid);
-            }
-            return es;
-        }
-        if exact.is_none() && !lot.model.is_empty() {
-            warn!("lot {}: model {} is not on disk; using another {kind}", lot.id, lot.model);
-        }
-        let slot = self.envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == kind));
-        let height = if exact.is_some() { lot.height_m } else { slot.map_or(6.0, |s| s.height[1]) };
-        let file = exact.unwrap_or_else(|| files[(hash(lot.id, 11) * files.len() as f32) as usize % files.len()].clone());
-        let it = Item { kind: kind.to_string(), file, at: lot.at, yaw: lot.yaw, height, glow: slot.and_then(|s| s.glow), k: lot.id as usize, floor: Some(lot.floor_m), native: true, person: None, size: None };
+        let Some(it) = lot_item(&self.envs, &self.land, lot) else { return Vec::new() };
         let es = spawn_item(commands, assets, &self.land, &it);
-        if let Some(&root) = es.first() {
-            commands.entity(root).insert(crate::envs::Solid);
+        if let (Some(&root), true) = (es.first(), it.size.is_none()) {
             // Low buildings too (market stalls, wells): a newcomer arrives among the stalls, and
             // their awnings hid them (play-test 1). Taller ones are occluders already.
             if it.height < 3.0 {
@@ -901,6 +859,43 @@ fn ready(assets: &AssetServer, scene: &Handle<WorldAsset>) -> bool {
     matches!(assets.recursive_dependency_load_state(scene), S::Loaded | S::Failed(_))
 }
 
+/// What is drawn on a lot, connected or in look-dev:
+/// - its model file (`model`, under `envs/`) when it is on disk;
+/// - in a **planned** settlement (an authored plan, docs/AUTHORED_PLANS.md), otherwise a grey box
+///   of its footprint and height, or for an open lot of no height a footprint marker
+///   ([`MARKER_H`]). A planned lot is never given another lot's model: its plan sized it for its
+///   own, and a terrace of borrowed houses would overlap. Its environment's folder may be empty
+///   or missing (Cullet's before its kit is generated);
+/// - elsewhere, a model of its kind from its environment (a generated town's buildings are
+///   sampled, `settle::env_of`), else a grey box when it has height; gardens and fields nothing.
+fn lot_item(envs: &HashMap<String, EnvDef>, land: &Land, lot: &LotRow) -> Option<Item> {
+    let planned = land.lots.get(lot.id as usize).and_then(|l| land.settlements.get(l.settlement as usize)).is_some_and(|s| s.planned);
+    let base = Item { kind: lot.kind.id().to_string(), at: lot.at, yaw: lot.yaw, height: lot.height_m, k: lot.id as usize, floor: Some(lot.floor_m), solid: true, ..default() };
+    // The row's model names its folder (`steampunk_city/clocktower/...`): a town in its own
+    // style uses its own assets.
+    let env = lot.model.split('/').next().filter(|_| !lot.model.is_empty()).unwrap_or(lot.env);
+    let kind = living_rules::settle::asset_kind(&lot.model).or(lot.kind.model());
+    let files = kind.map(|k| crate::envs::assets_for(env, k)).unwrap_or_default();
+    let exact = Some(format!("envs/{}", lot.model)).filter(|f| !lot.model.is_empty() && files.contains(f));
+    let slot = kind.and_then(|k| envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == k)));
+    if let Some(file) = exact {
+        return Some(Item { kind: kind.unwrap_or("").to_string(), file, glow: slot.and_then(|s| s.glow), native: true, ..base });
+    }
+    if planned || files.is_empty() {
+        let (w, d) = (lot.width_m.max(0.1), lot.depth_m.max(0.1));
+        if lot.height_m > 0.0 {
+            return Some(Item { size: Some(Vec3::new(w, lot.height_m, d)), ..base });
+        }
+        return planned.then(|| Item { size: Some(Vec3::new(w, MARKER_H, d)), height: MARKER_H, marker: true, solid: false, ..base });
+    }
+    if !lot.model.is_empty() {
+        warn!("lot {}: model {} is not on disk; using another {}", lot.id, lot.model, kind.unwrap_or(""));
+    }
+    let height = slot.map_or(6.0, |s| s.height[1]);
+    let file = files[(hash(lot.id, 11) * files.len() as f32) as usize % files.len()].clone();
+    Some(Item { kind: kind.unwrap_or("").to_string(), file, height, glow: slot.and_then(|s| s.glow), native: true, ..base })
+}
+
 fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &Item) -> Vec<Entity> {
     let y = it.floor.unwrap_or_else(|| land.height(it.at.x, it.at.y));
     let at = Vec3::new(it.at.x, y, it.at.y);
@@ -913,9 +908,17 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     }
     if let Some(size) = it.size {
         let c = at + Vec3::Y * size.y * 0.5;
-        let mut e = commands.spawn((EnvPart, GreyBox, Transform::from_translation(c).with_rotation(Quat::from_rotation_y(it.yaw)).with_scale(size)));
+        let colour = if it.marker { MARKER } else { GREY };
+        let fitted = crate::lookdev::Fitted { y_off: 0.0, size, center: Vec3::ZERO };
+        let mut e = commands.spawn((EnvPart, GreyBox(colour), fitted, Transform::from_translation(c).with_rotation(Quat::from_rotation_y(it.yaw)).with_scale(size)));
         if it.height >= 3.0 {
             e.insert((Occluder { height: it.height }, crate::fade::Fade::shown()));
+        }
+        if it.solid {
+            e.insert(crate::envs::Solid);
+        }
+        if it.marker {
+            e.insert(bevy::light::NotShadowCaster);
         }
         return vec![e.id()];
     }
@@ -928,6 +931,9 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     }
     if it.height <= SMALL {
         e.insert(crate::lookdev::NoShadow);
+    }
+    if it.solid {
+        e.insert(crate::envs::Solid);
     }
     let mut out = vec![e.id()];
     if let Some((light, tf)) = crate::envs::local_light(&it.kind, it.glow, it.height, it.k) {
