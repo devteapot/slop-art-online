@@ -1,5 +1,14 @@
 # Core validation record
 
+## 2026-11-11 fix-lives-tavvik: carriers take and store at stores, not squares (Spark)
+
+Branch `fix-lives-tavvik` from origin/main `accf27c8`, container `slop-trials-stdb` (port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, no minds.
+
+- Diagnosis (`core-tav1-190323`, origin/main build): Tavvik stood idle on his `square` place with 2 `cooked_meat` (he starts with 3 and eats one) and no activity. Highshelf's plaza middle is built on, so its square is a ring of edge spots; his spot is 43 m from the shelf's store, beyond a person's 11 m day sight, so the routine's `take` from `nearest storage` never resolved and no desire could act. Silas Pike's and Tern Gannet's far-market `work` (plaza spots) were 52 m and 36 m from a store, so their `store`/`take` there could not resolve either (latent; the scene does not check it).
+- Fix: `carry_graph` takes and stores at home at the `store` place; a carrier's `work` is the far town's `storage` (seed data, `author_world.py`; island.json's five carriers and four route graphs rewritten in place, since a full `--compile-only` would also rename `wound_tending`). `core-tav2-191131`: every carrier's `store` and `work` lie on a storage, legs 37.7-132.9 m; Tavvik takes 3 and leaves within 12 s.
+- `lives.py --minutes 24`: `core-lives-a-191326` 19 of 19 and `core-lives-b-193805` 19 of 19. Tavvik reached the Kettlebridge store (1.1 m, 5.9 m), carried wood back; Highshelf's store +3 wood in both.
+- `town.py` (`core-town-200247`): 22 of 23, the failure being the recorded flake (Cuth Marrow, facing someone who comes up behind; player stopped 1.8 tiles away). `just living-check` exits 0. Not run: the other baseline scenes (no rule, authority or other seed changed).
+
 
 ## 2026-11-11 lives-3: rhythms at any hour, Cullet's trades, Cullet's life law (dev-box)
 
