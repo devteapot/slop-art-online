@@ -5,6 +5,8 @@
                          [--window 10] [--seed 1] [--out .local/living/feel]
   feel_excerpts.py show [--out DIR] [--key]   print the blind excerpts as the page shows them
                                                (--key adds each one's source: not for the rater)
+  feel_excerpts.py rescore [--key K] [--out-key K2]   the key's window columns again, with the
+                                               current life_feel (new columns), same windows and ids
 
 `build` reads trial evidence (read-only), cuts candidate windows of `--window` real minutes from
 each run's thinking characters, scores every candidate with life_feel.py's own column definitions
@@ -378,8 +380,12 @@ def feel_dir(life, a_ms, b_ms, root):
     anchor = {"t": 0.0, "id": -1, "at_ms": int(a_ms), "kind": "window", "a": 0, "b": 0, "text": ""}
     if life.kind == "subject":
         src = life.d
-        for f in ("samples", "experiences", "graphs"):
+        for f in ("samples", "experiences"):
             write_jl(d / f"{f}.jsonl", [re_t(r) for r in jl(src / f"{f}.jsonl") if in_t(r.get("t"))])
+        gs = jl(src / "graphs.jsonl")
+        held = [g for g in gs if g.get("source") == "mind" and g.get("t") is not None and life.t0 + g["t"] * 1000 < a_ms]
+        # The plan held when the window opens, marked carried: life_feel reads it for the own-project measure only.
+        write_jl(d / "graphs.jsonl", ([dict(held[-1], t=0.0, carried=True)] if held else []) + [re_t(r) for r in gs if in_t(r.get("t"))])
         write_jl(d / "chronicle.jsonl", [anchor] + [re_t(r) for r in jl(src / "chronicle.jsonl") if in_t(r.get("t"))])
         rows, last_persona = [], None
         for r in jl(src / "mind_rows.jsonl"):
@@ -410,7 +416,9 @@ def feel_dir(life, a_ms, b_ms, root):
             k = "silence" if text.startswith("No answer from") else ("act" if life_feel.FAIL.match(text) else "seen")
             exps.append({"t": tt(ms), "at_ms": ms, "observer": R, "kind": k, "text": text})
     write_jl(d / "experiences.jsonl", exps)
-    write_jl(d / "graphs.jsonl", [{"t": tt(ms), "plan": p, "source": "mind"} for ms, p in life.plans if in_ms(ms)])
+    before = [p for ms, p in life.plans if ms < a_ms]
+    write_jl(d / "graphs.jsonl", ([{"t": 0.0, "plan": before[-1], "source": "mind", "carried": True}] if before else []) +
+             [{"t": tt(ms), "plan": p, "source": "mind"} for ms, p in life.plans if in_ms(ms)])
     personas, last = [], None
     for r in life.journal:
         m = re.search(r"^Goals: (.*)$", user_text(r), re.M)
@@ -832,7 +840,7 @@ def build(a):
                     "follows": life.kind, "batch_dir": str(life.d.parent), "run": life.run, "trial": life.trial, "variant": life.variant,
                     "character": life.name, "character_id": life.id, "pseudonym": pseudo if life.kind == "subject" else None,
                     "window_min": [round((x["start"] - life.t0) / 60000, 1), round((min(x["start"] + w_ms, life.end) - life.t0) / 60000, 1)],
-                    "run_min": round((life.end - life.t0) / 60000, 1), "running": not (life.d / "summary.json").exists(),
+                    "window_ms": int(x["start"]), "run_min": round((life.end - life.t0) / 60000, 1), "running": not (life.d / "summary.json").exists(),
                     "lines": len(lines), "lines_dropped": dropped, "leak_terms": leaks,
                     "feel_window": x["feel_window"], "feel_run": x["feel_run"], "feel0": x["feel0"]}
     meta = {"version": 1, "window_min": a.window, "seed": a.seed, "max_lines": MAX_LINES}
@@ -853,6 +861,42 @@ def build(a):
     for eid, v in key.items():
         if v["leak_terms"]:
             print(f"  LEAK CHECK {eid}: {v['leak_terms']}")
+
+
+def find_life(label, batch_dir, run, character, cache):
+    """The Life of one character in one run (every resident read, none sampled)."""
+    global RESIDENTS_PER_RUN
+    if batch_dir not in cache:
+        keep, RESIDENTS_PER_RUN = RESIDENTS_PER_RUN, 10 ** 6
+        try:
+            cache[batch_dir] = lives_of(label, [Path(batch_dir)], random.Random(0))
+        finally:
+            RESIDENTS_PER_RUN = keep
+    return next((l for l in cache[batch_dir] if l.run == run and l.name == character), None)
+
+
+def rescore(a):
+    """Recompute each key excerpt's life_feel columns on its own window with the current life_feel
+    (new columns included), into a copy of the key; the blind excerpts and ids are untouched."""
+    kp = Path(a.key).expanduser()
+    key = json.loads(kp.read_text())
+    cache, tmp = {}, Path(tempfile.mkdtemp(prefix="feel-"))
+    try:
+        for eid, k in key["excerpts"].items():
+            life = find_life(k["source"], str(Path(k["batch_dir"])), k["run"], k["character"], cache)
+            if life is None:
+                print(f"{eid}: {k['run']} {k['character']} not found; columns left as they were", file=sys.stderr)
+                continue
+            start = k.get("window_ms") or int(life.t0 + k["window_min"][0] * 60000)
+            k.setdefault("feel_window_built", k["feel_window"])
+            k["feel_window"] = feel(feel_dir(life, start, start + int(key.get("window_min", 10) * 60000), tmp / "x" / "y"))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    key["columns"] = life_feel.KEYS
+    key["rescored"] = "feel_window recomputed with the current life_feel; the build's values are in feel_window_built"
+    out = Path(a.out_key).expanduser() if a.out_key else kp.with_name(kp.stem + ".rescored.json")
+    out.write_text(json.dumps(key, indent=1, ensure_ascii=False))
+    print(f"{len(key['excerpts'])} excerpts rescored -> {out}")
 
 
 def show(a):
@@ -881,8 +925,11 @@ def main():
     s = sub.add_parser("show")
     s.add_argument("--out", default=str(OUT))
     s.add_argument("--key", action="store_true", help="add each excerpt's source (for the coordinator, never the rater)")
+    r = sub.add_parser("rescore", help="recompute the key's window columns with the current life_feel")
+    r.add_argument("--key", default=str(OUT / "excerpts_key.json"))
+    r.add_argument("--out-key", help="default: <key>.rescored.json beside it")
     a = ap.parse_args()
-    build(a) if a.cmd == "build" else show(a)
+    {"build": build, "show": show, "rescore": rescore}[a.cmd](a)
 
 
 if __name__ == "__main__":
