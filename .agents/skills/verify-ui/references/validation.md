@@ -1,5 +1,7 @@
 # verify-ui: last real run
 
+**2026-11-11, branch `talk-pick` (the cursor pick, after the play-test 5 build check).** `verify-ui-pick-190605` (`$V launch --run ui-pick-190605 --seed island --target-dir …`; doctor all ok). Clear. The new `pick` scenario on the harness commit with origin/main's pick (`9f2c7f7d`): **1 passed, 6 failed**. Hover and nameplate, Enter, the target plate and a tap all named #3, the one behind (`ui/pick-before/`, `checks-before.json`). With the fix: windows, talk, items, themes and pick, **50 passed, 0 failed**. The first full run with the fix had 5 talk failures, with #3 under the cursor in `talk/05`; that was before `seen` was in the dump, so it is not known whether #3 covered the cursor. Talk alone (14/14) and two full runs (49/49, then 50/50 with the tap check) passed. Not covered: a real trackpad; combat skills aimed at a creature under the cursor (they use the same target; no scenario fires one).
+
 **2026-11-11, later: themes and density (ui-1 after play-test 4).** `verify-ui-b`, the same harness. Clear (the default): windows, talk, items and the new themes scenario, **43 passed, 0 failed**. Night, Linen and Walnut (`LIVING_GAME_THEME=<t>`): windows, talk and items, **37 passed, 0 failed** each. Changes to the scenarios: the talk scenario reaches Introduce yourself through their window's More…; the second resident is placed beside the first (the stall side is out of sight). Found: Enter picked the hovered person nearest the player, not the cursor (fixed in `ui/say.rs`).
 
 ## The first run

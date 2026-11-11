@@ -13,7 +13,7 @@ and writes `.local/living/verify/RUN/ui/checks.json`. Exit 1 when any check fail
 Two residents are placed beside the player and held still for the talk and items scenarios
 (admin `place_at` and `set_behavior`: scene setup, not player acts).
 """
-import argparse, json, os, re, subprocess, sys
+import argparse, json, os, re, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
@@ -203,22 +203,26 @@ def pick(run, c):
     before it, Enter took the hovered person nearest the cursor's ground point: the one behind."""
     s = "pick"
     a, b = residents(run)
+    line = f"You in front, {int(time.time()) % 100000}."  # its own line: said rows from earlier drives don't count
     # The view faces north (yaw 0, sim -y). A stands ahead and to the left; B 1.5 m behind A along
     # the view, where the ray through A's chest meets the ground.
     plan = ("ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
-            "key:Enter:tap;wait:0.6;shot:02_to_them;dump:02;type:You, in front.;enter;wait:1.2;dump:03;key:Escape:tap;wait:0.4;quit").replace("{A}", str(a))
+            "key:Enter:tap;wait:0.6;shot:02_to_them;dump:02;type:{LINE};enter;wait:1.2;dump:03;key:Escape:tap;wait:0.6;"
+            "point:{A}:1.3;wait:0.8;tap;wait:0.8;dump:04;key:Escape:tap;wait:0.4;quit").replace("{A}", str(a)).replace("{LINE}", line)
     out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"])
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    d = {k: dump(out, k) for k in ["01", "02", "03"]}
+    d = {k: dump(out, k) for k in ["01", "02", "03", "04"]}
     L = log(out)
     hov = [h.get("id") for h in (d["01"] or {}).get("hovered") or []]
     c.check(s, "the cursor on the one in front: only they are hovered (one nameplate)", hov == [a], f"hovered {hov}, under {(d['01'] or {}).get('under')}, in front #{a}, behind #{b}")
     t2 = (d["02"] or {}).get("typing") or {}
     c.check(s, "Enter addresses the one in front, in their window", t2.get("to") == a and t2.get("window") == f"Person{a}", json.dumps(t2))
     c.check(s, "the target plate is the one addressed", (d["02"] or {}).get("targeted") == a, str((d["02"] or {}).get("targeted")))
-    c.check(s, "the line goes to them (human_say with to)", re.search(rf'say: "You, in front\." to #{a}\b', L) is not None)
+    c.check(s, "the line goes to them (human_say with to)", re.search(rf'say: "{re.escape(line)}" to #{a}\b', L) is not None)
+    t4 = (d["04"] or {}).get("typing") or {}
+    c.check(s, "a tap on the one in front talks to them (combat's target is the same pick)", t4.get("to") == a, json.dumps(t4))
     rows = sql(run, f"SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = {a}")
-    c.check(s, "the authority's said row has to = the one in front", any("You, in front." in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
+    c.check(s, "the authority's said row has to = the one in front", any(line in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
 
 
 SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick}

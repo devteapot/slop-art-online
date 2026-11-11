@@ -29,7 +29,7 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 
 ```bash
 S=.agents/skills/verify-ui/scripts
-$S/check.py --run $R                       # all scenarios: windows talk items themes (PASS/FAIL per check)
+$S/check.py --run $R                       # all scenarios: windows talk items themes pick (PASS/FAIL per check)
 LIVING_GAME_THEME=night $S/check.py --run $R windows talk items   # the same in a theme; evidence in <scenario>-night/
 $S/check.py --run $R windows               # one
 $S/drive.py --run $R --name try --plan 'ready;wait:2;click:@menu;wait:0.5;shot:menu;dump:menu;quit'
@@ -43,7 +43,8 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | `slide:A>B[:SECS]` | Holds the click at A, slides to B, lets go: a title-bar drag, an item carried onto someone (a three-finger drag is the same press and move) |
 | `key:NAME:tap\|down\|up` | Any key by its `KeyCode` name (`KeyI`, `Escape`, `Enter`, `Tab`, `Digit1`, `AltLeft`) |
 | `type:TEXT`, `enter`, `tab`, `chat:open\|close` | Words in the box, said to whom it addresses; Tab; the box opened or closed (closing keeps its window) |
-| `dump:NAME` | Writes `NAME.json`: open windows (top last) with anchors and rectangles, the Menu list, the list of acts, the box and whom it addresses, settings, and every tagged node shown with its centre |
+| `dump:NAME` | Writes `NAME.json`: open windows (top last) with anchors and rectangles, the Menu list, the list of acts, the box and whom it addresses, settings, every tagged node shown with its centre, and the cursor pick: `under` (who is under the cursor, `living/game/src/pick.rs`), `hovered` (id, label: the nameplates shown as hovered), `targeted` (the target plate) and `seen` (each body's feet and head on screen, its depth and its distance from the cursor's ground point) |
+| `point:ID[:H]` | Keeps the game's cursor on character ID as drawn, H m above their feet (default 0.3; 1.3 is the chest), frame after frame, until `cursor:` or another `point:` |
 | `menu:f@id:N`, `sync:NAME`, `shot:NAME`, `scroll:PX`, `dodge:W` | F's list on someone; wait for a scene; a photograph; two-finger scroll; a double tap |
 
 Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:0:give` finds `acts:0:give:3`):
