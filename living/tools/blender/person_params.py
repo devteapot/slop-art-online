@@ -46,6 +46,19 @@ EYE_COLOURS = dict(
     blue=(0.30, 0.47, 0.62), grey=(0.42, 0.50, 0.54), green=(0.33, 0.48, 0.33), hazel=(0.47, 0.40, 0.20), amber=(0.60, 0.40, 0.14),
     brown=(0.36, 0.23, 0.13), dark_brown=(0.21, 0.14, 0.10),
 )
+# How drawn the whole town's faces are (docs/CHARACTERS.md, "Style"): 0 keeps the proportions of
+# life that pass 1 had, 1 is the VRoid control's drawing (eyes low on the head and tall, a short
+# fine lower face, a small nose and mouth, a larger head). Grown men and the old take less of it.
+# One number for everyone; `stylise` in a person's parameters overrides it for that person.
+STYLE = dict(
+    toward=0.70,      # how far every face leans toward the control's proportions
+    men=0.66,         # the share of it a grown man's face takes
+    elders=0.85,      # and an old face
+    head=0.085,       # how much larger the head is at 1 (on top of 1.08)
+    lash=0.55,        # how much heavier the lash line is at 1
+    lash_colour=(0.24, 0.10, 0.09),  # the lashes' warm dark brown, as the control's
+)
+
 HAIR_STYLES = ("crop", "short", "tousled", "swept", "shag", "bob", "bob_parted", "long", "tail", "bun", "braid", "braids", "sides", "kerchief", "balding")  # hair.py STYLES
 # How far each style's hair hangs below the hairline at the sides, in metres, as drawn from a
 # seed (`hair.length`); for the short styles it scales the hairs' own length round 0.07.
@@ -270,6 +283,7 @@ def resolve(p):
     elder = smooth((age - 46) / 26)
     teen = smooth((age - 11) / 7)  # 0 a child, 1 grown
     masc = 1.0 if male else 0.0
+    drawn = clip(float(p.get("stylise", STYLE["toward"])), 0.0, 1.2) * (1 - (1 - STYLE["men"]) * masc * teen) * (1 - (1 - STYLE["elders"]) * elder)
     w, mus = b["weight"], b["muscle"]
     # A heavier person has a fuller face; a lean one a harder one.
     face["cheeks"] = clip(face.get("cheeks", 0) + 0.55 * w, -1.4, 1.4)
@@ -296,7 +310,7 @@ def resolve(p):
     brow = mix(mix(natural, silver, 0.6 * smooth(grey / 0.9)), (0.05, 0.04, 0.04), 0.25 if sum(natural) > 0.6 else 0.0)
     # Lines and lashes.
     fem = (1 - masc) * teen
-    lash = mix((0.10, 0.075, 0.07), natural, 0.25 if sum(natural) > 0.7 else 0.0)
+    lash = mix(mix((0.10, 0.075, 0.07), STYLE["lash_colour"], min(drawn, 1.0)), natural, 0.25 if sum(natural) > 0.7 else 0.0)
     style = beard_p.get("style", "none")
     if style not in BEARD_STYLES:
         raise SystemExit(f"beard.style: {style!r} is not one of {BEARD_STYLES}")
@@ -308,8 +322,9 @@ def resolve(p):
         freckles=skin_p.get("freckles", 0.0), nostril=clip(0.35 + 0.35 * masc * teen + 0.3 * elder - 0.3 * child, 0, 1), nose_line=clip(0.55 + 0.45 * masc * teen + 0.3 * elder - 0.3 * child, 0, 1.3),
         stubble=stubble, stubble_colour=mix(mix(skin, beard_c, 0.55), (0.35, 0.38, 0.42), 0.25), beard=style if masc else "none", beard_colour=beard_c, beard_density=1.0,
         hair=hair, hair_tip=hair_tip, hair_natural=natural, hair_natural_tip=natural_tip, hair_silver=silver, hair_grey=grey, brow=brow, lash=lash, lash_tip=mix(lash, (0.42, 0.20, 0.14), 0.6),
-        lash_k=0.66 + 0.74 * fem + 0.34 * child * (1 - masc) + 0.12 * child, lash_wing=0.14 + 0.22 * fem + 0.06 * child, wing_lift=0.10 + 0.22 * fem,
-        lashes=int(round(3 * fem + (1 if child > 0.5 and not male else 0))), fold=clip(0.65 + 0.5 * face.get("eye_fold", 0) + 0.35 * elder, 0, 1.6),
+        lash_k=(0.66 + 0.74 * fem + 0.34 * child * (1 - masc) + 0.12 * child) * (1 + STYLE["lash"] * drawn), lash_wing=0.14 + 0.22 * fem + 0.06 * child, wing_lift=0.10 + 0.22 * fem,
+        lashes=int(round(9 * fem + 5 * child * (1 - masc) + 2 * child * masc)), lashes_low=int(round(4 * fem + 2 * child * (1 - masc))),
+        brow_hairs=int(round(22 + 8 * masc * teen + 4 * elder)), fold=clip(0.65 + 0.5 * face.get("eye_fold", 0) + 0.35 * elder, 0, 1.6),
         lower=clip(0.35 + 0.45 * fem + 0.2 * child, 0, 1), iris=colour(p["eyes"]["colour"], EYE_COLOURS, "eyes.colour"),
         white_shade=mix((0.62, 0.60, 0.68), shade, 0.25),
     )
@@ -335,7 +350,7 @@ def resolve(p):
         if p[a][k] not in options:
             raise SystemExit(f"{name}: {p[a][k]!r} is not one of {options}")
     return dict(
-        seed=seed, masc=masc, child=child, elder=elder, face=face, look=look, girth=girth, limb=limb, belly=belly, chest=chest, woman_torso=bool(not male and age >= 13),
+        seed=seed, masc=masc, child=child, elder=elder, face=face, look=look, style=drawn, head_scale=1.08 * (1 + STYLE["head"] * drawn), girth=girth, limb=limb, belly=belly, chest=chest, woman_torso=bool(not male and age >= 13),
         hair_style=hair_p["style"], hair_length=hair_p.get("length", 0.07), recede=0.024 * clip(hair_p.get("recede", 0.0), 0, 1),
         hair=dict(style=hair_p["style"], length=float(hair_p.get("length", 0.07)), parting=float(hair_p.get("parting", 0.0)), fringe=float(hair_p.get("fringe", 0.7)), volume=float(hair_p.get("volume", 0.5)),
                   curl=float(hair_p.get("curl", 0.0)), fringe_style=hair_p.get("fringe_style", "auto")),

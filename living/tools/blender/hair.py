@@ -121,11 +121,39 @@ class Comb:
         b = dict(neck_r=0.050, neck_y=-0.012, neck_top=-0.070, shoulder_z=-0.200, half_w=0.165, half_d=0.085, torso_y=0.0, round=0.045)
         b.update(body or {})
         self.b = b
+        # The head's surface sampled by direction from its middle: its distance out, and how
+        # squarely it faces outward there. head_form's own function is not a distance (near the
+        # top of the skull it is many times too small), and hair must lie a set height off.
+        self.az = np.arange(-180, 180, 5.0)
+        self.el = np.arange(-90, 90.1, 5.0)
+        aa, ee = np.meshgrid(self.az, self.el, indexing="ij")
+        d = head_dir(aa.ravel(), ee.ravel())
+        r = hf.radius(d)
+        n = hf.normal(ORIGIN + d * r[:, None])
+        self.R = r.reshape(aa.shape)
+        self.C = np.clip(np.sum(n * d, axis=1), 0.35, 1.0).reshape(aa.shape)
+
+    def head(self, p):
+        """Roughly the distance of points from the head's surface (negative inside)."""
+        q = p - ORIGIN
+        rad = np.maximum(np.linalg.norm(q, axis=1), 1e-9)
+        az = np.degrees(np.arctan2(-q[:, 0], q[:, 1]))
+        el = np.degrees(np.arcsin(np.clip(q[:, 2] / rad, -1, 1)))
+        fa = (az + 180) / 5.0
+        fe = np.clip((el + 90) / 5.0, 0, len(self.el) - 1 - 1e-6)
+        ia, ie = np.floor(fa).astype(int), np.floor(fe).astype(int)
+        ta, te = fa - ia, fe - ie
+        i0, i1 = ia % len(self.az), (ia + 1) % len(self.az)
+
+        def at(g):
+            return (g[i0, ie] * (1 - ta) + g[i1, ie] * ta) * (1 - te) + (g[i0, ie + 1] * (1 - ta) + g[i1, ie + 1] * ta) * te
+
+        return (rad - at(self.R)) * at(self.C)
 
     def dist(self, p):
         b = self.b
         x, y, z = p[:, 0], p[:, 1], p[:, 2]
-        d = self.hf.f(p)
+        d = self.head(p)
         # Below the jaw the head's own function is a flat cap: the neck takes over.
         neck = np.hypot(x, y - b["neck_y"]) - b["neck_r"]
         neck = np.maximum(neck, z - b["neck_top"])
@@ -192,7 +220,7 @@ class Hair:
         return self.rng.uniform(a, b)
 
     def lock(self, az, el, d, length=0.05, z_end=None, width=0.045, lift=0.006, g=30.0, blunt=0.0, tip_out=0.0, bulge=None, target=None, layer=1, chain=-1, taper=2.6,
-             shade=0.0, jitter=0.0, thick=1.0, hug=1.0, root=None):
+             shade=0.0, jitter=0.0, thick=1.0, hug=1.0, root=None, even=0.0):
         """One lock: from the scalp at (az, el) (degrees round from the front, + to the
         character's left; degrees up), or from `root`, combed along `d` (a vector, or one of
         `down`, `away`)."""
@@ -215,7 +243,7 @@ class Hair:
             length = min(length, (p[2] - z_end) * 1.25 + 0.05)
         self.locks.append(dict(p=p, d=unit(d), length=length, z_end=-9.0 if z_end is None else z_end, width=width, lift=lift, g=g, blunt=blunt, tip_out=tip_out,
                                bulge=(0.35 + 0.9 * self.volume) * 0.006 if bulge is None else bulge, target=target, layer=layer, chain=chain, taper=taper,
-                               tone=self.u(-1, 1), shade=shade, thick=thick, hug=hug, u0=self.u(0, 1), du=self.u(0.16, 0.30), grey=self.rng.random()))
+                               tone=self.u(-1, 1), shade=shade, thick=thick, hug=hug, u0=self.u(0, 1), du=self.u(0.16, 0.30), grey=self.rng.random(), even=even))
 
     @property
     def whorl(self):
@@ -241,7 +269,7 @@ class Hair:
             self.lock(a + self.u(-3, 3), el + self.u(-4, 4), "down", z_end=z_end - back_drop * back + self.u(-0.008, 0.008), length=0.9, width=width + self.u(-0.005, 0.006), lift=0.004, g=g,
                       blunt=blunt, layer=0, chain=ch, shade=-0.05, taper=taper)
 
-    def over(self, z_end, n=7, width=0.074, back_drop=0.0, g=30.0, blunt=0.3, chain=None, front=52.0, taper=2.6, lift=0.009):
+    def over(self, z_end, n=7, width=0.074, back_drop=0.0, g=30.0, blunt=0.3, chain=None, front=80.0, taper=2.6, lift=0.009):
         """From the parting across the top and down over the under layer, on each side, then
         fanning round the crown."""
         px = self.part_x()
@@ -257,7 +285,7 @@ class Hair:
                 az, el = math.degrees(math.atan2(-p[0] + ORIGIN[0], p[1] - ORIGIN[1])), math.degrees(math.asin(np.clip((p[2] - ORIGIN[2]) / np.linalg.norm(p - ORIGIN), -1, 1)))
                 # Sideways at the front, fanning to straight back behind the crown.
                 th = math.radians(lerp(6, 50, smooth((t - 0.45) / 0.55)))
-                comb = np.array([side * math.cos(th), 0.25 * (1 - t) - math.sin(th), 0.0])
+                comb = np.array([side * math.cos(th), -0.22 - math.sin(th), 0.0])
                 back = smooth((t - 0.55) / 0.45)
                 a_end = 90 + 45 * back
                 ch = -1 if chain is None else chain(-side * a_end)
@@ -270,11 +298,11 @@ class Hair:
         for i in range(n):
             a = math.radians(-78 + 156 * i / (n - 1))  # 0 straight back
             comb = np.array([-math.sin(a), -math.cos(a), 0.0])
-            root = self.comb.surface(180.0 + math.degrees(a) * 0.12, 66.0)[0]
+            root = self.comb.surface(180.0 + math.degrees(a) * 0.45, 62.0 - 6 * abs(math.sin(a)))[0]
             az_end = 180 - math.degrees(a) * 0.9
             az_end = az_end if az_end <= 180 else az_end - 360
-            self.lock(0, 0, comb, root=root, z_end=z_end - back_drop + self.u(-0.010, 0.006), length=0.9, width=width + self.u(-0.006, 0.006), lift=0.012, g=g, blunt=blunt, layer=2,
-                      chain=-1 if chain is None else chain(az_end), shade=0.04, taper=taper)
+            self.lock(0, 0, comb, root=root, z_end=z_end - back_drop + self.u(-0.010, 0.006), length=0.9, width=width + self.u(-0.006, 0.006), lift=0.009, g=g, blunt=blunt, layer=2,
+                      chain=-1 if chain is None else chain(az_end), shade=0.04, taper=taper, bulge=0.003)
 
     def bangs(self, mode="straight", n=7, reach=1.0, width=0.048, blunt=0.55, span=50.0, g=38.0):
         """The fringe: from the top of the head forward and down over the forehead. `straight`
@@ -285,7 +313,7 @@ class Hair:
         if self.fringe_style in ("straight", "swept", "curtain"):
             mode = self.fringe_style
         px = self.part_x()
-        z_end = lerp(self.front_z - 0.004, self.brow_z + 0.002, f)
+        z_end = lerp(self.front_z - 0.004, self.brow_z + 0.004, f)
         sweep = 0.0
         if mode == "swept":
             sweep = 1.0 if px <= 0 else -1.0  # away from the parting
@@ -331,9 +359,10 @@ class Hair:
             if front is not None and p[1] > -0.02:
                 # On top, combed as the style says (forward, across, or back).
                 d = lerp(d, np.asarray(front, float) * 0.1 + np.array([0.06 * (1 if p[0] > px else -1) * (abs(px) > 0.004), 0, 0]), top)
-            ln = length * self.u(0.8, 1.25) * (1 - 0.35 * smooth((0.0 - p[2]) / 0.06))
+            ln = 1.45 * length * self.u(0.8, 1.25) * (1 - 0.35 * smooth((0.0 - p[2]) / 0.06))
             low = smooth((0.0 - p[2]) / 0.05)  # toward the nape and round the ears it lies flat
-            self.lock(az, el, d, length=ln, width=width * self.u(0.85, 1.2), lift=lift, g=g, tip_out=tip_out * self.u(0.4, 1.3) * (1 - 0.85 * low), jitter=jitter * (1 - 0.5 * low), layer=1, blunt=blunt, taper=2.2)
+            self.lock(az, el, d, length=ln, width=width * self.u(0.85, 1.2), lift=lift, g=g, tip_out=tip_out * self.u(0.4, 1.3) * (1 - 0.85 * low), jitter=jitter * (1 - 0.5 * low), layer=1, blunt=blunt, taper=1.5, thick=0.6, even=1.0,
+                      bulge=0.002 + 0.004 * self.volume)
 
     def gather(self, target, n_edge=16, n_mid=9, width=0.052):
         """Hair drawn back over the scalp to a point (a tail's or a bun's tie)."""
@@ -397,7 +426,7 @@ class Hair:
     def _bob_parted(self):
         z = self.side_line()
         self.under(z, n=13, blunt=0.4)
-        self.over(z, n=7, blunt=0.4, front=58.0)
+        self.over(z, n=7, blunt=0.4, front=74.0)
         self.crown(z, blunt=0.4)
         self.bangs("curtain", n=8)
         self.temples(z + 0.03, n=1)
@@ -659,8 +688,9 @@ class Hair:
         rings = n if blunt <= 0 else n + 1
         for i in range(rings):
             c = pts[i] + out[i] * rise[i]
-            shade = lerp(0.74, 1.0, smooth(t[i] / 0.25))
-            cc = lerp(base, tipc, smooth((t[i] - 0.35) / 0.65)) * shade / TEX_MEAN
+            even = k.get("even", 0.0)
+            shade = lerp(lerp(0.74, 0.92, even), 1.0, smooth(t[i] / 0.25))
+            cc = lerp(base, tipc, smooth((t[i] - 0.35) / 0.65) * (1 - 0.8 * even)) * shade / TEX_MEAN
             for a, h in zip(across, profile):
                 self.v.append(c + side[i] * (w[i] / 2 * a) + out[i] * (th[i] * h))
                 self.col.append(cc * (1 - 0.22 * abs(a) ** 3))
@@ -675,6 +705,19 @@ class Hair:
             self.along += [s[i]] * 6
         nr = 6
         v0 = len(self.v) - rings * nr
+        # A broad lock on the head bends across to follow it, as combed hair lies: each vertex
+        # is moved to its own height over whatever the lock's middle lies on.
+        if self._frame.__func__ is Hair._frame if hasattr(self._frame, "__func__") else False:
+            mid_d = self.comb.dist(pts[:rings] + out[:rings] * rise[:rings, None])
+            near = smooth((0.030 - mid_d) / 0.020)
+            if near.max() > 0.01:
+                V = np.array(self.v[v0 : v0 + rings * nr])
+                want = np.repeat(mid_d, nr) + np.repeat(th[:rings], nr) * np.tile(np.array(profile + (-0.35,)), rings)
+                wgt = np.repeat(near, nr)
+                for _ in range(2):
+                    V = V - self.comb.normal(V) * ((self.comb.dist(V) - want) * wgt)[:, None]
+                for q in range(len(V)):
+                    self.v[v0 + q] = V[q]
         for i in range(rings - 1):
             a, b = v0 + nr * i, v0 + nr * (i + 1)
             for j in range(nr):
@@ -684,7 +727,7 @@ class Hair:
         tip = len(self.v)
         end = pts[n] + out[n] * rise[n] + (tan[n] * 0.004 if blunt > 0 else 0)
         self.v.append(end)
-        self.col.append(tipc / TEX_MEAN * (0.9 if blunt > 0 else 1.0))
+        self.col.append(lerp(tipc, base, 0.8 * k.get("even", 0.0)) / TEX_MEAN * (0.9 if blunt > 0 else 1.0))
         self.uv.append((u0 + du * 0.5, 0.0))
         self.nrm.append(unit(out[n] + tan[n] * 0.3))
         self.chain.append(chain_id)

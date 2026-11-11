@@ -56,41 +56,46 @@ class Head:
     child) to 0 (grown), `elder` 0 to 1 (old), and `face`, the face parameters, each about -1 to
     1 round the person's average (missing ones are 0)."""
 
-    def __init__(self, masc=1.0, child=0.0, elder=0.0, face=None):
+    def __init__(self, masc=1.0, child=0.0, elder=0.0, face=None, style=0.0):
         g = lambda k: float((face or {}).get(k, 0.0))
         self.masc, self.child, self.elder = masc, child, elder
         c, e = child, elder
+        # How far the face leans from life toward the drawn face of the VRoid control
+        # (person_params.STYLE; docs/CHARACTERS.md, "Style"): the eyes lower on the head and
+        # taller, the lower face shorter and finer, the nose and mouth smaller.
+        k = float(style)
+        self.style = k
         # Children's faces differ little by sex.
         m = lerp(masc, 0.3, c)
         s = 2 * m - 1  # -1 a woman's, +1 a man's
         self.m = m
         # How long the lower face is (everything below the eyes scales by it).
-        L = 1.0 + 0.09 * g("face_length") + 0.0425 * s - 0.0075 - 0.12 * c + 0.01 * e
+        L = (1.0 + 0.09 * g("face_length") + 0.0425 * s - 0.0075 - 0.12 * c + 0.01 * e) * (1 - 0.15 * k * (1 - 0.5 * c))
         self.L = L
-        wide = 1.0 + 0.075 * g("face_width") + 0.02 * c
+        wide = (1.0 + 0.075 * g("face_width") + 0.02 * c) * (1 + 0.05 * k)
         self.chin_z = -0.131 * L
         self.top_z = 0.115 + 0.006 * g("forehead") + 0.003 * c
         # ---- the eyes
         self.eye_x = 0.0335 * (1 + 0.075 * g("eye_spacing")) * (1 + 0.5 * (wide - 1))
-        self.eye_z = 0.002 + 0.0035 * g("eye_height") - 0.007 * c - 0.0015 * (1 - m)
-        size = 1 + 0.11 * g("eye_size")
+        self.eye_z = 0.002 + 0.0035 * g("eye_height") - 0.007 * c - 0.0015 * (1 - m) - 0.012 * k * (1 - 0.5 * c)
+        size = (1 + 0.11 * g("eye_size")) * (1 + 0.09 * k)
         self.eye_w = lerp(lerp(0.0203, 0.0176, m), 0.0206, c) * size * (1 - 0.04 * e)
-        openness = (1 + 0.15 * g("eye_open")) * (1 - 0.16 * e)
+        openness = (1 + 0.15 * g("eye_open")) * (1 - 0.16 * e) * (1 + 0.44 * k * (1 - 0.45 * c))
         self.eye_up = self.eye_w * lerp(lerp(0.68, 0.50, m), 0.72, c) * openness
-        self.eye_lo = self.eye_w * lerp(lerp(0.36, 0.31, m), 0.40, c) * (1 + 0.10 * g("eye_open"))
+        self.eye_lo = self.eye_w * lerp(lerp(0.36, 0.31, m), 0.40, c) * (1 + 0.10 * g("eye_open")) * (1 + 0.30 * k * (1 - 0.45 * c))
         self.eye_tilt = 0.10 * g("eye_tilt") + 0.03 * (1 - m) - 0.05 * e  # the outer corner's rise, as a slope
         self.eye_peak = 0.10 * g("eye_shape") - 0.05 * m  # where the upper lid peaks: + outward
         self.iris_r = min(0.60 * (self.eye_up + self.eye_lo), 0.64 * self.eye_w) * (1 + 0.07 * g("iris_size"))
         # ---- brows
-        self.brow_w = lerp(lerp(0.0042, 0.0072, m), 0.0042, c) * (1 + 0.30 * g("brow_thickness")) * (1 + 0.25 * e * m)
-        self.brow_up = 0.0085 + 0.0030 * g("brow_height") + 0.0015 * (1 - m) + 0.002 * c
+        self.brow_w = lerp(lerp(0.0042, 0.0072, m), 0.0042, c) * (1 + 0.30 * g("brow_thickness")) * (1 + 0.25 * e * m) * (1 - 0.20 * k)
+        self.brow_up = 0.0085 + 0.0030 * g("brow_height") + 0.0015 * (1 - m) + 0.002 * c + 0.0020 * k
         self.brow_tilt = 0.0028 * g("brow_tilt") + 0.0006 * s
         self.brow_arch = 0.0048 * (1 + 0.5 * g("brow_arch")) * lerp(1.15, 0.8, m)
         self.brow_len = 1 + 0.10 * g("brow_length")
         # ---- nose
         self.nose_len = 1 + 0.17 * g("nose_length") + 0.06 * s - 0.20 * c + 0.07 * e
-        self.nose_wid = 1 + 0.22 * g("nose_width") + 0.08 * s - 0.05 * c + 0.08 * e
-        self.nose_out = (1 + 0.20 * g("nose_bridge") + 0.12 * s - 0.30 * c + 0.06 * e) * (1 + 0.5 * (self.nose_len - 1))
+        self.nose_wid = (1 + 0.22 * g("nose_width") + 0.08 * s - 0.05 * c + 0.08 * e) * (1 - 0.14 * k)
+        self.nose_out = (1 + 0.20 * g("nose_bridge") + 0.12 * s - 0.30 * c + 0.06 * e) * (1 + 0.5 * (self.nose_len - 1)) * (1 - 0.38 * k)
         self.nose_curve = 1.25 - 0.45 * g("nose_bridge") - 0.20 * s + 0.35 * c  # > 1 scooped, < 1 arched
         self.nose_turn = 0.0030 * g("nose_tip") + 0.0015 * c - 0.001 * e  # the tip's lift
         self.nasion_z = self.eye_z + 0.006
@@ -98,15 +103,15 @@ class Head:
         self.nose_base_z = self.nose_tip_z - 0.0095 - self.nose_turn
         # ---- mouth
         self.mouth_z = self.nose_base_z - (0.0275 + 0.0030 * g("mouth_height")) * L
-        self.mouth_w = lerp(lerp(0.0178, 0.0205, m), 0.0150, c) * (1 + 0.15 * g("mouth_width"))
+        self.mouth_w = lerp(lerp(0.0178, 0.0205, m), 0.0150, c) * (1 + 0.15 * g("mouth_width")) * (1 - 0.15 * k)
         self.lip = lerp(lerp(1.20, 0.80, m), 1.05, c) * (1 + 0.32 * g("lip_fullness")) * (1 - 0.25 * e)
         self.mouth_curve = 0.0016 * g("mouth_curve") - 0.0006 * e  # corners up (+) or down
         # ---- ears
         self.ear_size = 1 + 0.13 * g("ear_size") + 0.07 * e + 0.04 * c
         self.ear_out = 22 + 13 * g("ear_out") + 4 * c
         # ---- the outline from the front: half width by height
-        jaw = (0.0522 + 0.0042 * s) * (1 + 0.13 * g("jaw_width")) * (1 + 0.04 * c + 0.035 * e) * wide
-        chin_w = (0.0190 + 0.0045 * s) * (1 + 0.36 * g("chin_width")) * (1 + 0.10 * c)
+        jaw = (0.0522 + 0.0042 * s) * (1 + 0.13 * g("jaw_width")) * (1 + 0.04 * c + 0.035 * e) * wide * (1 - 0.05 * k)
+        chin_w = (0.0190 + 0.0045 * s) * (1 + 0.36 * g("chin_width")) * (1 + 0.10 * c) * (1 - 0.24 * k)
         cheekbone = 0.0712 * (1 + 0.06 * g("cheekbones") - 0.012 * c) * wide
         chin_len = 1 + 0.14 * g("chin_length") + 0.04 * s
         self.chin_z = self.mouth_z - (self.mouth_z - self.chin_z) * chin_len
@@ -132,8 +137,8 @@ class Head:
         self.dome_n = 2.0 + 0.25 * g("forehead") + 0.2 * c  # 2 an ellipse; more is a squarer forehead
         self.chin_round = 0.011
         # ---- bumps
-        self.cheek = 0.15 + 0.75 * c + 0.55 * g("cheeks") - 0.35 * e - 0.10 * s
-        self.brow_ridge = max(0.0, 0.0030 * (0.5 + 0.5 * s) * (1 - c) + 0.0015 * g("brow_ridge") + 0.0008 * e)
+        self.cheek = 0.15 + 0.75 * c + 0.55 * g("cheeks") - 0.35 * e - 0.10 * s + 0.20 * k
+        self.brow_ridge = max(0.0, 0.0030 * (0.5 + 0.5 * s) * (1 - c) + 0.0015 * g("brow_ridge") + 0.0008 * e) * (1 - 0.5 * k)
         self.chin_f = cf
         self.jowl = 0.6 * e + 0.25 * max(g("cheeks"), 0) * (1 - c)
 

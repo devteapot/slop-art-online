@@ -21,6 +21,7 @@ head's middle with more texels given to the front.
 """
 
 import math
+import random
 
 import numpy as np
 
@@ -28,7 +29,10 @@ from head_form import ORIGIN, lerp, smooth
 
 ATLAS = 1024
 EYE_ROWS = 192  # the eyes' strip, at the top of the atlas
-EYE_COLS = 448  # each eye's rectangle; the rest of the strip is a swatch of plain skin
+EYE_COLS = 320  # each eye's white; then the iris's square, then a swatch of plain skin
+IRIS_COL0, IRIS_PX = 2 * EYE_COLS, EYE_ROWS  # the iris both eyes share
+IRIS_FILL = 0.47  # the iris's half height, as a share of its square
+EYE_R = 0.080  # the radius of the ball an eye's white and iris lie on, m: about the face's own curve
 K_AZ, K_EL, EL0 = 1.5, 0.7, -0.05
 CUTS, WARP = 30, (0.0, 0.28, -0.34)  # the cube's front face runs from the brows to under the lip
 
@@ -101,7 +105,56 @@ def eye_uv(hf, side, x, z):
     return np.stack([col / ATLAS, 1 - row / ATLAS], axis=1)
 
 
-SWATCH_UV = ((2 * EYE_COLS + ATLAS) / 2 / ATLAS, 1 - EYE_ROWS / 2 / ATLAS)  # plain skin (ears)
+SWATCH_UV = ((IRIS_COL0 + IRIS_PX + ATLAS) / 2 / ATLAS, 1 - EYE_ROWS / 2 / ATLAS)  # plain skin (ears)
+IRIS_WIDE = 0.93  # the iris is a little taller than wide, as drawn eyes are
+
+
+def iris_centre(hf, side):
+    """Where the iris sits in the front view when the eye looks ahead: (x, z)."""
+    up0, lo0 = hf.lid(np.array(0.0))
+    r = hf.iris_r
+    return side * (hf.eye_x - 0.035 * hf.eye_w), hf.eye_z + min(float(up0) - 0.74 * r, float(lo0) + 0.97 * r)
+
+
+def eye_ball(hf, side):
+    """The ball an eye's white and iris lie on: its centre, set so the ball passes at least 2 mm
+    behind the skin everywhere in the opening. The eye's bone sits at the centre, so turning the
+    bone slides the iris over the white."""
+    cx, cz = iris_centre(hf, side)
+    s = np.linspace(-1, 1, 15)
+    up, lo = hf.lid(s)
+    pts = [(side * (hf.eye_x + hf.eye_w * a), hf.eye_z + b) for a, b in zip(s, up)] + [(side * (hf.eye_x + hf.eye_w * a), hf.eye_z + b) for a, b in zip(s, lo)] + [(cx, cz)]
+    p, n = hf.project_front(pts)
+    axis = n.mean(axis=0)
+    axis /= np.linalg.norm(axis)
+    depth = 0.0024
+    for _ in range(40):
+        c = p[-1] - axis * (EYE_R + depth)
+        if (np.linalg.norm(p - c, axis=1) - EYE_R).min() >= 0.0020:
+            break
+        depth += 0.0003
+    return c
+
+
+def on_ball(c, x, z, lift=0.0):
+    """Points of an eye's ball (or `lift` outside it) seen at front-view (x, z)."""
+    x, z = np.asarray(x, float), np.asarray(z, float)
+    r = EYE_R
+    y = c[1] + np.sqrt(np.maximum(r * r - (x - c[0]) ** 2 - (z - c[2]) ** 2, 1e-9))
+    p = np.stack([x, y, z], axis=1)
+    if lift:
+        p = p + (p - c) / r * lift
+    return p
+
+
+def turn(p, c, yaw, pitch):
+    """Points turned about an eye's centre: yaw degrees toward the character's left, pitch up."""
+    if not yaw and not pitch:
+        return p
+    a, b = math.radians(yaw), math.radians(pitch)
+    rz = np.array([[math.cos(a), -math.sin(a), 0], [math.sin(a), math.cos(a), 0], [0, 0, 1]])
+    rx = np.array([[1, 0, 0], [0, math.cos(b), -math.sin(b)], [0, math.sin(b), math.cos(b)]])
+    return c + (p - c) @ (rz @ rx).T
 
 
 def cube_sphere(n, warp):
@@ -135,13 +188,15 @@ class Mesh:
     """Geometry in progress: positions, per-vertex colours (sRGB) and UVs, faces with a material key."""
 
     def __init__(self):
-        self.v, self.col, self.uv, self.f, self.fm = [], [], [], [], []
+        self.v, self.col, self.uv, self.f, self.fm, self.eye = [], [], [], [], [], []
 
-    def add(self, pts, cols, uvs, faces, mat, facing=None):
+    def add(self, pts, cols, uvs, faces, mat, facing=None, eye=None):
+        """`eye`: (side, weight) for vertices that follow an eye's bone; the rest follow the head."""
         """`facing(centre, normal)` says whether a face looks the right way; others are turned."""
         base = len(self.v)
         pts = [tuple(float(c) for c in p) for p in pts]
         self.v += pts
+        self.eye += [eye] * len(pts)
         self.col += [tuple(cols)] * len(pts) if isinstance(cols[0], (int, float)) else [tuple(c) for c in cols]
         self.uv += [(0.0, 0.0)] * len(pts) if uvs is None else [tuple(float(c) for c in t) for t in uvs]
         for f in faces:
@@ -225,13 +280,14 @@ class Face:
         dirs, quads, front = cube_sphere(CUTS, WARP)
         self.base_pos = ORIGIN + dirs * hf.radius(dirs)[:, None]
         self.base_quads = quads  # the whole head before any cutting: hair and beards build on it
+        self.balls = {side: eye_ball(hf, side) for side in (-1, 1)}
         self._topology(front, keep)
-        neutral = self.build({})
+        neutral = self.build(dict(look=look.get("gaze", (0.0, 0.0))))
         self.mesh = neutral
         self.morphs = {}
         v0 = np.array(neutral.v)
         for name, state in EXPRESSIONS.items():
-            m = self.build(state)
+            m = self.build(dict(state, look=look.get("gaze", (0.0, 0.0))))
             assert len(m.v) == len(neutral.v), name
             self.morphs[name] = np.array(m.v) - v0
 
@@ -438,10 +494,16 @@ class Face:
             r = self.rings[side]
             first, ring = r["first"], r["ring"]
             k = len(ring)
-            # The lids' rim: the ring again, turned in behind the skin.
+            # The lids' rim: the ring again, turned in behind the skin as far as the eye's ball.
             ring_pos = skin[first : first + k]
             nrm = self.skin_normals[first : first + k]
-            base = m.add(ring_pos - nrm * self.RIM, look["skin_rim"], self.skin_uvs[first : first + k], [], "face")
+            ball = self.balls[side]
+            oc = ring_pos - ball
+            b_ = np.sum(oc * -nrm, axis=1)
+            disc = b_ * b_ - (np.sum(oc * oc, axis=1) - EYE_R * EYE_R)
+            reach = np.where(disc > 0, -b_ - np.sqrt(np.maximum(disc, 0)), self.RIM)
+            reach = np.clip(reach + 0.0005, self.RIM, 0.012)
+            base = m.add(ring_pos - nrm * reach[:, None], look["skin_rim"], self.skin_uvs[first : first + k], [], "face")
             mid_ring = ring_pos.mean(axis=0)
             for i in range(k):
                 q = (first + i, first + (i + 1) % k, base + (i + 1) % k, base + i)
@@ -451,14 +513,35 @@ class Face:
                     q = tuple(reversed(q))
                 m.f.append(q)
                 m.fm.append("face")
-            # The eye: a bowl behind the opening, carrying the painted eye.
+            # The eye's white: a patch of its ball behind the opening, with the lid's shadow painted.
             nx, nz = 10, 7
             mid, scale = eye_frame(hf)
             hw, hh = EYE_COLS / 2 / scale, EYE_ROWS / 2 / scale
             pts = [(side * hf.eye_x + lerp(-hw, hw, i / nx), hf.eye_z + mid + lerp(-hh, hh, j / nz)) for j in range(nz + 1) for i in range(nx + 1)]
-            p, nr = hf.project_front(pts)
             faces = [(j * (nx + 1) + i, j * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i) for j in range(nz) for i in range(nx)]
-            m.add(p - nr * self.BOWL, white, eye_uv(hf, side, [q[0] for q in pts], [q[1] for q in pts]), faces, "eye", facing=FORWARD)
+            m.add(on_ball(ball, [q[0] for q in pts], [q[1] for q in pts]), white, eye_uv(hf, side, [q[0] for q in pts], [q[1] for q in pts]), faces, "eye", facing=FORWARD)
+            # The iris: its own layer just off the white, following the eye's bone, so the eye
+            # can look round. `look` (yaw, pitch in degrees) turns it in the file, to photograph.
+            yaw, pitch = state.get("look", (0.0, 0.0))
+            cx, cz = iris_centre(hf, side)
+            r = hf.iris_r
+            seg = 24
+            ring_uv = lambda rho: [(math.cos(2 * math.pi * i / seg) * rho, math.sin(2 * math.pi * i / seg) * rho) for i in range(seg)]
+            disc_ = [(0.0, 0.0)] + ring_uv(0.55) + ring_uv(1.0)
+            xs = [cx + a * r * IRIS_WIDE for a, _ in disc_]
+            zs = [cz + b * r for _, b in disc_]
+            half = IRIS_PX * IRIS_FILL
+            uv = [((IRIS_COL0 + IRIS_PX / 2 + side * -a * half * IRIS_WIDE * 0 + a * half * IRIS_WIDE) / ATLAS, 1 - (IRIS_PX / 2 - b * half) / ATLAS) for a, b in disc_]
+            faces = [(0, 1 + i, 1 + (i + 1) % seg) for i in range(seg)] + [(1 + i, 1 + seg + i, 1 + seg + (i + 1) % seg, 1 + (i + 1) % seg) for i in range(seg)]
+            m.add(turn(on_ball(ball, xs, zs, 0.0006), ball, yaw, pitch), white, uv, faces, "iris", facing=FORWARD, eye=(side, 1.0))
+            # Highlights: both eyes are lit from the same side. They follow the eye half way,
+            # as a reflection does.
+            hs = look.get("light_side", 1.0)
+            for hx, hz, hrx, hrz in ((0.36 * hs, 0.36, 0.25, 0.20), (-0.34 * hs, -0.46, 0.105, 0.09)):
+                n_ = 12
+                ex = [cx + hx * r] + [cx + (hx + hrx * math.cos(2 * math.pi * i / n_)) * r for i in range(n_)]
+                ez = [cz + hz * r] + [cz + (hz + hrz * math.sin(2 * math.pi * i / n_)) * r for i in range(n_)]
+                m.add(turn(on_ball(ball, ex, ez, 0.0011), ball, 0.5 * yaw, 0.5 * pitch), (1.0, 1.0, 0.985), None, [(0, 1 + i, 1 + (i + 1) % n_) for i in range(n_)], "glint", facing=FORWARD, eye=(side, 0.5))
             self._lines(m, side, state, dark)
             self._brow(m, side, state)
         self._mouth_inside(m, state)
@@ -508,15 +591,23 @@ class Face:
             top.append((side * x, hf.eye_z + z + w))
             bot.append((side * x, hf.eye_z + z - 0.0004 * (1 - t)))
         self._strip(m, top, bot, mix3(dark, look["lash_tip"], 0.35), dark, "line", 0.0012)
-        # Lashes: short spikes off the outer part of the line.
+        # Lashes: strands off the line, as the hair's locks are in small: each a tapering card
+        # with a bend, fanning outward, longer toward the outer corner.
+        rng = random.Random(f"lash/{look.get('seed', 0)}/{side}")
         nl = look["lashes"]
         for i in range(nl):
-            s = 0.55 + 0.42 * (i + 0.5) / max(nl, 1)
-            root_z = up(s) + 0.6 * th[min(int((s + 1) / 2 * (n - 1)), n - 1)]
-            ln = 0.0022 * k * (0.8 + 0.4 * (i % 2))
-            a = math.radians(38 + 30 * i / max(nl, 1))
-            pts = [at(s - 0.07, root_z), at(s + 0.07, root_z), (side * (ex + ew * s + ln * math.cos(a)), hf.eye_z + root_z + ln * math.sin(a))]
-            self._shell(m, pts, [(0, 1, 2)], [dark, dark, look["lash_tip"]], "line", 0.0013)
+            f = (i + 0.5) / max(nl, 1)
+            s = lerp(0.10, 0.98, f ** 0.8) + rng.uniform(-0.02, 0.02)
+            root_z = up(s) + 0.55 * th[min(int((s + 1) / 2 * (n - 1)), n - 1)]
+            ln = (0.0020 + 0.0024 * f) * k * rng.uniform(0.85, 1.15) * (1 - 0.6 * b)
+            a = math.radians(74 - 46 * f + rng.uniform(-6, 6))
+            self._strand(m, side, (ex + ew * s, hf.eye_z + root_z), a, ln, 0.00030 + 0.00012 * k, bend=0.35, cols=(dark, look["lash_tip"]), mat="line", off=0.0013)
+        # A few under the outer corner.
+        for i in range(look.get("lashes_low", 0)):
+            f = (i + 0.5) / look["lashes_low"]
+            s = lerp(0.45, 0.92, f)
+            ln = (0.0010 + 0.0010 * f) * k * (1 - 0.6 * b)
+            self._strand(m, side, (ex + ew * s, hf.eye_z + lo(s) - 0.0002), math.radians(-70 + 30 * f), ln, 0.00024, bend=-0.3, cols=(dark, look["lash_tip"]), mat="line", off=0.0011)
         # Lower line: the outer part only.
         lk = look["lower"]
         s3 = [0.10 + 0.90 * i / 8 for i in range(9)]
@@ -549,7 +640,45 @@ class Face:
             top.append((side * x, z + 0.55 * w))
             bot.append((side * x, z - 0.45 * w))
         c = look["brow"]
-        self._strip(m, top, bot, c, mix3(c, (0, 0, 0), 0.18), "brow", 0.0011)
+        # A soft shape under the hairs, so the brow still reads from far off.
+        under = mix3(c, look["skin"], 0.12)
+        self._strip(m, [(x, lerp(zb, zt, 0.88)) for (x, zt), (_, zb) in zip(top, bot)], [(x, lerp(zb, zt, 0.12)) for (x, zt), (_, zb) in zip(top, bot)], under, mix3(under, (0, 0, 0), 0.12), "brow", 0.0010)
+        # The hairs: strands as the hair's locks are in small, growing up at the inner end and
+        # sweeping along the brow toward its tail.
+        rng = random.Random(f"brow/{look.get('seed', 0)}/{side}")
+        count = look.get("brow_hairs", 24)
+        for i in range(count):
+            t = (i + rng.uniform(0.1, 0.9)) / count
+            j = min(int(t * (n - 1)), n - 2)
+            f = t * (n - 1) - j
+            (xa, za), (xb, zb_) = top[j], top[j + 1]
+            (xc, zc), (xd, zd) = bot[j], bot[j + 1]
+            xt, zt, zl = lerp(abs(xa), abs(xb), f), lerp(za, zb_, f), lerp(zc, zd, f)
+            w = zt - zl
+            root = (xt, lerp(zl, zt, rng.uniform(0.05, 0.55)))
+            slope = math.atan2(zb_ - za, abs(xb) - abs(xa))
+            a = slope + math.radians(lerp(72, 14, smooth(t / 0.45)) + rng.uniform(-9, 9))
+            ln = max(w, 0.0012) * lerp(1.15, 1.9, smooth(t / 0.5)) * rng.uniform(0.8, 1.15) * (1 - 0.35 * smooth((t - 0.75) / 0.25))
+            tone = rng.uniform(-0.16, 0.16)
+            col = mix3(c, (0, 0, 0), -tone) if tone < 0 else mix3(c, look["skin"], tone * 0.8)
+            self._strand(m, side, root, a, ln, 0.00055 + 0.085 * max(w, 0.001), bend=-0.18, cols=(col, mix3(col, look["skin"], 0.25)), mat="brow", off=0.0012)
+
+    def _strand(self, m, side, root, angle, length, width, bend, cols, mat, off):
+        """One hair on the face: a tapering card from `root` (front view: |x|, z) along `angle`
+        (radians from pointing outward along +|x|, anticlockwise toward up), bending as it goes."""
+        x0, z0 = root
+        pts, cs = [], []
+        for q, (t, wk) in enumerate(((0.0, 1.0), (0.55, 0.72), (1.0, 0.0))):
+            a = angle + bend * t
+            cx, cz = x0 + length * t * math.cos(angle + 0.5 * bend * t), z0 + length * t * math.sin(angle + 0.5 * bend * t)
+            nx, nz = -math.sin(a), math.cos(a)
+            if wk > 0:
+                pts += [(side * (cx + nx * width * wk), cz + nz * width * wk), (side * (cx - nx * width * wk), cz - nz * width * wk)]
+                cs += [mix3(cols[0], cols[1], t)] * 2
+            else:
+                pts.append((side * cx, cz))
+                cs.append(cols[1])
+        self._shell(m, pts, [(0, 1, 3, 2), (2, 3, 4)], cs, mat, off)
 
     def _mouth_inside(self, m, state):
         """What an open mouth shows: a dark back, the upper teeth, the tongue."""
