@@ -217,6 +217,8 @@ pub struct SightEdge {
     /// My senses now by the rules (`senses(a)`): with a `field` while the world's `fov_on` law
     /// is on, and the keep margin (`keep_seen_m`) for someone already seen.
     pub senses: Option<Senses>,
+    /// Where they came from.
+    pub source: Option<Source>,
     pub keep_m: f32,
     /// The script revision `keep_m` was read for.
     keep_rev: Option<u32>,
@@ -232,7 +234,7 @@ impl Default for SightEdge {
     fn default() -> Self {
         let mode = std::env::var("LIVING_SIGHT_EDGE").ok().and_then(|v| Mode::parse(&v)).unwrap_or_default();
         let look = std::env::var("LIVING_SIGHT_LOOK").ok().and_then(|v| Look::parse(&v)).unwrap_or_default();
-        Self { mode, look, radius: 11.0, want: None, senses: None, keep_m: 1.0, keep_rev: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
+        Self { mode, look, radius: 11.0, want: None, senses: None, source: None, keep_m: 1.0, keep_rev: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
     }
 }
 
@@ -266,7 +268,35 @@ impl Plugin for SightEdgePlugin {
 /// My senses now by the world's rules (`senses(a)`: sight, hearing and, while the world's
 /// `fov_on` law is on, the `field` with its five values), or none before the script and my
 /// character are known.
-fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<Senses> {
+///
+/// The authority's own answer comes first: `my_senses` (one row for my living character, the
+/// `senses` law over all of its facts, written when a value changes), so the field drawn is the
+/// field the authority sees by. While that row is missing (before it arrives, or while the
+/// world's minds hold my character) the client asks the installed script itself for my sight,
+/// with no field: facing sight shows only as the authority reports it.
+fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<(Senses, Source)> {
+    let (conn, me) = (net.conn.as_ref()?, net.my_id?);
+    if let Some(r) = conn.db.my_senses().id().find(&me) {
+        return Some((senses_of_row(&r), Source::Authority));
+    }
+    local_sight(net, rules, hour).map(|s| (Senses { field: None, ..s }, Source::Local))
+}
+
+/// Where my senses came from: the authority's `my_senses` row, or the client's own ask.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    Authority,
+    Local,
+}
+
+/// My senses as the `my_senses` row has them.
+pub fn senses_of_row(r: &CharacterSenses) -> Senses {
+    let field = r.field.then_some(living_rules::sight::Field { focal_deg: r.focal_deg, side_deg: r.side_deg, side_share: r.side_share, near_m: r.near_m, margin_deg: r.margin_deg });
+    Senses { sight: r.sight, hearing: r.hearing, field }
+}
+
+/// The installed script's `senses(a)` for my character, by the client's own facts.
+fn local_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<Senses> {
     let (conn, me, sc) = (net.conn.as_ref()?, net.my_id?, rules.scripts.as_ref()?);
     let c = conn.db.my_characters().id().find(&me)?;
     let mut inv: Vec<(String, u32)> = Vec::new();
@@ -321,7 +351,11 @@ pub fn update(
     edge.next_ask -= dt;
     if edge.next_ask <= 0.0 {
         edge.next_ask = ASK_S;
-        if let Some(s) = my_sight(&net, &rules, clock.hour()) {
+        if let Some((s, source)) = my_sight(&net, &rules, clock.hour()) {
+            if edge.source != Some(source) {
+                info!("sight edge: my senses from {}", if source == Source::Authority { "the authority (my_senses)" } else { "the client's own ask (no my_senses row: no field)" });
+                edge.source = Some(source);
+            }
             let r = s.sight;
             if edge.senses.map(|o| o.field) != Some(s.field) {
                 match s.field {
@@ -439,6 +473,17 @@ mod tests {
         assert_eq!(Look::parse("Lantern"), Some(Look::Lantern));
         assert_eq!(Look::parse(""), Some(Look::Grey));
         assert_eq!(Look::parse("other"), None);
+    }
+
+    /// The authority's `my_senses` row gives the field exactly; a row with `field` false none.
+    #[test]
+    fn senses_from_the_authoritys_row() {
+        let mut r = CharacterSenses { id: 1, sight: 11.0, hearing: 9.0, field: true, focal_deg: 70.0, side_deg: 110.0, side_share: 0.3333, near_m: 3.0, margin_deg: 10.0, at_ms: 0 };
+        let s = senses_of_row(&r);
+        assert_eq!((s.sight, s.hearing), (11.0, 9.0));
+        assert_eq!(s.field, Some(living_rules::sight::Field { focal_deg: 70.0, side_deg: 110.0, side_share: 0.3333, near_m: 3.0, margin_deg: 10.0 }));
+        r.field = false;
+        assert_eq!(senses_of_row(&r).field, None);
     }
 
     /// The radius is the shipped law's answer: day, night, and a torch at night.
