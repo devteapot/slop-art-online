@@ -435,7 +435,7 @@ for rr in range(3):
         cy = 147.0 + rr * 8.5
         # An open lot, not a `garden`: a garden is planted with berry bushes, and a root plot
         # grows roots (its `root_plot` resource below). No lot model: its walls are a fixture.
-        lot(f"root_plot_{p}", "lamp", f"root plot {p}", (cx, cy), (8, 6), "south", "crown", 0, building=False, age=0.7, repair=0.6, district=LADDER, modelled=False, note="walled with dry stone; fed with kelp")
+        lot(f"root_plot_{p}", "lamp", f"root plot {p}", (cx, cy), (8, 6), "south", "crown", 0, building=False, age=0.7, repair=0.6, district=LADDER, note="walled with dry stone; fed with kelp")  # its model is the bed (the kit's; its walls are a fixture): without one the client draws an open lot as a pale slab
 
 # The Crown (+20 m): the cistern and its house, the Readers' House, the graveyard, the thorn and a bench.
 CROWN = "the Crown"
@@ -1029,16 +1029,21 @@ for l in [l for l in lots if l["id"].startswith("glasshouse_") and l["level"] in
         dress(f"canes_{n}_{j + 1}", "cane_wigwam", (l["at"][0] - 3.0 + 6.0 * j, l["at"][1] - 2.25 - 2.15), (1.1, 1.1), "south", 2.1,
               f"beans on canes in the bed before glasshouse {n}: the terrace wall behind breaks the wind", H[l["level"]])
 
-# The Hanger: its trees are the plan's `tree` resources (the engine's, drawn by the client).
-# The kit builds the six wind-bent forms for them (`hanger_tree_1..6`, standing where the first
-# six trees do) and the old wood's stumps among them. A stump stands between every third tree
-# and the next: the old wood was cut to stumps in the lean years, and the replanting stands
-# among them (SMALL_CITY §1).
-for i, q in enumerate(trees[:6]):
-    fixture(f"hanger_tree_{i + 1}", "hanger_tree", q, (9.0, 9.0), "south", H["hanger"], 8.0, f"the Hanger's wind-bent tree, form {i + 1} of six, leaning north-east: it stands for the plan's tree at {q[0]:g}, {q[1]:g}",
-            age=0.4, repair=0.5, form=i + 1, natural=True, stands_for="tree")
-for i, q in enumerate(trees[1::3]):
-    fixture(f"stump_{i + 1}", "stump", (q[0] + 4.5, q[1] + 3.5), (1.1, 1.1), "south", H["hanger"], 0.5 + 0.1 * (i % 3), "a stump of the old wood, cut for fuel in the lean years",
+# The Hanger. Its trees are the plan's `tree` resources: the engine's, which the client draws with
+# its own models. The kit builds the six wind-bent forms (`hanger_tree_1..6`) and stands them
+# where no resource tree is: round the woodward's yard (the plan plants nothing within 14 m of
+# the Hanger cottage), on the yard's level, the one ground there whose height the plan knows (a
+# fixture stands at the `floor_m` it is given, and the wood's own slope is the land's). Three
+# stumps of the old wood stand with them (SMALL_CITY §1: cut to stumps in the lean years, the
+# replanting among them). The rest of the wood takes these forms when the client draws Cullet's
+# `tree` resources from `envs/cullet/hanger_tree/`.
+_hc = by_id("hanger_cottage")
+_hx, _hy = _hc["at"]
+for i, (dx, dy) in enumerate(((-8.5, 4.0), (8.8, 4.3), (-8.0, -8.5), (8.5, -8.7), (0.5, -9.5), (-9.2, -2.2))):
+    fixture(f"hanger_tree_{i + 1}", "hanger_tree", (_hx + dx, _hy + dy), (9.0, 9.0), "south", H["hanger"], 8.0,
+            f"the Hanger's wind-bent tree, form {i + 1} of six, leaning north-east: at the edge of the woodward's yard", age=0.4, repair=0.5, form=i + 1, natural=True)
+for i, (dx, dy) in enumerate(((-4.5, -7.0), (5.0, 5.0), (9.5, -2.5))):
+    fixture(f"stump_{i + 1}", "stump", (_hx + dx, _hy + dy), (1.1, 1.1), "south", H["hanger"], 0.5 + 0.1 * i, "a stump of the old wood in the woodward's yard, cut for fuel in the lean years",
             age=1.0, repair=0.0, dressing=True, natural=True)
 
 # What the engine stands in a town, in Cullet's look: the client draws a structure of these kinds
@@ -1189,7 +1194,7 @@ GROUND_MAP = {
     "class:Low": ROCK,
     "class:Forest": ground("forest_floor", rgb("moor grass", "peat", 0.55), rgb("peat"), "the Hanger's floor: needles and peat"),
     # Regions (for Grass tiles).
-    "region:meadow": ground("thin_turf", rgb("moor grass", "basalt", 0.12), rgb("pale basalt"), "the island's thin turf, the rock showing through"),
+    "region:meadow": ground("thin_turf", rgb("moor grass", "basalt", 0.5), rgb("basalt"), "the island's thin turf, the rock showing through: moor grass greyed by the stone under it (at 0.12 it read mustard beside the setts in the game, at 0.32 ochre on the Crown)"),
     "region:highland": ground("heather", rgb("moor grass", "peat", 0.4), rgb("heather"), "the Moss: heather and moor grass over peat"),
     "region:beach": ground("kelp_shingle", rgb("kelp", "pale basalt", 0.42), rgb("kelp"), "shingle above the tide, wrack thrown on it"),
     "region:forest": ground("thin_turf", rgb("moor grass", "peat", 0.35), rgb("peat"), "under the Hanger's trees"),

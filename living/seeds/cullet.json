@@ -4840,6 +4840,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_1.glb",
        "seed": 20736,
        "wear": {
         "salt": 0.0,
@@ -4869,6 +4870,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_2.glb",
        "seed": 6138,
        "wear": {
         "salt": 0.0,
@@ -4898,6 +4900,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_3.glb",
        "seed": 51756,
        "wear": {
         "salt": 0.0,
@@ -4927,6 +4930,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_4.glb",
        "seed": 93839,
        "wear": {
         "salt": 0.0,
@@ -4956,6 +4960,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_5.glb",
        "seed": 78041,
        "wear": {
         "salt": 0.0,
@@ -4985,6 +4990,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_6.glb",
        "seed": 62083,
        "wear": {
         "salt": 0.0,
@@ -5014,6 +5020,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_7.glb",
        "seed": 26389,
        "wear": {
         "salt": 0.0,
@@ -5043,6 +5050,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_8.glb",
        "seed": 3300,
        "wear": {
         "salt": 0.0,
@@ -5072,6 +5080,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_9.glb",
        "seed": 95218,
        "wear": {
         "salt": 0.0,
@@ -5101,6 +5110,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_10.glb",
        "seed": 5295,
        "wear": {
         "salt": 0.0,
@@ -5130,6 +5140,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_11.glb",
        "seed": 22329,
        "wear": {
         "salt": 0.0,
@@ -5159,6 +5170,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_12.glb",
        "seed": 21763,
        "wear": {
         "salt": 0.0,
@@ -5188,6 +5200,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_13.glb",
        "seed": 56789,
        "wear": {
         "salt": 0.0,
@@ -5217,6 +5230,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_14.glb",
        "seed": 99830,
        "wear": {
         "salt": 0.0,
@@ -5246,6 +5260,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_15.glb",
        "seed": 32,
        "wear": {
         "salt": 0.0,
@@ -5275,6 +5290,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_16.glb",
        "seed": 95354,
        "wear": {
         "salt": 0.0,
@@ -5304,6 +5320,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_17.glb",
        "seed": 18156,
        "wear": {
         "salt": 0.0,
@@ -5333,6 +5350,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_18.glb",
        "seed": 40861,
        "wear": {
         "salt": 0.0,

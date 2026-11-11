@@ -4293,6 +4293,106 @@ def gen_campfire(k, rng, lot):
     return dict(ridge_m=0.68, glow="GlowAmber")
 
 
+def gen_root_plot(k, rng, lot):
+    """A root plot's bed, inside its wall (the wall is the plot's fixture): five ridges of root
+    tops, gaps where roots have been pulled, the kelp that feeds it heaped in a corner, a spade
+    left standing. No floor: the ground under it is the plan's worked soil."""
+    W, D = lot["size"]
+    hw, hd, w = W / 2 - 0.75, D / 2 - 0.75, lot["wear"]
+    for j in range(5):
+        y = -hd + 2 * hd * (j + 0.5) / 5
+        for i in range(13):
+            if rng.random() < 0.18 + 0.3 * (1 - w["repair"]) * (j == 4):
+                continue  # pulled
+            x = -hw + 0.3 + (2 * hw - 0.6) * i / 12 + rng.uniform(-0.06, 0.06)
+            tuft(k, rng, (x, y, 0.03), rng.uniform(0.14, 0.2), rng.uniform(0.18, 0.32), LEAF if rng.random() < 0.85 else mix(LEAF, P.heather, 0.4), 4)
+    kelp_heap(k, rng, (hw - 0.5, hd - 0.4, 0.0), 0.5, 0.4, 0.3, fronds=5)
+    sx = -hw + 0.6 + (lot["seed"] % 5) * 0.9
+    put(k, tube([(sx, -hd + 0.2, 0.0), (sx + 0.05, -hd + 0.25, 1.0)], 0.02, 4), jit(P.drift, rng))
+    put(k, box((sx - 0.09, -hd + 0.19, 0.0), (sx + 0.09, -hd + 0.21, 0.26)), mix(P.iron, P.rust, 0.5))
+    return dict(ridge_m=0.0, rows=5)
+
+
+def gen_cone_yard(k, rng, lot):
+    """The Cone yard's own ground: nothing built, so no floor (the plan's cinders lie under it).
+    A basalt kerb along the quay side, the ruts the handcart has worn from the heaps to the
+    mouths, drifts of pale ash, clinker raked out and left, glints of glass."""
+    W, D = lot["size"]
+    hw, hd = W / 2, D / 2
+    n = round(W / 1.2)
+    for i in range(n):
+        if i % 7 == 3:
+            continue  # a gap where carts cross
+        x0, x1 = -hw + W * i / n, -hw + W * (i + 1) / n
+        put(k, lbox(Vector((x0 + 0.01, -hd, 0.0)), Vector((x1 - 0.01, -hd + 0.3, 0.1 + 0.03 * rng.random())), open_bottom=True), jit(mix(P.basalt, P.pale, 0.4), rng, 0.03))
+    polys = []
+    for e in (-0.33, 0.33):  # ruts
+        pts = [Vector((-9.0 + 0.9 * t + e, -2.0 + 0.72 * t + 0.25 * sin(t * 0.8), 0.012)) for t in range(12)]
+        polys += [(oriented(q, Z), mix(P.tar, P.basalt, 0.4)) for q in ribbon(pts, 0.16, Vector((0.6, -0.8, 0)))]
+    for _ in range(9):  # ash
+        c = Vector((rng.uniform(-hw + 2, hw - 2), rng.uniform(-hd + 1, hd - 1), 0.014))
+        r = rng.uniform(0.5, 1.3)
+        polys.append(([c + Vector((cos(i / 8 * TAU) * r * rng.uniform(0.5, 1.0), sin(i / 8 * TAU) * r * 0.6 * rng.uniform(0.5, 1.0), 0)) for i in range(8)], mix(P.pale, P.smoke, 0.5)))
+    raw(k, polys)
+    for _ in range(14):  # clinker
+        c = Vector((rng.uniform(-hw + 1, hw - 1), rng.uniform(-hd + 0.8, hd - 0.5), 0.0))
+        put(k, moved(lbox(Vector((-0.14, -0.1, 0.0)), Vector((0.14, 0.1, 0.1)), bevel=0.02, open_bottom=True), Matrix.Translation(c) @ Matrix.Rotation(rng.uniform(0, PI), 4, "Z")), jit(mix(P.tar, P.brick, 0.3 * rng.random()), rng, 0.03))
+    polys = []
+    for _ in range(40):  # glass underfoot
+        c = Vector((rng.uniform(-hw + 0.5, hw - 0.5), rng.uniform(-hd + 0.5, hd - 0.3), 0.016))
+        t = rng.uniform(0, TAU)
+        u, v = Vector((cos(t), sin(t), 0)) * 0.07, Vector((-sin(t), cos(t), 0)) * 0.04
+        polys.append(([c - u, c + v, c + u], jit(rng.choice([P.aqua, P.aqua, P.green, P.smoke, P.amber]), rng, 0.03)))
+    raw(k, polys)
+    return dict(ridge_m=0.0)
+
+
+def gen_slip(k, rng, lot):
+    """The slip: two greased timber skids on sleepers down to the water's edge, a capstan at
+    its head with one bar left in it, a coil of hawser. No floor: the plan's setts lie under it."""
+    W, D = lot["size"]
+    hw, hd = W / 2, D / 2
+    for e in (-1.1, 1.1):
+        put(k, beam((e, -hd + 0.1, 0.16), (e, hd - 2.6, 0.16), 0.22, 0.2), lambda co, n, c=jit(mix(P.drift, P.tar, 0.35), rng): mix(c, P.tar, 0.4) if n.z > 0.5 else c)
+    for i in range(7):
+        y = -hd + 0.5 + i * 1.15
+        put(k, lbox(Vector((-1.7, y - 0.12, 0.0)), Vector((1.7, y + 0.12, 0.07)), open_bottom=True), jit(mix(P.drift, P.tar, 0.5), rng, 0.03))
+    c = Vector((0, hd - 1.4, 0.0))
+    put(k, lathe([(0.5, 0.0), (0.5, 0.12), (0.28, 0.16), (0.24, 0.9), (0.34, 0.95), (0.34, 1.15), (0.2, 1.2)], 10, Matrix.Translation(c)), lambda co, n, cc=jit(mix(P.drift, P.tar, 0.3), rng): mix(cc, P.rust, 0.4) if 0.9 < co.z < 1.16 else cc)
+    put(k, beam(c + Vector((0.3, 0, 1.05)), c + Vector((1.9, 0.3, 1.0)), 0.07, 0.07), jit(P.drift, rng))
+    for i in range(4):
+        put(k, ring(0.3, 0.42, 0.06 * i, 0.06 * i + 0.07, 10, Matrix.Translation((-3.2, hd - 1.2, 0.0))), ROPE, closed=False)
+    kelp(k, rng, (1.9, -hd + 0.6, 0.0), 6, 0.8)
+    return dict(ridge_m=0.0)
+
+
+def gen_graveyard(k, rng, lot):
+    """The graveyard on the Crown: three rows of glass markers, each a slab of the Cone's glass
+    leaded into a basalt foot, in the colour that was to hand the year it was set; the oldest
+    lean. One is cobalt, the Crown's one piece. Two gate stones on the town's side."""
+    W, D = lot["size"]
+    hw, hd, w = W / 2, D / 2, lot["wear"]
+    glass = [P.green, P.aqua, P.smoke, P.amber, P.aqua, P.green, P.smoke, P.aqua]
+    n = 0
+    for j in range(3):
+        y = -hd + 3.5 + j * 5.2
+        for i in range(9):
+            if (i * 3 + j * 5) % 11 == 0:
+                continue  # a place kept
+            x = -hw + 2.2 + i * 2.7 + 0.4 * (j % 2)
+            age = (2 - j) / 2 + 0.3 * rng.random()  # the back rows are the oldest
+            col = P.cobalt if (i, j) == (4, 1) else glass[(i + 2 * j) % 8]
+            M = Matrix.Translation((x, y, 0.0)) @ Matrix.Rotation(rng.uniform(-0.25, 0.25) * age, 4, "X") @ Matrix.Rotation(rng.uniform(-0.2, 0.2) * age, 4, "Y")
+            put(k, moved(lbox(Vector((-0.22, -0.11, 0.0)), Vector((0.22, 0.11, 0.2)), bevel=0.02, open_bottom=True), M), lambda co, nn, c=jit(P.basalt, rng, 0.03), a=age: mix(c, P.lichen, 0.3 * a) if nn.z > 0.5 else c)
+            put(k, moved(box((-0.16, -0.025, 0.2), (0.16, 0.025, 0.62 + 0.1 * ((i + j) % 3))), M), jit(col, rng, 0.03))
+            if rng.random() < 0.5 * age:
+                tuft(k, rng, (x + 0.3, y - 0.1, 0.0), 0.14, 0.3, P.grass, 4)
+            n += 1
+    for e in (-1, 1):
+        put(k, box((e * 0.9 - 0.2, -hd, 0.0), (e * 0.9 + 0.2, -hd + 0.4, 1.1), bevel=0.03), jit(mix(P.basalt, P.pale, 0.3), rng))
+    return dict(ridge_m=0.0, markers=n)
+
+
 def gen_hearth(k, rng, lot):
     """A household's hearth, for the engine's `hearth` at a home's door: a low basalt fire box
     with an iron plate and a pot on it, embers in its mouth, the day's peat stacked beside."""
@@ -4558,7 +4658,7 @@ GEN = dict(
     lehr_house=(gen_lehr_house, 8000), pot_house=(gen_pot_house, 6000), ash_house=(gen_ash_house, 5000), store=(gen_store, 6000), readers_house=(gen_readers_house, 6000),
     smoke_shed=(gen_smokehouse, 3500), smokehouse=(gen_smoke_fire, 1500), hearth=(gen_hearth, 1500), lamp=(gen_quay_lamp, 1500), furnace=(gen_furnace, 1500), oven=(gen_oven, 1500), cistern_house=(gen_cistern_house, 3000), peat_barn=(gen_peat_barn, 6000), batch=(gen_batch, 4000),
     wash_house=(gen_wash_house, 4000), cullet_shed=(gen_cullet_shed, 5000), boatshed=(gen_boatshed, 6000), dry_dock=(gen_dry_dock, 6000), cistern=(gen_cistern, 3000),
-    thorn=(gen_thorn, 1500), crown_bench=(gen_crown_bench, 600),
+    thorn=(gen_thorn, 1500), crown_bench=(gen_crown_bench, 600), root_plot=(gen_root_plot, 1500), cone_yard=(gen_cone_yard, 2500), slip=(gen_slip, 2500), graveyard=(gen_graveyard, 2500),
     blowpipe_rack=(gen_blowpipe_rack, 1500), crucible_stack=(gen_crucible_stack, 1500), cullet_heap=(gen_cullet_heap, 1500), ash_sacks=(gen_ash_sacks, 1500), handcart=(gen_handcart, 1500),
     trough=(gen_trough, 1500), cone_bench=(gen_cone_bench, 1500), sign=(gen_sign, 1500), storage=(gen_storage, 2500), campfire=(gen_campfire, 1500),
     lean_to=(gen_lean_to, 1500), privy=(gen_privy, 1500), washing_line=(gen_washing_line, 600), rain_butt=(gen_rain_butt, 1500), hen_coop=(gen_hen_coop, 1500),

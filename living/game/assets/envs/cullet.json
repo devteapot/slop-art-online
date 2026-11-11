@@ -298,14 +298,14 @@
   "region:meadow": {
    "layer": "thin_turf",
    "colour": [
-    124,
-    120,
+    97,
+    96,
     71
    ],
    "tint": [
-    92,
-    94,
-    99
+    61,
+    64,
+    71
    ]
   },
   "region:highland": {

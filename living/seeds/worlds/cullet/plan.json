@@ -4209,6 +4209,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_1.glb",
    "seed": 20736,
    "wear": {
     "salt": 0.0,
@@ -4238,6 +4239,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_2.glb",
    "seed": 6138,
    "wear": {
     "salt": 0.0,
@@ -4267,6 +4269,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_3.glb",
    "seed": 51756,
    "wear": {
     "salt": 0.0,
@@ -4296,6 +4299,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_4.glb",
    "seed": 93839,
    "wear": {
     "salt": 0.0,
@@ -4325,6 +4329,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_5.glb",
    "seed": 78041,
    "wear": {
     "salt": 0.0,
@@ -4354,6 +4359,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_6.glb",
    "seed": 62083,
    "wear": {
     "salt": 0.0,
@@ -4383,6 +4389,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_7.glb",
    "seed": 26389,
    "wear": {
     "salt": 0.0,
@@ -4412,6 +4419,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_8.glb",
    "seed": 3300,
    "wear": {
     "salt": 0.0,
@@ -4441,6 +4449,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_9.glb",
    "seed": 95218,
    "wear": {
     "salt": 0.0,
@@ -4470,6 +4479,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_10.glb",
    "seed": 5295,
    "wear": {
     "salt": 0.0,
@@ -4499,6 +4509,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_11.glb",
    "seed": 22329,
    "wear": {
     "salt": 0.0,
@@ -4528,6 +4539,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_12.glb",
    "seed": 21763,
    "wear": {
     "salt": 0.0,
@@ -4557,6 +4569,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_13.glb",
    "seed": 56789,
    "wear": {
     "salt": 0.0,
@@ -4586,6 +4599,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_14.glb",
    "seed": 99830,
    "wear": {
     "salt": 0.0,
@@ -4615,6 +4629,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_15.glb",
    "seed": 32,
    "wear": {
     "salt": 0.0,
@@ -4644,6 +4659,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_16.glb",
    "seed": 95354,
    "wear": {
     "salt": 0.0,
@@ -4673,6 +4689,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_17.glb",
    "seed": 18156,
    "wear": {
     "salt": 0.0,
@@ -4702,6 +4719,7 @@
    "height_m": 0,
    "district": "the Ladder",
    "building": false,
+   "model": "cullet/root_plot/root_plot_18.glb",
    "seed": 40861,
    "wear": {
     "salt": 0.0,
@@ -16302,8 +16320,8 @@
    "kind": "hanger_tree",
    "model": "cullet/hanger_tree/hanger_tree_1.glb",
    "at": [
-    215.6,
-    218.6
+    198.5,
+    211.5
    ],
    "size": [
     9.0,
@@ -16313,7 +16331,7 @@
    "floor_m": 14.0,
    "height_m": 8.0,
    "seed": 13722,
-   "cause": "the Hanger's wind-bent tree, form 1 of six, leaning north-east: it stands for the plan's tree at 215.6, 218.6",
+   "cause": "the Hanger's wind-bent tree, form 1 of six, leaning north-east: at the edge of the woodward's yard",
    "wear": {
     "salt": 0.0,
     "soot": 0.0,
@@ -16321,19 +16339,18 @@
     "age": 0.4,
     "repair": 0.5,
     "empty": 0.0,
-    "cause": "+14 m above the sea; 198 m from the Cone at bearing 20; front faces 180"
+    "cause": "+14 m above the sea; 186 m from the Cone at bearing 16; front faces 180"
    },
    "form": 1,
-   "natural": true,
-   "stands_for": "tree"
+   "natural": true
   },
   {
    "id": "hanger_tree_2",
    "kind": "hanger_tree",
    "model": "cullet/hanger_tree/hanger_tree_2.glb",
    "at": [
-    226.2,
-    217.0
+    215.8,
+    211.8
    ],
    "size": [
     9.0,
@@ -16343,7 +16360,7 @@
    "floor_m": 14.0,
    "height_m": 8.0,
    "seed": 70848,
-   "cause": "the Hanger's wind-bent tree, form 2 of six, leaning north-east: it stands for the plan's tree at 226.2, 217",
+   "cause": "the Hanger's wind-bent tree, form 2 of six, leaning north-east: at the edge of the woodward's yard",
    "wear": {
     "salt": 0.0,
     "soot": 0.0,
@@ -16351,19 +16368,18 @@
     "age": 0.4,
     "repair": 0.5,
     "empty": 0.0,
-    "cause": "+14 m above the sea; 200 m from the Cone at bearing 23; front faces 180"
+    "cause": "+14 m above the sea; 192 m from the Cone at bearing 21; front faces 180"
    },
    "form": 2,
-   "natural": true,
-   "stands_for": "tree"
+   "natural": true
   },
   {
    "id": "hanger_tree_3",
    "kind": "hanger_tree",
    "model": "cullet/hanger_tree/hanger_tree_3.glb",
    "at": [
-    240.8,
-    215.4
+    199.0,
+    199.0
    ],
    "size": [
     9.0,
@@ -16373,7 +16389,7 @@
    "floor_m": 14.0,
    "height_m": 8.0,
    "seed": 6582,
-   "cause": "the Hanger's wind-bent tree, form 3 of six, leaning north-east: it stands for the plan's tree at 240.8, 215.4",
+   "cause": "the Hanger's wind-bent tree, form 3 of six, leaning north-east: at the edge of the woodward's yard",
    "wear": {
     "salt": 0.0,
     "soot": 0.0,
@@ -16381,19 +16397,18 @@
     "age": 0.4,
     "repair": 0.5,
     "empty": 0.0,
-    "cause": "+14 m above the sea; 205 m from the Cone at bearing 27; front faces 180"
+    "cause": "+14 m above the sea; 174 m from the Cone at bearing 17; front faces 180"
    },
    "form": 3,
-   "natural": true,
-   "stands_for": "tree"
+   "natural": true
   },
   {
    "id": "hanger_tree_4",
    "kind": "hanger_tree",
    "model": "cullet/hanger_tree/hanger_tree_4.glb",
    "at": [
-    183.8,
-    229.8
+    215.5,
+    198.8
    ],
    "size": [
     9.0,
@@ -16403,7 +16418,7 @@
    "floor_m": 14.0,
    "height_m": 8.0,
    "seed": 27189,
-   "cause": "the Hanger's wind-bent tree, form 4 of six, leaning north-east: it stands for the plan's tree at 183.8, 229.8",
+   "cause": "the Hanger's wind-bent tree, form 4 of six, leaning north-east: at the edge of the woodward's yard",
    "wear": {
     "salt": 0.0,
     "soot": 0.0,
@@ -16411,19 +16426,18 @@
     "age": 0.4,
     "repair": 0.5,
     "empty": 0.0,
-    "cause": "+14 m above the sea; 200 m from the Cone at bearing 11; front faces 180"
+    "cause": "+14 m above the sea; 179 m from the Cone at bearing 22; front faces 180"
    },
    "form": 4,
-   "natural": true,
-   "stands_for": "tree"
+   "natural": true
   },
   {
    "id": "hanger_tree_5",
    "kind": "hanger_tree",
    "model": "cullet/hanger_tree/hanger_tree_5.glb",
    "at": [
-    194.4,
-    228.2
+    207.5,
+    198.0
    ],
    "size": [
     9.0,
@@ -16433,7 +16447,7 @@
    "floor_m": 14.0,
    "height_m": 8.0,
    "seed": 28035,
-   "cause": "the Hanger's wind-bent tree, form 5 of six, leaning north-east: it stands for the plan's tree at 194.4, 228.2",
+   "cause": "the Hanger's wind-bent tree, form 5 of six, leaning north-east: at the edge of the woodward's yard",
    "wear": {
     "salt": 0.0,
     "soot": 0.0,
@@ -16441,19 +16455,18 @@
     "age": 0.4,
     "repair": 0.5,
     "empty": 0.0,
-    "cause": "+14 m above the sea; 201 m from the Cone at bearing 14; front faces 180"
+    "cause": "+14 m above the sea; 176 m from the Cone at bearing 20; front faces 180"
    },
    "form": 5,
-   "natural": true,
-   "stands_for": "tree"
+   "natural": true
   },
   {
    "id": "hanger_tree_6",
    "kind": "hanger_tree",
    "model": "cullet/hanger_tree/hanger_tree_6.glb",
    "at": [
-    209.0,
-    230.6
+    197.8,
+    205.3
    ],
    "size": [
     9.0,
@@ -16463,7 +16476,7 @@
    "floor_m": 14.0,
    "height_m": 8.0,
    "seed": 18361,
-   "cause": "the Hanger's wind-bent tree, form 6 of six, leaning north-east: it stands for the plan's tree at 209, 230.6",
+   "cause": "the Hanger's wind-bent tree, form 6 of six, leaning north-east: at the edge of the woodward's yard",
    "wear": {
     "salt": 0.0,
     "soot": 0.0,
@@ -16471,19 +16484,18 @@
     "age": 0.4,
     "repair": 0.5,
     "empty": 0.0,
-    "cause": "+14 m above the sea; 207 m from the Cone at bearing 17; front faces 180"
+    "cause": "+14 m above the sea; 180 m from the Cone at bearing 16; front faces 180"
    },
    "form": 6,
-   "natural": true,
-   "stands_for": "tree"
+   "natural": true
   },
   {
    "id": "stump_1",
    "kind": "stump",
    "model": "cullet/stump/stump_1.glb",
    "at": [
-    230.7,
-    220.5
+    202.5,
+    200.5
    ],
    "size": [
     1.1,
@@ -16493,7 +16505,7 @@
    "floor_m": 14.0,
    "height_m": 0.5,
    "seed": 84701,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "cause": "a stump of the old wood in the woodward's yard, cut for fuel in the lean years",
    "wear": {
     "salt": 0.0,
     "soot": 0.0,
@@ -16501,7 +16513,7 @@
     "age": 1.0,
     "repair": 0.0,
     "empty": 0.0,
-    "cause": "+14 m above the sea; 205 m from the Cone at bearing 24; front faces 180"
+    "cause": "+14 m above the sea; 176 m from the Cone at bearing 18; front faces 180"
    },
    "dressing": true,
    "natural": true
@@ -16511,8 +16523,8 @@
    "kind": "stump",
    "model": "cullet/stump/stump_2.glb",
    "at": [
-    198.9,
-    231.7
+    212.0,
+    212.5
    ],
    "size": [
     1.1,
@@ -16522,7 +16534,7 @@
    "floor_m": 14.0,
    "height_m": 0.6,
    "seed": 6823,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "cause": "a stump of the old wood in the woodward's yard, cut for fuel in the lean years",
    "wear": {
     "salt": 0.0,
     "soot": 0.0,
@@ -16530,7 +16542,7 @@
     "age": 1.0,
     "repair": 0.0,
     "empty": 0.0,
-    "cause": "+14 m above the sea; 205 m from the Cone at bearing 15; front faces 180"
+    "cause": "+14 m above the sea; 191 m from the Cone at bearing 20; front faces 180"
    },
    "dressing": true,
    "natural": true
@@ -16540,8 +16552,8 @@
    "kind": "stump",
    "model": "cullet/stump/stump_3.glb",
    "at": [
-    238.7,
-    230.9
+    216.5,
+    205.0
    ],
    "size": [
     1.1,
@@ -16551,7 +16563,7 @@
    "floor_m": 14.0,
    "height_m": 0.7,
    "seed": 83057,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
+   "cause": "a stump of the old wood in the woodward's yard, cut for fuel in the lean years",
    "wear": {
     "salt": 0.0,
     "soot": 0.0,
@@ -16559,587 +16571,7 @@
     "age": 1.0,
     "repair": 0.0,
     "empty": 0.0,
-    "cause": "+14 m above the sea; 218 m from the Cone at bearing 25; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_4",
-   "kind": "stump",
-   "model": "cullet/stump/stump_4.glb",
-   "at": [
-    191.7,
-    245.3
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.5,
-   "seed": 83410,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 217 m from the Cone at bearing 12; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_5",
-   "kind": "stump",
-   "model": "cullet/stump/stump_5.glb",
-   "at": [
-    231.5,
-    244.5
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.6,
-   "seed": 54212,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 228 m from the Cone at bearing 22; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_6",
-   "kind": "stump",
-   "model": "cullet/stump/stump_6.glb",
-   "at": [
-    271.3,
-    243.7
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.7,
-   "seed": 37214,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 245 m from the Cone at bearing 31; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_7",
-   "kind": "stump",
-   "model": "cullet/stump/stump_7.glb",
-   "at": [
-    199.7,
-    255.7
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.5,
-   "seed": 52200,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 229 m from the Cone at bearing 13; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_8",
-   "kind": "stump",
-   "model": "cullet/stump/stump_8.glb",
-   "at": [
-    239.5,
-    254.9
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.6,
-   "seed": 29529,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 240 m from the Cone at bearing 23; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_9",
-   "kind": "stump",
-   "model": "cullet/stump/stump_9.glb",
-   "at": [
-    279.3,
-    258.1
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.7,
-   "seed": 8047,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 261 m from the Cone at bearing 30; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_10",
-   "kind": "stump",
-   "model": "cullet/stump/stump_10.glb",
-   "at": [
-    192.5,
-    269.3
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.5,
-   "seed": 44103,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 241 m from the Cone at bearing 11; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_11",
-   "kind": "stump",
-   "model": "cullet/stump/stump_11.glb",
-   "at": [
-    232.3,
-    268.5
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.6,
-   "seed": 77009,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 250 m from the Cone at bearing 20; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_12",
-   "kind": "stump",
-   "model": "cullet/stump/stump_12.glb",
-   "at": [
-    272.1,
-    267.7
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.7,
-   "seed": 62411,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 266 m from the Cone at bearing 28; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_13",
-   "kind": "stump",
-   "model": "cullet/stump/stump_13.glb",
-   "at": [
-    307.9,
-    266.9
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.5,
-   "seed": 74045,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 284 m from the Cone at bearing 35; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_14",
-   "kind": "stump",
-   "model": "cullet/stump/stump_14.glb",
-   "at": [
-    225.7,
-    280.5
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.6,
-   "seed": 30622,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 260 m from the Cone at bearing 18; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_15",
-   "kind": "stump",
-   "model": "cullet/stump/stump_15.glb",
-   "at": [
-    265.5,
-    279.7
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.7,
-   "seed": 55560,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 274 m from the Cone at bearing 26; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_16",
-   "kind": "stump",
-   "model": "cullet/stump/stump_16.glb",
-   "at": [
-    305.3,
-    278.9
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.5,
-   "seed": 45682,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 292 m from the Cone at bearing 33; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_17",
-   "kind": "stump",
-   "model": "cullet/stump/stump_17.glb",
-   "at": [
-    243.7,
-    290.9
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.6,
-   "seed": 18500,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 275 m from the Cone at bearing 21; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_18",
-   "kind": "stump",
-   "model": "cullet/stump/stump_18.glb",
-   "at": [
-    283.5,
-    294.1
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.7,
-   "seed": 13973,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 295 m from the Cone at bearing 28; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_19",
-   "kind": "stump",
-   "model": "cullet/stump/stump_19.glb",
-   "at": [
-    226.5,
-    304.5
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.5,
-   "seed": 6915,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 283 m from the Cone at bearing 16; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_20",
-   "kind": "stump",
-   "model": "cullet/stump/stump_20.glb",
-   "at": [
-    266.3,
-    303.7
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.6,
-   "seed": 45092,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 296 m from the Cone at bearing 24; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_21",
-   "kind": "stump",
-   "model": "cullet/stump/stump_21.glb",
-   "at": [
-    306.1,
-    302.9
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.7,
-   "seed": 53906,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 313 m from the Cone at bearing 31; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_22",
-   "kind": "stump",
-   "model": "cullet/stump/stump_22.glb",
-   "at": [
-    259.1,
-    317.3
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.5,
-   "seed": 72040,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 306 m from the Cone at bearing 22; front faces 180"
-   },
-   "dressing": true,
-   "natural": true
-  },
-  {
-   "id": "stump_23",
-   "kind": "stump",
-   "model": "cullet/stump/stump_23.glb",
-   "at": [
-    294.9,
-    316.5
-   ],
-   "size": [
-    1.1,
-    1.1
-   ],
-   "facing": "south",
-   "floor_m": 14.0,
-   "height_m": 0.6,
-   "seed": 76926,
-   "cause": "a stump of the old wood, cut for fuel in the lean years",
-   "wear": {
-    "salt": 0.0,
-    "soot": 0.0,
-    "wind": 0.57,
-    "age": 1.0,
-    "repair": 0.0,
-    "empty": 0.0,
-    "cause": "+14 m above the sea; 320 m from the Cone at bearing 28; front faces 180"
+    "cause": "+14 m above the sea; 186 m from the Cone at bearing 22; front faces 180"
    },
    "dressing": true,
    "natural": true
@@ -19061,7 +18493,7 @@
    "rain_butt": 17,
    "retaining_wall": 116,
    "stairs": 17,
-   "stump": 23,
+   "stump": 3,
    "trough": 1,
    "washing_line": 9
   },
