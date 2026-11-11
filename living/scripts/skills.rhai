@@ -101,7 +101,8 @@ fn senses_law() {
 //                see the speaker (`seen`), as rows of `kind` reading `text` ({a} the speaker,
 //                {b} the addressee as each one knows them).
 //   said, said_to, heard, heard_to, heard_to_you   the words of the rows, before the line
-//                itself (`: "…"` follows): {a} the speaker, {b} the addressee.
+//                itself (`: "…"` follows): {a} the speaker, {b} the addressee, {d} how far
+//                the speaker is from the one who reads it (metres).
 //   kind         the kind of the rows that carry the words ("speech").
 //   animals      what an animal in range hears ("" nothing).
 //   gap_s        seconds between two lines of this way (never under the 2 s speaking limit).
@@ -110,12 +111,50 @@ fn senses_law() {
 //   reach        the addressee must be within this many metres.
 //   needs_sight  the addressee must be in sight.
 //   introduces   a line with the speaker's own name tells it to those who receive the words.
+//   names        a line to someone that holds their name tells it to those who receive the
+//                words and see whom it was for (default: unless the words are for one ear).
 //   salience     #{ addressed, overheard }.
-// An optional `<way>_check(a)` refuses a line in the world's words ("" accepts it); `a.target`
-// is the addressee and `a.text` the line.
+// A way's refusals are its `<way>_check(a)`: "" accepts the line, anything else refuses it in
+// those words. The reducer returns exactly them, and the game client, which compiles this
+// script, runs the same check before it sends, so a player sees the same words either way.
+// `a.target` is the addressee (class "none" for the room; one who is not there, absent or dead,
+// is a creature not alive and very far), `a.text` the line, `a.qty` the milliseconds since the
+// speaker's last line in this way (4000000000 if never). A way that requires an addressee, a
+// reach, a technique or a gap must refuse a line that breaks it (the install tries). Only the
+// engine's own refusals are not here: a way it does not know, and two lines within 2 s.
 fn say_speech() {
     #{ label: "Say", order: 0, about: "Speak aloud. Everyone within earshot hears you, also when you speak to one person.",
        words: #{ hearing: 1.0 }, to: "optional", gap_s: 2.0, max_chars: 400 }
+}
+// How far a whisper goes, and how near one sees that someone whispered.
+fn whisper_reach() { 1.5 }
+fn whisper_noticed_within() { 6.0 }
+fn whisper_check(a) {
+    if a.target.class == "none" { return "a whisper needs someone to whisper to"; }
+    if !a.target.alive || a.target.dist > whisper_reach() { return "too far to whisper: step closer"; }
+    ""
+}
+fn whisper_speech() {
+    #{ label: "Whisper", order: 1,
+       about: `Whisper to someone beside you (within ${short(whisper_reach())} m). Only they hear the words; people within ${short(whisper_noticed_within())} m who see you may notice that you whispered to them, but not what.`,
+       to: "required", reach: whisper_reach(), words: #{ within_m: whisper_reach(), only_to: true }, kind: "whisper",
+       noticed: #{ within_m: whisper_noticed_within(), seen: true, kind: "whispered", text: "{a} whispers something to {b}.", salience: 0.3 },
+       said: "You whispered", said_to: "You whispered to {b}", heard_to_you: "{a} whispers to you", gap_s: 2.0, max_chars: 400 }
+}
+// A call carries this many times a voice, to people and animals alike, and comes at most once
+// every few seconds.
+fn call_carry() { 2.5 }
+fn call_gap_s() { 6.0 }
+fn call_check(a) {
+    if a.qty < (call_gap_s() * 1000.0).to_int() { return "too soon to call out again: wait a few seconds"; }
+    ""
+}
+fn call_speech() {
+    #{ label: "Call out", order: 2,
+       about: `Call out over a distance: everyone within ${short(hearing_of_people() * call_carry())} m hears you, and animals too (a shout can startle deer or draw wolves). Short lines (80 characters), at most one every ${short(call_gap_s())} s.`,
+       to: "optional", words: #{ hearing: call_carry() }, animals: "a person shouting",
+       said: "You called out", said_to: "You called out to {b}", heard: "{a} calls out from about {d} m", heard_to: "{a} calls out to {b} from about {d} m", heard_to_you: "{a} calls out to you from about {d} m",
+       gap_s: call_gap_s(), max_chars: 80 }
 }
 
 // ---- moving (a law per creature, on the hot path) -----------------------------------

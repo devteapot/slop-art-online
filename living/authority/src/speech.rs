@@ -26,36 +26,41 @@ fn way_name(way: &str) -> &str {
     }
 }
 
-/// When `speaker` last said a line of `way` (its `heard` rows; a way's own gap only).
-fn last_of(ctx: &ReducerContext, speaker: u32, way: &str) -> Option<u64> {
-    ctx.db.heard().speaker().filter(speaker).filter(|h| h.way == way).map(|h| h.at_ms).max()
+/// How long ago `speaker` last said a line of `way` (its `heard` rows), when it has.
+fn since_ms(ctx: &ReducerContext, speaker: u32, way: &str, now: u64) -> Option<u64> {
+    ctx.db.heard().speaker().filter(speaker).filter(|h| h.way == way).map(|h| h.at_ms).max().map(|at| now.saturating_sub(at))
 }
 
-/// The way's own gap, beyond the speaking limit: `Err` with how long to wait.
-fn way_gap(ctx: &ReducerContext, speaker: u32, w: &WaySpec, now: u64) -> Result<(), String> {
-    let gap = (w.gap_s * 1000.0) as u64;
-    if gap <= SPEAK_GAP_MS {
+/// The way's own refusal of a line, in the script's words (`<way>_check`), as a client sees it
+/// before sending: `Err` with exactly those words.
+fn way_check(ctx: &ReducerContext, sc: &living_rules::script::Scripts, w: &WaySpec, speaker: u32, to: u32, text: &str, now: u64) -> Result<(), String> {
+    if !sc.has(&format!("{}_check", w.name)) {
         return Ok(());
     }
-    match last_of(ctx, speaker, &w.name) {
-        Some(at) if now.saturating_sub(at) < gap => Err(format!("too soon to {} again: wait {} s", w.name, (gap - now.saturating_sub(at)).div_ceil(1000))),
-        _ => Ok(()),
-    }
+    let c = crate::act::way_ctx(ctx, speaker, &w.name, to, text, since_ms(ctx, speaker, &w.name, now), now);
+    sc.check(&w.name, &c)
 }
 
-/// Whether `speaker` must still wait before its next line of `way` (the limits in `speak`).
+/// Whether `speaker` must still wait before its next line of `way`: the 2 s speaking limit, or
+/// the way's own check refuses a line now (a call within its gap).
 pub fn too_soon_to_speak(ctx: &ReducerContext, speaker: u32, way: &str, now: u64) -> bool {
     if ctx.db.mind_state().id().find(speaker).is_some_and(|st| now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS) {
         return true;
     }
     let sc = common::scripts(ctx);
-    sc.way(way_name(way)).is_some_and(|w| way_gap(ctx, speaker, w, now).is_err())
+    let Some(w) = sc.way(way_name(way)) else { return false };
+    let gap = (w.gap_s * 1000.0) as u64;
+    gap > SPEAK_GAP_MS && since_ms(ctx, speaker, &w.name, now).is_some_and(|ago| ago < gap)
 }
 
-/// `{a}` (the speaker) and `{b}` (the addressee) in a way's words, as `reader` refers to them;
-/// an `{a}` that begins the sentence is capitalized.
-fn fill(ctx: &ReducerContext, template: &str, reader: &Character, a: u32, b: u32) -> String {
+/// `{a}` (the speaker) and `{b}` (the addressee) in a way's words, as `reader` refers to them,
+/// and `{d}` how far the speaker is from the reader (whole metres); an `{a}` that begins the
+/// sentence is capitalized.
+fn fill(ctx: &ReducerContext, template: &str, reader: &Character, a: u32, b: u32, d: f32) -> String {
     let mut t = template.to_string();
+    if t.contains("{d}") {
+        t = t.replace("{d}", &format!("{:.0}", d.max(1.0)));
+    }
     if t.contains("{b}") {
         t = t.replace("{b}", &common::label_for(ctx, reader, b));
     }
@@ -84,28 +89,14 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     if st.as_ref().is_some_and(|st| now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS) {
         return Err("speaking too fast".into());
     }
-    way_gap(ctx, speaker, w, now)?;
     let at = pos(&b, now);
     let world = common::world(ctx);
-    // What the way requires. An addressee who is not there (absent, dead, or no one) is refused
-    // in the same words as one too far, so ids cannot be probed.
+    // The way's refusals, in the script's words (`<way>_check`).
+    way_check(ctx, &sc, w, speaker, to, &text, now)?;
+    // What the spec requires, kept even by a check that forgets it (the install tries every
+    // check against its spec, so this is not reached by a script that passed it).
     if w.to == To::Required && to == 0 {
-        return Err(format!("a {0} needs someone to {0} to", w.name));
-    }
-    if !w.needs.is_empty() && !common::knows(ctx, speaker).iter().any(|k| *k == w.needs) {
-        return Err(format!("you don't know {}", w.needs));
-    }
-    if to != 0 && (w.reach > 0.0 || w.needs_sight) {
-        let there = ctx.db.body().id().find(to).filter(|_| ctx.db.character().id().find(to).is_some_and(|c| c.alive)).map(|tb| pos(&tb, now));
-        if w.reach > 0.0 && there.is_none_or(|p| common::dist(at, p) > w.reach) {
-            return Err(format!("too far to {}: step closer", w.name));
-        }
-        if w.needs_sight && there.is_none_or(|p| !crate::perception::sees(ctx, speaker, at, p, &world, &common::map(ctx), now)) {
-            return Err(format!("you can't see whom to {} to", w.name));
-        }
-    }
-    if sc.has(&format!("{}_check", w.name)) {
-        sc.check(&w.name, &crate::act::way_ctx(ctx, speaker, &w.name, to, &text, now))?;
+        return Err(format!("the rules' {}_check let through a line to no one", w.name));
     }
     if let Some(mut st) = st {
         st.spoke_ms = now;
@@ -120,7 +111,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     common::chronicle(ctx, now, "speech", speaker, to, at, line);
     // Every speaker perceives its own words, whoever controls it: a person's become lived
     // memory (docs/PLAYER_MEMORY.md), a mind's are in its experience like anyone's.
-    let said = format!("{}: “{}”", fill(ctx, if to != 0 { &w.said_to } else { &w.said }, &me, speaker, to), text);
+    let said = format!("{}: “{}”", fill(ctx, if to != 0 { &w.said_to } else { &w.said }, &me, speaker, to, 0.0), text);
     let said_id = percept(ctx, &me, now, "said", speaker, to, at, said, 0.5);
     if let Some((ago_s, said)) = echo {
         let when = if ago_s < 5 { "just now".to_string() } else { format!("{ago_s} s ago") };
@@ -141,24 +132,49 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     }
     let hearers: Vec<&(Character, f32, (f32, f32))> = near.iter().filter(|(c, d, _)| &*c.kind == "person" && (!w.only_to || c.id == to) && carries(c.id, *d)).collect();
     // Silence is information: calling someone out of earshot (far away, or dead) gets no answer.
+    // One the speaker sees, beyond what this way carries, is too far to hear: the speaker is
+    // told so, and which way would carry (the farthest-carrying public way), not that no one
+    // answered.
     if to != 0 && !hearers.iter().any(|(c, _, _)| c.id == to) {
-        let who = common::label_for(ctx, &me, to);
-        percept(ctx, &me, now, "silence", to, speaker, at, format!("No answer from {who}; they don't seem to be within earshot."), 0.35);
+        let seen = ctx.db.character().id().find(to).filter(|c| c.alive).and_then(|_| ctx.db.body().id().find(to)).is_some_and(|tb| {
+            let p = pos(&tb, now);
+            let sight = common::sight_to(ctx, common::sight_for(ctx, speaker, &world, now), to, &world, now);
+            crate::perception::in_sight(&common::map(ctx), at, p, common::dist(at, p), sight)
+        });
+        let text = if seen {
+            let louder = sc.ways().iter().filter(|o| o.public() && o.carry_for(1.0) > w.carry_for(1.0) && o.needs.is_empty()).max_by(|a, b| a.carry_for(1.0).total_cmp(&b.carry_for(1.0)));
+            let how = louder.map_or("go closer".to_string(), |o| format!("{} or go closer", o.label.to_lowercase()));
+            format!("{} is too far to hear you; {how}.", common::label_cap(ctx, &me, to))
+        } else {
+            format!("No answer from {}; they don't seem to be within earshot.", common::label_for(ctx, &me, to))
+        };
+        percept(ctx, &me, now, "silence", to, speaker, at, text, 0.35);
     }
     let address = common::laws(ctx).address_m;
     let close = hearers.iter().filter(|(_, d, _)| *d <= address).count();
     // Saying one's own name tells it to everyone who receives the words (an introduction).
     let introduces = w.introduces && mentions(&text, &me.name);
-    for (c, d, _) in hearers.iter().copied() {
+    // Words to someone that hold their name tell it to those who receive them and see whom it
+    // was for (overheard names): never from closeness, never from a whisper (`names`).
+    let addressee = (to != 0 && w.names).then(|| ctx.db.character().id().find(to)).flatten().filter(|t| t.kind == "person" && mentions(&text, &t.name));
+    let addressee_at = addressee.as_ref().and_then(|t| ctx.db.body().id().find(t.id)).map(|tb| pos(&tb, now));
+    let map = common::map(ctx);
+    for (c, d, p) in hearers.iter().copied() {
         let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
         let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || mentions(&text, &c.name)));
         let template = if to == c.id { &w.heard_to_you } else if to != 0 { &w.heard_to } else { &w.heard };
-        let heard = format!("{}: “{}”", fill(ctx, template, c, speaker, to), text);
+        let heard = format!("{}: “{}”", fill(ctx, template, c, speaker, to, *d), text);
         percept(ctx, c, now, &w.kind, speaker, to, at, heard, if addressed { w.addressed } else { w.overheard });
         // A name that is news is a moment of its own (below the 0.6 that wakes a body's graph, so
         // learning a name never re-runs what the listener is doing).
         if news {
             percept(ctx, c, now, "introduced", speaker, 0, at, format!("{} told you their name.", common::label_cap(ctx, c, speaker)), 0.55);
+        }
+        if let (Some(t), Some(tp)) = (&addressee, addressee_at) {
+            if c.id != t.id && crate::perception::sees(ctx, c.id, *p, tp, &world, &map, now) && crate::perception::introduce(ctx, c.id, t.id, now) {
+                let caller = common::label_for(ctx, c, speaker);
+                percept(ctx, c, now, "introduced", t.id, speaker, tp, format!("You heard {caller} call {} by name.", t.name), 0.55);
+            }
         }
         if let Some(mut st) = ctx.db.mind_state().id().find(c.id) {
             st.heard_ms = now;
@@ -172,18 +188,16 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     // Those who learn only that something was said, between whom (a whisper's onlookers): no
     // words, no name.
     if let Some(n) = &w.noticed {
-        let map = common::map(ctx);
-        for (c, _, p) in near.iter().filter(|(c, d, _)| &*c.kind == "person" && *d <= n.within_m && c.id != to && !hearers.iter().any(|(h, _, _)| h.id == c.id)) {
+        for (c, dist, p) in near.iter().filter(|(c, d, _)| &*c.kind == "person" && *d <= n.within_m && c.id != to && !hearers.iter().any(|(h, _, _)| h.id == c.id)) {
             if n.seen && !crate::perception::sees(ctx, c.id, *p, at, &world, &map, now) {
                 continue;
             }
-            percept(ctx, c, now, &n.kind, speaker, to, at, fill(ctx, &n.text, c, speaker, to), n.salience);
+            percept(ctx, c, now, &n.kind, speaker, to, at, fill(ctx, &n.text, c, speaker, to, *dist), n.salience);
         }
     }
     // Who heard: those who received the words and whom the speaker saw (the sight rule), with
     // the line, in this transaction.
     if let Some(line) = said_id {
-        let map = common::map(ctx);
         let sight = common::sight_for(ctx, speaker, &world, now);
         let mut seen: Vec<(f32, u32)> = hearers
             .iter()
@@ -221,10 +235,32 @@ fn said_recently(ctx: &ReducerContext, speaker: u32, text: &str, now: u64) -> Op
     latest.map(|(at, said)| (now.saturating_sub(at) / 1000, said))
 }
 
+/// Whether `text` names `name`: the whole name as its words in a row ("Vessa Pontil"), or its
+/// first word, the given name ("Vessa"). Before `speech-2` a name of two words never matched.
 fn mentions(text: &str, name: &str) -> bool {
     let t = text.to_lowercase();
+    let words: Vec<&str> = t.split(|ch: char| !ch.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
     let n = name.to_lowercase();
-    t.split(|ch: char| !ch.is_alphanumeric()).any(|w| w == n)
+    let parts: Vec<&str> = n.split(|ch: char| !ch.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    match parts.first() {
+        None => false,
+        Some(given) => words.iter().any(|w| w == given) || (parts.len() > 1 && words.windows(parts.len()).any(|win| win == parts.as_slice())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mentions;
+
+    #[test]
+    fn a_name_is_mentioned_by_its_given_name_or_in_full() {
+        assert!(mentions("I am Walker1, new here.", "Walker1"));
+        assert!(mentions("I'm Vessa.", "Vessa Pontil"));
+        assert!(mentions("Vessa Pontil, at your service.", "Vessa Pontil"));
+        assert!(!mentions("I'm Pontil's cousin.", "Vessa Pontil"));
+        assert!(!mentions("Vessage for you.", "Vessa Pontil"));
+        assert!(!mentions("Hello.", ""));
+    }
 }
 
 /// A speaker's lines left its window (trimmed or consolidated): their `heard` rows go too.

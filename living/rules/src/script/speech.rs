@@ -8,6 +8,26 @@
 
 use rhai::{Dynamic, Map};
 
+use super::{ActorFacts, SkillCtx, TargetFacts};
+
+/// `a.qty` of a way's check when the speaker never said a line in that way.
+pub const NEVER_MS: u32 = 4_000_000_000;
+
+/// The context of a way's `<way>_check(a)`, as every caller builds it: the authority before it
+/// speaks a line, and a client before it sends one (the reducer returns the check's words, so
+/// the client can show them first). `actor` is the speaker; `addressee` is `None` for the room,
+/// and an addressee that is not there (absent or dead) is a creature that is not alive and very
+/// far, so a check cannot tell the two apart; `text` is the line; `since_ms` is how long ago the
+/// speaker last said a line in this way (`a.qty`, `NEVER_MS` if never).
+pub fn check_ctx(way: &str, actor: ActorFacts, addressee: Option<TargetFacts>, text: &str, since_ms: Option<u64>) -> SkillCtx {
+    let target = match addressee {
+        None => TargetFacts { class: "none".into(), ..Default::default() },
+        Some(t) if t.class != "creature" || !t.alive => TargetFacts { class: "creature".into(), id: t.id, kind: if t.kind.is_empty() { "person".into() } else { t.kind }, alive: false, dist: 1.0e9, ..Default::default() },
+        Some(t) => t,
+    };
+    SkillCtx { actor, target, text: text.into(), qty: since_ms.map_or(NEVER_MS, |ms| ms.min(NEVER_MS as u64) as u32), skill: way.into(), ..Default::default() }
+}
+
 /// To whom a line may be said.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum To {
@@ -58,7 +78,8 @@ pub struct WaySpec {
     /// The kind of the experience rows that carry the words to a listener.
     pub kind: String,
     /// Words for the speaker's own row and for listeners (the words follow: `: “…”`). `{a}` is
-    /// the speaker and `{b}` the addressee as the reader refers to them.
+    /// the speaker and `{b}` the addressee as the reader refers to them, `{d}` how far the speaker
+    /// is from the reader (whole metres).
     pub said: String,
     pub said_to: String,
     pub heard: String,
@@ -78,6 +99,9 @@ pub struct WaySpec {
     pub needs_sight: bool,
     /// A line with the speaker's own name in it tells it to those who receive the words.
     pub introduces: bool,
+    /// A line to someone that holds their name tells it to those who receive the words and see
+    /// whom it was for (overheard names).
+    pub names: bool,
     /// Salience of the words for the one they are for, and for the others who hear them.
     pub addressed: f32,
     pub overheard: f32,
@@ -86,7 +110,7 @@ pub struct WaySpec {
 /// The keys a `<way>_speech()` map may have.
 pub const WAY_TRAITS: &[&str] = &[
     "about", "label", "order", "to", "words", "noticed", "kind", "said", "said_to", "heard", "heard_to", "heard_to_you", "animals", "gap_s", "max_chars", "needs", "reach", "needs_sight", "introduces",
-    "salience",
+    "names", "salience",
 ];
 
 /// The way every line takes when none is named, and the one a script without ways speaks by.
@@ -117,6 +141,7 @@ impl WaySpec {
             reach: 0.0,
             needs_sight: false,
             introduces: true,
+            names: true,
             addressed: 0.9,
             overheard: 0.45,
         }
@@ -256,8 +281,14 @@ pub fn way_of(name: &str, m: &Map) -> Result<WaySpec, String> {
         max_chars: num(m, "max_chars", base.max_chars as f64, 1.0, 400.0)? as usize,
         needs: text(m, "needs", "")?,
         reach,
-        needs_sight: flag("needs_sight", false)?,
+        needs_sight: match flag("needs_sight", false)? {
+            // Ways that need sight wait for signing (docs/COMMUNICATION.md item 13).
+            true => return Err(format!("{f}: `needs_sight` is not built yet (a way that needs its addressee in sight waits for signing)")),
+            false => false,
+        },
         introduces: flag("introduces", true)?,
+        // Words for one ear alone teach no bystander a name.
+        names: flag("names", !only_to)?,
         addressed,
         overheard,
     })

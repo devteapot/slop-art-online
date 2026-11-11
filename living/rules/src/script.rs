@@ -2206,7 +2206,14 @@ mod tests {
     fn ways_of_speaking_are_read_from_the_script() {
         let s = scripts();
         let names: Vec<&str> = s.ways().iter().map(|w| w.name.as_str()).collect();
-        assert_eq!(names, ["say"]);
+        assert_eq!(names, ["say", "whisper", "call"]);
+        let whisper = s.way("whisper").unwrap();
+        assert_eq!((whisper.carry, whisper.only_to, whisper.reach, whisper.kind.as_str(), whisper.names, whisper.animals.as_str()), (speech::Carry::Within(1.5), true, 1.5, "whisper", false, ""));
+        let noticed = whisper.noticed.as_ref().unwrap();
+        assert_eq!((noticed.within_m, noticed.seen, noticed.kind.as_str(), noticed.text.as_str()), (6.0, true, "whispered", "{a} whispers something to {b}."));
+        let call = s.way("call").unwrap();
+        assert_eq!((call.carry_for(9.0), call.max_chars, call.gap_s, call.animals.as_str(), call.public()), (22.5, 80, 6.0, "a person shouting", true));
+        assert!(call.about.contains("within 22.5 m"), "{}", call.about);
         // The shipped `say` is today's speech, field for field (the regression baseline).
         let mut say = s.way("say").unwrap().clone();
         assert_eq!(say.about, speech::WaySpec::say().about);
@@ -2227,13 +2234,46 @@ mod tests {
         // A second way comes in its order, and its words for one ear reach no animal.
         let two = with("fn hush_speech() { #{ about: \"Hush.\", order: 1, to: \"required\", words: #{ within_m: 1.5, only_to: true }, heard_to_you: \"{a} hushes to you\" } }").unwrap();
         let w = two.way("hush").unwrap();
-        assert_eq!(two.ways().iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["say", "hush"]);
+        assert_eq!(two.ways().iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["say", "whisper", "hush", "call"]);
         assert_eq!((w.carry, w.only_to, w.animals.as_str(), w.label.as_str()), (speech::Carry::Within(1.5), true, "", "Hush"));
         assert_eq!((w.carry_for(9.0), w.widest(9.0)), (1.5, 1.5));
-        assert!(two.world_text(&[]).contains("say = Speak aloud. Everyone within earshot hears you, also when you speak to one person. hush = Hush."));
+        assert!(two.world_text(&[]).contains("say = Speak aloud. Everyone within earshot hears you, also when you speak to one person. whisper = Whisper to someone beside you (within 1.5 m)."));
         // A script with no ways at all speaks by today's `say`.
-        let none = Scripts::new(&src.replace("fn say_speech()", "fn say_speech_old()")).unwrap();
+        let none = Scripts::new(&src.replace("_speech()", "_speech_old()")).unwrap();
         assert_eq!(none.way("say"), Some(&speech::WaySpec::say()));
+    }
+
+    #[test]
+    fn ways_refuse_in_their_checks_words() {
+        use speech::check_ctx;
+        let s = scripts();
+        let me = ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), ..Default::default() };
+        let them = |dist: f32, alive: bool| Some(TargetFacts { class: "creature".into(), id: 2, kind: "person".into(), alive, dist, ..Default::default() });
+        let check = |way: &str, to, since| s.check(way, &check_ctx(way, me.clone(), to, "hello", since));
+        // The words a client shows before sending are the reducer's (both call these).
+        assert_eq!(check("whisper", None, None), Err("a whisper needs someone to whisper to".into()));
+        assert_eq!(check("whisper", them(3.0, true), None), Err("too far to whisper: step closer".into()));
+        assert_eq!(check("whisper", them(1.0, false), None), Err("too far to whisper: step closer".into()), "absent or dead reads as too far: ids cannot be probed");
+        assert_eq!(check("whisper", them(1.0, true), None), Ok(()));
+        assert_eq!(check("call", None, Some(3_000)), Err("too soon to call out again: wait a few seconds".into()));
+        assert_eq!(check("call", None, Some(6_000)), Ok(()));
+        assert_eq!(check("call", None, None), Ok(()));
+        assert_eq!(check("say", them(30.0, true), Some(0)), Ok(()), "say has no check of its own");
+        // A way whose spec requires something must refuse it in its check, or the install is refused.
+        let src = include_str!("../../scripts/skills.rhai");
+        let install = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap()).and_then(|s| s.validate().map(|_| ()));
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }").unwrap_err();
+        assert!(e.contains("has no `hush_check(a)`"), "{e}");
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }\nfn hush_check(a) { if a.target.class == \"none\" { return \"hush to whom?\"; } \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to someone 1.5 m away"), "{e}");
+        let e = install("fn whisper_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to no one"), "{e}");
+        let e = install("fn call_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("a second line 5000 ms after the first"), "{e}");
+        let e = install("fn say_check(a) { \"no\" }").unwrap_err();
+        assert!(e.contains("refuses a line that breaks nothing"), "{e}");
+        let e = Scripts::new(&crate::floors::compose(src, "fn sign_speech() { #{ about: \"Sign.\", needs_sight: true } }").unwrap()).err().unwrap();
+        assert!(e.contains("`needs_sight` is not built yet"), "{e}");
     }
 
     #[test]

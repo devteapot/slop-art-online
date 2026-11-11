@@ -205,7 +205,8 @@ async fn main() -> Result<()> {
             if rethink {
                 let _ = tx.send(mind::Event::Percept(e.clone()));
             }
-            if e.kind == "speech" || e.kind == "silence" {
+            // A whisper to me carries words too; noticing one (`whispered`) does not.
+            if e.kind == "speech" || e.kind == "whisper" || e.kind == "silence" {
                 let _ = tx.send(mind::Event::Speech(e.clone()));
             }
         });

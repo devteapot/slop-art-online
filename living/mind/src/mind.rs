@@ -1982,7 +1982,7 @@ impl Minds {
         memory::sugar_into(&v, &mut patch, &known);
         notes.extend(self.canonical_people(actor, &mut patch));
         self.keep_refused_merges(actor, &notes);
-        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
+        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "whisper" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
         if c.stage <= 1 {
             for m in patch.remember.iter_mut() {
