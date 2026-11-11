@@ -115,13 +115,13 @@ The simulation logs its cost every 3 s. A 78-joint character costs about 9 µs o
 | Esc | closes the text box, a list (a sub-list first) or the panels; with nothing open, gives the cursor back. Losing focus gives it back too |
 | WASD, Shift | move relative to the camera, run (`human_move`). Shift is also the dodge (an open question) |
 | Mouse or one finger on a trackpad | the cursor: where you face and aim. Moving, your legs keep to your travel (backwards beyond 110°) and your upper body turns toward it (`twist.rs`) |
-| Left click (tap) / left held | the strike (on release for a tap, after 0.22 s held for aiming) |
+| Left click (tap) / left held | the strike (on release for a tap, after 0.22 s held for aiming). A tap on a person who is not hostile to you (not hurting you in the last 15 s, no move aimed at you) does not strike: you turn to them and the text box opens to them. Striking them takes a held press |
 | Left drag (mouse or trackpad press-and-move), two-finger pan, middle drag, `[` / `]` | turn the view; the cursor stays on its ground point, so where you face doesn't change |
 | Pinch, mouse wheel | zoom, within 0.6–1.4 of the view's distance |
 | Two-finger double tap, middle tap | turn the view until the direction you face is straight ahead |
 | Right click (two-finger click), Q, E, R, Shift | the bow shot, fire bolt, block, heal, dodge |
 | Space | jump (a 1.6 m hop; `jump.rs`, the rules' `jump`) |
-| Enter | say something; only characters within earshot hear it (`human_say`). Enter says it, Esc cancels |
+| Enter | say something; only characters within earshot hear it (`human_say`). The box says whom it is to ("Say to a stranger"): the person under the cursor, else the nearest within earshot by the rules' hearing (`talk.rs`); Tab picks the next one. Enter says it to them, Esc cancels |
 | Alt + mouse | glance around; the view eases back on release |
 | F | act on what is under the cursor or within 3 m: a tap does the likely act (never a gesture), holding opens the list of what the rules allow (`verbs.rs`) |
 | C | the list of acts on yourself (eat, sleep, craft, build, write, …) |

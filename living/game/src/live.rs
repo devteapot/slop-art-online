@@ -755,6 +755,9 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `key:NAME:down|up|tap` and `mouse:left|right|middle:down|up`: a key or button as the
 ///   window would report it (`KeyE`, `KeyQ`, `Enter`, `ShiftLeft`, …), read by every input
 ///   system this frame; `chat:open|close` opens or closes the text box, as Enter and Esc do;
+///   `tap` is a left tap as the pointer reports one (a strike, or talk to a peaceful person);
+///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
+///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
@@ -811,7 +814,7 @@ fn script(
     mut input: ResMut<Input>,
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
-    (mut skills, mut gestures, mut verbs): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>),
+    (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
     target: Option<Res<crate::capture::Target>>,
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
@@ -885,6 +888,12 @@ fn script(
             pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
             true
         }
+        "tap" => {
+            // A left tap, as the pointer reports one (`pointer.rs`): a strike, or on a peaceful
+            // person the text box to them (`combat.rs`).
+            pointer.scripted_tap = true;
+            true
+        }
         "pan" | "drag" => {
             pointer.scripted_turn += arg.parse::<f32>().unwrap_or(0.0) * if verb == "pan" { 0.6 } else { 1.0 };
             true
@@ -907,7 +916,7 @@ fn script(
             true
         }
         "say" => {
-            out.say.push(arg.to_string());
+            out.say.push((arg.to_string(), 0));
             true
         }
         "skill" | "aim" => {
@@ -987,6 +996,24 @@ fn script(
             } else {
                 buttons.press(b);
             }
+            true
+        }
+        "type" => {
+            // Words typed into the open text box.
+            input.chat = arg.to_string();
+            true
+        }
+        "tab" => {
+            talk.cycle = true;
+            true
+        }
+        "enter" => {
+            // As Enter in the open text box: said to whom it addresses (`talk.rs`).
+            let line = std::mem::take(&mut input.chat);
+            if !line.trim().is_empty() {
+                out.say.push((line.trim().to_string(), talk.to.unwrap_or(0)));
+            }
+            input.chat_open = false;
             true
         }
         "chat" => {

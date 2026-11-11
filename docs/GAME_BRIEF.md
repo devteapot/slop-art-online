@@ -46,7 +46,7 @@ Findings move from the lab to the game when a core version is released and the g
 | Death | Permanent, as agreed. The player sees how they died and who saw it, then arrives as a new stranger with nothing inherited | Follows [world vision](WORLD_VISION.md) mortality. In the spike (2026-11-08) a test character starved, and the client quietly joined again as a new character: the death and rejoin screen is missing |
 | World pace | Slower than labs (labs run about 5 game days per real hour); set per seed with `life_pace` and `year_days` | To decide by play-testing |
 | Camera details | **Default chosen** (user, 2026-11-08): spike preset 5, "Default (mid)". Skills, passives or other capabilities may change how it behaves. Rotation: see "Turning the view" below. Earlier status: not fixed yet (user, 2026-11-08). Leading candidate: zoom-tilt (spike preset 4). The view should show only what the character perceives, and how much a character can see could be a capability (below) | The user liked presets 1–3 and found a purely high view less immersive. Fully zoomed in feels most immersive, but it is unclear how that plays with many players, since much of the area is not visible. The camera research found the zoom-tilt blend in Baldur's Gate 3, Manor Lords and Diablo IV |
-| Movement | WASD relative to the camera, plus click-to-move (`goto` to a point) | Matches the chosen genre |
+| Movement | WASD relative to the camera, plus click-to-move (`goto` to a point). Since 2026-11-09 right click is the bow shot and there is no click-to-move; scripts still walk to a point with `goto` | Matches the chosen genre |
 
 ## The view as perception (idea, 2026-11-08)
 
@@ -891,6 +891,35 @@ How it works (`sightfield.rs`, `sightedge.rs`, `edges.wesl`, `post.rs`):
 - Weather shortening sight. That waits on rules that do it.
 - Terrain edits are known only within the client's `terrain_chunk` window: 7 × 7 chunks, re-centred as you walk, so at least about 24 m round you. Edits made since world creation farther out, within a 48 m sight, are not in the field.
 - No settings menu; that comes with the interface redesign.
+
+## Talking and tapping (2026-11-11)
+
+Branch `talk-1`, after play-test 2. In that session the residents answered every line within 3–28 s, yet the owner found them "not interactive". Evidence is in `.local/living/talk-1/` (git-ignored). Client only: no table, reducer, view, subscription, rule or mind change. The client calls the existing `human_say(text, to)` with `to` set, and reads `silence` rows from the existing `my_experience` view. No SpacetimeDB feature is used in a new way, so no new documentation was consulted.
+
+- **Addressed speech** (`talk.rs`, `ui/chat.rs`):
+  - Enter opens the text box addressed to the person under the cursor, if they are within earshot, else to the nearest person within earshot.
+  - Earshot is the rules': the world's `senses` law, asked per person perceived. The play-test scene gives 12 m.
+  - The box reads "Say to a stranger" (or a name the rules give: the projection's `label` from `seen_characters`), and the one addressed is the HUD's target while it is open. Tab goes to the next person within earshot, nearest first.
+  - With nobody in earshot it reads "Say — nobody in earshot" and the line goes to no one (`to = 0`), as before. If the addressee is no longer perceived, the box falls back to the nearest person in earshot.
+  - **What the authority accepts:** any `to`. Everyone within their own hearing hears the line. The one addressed hears it as said to them (salience 0.9, a conversation turn for their mind), whatever the 6 m `address_m` rule for unaddressed speech. If the addressee is out of earshot, they hear nothing and the speaker gets "No answer from …" (a `silence` row). The client shows that as a red note, and shows "speaking too fast" (a line within 2 s of the last) the same way.
+  - Before, every line was `to = 0`: with two or more people within 6 m, nobody was addressed, and a stranger's unaddressed line draws no turn from minds that do not care about them.
+- **The tap rule** (provisional; the owner is being asked what they expected): *a left tap on a person who is not hostile to you (has not hurt you in the last 15 s and has no move aimed at you) turns you to them and opens the text box to them; striking them takes a held press (0.22 s).*
+  - Animals, and people hostile to you, are struck by a tap as before.
+  - With the box open, a tap on a peaceful person addresses them instead.
+  - `combat::hostile_to_me` is the HUD's hostile stance, now shared.
+- **First-time hint** (`ui/tips.rs`): "Enter — talk to the person you point at", under the target frame, for 6 s once the first load lifts, and again the first time someone speaks to you. `Tips::once` is a shared line, so other first-time hints (F2, F3) can stack there.
+- **F1 controls line:** it said "right click: walk to" and "R: turn to where you face". It now lists the skill bar's keys.
+- **F at remains offered "take wound tending"** and the authority refused it three times. The client checks `take` as if the remains held whatever is asked, because their contents are not perceived, and its candidates included the techniques the player knows.
+  - Techniques are now candidates only toward a person (teach) or oneself.
+  - A refused act is no longer the one a tap repeats.
+  - Still open, for the interface redesign: what remains or a store hold is not perceived, so `take ›` can still offer an item that is not there.
+
+Measured on scratch worlds from the play-test 2 scene's module and script (`verify-talk1-*`; no mind service, no model calls):
+- In the crowd case (three people within 6 m), the line went out with `to = 7`. Osric's row reads "A stranger said to you" (0.9); the two others' read "A stranger said to Osric Abbot" (0.45).
+- A tap on a peaceful resident sent `face` and no strike. A held press struck them (hit for 10). A tap on a resident who had just struck the player struck back (hit for 7).
+- At the remains, `take wound_tending` is not offered; `take berries` is.
+
+Not covered: the "No answer" note and the "(out of earshot)" label on screen. The authority's `silence` row was shown by verify-player. Also not covered: a real trackpad (captures are headless), and whether minds answer an addressed line (no mind service ran).
 
 ## World look and camera research (2026-11-08)
 
