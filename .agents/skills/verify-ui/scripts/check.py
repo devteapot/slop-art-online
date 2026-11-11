@@ -493,14 +493,16 @@ def field(run, c):
     changes0 = sql(run, "SELECT id FROM law_change")
     snap = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms FROM body;sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};sql|SELECT key, target, bearing, band FROM heard WHERE listener = {{me}}"
     body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy FROM body WHERE id = {{me}}"
-    plan = "ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on"
+    # By day (`{epoch_at:12}`, a scratch fixture): at night side vision is left out of the
+    # comparison for the lights the client can't know, and a day lasts 12 minutes.
+    plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on"
     for deg in FOV_LOOKS:
         plan += f";look:{deg};wait:2.5;sync:h{deg};dump:h{deg};shot:h{deg}"
     # Walking north with the look east (90° off): held at look_walk_deg; F3 (to "where you walk")
     # releases it while walking, then standing.
     plan += (";look:90;hold:0;wait:2;sync:walk;key:F3:tap;wait:1.5;sync:released;stop;wait:1.5;key:F3:tap;look:270;wait:2;sync:looked;key:F3:tap;wait:1.5;sync:stood;"
              "click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;shot:03_settings_on;dump:03;click:@settings:facing_sight;wait:2.5;shot:04_settings_off;dump:04;quit")
-    syncs = [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
     places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, FOV_PLACES)]
     env = {"LIVING_GAME_CONTROL": "cursor", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::controls=debug"}
     old = {k: os.environ.get(k) for k in list(env) + ["LIVING_SIGHT_FIELD_DUMP"]}
@@ -671,6 +673,12 @@ def look_walk_one(run, c, preset):
                 os.environ[k] = v
     c.check(s, "client ran and joined", code == 0, text[-300:])
     rows = feet_log(out)
+    # Only the scenario's own frames: from its first scripted look (after the spot and the preset
+    # are set). Before that the body stands wherever the last drive left it, and the first-time
+    # tip's click can strike; since fov-client, `human_face` turns a standing body to the
+    # cursor, so those frames turn and twist for reasons this scenario doesn't set up.
+    first = next((i for i, r in enumerate(rows) if r.get("look") is not None), len(rows))
+    rows = rows[first:]
     c.check(s, "the feet log recorded the walk", len(rows) > 300, f"{len(rows)} frames")
     if len(rows) < 300:
         return {}

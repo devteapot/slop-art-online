@@ -11,6 +11,7 @@ While the world's `fov_on` law is on, what a character sees depends on where its
   - Facing the cursor: the cursor's direction while standing; released while a direction is held (`FACE_WHILE_MOVING` off until look-2).
   - Facing where you walk: only while a move is aimed, then released with `(0, 0)`.
   - A look is sent on changes over 4°, at most every 0.1 s. A send the bucket refused ("too many movement inputs") is retried.
+  - The look goes before the frame's move, so the release reaches the authority while the body still stands: the facing is kept, and the walk turns on its eased curve. A release mid-walk would snap the heading to the travel, a leg jump `look-walk` catches.
 
 ## Sub-features
 
@@ -37,6 +38,7 @@ Preconditions: baseline, plus six residents (`residents(run, 6)`) placed round t
   - `RUST_LOG=…,living_game::controls=debug` (the `look: human_face(…)` lines);
   - `--admin-link` (drive.py writes the admin token to `.local/living/verify/RUN/private/`, mode 600, and deletes it when the drive ends).
 - **Snapshots:** `--sync 'hN=sql|SELECT … FROM body;sql|SELECT body FROM perceived WHERE viewer = 0x{ident};sql|SELECT key, target, bearing, band FROM heard WHERE listener = {me}'`. They are saved in `scene.json` under `snaps`, with their wall times. The comparison uses the last field dump before each snapshot (`fov_compare.json`).
+- **Hour:** the scenario sets noon first (`sync:noon`, `UPDATE world SET epoch_ms = {epoch_at:12}`, a scratch fixture through drive.py), so side vision is compared.
 - **Plan:** `frame:0;yaw:0;…;key:F5:tap;…;look:0;wait:2.5;sync:h0;dump:h0;…;look:90;hold:0;wait:2;sync:walk;key:F3:tap;…;click:@settings:facing_sight`.
 
 ## Gotchas
