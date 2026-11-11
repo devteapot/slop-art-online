@@ -25,6 +25,8 @@ pub struct Activity {
     pub victim: u32,
     pub want: String,
     pub want_qty: u32,
+    pub offer: u64,
+    pub record: u64,
 }
 
 impl __sdk::InModule for Activity {
@@ -51,6 +53,8 @@ pub struct ActivityCols {
     pub victim: __sdk::__query_builder::Col<Activity, u32>,
     pub want: __sdk::__query_builder::Col<Activity, String>,
     pub want_qty: __sdk::__query_builder::Col<Activity, u32>,
+    pub offer: __sdk::__query_builder::Col<Activity, u64>,
+    pub record: __sdk::__query_builder::Col<Activity, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for Activity {
@@ -73,6 +77,8 @@ impl __sdk::__query_builder::HasCols for Activity {
             victim: __sdk::__query_builder::Col::new(table_name, "victim"),
             want: __sdk::__query_builder::Col::new(table_name, "want"),
             want_qty: __sdk::__query_builder::Col::new(table_name, "want_qty"),
+            offer: __sdk::__query_builder::Col::new(table_name, "offer"),
+            record: __sdk::__query_builder::Col::new(table_name, "record"),
         }
     }
 }

@@ -273,6 +273,20 @@ fn plan(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, spec: &S
     if sc.shapes().get(skill).is_some_and(|s| s.real_time) {
         return None;
     }
+    // Where its presentation puts it (`living_rules::ui`: the defaults are this list's own
+    // choices; a declaration may take a skill from the lists, `on: []`, when a player does it
+    // another way).
+    if let Some(u) = sc.ui(skill) {
+        use living_rules::ui::On;
+        let place = match aim {
+            Aim::Me => On::Me,
+            Aim::Thing { .. } => On::Thing,
+            Aim::Creature { .. } => On::Person,
+        };
+        if !u.is_on(place) {
+            return None;
+        }
+    }
     let wants_target = *aim != Aim::Me;
     if spec.target != wants_target {
         return None;
@@ -1377,12 +1391,13 @@ mod tests {
         let sc = Scripts::new(SKILLS).unwrap();
         let (aim, t) = bush();
         let c = choices(&sc, &me(&[], &[]), &aim, Some(&t), &skills_of(&sc));
-        // Gathering, and turning to face it (the rules' `face` takes anything in sight).
-        assert_eq!(skills(&c), vec!["gather", "face"], "{c:?}");
+        // Gathering. Not facing it: the rules' `face` takes anything in sight, but a player faces
+        // where it looks, so `face_ui()` puts it in no list (play-test 5).
+        assert_eq!(skills(&c), vec!["gather"], "{c:?}");
         assert_eq!(likely(&sc, &aim, &c, None).map(|c| c.skill.as_str()), Some("gather"));
-        // A full pack: the rules refuse to gather, so it is not offered.
+        // A full pack: the rules refuse to gather, so it is not offered, and nothing is.
         let full = me(&[("wood", 40)], &[]);
-        assert_eq!(skills(&choices(&sc, &full, &aim, Some(&t), &skills_of(&sc))), vec!["face"]);
+        assert!(skills(&choices(&sc, &full, &aim, Some(&t), &skills_of(&sc))).is_empty());
     }
 
     #[test]

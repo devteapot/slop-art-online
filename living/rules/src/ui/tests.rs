@@ -222,11 +222,18 @@ fn the_three_looks_by_name_are_declared_not_coded() {
         let (u, d) = (s.ui(skill).unwrap(), s.ui_default(skill).unwrap());
         assert_eq!(UiSpec { look: d.look.clone(), declared: false, ..u.clone() }, d, "{skill}: only `look` is declared");
     }
-    // Step 2 declares the bar's seven (where each sits, its input and its look) and Accept on an
-    // offer's card.
+    // Step 2 declares the bar's seven (where each sits, its input and its look); accept and
+    // decline (rules-offers-2) are also answers on an offer's card, with the trade icon.
     let mut declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
     declared.sort();
-    assert_eq!(declared, ["accept", "block", "bowshot", "dodge", "firebolt", "heal", "jump", "shoot", "strike", "throw"], "the shipped script declares these");
+    assert_eq!(declared, ["accept", "block", "bowshot", "decline", "dodge", "face", "firebolt", "heal", "jump", "shoot", "strike", "throw"], "the shipped script declares these");
+    // Face is in no list of a player's (play-test 5): a player faces where it looks, as the tip says.
+    let face = s.ui("face").unwrap();
+    assert!(face.on.is_empty() && face.tip.is_some() && !s.ui_default("face").unwrap().on.is_empty(), "{face:?}");
+    for skill in ["accept", "decline"] {
+        let u = s.ui(skill).unwrap();
+        assert!(u.look.icon == Some("trade") && u.is_on(On::Offer) && u.is_on(On::Person), "{skill}: {u:?}");
+    }
 }
 
 #[test]
@@ -318,7 +325,8 @@ fn defaults_reproduce_todays_aims_and_lists() {
     for (world, s) in worlds() {
         for spec in s.skills().iter() {
             let name = spec.name.as_str();
-            let u = s.ui(name).unwrap();
+            // The defaults (a declaration may move a skill: face is in no list of a player's).
+            let u = s.ui_default(name).unwrap();
             // The F and C lists: where `plan()` offered it.
             assert_eq!(u.is_on(On::Me), plan_offers(&s, name, Aimed::Me), "{world}: `{name}` toward myself");
             assert_eq!(u.is_on(On::Person), plan_offers(&s, name, Aimed::OwnKind), "{world}: `{name}` toward a person");
@@ -375,7 +383,7 @@ fn want(t: &ActTarget) -> Kind {
         ActTarget::Creature(i) => Kind::Id(*i),
         ActTarget::Thing { kind, .. } => Kind::Nearest(kind.clone()),
         ActTarget::At(_) => Kind::At,
-        ActTarget::Offer { from, .. } => Kind::Id(*from),
+        ActTarget::Offer { from, .. } | ActTarget::Record { from, .. } => Kind::Id(*from),
     }
 }
 
@@ -406,7 +414,7 @@ fn targets(on: On, spec: &crate::catalog::SkillSpec) -> Vec<ActTarget> {
         On::Me => vec![ActTarget::Me],
         On::Item if spec.needs_target => vec![ActTarget::Creature(7)],
         On::Item => vec![ActTarget::Me],
-        On::Offer => vec![ActTarget::Offer { from: 7, offer: 1 }],
+        On::Offer => vec![ActTarget::Offer { from: 7, offer: 1 }, ActTarget::Record { from: 7, record: 2 }],
         On::Bar | On::Box => vec![],
     }
 }
@@ -672,7 +680,7 @@ fn a_bad_declaration_is_logged_by_a_client_and_refused_at_install() {
         // The review's rule-safety cases (findings 1 and 6): a presentation may not take a skill
         // from players only, send an act the grammar refuses, or pair an input with nothing.
         ("fn wave_ui() { #{ on: \"self\" } }", "`self` sends no target, and `wave_spec()` needs one"),
-        ("fn gather_ui() { #{ on: [] } }", "to hide a skill from both, its spec says `listed: false`"),
+        ("fn gather_ui() { #{ on: [] } }", "say in `tip` how a player does it instead"),
         ("fn gather_ui() { #{ on: \"ground\" } }", "`ground` needs a combat aim of `point`"),
         ("fn rest_ui() { #{ on: \"offer\" } }", "`offer` needs a spec with `target: true`"),
         ("fn dodge_ui() { #{ input: \"toggle\" } }", "`input: \"toggle\"` needs `toggles`"),
@@ -819,7 +827,9 @@ fn without_vocabulary(src: &str) -> String {
 /// And the species' signals: a body offered `signal` must have signals to make
 /// (`Species::signals`), a rule moved unchanged from `species::skills_help_of` so minds' references
 /// stay byte for byte.
-const GRAMMAR: &[&str] = &["goto", "signal"];
+/// And `offer`: the field an answer (accept, decline) names the trade offer it answers with
+/// (`{"do": "accept", "target": {"id": 4}, "offer": 9}`, rules-offers-2), spelt like the skill.
+const GRAMMAR: &[&str] = &["goto", "signal", "offer"];
 
 #[test]
 fn no_skill_is_named_in_the_rules_interface_code() {
@@ -1212,12 +1222,29 @@ fn seventy_declarations_cost_little_to_compile() {
 }
 
 #[test]
-fn the_grammar_has_no_offer_reference_yet() {
-    // Finding 7: an act toward an incoming offer names its sender; the offer's own id joins the
-    // act when the grammar carries a reference (rules-offers-2). This fails when it does, so that
-    // `act_node` starts sending it.
-    assert!(serde_json::from_value::<graph::Action>(json!({"skill": "accept", "offer": 1})).is_err(), "the grammar carries `offer` now: send `ActTarget::Offer`'s id in `act_node`");
-    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}}));
+fn an_act_toward_an_offer_names_it() {
+    // Finding 7: an act toward an incoming offer names its sender and the offer it answers
+    // (rules-offers-2), and the grammar carries the reference; an offer of 0 names none.
+    let a: graph::Action = serde_json::from_value(json!({"skill": "accept", "offer": 1})).expect("the grammar carries `offer`");
+    assert_eq!(a.offer, Some(1));
+    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}, "offer": 9}));
+    assert_eq!(act_node("decline", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "decline", "target": {"id": 4}, "offer": 9}));
+    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 0 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}}));
+    // What it sends parses as the act it names.
+    let parsed = crate::acts::parse(act_node("decline", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), None, &Default::default()).unwrap();
+    assert_eq!((parsed.skill.as_str(), parsed.offer), ("decline", Some(9)));
+}
+
+#[test]
+fn an_act_toward_a_proposal_names_its_record() {
+    // A proposal of terms (an agreement record) is answered by its record id (rules-offers-2's
+    // `"record"`), toward its proposer; what is sent parses back as the act it names.
+    for skill in ["accept", "decline"] {
+        let node = act_node(skill, &ActTarget::Record { from: 4, record: 12 }, &Picked::default());
+        assert_eq!(node, json!({"do": skill, "target": {"id": 4}, "record": 12}));
+        let parsed = crate::acts::parse(node, None, &Default::default()).unwrap();
+        assert_eq!((parsed.skill.as_str(), parsed.record, parsed.offer), (skill, Some(12), None));
+    }
 }
 
 /// The shipped bar's declarations (ui-1 step 4, INTERFACE.md step 2): they parse with no

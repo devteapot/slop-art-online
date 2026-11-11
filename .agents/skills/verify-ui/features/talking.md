@@ -36,6 +36,8 @@ Preconditions: baseline; two residents placed beside the player with `--place ID
 
 ## Gotchas
 
+- Face is in no list of a player's (`face_ui() { on: [], tip }`, play-test 5): a player faces where it looks. The talk scenario checks More… leaves it out.
+
 - Someone behind a stall or a house is not perceived (sight is a rule), so Enter skips them; place people in the open.
 - `point:ID` puts the cursor 0.3 m above their feet. Someone standing in front of them on screen can cover that spot, and then the pick is rightly the one in front; the dump's `seen` shows where each body was.
 - A run's character keeps its old experience rows: "First seen 12 min ago" can predate the run.
