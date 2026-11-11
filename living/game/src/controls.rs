@@ -318,6 +318,11 @@ pub fn look(net: &Net, dir: Option<Vec2>, last: &mut Option<Option<Vec2>>) {
         return;
     }
     *last = Some(dir);
+    // ==== HUMAN_FACE PLUGS IN HERE ====
+    // When `human_face(dx, dy)` is in the bindings: send `dir` (None as (0, 0), the release)
+    // through `conn.reducers.human_face_then(..., net.on_reply("face"))`, retrying a refused send
+    // (the input bucket, `input_hz`/`input_burst`) on the next call, as the move does. The field
+    // of view follows: it reads `body.heading` from my motion row (`sightfield::my_heading`).
     // No `human_face` in the bindings yet: nothing is sent.
 }
 

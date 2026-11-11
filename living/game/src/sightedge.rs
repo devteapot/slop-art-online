@@ -28,10 +28,15 @@
 //! arrival, so the key can be found. `LIVING_SIGHT_EDGE=fade|unseen|limited` sets the starting
 //! mode (headless captures).
 //!
-//! **Looks under trial** (branch `sight-look`, for the owner to pick from; not in F2's cycle, and
-//! the default is unchanged): `LIVING_SIGHT_LOOK=wash|lantern|shadows|hatch|memory` changes how
-//! "not seen now" draws what my character doesn't see (`edges.wesl`); the live script's
-//! `sightlook:NAME` step switches it for captures (`sightlook:` or `sightlook:grey` is today's).
+//! **Looks** (from branch `sight-look`): how "not seen now" draws what my character doesn't see
+//! (`edges.wesl`). Memory is the default (fov-client, 2026-11-11); the others stay selectable in
+//! Settings › Play ("Unseen ground", kept in the settings file) and by
+//! `LIVING_SIGHT_LOOK=grey|wash|lantern|shadows|hatch|memory`; not in F2's cycle. The live
+//! script's `sightlook:NAME` step switches it for captures (`sightlook:grey` is the old grey).
+//!
+//! **Facing sight:** while the world's `fov_on` law is on, `senses(a)` also gives a `field`
+//! ([`SightEdge::senses`]); `sightfield.rs` then draws its three zones in whichever look, and
+//! `facing.rs` shows its values.
 //! - **wash:** a warm paper wash with a dry-brush edge, pigment pooling along it.
 //! - **lantern:** my sight as light: what I don't see is in darkness, with a wide soft penumbra
 //!   and a warm rim; lighter by day.
@@ -46,7 +51,7 @@
 use crate::net::Net;
 use bevy::prelude::*;
 use living_bindings::*;
-use living_rules::script::{ActorFacts, SkillCtx};
+use living_rules::script::{ActorFacts, Senses, SkillCtx};
 use spacetimedb_sdk::Table;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -110,12 +115,14 @@ impl Mode {
 /// How "not seen now" is drawn: today's grey, or one of the looks under trial.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Look {
-    #[default]
     Grey,
     Wash,
     Lantern,
     Shadows,
     Hatch,
+    /// The default since fov-client (2026-11-11, the coordinator's choice from the sight-look
+    /// comparison).
+    #[default]
     Memory,
 }
 
@@ -129,6 +136,33 @@ impl Look {
             "hatch" | "hatching" => Some(Look::Hatch),
             "memory" => Some(Look::Memory),
             _ => None,
+        }
+    }
+
+    /// Every look, in Settings' order (the default first).
+    pub const ALL: [Look; 6] = [Look::Memory, Look::Grey, Look::Wash, Look::Lantern, Look::Shadows, Look::Hatch];
+
+    /// Its name in the settings file, `LIVING_SIGHT_LOOK` and Settings' tags.
+    pub fn name(self) -> &'static str {
+        match self {
+            Look::Grey => "grey",
+            Look::Wash => "wash",
+            Look::Lantern => "lantern",
+            Look::Shadows => "shadows",
+            Look::Hatch => "hatch",
+            Look::Memory => "memory",
+        }
+    }
+
+    /// Its name in Settings.
+    pub fn label(self) -> &'static str {
+        match self {
+            Look::Grey => "Grey",
+            Look::Wash => "Wash",
+            Look::Lantern => "Lantern",
+            Look::Shadows => "Shadows",
+            Look::Hatch => "Hatch",
+            Look::Memory => "Memory",
         }
     }
 
@@ -180,6 +214,12 @@ pub struct SightEdge {
     pub radius: f32,
     /// The rules' answer for me now (m), once known.
     pub want: Option<f32>,
+    /// My senses now by the rules (`senses(a)`): with a `field` while the world's `fov_on` law
+    /// is on, and the keep margin (`keep_seen_m`) for someone already seen.
+    pub senses: Option<Senses>,
+    pub keep_m: f32,
+    /// The script revision `keep_m` was read for.
+    keep_rev: Option<u32>,
     next_ask: f32,
     next_report: f32,
     /// The camera's far plane before Limited view brought it in.
@@ -192,7 +232,7 @@ impl Default for SightEdge {
     fn default() -> Self {
         let mode = std::env::var("LIVING_SIGHT_EDGE").ok().and_then(|v| Mode::parse(&v)).unwrap_or_default();
         let look = std::env::var("LIVING_SIGHT_LOOK").ok().and_then(|v| Look::parse(&v)).unwrap_or_default();
-        Self { mode, look, radius: 11.0, want: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
+        Self { mode, look, radius: 11.0, want: None, senses: None, keep_m: 1.0, keep_rev: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
     }
 }
 
@@ -223,9 +263,10 @@ impl Plugin for SightEdgePlugin {
     }
 }
 
-/// My sight now by the world's rules (`senses(a)`), or none before the script and my character
-/// are known.
-fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<f32> {
+/// My senses now by the world's rules (`senses(a)`: sight, hearing and, while the world's
+/// `fov_on` law is on, the `field` with its five values), or none before the script and my
+/// character are known.
+fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<Senses> {
     let (conn, me, sc) = (net.conn.as_ref()?, net.my_id?, rules.scripts.as_ref()?);
     let c = conn.db.my_characters().id().find(&me)?;
     let mut inv: Vec<(String, u32)> = Vec::new();
@@ -240,7 +281,7 @@ fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<f32> {
     let actor = ActorFacts { id: me, kind: c.kind.clone(), inv, ..Default::default() };
     let ctx = SkillCtx { actor, night, dark, hour, ..Default::default() };
     match sc.senses(&ctx) {
-        Ok(s) => Some(s.sight),
+        Ok(s) => Some(s),
         Err(e) => {
             warn!("sight edge: the rules' senses law failed: {e}");
             None
@@ -280,7 +321,21 @@ pub fn update(
     edge.next_ask -= dt;
     if edge.next_ask <= 0.0 {
         edge.next_ask = ASK_S;
-        if let Some(r) = my_sight(&net, &rules, clock.hour()) {
+        if let Some(s) = my_sight(&net, &rules, clock.hour()) {
+            let r = s.sight;
+            if edge.senses.map(|o| o.field) != Some(s.field) {
+                match s.field {
+                    Some(f) => info!("sight edge: facing sight on: focal {:.0}°, side {:.0}° at {:.2} of sight, near {:.1} m, margin {:.0}°", f.focal_deg, f.side_deg, f.side_share, f.near_m, f.margin_deg),
+                    None => info!("sight edge: facing sight off (sight the same all round)"),
+                }
+            }
+            edge.senses = Some(s);
+            if edge.keep_rev != Some(rules.revision) {
+                if let Some(sc) = rules.scripts.as_ref() {
+                    edge.keep_m = sc.laws().keep_seen_m;
+                    edge.keep_rev = Some(rules.revision);
+                }
+            }
             if edge.want.is_none() {
                 edge.radius = r;
                 info!("sight edge: sight {r:.1} m by the world's rules");
@@ -380,7 +435,7 @@ mod tests {
         assert_eq!(Mode::parse("unseen"), Some(Mode::Unseen));
         assert_eq!(Mode::parse(" Limited "), Some(Mode::Limited));
         assert_eq!(Mode::parse("other"), None);
-        assert_eq!(Look::default(), Look::Grey, "today's grey stays the default");
+        assert_eq!(Look::default(), Look::Memory, "memory is the default look");
         assert_eq!(Look::parse("Lantern"), Some(Look::Lantern));
         assert_eq!(Look::parse(""), Some(Look::Grey));
         assert_eq!(Look::parse("other"), None);

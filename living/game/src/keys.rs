@@ -361,11 +361,13 @@ pub struct Prefs {
     pub dirty: bool,
     /// The interface's theme (`ui::wood::Name`: clear, night, linen, walnut).
     pub theme: Option<String>,
+    /// How unseen ground is drawn (`sightedge::Look`: memory, grey, wash, lantern, shadows, hatch).
+    pub sight_look: Option<String>,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None }
+        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, sight_look: None }
     }
 }
 
@@ -409,6 +411,7 @@ pub fn load() -> (Binds, Prefs) {
         auto_draw: v["auto_draw"].as_bool().unwrap_or(d.auto_draw),
         dirty: false,
         theme: v["theme"].as_str().map(String::from),
+        sight_look: v["sight_look"].as_str().map(String::from),
     };
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
     (binds, prefs)
@@ -425,6 +428,7 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "tips": prefs.tips,
         "auto_draw": prefs.auto_draw,
         "theme": prefs.theme,
+        "sight_look": prefs.sight_look,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);

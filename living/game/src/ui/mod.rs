@@ -15,6 +15,7 @@
 //! with the window's height (`UiScale`).
 
 mod death;
+mod facing;
 mod frame;
 pub mod hit;
 mod icons;
@@ -92,9 +93,9 @@ impl Plugin for UiPlugin {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
         } else {
             // Connected play: the game UI's input, its windows and the live source.
-            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
+            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
-                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
                 .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare));
             if perf_on() {
@@ -349,11 +350,21 @@ pub struct DumpExtra<'w> {
     prefs: Res<'w, crate::keys::Prefs>,
     binds: Res<'w, crate::keys::Binds>,
     theme: Res<'w, ThemeState>,
+    fov: Option<Res<'w, crate::facing::FovState>>,
+    heard: Option<Res<'w, crate::heardmark::HeardMarks>>,
+    edge: Option<Res<'w, crate::sightedge::SightEdge>>,
 }
 
 impl DumpExtra<'_> {
     fn json(&self) -> serde_json::Value {
-        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key()})
+        // Facing sight: whether it is on, the field's five values, whether this client can switch
+        // it, and the heard marks (`facing.rs`, `heardmark.rs`).
+        let fov = self.fov.as_ref().map(|f| {
+            serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last,
+                "field": f.field.map(|v| serde_json::json!({"focal_deg": v.focal_deg, "side_deg": v.side_deg, "side_share": v.side_share, "near_m": v.near_m, "margin_deg": v.margin_deg}))})
+        });
+        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
+            "facing_sight": fov, "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name())})
     }
 }
 

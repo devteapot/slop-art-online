@@ -46,6 +46,8 @@ mod route;
 mod sight;
 mod sightedge;
 mod sightfield;
+mod facing;
+mod heardmark;
 mod sky;
 mod takes;
 mod talk;
@@ -183,6 +185,8 @@ fn main() {
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
         app.add_plugins(sightfield::SightFieldPlugin);
+        // Sight that depends on facing: its readout and switch, and what I hear but don't see.
+        app.add_plugins((facing::FacingPlugin, heardmark::HeardMarksPlugin));
         // A record of the session for the play report, when LIVING_GAME_RECORD names a directory.
         app.add_plugins(record::RecordPlugin);
         if let Some(d) = demo::Demo::from_env() {
