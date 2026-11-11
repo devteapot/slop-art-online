@@ -424,6 +424,14 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     you.insert("kind".into(), json!(me.kind));
     you.insert("at".into(), json!([round(at.0), round(at.1)]));
     you.insert("terrain".into(), json!(map.at(at.0, at.1).name()));
+    // Inside a settlement one sees its streets run on past the edge of sight: how big the place
+    // is and which way its nearest edge lies (sight alone covers about 11 tiles of a town 240
+    // across; newcomers searched it for bushes and starved, docs/TRIALS.md "Fast iterations" 10).
+    if let Some(s) = ctx.db.settlement().iter().filter(|s| common::dist((s.x, s.y), at) < s.radius_m).min_by(|a, b| common::dist((a.x, a.y), at).total_cmp(&common::dist((b.x, b.y), at))) {
+        let to_edge = (s.radius_m - common::dist((s.x, s.y), at)).max(1.0);
+        let outward = (at.0 + (at.0 - s.x), at.1 + (at.1 - s.y));
+        you.insert("where".into(), json!(format!("inside a {} about {:.0} m across; its nearest edge is about {:.0} m {}", s.kind, s.radius_m * 2.0, to_edge, common::direction(at, outward))));
+    }
     if let Some(sp) = common::species(&me.kind).filter(|s| !s.eats.is_empty()) {
         you.insert("you eat".into(), json!(sp.eats));
     }
