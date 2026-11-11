@@ -1071,9 +1071,15 @@ class Instance:
         same = Counter((r[1], r[2]) for r in errors).most_common(1)
         last_min = sum(1 for r in self.recent if now - r[0] <= 60)
         why = None
-        if len(errors) >= 30:
+        # Where a whole island thinks (`minds.only: "all"`, thousands of calls in 5 minutes), a
+        # provider's 429s at about 1% are noise the mind retries: failures count as a runaway
+        # only as a share of the calls (20%, the same one 10%), never below the one-mind counts.
+        many = self.trial.get("minds", {}).get("only") == "all"
+        fail_limit = max(30, 0.2 * len(self.recent)) if many else 30
+        same_limit = max(15, 0.1 * len(self.recent)) if many else 15
+        if len(errors) >= fail_limit:
             why = f"{len(errors)} failed model calls in 5 minutes"
-        elif same and same[0][1] >= 15:
+        elif same and same[0][1] >= same_limit:
             why = f"the same failure {same[0][1]} times in 5 minutes ({same[0][0][0]}: {same[0][0][1]})"
         # A call rate is a loop signal only when one mind thinks: with `minds.only: "all"` a whole
         # island thinks (lives-2: hundreds of calls a minute is its normal), so only a trial's
