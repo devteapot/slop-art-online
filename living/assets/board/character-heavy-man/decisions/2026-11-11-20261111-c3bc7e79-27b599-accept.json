@@ -1,0 +1,13 @@
+{
+ "schema": 1,
+ "family": "character:heavy-man",
+ "version": "20261111-c3bc7e79-27b599",
+ "verdict": "accept",
+ "date": "2026-11-11",
+ "by": "owner",
+ "words": "It's a solid start, but we can and should do much better. I would like to get to a point where we can generate and parameterize characters that are similar quality to what we currently have.",
+ "note": "Our own generator (person.py, the character spike) accepted as the base for characters, not as the bar. The quality target is the VRoid control (Sendagaya Shino) close up, from a parameterized tool of our own (docs/SMALL_CITY.md decision 2). Track char-2 works from it in passes.",
+ "scope": "base",
+ "recorded": "2026-11-11T16:46:12.430721+01:00",
+ "recorded_by": "tool-6, for the dev-box coordinator"
+}

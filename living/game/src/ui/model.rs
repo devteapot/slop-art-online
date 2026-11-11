@@ -44,7 +44,21 @@ pub struct VerbsView {
 
 pub struct MenuView {
     pub title: String,
-    pub rows: Vec<String>,
+    pub rows: Vec<MenuRowView>,
+    /// An open sub-list (a skill with many items: "Give ›"), beside the list.
+    pub sub: Option<(String, Vec<MenuRowView>)>,
+    /// Toward whom (an icon and the place beside their head), or where the UI put it.
+    pub person: Option<u32>,
+    pub at: Option<Vec2>,
+}
+
+pub struct MenuRowView {
+    pub label: String,
+    /// The rules' skill (or `talk`, `window`), for its icon and key.
+    pub skill: String,
+    pub group: bool,
+    /// How many of its item I carry, for a sub-list's count.
+    pub have: u32,
 }
 
 pub struct InventoryView {
@@ -187,6 +201,8 @@ pub struct Actor {
     pub hp: Option<f32>,
     /// Exact health and its maximum, only while I perceive it exactly (an appraisal holds).
     pub exact: Option<(f32, f32)>,
+    /// A person (not an animal).
+    pub kind_person: bool,
 }
 
 pub struct TargetInfo {
@@ -288,6 +304,8 @@ pub struct MapInfo {
     /// View yaw, degrees (0 = north up, clockwise).
     pub yaw: f32,
     pub pois: Vec<Poi>,
+    /// The name of where I am: the nearest place my character knows, if near enough.
+    pub place: Option<String>,
 }
 
 /// What the player asked of the UI this frame; the active source carries it out.

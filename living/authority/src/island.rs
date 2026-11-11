@@ -317,7 +317,7 @@ pub fn build_lots(ctx: &ReducerContext, h: &Hosted, range: std::ops::Range<usize
     for (i, l) in h.lots.iter().enumerate().skip(range.start).take(range.len()) {
         let structure = structure_kind(l.kind).map_or(0, |k| {
             common::invalidate_structures(ctx);
-            ctx.db.structure().insert(Structure { id: 0, kind: k.into(), x: l.door.0, y: l.door.1, chunk: chunk_of(l.door.0, l.door.1), owner: 0, built_ms: now }).id
+            ctx.db.structure().insert(Structure { id: 0, kind: k.into(), x: l.door.0, y: l.door.1, chunk: chunk_of(l.door.0, l.door.1), owner: 0, built_ms: now, lit_until_ms: 0 }).id
         });
         ctx.db.lot().insert(Lot {
             id: i as u32,

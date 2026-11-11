@@ -44,9 +44,9 @@ pub(super) fn day_words(hour: f32) -> &'static str {
 /// Techniques a text names (as whole words): `know:<technique>` anchors, so being taught,
 /// watching someone make a thing, hearing who knows what, and failing for lack of a technique
 /// all meet at one concept, and the failure brings back who was seen or said to know it.
-pub(super) fn techniques_in(text: &str) -> Vec<&'static str> {
+pub(super) fn techniques_in(text: &str) -> Vec<String> {
     let words: Vec<String> = text.to_lowercase().split(|c: char| !c.is_alphabetic()).map(String::from).collect();
-    living_rules::catalog::TECHNIQUES.iter().map(|t| t.name).filter(|n| words.iter().any(|w| w == n)).collect()
+    living_rules::catalog::technique_names().into_iter().filter(|n| words.iter().any(|w| w == n)).collect()
 }
 
 /// Token budgets for recalled text by call (`LIVING_RECALL_TOKENS`, default `decide=800`;

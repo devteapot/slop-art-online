@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 /// Talking (`talk.rs`): on arrival, and again the first time someone speaks to me.
-pub const TALK: &str = "Enter — talk to the person you point at";
+pub const TALK: &str = "Enter — talk to the person you point at, or to the room";
 /// How long a hint shows, and the fade at its end (s).
 const SHOW_S: f64 = 6.0;
 const FADE_S: f64 = 1.5;
@@ -29,6 +29,12 @@ impl Tips {
         if self.shown.insert(text.to_string()) {
             self.show(text, now);
         }
+    }
+
+    /// Every hint may show again (Settings › Play, "Show tips again").
+    pub fn again(&mut self, now: f64) {
+        self.shown.clear();
+        self.show(TALK, now);
     }
 
     /// Show a hint now (again).

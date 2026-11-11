@@ -16,6 +16,7 @@ pub struct ResourceNode {
     pub max: f32,
     pub regen: f32,
     pub at_ms: u64,
+    pub pool: u64,
 }
 
 impl __sdk::InModule for ResourceNode {
@@ -35,6 +36,7 @@ pub struct ResourceNodeCols {
     pub max: __sdk::__query_builder::Col<ResourceNode, f32>,
     pub regen: __sdk::__query_builder::Col<ResourceNode, f32>,
     pub at_ms: __sdk::__query_builder::Col<ResourceNode, u64>,
+    pub pool: __sdk::__query_builder::Col<ResourceNode, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for ResourceNode {
@@ -50,6 +52,7 @@ impl __sdk::__query_builder::HasCols for ResourceNode {
             max: __sdk::__query_builder::Col::new(table_name, "max"),
             regen: __sdk::__query_builder::Col::new(table_name, "regen"),
             at_ms: __sdk::__query_builder::Col::new(table_name, "at_ms"),
+            pool: __sdk::__query_builder::Col::new(table_name, "pool"),
         }
     }
 }

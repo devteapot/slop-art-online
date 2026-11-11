@@ -718,6 +718,15 @@ pub fn graze_pasture(ctx: &ReducerContext, chunk: u32, now: u64) {
     }
 }
 
+/// The node whose stock a resource node draws on: its pool's (a fishing ground's spots share
+/// one limit), or itself.
+pub fn stock_of(ctx: &ReducerContext, r: &ResourceNode) -> ResourceNode {
+    if r.pool == 0 || r.pool == r.id {
+        return r.clone();
+    }
+    ctx.db.resource_node().id().find(r.pool).unwrap_or_else(|| r.clone())
+}
+
 pub fn amount_now(ctx: &ReducerContext, r: &ResourceNode, now: u64) -> f32 {
     let (epoch, day, year) = calendar(ctx);
     (r.amount + r.regen * living_rules::growing_ms(r.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(r.max)
@@ -842,17 +851,21 @@ pub fn gather_radius(ctx: &ReducerContext, sight: f32) -> f32 {
     sight.max(scripts(ctx).reach().glow)
 }
 
-/// Whether a spot is in lamplight: within the `lights` radius of a structure that gives light
-/// (`structure_traits()`); false at once when no kind gives light.
+/// Whether a spot is in lamplight: within the light of a structure that gives it (its kind's
+/// `lights`, or a fire's `burns.light`). A kind that `burns` gives light only while it is lit
+/// (`lit_until_ms` ahead of now): a lamp out of oil is dark. False at once when no kind gives
+/// light.
 pub fn lit_at(ctx: &ReducerContext, at: (f32, f32)) -> bool {
     let sc = scripts(ctx);
     let widest = sc.widest_light();
     if widest <= 0.0 {
         return false;
     }
+    let now = now_ms(ctx);
     structures_near(ctx, at, widest).into_iter().any(|(s, d)| {
-        let l = sc.structure(&s.kind).lights;
-        l > 0.0 && d <= l
+        let t = sc.structure(&s.kind);
+        let l = t.light();
+        l > 0.0 && d <= l && (t.burns.is_none() || living_rules::fire::lit(s.lit_until_ms, now))
     })
 }
 

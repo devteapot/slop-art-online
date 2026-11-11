@@ -20,7 +20,8 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked')
+         'takeover', 'sight', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
+         'death-names')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 DROP, LOW = 8, 9
@@ -188,6 +189,8 @@ def run_case(run, case):
         return sight_case(run)
     if case == 'drop':
         return drop_case(run)
+    if case == 'death-names':
+        return death_names_case(run)
     if case == 'resident':
         return resident_case(run)
     if case == 'parked':
@@ -607,6 +610,92 @@ def sight_case(run):
     assert any(e['subject'] == third for e in deaths) and not any(e['subject'] == other for e in deaths), deaths
     return {'status': 'pass', 'scene_ids': ids, 'witnessed': [e['text'] for e in deaths],
             'hidden': names.get(other), 'open': names.get(third)}
+
+
+def death_names_case(run):
+    """A community member killed in view of a mind's character, who shares the community and
+    feels something for them: the experience the authority gives that mind names the dead, and
+    the next prompt the model is sent names them in what happened and in the relations, not as
+    "a stranger" (`die` keeps the community's names as acquaintances, `perception::remember_member`;
+    the mind's `known_as` reads them). The killer's experience reads "killed by you"; a bystander
+    who knew neither reads strangers."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 4, True)
+    made = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    assert len(made) == 4, made
+    victim, member, killer, bystander = made
+    names = {c['id']: c['name'] for c in run.sql('SELECT id, name FROM character', 'names')}
+    vname = names[victim]
+    for who in made:
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    act = lambda who, node: run.admin('mind_act', who, [json.dumps(node)], 'verify-minds')
+    run.admin('place_near', member, victim)
+    act(victim, {'do': 'found', 'text': f'Verify Hollow {victim}'})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {victim}', 'victim-membership'), 'community founded', 20)
+    act(member, {'do': 'join', 'target': {'id': victim}})
+    run.wait(lambda: run.sql(f'SELECT * FROM join_request WHERE asker = {member}', 'join-request'), 'join request', 20)
+    act(victim, {'do': 'welcome', 'target': {'id': member}})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {member}', 'member-membership'), 'member welcomed', 20)
+    assert not run.sql(f'SELECT * FROM membership WHERE member = {killer} OR member = {bystander}', 'outsiders-membership')
+    # The member feels something for the victim (an authored relation), so the relations the
+    # prompt lists include the victim, named as the member knows them (`known_as`).
+    run.admin('set_background', member, json.dumps({'sheet': {'narrative': 'I keep the hollow with my neighbour.',
+        'values': ['care'], 'goals': ['keep the hollow'], 'mood': 'settled',
+        'relations': [{'id': victim, 'trust': 40, 'affinity': 50, 'label': 'neighbour'}]}}))
+    for who in (killer, bystander):
+        run.admin('place_near', who, victim)
+    time.sleep(1.0)
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    run.start(models, [member])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    asked = lambda marker: [sent_text(e) for e in requests() if f'verify {marker}' in sent_text(e)]
+    run.admin('set_behavior', member, json.dumps({'think': 'I finished my plan. verify alive'}))
+    alive_prompt = run.wait(lambda: asked('alive'), 'prompt while the victim lives', 60)[0]
+    (run.directory / 'prompt-alive.txt').write_text(alive_prompt)
+    accepted(run, member)
+    run.wait(lambda: run.sql(f'SELECT * FROM relation WHERE actor = {member} AND other = {victim}', 'relation-before'), 'authored relation', 20)
+    deliberated = time.monotonic()
+    # The victim gives in and the blows go on to death (as verify-core's death-names scene).
+    run.admin('grant_items', killer, 'spear', 1)
+    run.admin('set_behavior', victim, json.dumps({'seq': [{'do': 'yield', 'target': {'id': killer}}, {'wait': 120}]}))
+    run.wait(lambda: run.sql(f"SELECT * FROM chronicle WHERE kind = 'yield' AND a = {victim}", 'yield'), 'victim yields', 30)
+    run.admin('set_behavior', killer, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': victim}}}, {'wait': 1}]}))
+    run.wait(lambda: not run.sql(f'SELECT alive FROM character WHERE id = {victim}', 'victim-alive')[0]['alive'], 'victim dead', 90)
+    run.admin('set_behavior', killer, json.dumps({'wait': 120}))
+    dead = run.sql(f'SELECT * FROM character WHERE id = {victim}', 'killed')[0]
+    known = run.private(f'SELECT * FROM acquaintance WHERE known = {victim}', 'acquaintance-after')
+    deaths = {w: run.wait(lambda w=w: [e['text'] for e in run.private(f'SELECT * FROM experience WHERE observer = {w}', f'experiences-{w}')
+                                       if e['kind'] == 'death' and e['subject'] == victim], f'death witnessed by #{w}', 20)
+              for w in (member, killer, bystander)}
+    # A person's mind is asked again only after its think_min_s (20 s) unless urgent.
+    time.sleep(max(0.0, 21 - (time.monotonic() - deliberated)))
+    run.admin('set_behavior', member, json.dumps({'think': 'I finished my plan. verify after-death'}))
+    after_prompt = run.wait(lambda: asked('after-death'), 'prompt after the death', 60)[0]
+    (run.directory / 'prompt-after-death.txt').write_text(after_prompt)
+    lines = lambda text, words: [l for l in text.split('\n') if words in l]
+    texts = {'victim': vname, 'killer': names[killer], 'cause': dead['cause'],
+             'acquaintance_observers': sorted(r['observer'] for r in known),
+             'death': {'member': deaths[member], 'killer': deaths[killer], 'bystander': deaths[bystander]},
+             'prompt_alive': {'relation': lines(alive_prompt, f'(#{victim})')},
+             'prompt_after_death': {'relation': lines(after_prompt, f'(#{victim})'), 'death': lines(after_prompt, 'was killed by')}}
+    (run.directory / 'death-names.json').write_text(json.dumps(texts, indent=2))
+    checks = {
+        'member_keeps_name': sorted(r['observer'] for r in known) == [member],
+        'member_death_names_victim': any(t.startswith(f'{vname} was killed by') for t in deaths[member]),
+        'killer_reads_you': any('was killed by you' in t for t in deaths[killer]) and not any(names[killer] in t for t in deaths[killer]),
+        'bystander_reads_strangers': any(t.startswith('A stranger was killed by a stranger') for t in deaths[bystander]),
+        'prompt_alive_names_relation': f'{vname} (#{victim})' in alive_prompt,
+        'prompt_after_names_relation': f'{vname} (#{victim})' in after_prompt and f'a stranger (#{victim})' not in after_prompt,
+        'prompt_after_names_death': any(f'{vname} was killed by' in l and f'{vname}=#{victim}' in l for l in lines(after_prompt, 'was killed by')),
+    }
+    texts['checks'] = checks
+    (run.directory / 'death-names.json').write_text(json.dumps(texts, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **texts}
 
 
 def animals_case(run):

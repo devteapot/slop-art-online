@@ -104,7 +104,7 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 8] = ["perceived_of", "record_text", "items", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight"];
+pub const ENGINE_LAWS: [&str; 12] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.
@@ -141,7 +141,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
         Plan::of(&f, s.fields.of(&f, 1).and_then(|u| u.first()), true).map_err(|e| format!("install refused: {e}"))?;
     }
     let count = Rc::new(Cell::new(0u64));
-    let mut engine = super::engine_with(limits);
+    let mut engine = super::engine_with(limits, &s.tables);
     super::register_day(&mut engine, s.hour_ms);
     let c2 = count.clone();
     engine.on_progress(move |n| {
@@ -277,7 +277,7 @@ fn skills(p: &mut Probe) -> Result<(), String> {
     let targets = targets();
     let items = items();
     // Where an item is used: on nothing, a place, a person, and the structures items go into.
-    let item_targets: Vec<&TargetFacts> = targets.iter().filter(|t| matches!(t.class.as_str(), "none" | "place") || t.id == 9 || ["storage", "campfire", "remains"].contains(&t.kind.as_str())).collect();
+    let item_targets: Vec<&TargetFacts> = targets.iter().filter(|t| matches!(t.class.as_str(), "none" | "place") || t.id == 9 || ["storage", "campfire", "remains"].contains(&t.kind.as_str()) || (t.class == "structure" && s.structure(&t.kind).fire())).collect();
     for skill in &names {
         let takes_item = s.skills.get(skill).is_none_or(|k| k.needs_item) || ["build", "craft"].contains(&skill.as_str());
         let mut samples: Vec<SkillCtx> = Vec::new();
@@ -466,7 +466,7 @@ fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx 
 /// People of each age and both animals, in the states the engine hands the laws.
 pub fn actors() -> Vec<ActorFacts> {
     let all_items: Vec<(String, u32)> = catalog::item_names().into_iter().map(|i| (i, 3)).collect();
-    let all_known: Vec<String> = catalog::TECHNIQUES.iter().map(|t| t.name.to_string()).collect();
+    let all_known: Vec<String> = catalog::technique_names();
     let base = ActorFacts { id: 1, kind: "person".into(), hp: 70.0, hunger: 40.0, energy: 80.0, terrain: "grass".into(), age: 20.0, stage: "adult".into(), life: 0.3, kin_near: 2, pasture: 5.0, room: 25, ..Default::default() };
     vec![
         ActorFacts { inv: all_items, knows: all_known, practice: [("strike".to_string(), 30)].into(), community: crate::records::COMMUNITY | 2, home: "10,10".into(), ..base.clone() },
@@ -494,23 +494,25 @@ pub fn targets() -> Vec<TargetFacts> {
         creature("deer", 13, 40.0, 40.0),
         TargetFacts { alive: false, hp: 0.0, ..creature("person", 14, 0.0, 100.0) },
     ];
-    for (kind, _) in catalog::RESOURCES {
+    for kind in catalog::resource_names() {
         v.push(TargetFacts { class: "resource".into(), id: 20, kind: kind.to_string(), amount: 5.0, dist: 1.0, ..Default::default() });
     }
-    for kind in catalog::STRUCTURES {
+    for kind in catalog::structure_names() {
         v.push(TargetFacts { class: "structure".into(), id: 30, kind: kind.to_string(), dist: 1.0, inv: vec![("berries".into(), 5), ("meat".into(), 2), ("wood".into(), 3)], ..Default::default() });
         // Someone's household store.
-        if *kind == "storage" {
+        if kind == "storage" {
             v.push(TargetFacts { class: "structure".into(), id: 31, kind: kind.to_string(), dist: 1.0, owner: 9, home: "40,12".into(), ..Default::default() });
         }
+        // A fire burning with some fuel left (the samples above are out, with none).
+        v.push(TargetFacts { class: "structure".into(), id: 32, kind: kind.to_string(), dist: 1.0, lit: true, fuel: 3.0, ..Default::default() });
     }
     v
 }
 
 /// Every item and technique, and the words the engine passes as items.
 pub fn items() -> Vec<String> {
-    let mut v: Vec<String> = catalog::item_names().into_iter().chain(catalog::TECHNIQUES.iter().map(|t| t.name.to_string())).collect();
-    v.extend(catalog::STRUCTURES.iter().chain(catalog::TERRAIN_BUILDS).map(|s| s.to_string()));
+    let mut v: Vec<String> = catalog::item_names().into_iter().chain(catalog::technique_names()).collect();
+    v.extend(catalog::structure_names().into_iter().chain(catalog::TERRAIN_BUILDS.iter().map(|s| s.to_string())));
     v.extend(["food", "top level", "retire", "tablet", "sign", "alarm"].map(String::from));
     v.sort();
     v.dedup();
@@ -606,7 +608,7 @@ mod tests {
         for (f, n) in &v {
             println!("  {f:24} {n}");
         }
-        let passes = |l: Limits| Scripts::new(SKILLS).ok().filter(|_| super::super::engine_with(l).compile(SKILLS).is_ok()).is_some_and(|s| validate(&s, l).is_ok());
+        let passes = |l: Limits| Scripts::new(SKILLS).ok().filter(|_| super::super::engine_with(l, &Default::default()).compile(SKILLS).is_ok()).is_some_and(|s| validate(&s, l).is_ok());
         let least = |set: &dyn Fn(usize) -> Limits, hi: usize| {
             let (mut lo, mut hi) = (1usize, hi);
             while lo < hi {

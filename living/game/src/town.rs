@@ -9,8 +9,8 @@
 //!   settling down to sit), where a standing body faces (its activity's spot or the one it is
 //!   aimed at), and whether the body is indoors and not drawn (asleep, or resting at its own
 //!   door: the house is where it is; an animal has no house and stays drawn, standing);
-//! - sends my own gestures through `human_act` ([`WAVE`] waves, [`NOD`] nods, at the person under
-//!   or nearest the cursor, else the nearest one ahead), predicting only my clip; [`APPRAISE`]
+//! - sends my own gestures through `human_act` (the Wave key waves, the Nod key nods (`keys.rs`), at the person under
+//!   or nearest the cursor, else the nearest one ahead), predicting only my clip; the Look over key
 //!   looks a person or an animal over the same way (the rules' `appraise`: for a while the
 //!   authority's projection of them carries their exact health, which the nameplate shows);
 //! - notes who answered my greeting (my `experience` rows), so their nameplate shows briefly;
@@ -28,11 +28,6 @@ use living_bindings::*;
 use spacetimedb_sdk::Table;
 use std::collections::{HashMap, HashSet};
 
-/// Gesture keys: G waves (greets), B nods, V looks someone over (`appraise`). Clear of WASD, the
-/// skill bar (LMB, RMB, Q, E, R, Shift) and F (interact).
-pub const WAVE: KeyCode = KeyCode::KeyG;
-pub const NOD: KeyCode = KeyCode::KeyB;
-pub const APPRAISE: KeyCode = KeyCode::KeyV;
 /// How long my predicted gesture waits for the authority's `doing` row (ms).
 const PREDICT_MS: f64 = 600.0;
 /// How long the nameplate of someone who answered my greeting shows (ms).
@@ -82,7 +77,8 @@ const APPRAISE_LOOK: Pose = Pose::Once("idle_look", 1.0, 1.5);
 /// the clip predicted at the press.
 struct MyAct {
     skill: &'static str,
-    key: KeyCode,
+    /// Its binding (`keys.rs`: G, B and V by default).
+    key: crate::keys::Act,
     reach: f32,
     /// People only (a greeting), or any creature (looking an animal over too).
     people: bool,
@@ -90,9 +86,9 @@ struct MyAct {
 }
 
 const MY_ACTS: [MyAct; 3] = [
-    MyAct { skill: "wave", key: WAVE, reach: WAVE_REACH, people: true, look: WAVE_LOOK },
-    MyAct { skill: "nod", key: NOD, reach: NOD_REACH, people: true, look: NOD_LOOK },
-    MyAct { skill: "appraise", key: APPRAISE, reach: APPRAISE_REACH, people: false, look: APPRAISE_LOOK },
+    MyAct { skill: "wave", key: crate::keys::Act::Wave, reach: WAVE_REACH, people: true, look: WAVE_LOOK },
+    MyAct { skill: "nod", key: crate::keys::Act::Nod, reach: NOD_REACH, people: true, look: NOD_LOOK },
+    MyAct { skill: "appraise", key: crate::keys::Act::LookOver, reach: APPRAISE_REACH, people: false, look: APPRAISE_LOOK },
 ];
 /// Settling down to sit plays this long (s; `sit_ground_down` is 2.97 s).
 const SIT_DOWN_S: f64 = 2.9;
@@ -262,6 +258,7 @@ pub fn input(
     combat: Res<crate::combat::Combat>,
     mut scripted: ResMut<Scripted>,
     mut town: ResMut<Town>,
+    binds: Res<crate::keys::Binds>,
 ) {
     let now = scene.now_ms;
     let (Some(conn), Some(me_id), Some(me3)) = (net.conn.as_ref(), net.my_id, target.0) else { return };
@@ -275,7 +272,7 @@ pub fn input(
     let me = Vec2::new(me3.x, me3.z);
     let mut presses: Vec<(&MyAct, Option<u32>)> = Vec::new();
     if !controls.demo && !controls.chat_open && !ui.keyboard {
-        if let Some(a) = MY_ACTS.iter().find(|a| keys.just_pressed(a.key)) {
+        if let Some(a) = MY_ACTS.iter().find(|a| binds.just_pressed(a.key, &keys)) {
             presses.push((a, None));
         }
     }

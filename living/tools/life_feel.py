@@ -138,7 +138,7 @@ def run(d, variants):
     graphs = [g for g in jl(d / "graphs.jsonl") if g.get("source") == "mind"]
     # As trials.py reads it: the mind's live journal while it exists, else the copy taken at the stop.
     live = d.parents[2] / "journal" / f"{trials.PREFIX}{d.parent.name}-{d.name}"
-    journal = jl((live if live.exists() else d / "journal") / f"{name}.jsonl")
+    journal = jl((live if live.exists() else d / "journal") / trials.journal_file(name))
     speech = [c for c in chron if c.get("kind") == "speech"]
     to_me = sorted(int(c["at_ms"]) for c in speech if c.get("b") == S and c.get("a") != S)
     ex = defaultdict(list)

@@ -7,6 +7,14 @@ Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own 
 - before: `"drop": "west 1"`, and no low thing at all;
 - after: `"drop": "west 1, a drop to ground at another level (stairs, ramps and roads join the levels): you can see past it but not walk through it"`, `"low": "east 1, something low or open in the way, such as a cart, a low wall or an open stall: you can see past it but not walk through it"`.
 
+## 2026-11-11 fix-death-labels on main (Spark)
+
+Main at `7837320` (the merge of `fix-death-labels`), branch `fix-death-names-minds`, worktree on the DGX Spark, trial container `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, load average 19–29 from other work.
+
+- Full suite `minds-vdeath-20261111-161806`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink, rethink-llm, parked and the new `death-names` pass; `consolidation` is its known XFAIL; `animals` fails at its last step ("nothing new: no call"), the known gap below; `dealings` failed waiting for a deliberation.
+- `death-names` (new): passes on main. With the fix reverted in the worktree (`act.rs`, `perceive.rs`, `perception.rs` from `285a20e^1`, `minds-vprefix-20261111-170057`) it fails as it should: no acquaintance row; the member reads "A stranger was killed by a stranger after yielding"; the killer reads "A stranger was killed by Walker3 after yielding"; the after-death prompt lists "a stranger (#256): neighbour" and "{someone=#256, …}". On main: "Walker1 was killed by a stranger after yielding", the killer "A stranger was killed by you after yielding", the prompt "Walker1 (#256): neighbour" and "{Walker1=#256, …}" (`death-names.json`).
+- `dealings`: post-fix 4 of 7 runs pass (`minds-vdeal-*`, `minds-vdeal1`–`5-*`; the last three in a row), pre-fix 3 of 3 (`minds-vprefix-*`, `minds-vpre1`/`2-*`; a third attempt stopped at an unrelated `living-mind` unit test, `llm::tests::unreachable_provider_holds_calls`, under load). The failures are the case's recorded load timing: either the demander's demand act or the rules' ask was late (the first deliberation at about 70 s instead of 2.4 s), and the driver's `run.request` wait timed out. Passing runs pre- and post-fix have the same timeline (think at 2.4 s, the requested think at about 48 s). Neither changed path (`remember_member` in `die`, the "you" rendering for a death's killer or a storage's owner) is on the demand path.
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
