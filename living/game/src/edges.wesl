@@ -23,7 +23,8 @@ struct Edges {
     fade: vec4<f32>,
     // rgb: rim colour, a: unused.
     rim: vec4<f32>,
-    // xy: sun direction on screen (unit, y down), zw: unused.
+    // xy: sun direction on screen (unit, y down), z: the smallest step a crease line marks (m;
+    // 0 marks every crease), w: unused.
     sun: vec4<f32>,
     // rgb: gradient colour, a: gradient strength.
     grade: vec4<f32>,
@@ -85,6 +86,27 @@ fn normal(px: vec2<i32>) -> vec3<f32> {
     let size = vec2<i32>(edges.screen.xy);
     let p = clamp(px, vec2(0), size - vec2(1));
     return textureLoad(normal_texture, p, 0).xyz * 2.0 - 1.0;
+}
+
+// The world point at a pixel.
+fn world_at(px: vec2<i32>) -> vec3<f32> {
+    let size = vec2<i32>(edges.screen.xy);
+    let p = clamp(px, vec2(0), size - vec2(1));
+    let d = textureLoad(depth_texture, p, 0);
+    return unproject((vec2<f32>(p) + 0.5) * edges.screen.zw, max(d, 1e-7));
+}
+
+// Walking from `start` along `dir` for a few samples: the first face parallel to the one at `a`
+// (normal `na`) lies within `sun.z` metres of its plane.
+fn small_step(a: vec2<i32>, na: vec3<f32>, start: vec2<i32>, dir: vec2<i32>) -> bool {
+    let pa = world_at(a);
+    for (var k = 0; k < 6; k++) {
+        let s = start + dir * k;
+        if (1.0 - dot(na, normal(s)) < edges.params.y * 0.5) {
+            return abs(dot(na, world_at(s) - pa)) < edges.sun.z;
+        }
+    }
+    return false;
 }
 
 fn hash2(p: vec2<f32>) -> f32 {
@@ -155,11 +177,23 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
             edge = 1.0;
             near_d = min(near_d, d);
         }
-        // Normals: a crease, where depths are similar.
+        // Normals: a crease, where depths are similar. Both faces must go on for another sample
+        // (mine behind me, theirs beyond them): a face a pixel or so wide, such as a slate's
+        // lower edge or a sill seen from afar, comes and goes between pixels as the view moves,
+        // and its lines beaded and crawled along every row of a roof (the owner's Cullet walk).
         if (abs(d0 - d) / d0 < edges.params.x && d0 < 1e6) {
-            let c = 1.0 - dot(n0, normal(q));
+            let nq = normal(q);
+            let c = 1.0 - dot(n0, nq);
             if (c > edges.params.y) {
-                edge = max(edge, 0.7);
+                // Not a step smaller than `sun.z` between two parallel faces (a slate's lower
+                // edge, a sill): either the face past my neighbour is parallel to mine and near my
+                // plane, or I am the step and the face behind me is parallel to my neighbour's.
+                // World-sized, so the same at every distance.
+                let o = offsets[i];
+                let small = edges.sun.z > 0.0 && (small_step(px, n0, q + o, o) || small_step(q, nq, px - o, -o));
+                if (!small) {
+                    edge = max(edge, 0.7);
+                }
             }
         }
     }
