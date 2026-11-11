@@ -17,11 +17,15 @@ base = pathlib.Path("living/scripts/skills.rhai").read_text()
 def sql(q):
     out = subprocess.run(["python3", V, "sql", "--run", R, q, "--as-admin"], capture_output=True, text=True, check=True).stdout
     return {r["skill"]: r["code"] for r in json.loads(out[out.index("["):])}
+# The script goes in a file: it is past what one command-line argument may hold (128 KiB).
+ARGS = pathlib.Path(".local/living/verify") / R / "codes-install-args.json"
+def args_file(src):
+    ARGS.write_text(json.dumps([src])); return "@" + str(ARGS)
 def install(src):
-    p = subprocess.run(["python3", V, "call", "--run", R, "install_script", json.dumps([src]), "--as-admin"], capture_output=True, text=True)
+    p = subprocess.run(["python3", V, "call", "--run", R, "install_script", args_file(src), "--as-admin"], capture_output=True, text=True)
     assert p.returncode == 0, p.stdout + p.stderr
 def refused(src, text):
-    p = subprocess.run(["python3", V, "call", "--run", R, "install_script", json.dumps([src]), "--as-admin", "--expect-refusal", text], capture_output=True, text=True)
+    p = subprocess.run(["python3", V, "call", "--run", R, "install_script", args_file(src), "--as-admin", "--expect-refusal", text], capture_output=True, text=True)
     return p.returncode == 0, (p.stdout + p.stderr).strip()[-300:]
 def revision():
     out = subprocess.run(["python3", V, "sql", "--run", R, "SELECT revision FROM script", "--as-admin"], capture_output=True, text=True, check=True).stdout

@@ -338,10 +338,10 @@ fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill,
 
 /// Requests in words to a person: to be taught what I don't know.
 fn requests(me: &Me) -> Vec<Choice> {
-    catalog::TECHNIQUES
-        .iter()
-        .filter(|t| !me.actor.knows.iter().any(|k| k == t.name))
-        .map(|t| Choice { say: Some(format!("Would you teach me {}?", pretty(t.name))), label: format!("ask to be taught {}", pretty(t.name)), ..Choice::new("ask", String::new()) })
+    catalog::technique_names()
+        .into_iter()
+        .filter(|t| !me.actor.knows.iter().any(|k| k == t))
+        .map(|t| Choice { say: Some(format!("Would you teach me {}?", pretty(&t))), label: format!("ask to be taught {}", pretty(&t)), ..Choice::new("ask", String::new()) })
         .collect()
 }
 

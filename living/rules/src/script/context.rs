@@ -9,10 +9,10 @@ use rhai::{Array, Dynamic, Map};
 /// Fields of `a`. The order is the bit order of [`Plan::top`].
 pub const TOP: [&str; 17] = ["actor", "target", "routine", "item", "qty", "night", "hour", "season", "text", "topic", "roll", "raining", "skill", "want", "want_qty", "records", "record"];
 /// Fields of `a.actor` (the body genes are `genes::BODY`; `factor` is the skill factor).
-pub const ACTOR: [&str; 29] = [
-    "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor",
+pub const ACTOR: [&str; 30] = [
+    "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "near_light", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor",
 ];
-pub const TARGET: [&str; 23] = ["class", "id", "kind", "name", "amount", "hp", "max_hp", "stage", "hurt_ago", "alive", "dist", "inv", "knows", "activity", "yielded_ago", "near_fire", "company", "bearing", "closing", "community", "owner", "home", "hosts"];
+pub const TARGET: [&str; 25] = ["class", "id", "kind", "name", "amount", "hp", "max_hp", "stage", "hurt_ago", "alive", "dist", "inv", "knows", "activity", "yielded_ago", "near_fire", "company", "bearing", "closing", "community", "owner", "home", "hosts", "lit", "fuel"];
 pub const ROUTINE: [&str; 4] = ["exists", "ok", "failed", "changed_s"];
 
 const _: () = assert!(crate::genes::BODY.len() == 4);
@@ -307,6 +307,7 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "energy" => Val::F(a.energy),
             "near_fire" => Val::B(a.near_fire),
             "near_shelter" => Val::B(a.near_shelter),
+            "near_light" => Val::B(a.near_light),
             "terrain" => Val::Str(&a.terrain),
             "activity" => Val::Str(&a.activity),
             "age" => Val::F(a.age),
@@ -358,6 +359,8 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "owner" => Val::I(t.owner as i64),
             "home" => Val::Str(&t.home),
             "hosts" => Val::B(t.hosts),
+            "lit" => Val::B(t.lit),
+            "fuel" => Val::F(t.fuel),
             _ => Val::F(t.closing),
         };
         f(Level::Target, name, v);

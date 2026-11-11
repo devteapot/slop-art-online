@@ -176,7 +176,7 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 | `foods_text` listed seven foods; `source_of("food")` and `act.rs`'s food hint named berries and fish | built from the items' `nutrition` and the resources' yields; `act.rs` asks `source_of("food")` (`Scripts::text_of`) |
 | `LATCHES` (`brain.rs`), the notable skills in `report()` (`act.rs`), `rooted` (`act.rs`), `MOVES` (`combat.rs`), `skill == "flee"` for a reflex | skill spec traits `latch`, `notable`, `moving`, `moment`, `reflex` (`catalog::SkillSpec`) |
 | the theft rule in `act.rs` (owner, community, guest) | the `theft(a)` law; the engine fills `a.target.community` and the new `a.target.hosts` (the actor is the owner's guest) for a structure, and does what follows: the owner roused if it sees, onlookers told |
-| warmth by structure kind (`act.rs` `warmth`: campfire, shelter, house, hall, inn, workshop) | `structure_traits()`: `warms` (a hearth) and `roof`; distances stay the laws' `fire_warmth` and `shelter_warmth` |
+| warmth by structure kind (`act.rs` `warmth`: campfire, shelter, house, hall, inn, workshop) | `structure_traits()`: `warms` (a hearth) and `roof`; distances stay the laws' `fire_warmth` and `shelter_warmth`. Since `goods-1` (2026-11-11) these are traits of `structures()`, with `burns` for fires that eat fuel ([goods](#goods-recipes-and-fuel)) |
 | food in any structure spoils at a third (`tick.rs`) | `kept_spoil(kind)`, a name law over the structure kinds |
 | a planted bush's 5 berries (`act.rs`, `seed.rs`) | `planted_max(kind)` |
 | `occupation_know_how` (`seed.rs`) | `occupation_knows(occ)` (`Scripts::words_of`) |
@@ -184,7 +184,7 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 **Stayed in Rust as primitives,** and why:
 
 - The torch in `senses`: the law names the item it reads (`inv(a, "torch")`), in the script. A `light` trait read through the items would make the law read the whole pack, so the per-state key would be every pack and the hot-path memo would stop sharing answers.
-- `catalog::CREATURES`, `RESOURCES`, `STRUCTURES` and `TECHNIQUES`: the names generation, species files and the client draw from. Their rules (what a kind, a structure or a technique does) are the script's; the name lists are the world's vocabulary. Moving them is the next step of the same kind as `items()`.
+- `catalog::CREATURES`: the names generation, species files and the client draw from. `RESOURCES`, `STRUCTURES` and `TECHNIQUES` moved into the script on `goods-1` (2026-11-11) as `resources()`, `structures()` and `know_how()` ([goods](#goods-recipes-and-fuel)); a build without the script runtime (the lab viewer) keeps the old resource and structure names to tell kinds apart.
 - The calendar (night 20:00–06:00, the world starting at 07:00, winter as a quarter of the year): `is_night` and `season_of` run in the rules crate, the authority and the client on every frame or tick. The minds' world text states them (`calendar_law`).
 - Infrastructure limits (memo sizes, sweep and step cadences, table bounds, input buckets' clamps) and generation constants: not rules a world varies.
 - Many remaining numbers the survey found (alert thresholds in `brain.rs`, think and re-think timings, fight-report pacing, mutation sizes, wander distances): rules, still in Rust; listed for the next pass in the branch's survey.
@@ -381,6 +381,121 @@ All of this is in `skills.rhai`. It is the same for players, minds and graphs: t
 
 - A skill whose spec reads `want` offers one choice per thing to ask for, from what the player carries and the skill's `items`: `offer`, and now `offer_terms`.
 - What the rules tell the player (experiences of kind `record`) shows as a toast.
+
+## Goods, recipes and fuel
+
+**Status:** built on branch `goods-1`, 2026-11-11, for Cullet's phase 4 ([small city](SMALL_CITY.md#the-land-that-feeds-it), decision 9: goods and fire that eats fuel now; pane decay and the tide later). The owner's standing decisions it follows: items satisfy requirements by traits, not lists; the world is self-sufficient; world rules are Rhai laws over Rust primitives; no hard-coded guardrails and no engine behaviour for tests.
+
+### The trait model
+
+What the world has is data in the script, each a list of maps with a `name`, read once when the script compiles. The engine keeps them as tables and gives the rules three primitives over them, so a rule asks by trait for one operation instead of rebuilding a list:
+
+| Primitive | Gives |
+| --- | --- |
+| `entry_of(table, name)` | the entry's map, or `()` |
+| `names_of(table)` | its names, in the script's order |
+| `having(table, trait)` | the names whose entry has the trait (neither `()` nor false) |
+
+| Table | Required | What its traits are |
+| --- | --- | --- |
+| `items()` | yes | `cooks_to`, `smokes_to` (what cooking or smoking makes), `fuel` (units a fire that burns `fuel` gets from one), and any trait a world's recipes read (`alkali`, `bakes_to`, `oil`) |
+| `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `light` (metres a fire that needs no feeding lights), `burns` (below); other traits are the rules' data |
+| `resources()` | yes (new) | `yields`, `regrow` (a minute), `max`, `ground` and `by_water` (where a settlement's promised nodes go), `gather_ms` |
+| `know_how()` | yes (new) | `help` (what someone taught or reading is told), `requires` |
+| `recipes()` | no (none) | below |
+
+These replace the Rust constants `catalog::RESOURCES`, `STRUCTURES` and `TECHNIQUES`, and the Rhai switches `yield_of`, `regrow` and `requires`, which now read the tables. The shipped tables hold exactly what the constants and switches held. Requirements match by trait:
+
+- **Food** is anything with nutrition (`nutrition(item) > 0`), as before.
+- **Fuel** for a fire is anything with the item trait its kind's `burns.fuel` names. Peat (`fuel: 1.0`) and wood (`fuel: 1.0`) burn in a hearth; lamp oil (`oil: 1.0`) burns only in a lamp (`burns.fuel: "oil"`).
+- **A recipe's input** is an item by name or anything carrying a trait: glass's `alkali: 1` takes ash, or a world's soda with `alkali: true`, with no recipe changed.
+
+### Fire that eats fuel
+
+A structure kind with a `burns` trait is a fire that eats fuel:
+
+```rhai
+#{ name: "hearth", burns: #{ fuel: "fuel", rate: 0.5, warmth: 4.0, light: 8.0, holds: 12.0 } }
+```
+
+- `fuel`: the item trait it burns; `rate`: units a game hour while lit (converted with the world's `day_ms`); `warmth`, `light`: metres while lit; `holds`: the most units it takes.
+- **Lit only while it holds fuel.** Its one number is `structure.lit_until_ms`: the moment its fuel runs out. The fuel left is the time left times the rate (`living_rules::fire`). Nothing is written or scanned while it burns.
+- **Settled on change.** Feeding it (`feed`) or drawing on it (a recipe's `fuel`, op `burn`) settles what is left and writes the new moment once. Fed fuel is gone from the pack; it is not an item to take back.
+- **Goes out** when the moment passes, with no write. **Relit** by feeding it again, which takes knowing `fire` (the rules' check, `feed_check`); anyone may feed a lit fire.
+- **Warmth and light come only from lit fires.** `act::warmth` counts a burning structure within its `burns.warmth` as a fire and within `burns.light` as light (`a.actor.near_light`, a new fact the shipped laws do not read yet; sight is the rules worker's). A fire that needs no feeding (a campfire, `warms` without `burns`) warms as before, within `fire_warmth`. A body's needs pick up a fire going out at the next look (the needs' state key includes `near_fire`), as when it walks away.
+- **What others perceive.** A mind's scene says a burning structure is "burning, about N hours of fuel left on it", or "out". A client reads `lit_until_ms` on the public `structure` table: lit while it is ahead of the clock. Under `LIVING_PERCEPTION=scoped` the inventory table is private, so the fuel is not kept as items.
+- **What reads it:** `a.target.lit` and `a.target.fuel` (units) for a structure target. Cooking and smoking work at a burning fire that eats fuel as at a campfire, and are refused at an out one.
+
+### Recipes
+
+`recipes()` entries, made with the `make` skill (target: the workplace; item: what is made):
+
+| Trait | Meaning |
+| --- | --- |
+| `gives`, `makes` | the item made (the recipe's name by default) and how many (1) |
+| `takes` | `#{ name or trait: qty }` from the pack |
+| `turns` | instead of `gives` and `takes`: an item trait naming what an item becomes (`smokes_to`); one of the item is used |
+| `at` | the structure kind it is made at, or `"fire"` for any fire (none: anywhere) |
+| `lit` | the fire must be burning |
+| `fuel` | units the heat draws from the fire it is made at (a fire that needs no feeding gives its heat free) |
+| `knows`, `ms` | the technique it needs; how long it takes (8,000 ms) |
+
+The shipped world has no recipes and no fires that burn fuel, so `make` and `feed` are not offered to its people (`listed` is computed from the tables), and its minds' world text is unchanged. A world with them gets a "Fires that burn fuel" and "Made at workplaces" sentence in its making section (`workplaces_law`), built from the same tables.
+
+### Cullet's goods, as data
+
+[`living/scripts/cullet_goods.rhai`](../living/scripts/cullet_goods.rhai) is an overlay composed over the shipped script (`floors::compose`); it adds no rule. Its numbers are first guesses for the soak.
+
+| Goods | Traits |
+| --- | --- |
+| kelp, sand, glass, greens | plain items; greens nutrition 10 |
+| ash | `alkali` |
+| roots, baked roots | roots `bakes_to: baked_roots`; nutrition 14 and 30 |
+| peat | `fuel: 1.0` |
+| lamp oil | `oil: 1.0` |
+| fish fresh and smoked, marks | the shipped items |
+
+| Place | Kind | Gives |
+| --- | --- | --- |
+| hearth, oven, furnace (the Cone), smokehouse | `burns` peat or wood at 0.5, 1, 3 and 0.5 units a game hour | warmth 4, 2.5, 6 and 2 m while lit |
+| lamp | `burns` oil at 0.25 a game hour | light 10 m |
+| kelp_bed, sand_bank, peat_bank, root_plot, greens_bed, weir | resources | kelp, sand, peat, roots, greens, fish |
+
+| Recipe | At | Takes | Heat |
+| --- | --- | --- | --- |
+| ash | any burning fire | 4 kelp | — |
+| glass | a burning furnace, knowing `glassmaking` | 1 alkali, 2 sand | 1 unit |
+| smoking | a burning smokehouse, knowing `smoking` | 1 of anything that `smokes_to` | 0.5 unit |
+| baking | a burning oven | 1 of anything that `bakes_to` | 0.25 unit |
+| lamp oil | any burning fire | 2 fish | — |
+
+**Shared stocks.** A resource node may draw on another's stock (`resource_node.pool`, the id of the node holding it; 0: its own). A spot of a fishing ground is fished from, but its amount, max and regrowth are its pool's: target facts, a mind's scene and the harvest all read the stock. A seed places nodes with `resource_nodes: [{kind, at, max, regrow, pool}]`; nodes naming the same pool share the first one's stock. The authored plan (task `plan-1`) is to place Cullet's.
+
+### What changed for old worlds
+
+- **The same goods.** The shipped tables hold what the constants and switches held; the install checks, the rules tests and the verify-core scenes below pass unchanged (except two lists in `rules_read_traits_not_lists`, which now include `feed` and `make`).
+- **A script installed before this change** lacks `structures()`, `resources()` and `know_how()`. It runs with the shipped script's functions underneath its own, as for any required law it lacks (`REQUIRED_LAWS`), until it is installed again; its own `structure_traits()` still decides `warms` and `roof`. An install without the three tables is refused. Old worlds have no fires that burn fuel, so `lit_until_ms` stays 0 and their campfires and houses warm as before.
+- **Schema.** Two columns appended with defaults, `structure.lit_until_ms` and `resource_node.pool` (both `#[default(0u64)]`); one admin reducer added, `place_resource` (scene setup, like `place_structure`). Clients need regenerated bindings to see the new columns.
+- **Engine limits.** Rhai counts nested array and map entries together, so the data tables set the limits: arrays 64 → 256 and maps 64 → 512 per value (`script::LIMITS`). The shipped rules need 27 and 35 (`measure_limits`).
+- **Installing the script.** `skills.rhai` grew from 113 KB to 128 KB, and its JSON is past Linux's 128 KiB limit on one command-line argument, so `spacetime call ... install_script "<source>"` no longer runs. Installs go over HTTP: `living/tools/install_script.py` (and `just living-publish`), the verify harness, the scenes, `codes.py`, verify-knowledge, `soak.py`, `perception_bench.py` and `verify_steering.py`.
+
+### Data paths
+
+| Path | Reads | Writes | Recipients | Frequency | Growth |
+| --- | --- | --- | --- | --- | --- |
+| Warmth (`act::warmth`, in `facts` and the needs' look) | structures in the chunks within the farthest warmth, shelter or light radius (the cached chunk lists, as before; the radius is 6 m for Cullet's furnace instead of 3.5) | — | — | as before | — |
+| `feed` | the structure row, the items table entry | 1 `structure` row (`lit_until_ms`), the pack's inventory row | `structure` subscribers | per feeding | — |
+| `make` with heat | the structure row | pack inventory rows; 1 `structure` row | as above | per recipe made | — |
+| A fire burning down | — | — | — | — | — |
+| Harvest at a pooled spot | the spot and its stock's row (PK) | the stock's row | `resource_node` subscribers | per gathering | — |
+
+No whole-World scan was added. A fire costs nothing while it burns: no per-tick work, no scheduled row.
+
+### Costs (measured)
+
+- **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
+- **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here.
+- **Not measured:** tick time and subscription volume at population. A fire changes one public row per feeding or recipe made; at Cullet's 64 residents that is a few rows a game hour.
 
 ## How a floor adds its own rules
 

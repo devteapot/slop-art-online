@@ -132,6 +132,8 @@ fn actor(r: &mut Rng, id: u32) -> ActorFacts {
         energy: r.range(-5.0, 100.0).max(0.0),
         near_fire: r.chance(0.3),
         near_shelter: r.chance(0.3),
+        // Not drawn: the fixtures keep the draws they had before fires that eat fuel.
+        near_light: false,
         terrain: r.pick(&["grass", "forest", "road", "sand"]).into(),
         activity: r.pick(&ACTIVITIES).into(),
         inv: if person { pack(r, 2, 6) } else { Vec::new() },
@@ -185,6 +187,8 @@ fn target(r: &mut Rng, actor_id: u32) -> TargetFacts {
         owner: 0,
         home: String::new(),
         hosts: false,
+        lit: false,
+        fuel: 0.0,
     }
 }
 

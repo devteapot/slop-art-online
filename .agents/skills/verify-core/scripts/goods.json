@@ -1,0 +1,29 @@
+{
+  "run": "verify-goods",
+  "seed": 12,
+  "map": {
+    "kind": "valley"
+  },
+  "year_days": 1800,
+  "life_pace": 1.0,
+  "bands": [
+    {
+      "name": "goods fixture",
+      "family": [
+        { "stage": "adult" },
+        { "stage": "adult" },
+        { "stage": "adult" }
+      ],
+      "camp": []
+    }
+  ],
+  "resource_nodes": [
+    { "kind": "fishing_spot", "at": [40.5, 40.5], "max": 3, "regrow": 0.0, "pool": "jetty" },
+    { "kind": "fishing_spot", "at": [42.5, 40.5], "pool": "jetty" },
+    { "kind": "fishing_spot", "at": [44.5, 40.5], "pool": "jetty" }
+  ],
+  "animals": {
+    "deer": 0,
+    "wolf": 0
+  }
+}

@@ -710,6 +710,15 @@ pub fn graze_pasture(ctx: &ReducerContext, chunk: u32, now: u64) {
     }
 }
 
+/// The node whose stock a resource node draws on: its pool's (a fishing ground's spots share
+/// one limit), or itself.
+pub fn stock_of(ctx: &ReducerContext, r: &ResourceNode) -> ResourceNode {
+    if r.pool == 0 || r.pool == r.id {
+        return r.clone();
+    }
+    ctx.db.resource_node().id().find(r.pool).unwrap_or_else(|| r.clone())
+}
+
 pub fn amount_now(ctx: &ReducerContext, r: &ResourceNode, now: u64) -> f32 {
     let (epoch, day, year) = calendar(ctx);
     (r.amount + r.regen * living_rules::growing_ms(r.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(r.max)
