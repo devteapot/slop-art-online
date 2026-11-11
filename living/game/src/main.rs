@@ -24,6 +24,7 @@ mod envs;
 mod gait;
 mod ik;
 mod twist;
+mod fade;
 mod hud;
 mod island;
 mod live;
@@ -89,6 +90,7 @@ fn main() {
         .add_plugins(anim::AnimPlugin)
         .add_plugins(ik::IkPlugin)
         .add_plugins(twist::TwistPlugin)
+        .add_plugins(fade::FadePlugin)
         .add_plugins(daylight::DaylightPlugin)
         .add_plugins(terrain::TerrainPlugin)
         .add_systems(PostUpdate, post::update)

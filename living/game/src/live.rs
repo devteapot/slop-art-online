@@ -205,6 +205,9 @@ pub struct Live {
     shown: HashMap<u32, Shown>,
     /// Height (m) of each drawn character, for nameplates and bubbles.
     pub heights: HashMap<u32, f32>,
+    /// Bodies gone from sight, fading out where they were last drawn (`fade.rs`), and how long
+    /// they have been fading (s).
+    leaving: Vec<(Entity, f32)>,
 }
 
 /// Regenerate the land from the `land` row once, then put the island in place.
@@ -342,6 +345,7 @@ fn bodies(
     town: Res<crate::town::Town>,
     mut live: ResMut<Live>,
     mut q: Query<Drawn>,
+    mut fades: Query<&mut crate::fade::Fade>,
     time: Res<Time>,
 ) {
     let Some(island) = island else { return };
@@ -350,11 +354,23 @@ fn bodies(
         for (_, s) in live.shown.drain() {
             commands.entity(s.entity).despawn();
         }
+        for (e, _) in live.leaving.drain(..) {
+            commands.entity(e).despawn();
+        }
         live.heights.clear();
         return;
     };
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
+    // Bodies that left sight fade out where they were, then go.
+    live.leaving.retain_mut(|(e, t)| {
+        *t += dt;
+        let keep = *t < crate::fade::OUT_S + 0.05;
+        if !keep {
+            commands.entity(*e).despawn();
+        }
+        keep
+    });
     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
     let mut talking: HashSet<u32> = me
         .map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
@@ -379,8 +395,18 @@ fn bodies(
             }
             continue;
         }
+        // Out of sight (the authority no longer sends them): fade out rather than vanish.
         if let Some(s) = live.shown.remove(&id) {
-            commands.entity(s.entity).despawn();
+            match fades.get_mut(s.entity) {
+                Ok(mut f) => {
+                    f.target = 1.0;
+                    if let Ok((_, _, _, _, mut motion, _)) = q.get_mut(s.entity) {
+                        motion.speed = 0.0;
+                    }
+                    live.leaving.push((s.entity, 0.0));
+                }
+                Err(_) => commands.entity(s.entity).despawn(),
+            }
         }
         live.heights.remove(&id);
     }
@@ -436,7 +462,8 @@ fn bodies(
                 (e, crate::bodies::beast_height(&body.kind).min(1.4), false, false)
             };
             let startles = beast && crate::bodies::beast_file(&body.kind).is_some_and(|f| crate::gait::of(f).info(STARTLE.0).is_some());
-            commands.entity(entity).insert(Motion::default());
+            // Coming into sight: fade in once the model can be seen (`fade.rs`).
+            commands.entity(entity).insert((Motion::default(), crate::fade::Fade::appearing()));
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
@@ -536,14 +563,14 @@ fn bodies(
         if beast {
             tf.scale = Vec3::splat(size);
         }
-        // Indoors (asleep, or resting at the door): not drawn. Never my own character.
-        let want = if show.hidden && !mine { Visibility::Hidden } else { Visibility::Inherited };
-        match vis {
-            Some(mut v) if *v != want => *v = want,
-            None if want == Visibility::Hidden => {
-                commands.entity(s.entity).insert(want);
+        // Indoors (asleep, or resting at the door): faded out, then not drawn. Never my own
+        // character.
+        let _ = vis;
+        if let Ok(mut f) = fades.get_mut(s.entity) {
+            let to = if show.hidden && !mine { 1.0 } else { 0.0 };
+            if f.target != to {
+                f.target = to;
             }
-            _ => {}
         }
         match (fitted, model.as_mut()) {
             // `fit` measured a creature at its file's size (height 0 keeps it).
@@ -676,6 +703,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   while walking), until `stop`;
 /// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
 ///   (a headless run has no cursor);
+///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
 ///   (photographing small things up close);
@@ -814,6 +842,10 @@ fn script(
         }
         "yaw" => {
             cam.set_yaw(arg.parse().unwrap_or(0.0));
+            true
+        }
+        "frame" => {
+            cam.rig.frame = arg != "0";
             true
         }
         "look" => {

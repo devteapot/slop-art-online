@@ -787,7 +787,7 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(it.file.clone()));
     let mut e = commands.spawn((EnvPart, model, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(it.yaw)), Visibility::Hidden));
     if it.height >= 3.0 {
-        e.insert(Occluder { height: it.height });
+        e.insert((Occluder { height: it.height }, crate::fade::Fade::shown()));
     }
     if it.height <= SMALL {
         e.insert(crate::lookdev::NoShadow);

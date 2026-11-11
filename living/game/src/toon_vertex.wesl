@@ -95,9 +95,16 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_no_morph.instance_index;
 
-@if(VISIBILITY_RANGE_DITHER)
+@if(VISIBILITY_RANGE_DITHER) {
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
         vertex_no_morph.instance_index, mesh_world_from_local[3]);
+    // A fade set by the client (fade.rs): bits 28-31 of the mesh's tag, 0 drawn to 15 almost gone,
+    // dithered like a visibility range's transition.
+    let fade = i32((mesh_functions::get_tag(vertex_no_morph.instance_index) >> 28u) & 15u);
+    if (fade > 0) {
+        out.visibility_range_dither = fade;
+    }
+}
 
     return out;
 }

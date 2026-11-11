@@ -468,15 +468,17 @@ fn person_width(style: &Style, distance: f32) -> f32 {
     (w * 8.0).round() / 8.0
 }
 
-fn fog_outlines(style: Res<Style>, cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>, mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>)>) {
+fn fog_outlines(style: Res<Style>, cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>, mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>, Option<&bevy::mesh::MeshTag>)>) {
     let Ok((cam, fog)) = cams.single() else { return };
     let FogFalloff::Linear { start, end } = fog.falloff else { return };
     let cutoff = start + (end - start) * 0.55;
     let eye = cam.translation();
     let on = style.outlines && style.enabled;
-    for (kind, mut o, g, shown) in &mut outlines {
+    for (kind, mut o, g, shown, tag) in &mut outlines {
         let d = g.translation().distance(eye);
-        let want = on && shown.is_none_or(|v| v.get()) && d < cutoff;
+        // A thing mostly faded out (fade.rs) loses its lines with it.
+        let faded = tag.is_some_and(|t| crate::fade::tag_level(t.value) > 6);
+        let want = on && shown.is_none_or(|v| v.get()) && d < cutoff && !faded;
         if o.visible != want {
             o.visible = want;
         }
