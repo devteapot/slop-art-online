@@ -678,7 +678,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut terrain = JMap::new();
     let (tx, ty) = (at.0.floor() as i32, at.1.floor() as i32);
     let ri = r as i32;
-    for kind in [living_rules::map::Terrain::Water, living_rules::map::Terrain::Forest, living_rules::map::Terrain::Rock, living_rules::map::Terrain::Road, living_rules::map::Terrain::Wall, living_rules::map::Terrain::Drop] {
+    use living_rules::map::Terrain;
+    for kind in [Terrain::Water, Terrain::Forest, Terrain::Rock, Terrain::Road, Terrain::Wall, Terrain::Drop, Terrain::Low] {
         let mut best: Option<(f32, (f32, f32))> = None;
         for dy in -ri..=ri {
             for dx in -ri..=ri {
@@ -692,7 +693,14 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
         }
         if let Some((d, p)) = best {
-            terrain.insert(kind.name().into(), json!(format!("{} {:.0}", direction(at, p), d)));
+            // A class whose name does not say what it does is told in words, with how it meets
+            // the foot and the eye ("south 5, a drop to ground at another level (...): you can
+            // see past it but not walk through it").
+            let said = match kind.words() {
+                Some(w) => format!("{} {:.0}, {w}: {}", direction(at, p), d, kind.passage()),
+                None => format!("{} {:.0}", direction(at, p), d),
+            };
+            terrain.insert(kind.name().into(), json!(said));
         }
     }
 

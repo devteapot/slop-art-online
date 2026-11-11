@@ -9,6 +9,7 @@
 | Wait off stage and resume on stage | `lod` | [level-of-detail.md](level-of-detail.md) |
 | An offline player's character: takeover after `takeover_s`, thought for like any AI, handback (plan stops, graph held), a reply in flight refused | `takeover` | [takeover.md](takeover.md) |
 | A mind sees what its character sees: the scene the model is sent and the deaths it witnesses follow the sight line | `sight` | [sight.md](sight.md) |
+| A mind is told of drops and low things in words (`terrain_near`), and sees the one across them, on the island | `drop` | [drop.md](drop.md) |
 | Cheaper animal minds: one call picks among built options (choose), the deer it sees reuse it (pack), nothing new answers by instinct (salient) | `animals` | [animals.md](animals.md) |
 | Reorganization at night, in the night's batch round | `night` (scheduling, no store); `verify-knowledge` sleep stage (the batch job) | [sleep.md](sleep.md) |
 | A cached Jev judgment drives the graph: asked in the background, cached by `mind_judged`, read by `judged` | `jev` | [judgments.md](judgments.md) |
