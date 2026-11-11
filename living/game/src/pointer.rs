@@ -3,8 +3,9 @@
 //!
 //! - **Capture.** A click in the window captures the cursor: the system cursor is locked and
 //!   hidden, and the game draws its own, moved by the mouse's or trackpad's motion. Esc gives it
-//!   back once nothing else is open (a list, the pack or know-how, the text box close first, by
-//!   their own Esc), and so does the window losing focus. On macOS only `Locked` grabs
+//!   back once nothing else is open (the game UI's Esc order closes the top window first, then
+//!   opens Menu and asks for the cursor back, [`Pointer::release`]), and so does the window
+//!   losing focus. Over a window, two-finger swipes scroll it ([`Pointer::scroll_px`]). On macOS only `Locked` grabs
 //!   (`Confined` is unsupported), and a locked cursor reports a frozen position, so the game's
 //!   cursor is virtual: [`Pointer::pos`] is what every reader uses (the camera's ground ray,
 //!   facing, the aim), and the UI's picking is fed from it while captured.
@@ -83,6 +84,11 @@ pub struct Pointer {
     pub tapped: bool,
     /// A script's tap (headless), through the same path.
     pub scripted_tap: bool,
+    /// The game UI asks to give the system cursor back (Esc with nothing open, `ui/win.rs`).
+    pub release: bool,
+    /// Two-finger scroll over a window this frame (logical px, positive up), and a script's.
+    pub scroll_px: f32,
+    pub scripted_scroll: f32,
     left: Left,
     /// A tap's strike was pressed this frame; let go of it next frame.
     release_next: bool,
@@ -122,6 +128,7 @@ fn update(
     p.zoom = std::mem::replace(&mut p.scripted_zoom, 1.0);
     p.align = false;
     p.tapped = false;
+    p.scroll_px = std::mem::take(&mut p.scripted_scroll);
     if p.release_next {
         buttons.release(MouseButton::Left);
         p.release_next = false;
@@ -148,12 +155,14 @@ fn update(
     if lost {
         capture = false;
     }
-    // Esc: the text box, a list and the panels close first, by their own Esc; then the cursor goes.
-    if keys.just_pressed(KeyCode::Escape) && !input.chat_open && !ui.menu && !ui.keyboard {
+    // Esc frees the cursor only once nothing else is open: the game UI decides that, and asks
+    // (`ui/win.rs`: the Esc order closes the top window first, then opens Menu and frees it).
+    if std::mem::take(&mut p.release) {
         capture = false;
     }
+    let _ = (&keys, &input);
     // The left button: a tap, a hold or a drag (lists and panels take clicks as they are).
-    let free = !ui.pointer && !ui.menu;
+    let free = !ui.over() && !ui.menu;
     for e in raw.read() {
         let pick_button = match e.button {
             MouseButton::Left => Some(PointerButton::Primary),
@@ -173,7 +182,7 @@ fn update(
             continue;
         }
         match e.state {
-            ButtonState::Pressed if !p.captured && !ui.pointer => {
+            ButtonState::Pressed if !p.captured && !ui.over() => {
                 // The click that takes the cursor does nothing else.
                 capture = true;
                 buttons.reset(MouseButton::Left);
@@ -227,13 +236,18 @@ fn update(
                     }
                     TouchPhase::Moved => {}
                 }
-                if !p.coasting {
+                if p.coasting {
+                } else if ui.over() {
+                    // Over a window, two fingers scroll it instead of turning the view.
+                    p.scroll_px += e.y / win.scale_factor();
+                } else {
                     p.turn_px += e.x / win.scale_factor() * PAN_GAIN;
                 }
                 if matches!(e.phase, TouchPhase::Ended | TouchPhase::Canceled) {
                     p.coasting = false;
                 }
             }
+            MouseScrollUnit::Line if ui.over() => p.scroll_px += e.y * 24.0,
             MouseScrollUnit::Line => p.zoom *= 1.0 - WHEEL_STEP * e.y.clamp(-3.0, 3.0),
         }
     }
@@ -290,21 +304,43 @@ fn update(
 #[derive(Component)]
 struct GameCursor;
 
-/// A small ring with a dot, drawn over everything while the cursor is captured.
+/// The drawn cursor: interface D's arrow (cream with an ink edge, its tip at the hot spot),
+/// drawn over everything while the system cursor is captured.
 fn spawn_cursor(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let n = 32u32;
+    let n = 64u32;
+    // The arrow's outline, in a 32-unit box with the tip at (1.5, 1.5).
+    let poly = [Vec2::new(1.5, 1.5), Vec2::new(1.5, 23.0), Vec2::new(7.0, 18.0), Vec2::new(11.0, 27.0), Vec2::new(14.5, 25.5), Vec2::new(10.5, 16.8), Vec2::new(18.0, 16.8)];
+    let inside = |p: Vec2| {
+        let mut c = false;
+        for i in 0..poly.len() {
+            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+            if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x {
+                c = !c;
+            }
+        }
+        c
+    };
+    let edge = |p: Vec2| {
+        (0..poly.len())
+            .map(|i| {
+                let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+                let (pa, ba) = (p - a, b - a);
+                (pa - ba * (pa.dot(ba) / ba.dot(ba)).clamp(0.0, 1.0)).length()
+            })
+            .fold(f32::MAX, f32::min)
+    };
     let mut data = vec![0u8; (n * n * 4) as usize];
     for y in 0..n {
         for x in 0..n {
-            let d = Vec2::new(x as f32 + 0.5 - n as f32 / 2.0, y as f32 + 0.5 - n as f32 / 2.0).length();
-            let ring = (1.0 - ((d - 9.5).abs() - 1.2).max(0.0)).clamp(0.0, 1.0);
-            let edge = (1.0 - ((d - 9.5).abs() - 2.4).max(0.0)).clamp(0.0, 1.0);
-            let dot = (2.6 - d).clamp(0.0, 1.0);
-            let white = ring.max(dot);
-            let a = edge.max(dot).max(white);
+            let p = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) * (32.0 / n as f32);
+            let d = edge(p);
+            let fill: f32 = if inside(p) { 1.0 } else { 0.0 };
+            // A 1.4-unit ink line on the outline, cream within.
+            let ink = (1.0 - (d - 0.9).max(0.0) * 2.0).clamp(0.0, 1.0);
+            let a = fill.max(ink);
             let i = ((y * n + x) * 4) as usize;
-            let v = (white * 255.0) as u8;
-            data[i..i + 4].copy_from_slice(&[v, v, v, (a * 230.0) as u8]);
+            let (r, g, b) = if ink > 0.5 || fill == 0.0 { (42u8, 29u8, 20u8) } else { (255u8, 248u8, 234u8) };
+            data[i..i + 4].copy_from_slice(&[r, g, b, (a * 255.0) as u8]);
         }
     }
     let image = Image::new(
@@ -317,7 +353,7 @@ fn spawn_cursor(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.spawn((
         GameCursor,
         ImageNode::new(images.add(image)),
-        Node { position_type: PositionType::Absolute, width: Val::Px(24.0), height: Val::Px(24.0), display: Display::None, ..default() },
+        Node { position_type: PositionType::Absolute, width: Val::Px(30.0), height: Val::Px(30.0), display: Display::None, ..default() },
         GlobalZIndex(i32::MAX),
         Pickable::IGNORE,
     ));
@@ -333,8 +369,8 @@ fn draw_cursor(p: Res<Pointer>, mut q: Query<&mut Node, With<GameCursor>>, scale
             n.display = want;
         }
         if let (true, Some(pos)) = (show, p.pos) {
-            // UI values are scaled by `UiScale`; the cursor sits on its centre.
-            let (l, t) = (Val::Px(pos.x / k - 12.0), Val::Px(pos.y / k - 12.0));
+            // UI values are scaled by `UiScale`; the arrow's tip is the hot spot.
+            let (l, t) = (Val::Px(pos.x / k - 1.4), Val::Px(pos.y / k - 1.4));
             if n.left != l {
                 n.left = l;
             }

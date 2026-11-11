@@ -380,7 +380,7 @@ pub fn input(
     let (Some(conn), Some(me_id), Some(me3)) = (net.conn.as_ref(), net.my_id, target.0) else { return };
     let me = Vec2::new(me3.x, me3.z);
     let typing = input.chat_open || ui.keyboard;
-    let free_mouse = !ui.pointer && !ui.menu;
+    let free_mouse = !ui.over() && !ui.menu;
     let mut presses: Vec<(String, Option<Vec2>, Option<u32>)> = Vec::new();
     // A script's indicator (headless photographs).
     let mut scripted_aiming = None;

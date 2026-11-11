@@ -321,7 +321,7 @@ pub fn follow(
         (false, _, _) => cursor,
     };
     let mut turn = 0.0;
-    if r.steer && !ui.pointer && !input.chat_open {
+    if r.steer && !ui.over() && !input.chat_open {
         if let (Some((c, size2)), Some(me)) = (steer_cursor, target.0) {
             let nx = (c.x - size2.x / 2.0) / (size2.x / 2.0);
             let me_y = camera.world_to_viewport(gtf, me).map(|p| p.y).unwrap_or(size2.y / 2.0);
@@ -345,12 +345,12 @@ pub fn follow(
     if mouse.just_pressed(MouseButton::Middle) {
         cam.middle_moved = 0.0;
     }
-    if !ui.pointer && !input.demo && mouse.pressed(MouseButton::Middle) {
+    if !ui.over() && !input.demo && mouse.pressed(MouseButton::Middle) {
         manual += motion.delta.x * 0.3;
         cam.middle_moved += motion.delta.length();
     }
     // A left drag or a two-finger pan (`pointer.rs`), at the middle drag's rate.
-    if !ui.pointer && !input.demo {
+    if !ui.over() && !input.demo {
         manual += pointer.turn_px * 0.3;
     }
     if pointer.align {
@@ -364,7 +364,7 @@ pub fn follow(
     cam.zoom = (cam.zoom * pointer.zoom).clamp(crate::pointer::ZOOM_MIN, crate::pointer::ZOOM_MAX);
     cam.zoom_shown += (cam.zoom - cam.zoom_shown) * ease(12.0);
     // Align on request: a middle-button tap (released having moved under 6 px). R is a skill key.
-    let tapped = mouse.just_released(MouseButton::Middle) && cam.middle_moved < 6.0 && !ui.pointer;
+    let tapped = mouse.just_released(MouseButton::Middle) && cam.middle_moved < 6.0 && !ui.over();
     if tapped || std::mem::take(&mut cam.align_request) {
         if let Some(l) = input.facing().filter(|l| l.length_squared() > 1e-4) {
             let face = l.y.atan2(l.x).to_degrees() + 90.0;
@@ -386,7 +386,7 @@ pub fn follow(
     }
     cam.yaw += turn + manual;
     // Glance: hold Alt and move the mouse; let go and it eases back.
-    let holding = !ui.pointer && (keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight));
+    let holding = !ui.over() && (keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight));
     if let Some(g) = cam.scripted_glance {
         cam.glance += (g - cam.glance) * ease(6.0);
     } else if holding {

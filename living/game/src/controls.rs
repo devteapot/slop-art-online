@@ -94,6 +94,8 @@ pub struct Input {
     /// ("write tablet"), and the words once entered.
     pub compose: Option<String>,
     pub composed: Option<String>,
+    /// Keep the words already in the box when it opens ("Introduce yourself" puts a line in).
+    pub keep_words: bool,
     /// When the last movement intent was sent (input → drawn, `bodies.rs`).
     pub moved_at: Option<std::time::Instant>,
     /// Whether a movement direction is held (the camera keeps the keys' frame meanwhile).
@@ -121,6 +123,8 @@ pub struct Input {
     pub face: Option<Vec2>,
     /// The scheme's note was shown on arrival.
     hinted: bool,
+    /// The look last given to [`look`] (`Some(None)`: released).
+    pub look_sent: Option<Option<Vec2>>,
 }
 
 impl Input {
@@ -157,9 +161,16 @@ pub fn scheme(
     loading: Option<Res<crate::loading::Loading>>,
     verbs: Option<ResMut<crate::verbs::Verbs>>,
     tips: Option<ResMut<crate::ui::tips::Tips>>,
-    time: Res<Time>,
+    (time, prefs): (Res<Time>, Option<ResMut<crate::keys::Prefs>>),
 ) {
     let switched = keys.just_pressed(KeyCode::F3) && !input.chat_open;
+    if switched {
+        // Settings › Play shows the scheme; the settings file keeps it.
+        if let Some(mut p) = prefs {
+            p.control = input.control.next();
+            p.dirty = true;
+        }
+    }
     if switched {
         input.control = input.control.next();
         info!("controls: {:?}", input.control);
@@ -273,9 +284,41 @@ pub fn movement(
         net.report("move", r);
         input.moved_at = Some(std::time::Instant::now());
     }
+    // My look, to the authority once it takes one (`look`, a no-op today): the cursor's
+    // direction facing the cursor; facing where I walk, none (the body faces its travel).
+    let dir = match input.control {
+        Control::Cursor => input.look,
+        Control::Travel => None,
+    };
+    let mut last = input.look_sent;
+    look(&net, dir, &mut last);
+    input.look_sent = last;
     // A move the authority held back while I was rooted is re-sent by the authority itself
     // (`combat::resume_move`); RMB is the bow shot (combat.rs), so there is no click-to-move.
     let _ = (&mouse, &ui, &time);
+}
+
+/// Where my character looks, toward the authority: the one place the client's look direction
+/// goes (interface D, agreed 2026-11-11). The reducer is `human_face(dx, dy)` (dev-box's fov-1
+/// is building it): rate-limited by the authority, a change under about 10° writes nothing, and
+/// `None` is sent as `human_face(0, 0)`, which releases the look (the body faces its travel).
+///
+/// **A no-op until `human_face` is on main and the bindings are regenerated with
+/// `just living-generate`.** Then this sends it as it is called now: "cursor" with the
+/// cursor's direction, "travel" with `None` (an aimed move reaches the authority with its own
+/// aim point).
+pub fn look(net: &Net, dir: Option<Vec2>, last: &mut Option<Option<Vec2>>) {
+    // Unchanged (within the authority's ~10°): nothing to send.
+    let same = match (*last, dir) {
+        (Some(None), None) => true,
+        (Some(Some(a)), Some(b)) => a.normalize_or_zero().dot(b.normalize_or_zero()) > 10f32.to_radians().cos(),
+        _ => false,
+    };
+    if same || net.conn.is_none() {
+        return;
+    }
+    *last = Some(dir);
+    // No `human_face` in the bindings yet: nothing is sent.
 }
 
 /// Send a chat line to whoever is in earshot, addressed to `to` (0: no one in particular).
