@@ -36,7 +36,8 @@ SEE_PAST = 'you can see past it but not walk through it'
 
 class Run(shared.Run):
     def __init__(self, name):
-        super().__init__(name, prefix='minds')
+        # gate-*: the merge's scene gate (living/tools/scene_gate.py), databases verify-gate-*.
+        super().__init__(name, prefix='gate' if name.startswith('gate-') else 'minds')
 
     def request(self, actor, marker):
         self.admin('set_behavior', actor, json.dumps({'think': 'I finished my plan. verify ' + marker}))
@@ -1611,17 +1612,22 @@ def speech_case(run):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--run', required=True, help='new suite name starting with minds-')
+    parser.add_argument('--run', required=True, help='new suite name starting with minds- (gate- for the merge scene gate)')
     parser.add_argument('--case', action='append', choices=CASES, help='repeat to select; default all')
+    parser.add_argument('--no-unit-tests', action='store_true',
+                        help="skip living-mind's cargo tests (the merge's scene gate: `just living-check` ran them)")
     args = parser.parse_args()
-    if not re.fullmatch(r'minds-[a-zA-Z0-9-]+', args.run):
-        parser.error('--run must start with minds-')
+    if not re.fullmatch(r'(minds|gate)-[a-zA-Z0-9-]+', args.run):
+        parser.error('--run must start with minds- (or gate- for the merge scene gate)')
     with urllib.request.urlopen(os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/') + '/v1/ping', timeout=5) as response:
         assert response.status == 200
     suite = ROOT / '.local/living/verify' / args.run
     suite.mkdir(parents=True, exist_ok=False)
     for command, name in ((['cargo', 'build', '--manifest-path', 'living/Cargo.toml', '-p', 'living-mind', '--release'], 'build.log'),
                           (['cargo', 'test', '--manifest-path', 'living/Cargo.toml', '-p', 'living-mind', '--', '--nocapture'], 'cargo-tests.log')):
+        if args.no_unit_tests and name == 'cargo-tests.log':
+            (suite / name).write_text('skipped (--no-unit-tests)\n')
+            continue
         with (suite / name).open('w') as stream:
             subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, check=True)
     paths = ['living/mind/src/main.rs', 'living/mind/src/mind.rs', 'living/mind/src/mind/talk.rs',

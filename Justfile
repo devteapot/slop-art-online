@@ -111,10 +111,18 @@ living-check-full:
 
 # Merge a branch into main end to end, from a clean coordinator worktree: --no-ff merge onto
 # origin/main, living-check, push; when main moved, fetch, merge and check again
-# (docs/TOOLING.md). Arguments after the branch: -m "message", --retries N, --no-push.
+# (docs/TOOLING.md). Arguments after the branch: -m "message", --retries N, --no-push, --scenes.
 [positional-arguments]
 living-merge branch *args:
     python3 living/tools/merge.py "$@"
+
+# The scene gate (living/tools/scene_gate.py): real verify-core, verify-minds and verify-player
+# scenes on scratch verify-gate-* databases when a change touches behaviour; a case failing twice
+# fails it unless it fails on main too. `living-merge --scenes` runs it after the check.
+# Default `run`; `reds` prints the red-on-main list.
+[positional-arguments]
+living-scene-gate *args:
+    python3 living/tools/scene_gate.py "$@"
 
 # Remove idle build folders under the policy in docs/TOOLING.md (a dry run unless --apply);
 # `living/tools/disk_clean_install.sh` runs it on a timer.
