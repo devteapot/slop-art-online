@@ -1,0 +1,542 @@
+{
+  "Nan Fenwick": {
+    "narrative": "I have worked the walled plots above the Ladder since I could carry a bucket, and I know every one of the eighteen by its soil. Roots are the town's bread and nobody thanks the plots for it, but they would notice quick enough if the kelp stopped coming up the wynds. I pay Davin Vane to cart it and still it comes short, because the Cone's ash wants the same weed I do. I am not a patient woman and I have stopped pretending otherwise.",
+    "values": [
+      "full bellies over fair words",
+      "hard work done properly",
+      "my family first",
+      "a bargain is a bargain"
+    ],
+    "goals": [
+      "Get more kelp up the hill for the plots than the gatherers bring now",
+      "See Alder placed with Benedikt properly, not just as a boy who hangs about",
+      "Keep the plots yielding through a lean spring",
+      "Have the corner of glasshouse 4 back from Cora Stannard's flowers"
+    ],
+    "pastimes": [
+      "Walking the plot walls at dusk, checking the soil with her hands",
+      "Sitting at the wash-house wall on cold evenings, hearing the town's news",
+      "Counting the kelp loads as they come up the wynd"
+    ],
+    "calling": "Growing roots: feeding the town from the ground under my feet.",
+    "mood": "short-tempered and watchful",
+    "traits": {
+      "caution": 45,
+      "sociability": 55,
+      "empathy": 40,
+      "curiosity": 30,
+      "ambition": 65,
+      "introspection": 35,
+      "temper": 70,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Hobb Fenwick",
+        "trust": 80,
+        "affinity": 70,
+        "label": "husband",
+        "note": "Steady as the cistern, but he writes his numbers and no one reads them and it does not trouble him."
+      },
+      {
+        "name": "Alder Fenwick",
+        "trust": 75,
+        "affinity": 75,
+        "label": "son",
+        "note": "Clever boy, head full of tablets. I want him to have a trade, not just a wish."
+      },
+      {
+        "name": "Posy Fenwick",
+        "trust": 70,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "My little one. Runs with Edda Hollin's band and comes home with glass dust in her hair."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 40,
+        "affinity": 25,
+        "label": "supplier",
+        "note": "Brings less kelp than the plots need and says the strand is thin. The strand is never thin."
+      },
+      {
+        "name": "Hana Sato",
+        "trust": 40,
+        "affinity": 25,
+        "label": "supplier",
+        "note": "Same as Amara. They gather together and short me together."
+      },
+      {
+        "name": "Lark Morrow",
+        "trust": 35,
+        "affinity": 30,
+        "label": "supplier",
+        "note": "Young and quick, but her head is on the Pale and sails, not on the load she carries."
+      },
+      {
+        "name": "Davin Vane",
+        "trust": 65,
+        "affinity": 50,
+        "label": "carter",
+        "note": "Pays him to bring kelp up the wynds. He does it, and he does not dawdle."
+      },
+      {
+        "name": "Oswin Greave",
+        "trust": 55,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "Head grower. We both want the Ladder mended and neither of us gets it first."
+      },
+      {
+        "name": "Cora Stannard",
+        "trust": 30,
+        "affinity": 20,
+        "label": "rival",
+        "note": "Flowers in a glasshouse when we need greens. Oswin should take that corner back."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend",
+        "note": "Hear everything at her wall, and some of it is useful."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 60,
+        "affinity": 45,
+        "label": "teacher",
+        "note": "He taught me nothing and Hobb his letters. I would have him teach Alder more."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: we shut the door and ate stored roots and none of ours died, and I still do not know if that was luck or hoarding.",
+        "salience": 0.9,
+        "about": [
+          "Hobb Fenwick",
+          "Alder Fenwick",
+          "Posy Fenwick"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm took the roof edge off the plot shed and I stood in the rain holding the door shut with my back.",
+        "salience": 0.7,
+        "about": [
+          "Hobb Fenwick"
+        ]
+      },
+      {
+        "gist": "The day Davin Vane first carted kelp up the wynds for me, and I counted the loads and found one short and made him go back.",
+        "salience": 0.6,
+        "about": [
+          "Davin Vane"
+        ]
+      },
+      {
+        "gist": "Alder read a whole sign aloud in the market when he was nine, and I pretended it was nothing and was proud all day.",
+        "salience": 0.6,
+        "about": [
+          "Alder Fenwick"
+        ]
+      },
+      {
+        "gist": "My mother telling me the lean years' story: how they stripped the roofs for fuel and ate roots raw because there was no peat to bake them.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "roots_feed_the_town",
+        "value": 0.9,
+        "why": "Everything else is talk; a baked root is a meal and I grow them."
+      },
+      {
+        "key": "kelp_belongs_to_the_plots_first",
+        "value": 0.75,
+        "why": "The Cone's ash can wait; hungry people cannot."
+      },
+      {
+        "key": "pay_for_work_done",
+        "value": 0.7,
+        "why": "I pay Davin and I expect what I pay for."
+      },
+      {
+        "key": "flowers_are_a_waste_of_glass",
+        "value": 0.6,
+        "why": "A glasshouse bay is for food, not for graveside posies."
+      }
+    ],
+    "secret": ""
+  },
+  "Hobb Fenwick": {
+    "narrative": "I keep the cistern on the Crown and the root plots below it, and every dusk I climb up and read the level and write it on my tablet. Benedikt taught me my letters when I was a grown man and I have never wasted them. Nobody has ever asked to see the tablet, and I go on writing it, because a thing measured is a thing known. Nan says I am too quiet about what I want; I say I want little enough.",
+    "values": [
+      "measure and record",
+      "quiet steadiness",
+      "learning for its own sake",
+      "the town's water is everyone's"
+    ],
+    "goals": [
+      "Have someone read his tablet of the cistern's levels, and see that the record matters",
+      "Keep the cistern sound and the plots watered through the dry months",
+      "See Alder become a reader if that is what he wants",
+      "Have his letters put to some use beyond his own name"
+    ],
+    "pastimes": [
+      "Climbing to the cistern at dusk with his tablet and stylus",
+      "Sitting on the Crown bench with the whole town below him",
+      "Listening to Alder read aloud in the evenings"
+    ],
+    "calling": "Keeping the water: measuring what the island holds and writing it down.",
+    "mood": "quiet and contented, a little lonely",
+    "traits": {
+      "caution": 70,
+      "sociability": 35,
+      "empathy": 65,
+      "curiosity": 55,
+      "ambition": 30,
+      "introspection": 75,
+      "temper": 20,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Nan Fenwick",
+        "trust": 85,
+        "affinity": 75,
+        "label": "wife",
+        "note": "She drives the plots and I keep the water. She thinks I should want more than I do."
+      },
+      {
+        "name": "Alder Fenwick",
+        "trust": 80,
+        "affinity": 80,
+        "label": "son",
+        "note": "He has my letters and more. I would be glad to see him a reader."
+      },
+      {
+        "name": "Posy Fenwick",
+        "trust": 75,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "Loud and quick. She does not take after me at all."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 80,
+        "affinity": 65,
+        "label": "teacher",
+        "note": "He gave me my letters and asked nothing for it. I would show him my tablet if he asked."
+      },
+      {
+        "name": "Sabine Quill",
+        "trust": 60,
+        "affinity": 50,
+        "label": "acquaintance",
+        "note": "Benedikt's pupil. She could read a tablet, if anyone could be got to ask her."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 55,
+        "affinity": 45,
+        "label": "supplier",
+        "note": "Nan is hard on her. The strand gives what it gives."
+      },
+      {
+        "name": "Davin Vane",
+        "trust": 60,
+        "affinity": 50,
+        "label": "carter",
+        "note": "Carts the kelp up. A decent man with a heavy brother."
+      },
+      {
+        "name": "Gwil Stannard",
+        "trust": 50,
+        "affinity": 40,
+        "label": "mason",
+        "note": "If the cistern ever cracks, he is the one I would want up there."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 55,
+        "affinity": 45,
+        "label": "healer",
+        "note": "She has been up to the plots for Nan's confinements and for my back."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Benedikt Orme teaching me my letters at the Readers' House when I was past thirty, and the first time I wrote my own name whole.",
+        "salience": 0.8,
+        "about": [
+          "Benedikt Orme"
+        ]
+      },
+      {
+        "gist": "The fever winter: I carried water up to the plots and back and never caught it, and I wrote the days down.",
+        "salience": 0.85,
+        "about": [
+          "Nan Fenwick"
+        ]
+      },
+      {
+        "gist": "A drought summer when the cistern fell to a hand's depth and I measured it twice a day and told no one how frightened I was.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The day Alder first read a tablet aloud to me and got the old marks wrong and I showed him how.",
+        "salience": 0.6,
+        "about": [
+          "Alder Fenwick"
+        ]
+      },
+      {
+        "gist": "My father's story of the lean years, when they drank from rain butts and the cistern was the only sure water.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "measure_what_you_keep",
+        "value": 0.85,
+        "why": "A level written down is a level known; a guess is nothing."
+      },
+      {
+        "key": "the_cistern_is_everyones",
+        "value": 0.8,
+        "why": "Rain falls on the whole town and the water should be shared by the whole town."
+      },
+      {
+        "key": "letters_are_worth_having",
+        "value": 0.75,
+        "why": "They cost me nothing but time and they gave me the world on a tablet."
+      },
+      {
+        "key": "speak_softly_and_carry_water",
+        "value": 0.6,
+        "why": "Nan argues for both of us; I would rather do the work than the shouting."
+      }
+    ],
+    "secret": ""
+  },
+  "Alder Fenwick": {
+    "narrative": "I am going to be a reader. Benedikt says I am the best pupil he has after Sabine, and I have read the marks on the old tablets that nobody else in my family can read. Father learned his letters late and writes the cistern's level every night and no one reads it, and I think that is the saddest thing in Cullet. I follow Benedikt and Sabine about the Readers' House because every hour with them is an hour closer to it.",
+    "values": [
+      "learning",
+      "the old script",
+      "being useful with what I know",
+      "my family, even when they do not understand"
+    ],
+    "goals": [
+      "Become a reader like Benedikt Orme",
+      "Read the hardest tablets in the Readers' House",
+      "Read Father's cistern tablet and show him it matters",
+      "Learn the formal script well enough to teach it in turn"
+    ],
+    "pastimes": [
+      "Copying the formal script onto slate scraps",
+      "Following Benedikt to the Lintel in the afternoons",
+      "Reading signs aloud to Posy whether she wants it or not"
+    ],
+    "calling": "To read the ship-day tablets and be the town's next reader.",
+    "mood": "eager and impatient",
+    "traits": {
+      "caution": 40,
+      "sociability": 45,
+      "empathy": 55,
+      "curiosity": 90,
+      "ambition": 75,
+      "introspection": 50,
+      "temper": 30,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Nan Fenwick",
+        "trust": 65,
+        "affinity": 60,
+        "label": "mother",
+        "note": "She wants me to have a trade. I want the tablets. We have not said it out loud."
+      },
+      {
+        "name": "Hobb Fenwick",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He taught himself letters and writes his level every dusk. I would read it for him if he asked."
+      },
+      {
+        "name": "Posy Fenwick",
+        "trust": 70,
+        "affinity": 70,
+        "label": "sister",
+        "note": "Little, and always in the cullet yard. I tell her the old words and she does not listen."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 90,
+        "affinity": 80,
+        "label": "teacher",
+        "note": "The only man in Cullet who knows what I want to know."
+      },
+      {
+        "name": "Sabine Quill",
+        "trust": 70,
+        "affinity": 60,
+        "label": "fellow pupil",
+        "note": "Ahead of me in the script. I will catch her."
+      },
+      {
+        "name": "Tilly Dunlin",
+        "trust": 55,
+        "affinity": 45,
+        "label": "classmate",
+        "note": "At lessons with me. Quick enough, but she does not care for the old marks."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time Benedikt set a formal-script tablet in front of me and I read three words of it and he nodded.",
+        "salience": 0.9,
+        "about": [
+          "Benedikt Orme"
+        ]
+      },
+      {
+        "gist": "Watching Father write the cistern's level by lamplight and asking him who reads it, and him saying nobody, and me deciding I would.",
+        "salience": 0.8,
+        "about": [
+          "Hobb Fenwick"
+        ]
+      },
+      {
+        "gist": "Following Benedikt to the Lintel one afternoon and being told to stay back from the dark glass, and wanting to touch it.",
+        "salience": 0.6,
+        "about": [
+          "Benedikt Orme"
+        ]
+      },
+      {
+        "gist": "The fever winter: I was small and remember the door shut and Mother counting roots, and being told to be quiet.",
+        "salience": 0.5,
+        "about": [
+          "Nan Fenwick",
+          "Hobb Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "reading_is_the_highest_work",
+        "value": 0.9,
+        "why": "Everything else in Cullet can be learned by anyone; the tablets cannot."
+      },
+      {
+        "key": "the_old_marks_hold_answers",
+        "value": 0.8,
+        "why": "The ship days wrote them down and we have forgotten how to hear them."
+      },
+      {
+        "key": "a_record_unread_is_a_waste",
+        "value": 0.7,
+        "why": "Father writes every dusk and no one looks. What is the use of that?"
+      }
+    ],
+    "secret": ""
+  },
+  "Posy Fenwick": {
+    "narrative": "I am going to be in Edda's band proper, not just trailing after Tilly. Edda leads us into the cullet yard and Ode Pontil chases us out and that is the best part of the day. At lessons I sit by Tilly and we pass slate scraps under the bench. Mother says I must learn my letters and I say I will when I am in the band.",
+    "values": [
+      "my friends",
+      "being brave in the cullet yard",
+      "fair turns"
+    ],
+    "goals": [
+      "Be properly in Edda Hollin's band",
+      "Get a piece of blue cullet for herself",
+      "Keep Tilly Dunlin as her best friend"
+    ],
+    "pastimes": [
+      "Playing in the cullet yard",
+      "Trading coloured glass shards with Tilly",
+      "Running the wynds"
+    ],
+    "calling": "Not yet: playing is the work.",
+    "mood": "bouncy and bold",
+    "traits": {
+      "caution": 30,
+      "sociability": 80,
+      "empathy": 55,
+      "curiosity": 65,
+      "ambition": 50,
+      "introspection": 25,
+      "temper": 45,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Nan Fenwick",
+        "trust": 60,
+        "affinity": 65,
+        "label": "mother",
+        "note": "She is always cross about the kelp and always glad to see me home."
+      },
+      {
+        "name": "Hobb Fenwick",
+        "trust": 70,
+        "affinity": 75,
+        "label": "father",
+        "note": "He climbs to the cistern at dusk and lets me carry the stylus."
+      },
+      {
+        "name": "Alder Fenwick",
+        "trust": 65,
+        "affinity": 60,
+        "label": "brother",
+        "note": "He reads at me. I would rather run."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 70,
+        "affinity": 80,
+        "label": "leader",
+        "note": "She is not afraid of Ode Pontil and she decides everything."
+      },
+      {
+        "name": "Tilly Dunlin",
+        "trust": 80,
+        "affinity": 85,
+        "label": "best friend",
+        "note": "We trade shards and sit together at lessons."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day Edda Hollin let me into the cullet yard and we found a whole cobalt shard and she kept it and gave me a green one.",
+        "salience": 0.8,
+        "about": [
+          "Edda Hollin"
+        ]
+      },
+      {
+        "gist": "Ode Pontil chasing us out of the heaps with his broom and me dropping my best shard and it going to cullet.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Last autumn's storm, and the slates coming off the roof and Mother holding the door and me under the table with Alder.",
+        "salience": 0.5,
+        "about": [
+          "Nan Fenwick",
+          "Alder Fenwick"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

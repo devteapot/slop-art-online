@@ -857,7 +857,16 @@ def main():
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
     p = plan()
-    out = {PLAN_OUT: dump(p), SEED_OUT: dump(seed(p))}
+    s = seed(p)
+    # The residents and their homes are `author_world.py cullet --compile-only`'s (from the cast
+    # and the drafted sheets, merged into this seed): keep them when rewriting the rest.
+    if SEED_OUT.exists():
+        old = {t["name"]: t for t in json.loads(SEED_OUT.read_text()).get("towns", [])}
+        for t in s["towns"]:
+            for k in ("residents", "homes"):
+                if k in old.get(t["name"], {}):
+                    t[k] = old[t["name"]][k]
+    out = {PLAN_OUT: dump(p), SEED_OUT: dump(s)}
     if a.check:
         bad = [str(k) for k, v in out.items() if not k.exists() or k.read_text() != v]
         if bad:

@@ -51,7 +51,7 @@ pub struct Last {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, talk: Option<Res<crate::talk::Talk>>, mut last: Local<Last>) {
+pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, (talk, looks): (Option<Res<crate::talk::Talk>>, Res<crate::looks::Looks>), mut last: Local<Last>) {
     let now_ms = scene.now_ms;
     let now = now_ms / 1000.0;
     model.shown = true;
@@ -168,7 +168,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     let mut heard: Vec<Experience> = last.heard.values().cloned().collect();
     heard.sort_by_key(|e| e.at_ms);
     let talking: Vec<u32> = heard.iter().filter(|e| now_ms - (e.at_ms as f64) < 8_000.0).map(|e| e.subject).collect();
-    let name_of = |id: u32| chars.get(&id).map_or_else(|| "Someone".to_string(), |c| c.label.clone());
+    // How I name them: the rules' name, else their looks (`looks.rs`).
+    let name_of = |id: u32| looks.of(id).map(String::from).or_else(|| chars.get(&id).map(|c| c.label.clone())).unwrap_or_else(|| "Someone".to_string());
     let mut log: Vec<LogLine> = heard
         .iter()
         .map(|e| LogLine { at: e.at_ms as f64 / 1000.0, who: name_of(e.subject), text: quoted(&e.text).to_string(), kind: if e.text.contains(" said to you:") { LogKind::ToMe } else { LogKind::Heard } })
@@ -205,7 +206,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         let hostile = hostile(*id);
         actors.push(Actor {
             id: *id as u64,
-            name: c.label.clone(),
+            name: name_of(*id),
             head: head(*id, *p, &c.kind),
             distance,
             hovered: near_cursor < 1.2,
@@ -216,6 +217,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             hp: band(*id),
             // The projection carries exact health for others only while an appraisal holds.
             exact: (c.hp >= 0.0 && c.max_hp > 0.0).then_some((c.hp, c.max_hp)),
+            kind_person: c.kind == "person",
         });
     }
     // Targeted skills go to the creature under or nearest the cursor (`combat.rs` picks it);
@@ -235,7 +237,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         } else {
             None
         };
-        let name = if c.kind != "person" && !c.name.is_empty() { format!("{} the {}", c.name, c.kind) } else { c.label.clone() };
+        // Capitalised, as everywhere a label starts a line (talk-1 left the target's lower case).
+        let name = super::label(&if c.kind != "person" && !c.name.is_empty() { format!("{} the {}", c.name, c.kind) } else { name_of(id) });
         Some(TargetInfo { name, doing, hp: band(id), stance: a.stance, distance: a.distance })
     });
 
@@ -310,13 +313,11 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         })
         .collect();
 
-    // Compass: my known places.
-    model.map = MapInfo {
-        me: my_pos.map(|p| Vec2::new(p.x, p.z)),
-        facing: input.facing(),
-        yaw: cam.shown_yaw,
-        pois: me.map(|id| conn.db.my_places().iter().filter(|p| p.actor == id).map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect()).unwrap_or_default(),
-    };
+    // Compass: my known places, and the nearest of them names where I am (`ui/top.rs`).
+    let places: Vec<Place> = me.map(|id| conn.db.my_places().iter().filter(|p| p.actor == id).collect()).unwrap_or_default();
+    let here = my_pos.map(|p| Vec2::new(p.x, p.z));
+    let place = here.and_then(|h| places.iter().map(|p| (p, Vec2::new(p.x, p.y).distance(h))).filter(|(p, d)| *d <= super::top::PLACE_M && !p.name.trim().is_empty()).min_by(|a, b| a.1.total_cmp(&b.1)).map(|(p, _)| super::label(&super::wood::readable(p.name.trim()))));
+    model.map = MapInfo { me: here, facing: input.facing(), yaw: cam.shown_yaw, pois: places.iter().map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect(), place };
 }
 
 /// The keys of the bar, slot by slot (the rules' `skill_bar()` order).

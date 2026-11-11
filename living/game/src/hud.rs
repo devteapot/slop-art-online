@@ -15,9 +15,18 @@ use std::collections::HashMap;
 pub struct UiWants {
     pub pointer: bool,
     pub keyboard: bool,
-    /// A list or a panel of the game UI is open (`verbs.rs`): the mouse picks from it, not the
-    /// skill bar.
+    /// A list of acts is open (`verbs.rs`): the mouse picks from it, not the skill bar.
     pub menu: bool,
+    /// The cursor is over the game UI's windows, buttons or cluster, or a press or drag that
+    /// began on them is under way (`ui/hit.rs`).
+    pub game: bool,
+}
+
+impl UiWants {
+    /// The pointer belongs to a UI (egui's panels or the game's), not the world.
+    pub fn over(&self) -> bool {
+        self.pointer || self.game
+    }
 }
 
 #[derive(Resource)]
