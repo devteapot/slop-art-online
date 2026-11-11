@@ -358,7 +358,7 @@ fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool) 
         return false;
     }
     // Minds of other species think less often; being attacked is always worth a thought.
-    let urgent = urgent || reason.contains("attacking you") || reason.starts_with("The fight with") || reason.starts_with("Dawn of day");
+    let urgent = urgent || reason.contains("attacking you") || reason.starts_with("The fight with");
     // Away from people an animal lives by its instincts: its mind is for encounters
     // (and for being attacked). Keeps thinking where the world is being lived and watched.
     if c.kind != "person" && !urgent {

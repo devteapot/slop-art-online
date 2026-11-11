@@ -127,6 +127,8 @@ No whole-world scan was added to a routine action or the tick.
 
 ## What residents do, hour by hour
 
+> Since 2026-11-11 the hours are each resident's own: a rhythm per person (when they rise and go to bed, how long their evening is), read by graphs as `bedtime` and `evening`, and evening habits that include home and working late ([seeded lives, "No lockstep"](SEEDED_LIVES.md#no-lockstep)). The world-clock hours below are the layer as first built.
+
 A census of an undisturbed island world (`core-town-census`: no scenes, no player, the world's own weather), once per world hour for a day: 189 adults and 52 children, 34 animals. "Home" is within 3 tiles of the household's door, "work" within 6 of the resident's `work` place, "evening place" within 8 of its `evening` place. Rows: `.local/living/verify/core-town-census/town-census.json` on the dev-box.
 
 | Hour | Home | Work | Evening place | Elsewhere | Most common activities (all residents) |

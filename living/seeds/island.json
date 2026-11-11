@@ -44611,10 +44611,7 @@
         "if": {
           "all": [
             {
-              "hour": {
-                "above": 17.5,
-                "below": 22
-              }
+              "evening": true
             },
             {
               "raining": false
@@ -47658,7 +47655,7 @@
           "want": "shelter",
           "weight": {
             "base": -0.2,
-            "rain": 1.2
+            "rain": 1.0
           },
           "do": {
             "routine": "get out of the rain"
@@ -47680,8 +47677,8 @@
           "weight": {
             "base": -0.7,
             "tired": 1.3,
-            "night": 0.6,
-            "exhausted": 1.0
+            "exhausted": 1.0,
+            "bedtime": 1.2
           },
           "do": {
             "routine": "sleep"
@@ -47726,8 +47723,9 @@
         {
           "want": "work",
           "weight": {
-            "base": 0.2,
-            "day": 0.5
+            "base": 0.7,
+            "bedtime": -0.9,
+            "evening": -0.4
           },
           "do": {
             "routine": "WORK"
@@ -47737,8 +47735,8 @@
           "want": "home at night",
           "weight": {
             "base": -0.1,
-            "night": 0.5,
-            "winter": 0.3
+            "winter": 0.3,
+            "bedtime": 0.6
           },
           "do": {
             "routine": "keep warm"
@@ -47792,6 +47790,11 @@
     },
     "evening": [
       "inn",
+      "home",
+      "square",
+      "work",
+      "inn",
+      "home",
       "square"
     ],
     "work": {

@@ -460,6 +460,13 @@ def scene_night(t, state):
     state["home_at_night"] = [p["id"] for p in home]
     t.check("at night people are at home", len(home) >= 0.7 * len(a), f"hour {h:.1f}: {len(home)} of {len(a)} adults within 3 tiles of home")
     t.check("at home at night they sleep or rest", len(asleep) >= 0.8 * max(1, len(home)), f"{len(asleep)} of {len(home)} asleep or resting")
+    # Each keeps their own hours (the `rhythm` table: seeded or drawn per person), so the town
+    # does not turn in for the night, or rise, at one moment.
+    rows = [r for r in t.sql("SELECT * FROM rhythm") if r["id"] in ppl]
+    rises, beds = [r["rise_h"] for r in rows], [r["bed_h"] for r in rows]
+    sd = lambda xs: (sum((x - sum(xs) / len(xs)) ** 2 for x in xs) / len(xs)) ** 0.5 if xs else 0.0
+    t.check("each keeps their own hours", len(rows) >= 0.9 * max(1, len(a)) and sd(rises) >= 0.4 and sd(beds) >= 0.6,
+            f"{len(rows)} rhythms for {len(a)} adults; rising {min(rises or [0]):.1f}-{max(rises or [0]):.1f} h (sd {sd(rises):.2f}), bed {min(beds or [0]):.1f}-{max(beds or [0]):.1f} h (sd {sd(beds):.2f})")
 
 
 def scene_morning(t, state):

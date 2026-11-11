@@ -171,6 +171,8 @@ pub mod resource_node_type;
 pub mod resume_genesis_reducer;
 pub mod reveal_table;
 pub mod reveal_type;
+pub mod rhythm_table;
+pub mod rhythm_type;
 pub mod routine_in_type;
 pub mod routine_stat_table;
 pub mod routine_stat_type;
@@ -400,6 +402,8 @@ pub use resource_node_type::ResourceNode;
 pub use resume_genesis_reducer::resume_genesis;
 pub use reveal_table::*;
 pub use reveal_type::Reveal;
+pub use rhythm_table::*;
+pub use rhythm_type::Rhythm;
 pub use routine_in_type::RoutineIn;
 pub use routine_stat_table::*;
 pub use routine_stat_type::RoutineStat;
@@ -977,6 +981,7 @@ pub struct DbUpdate {
     relation: __sdk::TableUpdate<Relation>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     reveal: __sdk::TableUpdate<Reveal>,
+    rhythm: __sdk::TableUpdate<Rhythm>,
     routine: __sdk::TableUpdate<Routine>,
     routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
@@ -1207,6 +1212,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "reveal" => db_update
                     .reveal
                     .append(reveal_table::parse_table_update(table_update)?),
+                "rhythm" => db_update
+                    .rhythm
+                    .append(rhythm_table::parse_table_update(table_update)?),
                 "routine" => db_update
                     .routine
                     .append(routine_table::parse_table_update(table_update)?),
@@ -1469,6 +1477,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.reveal = cache
             .apply_diff_to_table::<Reveal>("reveal", &self.reveal)
+            .with_updates_by_pk(|row| &row.id);
+        diff.rhythm = cache
+            .apply_diff_to_table::<Rhythm>("rhythm", &self.rhythm)
             .with_updates_by_pk(|row| &row.id);
         diff.routine = cache
             .apply_diff_to_table::<Routine>("routine", &self.routine)
@@ -1773,6 +1784,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "reveal" => db_update
                     .reveal
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "rhythm" => db_update
+                    .rhythm
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "routine" => db_update
                     .routine
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2056,6 +2070,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "reveal" => db_update
                     .reveal
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "rhythm" => db_update
+                    .rhythm
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "routine" => db_update
                     .routine
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2209,6 +2226,7 @@ pub struct AppliedDiff<'r> {
     relation: __sdk::TableAppliedDiff<'r, Relation>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     reveal: __sdk::TableAppliedDiff<'r, Reveal>,
+    rhythm: __sdk::TableAppliedDiff<'r, Rhythm>,
     routine: __sdk::TableAppliedDiff<'r, Routine>,
     routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
@@ -2364,6 +2382,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Reveal>("reveal", &self.reveal, event);
+        callbacks.invoke_table_row_callbacks::<Rhythm>("rhythm", &self.rhythm, event);
         callbacks.invoke_table_row_callbacks::<Routine>("routine", &self.routine, event);
         callbacks.invoke_table_row_callbacks::<RoutineStat>(
             "routine_stat",
@@ -3130,6 +3149,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         relation_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         reveal_table::register_table(client_cache);
+        rhythm_table::register_table(client_cache);
         routine_table::register_table(client_cache);
         routine_stat_table::register_table(client_cache);
         script_table::register_table(client_cache);
@@ -3222,6 +3242,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "relation",
         "resource_node",
         "reveal",
+        "rhythm",
         "routine",
         "routine_stat",
         "script",

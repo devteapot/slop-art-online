@@ -88,6 +88,8 @@ What one resident starts with. Every item is a world fact written once, at world
 | Whose name they know | kin and one's own community; **`acquaintance` rows** for each authored relation across communities unless the sheet says `knows_name: false` | perception (names in percepts), minds (`known_as`) |
 | A short past | sheet `memories` (in `background`) | the mind, installed as formative memories |
 | Stances, wants and fears | sheet `stances`, `values`, `goals`, `mood` | the mind |
+| Their daily rhythm | `residents[].rhythm` (or drawn) → `rhythm` | graphs (`bedtime`, `evening`), the new day, the mind's prompts |
+| Appetite and hardiness | genes (`appetite`, `hardiness`), drawn per person | the needs law |
 | A secret | the seed file only (`LIVING_SEED`); never a table | the character's own prompts |
 | The situations they are in | **inside each person's sheet, from their side**; the situation records stay in the authoring files (`cast/*.json`) | developer audit only |
 
@@ -387,6 +389,25 @@ The owner's first play-test (2026-11-11): survival was too hard and too central.
 **Stores and food from the world.** Nothing spawns food: berries regrow on bushes (1.2 a minute), fish at fishing spots (1.4), and farmers, fishers and hunters bring them in by their starting ways; town stores and households start with the seed's stores and kits. At the new rates a person eats about 4 berries' worth a game day instead of 5. Whether that is enough for normal life is measured, not assumed: starvation and cold deaths on the Spark, below.
 
 **Changed with it.** The rules tests that pin the needs law (`rules/src/script.rs`: rates by activity and night, infant appearance against cold damage, the parameter law against the whole computation, food and injury appearance; `floors.rs`, where a frozen floor now overrides `freezing` too) and verify-core's `needs` and `infant` scenes (a cloak or shelter removes the cold's tiring; a summer night does not hurt).
+
+## No lockstep
+
+At the play-test, everyone looked for shelter at the same moment when night fell. Nothing scripted it, but every cause was shared by everyone at once:
+
+1. **The dawn broadcast.** `tick.rs` asked every person to deliberate at 06:00 ("Dawn of day N. A new day."), a scheduled event and an urgent reason that skipped the thinking throttle: 277 deliberations in one burst every game day.
+2. **The world's clock in every starting graph.** Every resident had the same top-level desires, weighted by the world's `night` and `day` flags (sleep `night 0.6`, home `night 0.5`, work `day 0.5`), and the same evening routine (`hour` 17.5–22). At 20:00 every weight flipped for everyone in the same tick.
+3. **The cold law and its alarm.** At nightfall every body outside without fire or shelter began to lose health in the same tick, and the "You are freezing" alarm asked every outdoor mind to deliberate at once.
+4. **Identical thresholds.** The same weights everywhere meant the same hunger at which everyone turned to food, the same pitch at which rain sent everyone in.
+
+What replaced them (general rules and seeded data; no role types, no scripts):
+
+- **A rhythm per person** (`rhythm` table, private; `seed::drawn_rhythm`): when they rise (about 06:00 ± 0.8 h, 04:00–09:00), when they go to bed (about 16 ± 1 waking hours later, 19:30–02:30) and how many hours before bed are their evening (1.5–4.5). A seed may give a resident's (`residents[].rhythm`: `rises`, `sleeps` (past 24 for after midnight), `evening_hours`); whatever it leaves out is drawn from the person's id alone, so the world's random stream and its generation digests do not change. Newborns get one at birth.
+- **Graphs read one's own day.** New weights and conditions `bedtime` and `evening` (`rules/src/graph.rs`; `common::day_phase`): the body's own hours, not the world's. The island's and the repertoire's starting desires use them: sleep `bedtime 1.2`, home `bedtime 0.6`, work `base 0.7, bedtime -0.9, evening -0.4`, and the evening routine runs in one's own evening. `night` and `hour` stay for darkness and the clock. Minds' prompts list them.
+- **Evening habits.** `town_life.evening` may name `home` (an evening in) and `work` (working late) beside the inn and the square; the island alternates inn, home, square, work by household.
+- **Desires weighed a little differently by each person.** At seeding, a founder's starting desires are varied the way a child's are varied from its parent's (`genes::vary_ways`, drawn from the person's id): weights ±8 % typical, occasionally more. Rain sends most people in, not all (`rain 1.0` against work's 0.7).
+- **Tolerance as genes.** `appetite` (how fast hunger grows) and `hardiness` (what cold and wet take) are constitution genes, ±12 % typical, inherited like the others; the needs law reads them (`appetite_gene`, `hardiness_gene`). One can tell one's own: "always hungry", "quick to feel the cold".
+- **A new day at one's own rising.** The dawn broadcast is gone. A person's new day begins within three hours of its own `rise_h`, once a game day: a "A new day begins for you" feeling and a deliberation request, which goes through the thinking throttle like any other (not urgent).
+- **What minds see.** A person's prompt says when they usually rise and go to bed and how long their evening is (`daily_life` in `mind.rs`).
 
 ## Open questions for the user
 

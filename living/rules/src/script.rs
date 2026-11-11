@@ -442,6 +442,10 @@ pub enum NeedLaw {
         healing_gene: String,
         wet_energy: f64,
         cold_hp: f64,
+        /// Genes (optional, empty: none) by which hunger grows faster, and by which exposure
+        /// (`wet_energy`, `cold_hp`) is divided.
+        appetite_gene: String,
+        hardiness_gene: String,
     },
     /// A script whose `rates(a)` returns the finished rates (`hunger`, `energy`, `hp`).
     Final(Rates),
@@ -454,7 +458,7 @@ impl NeedLaw {
     pub fn rates(&self, a: &ActorFacts) -> Rates {
         match self {
             NeedLaw::Final(r) => *r,
-            NeedLaw::Params { hunger, energy, starving_at, starving_hp, fed_below, rested_above, healing_hp, spent_at, spent_hp, healing, tiring_gene, healing_gene, wet_energy, cold_hp } => {
+            NeedLaw::Params { hunger, energy, starving_at, starving_hp, fed_below, rested_above, healing_hp, spent_at, spent_hp, healing, tiring_gene, healing_gene, wet_energy, cold_hp, appetite_gene, hardiness_gene } => {
                 let (h, e) = (a.hunger as f64, a.energy as f64);
                 let mut hp = 0.0f64;
                 if h >= *starving_at {
@@ -475,9 +479,11 @@ impl NeedLaw {
                 if hp > 0.0 {
                     hp *= crate::genes::gene(&a.genes, healing_gene) as f64;
                 }
-                energy += wet_energy;
-                hp += cold_hp;
-                Rates { hunger_per_min: *hunger as f32, energy_per_min: energy as f32, hp_per_min: hp as f32 }
+                let gene = |name: &String| if name.is_empty() { 1.0 } else { crate::genes::gene(&a.genes, name) as f64 };
+                let hardy = gene(hardiness_gene).max(0.1);
+                energy += wet_energy / hardy;
+                hp += cold_hp / hardy;
+                Rates { hunger_per_min: (*hunger * gene(appetite_gene)) as f32, energy_per_min: energy as f32, hp_per_min: hp as f32 }
             },
         }
     }
@@ -1108,6 +1114,8 @@ impl NeedLaw {
             healing_gene: gene("healing_gene")?,
             wet_energy: n("wet_energy")?,
             cold_hp: n("cold_hp")?,
+            appetite_gene: m.get("appetite_gene").and_then(|v| v.clone().into_string().ok()).unwrap_or_default(),
+            hardiness_gene: m.get("hardiness_gene").and_then(|v| v.clone().into_string().ok()).unwrap_or_default(),
         })
     }
 }

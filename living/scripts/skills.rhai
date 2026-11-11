@@ -160,8 +160,9 @@ fn rates(a) {
         starving_at: 100.0, starving_hp: -4.0,
         fed_below: 70.0, rested_above: 15.0, healing_hp: 3.0, healing: healing,
         spent_at: 0.0, spent_hp: -2.0,
-        // Inborn endurance slows tiring; vitality speeds healing.
-        tiring_gene: "endurance", healing_gene: "vitality",
+        // Inborn endurance slows tiring; vitality speeds healing; a big appetite makes one
+        // hungry sooner; hardiness divides what cold and wet weather take.
+        tiring_gene: "endurance", healing_gene: "vitality", appetite_gene: "appetite", hardiness_gene: "hardiness",
         // Exposure tires: rain soaks people out from under a roof (a cloak keeps some of it
         // off), and a cold night without a fire, shelter or warm cloak is uncomfortable.
         wet_energy: (if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 })

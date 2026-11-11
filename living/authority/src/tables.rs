@@ -1318,6 +1318,19 @@ pub struct Presence {
     pub ai_plan: String,
 }
 
+/// A person's daily rhythm (private; seed content or drawn at birth, docs/SEEDED_LIVES.md):
+/// when it rises and goes to bed (hours of the day; `bed_h` may pass 24, e.g. 24.5 is 00:30)
+/// and how many hours before bed it keeps as its evening. Graphs read it as `bedtime` and
+/// `evening`; its new day starts at `rise_h`. Without a row: the world's night, and 18–22.
+#[spacetimedb::table(accessor = rhythm)]
+pub struct Rhythm {
+    #[primary_key]
+    pub id: u32,
+    pub rise_h: f32,
+    pub bed_h: f32,
+    pub evening_h: f32,
+}
+
 /// A guest of a household (private; the database owner reads it): `guest` may sleep in the
 /// `house` and take from its household's store until `until_ms` (the `host` skill).
 #[spacetimedb::table(accessor = guest)]

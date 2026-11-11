@@ -261,7 +261,8 @@ pub struct SeedTownLife {
     /// Occupation -> the kinds its workplace may be (as above); spread over the matching lots.
     #[serde(default)]
     pub work: std::collections::BTreeMap<String, Vec<String>>,
-    /// Places some households go in the evening (alternating by household), e.g. inn, square.
+    /// Places some households go in the evening (alternating by household), e.g. inn, square,
+    /// `work` (working late) or `home` (an evening in).
     #[serde(default)]
     pub evening: Vec<String>,
     /// Places spread over their spots like workplaces (each resident the nearest of the least
@@ -427,8 +428,12 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
                 households.push(hk);
                 households.len() - 1
             });
+            // `home` keeps the evening at home; any other name is one of the places just given
+            // (`inn`, `square`, `work`: working late).
             let name = &life.evening[n % life.evening.len()];
-            if let Some(p) = ctx.db.place().actor().filter(id).find(|p| p.name == *name) {
+            if name == "home" {
+                put("evening", home);
+            } else if let Some(p) = ctx.db.place().actor().filter(id).find(|p| p.name == *name) {
                 put("evening", (p.x, p.y));
             }
         }

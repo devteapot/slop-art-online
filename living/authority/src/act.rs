@@ -1791,6 +1791,7 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
     ctx.db.practice().actor().delete(id);
     ctx.db.brain().id().delete(id);
     ctx.db.genome().id().delete(id);
+    ctx.db.rhythm().id().delete(id);
     ctx.db.rearing().id().delete(id);
     ctx.db.relation().actor().delete(id);
     ctx.db.belief().actor().delete(id);
