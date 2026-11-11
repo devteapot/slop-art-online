@@ -2412,7 +2412,11 @@
         "empty": 0.0,
         "cause": "+2 m above the sea; 95 m from the Cone at bearing 259; front faces 180"
        },
-       "note": "the common store"
+       "note": "the common store",
+       "contents": {
+        "smoked_fish": 212,
+        "roots": 297
+       }
       },
       {
        "id": "boatshed",
@@ -4684,7 +4688,7 @@
       },
       {
        "id": "root_plot_1",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 1",
        "at": [
         -236.0,
@@ -4713,7 +4717,7 @@
       },
       {
        "id": "root_plot_2",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 2",
        "at": [
         -226.0,
@@ -4742,7 +4746,7 @@
       },
       {
        "id": "root_plot_3",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 3",
        "at": [
         -216.0,
@@ -4771,7 +4775,7 @@
       },
       {
        "id": "root_plot_4",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 4",
        "at": [
         -206.0,
@@ -4800,7 +4804,7 @@
       },
       {
        "id": "root_plot_5",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 5",
        "at": [
         -196.0,
@@ -4829,7 +4833,7 @@
       },
       {
        "id": "root_plot_6",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 6",
        "at": [
         -186.0,
@@ -4858,7 +4862,7 @@
       },
       {
        "id": "root_plot_7",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 7",
        "at": [
         -236.0,
@@ -4887,7 +4891,7 @@
       },
       {
        "id": "root_plot_8",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 8",
        "at": [
         -226.0,
@@ -4916,7 +4920,7 @@
       },
       {
        "id": "root_plot_9",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 9",
        "at": [
         -216.0,
@@ -4945,7 +4949,7 @@
       },
       {
        "id": "root_plot_10",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 10",
        "at": [
         -206.0,
@@ -4974,7 +4978,7 @@
       },
       {
        "id": "root_plot_11",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 11",
        "at": [
         -196.0,
@@ -5003,7 +5007,7 @@
       },
       {
        "id": "root_plot_12",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 12",
        "at": [
         -186.0,
@@ -5032,7 +5036,7 @@
       },
       {
        "id": "root_plot_13",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 13",
        "at": [
         -236.0,
@@ -5061,7 +5065,7 @@
       },
       {
        "id": "root_plot_14",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 14",
        "at": [
         -226.0,
@@ -5090,7 +5094,7 @@
       },
       {
        "id": "root_plot_15",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 15",
        "at": [
         -216.0,
@@ -5119,7 +5123,7 @@
       },
       {
        "id": "root_plot_16",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 16",
        "at": [
         -206.0,
@@ -5148,7 +5152,7 @@
       },
       {
        "id": "root_plot_17",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 17",
        "at": [
         -196.0,
@@ -5177,7 +5181,7 @@
       },
       {
        "id": "root_plot_18",
-       "kind": "garden",
+       "kind": "lamp",
        "name": "root plot 18",
        "at": [
         -186.0,
@@ -5573,7 +5577,10 @@
         -2.0,
         -2.0
        ],
-       "where": "the Fish Steps"
+       "where": "the Fish Steps",
+       "regrow_per_h": 0.4409,
+       "max": 21.2,
+       "pool": "the Fish Steps"
       },
       {
        "kind": "fishing_spot",
@@ -5581,7 +5588,10 @@
         2.0,
         -2.0
        ],
-       "where": "the Fish Steps"
+       "where": "the Fish Steps",
+       "regrow_per_h": 0.4409,
+       "max": 21.2,
+       "pool": "the Fish Steps"
       },
       {
        "kind": "fishing_spot",
@@ -5589,7 +5599,10 @@
         -62.0,
         0.6
        ],
-       "where": "the quay edge"
+       "where": "the quay edge (the jetties)",
+       "regrow_per_h": 0.8818,
+       "max": 42.3,
+       "pool": "the quay"
       },
       {
        "kind": "fishing_spot",
@@ -5597,7 +5610,10 @@
         -35.0,
         0.6
        ],
-       "where": "the quay edge"
+       "where": "the quay edge (the jetties)",
+       "regrow_per_h": 0.8818,
+       "max": 42.3,
+       "pool": "the quay"
       },
       {
        "kind": "fishing_spot",
@@ -5605,7 +5621,10 @@
         40.0,
         0.6
        ],
-       "where": "the quay edge"
+       "where": "the quay edge (the jetties)",
+       "regrow_per_h": 0.8818,
+       "max": 42.3,
+       "pool": "the quay"
       },
       {
        "kind": "fishing_spot",
@@ -5613,7 +5632,10 @@
         68.0,
         0.6
        ],
-       "where": "the quay edge"
+       "where": "the quay edge (the jetties)",
+       "regrow_per_h": 0.8818,
+       "max": 42.3,
+       "pool": "the quay"
       },
       {
        "kind": "fishing_spot",
@@ -5621,7 +5643,10 @@
         132.6,
         -22.0
        ],
-       "where": "the mole"
+       "where": "the mole",
+       "regrow_per_h": 1.3228,
+       "max": 63.5,
+       "pool": "the mole"
       },
       {
        "kind": "fishing_spot",
@@ -5629,7 +5654,10 @@
         138.4,
         -30.0
        ],
-       "where": "the mole"
+       "where": "the mole",
+       "regrow_per_h": 1.3228,
+       "max": 63.5,
+       "pool": "the mole"
       },
       {
        "kind": "fishing_spot",
@@ -5637,7 +5665,10 @@
         132.6,
         -40.0
        ],
-       "where": "the mole"
+       "where": "the mole",
+       "regrow_per_h": 1.3228,
+       "max": 63.5,
+       "pool": "the mole"
       },
       {
        "kind": "fishing_spot",
@@ -5645,7 +5676,10 @@
         138.4,
         -48.0
        ],
-       "where": "the mole"
+       "where": "the mole",
+       "regrow_per_h": 1.3228,
+       "max": 63.5,
+       "pool": "the mole"
       },
       {
        "kind": "fishing_spot",
@@ -5653,7 +5687,10 @@
         129.6,
         -63.0
        ],
-       "where": "the mole"
+       "where": "the mole",
+       "regrow_per_h": 1.3228,
+       "max": 63.5,
+       "pool": "the mole"
       },
       {
        "kind": "fishing_spot",
@@ -5661,87 +5698,120 @@
         141.4,
         -63.0
        ],
-       "where": "the mole"
+       "where": "the mole",
+       "regrow_per_h": 1.3228,
+       "max": 63.5,
+       "pool": "the mole"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -163.75,
         -0.9
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -171.25,
         1.3
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -178.75,
         3.5
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -186.25,
         5.7
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -193.75,
         7.9
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -201.25,
         10.1
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -208.75,
         12.3
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -216.25,
         14.5
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -223.75,
         16.7
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
-       "kind": "fishing_spot",
+       "kind": "weir",
        "at": [
         -231.25,
         18.9
        ],
-       "where": "the Weirs"
+       "where": "the Weirs (fish by trap)",
+       "regrow_per_h": 1.7637,
+       "max": 84.7,
+       "pool": "the Weirs"
       },
       {
        "kind": "tree",
@@ -6312,524 +6382,882 @@
        "where": "the clay bank below the Crown"
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -146.67,
         5.33
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -160.0,
         8.0
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -173.33,
         10.67
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -186.67,
         13.33
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -200.0,
         16.0
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -213.33,
         18.67
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -226.67,
         21.33
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -240.0,
         24.0
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -253.33,
         26.67
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -266.67,
         29.33
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -280.0,
         32.0
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "kelp",
+       "kind": "kelp_bed",
        "at": [
         -293.33,
         34.67
        ],
-       "where": "the Wrack Strand (kelp: fertiliser and ash)"
+       "where": "the Wrack Strand (kelp: fertiliser and ash)",
+       "regrow_per_h": 0.2083,
+       "max": 10.0
       },
       {
-       "kind": "sand",
+       "kind": "sand_bank",
        "at": [
         353.67,
         108.75
        ],
-       "where": "the Sand Spit (white sand for glass)"
+       "where": "the Sand Spit (white sand for glass)",
+       "regrow_per_h": 0.1667,
+       "max": 8.0
       },
       {
-       "kind": "sand",
+       "kind": "sand_bank",
        "at": [
         357.0,
         126.25
        ],
-       "where": "the Sand Spit (white sand for glass)"
+       "where": "the Sand Spit (white sand for glass)",
+       "regrow_per_h": 0.1667,
+       "max": 8.0
       },
       {
-       "kind": "sand",
+       "kind": "sand_bank",
        "at": [
         360.33,
         143.75
        ],
-       "where": "the Sand Spit (white sand for glass)"
+       "where": "the Sand Spit (white sand for glass)",
+       "regrow_per_h": 0.1667,
+       "max": 8.0
       },
       {
-       "kind": "sand",
+       "kind": "sand_bank",
        "at": [
         363.67,
         161.25
        ],
-       "where": "the Sand Spit (white sand for glass)"
+       "where": "the Sand Spit (white sand for glass)",
+       "regrow_per_h": 0.1667,
+       "max": 8.0
       },
       {
-       "kind": "sand",
+       "kind": "sand_bank",
        "at": [
         367.0,
         178.75
        ],
-       "where": "the Sand Spit (white sand for glass)"
+       "where": "the Sand Spit (white sand for glass)",
+       "regrow_per_h": 0.1667,
+       "max": 8.0
       },
       {
-       "kind": "sand",
+       "kind": "sand_bank",
        "at": [
         370.33,
         196.25
        ],
-       "where": "the Sand Spit (white sand for glass)"
+       "where": "the Sand Spit (white sand for glass)",
+       "regrow_per_h": 0.1667,
+       "max": 8.0
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         -150,
         360
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         -90,
         360
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         -30,
         360
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         30,
         360
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         90,
         360
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         150,
         360
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         -150,
         400
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         -90,
         400
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         -30,
         400
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         30,
         400
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         90,
         400
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         150,
         400
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         -150,
         440
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         -90,
         440
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         -30,
         440
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         30,
         440
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         90,
         440
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "peat",
+       "kind": "peat_bank",
        "at": [
         150,
         440
        ],
-       "where": "the Moss (peat cuttings)"
+       "where": "the Moss (peat cuttings)",
+       "regrow_per_h": 0.2333,
+       "max": 11.2
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -236.0,
         147.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -226.0,
         147.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -216.0,
         147.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -206.0,
         147.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -196.0,
         147.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -186.0,
         147.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -236.0,
         155.5
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -226.0,
         155.5
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -216.0,
         155.5
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -206.0,
         155.5
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -196.0,
         155.5
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -186.0,
         155.5
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -236.0,
         164.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -226.0,
         164.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -216.0,
         164.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -206.0,
         164.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -196.0,
         164.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "roots",
+       "kind": "root_plot",
        "at": [
         -186.0,
         164.0
        ],
-       "where": "the root plots"
+       "where": "the root plots",
+       "regrow_per_h": 0.1069,
+       "max": 6.0
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -39.0,
         55.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -53.0,
         55.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -109.0,
         55.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -39.0,
         85.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -53.0,
         85.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -39.0,
         115.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -67.0,
         115.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -109.0,
         115.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -39.0,
         129.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -109.0,
         129.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
       },
       {
-       "kind": "greens",
+       "kind": "greens_bed",
        "at": [
         -145.0,
         191.05
        ],
-       "where": "the working glasshouses"
+       "where": "the working glasshouses",
+       "regrow_per_h": 0.2624,
+       "max": 12.6
+      }
+     ],
+     "structures": [
+      {
+       "kind": "furnace",
+       "lot": "cone",
+       "spot": "the front mouth",
+       "fuel": 40.0,
+       "note": "the Cone's furnace, full (13 game hours at full firing)"
+      },
+      {
+       "kind": "storage",
+       "lot": "cone_yard",
+       "contents": {
+        "peat": 824
+       },
+       "note": "the Cone's peat: with the furnace's, 864 units, 12 days of full firing at 3 a game hour"
+      },
+      {
+       "kind": "oven",
+       "lot": "batch",
+       "spot": "the oven mouth",
+       "fuel": 8.0,
+       "note": "the Batch's oven, full (8 game hours)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "marver",
+       "spot": "the hearth bench",
+       "fuel": 12.0,
+       "note": "the Marver's public hearth, full (a game day)"
+      },
+      {
+       "kind": "smokehouse",
+       "lot": "smokehouse_1",
+       "fuel": 8.0,
+       "note": "full (16 game hours)"
+      },
+      {
+       "kind": "smokehouse",
+       "lot": "smokehouse_2",
+       "fuel": 8.0,
+       "note": "full (16 game hours)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "lamp_house",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "low_1",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "low_2",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "low_4",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "low_5",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "low_6",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "low_7",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "low_8",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "low_10",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "mid_1",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "mid_2",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "mid_4",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "mid_5",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "mid_7",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "high_1",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "high_2",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "high_3",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "high_5",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "readers_house",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "turf_house",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "hearth",
+       "lot": "hanger_cottage",
+       "fuel": 12.0,
+       "note": "the household's hearth, full (a game day)"
+      },
+      {
+       "kind": "lamp",
+       "at": [
+        6.0,
+        1.5
+       ],
+       "fuel": 8.0,
+       "note": "at the top of the Fish Steps"
+      },
+      {
+       "kind": "lamp",
+       "at": [
+        -60.0,
+        4.0
+       ],
+       "fuel": 8.0,
+       "note": "on the quay by the net lofts"
+      },
+      {
+       "kind": "lamp",
+       "at": [
+        54.0,
+        7.5
+       ],
+       "fuel": 8.0,
+       "note": "on the quay by the Store"
+      },
+      {
+       "kind": "lamp",
+       "at": [
+        30.0,
+        17.0
+       ],
+       "fuel": 8.0,
+       "note": "in the Counting House yard"
+      },
+      {
+       "kind": "lamp",
+       "lot": "marver",
+       "spot": "the door",
+       "fuel": 8.0,
+       "note": "at the Marver's door"
+      },
+      {
+       "kind": "lamp",
+       "at": [
+        136.0,
+        -8.0
+       ],
+       "fuel": 8.0,
+       "note": "on the mole by the lamp house"
+      },
+      {
+       "kind": "lamp",
+       "lot": "watchglass",
+       "spot": "Rafe's place by the light",
+       "fuel": 8.0,
+       "note": "at the Watchglass, where Rafe fishes by the light"
       }
      ]
     }
@@ -6843,7 +7271,13 @@
   "berry_bush": 0.0,
   "clay_bank": 0.0,
   "boulder": 0.4,
-  "reeds": 0.3
+  "reeds": 0.3,
+  "kelp_bed": 0.0,
+  "sand_bank": 0.0,
+  "peat_bank": 0.0,
+  "root_plot": 0.0,
+  "greens_bed": 0.0,
+  "weir": 0.0
  },
  "animals": {
   "deer": 0,
@@ -6905,7 +7339,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       13
+      ]
      },
      "places": [
       {
@@ -7128,7 +7566,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       14
+      ]
      },
      "places": [
       {
@@ -7337,7 +7779,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 18.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -7501,7 +7947,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 22.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       14
+      ]
      },
      "places": [
       {
@@ -7706,7 +8156,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 22.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -7911,7 +8365,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -8110,7 +8568,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 20,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -8237,7 +8699,11 @@
      "rhythm": {
       "rises": 9,
       "sleeps": 25,
-      "evening_hours": 3
+      "evening_hours": 3,
+      "works": [
+       14,
+       22
+      ]
      },
      "places": [
       {
@@ -8470,7 +8936,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -8678,7 +9148,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 23,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       15
+      ]
      },
      "places": [
       {
@@ -8906,7 +9380,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 23.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       8,
+       16
+      ]
      },
      "places": [
       {
@@ -9132,7 +9610,11 @@
      "rhythm": {
       "rises": 7.5,
       "sleeps": 23.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       16
+      ]
      },
      "places": [
       {
@@ -9344,7 +9826,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -9522,7 +10008,11 @@
      "rhythm": {
       "rises": 5,
       "sleeps": 21,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       14
+      ]
      },
      "places": [
       {
@@ -9702,7 +10192,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -9811,7 +10305,11 @@
      "rhythm": {
       "rises": 14,
       "sleeps": 31,
-      "evening_hours": 1
+      "evening_hours": 1,
+      "works": [
+       22,
+       30
+      ]
      },
      "places": [
       {
@@ -10024,7 +10522,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 20,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -10156,7 +10658,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 22.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       8,
+       18
+      ]
      },
      "places": [
       {
@@ -10364,7 +10870,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 22.0,
-      "evening_hours": 2.0
+      "evening_hours": 2.0,
+      "works": [
+       8,
+       20
+      ]
      },
      "places": [
       {
@@ -10556,7 +11066,11 @@
      "rhythm": {
       "rises": 8,
       "sleeps": 23,
-      "evening_hours": 1
+      "evening_hours": 1,
+      "works": [
+       14,
+       22
+      ]
      },
      "places": [
       {
@@ -10738,7 +11252,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -10934,7 +11452,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -11123,7 +11645,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -11313,7 +11839,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -11499,7 +12029,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -11751,7 +12285,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -11984,7 +12522,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -12216,7 +12758,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       8,
+       16
+      ]
      },
      "places": [
       {
@@ -12446,7 +12992,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 20.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -12834,7 +13384,11 @@
      "rhythm": {
       "rises": 5,
       "sleeps": 21,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       16
+      ]
      },
      "places": [
       {
@@ -13032,7 +13586,11 @@
      "rhythm": {
       "rises": 4,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       4.5,
+       11
+      ]
      },
      "places": [
       {
@@ -13232,7 +13790,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -13370,7 +13932,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -13504,7 +14070,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 23,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       13
+      ]
      },
      "places": [
       {
@@ -13738,7 +14308,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 22.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       15
+      ]
      },
      "places": [
       {
@@ -13960,7 +14534,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       17
+      ]
      },
      "places": [
       {
@@ -14167,7 +14745,11 @@
      "rhythm": {
       "rises": 5,
       "sleeps": 21,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       11
+      ]
      },
      "places": [
       {
@@ -14361,7 +14943,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -14546,7 +15132,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       11
+      ]
      },
      "places": [
       {
@@ -14734,7 +15324,11 @@
      "rhythm": {
       "rises": 4.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       5,
+       12
+      ]
      },
      "places": [
       {
@@ -14931,7 +15525,11 @@
      "rhythm": {
       "rises": 11,
       "sleeps": 28,
-      "evening_hours": 1
+      "evening_hours": 1,
+      "works": [
+       22,
+       27
+      ]
      },
      "places": [
       {
@@ -15129,7 +15727,11 @@
      "rhythm": {
       "rises": 7.5,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -15279,7 +15881,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -15493,7 +16099,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -15700,7 +16310,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -15903,7 +16517,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 22.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       15
+      ]
      },
      "places": [
       {
@@ -16111,7 +16729,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -16316,7 +16938,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 2
+      "evening_hours": 2,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -16506,7 +17132,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -16661,7 +17291,11 @@
      "rhythm": {
       "rises": 6.5,
       "sleeps": 20.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       12
+      ]
      },
      "places": [
       {
@@ -16785,7 +17419,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 22.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       15
+      ]
      },
      "places": [
       {
@@ -16972,7 +17610,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 21.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       15
+      ]
      },
      "places": [
       {
@@ -17156,7 +17798,11 @@
      "rhythm": {
       "rises": 5.5,
       "sleeps": 21.0,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       6,
+       15
+      ]
      },
      "places": [
       {
@@ -17299,7 +17945,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       17
+      ]
      },
      "places": [
       {
@@ -17511,7 +18161,11 @@
      "rhythm": {
       "rises": 13,
       "sleeps": 30,
-      "evening_hours": 0.0
+      "evening_hours": 0.0,
+      "works": [
+       19.5,
+       30
+      ]
      },
      "places": [
       {
@@ -17714,7 +18368,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 23,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       8,
+       16
+      ]
      },
      "places": [
       {
@@ -17899,7 +18557,11 @@
      "rhythm": {
       "rises": 8.5,
       "sleeps": 25.0,
-      "evening_hours": 3.0
+      "evening_hours": 3.0,
+      "works": [
+       10,
+       22
+      ]
      },
      "places": [
       {
@@ -18096,8 +18758,16 @@
      },
      "rhythm": {
       "rises": 2.5,
-      "sleeps": 13.0,
-      "evening_hours": 3.0
+      "sleeps": 22.0,
+      "evening_hours": 4.5,
+      "works": [
+       3,
+       10
+      ],
+      "second_sleep": [
+       13,
+       19
+      ]
      },
      "places": [
       {
@@ -18289,7 +18959,11 @@
      "rhythm": {
       "rises": 9.5,
       "sleeps": 25.5,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       11,
+       19
+      ]
      },
      "places": [
       {
@@ -18480,7 +19154,11 @@
      "rhythm": {
       "rises": 7,
       "sleeps": 23,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       9,
+       17
+      ]
      },
      "places": [
       {
@@ -18668,7 +19346,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -18859,7 +19541,11 @@
      "rhythm": {
       "rises": 6,
       "sleeps": 22,
-      "evening_hours": 4.5
+      "evening_hours": 4.5,
+      "works": [
+       7,
+       16
+      ]
      },
      "places": [
       {
@@ -19056,5 +19742,2922 @@
    }
   }
  ],
- "villages": []
+ "villages": [],
+ "ways": {
+  "top": {
+   "desires": [
+    {
+     "want": "safety",
+     "weight": {
+      "base": 2.0,
+      "threatened": 3,
+      "hurt": 1.2
+     },
+     "do": {
+      "routine": "stay safe"
+     }
+    },
+    {
+     "want": "shelter",
+     "weight": {
+      "base": -0.2,
+      "rain": 1.0
+     },
+     "do": {
+      "routine": "get out of the rain"
+     }
+    },
+    {
+     "want": "food",
+     "weight": {
+      "base": -0.2,
+      "hunger": 3.6,
+      "starving": 1.5
+     },
+     "do": {
+      "routine": "find food and eat"
+     }
+    },
+    {
+     "want": "sleep",
+     "weight": {
+      "base": -0.7,
+      "tired": 1.3,
+      "exhausted": 1.0,
+      "bedtime": 1.2
+     },
+     "do": {
+      "routine": "sleep"
+     }
+    },
+    {
+     "want": "greet",
+     "weight": {
+      "hailed": 2.2
+     },
+     "do": {
+      "routine": "answer a greeting"
+     }
+    },
+    {
+     "want": "look",
+     "weight": {
+      "commotion": 1.6
+     },
+     "do": {
+      "routine": "watch what happens"
+     }
+    },
+    {
+     "want": "manners",
+     "weight": {
+      "base": 0.9
+     },
+     "do": {
+      "routine": "mind the people near me"
+     }
+    },
+    {
+     "want": "evening",
+     "weight": {
+      "base": 0.8
+     },
+     "do": {
+      "routine": "spend the evening out"
+     }
+    },
+    {
+     "want": "work",
+     "weight": {
+      "base": 0.1,
+      "work_hours": 0.8,
+      "bedtime": -0.9,
+      "evening": -0.4
+     },
+     "do": {
+      "routine": "WORK"
+     }
+    },
+    {
+     "want": "home at night",
+     "weight": {
+      "base": -0.1,
+      "winter": 0.3,
+      "bedtime": 0.6
+     },
+     "do": {
+      "routine": "keep warm"
+     }
+    },
+    {
+     "want": "a family",
+     "weight": {
+      "base": 0.2,
+      "hunger": -0.8,
+      "longing": 0.4,
+      "company": 0.2,
+      "courted": 0.8
+     },
+     "do": {
+      "routine": "keep close to my partner"
+     }
+    },
+    {
+     "want": "company",
+     "weight": {
+      "base": 0.15,
+      "alone": 0.3,
+      "longing": 0.3
+     },
+     "do": {
+      "routine": "be with people"
+     }
+    }
+   ]
+  },
+  "common": {
+   "stay safe": {
+    "first": [
+     {
+      "if": {
+       "all": [
+        {
+         "hurt_within": 5
+        },
+        {
+         "health": {
+          "below": 40
+         }
+        },
+        {
+         "near": {
+          "target": {
+           "nearest": "wolf"
+          },
+          "within": 8
+         }
+        }
+       ]
+      },
+      "then": {
+       "do": "flee",
+       "target": "attacker"
+      }
+     },
+     {
+      "if": {
+       "all": [
+        {
+         "hurt_within": 5
+        },
+        {
+         "health": {
+          "below": 40
+         }
+        },
+        {
+         "not": {
+          "near": {
+           "target": {
+            "nearest": "wolf"
+           },
+           "within": 8
+          }
+         }
+        }
+       ]
+      },
+      "then": {
+       "do": "yield",
+       "target": "attacker"
+      }
+     },
+     {
+      "if": {
+       "all": [
+        {
+         "hurt_within": 2
+        },
+        {
+         "health": {
+          "below": 40
+         }
+        }
+       ]
+      },
+      "then": {
+       "do": "flee",
+       "target": "attacker"
+      }
+     },
+     {
+      "if": {
+       "hurt_within": 5
+      },
+      "then": {
+       "do": "attack",
+       "target": "attacker"
+      }
+     },
+     {
+      "if": {
+       "all": [
+        {
+         "threatened": true
+        },
+        {
+         "count": {
+          "of": "person",
+          "within": 7,
+          "at_least": 2
+         }
+        },
+        {
+         "not": {
+          "count": {
+           "of": {
+            "kind": "person",
+            "relation": "friend"
+           },
+           "within": 7,
+           "at_least": 1
+          }
+         }
+        }
+       ]
+      },
+      "then": {
+       "do": "yield"
+      }
+     },
+     {
+      "if": {
+       "all": [
+        {
+         "near": {
+          "target": {
+           "nearest": "wolf"
+          },
+          "within": 10
+         }
+        },
+        {
+         "count": {
+          "of": "person",
+          "within": 8,
+          "at_least": 2
+         }
+        },
+        {
+         "health": {
+          "above": 60
+         }
+        }
+       ]
+      },
+      "then": {
+       "do": "attack",
+       "target": {
+        "nearest": "wolf"
+       }
+      }
+     },
+     {
+      "if": {
+       "near": {
+        "target": {
+         "nearest": "wolf"
+        },
+        "within": 12
+       }
+      },
+      "then": {
+       "do": "flee",
+       "target": {
+        "nearest": "wolf"
+       }
+      }
+     }
+    ]
+   },
+   "get out of the rain": {
+    "first": [
+     {
+      "if": {
+       "near": {
+        "target": "home",
+        "within": 2.5
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "if": {
+          "energy": {
+           "below": 60
+          }
+         },
+         "then": {
+          "do": "sleep"
+         }
+        },
+        {
+         "do": "rest"
+        }
+       ]
+      }
+     },
+     {
+      "if": {
+       "near": {
+        "target": {
+         "nearest": "inn"
+        },
+        "within": 2.5
+       }
+      },
+      "then": {
+       "do": "rest"
+      }
+     },
+     {
+      "if": {
+       "near": {
+        "target": {
+         "nearest": "hall"
+        },
+        "within": 2.5
+       }
+      },
+      "then": {
+       "do": "rest"
+      }
+     },
+     {
+      "if": {
+       "near": {
+        "target": {
+         "nearest": "house"
+        },
+        "within": 2.5
+       }
+      },
+      "then": {
+       "do": "rest"
+      }
+     },
+     {
+      "if": {
+       "not": {
+        "near": {
+         "target": "home",
+         "within": 40
+        }
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "do": "goto",
+         "target": {
+          "nearest": "inn"
+         }
+        },
+        {
+         "do": "goto",
+         "target": {
+          "nearest": "hall"
+         }
+        },
+        {
+         "do": "goto",
+         "target": {
+          "nearest": "house"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "do": "goto",
+      "target": "home"
+     }
+    ]
+   },
+   "sleep": {
+    "first": [
+     {
+      "if": {
+       "near": {
+        "target": "home",
+        "within": 2.5
+       }
+      },
+      "then": {
+       "do": "sleep"
+      }
+     },
+     {
+      "seq": [
+       {
+        "do": "goto",
+        "target": "home"
+       },
+       {
+        "do": "sleep"
+       }
+      ]
+     }
+    ]
+   },
+   "keep warm": {
+    "first": [
+     {
+      "if": {
+       "near": {
+        "target": "home",
+        "within": 2.5
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "if": {
+          "energy": {
+           "below": 90
+          }
+         },
+         "then": {
+          "do": "sleep"
+         }
+        },
+        {
+         "do": "rest"
+        }
+       ]
+      }
+     },
+     {
+      "do": "goto",
+      "target": "home"
+     }
+    ]
+   },
+   "answer a greeting": {
+    "first": [
+     {
+      "if": {
+       "near": {
+        "target": "hailer",
+        "within": 5
+       }
+      },
+      "then": {
+       "do": "nod",
+       "target": "hailer"
+      }
+     },
+     {
+      "do": "wave",
+      "target": "hailer"
+     }
+    ]
+   },
+   "watch what happens": {
+    "first": [
+     {
+      "do": "face",
+      "target": "commotion"
+     },
+     {
+      "wait": 2
+     }
+    ]
+   },
+   "mind the people near me": {
+    "first": [
+     {
+      "if": {
+       "all": [
+        {
+         "heard_within": 4
+        },
+        {
+         "near": {
+          "target": "speaker",
+          "within": 9
+         }
+        }
+       ]
+      },
+      "then": {
+       "do": "face",
+       "target": "speaker"
+      }
+     },
+     {
+      "if": {
+       "all": [
+        {
+         "moving": false
+        },
+        {
+         "near": {
+          "target": {
+           "nearest": {
+            "kind": "person",
+            "relation": "enemy"
+           }
+          },
+          "within": 6
+         }
+        }
+       ]
+      },
+      "then": {
+       "do": "face",
+       "target": {
+        "nearest": {
+         "kind": "person",
+         "relation": "enemy"
+        }
+       }
+      }
+     },
+     {
+      "if": {
+       "all": [
+        {
+         "chance": 0.03
+        },
+        {
+         "not": {
+          "near": {
+           "target": "home",
+           "within": 8
+          }
+         }
+        },
+        {
+         "near": {
+          "target": {
+           "nearest": {
+            "kind": "person",
+            "relation": "friend"
+           }
+          },
+          "within": 11
+         }
+        }
+       ]
+      },
+      "then": {
+       "do": "wave",
+       "target": {
+        "nearest": {
+         "kind": "person",
+         "relation": "friend"
+        }
+       }
+      }
+     },
+     {
+      "if": {
+       "all": [
+        {
+         "moving": false
+        },
+        {
+         "near": {
+          "target": {
+           "nearest": "person"
+          },
+          "within": 2.5
+         }
+        }
+       ]
+      },
+      "then": {
+       "first": [
+        {
+         "do": "step_aside",
+         "target": {
+          "nearest": "person"
+         }
+        },
+        {
+         "do": "face",
+         "target": {
+          "nearest": "person"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "spend the evening out": {
+    "if": {
+     "all": [
+      {
+       "evening": true
+      },
+      {
+       "raining": false
+      }
+     ]
+    },
+    "then": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "evening"
+          },
+          "within": 6
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "evening"
+        }
+       }
+      },
+      {
+       "if": {
+        "chance": 0.04
+       },
+       "then": {
+        "first": [
+         {
+          "do": "nod",
+          "target": {
+           "nearest": {
+            "kind": "person",
+            "relation": "friend"
+           }
+          }
+         },
+         {
+          "do": "nod",
+          "target": {
+           "nearest": "person"
+          }
+         }
+        ]
+       }
+      },
+      {
+       "do": "rest"
+      }
+     ]
+    }
+   },
+   "find food and eat": {
+    "first": [
+     {
+      "if": {
+       "has": {
+        "item": "food",
+        "at_least": 1
+       }
+      },
+      "then": {
+       "do": "eat",
+       "item": "food",
+       "qty": 4
+      }
+     },
+     {
+      "do": "take",
+      "target": {
+       "nearest": "storage"
+      },
+      "item": "food"
+     },
+     {
+      "do": "gather",
+      "target": {
+       "nearest": "root_plot"
+      }
+     },
+     {
+      "do": "gather",
+      "target": {
+       "nearest": "greens_bed"
+      }
+     },
+     {
+      "do": "gather",
+      "target": {
+       "nearest": "fishing_spot"
+      }
+     },
+     {
+      "seq": [
+       {
+        "first": [
+         {
+          "do": "goto",
+          "target": {
+           "place": "store"
+          }
+         },
+         {
+          "wait": 1
+         }
+        ]
+       },
+       {
+        "do": "wander"
+       },
+       {
+        "do": "wander"
+       },
+       {
+        "do": "wander"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "occupations": {
+   "glassmaster": {
+    "routine": "keep the melt",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "can": {
+         "do": "make",
+         "target": {
+          "nearest": "furnace"
+         },
+         "item": "glass"
+        }
+       },
+       "then": {
+        "do": "make",
+        "target": {
+         "nearest": "furnace"
+        },
+        "item": "glass"
+       }
+      },
+      {
+       "if": {
+        "can": {
+         "do": "feed",
+         "target": {
+          "nearest": "furnace"
+         },
+         "item": "peat"
+        }
+       },
+       "then": {
+        "do": "feed",
+        "target": {
+         "nearest": "furnace"
+        },
+        "item": "peat"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "sand",
+            "at_least": 2
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "sand"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "sand"
+         }
+        },
+        "item": "sand",
+        "qty": 4
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "ash",
+            "at_least": 1
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "ash"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "ash"
+         }
+        },
+        "item": "ash",
+        "qty": 2
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "peat",
+            "at_least": 1
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "peat"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "peat"
+         }
+        },
+        "item": "peat",
+        "qty": 4
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "blower": {
+    "routine": "blow glass",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "all": [
+         {
+          "has": {
+           "item": "glass",
+           "at_least": 3
+          }
+         },
+         {
+          "sees": {
+           "nearest": "storage"
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "store",
+        "target": {
+         "nearest": "storage"
+        },
+        "item": "glass",
+        "qty": 3
+       }
+      },
+      {
+       "if": {
+        "can": {
+         "do": "make",
+         "target": {
+          "nearest": "furnace"
+         },
+         "item": "glass"
+        }
+       },
+       "then": {
+        "do": "make",
+        "target": {
+         "nearest": "furnace"
+        },
+        "item": "glass"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "sand",
+            "at_least": 2
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "sand"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "sand"
+         }
+        },
+        "item": "sand",
+        "qty": 4
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "ash",
+            "at_least": 1
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "ash"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "ash"
+         }
+        },
+        "item": "ash",
+        "qty": 2
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "stoker": {
+    "routine": "stoke the Cone",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "can": {
+         "do": "feed",
+         "target": {
+          "nearest": "furnace"
+         },
+         "item": "peat"
+        }
+       },
+       "then": {
+        "do": "feed",
+        "target": {
+         "nearest": "furnace"
+        },
+        "item": "peat"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "peat",
+            "at_least": 1
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "peat"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "peat"
+         }
+        },
+        "item": "peat",
+        "qty": 6
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "retired_blower": {
+    "routine": "watch the Cone",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 5
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "rest"
+      }
+     ]
+    }
+   },
+   "cullet_sorter": {
+    "routine": "sort the cullet",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "glazier": {
+    "routine": "glaze",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "lehr_keeper": {
+    "routine": "keep the lehr",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "grower": {
+    "routine": "tend the glasshouse",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "all": [
+         {
+          "has": {
+           "item": "greens",
+           "at_least": 4
+          }
+         },
+         {
+          "sees": {
+           "nearest": "storage"
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "store",
+        "target": {
+         "nearest": "storage"
+        },
+        "item": "greens",
+        "qty": 4
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 10
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "gather",
+       "target": {
+        "nearest": "greens_bed"
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "root_grower": {
+    "routine": "tend the roots",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "all": [
+         {
+          "has": {
+           "item": "roots",
+           "at_least": 6
+          }
+         },
+         {
+          "sees": {
+           "nearest": "storage"
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "store",
+        "target": {
+         "nearest": "storage"
+        },
+        "item": "roots",
+        "qty": 6
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 10
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "gather",
+       "target": {
+        "nearest": "root_plot"
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "peat_cutter": {
+    "routine": "cut peat",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "has": {
+         "item": "peat",
+         "at_least": 8
+        }
+       },
+       "then": {
+        "seq": [
+         {
+          "do": "goto",
+          "target": {
+           "place": "peat barn"
+          }
+         },
+         {
+          "do": "store",
+          "target": {
+           "nearest": "storage"
+          },
+          "item": "peat",
+          "qty": 8
+         }
+        ]
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 12
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "gather",
+       "target": {
+        "nearest": "peat_bank"
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "wrack_gatherer": {
+    "routine": "gather wrack",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "has": {
+         "item": "kelp",
+         "at_least": 8
+        }
+       },
+       "then": {
+        "seq": [
+         {
+          "do": "goto",
+          "target": {
+           "place": "ash house"
+          }
+         },
+         {
+          "do": "store",
+          "target": {
+           "nearest": "storage"
+          },
+          "item": "kelp",
+          "qty": 8
+         }
+        ]
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 12
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "gather",
+       "target": {
+        "nearest": "kelp_bed"
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "ash_burner": {
+    "routine": "burn kelp to ash",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "all": [
+         {
+          "has": {
+           "item": "ash",
+           "at_least": 2
+          }
+         },
+         {
+          "sees": {
+           "nearest": "storage"
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "store",
+        "target": {
+         "nearest": "storage"
+        },
+        "item": "ash",
+        "qty": 2
+       }
+      },
+      {
+       "first": [
+        {
+         "if": {
+          "can": {
+           "do": "make",
+           "target": {
+            "nearest": "hearth"
+           },
+           "item": "ash"
+          }
+         },
+         "then": {
+          "do": "make",
+          "target": {
+           "nearest": "hearth"
+          },
+          "item": "ash"
+         }
+        },
+        {
+         "if": {
+          "can": {
+           "do": "make",
+           "target": {
+            "nearest": "furnace"
+           },
+           "item": "ash"
+          }
+         },
+         "then": {
+          "do": "make",
+          "target": {
+           "nearest": "furnace"
+          },
+          "item": "ash"
+         }
+        },
+        {
+         "if": {
+          "can": {
+           "do": "make",
+           "target": {
+            "nearest": "campfire"
+           },
+           "item": "ash"
+          }
+         },
+         "then": {
+          "do": "make",
+          "target": {
+           "nearest": "campfire"
+          },
+          "item": "ash"
+         }
+        }
+       ]
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "kelp",
+            "at_least": 4
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "kelp"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "kelp"
+         }
+        },
+        "item": "kelp",
+        "qty": 8
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "baker": {
+    "routine": "bake at the Batch",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "can": {
+         "do": "feed",
+         "target": {
+          "nearest": "oven"
+         },
+         "item": "peat"
+        }
+       },
+       "then": {
+        "do": "feed",
+        "target": {
+         "nearest": "oven"
+        },
+        "item": "peat"
+       }
+      },
+      {
+       "if": {
+        "can": {
+         "do": "make",
+         "target": {
+          "nearest": "oven"
+         },
+         "item": "baked_roots"
+        }
+       },
+       "then": {
+        "do": "make",
+        "target": {
+         "nearest": "oven"
+        },
+        "item": "baked_roots"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "has": {
+           "item": "baked_roots",
+           "at_least": 4
+          }
+         },
+         {
+          "sees": {
+           "nearest": "storage"
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "store",
+        "target": {
+         "nearest": "storage"
+        },
+        "item": "baked_roots",
+        "qty": 4
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "roots",
+            "at_least": 1
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "roots"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "roots"
+         }
+        },
+        "item": "roots",
+        "qty": 6
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "peat",
+            "at_least": 1
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "peat"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "peat"
+         }
+        },
+        "item": "peat",
+        "qty": 4
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "smoker": {
+    "routine": "smoke fish",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "can": {
+         "do": "feed",
+         "target": {
+          "nearest": "smokehouse"
+         },
+         "item": "peat"
+        }
+       },
+       "then": {
+        "do": "feed",
+        "target": {
+         "nearest": "smokehouse"
+        },
+        "item": "peat"
+       }
+      },
+      {
+       "if": {
+        "can": {
+         "do": "make",
+         "target": {
+          "nearest": "smokehouse"
+         },
+         "item": "smoked_fish"
+        }
+       },
+       "then": {
+        "do": "make",
+        "target": {
+         "nearest": "smokehouse"
+        },
+        "item": "smoked_fish"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "has": {
+           "item": "smoked_fish",
+           "at_least": 3
+          }
+         },
+         {
+          "sees": {
+           "nearest": "storage"
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "store",
+        "target": {
+         "nearest": "storage"
+        },
+        "item": "smoked_fish",
+        "qty": 3
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "fish",
+            "at_least": 1
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "fish"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "fish"
+         }
+        },
+        "item": "fish",
+        "qty": 4
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "peat",
+            "at_least": 1
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "peat"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "peat"
+         }
+        },
+        "item": "peat",
+        "qty": 4
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "oil_renderer": {
+    "routine": "render lamp oil",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "all": [
+         {
+          "has": {
+           "item": "lamp_oil",
+           "at_least": 2
+          }
+         },
+         {
+          "sees": {
+           "nearest": "storage"
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "store",
+        "target": {
+         "nearest": "storage"
+        },
+        "item": "lamp_oil",
+        "qty": 2
+       }
+      },
+      {
+       "first": [
+        {
+         "if": {
+          "can": {
+           "do": "make",
+           "target": {
+            "nearest": "hearth"
+           },
+           "item": "lamp_oil"
+          }
+         },
+         "then": {
+          "do": "make",
+          "target": {
+           "nearest": "hearth"
+          },
+          "item": "lamp_oil"
+         }
+        },
+        {
+         "if": {
+          "can": {
+           "do": "make",
+           "target": {
+            "nearest": "furnace"
+           },
+           "item": "lamp_oil"
+          }
+         },
+         "then": {
+          "do": "make",
+          "target": {
+           "nearest": "furnace"
+          },
+          "item": "lamp_oil"
+         }
+        },
+        {
+         "if": {
+          "can": {
+           "do": "make",
+           "target": {
+            "nearest": "campfire"
+           },
+           "item": "lamp_oil"
+          }
+         },
+         "then": {
+          "do": "make",
+          "target": {
+           "nearest": "campfire"
+          },
+          "item": "lamp_oil"
+         }
+        }
+       ]
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "fish",
+            "at_least": 2
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "fish"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "fish"
+         }
+        },
+        "item": "fish",
+        "qty": 4
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "lamp_keeper": {
+    "routine": "keep the lamps",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "can": {
+         "do": "feed",
+         "target": {
+          "nearest": "lamp"
+         },
+         "item": "lamp_oil"
+        }
+       },
+       "then": {
+        "do": "feed",
+        "target": {
+         "nearest": "lamp"
+        },
+        "item": "lamp_oil"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "has": {
+            "item": "lamp_oil",
+            "at_least": 1
+           }
+          }
+         },
+         {
+          "sees": {
+           "nearest": {
+            "kind": "storage",
+            "holds": "lamp_oil"
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "take",
+        "target": {
+         "nearest": {
+          "kind": "storage",
+          "holds": "lamp_oil"
+         }
+        },
+        "item": "lamp_oil",
+        "qty": 2
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "cook": {
+    "routine": "keep the kitchen",
+    "graph": {
+     "first": [
+      {
+       "first": [
+        {
+         "if": {
+          "can": {
+           "do": "cook",
+           "target": {
+            "nearest": "hearth"
+           },
+           "item": "fish"
+          }
+         },
+         "then": {
+          "do": "cook",
+          "target": {
+           "nearest": "hearth"
+          },
+          "item": "fish"
+         }
+        },
+        {
+         "if": {
+          "can": {
+           "do": "cook",
+           "target": {
+            "nearest": "campfire"
+           },
+           "item": "fish"
+          }
+         },
+         "then": {
+          "do": "cook",
+          "target": {
+           "nearest": "campfire"
+          },
+          "item": "fish"
+         }
+        }
+       ]
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "server": {
+    "routine": "serve at the Marver",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "fisher": {
+    "routine": "fishing",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "has": {
+         "item": "fish",
+         "at_least": 4
+        }
+       },
+       "then": {
+        "seq": [
+         {
+          "do": "goto",
+          "target": {
+           "place": "store"
+          }
+         },
+         {
+          "do": "store",
+          "target": {
+           "nearest": "storage"
+          },
+          "item": "fish",
+          "qty": 4
+         }
+        ]
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 6
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "gather",
+       "target": {
+        "nearest": "fishing_spot"
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "line_maker": {
+    "routine": "fish and make lines",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "has": {
+         "item": "fish",
+         "at_least": 4
+        }
+       },
+       "then": {
+        "seq": [
+         {
+          "do": "goto",
+          "target": {
+           "place": "store"
+          }
+         },
+         {
+          "do": "store",
+          "target": {
+           "nearest": "storage"
+          },
+          "item": "fish",
+          "qty": 4
+         }
+        ]
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 6
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "gather",
+       "target": {
+        "nearest": "fishing_spot"
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "net_mender": {
+    "routine": "mend nets",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "boatwright": {
+    "routine": "work on the boats",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 6
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "porter": {
+    "routine": "carry for the Store",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 6
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "tally_keeper": {
+    "routine": "keep the tally",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "near": {
+         "target": {
+          "nearest": "sign"
+         },
+         "within": 3
+        }
+       },
+       "then": {
+        "seq": [
+         {
+          "do": "read",
+          "target": {
+           "nearest": "sign"
+          }
+         },
+         {
+          "do": "keep"
+         }
+        ]
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "reader": {
+    "routine": "teach and read",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "near": {
+         "target": {
+          "nearest": "sign"
+         },
+         "within": 3
+        }
+       },
+       "then": {
+        "seq": [
+         {
+          "do": "read",
+          "target": {
+           "nearest": "sign"
+          }
+         },
+         {
+          "do": "keep"
+         }
+        ]
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "healer": {
+    "routine": "tend the hurt",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "health_of": {
+         "target": {
+          "nearest": "person"
+         },
+         "below": 70
+        }
+       },
+       "then": {
+        "do": "tend",
+        "target": {
+         "nearest": "person"
+        }
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "washer": {
+    "routine": "keep the wash-house",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "pot_maker": {
+    "routine": "make pots",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 4
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "mason": {
+    "routine": "mend walls",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "all": [
+         {
+          "has": {
+           "item": "stone",
+           "at_least": 6
+          }
+         },
+         {
+          "sees": {
+           "nearest": "storage"
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "store",
+        "target": {
+         "nearest": "storage"
+        },
+        "item": "stone",
+        "qty": 5
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 10
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "gather",
+       "target": {
+        "nearest": "boulder"
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "warden": {
+    "routine": "keep the Hanger",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": {
+           "place": "work"
+          },
+          "within": 10
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "place": "work"
+        }
+       }
+      },
+      {
+       "do": "keep"
+      }
+     ]
+    }
+   },
+   "child": {
+    "routine": "play",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "all": [
+         {
+          "not": {
+           "near": {
+            "target": "home",
+            "within": 14
+           }
+          }
+         },
+         {
+          "not": {
+           "near": {
+            "target": {
+             "place": "square"
+            },
+            "within": 14
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "goto",
+        "target": "home"
+       }
+      },
+      {
+       "seq": [
+        {
+         "do": "play"
+        },
+        {
+         "do": "wander"
+        },
+        {
+         "do": "play"
+        },
+        {
+         "wait": 2
+        }
+       ]
+      }
+     ]
+    }
+   }
+  }
+ },
+ "town_life": {
+  "work": {
+   "glassmaster": [
+    "lot:cone"
+   ],
+   "blower": [
+    "lot:cone"
+   ],
+   "stoker": [
+    "lot:cone"
+   ],
+   "retired_blower": [
+    "lot:cone"
+   ],
+   "cullet_sorter": [
+    "lot:cullet_shed"
+   ],
+   "glazier": [
+    "lot:lehr_house"
+   ],
+   "lehr_keeper": [
+    "lot:lehr_house"
+   ],
+   "grower": [
+    "greens_bed",
+    "lot:glasshouse_1"
+   ],
+   "root_grower": [
+    "root_plot",
+    "garden"
+   ],
+   "peat_cutter": [
+    "peat_bank",
+    "lot:peat_barn"
+   ],
+   "wrack_gatherer": [
+    "kelp_bed",
+    "lot:ash_house"
+   ],
+   "ash_burner": [
+    "lot:ash_house"
+   ],
+   "baker": [
+    "lot:batch"
+   ],
+   "smoker": [
+    "lot:smokehouse_1",
+    "lot:smokehouse_2"
+   ],
+   "oil_renderer": [
+    "lot:lamp_house"
+   ],
+   "lamp_keeper": [
+    "lot:watchglass"
+   ],
+   "cook": [
+    "lot:marver"
+   ],
+   "server": [
+    "lot:marver"
+   ],
+   "fisher": [
+    "fishing_spot",
+    "lot:fish_steps"
+   ],
+   "line_maker": [
+    "fishing_spot",
+    "lot:net_loft_2"
+   ],
+   "net_mender": [
+    "lot:fish_steps"
+   ],
+   "boatwright": [
+    "lot:dry_dock",
+    "lot:boatshed"
+   ],
+   "porter": [
+    "lot:store",
+    "lot:heron"
+   ],
+   "tally_keeper": [
+    "lot:counting_house"
+   ],
+   "reader": [
+    "lot:readers_house"
+   ],
+   "healer": [
+    "lot:readers_house",
+    "hall"
+   ],
+   "washer": [
+    "lot:wash_house"
+   ],
+   "pot_maker": [
+    "lot:pot_house"
+   ],
+   "mason": [
+    "boulder",
+    "workshop"
+   ],
+   "warden": [
+    "lot:hanger_cottage"
+   ]
+  },
+  "places": {
+   "square": [
+    "plaza"
+   ],
+   "store": [
+    "lot:store",
+    "storage"
+   ],
+   "peat barn": [
+    "lot:peat_barn",
+    "storage"
+   ],
+   "ash house": [
+    "lot:ash_house",
+    "storage"
+   ]
+  },
+  "evening": [
+   "home"
+  ]
+ }
 }

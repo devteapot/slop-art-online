@@ -98,7 +98,7 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 | Machine | Floor | Target (floor + 30 GB, about one cold check build) |
 | --- | --- | --- |
 | dev-box | 40 GB | 70 GB |
-| Spark | 40 GB (the default; set `--floor-gb` when installing) | 70 GB |
+| Spark | 60 GB proposed (`--floor-gb 60`): its paid trial servers write to the same disk, and several agents build cold at once | 90 GB |
 | laptop | 40 GB (the default; set `--floor-gb` when installing) | 70 GB |
 
 When the folders that may go are gone and free space is still under the floor, the report says so (exit 3), and the list shows what holds the rest.
@@ -109,7 +109,7 @@ When the folders that may go are gone and free space is still under the floor, t
 - `~/archive`;
 - container storage, Docker and Podman volumes (never pruned) and the databases in them. `living/tools/reclaim_disk.sh`, which deletes idle SpacetimeDB replicas, stays a manual tool: the paused reference worlds are idle replicas;
 - `.local` evidence that is not a build folder;
-- worktree roots, symlinks, and anything outside this repository's worktrees;
+- worktree roots, symlinks, and anything outside this repository's worktrees, except the outside target folders a machine names (below);
 - each machine's own protected paths (below).
 
 **The machine's protected paths.** Each machine lists its own in `~/.config/slop-disk/protect.txt`: one path per line, `~` expanded, `#` starting a comment (a whole line, or after a space). A path protects everything under it, and a build folder that holds it is not removed either. `--protect PATH` (repeatable) adds more for one run. These add to the built-in list above; nothing can remove a built-in path. Every run reads the file, the timer's included, so an edit applies from the next run. A missing file adds nothing. A file that cannot be read, or a line that is not an absolute path, stops the run with exit 2, and nothing is removed. Every report, and `--list-protected`, lists each protected path with its source: `built in`, `the repository's main checkout`, the file and line, or `--protect`. A protected worktree's build folders are listed as `never` with the path that protects them. Example (the laptop):
@@ -119,6 +119,10 @@ When the folders that may go are gone and free space is still under the floor, t
 ~/dev/slop-trials     # 14 GB, the trials
 ~/dev/slop-play       # 2.5 GB, the play-tests
 ```
+
+A line with `*`, `?` or `[` is a glob, expanded on every run and listed once per match with its line (`~/.t3/worktrees/*/*/.local/living`, say, where verify runs build inside their evidence). A glob that matches nothing protects nothing.
+
+**Target folders outside the worktrees.** A machine whose agents build in private `CARGO_TARGET_DIR`s outside the worktrees (the Spark's `~/slop-<name>-target`, 16–24 GB each) names them in `~/.config/slop-disk/targets.txt` (`--targets-file`), in the same format. Without the file, no folder outside the worktrees is a candidate. A named folder must be a Cargo target. No worktree goes with it, so the in-use checks and the idle (24 hours) and pressure rules apply, never the merged rule, and the protected paths still win. Reports list them as `(outside the worktrees)`, and `--list-protected` prints them after the protected paths.
 
 **A target folder that holds other files** (a worker's `build.log` in its target root, say) keeps them. Only Cargo's own entries are removed (`debug`, `release`, the target-triple and profile folders, `.rustc_info.json`, `CACHEDIR.TAG`, `cargo-timings`), and the folder and the other files stay. A nested repository (a folder with its own `.git`) is not entered.
 
@@ -132,7 +136,7 @@ The report's `sizes:` line says which method was used. Whatever the method, the 
 
 **Known limit on macOS.** Without Full Disk Access, `lsof` cannot see the open files of root's processes and of system processes (Spotlight's `mds`, say). A build is still seen, because cargo, rustc and the game run as the user. A system process holding a file inside a build folder could be missed. The removal would then delete the file under it, which harms neither the process nor the build. The laptop does not grant Full Disk Access, and this limit stands.
 
-**How a removal happens.** Just before each removal the script looks again at the processes and containers. It takes every Cargo lock in the folder without waiting, renames the folder aside (`<folder>.slop-reclaim-<time>`), checks again that no process uses it, and deletes it. If a check fails, it renames the folder back. An aside folder left by an interrupted run is removed on a later run. `python3 living/tools/disk_clean_selftest.py` runs the policy in a throwaway home with aged fake targets (24 checks). It covers a merged worktree, a busy one, a fresh one, an old one holding a log, protected checkouts, untagged evidence, a foreign tag, a symlink and a nested repository. It also covers worktrees protected by the protect file and by `--protect`, a target holding a protected path, an invalid protect file, a file newer than the scan (idle 0.0 h, never negative), the measured pressure tier, and the container notes (podman with no machine; docker answering). Reports go to `~/.local/state/slop-disk/reports/` and `log.jsonl`, and on Linux also to the journal (`journalctl --user -u slop-disk-clean.service`).
+**How a removal happens.** Just before each removal the script looks again at the processes and containers. It takes every Cargo lock in the folder without waiting, renames the folder aside (`<folder>.slop-reclaim-<time>`), checks again that no process uses it, and deletes it. If a check fails, it renames the folder back. An aside folder left by an interrupted run is removed on a later run. `python3 living/tools/disk_clean_selftest.py` runs the policy in a throwaway home with aged fake targets (31 checks). It covers a merged worktree, a busy one, a fresh one, an old one holding a log, protected checkouts, untagged evidence, a foreign tag, a symlink and a nested repository. It also covers worktrees protected by the protect file and by `--protect`, a target holding a protected path, an invalid protect file, a file newer than the scan (idle 0.0 h, never negative), the measured pressure tier, the container notes (podman with no machine; docker answering), a protect-file glob, and outside target folders (idle, protected by a glob, active, busy, not Cargo's, and no `targets.txt`). Reports go to `~/.local/state/slop-disk/reports/` and `log.jsonl`, and on Linux also to the journal (`journalctl --user -u slop-disk-clean.service`).
 
 **Install** (re-run after `disk_clean.py` changes; it copies the script to `~/.local/share/slop-tools/`, so removing a worktree never breaks the timer). The installer reads `~/.config/slop-disk/protect.txt` the way the timer will and prints every protected path. If the file is invalid, it stops before installing. When there is no file, it writes a template that holds only comments.
 
@@ -191,6 +195,20 @@ B2 and A2 were not run: each cold arm needs about 15 GB, and free space kept fal
 
 **Disk.** A cold check's target folder is 14–17 GB (debug 9 GB, release 3 GB, wasm 2 GB). On 2026-11-11 the cleanup's first runs on the dev-box found 24 build folders. All but one were in use or active (idle under 2 hours), so it removed 1 (0.9 GB). By then the folders of most finished worktrees had already been removed by hand.
 
+## Measurements (Spark, 2026-11-11)
+
+The DGX Spark: aarch64, 20 cores, `CARGO_BUILD_JOBS` unset (20), with paid trial batches and other agents building throughout. Every run was `check.py` on the same commit (`e56c203`, tool-7) in one fresh worktree, each with a fresh target folder and its own stamp store. The cache had its own folder and port. The raw records (`check.py --json`, logs) are in `~/slop-mq/sccache-bench-20261111/` on the Spark.
+
+| Case | Wall | Load at start → end (peak) | Steps: authority, mind+viewer, game, viewer-wasm, rules tests | sccache |
+| --- | --- | --- | --- | --- |
+| a: cold, no cache | 509 s | 11 → 25 | 156, 285, 280, 312, 219 | none |
+| b: cold, empty cache | 436 s | 15 → 34 | 71, 218, 282, 168, 215 | 2 hits, 1,480 misses, 393 not cacheable |
+| c: cold target, warm cache | 638 s | 34 → 40 (49) | 112, 334, 487, 324, 299 | 1,068 hits, 414 misses, 393 not cacheable |
+| c2: the same again | 582 s | 33 → 37 (49) | 147, 324, 358, 246, 254 | 1,068 hits, 414 misses, 392 not cacheable |
+| d: c rerun unchanged | 0.6 s | 40 | all five skipped by stamps | – |
+
+On aarch64, sccache behaved as it did on the dev-box: the pinned musl build ran, and with a warm cache it served the same 56% of compile requests (1,068 of 1,909). It showed no gain in wall time here. The warm-cache runs ran under about twice the uncached run's load. The steps it cannot serve also set the length of each lane: the game crate and its link, the debug workspace crates, and the rules test run, 200–300 s under this load. A second uncached run, to interleave the arms, was not started: free space had fallen to 47 GB. The cache held 3.8 GB afterwards. Stamps made the unchanged rerun take under a second, and a docs-only merge through `living-merge` too, because the coordinator's merge of `main` had already stamped every step.
+
 ## Adoption
 
 Every part arrives with `main` once `tool-7` is merged; `just living-check` keeps its name and its five steps. Each machine then does the following.
@@ -203,8 +221,8 @@ Every part arrives with `main` once `tool-7` is merged; `just living-check` keep
 **dev-box** (done on 2026-11-11): `install_sccache.sh` ran (v0.19.0), the timer is installed (`disk_clean_install.sh --floor-gb 40`), and lingering is on.
 
 **Spark** (aarch64 Linux, its coordinator):
-1. `living/tools/install_sccache.sh` (the pinned aarch64 musl build).
-2. `living/tools/disk_clean_install.sh --floor-gb 40`, after a dry run `just living-disk-clean`. Check the dry run's list against the Spark's own rules: `~/kimodo-test` and the Hugging Face cache are not worktrees of this repository, so they are never candidates. If the Spark has protected checkouts other than the five listed, add them to `~/.config/slop-disk/protect.txt` first.
+1. `living/tools/install_sccache.sh` (the pinned aarch64 musl build) works on the Spark. It puts sccache where every check on the machine finds it, so installing it turns on the cache for every agent's check at once. That is the coordinator's call; see "Measurements (Spark)". A bench passes `SLOP_SCCACHE=<private copy>` instead.
+2. `living/tools/disk_clean_install.sh --floor-gb 60`, after a dry run `just living-disk-clean`. The Spark's `protect.txt` (evidence globs, labs, run checkouts and the running batches' targets) and `targets.txt` (`~/slop-*-target`) were written on 2026-11-11; check the dry run's list against them.
 3. `loginctl show-user $USER -p Linger`; if it is `no`, run `loginctl enable-linger $USER` so the timer runs without a login.
 
 **Laptop** (macOS, Apple silicon), after `tool-7b` is merged:

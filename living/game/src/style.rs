@@ -173,7 +173,7 @@ fn surface_layers() -> [Vec4; SURFACES] {
 pub struct DetailLayers(pub Handle<Image>);
 
 fn load_detail(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    commands.insert_resource(DetailLayers(images.add(crate::terrain::load_array("textures/material", &Surface::ALL.map(Surface::name)))));
+    commands.insert_resource(DetailLayers(images.add(crate::terrain::load_array("textures/material", &Surface::ALL.map(Surface::name), |_| None))));
 }
 
 /// Give a scenery material the painted surfaces its vertex colours name.
@@ -283,6 +283,11 @@ pub struct Style {
     pub line_strength: f32,
     pub depth_threshold: f32,
     pub normal_threshold: f32,
+    /// The smallest step between two parallel faces a crease line marks (m): a slate's lower
+    /// edge or a sill is drawn by the model, and its lines beaded and crawled as the view moved,
+    /// a pixel or so wide (edges-1, the owner's Cullet walk). 0 marks every crease (the old
+    /// rule, `LIVING_GAME_PERF=slivers` for A/B).
+    pub crease_step: f32,
     pub line_width: f32,
     pub line_fade: [f32; 2],
     pub screen_rim: f32,
@@ -344,6 +349,7 @@ impl Default for Style {
             line_strength: 0.85,
             depth_threshold: 0.06,
             normal_threshold: 0.55,
+            crease_step: 0.06,
             line_width: 1.0,
             line_fade: [25.0, 70.0],
             screen_rim: 0.18,
