@@ -20,6 +20,7 @@ use std::rc::Rc;
 mod check;
 pub mod context;
 pub mod fields;
+mod ui;
 pub use check::Report;
 
 #[derive(Clone, Debug, Default)]
@@ -779,6 +780,9 @@ pub struct Scripts {
     structures: HashMap<String, StructureTraits>,
     /// The data tables, shared with the engine's primitives.
     tables: Rc<RefCell<Tables>>,
+    /// How each skill is presented (`<name>_ui()` over its defaults), and what was wrong with
+    /// the declarations (an install refuses them; a client plays on with the defaults).
+    ui: ui::UiRead,
 }
 
 /// What a kind of structure does for those near it (its traits in `structures()`).
@@ -797,9 +801,9 @@ pub struct StructureTraits {
     pub burns: Option<Burns>,
 }
 
-/// What a client shows of an item or of what a recipe makes (`Scripts::look_of`).
+/// What a client shows of an item or of what a recipe makes (`Scripts::item_look_of`).
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Look {
+pub struct ItemLook {
     /// A short stable id the client draws it by (docs/WORLD_RULES.md lists them).
     pub icon: String,
     /// Its name for players, lower case as in a sentence.
@@ -928,15 +932,19 @@ fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
     for f in ["combat_cooldown", "combat_recover", "combat_cost"] {
         add(f, &skills);
     }
-    for f in ["lunge", "max_hp", "yield_ms", "carry_limit", "carried_spoil", "remains_s"] {
+    // Rates and durations in game time (`_per_h`, `_h`), and the same in real time as scripts
+    // before rates-2 wrote them (`spoil_rate`, `regrow`, `remains_s`, `trap_every_s`).
+    for f in ["lunge", "max_hp", "yield_ms", "carry_limit", "carried_spoil", "remains_h", "remains_s"] {
         add(f, &kinds);
     }
+    add("spoil_per_h", &items);
     add("spoil_rate", &items);
     add("nutrition", &items);
+    add("regrow_per_h", &resources);
     add("regrow", &resources);
     add("planted_max", &resources);
     add("kept_spoil", &structures);
-    for f in ["trap_every_s", "trap_holds"] {
+    for f in ["trap_every_h", "trap_every_s", "trap_holds"] {
         add(f, &["meat".to_string()]);
     }
     // A dash's and a step's distance and speed by kind.
@@ -983,7 +991,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1010,6 +1018,9 @@ impl Scripts {
                 s.num_of(&f, &n, 0.0);
             }
         }
+        // Presentation last: it reads the skills, shapes, shows and tables, and never fails the
+        // compile (`ui_errors`).
+        s.ui = s.read_ui();
         Ok(s)
     }
 
@@ -1283,13 +1294,13 @@ impl Scripts {
     /// How an item looks in a client (`item_look`), or what a recipe makes (`recipe_look`: its
     /// product's look under the recipe's own `icon` and `label`). None when the script has no
     /// such function or it fails (a script from before 2026-11-11's looks).
-    pub fn look_of(&self, f: &str, name: &str) -> Option<Look> {
+    pub fn item_look_of(&self, f: &str, name: &str) -> Option<ItemLook> {
         if !self.has(f) {
             return None;
         }
         let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (name.to_string(),)).ok()?.try_cast::<Map>()?;
         let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
-        Some(Look { icon: text("icon"), label: text("label"), group: text("group") })
+        Some(ItemLook { icon: text("icon"), label: text("label"), group: text("group") })
     }
 
     /// A yes-or-no law of a context (`theft(a)`); false when the script has none or it fails.
@@ -1764,6 +1775,14 @@ impl Scripts {
         Ok(NeedLaw::from_dynamic(d, self.hour_ms)?.rates(&ctx.actor))
     }
 
+    /// Whether `rates(a)`'s answer for the actor's state is already kept, so [`Self::need_law`]
+    /// will not ask the law (for profiling how often the law itself runs).
+    pub fn need_law_kept(&self, ctx: &SkillCtx) -> bool {
+        let mut key = Vec::with_capacity(64);
+        context::key(ctx, self.shapes.knack(&ctx.skill), &self.plan("rates"), &mut key);
+        self.needs.borrow().contains_key(&key)
+    }
+
     /// What `rates(a)` says for the actor's state.
     pub fn need_law(&self, ctx: &SkillCtx) -> Result<NeedLaw, String> {
         let plan = self.plan("rates");
@@ -1848,7 +1867,9 @@ impl Scripts {
             scent_hz: g("scent_hz", l.scent_hz).clamp(0.1, 60.0),
             input_hz: g("input_hz", l.input_hz).clamp(1.0, 120.0),
             input_burst: g("input_burst", l.input_burst).clamp(1.0, 240.0),
-            pasture_regen: g("pasture_regen", l.pasture_regen).clamp(0.0, 1.0),
+            // Per game hour (`pasture_regen_per_h`), or per real minute in a script that still
+            // writes `pasture_regen`; the engine keeps it per real minute.
+            pasture_regen: if m.contains_key("pasture_regen") || !m.contains_key("pasture_regen_per_h") { g("pasture_regen", l.pasture_regen) } else { m.get("pasture_regen_per_h").and_then(number).map_or(l.pasture_regen, |v| (v * self.per_minute()) as f32) }.clamp(0.0, 1.0),
             alone_within: g("alone_within", l.alone_within).clamp(0.0, 40.0),
             face_slack: g("face_slack", l.face_slack).clamp(0.0, 3.0),
             flee_clear: g("flee_clear", l.flee_clear).clamp(1.0, 60.0),
@@ -1895,6 +1916,56 @@ impl Scripts {
         let v = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok().and_then(|d| number(&d));
         self.names.borrow_mut().entry(f.to_string()).or_default().insert(arg.to_string(), v);
         v.unwrap_or(default)
+    }
+
+    /// Game hours in a real minute on this world's day (2 on the shipped 12-minute day, ½ on a
+    /// 48-minute one): what a rate written per game hour is multiplied by to be per real minute.
+    pub fn per_minute(&self) -> f64 {
+        60_000.0 / self.hour_ms
+    }
+
+    /// A rate of a name (spoiling of an item, regrowth of a resource) per real minute on this
+    /// world's day. The script writes it per game hour in `per_h` (`spoil_per_h`); a script that
+    /// still defines the real-minute law `per_min` (`spoil_rate`, every script before rates-2,
+    /// or an overlay written in real time) is taken as it is. `default` is per real minute.
+    pub fn per_real_minute(&self, per_h: &str, per_min: &str, arg: &str, default: f64) -> f64 {
+        if !self.has(per_min) && self.has(per_h) {
+            let v = self.num_of(per_h, arg, f64::NAN);
+            return if v.is_nan() { default } else { v * self.per_minute() };
+        }
+        self.num_of(per_min, arg, default)
+    }
+
+    /// A duration of a name (how long remains lie, how often a trap catches) in real
+    /// milliseconds on this world's day: written in game hours in `hours` (`remains_h`), or in
+    /// real seconds in `seconds` (`remains_s`) by a script that still defines that law, which is
+    /// taken as it is. `default_ms` is real milliseconds.
+    pub fn real_ms(&self, hours: &str, seconds: &str, arg: &str, default_ms: f64) -> f64 {
+        if !self.has(seconds) && self.has(hours) {
+            let v = self.num_of(hours, arg, f64::NAN);
+            return if v.is_nan() { default_ms } else { v * self.hour_ms };
+        }
+        self.num_of(seconds, arg, default_ms / 1000.0) * 1000.0
+    }
+
+    /// Share of an item that spoils in a real minute (`spoil_per_h`, a game hour's share).
+    pub fn spoil_per_min(&self, item: &str) -> f64 {
+        self.per_real_minute("spoil_per_h", "spoil_rate", item, 0.0)
+    }
+
+    /// Units a resource of a kind regrows in a real minute of growing time (`regrow_per_h`).
+    pub fn regrow_per_min(&self, kind: &str, default: f64) -> f64 {
+        self.per_real_minute("regrow_per_h", "regrow", kind, default)
+    }
+
+    /// Real milliseconds a creature's remains lie (`remains_h`, game hours).
+    pub fn remains_ms(&self, kind: &str) -> f64 {
+        self.real_ms("remains_h", "remains_s", kind, 1_800_000.0)
+    }
+
+    /// Real milliseconds between a trap's catches (`trap_every_h`, game hours).
+    pub fn trap_every_ms(&self) -> f64 {
+        self.real_ms("trap_every_h", "trap_every_s", "meat", 240_000.0)
     }
 
     /// Items a one-argument law gives as a map (`fn carcass(kind) { #{ meat: 5, hide: 1 } }`),
@@ -2315,7 +2386,7 @@ mod tests {
         assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits::default()));
         assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
         assert_eq!((s.num_of("kept_spoil", "storage", 0.0), s.num_of("planted_max", "berry_bush", 0.0)), (1.0 / 3.0, 5.0));
-        assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.num_of("remains_s", "deer", 0.0), s.num_of("dodge_speed", "person", 0.0)), (55.0, 1.8, 1800.0, 5.2));
+        assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.remains_ms("deer"), s.num_of("dodge_speed", "person", 0.0)), (55.0, 1.8, 1_800_000.0, 5.2));
         // The words minds and players read are the ones the lists gave.
         assert_eq!(s.text_of("source_of", "food").unwrap(), "gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt");
         let cook = |s: &Scripts, item: &str| {
@@ -2405,7 +2476,28 @@ mod tests {
         let odd = Scripts::new(&format!("{}\nfn odd(k) {{ if k == \"a\" {{ 3 }} else {{ #{{ meat: 0.5, hide: -1, bone: 2 }} }} }}", include_str!("../../scripts/skills.rhai"))).unwrap();
         assert!(odd.items_of("odd", "a").is_empty());
         assert_eq!(odd.items_of("odd", "b"), vec![("bone".to_string(), 2)]);
-        assert_eq!((sc.num_of("remains_s", "deer", 0.0), sc.num_of("remains_s", "person", 0.0)), (1800.0, 3600.0));
+        assert_eq!((sc.remains_ms("deer"), sc.remains_ms("person")), (1_800_000.0, 3_600_000.0));
+    }
+
+    /// Spoiling, regrowth, grass, traps and remains are written in game time and turned into
+    /// real time for the world's day; a script that still writes them in real time (a law of
+    /// the old name) is taken as it is, whatever the day.
+    #[test]
+    fn game_time_rates_follow_the_day_and_real_time_laws_stay_real() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let lab = Scripts::new(src).unwrap();
+        let long = Scripts::with_day(src, 48 * 60_000).unwrap();
+        // The shipped numbers on the 12-minute day: what they were per real minute and second.
+        assert_eq!((lab.spoil_per_min("fish"), lab.spoil_per_min("smoked_fish"), lab.spoil_per_min("berries")), (0.05, 0.002, 0.02));
+        assert_eq!((lab.regrow_per_min("fishing_spot", 0.0), lab.regrow_per_min("berry_bush", 0.0), lab.regrow_per_min("no_such", 0.5)), (1.4, 1.2, 0.0));
+        assert_eq!((lab.trap_every_ms(), lab.remains_ms("wolf"), lab.laws().pasture_regen), (240_000.0, 1_800_000.0, 0.0015));
+        // A four-times-longer day: a quarter of the rate per real minute, four times the time.
+        assert_eq!((long.spoil_per_min("fish"), long.regrow_per_min("fishing_spot", 0.0)), (0.0125, 0.35));
+        assert_eq!((long.trap_every_ms(), long.remains_ms("person"), long.laws().pasture_regen), (960_000.0, 14_400_000.0, 0.000375));
+        // An overlay in real time keeps its numbers on any day.
+        let old = format!("{src}\nfn spoil_rate(item) {{ 0.05 }}\nfn remains_s(kind) {{ 90 }}\nfn trap_every_s(x) {{ 60.0 }}\nfn regrow(kind) {{ 2.0 }}");
+        let old = Scripts::with_day(&old, 48 * 60_000).unwrap();
+        assert_eq!((old.spoil_per_min("fish"), old.remains_ms("deer"), old.trap_every_ms(), old.regrow_per_min("tree", 0.0)), (0.05, 90_000.0, 60_000.0, 2.0));
     }
 
     #[test]
@@ -2724,7 +2816,7 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
     /// is not text is refused at install.
     #[test]
     fn items_and_recipes_say_how_they_look() {
-        let look = |icon: &str, label: &str, group: &str| Some(Look { icon: icon.into(), label: label.into(), group: group.into() });
+        let look = |icon: &str, label: &str, group: &str| Some(ItemLook { icon: icon.into(), label: label.into(), group: group.into() });
         for s in [scripts(), cullet()] {
             let t = s.tables();
             for n in t.names("items") {
@@ -2732,21 +2824,25 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
                 for k in ITEM_LOOK {
                     assert!(e.get(k).and_then(|v| v.clone().into_string().ok()).is_some_and(|v| !v.is_empty()), "item {n} has no {k}");
                 }
+                // Within the interface's vocabulary (`living_rules::ui`).
+                let text = |k: &str| e[k].clone().into_string().unwrap();
+                assert!(crate::ui::ITEM_ICONS.contains(&text("icon").as_str()), "item {n}: icon {} is not in ui::ITEM_ICONS", text("icon"));
+                assert!(crate::ui::ITEM_GROUPS.contains(&text("group").as_str()), "item {n}: group {} is not in ui::ITEM_GROUPS", text("group"));
             }
         }
         let (shipped, s) = (scripts(), cullet());
-        assert_eq!(shipped.look_of("item_look", "cooked_fish"), look("cooked_fish", "cooked fish", "food"));
-        assert_eq!(s.look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
-        assert_eq!(s.look_of("item_look", "glass"), look("glass", "glass", "glass"));
+        assert_eq!(shipped.item_look_of("item_look", "cooked_fish"), look("cooked_fish", "cooked fish", "food"));
+        assert_eq!(s.item_look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
+        assert_eq!(s.item_look_of("item_look", "glass"), look("glass", "glass", "glass"));
         // An item without looks (a world's own, from before): its name, spaced; no group.
-        assert_eq!(s.look_of("item_look", "glass_beads"), look("glass_beads", "glass beads", ""));
+        assert_eq!(s.item_look_of("item_look", "glass_beads"), look("glass_beads", "glass beads", ""));
         // A recipe looks like its product, a recipe that turns items like each product.
-        assert_eq!(s.look_of("recipe_look", "glass"), s.look_of("item_look", "glass"));
-        assert_eq!(s.look_of("recipe_look", "smoked_meat"), look("smoked_meat", "smoked meat", "food"));
+        assert_eq!(s.item_look_of("recipe_look", "glass"), s.item_look_of("item_look", "glass"));
+        assert_eq!(s.item_look_of("recipe_look", "smoked_meat"), look("smoked_meat", "smoked meat", "food"));
         let over = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"lamp_oil\", at: \"fire\",", "#{ name: \"lamp_oil\", label: \"rendered oil\", icon: \"oil_jar\", at: \"fire\",");
         let over = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), &over).unwrap()).unwrap();
-        assert_eq!(over.look_of("recipe_look", "lamp_oil"), look("oil_jar", "rendered oil", "fuel"));
-        assert_eq!(over.look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
+        assert_eq!(over.item_look_of("recipe_look", "lamp_oil"), look("oil_jar", "rendered oil", "fuel"));
+        assert_eq!(over.item_look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
         let bad = include_str!("../../scripts/skills.rhai").replace("#{ name: \"berries\", icon: \"berries\",", "#{ name: \"berries\", icon: 3,");
         assert_eq!(Scripts::new(&bad).err().unwrap(), "items: the icon of `berries` must be a text");
     }
@@ -2944,6 +3040,22 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         assert!(why.contains("no technique called hide_preservation") && why.contains("tanning") && why.contains("cloak"), "{why}");
         c.item = "cloak".into();
         assert!(s.check("teach", &c).unwrap_err().contains("don't know cloak yourself"));
+    }
+
+    /// Every know-how can be taught, not only what experimenting can reveal: fire_bolt and
+    /// wound_tending (learned only from someone or from writing) were refused as "no technique".
+    #[test]
+    fn every_know_how_can_be_taught() {
+        let s = scripts();
+        let names: Vec<String> = s.tables().names("know_how").to_vec();
+        assert!(names.iter().any(|n| n == "fire_bolt") && names.iter().any(|n| n == "wound_tending"), "{names:?}");
+        for t in &names {
+            let mut c = ctx();
+            c.item = t.clone();
+            c.actor.knows = names.clone();
+            c.target = TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "adult".into(), knows: s.tables().words("know_how", t, "requires"), ..Default::default() };
+            assert_eq!(s.check("teach", &c), Ok(()), "teach {t}");
+        }
     }
 
     #[test]

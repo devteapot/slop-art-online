@@ -1,6 +1,6 @@
 # Interface from rules and skills
 
-Status: Approved 2026-11-11 as the design; steps are built in order; open questions below are not yet settled. Nothing here is built. Line references are to `origin/main` at `bade5c09` unless a branch is named.
+Status: Approved 2026-11-11 as the design; steps are built in order; open questions below are not yet settled. Step 1 is built on `ui-decl-1` (in review by the Spark, not yet merged); nothing else is built. Line references are to `origin/main` at `bade5c09` unless a branch is named.
 
 The owner's idea: "Most of the UI is related to the world rules or skills. So I think we should have a way to compose the UI by those rules and skills, with a kind of framework that attaches to exposed primitives from the game engine that can be scripted by the rules and skills, in addition to the behaviour. They should also describe how the user interacts with these systems and how they plug into the world."
 
@@ -240,7 +240,7 @@ The client keeps a fixed vocabulary. The rules choose names from it, and only th
 | `toggle` | presses to switch a body state (drawn or sheathed) | a binding; the state shows on its slot |
 | `aim_point` | aims at a point within the spec's reach; a `marker` shows the reach | the ground point under the cursor; sent as `use_skill(…, x, y)` or `target: {"at": [x, y]}` |
 | `aim_dir` | aims a direction; a `marker` shows the arc | cursor or facing direction |
-| `pick_person` | picks the hovered person, or cycles with Tab within reach | `verbs.rs` aim; `talk.rs` earshot order |
+| `pick_target` | picks the hovered target, or cycles with Tab within reach | `verbs.rs` aim; `talk.rs` earshot order |
 | `pick_item` | picks from a sub-list of the pack, or from a declared list | `list` or `grid` |
 | `pick_qty` | sets an amount, from 1 up to the amount carried | new: a stepper in the sub-list (today every quantity is 1) |
 | `drag_onto` | drags an item onto a person, their window or a thing | `drop_target` |
@@ -257,6 +257,7 @@ The client keeps a fixed vocabulary. The rules choose names from it, and only th
 | `self` | C, the acts on oneself | `human_act` with no target |
 | `item` | Clicking an item in the pack | as for `self`, with that item |
 | `box` | The ways chips in the text box | `human_speak(text, to, way)` |
+| `offer` | An incoming offer or proposal | `human_act` toward its sender, `target: {"id": sender}`; the offer's id as the act's reference once rules-offers-2 adds one |
 
 Declarations can add rows to two fixed window kinds: `person` (pinned acts) and `skills` (descriptions). A new window kind is a client change (section 4).
 
@@ -296,18 +297,18 @@ The client's theme maps each name to assets. The lists live in `living_rules::ui
 | Key | Value | Default when absent |
 |---|---|---|
 | `label` | Short display name ("Fire bolt"). For a way, only `_speech()` sets it | The name, with `_` replaced by a space and capitalised (as now) |
-| `on` | One place or a list (section 2) | `bar` for a skill in `skill_bar()`. Otherwise from the spec: `person` and `thing` if `target`, `self` otherwise, and `item` if `item` |
+| `on` | One place or a list (section 2); never empty (hide a skill with `listed: false`) | `bar` for a skill in `skill_bar()`. Otherwise from the spec, unless real-time combat: `person` (and `thing` when checked) if `target`, `self` otherwise, and `item` for a pack item with no target |
 | `place` | For the bar: `primary`, `secondary`, `skill`, `jump`, `dodge`, `weapon` or `extra` | By aim, as the WIP's `Roles::of` does now, but computed in `living_rules::ui` |
 | `order` | A number: position within its place or list. For a way, only `_speech()` sets it | Script order |
 | `input` | An input kind (section 2) | From the combat aim: creature → `tap`; self_or_ally → `tap`, on the hovered ally, else oneself; point → `aim_point`; facing → `hold`; dash → `tap`. Otherwise `tap` |
-| `picks` | What must be chosen. `person` needs a spec with `target: true`; `item` needs `item`; `qty`, `want` and `words` need those args (`qty`, `want`, `text`) | From the spec |
+| `picks` | What must be chosen. `target` needs a spec with `target: true`; `item` needs `item`; `qty`, `want` and `words` need those args (`qty`, `want`, `text`) | From the spec |
 | `choose` | How an item is chosen: `list` or `grid` | `list` |
 | `detail` | The name of a script function that takes a choice's name and returns a text describing it | none |
 | `unready` | What a press does while the skill's combat `stance` is not met: `toggle` (the press switches the state instead) or `grey` | `grey` |
 | `toggles` | The body state this declaration switches | none |
 | `drag` | Dropping an item on this target does this act: `person` or `thing` | none |
 | `pin` | Shown as a button in the person window | false |
-| `running` | `#{ show: "windup" \| "progress" \| "held" \| "none", text }` | `windup` for combat, `progress` for an act that lasts over 2 s |
+| `running` | `#{ show: "windup" \| "progress" \| "held" \| "none", text }` | `windup` for timed combat, `held` for a guard, `progress` for a `latch` skill (work not dropped half-done) |
 | `refused` | `grey` or `note` (see below) | `grey` on the bar, `note` elsewhere |
 | `look` | `#{ icon, clip, effect }`; `clip` may be a list | `icon` and `effect` by aim, as `combat.rs:200-208` does now. `clip` is the skill's `_shows().look` if it has one, else by aim |
 | `marker` | `circle`, `arc`, `line` or `none` | From the aim |
@@ -391,7 +392,7 @@ fn firebolt_ui() {
 
 ```rhai
 fn give_ui() {
-    #{ label: "Give", on: ["person", "item"], picks: ["person", "item", "qty"], choose: "list", drag: "person", pin: true, order: 0,
+    #{ label: "Give", on: ["person", "item"], picks: ["target", "item", "qty"], choose: "list", drag: "person", pin: true, order: 0,
        look: #{ icon: "give", clip: "hand" }, refused: "note" }
 }
 ```
@@ -445,7 +446,7 @@ fn whisper_ui() {
 
 How the box uses it:
 - **Chips.** The box's chips are the ways in their `_speech()` `order`, with their `label`.
-- **Greying.** The whisper chip greys by the client's distance against `reach` and its know-how against `needs`. Its words today are Rust formats in the authority (`speech-1` `authority/src/speech.rs:93-101`, "too far to {way}: step closer"), which the client can only copy. They should move into `living_rules` as one `WaySpec` function that both `speak` and the chip call.
+- **Greying.** The whisper chip greys by the client's distance against `reach` and its know-how against `needs`. Its words are the way's own script check (`whisper_check`, being built by `speech-1`), which the client runs before sending, as the F list runs `_check`; they stay in the script, not in Rust (the Spark, 2026-11-11).
 - **Rows.** `rows` says how to draw the kinds this way declares, its `kind` and `noticed.kind`:
   - `whisper` is a line with words in the log, with a hushed bubble;
   - `whispered` is "…" between the two people.
@@ -530,8 +531,76 @@ Each step leaves the game playable. A step that ships no declarations changes no
   - The defaults are the client's current guesses, moved into the shared crate: `look()`'s aim fallback for icon, clip and effect, with `BOLT_RADIUS` 0.25 as the line between an arrow and a bolt; and the spec-derived `on` and `picks`.
   - `bar_places(&Scripts)` keeps the WIP `Roles::of`'s resolution across the whole bar: places in their order, and the first unused skill whose aim fits each. Declared places come first.
 - **`Scripts::ui(name)`:** the declared `UiSpec`, or the default, with the lenient read and `ui_errors` of section 3.
-- **Shipped declarations:** none yet.
+- **Shipped declarations:** look-only `_ui()` for `strike` (three clips), `shoot` (a bow, no slash) and `throw` (its own clip), the three the client drew by name that no shape can derive. No place or key changes.
 - **Owner:** the rules crate is the Spark coordinator's. The laptop worker writes it and the Spark reviews.
+
+**Step 1 as built** (`ui-decl-1`, 2026-11-11, after the Spark's review; not merged until the review is clean). Where it differs from the plan above, it says so.
+
+**Module.** `living/rules/src/ui.rs` needs no script runtime; reading `_ui()` is `living/rules/src/script/ui.rs`. Rules code never reads `UiSpec`.
+- **Vocabulary enums**, with `parse`, `as_str` and `ALL`: `On`, `BarPlace`, `Input`, `Pick`, `Choose`, `ItemSource`, `Unready`, `RunShow`, `Refused`, `Marker`, `Row`, `Bubble`.
+- **Name lists:** `ICONS`, `ITEM_ICONS`, `CLIPS`, `EFFECTS`, `STATES`, `ITEM_GROUPS`, `UI_TRAITS`.
+- **Every list is append-only.** A golden test (`the_vocabulary_only_grows`) refuses a rename or reorder, so a world installed with a name keeps installing.
+- **Changes from section 2:**
+  - `On::Offer` is new: toward an incoming offer's sender.
+  - The `person` pick is `target`, and the `pick_person` input is `pick_target`.
+  - `Pick::Topic` is new, for `write`.
+  - `source` (`ItemSource`) says where an item choice comes from: pack, techniques, signals, spec_items, target_holds, products or world.
+  - `CLIPS` adds `throw`, `turn`, `step` and `play`, so every shipped `_shows().look` is a family.
+  - `STATES` is empty until the drawn state lands, so any `toggles` is refused.
+  - `effect: "none"` declares no effect.
+  - Item `icon` and `group` traits are not checked at install: they are the dev-box's vocabulary.
+
+**`defaults(&Source)`.** It reads the spec, the combat shape, a newcomer's missile, bar membership, whether a `_check` exists, and the `_shows` look. The plan's three-argument signature could not reproduce today's F list.
+- **`on`:** as `verbs.rs` `plan()` offers.
+  - Real-time combat off the bar is nowhere, by the client's combat-only test: attack, shoot and throw have no player entry, as today.
+  - A spec with a `graph` arg is nowhere.
+  - An unchecked target skill is `person` only.
+  - `item` only for a pack item with no target (eat, drop, experiment).
+- **Fight looks:** look, marker and input by aim only for a fight move, one on the bar or hostile. Tend, seize and yield get no sword.
+- **`picks`:** from the spec. A combat skill aimed at a point takes its target from the aim, and a held guard takes no `qty`.
+- **`running`:** `progress` for a `latch` skill, not "over 2 s", which would need sampled facts.
+
+**`bar_places(&Scripts)` and `bar_places_of(&[BarEntry])`.** With nothing declared they place exactly as `Roles::of` did.
+- Declared places come first.
+- A skill key a declaration took passes its default skill to the first free key.
+- A single place claimed twice keeps the first claim, and the install refuses the second.
+- The keys follow the WIP and example 2 (Q block, E heal, R fire bolt), not main's slot order (Q fire bolt, E block, R heal). LMB, RMB, Shift and Space agree with main.
+
+**One filter and one definition.**
+- `offered(&Skills, Option<&Species>)` is the filter. `catalog::skills_help_of` and `species::skills_help_of` call it, so minds' references are byte-identical.
+- `real_time()` is `Shapes::real_time_in`, which `Shapes::real_time` now calls.
+
+**Act building.**
+- `act_node()` is `verbs.rs` `Choice::node`, moved here; `Picked` adds `topic`.
+- `ActTarget::Offer` names the sender. The offer's id joins the act once the grammar carries a reference (rules-offers-2); a test fails when it does.
+- `bar_act()` returns `Option`: the leaf a press means, resolved as `use_skill` resolves it, and `None` where the authority refuses. The equivalence covers intent and target only: a press is used where the body stands, while a leaf with `{"id": n}` walks into reach first.
+
+**`Scripts`.** Methods `ui(name)`, `ui_specs()`, `ui_default(name)` and `ui_errors()`. `validate()` refuses any `ui_errors`, listing up to 12. The read keeps the default per field, so the rest of a declaration holds. Checks against the rules:
+- `self` with a target spec, `ground` without a point aim, an empty `on` (hide a skill with `listed: false`), and `offer` without a target are refused.
+- Inputs must pair: `toggle` with `toggles`, `hold` with a held shape, `aim_dir` with facing or dash, each `pick_*` with its pick, `drag_onto` with `drag`.
+- `unready` is refused until a stance exists.
+- `order` must be 0..12.
+- `source` must fit the spec.
+
+**Grey is a hint.** `Refused::Grey` and `Unready::Grey` grey a slot, but a press still goes to the authority. The client's `_check` runs on the facts it has, some faked today: noon, grass, age 30.
+
+**Waiting on other work:**
+- Ways (review finding 9): a way's `UiSpec` is built only from its `_ui()`. When speech-1 lands, every way gets a base from its `_speech()` (label, order), so ways with no `_ui()`, such as `say`, still appear.
+- `toggles` (finding 10): once `drawn` exists, `toggles: "drawn"` must be among the setting skill's items and some shape's stance.
+
+**Tests** (`rules/src/ui/tests.rs`). The oracles are frozen from main's `look()`, the WIP's `Roles::of`, `verbs.rs` `plan()` and `use_skill`'s target resolution.
+- Looks, the bar (including 88 orderings and subsets), aims and lists reproduce today's game on the island and Cullet.
+- Every default act parses for minds (`acts::parse`, `graph::from_value_for`) and through `human_act`'s `graph::parse`, with equal roots and the same skill, target kind, item, amount, want, words and topic.
+- A bar press gives the leaf `use_skill` resolves, or both refuse.
+- `offered()` matches minds' references for people and every species. `offered(None)` equals a person's, `listed: false` hides a skill from both, and real-time agrees with `acts::not_an_act` for every name.
+- The same facts give a player's act and a mind's the same `_check`.
+- The rules are the same with every `_ui()` stripped: specs, shapes, laws, `validate`, `offered`, checks, durations and act parsing.
+- Every default, written back as a declaration, is accepted and reads back equal.
+- Renaming every combat skill gives the same layout and presentation.
+- No skill name is spelt in the rules' interface code. Vocabulary words and the grammar's `goto` and `signal` are excepted.
+- A ratchet fails when a game client file names a skill it did not name before. `CLIENT_NAMES_TODAY` lists today's matches; steps 2–4 shrink it.
+- A floor overlay may restyle a base declaration.
+- Compile cost with a declaration for each of the island's 62 skills: about +13% in a debug build (129 ms against 114 ms).
 
 **Step 2 (ui-1 step 4): the skill bar, as the first user.** Step 4 (cluster and skill bar, sheathe and draw, rebindable keys, number keys and Q E R) is built on step 1, not beside it:
 - **Placement:** the cluster places skills by `bar_places`. `Roles::of` is deleted from `combat.rs`.
@@ -643,30 +712,48 @@ The pages are labelled 2.0.0. The project pins 2.14.1 (`living/Cargo.toml:10-11`
 - **The drawn state,** on the projection and on `fighter`.
 - **Possibly `my_senses`,** so the client stops re-running `senses()` with partial facts.
 
-### What must be agreed
+### What was agreed
 
-**With the Spark coordinator** (the rules and the script):
-1. **Open.** May `living_rules::script` read `<name>_ui()` into `UiSpec`, leniently with `ui_errors` and refused by `validate()`, with a new `living_rules::ui` module holding the vocabularies, defaults and `bar_places`? Does the laptop worker write it, with the Spark reviewing?
-2. **Open.** The drawn state:
-   - a `draw` act taking the state (`item: "drawn" | "sheathed"`);
-   - a `stance` trait on `_combat()`, enforced in `use_skill` for players and minds;
-   - the field in the projection and on `fighter`.
+Answers of 2026-11-11, collected in `.local/living/ui-designs/INTERFACE-answers.md` (git-ignored).
 
-   Until then the client keeps it locally.
-3. **Open.** One `offered()` filter for players and minds: `listed: false` hides from both, and real-time is `Shapes::real_time`. Is that agreed?
-4. **Open.** A structured outcome on act rows (ok or refused, and the skill) and a cause kind on death, so the client stops parsing English (`verbs.rs:1173-1196`, `ui/live.rs:362-377`)?
-5. **Open.** `meters()` and a `status_of(a)` law to replace three threshold sets: client 80/97/35/12, `brain.rs`, and `body_state` at 50/100. Which numbers are right? Should the AI alerts use the law, at the measured tick cost?
-6. **Open.** Speech-2's whisper follows `speech-1`'s `WAY_TRAITS`: privacy from `words.only_to`, no `private` or `shows` keys. Is it acceptable that the client reads row kinds from the compiled script, not `speech_card`? Can the way refusals move into `living_rules`, so the chip and `speak` share the words?
-7. **Open.** Will the client keep compiling the script for the foreseeable future, which this design relies on? Or is there a plan to stop shipping the whole rules source, laws included, to clients?
-8. **Open.** The client's sight: publish a `my_senses` view, or keep calling `senses()` with the client's partial facts? Facing sight (fov-1) will need one answer.
-9. **Open.** `my_offers`, as sketched above.
+**With the Spark coordinator** (the rules and the script). All agreed; owners settled.
+1. **`UiSpec` from `<name>_ui()`.** Agreed: the laptop writes it in `ui-decl-1` and the Spark reviews.
+   - Condition: rules code never reads `UiSpec`.
+   - A test is required: a world's rules behave identically with every `_ui()` removed. It is `the_rules_are_the_same_without_any_declaration` in `rules/src/ui/tests.rs`.
+2. **The drawn state.** The Spark builds it.
+   - `draw` and `sheathe` are ordinary skills that set a body state.
+   - Combat specs declare a `stance`, enforced in the shared use path for players and minds.
+   - The state is shown in `perceived_of` and on `fighter`.
+   - Until then the client keeps a stand-in that only restricts.
+3. **One `offered()` filter.** Agreed. It is shared code in `living_rules`, written in `ui-decl-1`. The Spark adds equality cases to verify-player and verify-minds.
+4. **Structured outcomes.** Not as `experience` columns: `line_seen` embeds the type, so migration refuses them.
+   - Instead, a private `act_outcome` table keyed by experience id (ok or refused, skill, reason code), written in the same transaction and read through `my_act_outcomes`.
+   - The death cause takes the same approach. The Spark builds both.
+5. **`meters()` and `status_of`.** One script law with one set of thresholds, feeding the minds' body words and alarms as well as the client. The Spark builds it.
+6. **Whisper.** speech-1 builds `whisper_speech()` and `whisper_check` in the script.
+   - The refusal wording stays in the script, not in Rust.
+   - The client runs `whisper_check` before sending.
+7. **Clients keep compiling the script.** `ui_card` remains a documented fallback only.
+8. **`my_senses`.** A small private per-character row, updated only when a sense value changes, read through a point-lookup caller view; not a computed view. The Spark builds it.
+9. **`my_offers`.** A btree index on `trade_offer.to` and a caller-scoped view of offers to my character. The Spark builds it first, because of the trade-offer defect.
 
-**With the dev-box coordinator** (Cullet's goods and recipes):
-1. **Open.** May items carry `icon`, `label` and `group` traits from the shared vocabulary? Will Cullet's goods (kelp, ash, sand, glass, peat, lamp_oil, baked_roots) get them?
-2. **Open.** Are the per-recipe label and icon taken from the product item, or declared per recipe? Will `craft` and `cook`/`smoke` fold into `recipes()`, so that one `make_ui()` drives every making? Cullet's `smoking` already duplicates `smoke`.
-3. **Open.** Should `make` and `feed` get `_shows`, so that others see someone working a furnace?
-4. **Open.** May the client compute `lit` and `fuel` for a structure from `lit_until_ms`, `burns.rate` and `day_ms` through `living_rules::fire`? Is the `burns` shape stable? Without it, no fuel-burning workplace offers `make`.
-5. **Open.** Is `teach_check` refusing glassmaking (`techniques()` against `know_how()`, `skills.rhai:995-1044`) intended, or a bug?
+The Spark's build order: `my_offers`, the teach fix, `my_senses`, `act_outcome`, `meters`, then the drawn state.
+
+**With the dev-box coordinator** (Cullet's goods and recipes; rules side by the goods-2 worker).
+1. **Item traits.** Every item gets `icon` (a short stable id the client maps to an image), `label` and `group`, in the shipped script and in Cullet's goods. The icon ids will be listed in [world rules](WORLD_RULES.md).
+   - Their groups (food, fuel, material, tool, glass, money…) go beyond step 1's `ITEM_GROUPS`. That list is append-only, so goods-2's names are added at its end when they land, and an install refuses any other name until then.
+2. **Recipe looks.** A recipe takes `icon` and `label` from its product item by default, and may override either.
+   - Folding `craft`, `cook` and `smoke` into `recipes()` changes every world's rules. It is raised with the general coordinator; goods-2 is not doing it.
+3. **Showing work.** goods-2 adds `make_shows()` and `feed_shows()`.
+4. **Lit and fuel.** The client computes them, with no new field:
+   - lit is `lit_until_ms > now`;
+   - hours left is `(lit_until_ms − now) / hour_ms`, where `hour_ms = world.day_ms / 24`;
+   - fuel units left is hours left × `burns.rate`.
+5. **`teach_check` refusing glassmaking** is a bug. goods-2 fixes it (against `know_how()`), together with `know_how_law()`'s hard-coded list.
+
+**Defects:**
+- **Teaching:** `teach_check` refusing fire_bolt and wound_tending is the Spark's to fix, with a verify-core case.
+- **`make`:** never offered at a fuel-burning workplace, probably because the client fakes facts. `my_senses` and `offered()` remove that cause, and the Spark also checks the rules side.
 
 ## References
 

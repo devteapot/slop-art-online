@@ -19,6 +19,17 @@ Maintained: the goods scene checks `make`'s `doing` row; features/goods.md (item
 
 
 
+## 2026-11-11 rates-2: spoiling, regrowth, traps and remains in game time; the decay scene (dev-box)
+
+Branch `rates-2` (from `f2d803fa`; origin/main merged twice, at `d92c67d5` with the cast and at `d538967f`), own container `rates2-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to the features this change touches (laws, wildlife's remains, goods): their maps were read against the changed source, not by a source wave.
+
+- `core-rates2-goods` (goods fixture): `goods` and `stock` pass. `core-rates2` (default seed): `needs`, `food`, `refusal` pass; `tick` failed `pause stops ticks, housekeeping and completion` because the giver's 3 s wait ended before the pause landed (its activity was already the final `wait 120`; four worlds shared the server). Rerun `core-rates2-tick` after the first merge: 6 of 6.
+- `core-rates2-remains` (stage1-acts): `remains` passes with `remains_h` 3 game hours (90 s on the 12-minute day), its `rot` row due `remains_h × day_ms / 24` after `built_ms`.
+- `core-rates2-laws` (cullet-laws): 15 pass, the mirrored dark spot skipped (as on rules-1).
+- `decay` (new): the first run (`core-rates2-decay`) aimed the store act at `{"id": <structure>}`, which names a creature; it now aims at the nearest storage, and stores 100 (a storage holds `storage_holds`). `core-rates2-decay2`, a whole Cullet game day (48 real minutes): spoiling passes (543 of 1,000 carried left, the law 547; 87 of 100 stored), the node's `regen` passes; the regrowth check failed (7 gathered against 5.86 grown): gathering by `nearest` walked on to the valley's wild greens beds. It now reads the bed's own row after one gathering. The rerun on a fresh world (`core-rates2-decay3`, a whole game day) passes all five: 553 of 1,000 carried and 78 of 100 stored raw fish left after 48.0 real minutes (the law: 547 and about 82), and the emptied greens bed had regrown 5.891 units over 22.06 game hours, its `regen` of 0.131 a real minute (`regrow_per_h` 0.262) exactly.
+- Cargo: `cargo test -p living-rules` 161 pass (9 ignored); `rates_check::rates_are_bit_identical` with `LIVING_OLD_SKILLS` (f2d803fa's script): 50,725 states, none differ.
+- Not run on this change: seize, sight, senses, doing, moves, death-names, skirmish, low, drop, dealings, town, lives, infant, lifecycle, family_laws, wildlife, grazing, flee; mechanics and steering.
+
 ## 2026-11-11 lives-3: rhythms at any hour, Cullet's trades, Cullet's life law (dev-box)
 
 Branch `lives-3` (from the coordinator's main `3faa7bfb`; origin/main `12fd78ef`, with Cullet's 64 drafted residents, then `bade5c09` merged), own container `lives3-stdb` (2.14.1, port 3321, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
@@ -30,6 +41,10 @@ Branch `lives-3` (from the coordinator's main `3faa7bfb`; origin/main `12fd78ef`
 - After merging origin/main again (`f793143a`: eye-2's sight, kit-1's plan fixtures): `rhythm.py` 20 of 20 (`core-l3rhythm4`), rules 166 pass (8 ignored), authority 18, `just living-check` exits 0.
 - Not run on this change: tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, goods, stock, laws, infant, lifecycle, wildlife, remains, flee; mechanics and steering.
 
+
+## 2026-11-11 rules-offers: every know-how can be taught (Spark)
+
+Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. `scenes.py teach` (new) on `core-teach-1111-184247`: 6 of 6, twice (`teach-results-fixed-2.json`). With origin/main's `skills.rhai` installed on the same world it gave 2 of 6: the teacher was told "there is no technique called fire_bolt (the techniques are: spear, fire, masonry, …)" (`teach-results-main-rules.json`). Cargo: `every_know_how_can_be_taught` and `cullet_s_glassmaking_can_be_taught` pass.
 
 ## 2026-11-11 eye-2: things open at eye height are see-through (dev-box)
 

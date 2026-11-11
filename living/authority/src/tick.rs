@@ -213,7 +213,7 @@ fn spoil(ctx: &ReducerContext, now: u64) {
     let mut kept: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
     let mut carrier: (u64, f32) = (u64::MAX, 1.0);
     for mut r in rows.into_iter().filter(|r| r.qty > 0) {
-        let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.num_of("spoil_rate", &r.item, 0.0) as f32);
+        let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.spoil_per_min(&r.item) as f32);
         if rate <= 0.0 {
             continue;
         }
@@ -437,14 +437,21 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             }
         }
     }
-    // Offers are dropped a minute after they can no longer be taken up (the laws' windows).
+    // Bond offers are dropped a minute after they can no longer be taken up (the laws'
+    // window). Trade offers go as soon as they end, so `my_offers` stops showing them
+    // within this second.
     let laws = common::laws(ctx);
-    let (bond_ms, trade_ms) = ((laws.bond_window_s * 1000.0) as u64 + 60_000, (laws.trade_window_s * 1000.0) as u64 + 60_000);
+    let bond_ms = (laws.bond_window_s * 1000.0) as u64 + 60_000;
     for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > bond_ms).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.bond_offer().id().delete(o);
     }
-    for o in ctx.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > trade_ms).map(|o| o.id).collect::<Vec<_>>() {
+    for o in ctx.db.trade_offer().iter().filter(|o| now > o.ends_ms(laws.trade_window_s)).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.trade_offer().id().delete(o);
+    }
+    // An offer made before `until_ms` existed gets its end from the law's window.
+    for mut o in ctx.db.trade_offer().iter().filter(|o| o.until_ms == 0).collect::<Vec<_>>() {
+        o.until_ms = o.ends_ms(laws.trade_window_s);
+        ctx.db.trade_offer().id().update(o);
     }
 
     // Bound the story feed.

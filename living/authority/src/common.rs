@@ -65,6 +65,11 @@ pub fn set_profiling(on: bool) {
 }
 
 /// A named timing span logged by the host while profiling is on (see `tools/bench.py`).
+/// Whether spans are being logged (a profiling window is open).
+pub fn profiling() -> bool {
+    PROFILE.with(|p| p.get())
+}
+
 pub fn span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
     PROFILE.with(|p| p.get()).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
 }
@@ -1231,7 +1236,7 @@ pub fn same_routine(a: &str, b: &str) -> bool {
 /// holds). `built_ms` marks the last catch counted.
 pub fn trap_catch(ctx: &ReducerContext, s: &Structure, now: u64) {
     let sc = scripts(ctx);
-    let every = (sc.num_of("trap_every_s", "meat", 240.0) * 1000.0) as u64;
+    let every = sc.trap_every_ms() as u64;
     if every == 0 {
         return;
     }
