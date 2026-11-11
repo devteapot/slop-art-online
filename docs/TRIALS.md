@@ -666,7 +666,7 @@ With any law on, a person seen in a crowd gets a familiarity row with `times` 0 
 
 ### The trial and the report
 
-[`arrive`](../living/trials/arrive.json): the hamlet on Cullet's day and laws (12 people in two settlements, everyone past infancy thought for, at most 12). The world lives 30 s (`subject.join.after_s`). Then a scripted player (`Player.arrive_session`: `join`, `human_act`, `human_move` with its own identity) joins at the arrival point, waits 20 s, walks to the densest group until two residents are within 5 m, steps to face into it and stands silent 5 minutes. Then it walks to the group sharing fewest members with the first and stands silent 5 more minutes, then stays to the end (14 minutes). It never speaks, gestures or names itself. Arms differ only in the variants' `skills_patch`. Every line, conversation turn, experience row (before it is integrated), gesture and position with activity target is recorded (`record`).
+[`arrive`](../living/trials/arrive.json): the hamlet on Cullet's day and laws (12 people in two settlements; the 11 past infancy are thought for, `minds.max` 11). Under Cullet's life law (`life_years`, since lives-3: a lifespan of 90, a child until 15, deaths of old age from 75) the cast's stages at the start are as before: Pim and Lio children, Teodor old, Tobin an infant. A year of age is about 6.9 real minutes, so no one dies of old age within 14 minutes; the earliest, Teodor at 70, is due from about 34 minutes. Tobin leaves infancy (2.1 years) about 8 minutes in. With `minds.max` 12 the runner then restarted the mind service in the middle of the second stand (`af5`: `reslot` at 482 s, the stand 373–673 s), breaking off every mind's calls and conversations. With 11 he stays on his graph, and the player neither approaches nor answers him. The world lives 30 s (`subject.join.after_s`). Then a scripted player (`Player.arrive_session`: `join`, `human_act`, `human_move` with its own identity) joins at the arrival point, waits 20 s, walks to the densest group until two residents are within 5 m, steps to face into it and stands silent 5 minutes. Then it walks to the group sharing fewest members with the first and stands silent 5 more minutes, then stays to the end (14 minutes). It never speaks, gestures or names itself. Arms differ only in the variants' `skills_patch`. Every line, conversation turn, experience row (before it is integrated), gesture and position with activity target is recorded (`record`).
 
 [`arrive_report.py`](../living/tools/arrive_report.py) (read-only, no model calls; its docstring defines every column), per resident within 12 m of the newcomer during a stand:
 
@@ -733,6 +733,12 @@ The fake run shows the mechanics. Whether residents then greet, watch or talk ab
 - In `arrive-answer` × `arrive-all` the player answered Lio 7.8 s after his line: the player looks every 2 s while it walks and stands. Lio replied in 1.5 s, and Teodor joined.
 - In `arrive-answer` × control nobody's line reached the player's ear, so it never answered.
 
+`af6` (after merging main `accf27c`: lives-3, exp-player-frame, exp-projects; with `minds.max` 11): the same four runs, 10 minutes each.
+
+- Every run had one mind start and no `reslot`: `LIVING_ONLY` was the 11 people past infancy throughout, at concurrency 64.
+- `carried_again` was 0 of 49–60 reasons per run. `reused_events`, read from the prompts' words, was 0–3: a feeling that arrives again later reads the same.
+- In `arrive-answer` × `arrive-all` the player answered Pim, who did not reply (he was deliberating), and Cal spoke to the newcomer within the minute.
+
 Driving the laws on a scratch world: `scenes.py newcomers` on a hamlet run (`core-arrive-n3`) passed 18 of 18 checks. Shipped: the crowd hides the newcomer; the first sight is 0.45, not near home, and asks for no thought. On: seen in the crowd, "near your home", 0.7 (persona-less, temperament 50); asks for a thought; the scene marks them and no neighbour; wonders about them 20 s later and about no neighbour.
 
 ### The paid batch, planned
@@ -748,7 +754,7 @@ python3 living/tools/arrive_report.py ar1 --examples 3
 python3 living/tools/trials.py clean --batch ar1
 ```
 
-`arrive`: five arms × 4 replicates; `arrive-answer`: two arms (its `variants`) × 4. That is 28 runs of 14 minutes, 6.5 world-hours with 11–12 minds thinking. The cost is an estimate, not a measurement:
+`arrive`: five arms × 4 replicates; `arrive-answer`: two arms (its `variants`) × 4. That is 28 runs of 14 minutes, 6.5 world-hours with 11 minds thinking (`minds.max` 11). The cost is an estimate, not a measurement:
 
 - **At the greeting batch's rate:** its control arm cost $1.62–2.01 per world-hour on the same hamlet and models (`arrive_report.py` over `gr1a` control, `usd_h`), which gives about $10.5–13.
 - **The switches' extra thoughts:** the fake rates were 1.2–1.3 times control for `notice` and `wonder`, more for `all`, though fake cadence is not a price. That allows about $13–16 in all.

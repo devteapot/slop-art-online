@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-11-11 exp-arrive after merging main accf27c (Spark)
+
+`reasons`, `frame`, `roundtrip` and `conversation` pass (`minds-arrive-m5-190947`). `just living-check` exits 0 (`.local/living/arrive/living-check-4.log`). Trials `af6`: `arrive` and `arrive-answer` × control and `arrive-all`, 10 minutes, with `minds.max` 11. All four ran to their duration with one mind start each, concurrency 64, and `carried_again` 0.
+
 ## 2026-11-11 exp-arrive after merging main 62d861f and fix-stale-reasons 0209eb4 (Spark)
 
 - `reasons`, `conversation` and `roundtrip` pass (`minds-arrive-m4-185828`). The first attempt (`minds-arrive-m3-185610`) failed all three at launch, before any check ran: main's `skills.rhai` is 133,155 bytes, past the 128 KiB a single command-line argument may be (`OSError: Argument list too long` from `spacetime call install_script`). `verify.py launch` now installs it over HTTP with the owner's token. Main's `1b3b5dd` had also dropped the launch's keeping of a seed's own laws (it started from an older copy of `verify.py`); restored.

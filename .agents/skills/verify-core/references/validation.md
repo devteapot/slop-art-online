@@ -1,6 +1,10 @@
 # Core validation record
 
 
+## 2026-11-11 exp-arrive after merging main accf27c (Spark)
+
+`newcomers` 18 of 18 (`core-arrive-n7`, hamlet, under lives-3's Cullet life law); launch kept the seed's laws and installed nothing over them.
+
 ## 2026-11-11 exp-arrive after merging main 62d861f and fix-stale-reasons 0209eb4 (Spark)
 
 `newcomers` 18 of 18 on the merged build (`core-arrive-n6`, hamlet; launch kept the seed's laws again, see verify-minds' record), and 18 of 18 after main alone (`core-arrive-n5`, whose launch had exited 1 installing the plain script before the fix). `just living-check` exits 0 (`.local/living/arrive/living-check-3.log`).
