@@ -154,7 +154,7 @@ fn log_assets(
     let px: usize = images.iter().map(|(_, i)| i.data.as_ref().map_or(0, |d| d.len())).sum();
     let curves: usize = clips.iter().map(|(_, c)| c.curves().values().map(|v| v.len()).sum::<usize>()).sum();
     info!(
-        "assets: {} meshes {:.1} MiB (vertices {:.1}, indices {:.1}, morph targets {:.1}); {} images {:.1} MiB; {} clips ({curves} curves); {} graphs; {} glTF files",
+        "assets: {} meshes {:.1} MiB (vertices {:.1}, indices {:.1}, morph targets {:.1}); {} images {:.1} MiB; {} clips ({curves} curves); {} graphs; {} glTF files; outline directions generated for {} meshes, brought by {}",
         meshes.len(),
         mib(vb + ib + mb),
         mib(vb),
@@ -164,7 +164,9 @@ fn log_assets(
         mib(px),
         clips.len(),
         graphs.len(),
-        gltfs.len()
+        gltfs.len(),
+        crate::style::OUTLINE_NORMALS.0.load(std::sync::atomic::Ordering::Relaxed),
+        crate::style::OUTLINE_NORMALS.1.load(std::sync::atomic::Ordering::Relaxed)
     );
 }
 

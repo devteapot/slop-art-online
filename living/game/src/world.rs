@@ -703,7 +703,7 @@ pub fn things(
             .entry(shape.clone())
             .or_insert_with(|| {
                 let (mut m, g) = thing_mesh(&shape).unwrap_or_else(marker_mesh);
-                let _ = m.generate_outline_normals(&Default::default());
+                crate::style::outline_normals(&mut m);
                 (meshes.add(m), g.map(|(g, c)| (meshes.add(g), c)))
             })
             .clone();

@@ -436,7 +436,7 @@ pub fn update(
 pub fn spawn(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &crate::world::Palette, style: &Style, kind: &str, id: u32, mine: bool, tf: Transform, p: Vec2) -> Entity {
     let parts = parts(kind, id, mine);
     let smooth = |mut m: Mesh| {
-        let _ = m.generate_outline_normals(&Default::default());
+        crate::style::outline_normals(&mut m);
         m
     };
     let body = meshes.add(smooth(parts.body));

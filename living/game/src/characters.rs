@@ -46,6 +46,7 @@
 //! `LIVING_GAME_PERF=frames` logs frame times every 2 s outside the island (whose own
 //! `island perf` line does it), with the number of characters and outfit meshes.
 
+pub mod identity;
 pub mod outfit;
 
 use crate::lookdev::{Converted, Fitted, Model};
@@ -113,6 +114,10 @@ pub struct Recipe {
     /// Outfit pieces by slot (`outfits.json` names: `"head": "top_hat"`).
     #[serde(default)]
     pub outfit: BTreeMap<String, String>,
+    /// Identity values (-1 to 1 by name) for a type's identity bones (`identity.rs`): set once
+    /// in `shape`. A file whose bones already carry them (`gen_person.sh`'s people) needs none.
+    #[serde(default)]
+    pub identity: BTreeMap<String, f32>,
 }
 
 #[derive(Deserialize, Default)]
@@ -222,7 +227,7 @@ impl Recipe {
     }
 
     pub fn default_for(base: &str) -> Recipe {
-        let plain = Recipe { name: String::new(), base: base.to_string(), height: 1.75, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new() };
+        let plain = Recipe { name: String::new(), base: base.to_string(), height: 1.75, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new(), identity: BTreeMap::new() };
         book().recipes.iter().find(|r| r.base == base && r.proportions == plain.proportions && r.colors == plain.colors && r.outfit.is_empty()).cloned().unwrap_or_else(|| Recipe {
             name: std::path::Path::new(base).file_stem().unwrap_or_default().to_string_lossy().to_string(),
             ..plain
@@ -290,7 +295,7 @@ impl Recipe {
             }
         }
         let name = if style == DEFAULT_STYLE { format!("{folk}-{seed}") } else { format!("{folk}:{seed}:{style}") };
-        Recipe { name, base, height: at("height", tall), proportions, colors, outfit: pieces }
+        Recipe { name, base, height: at("height", tall), proportions, colors, outfit: pieces, identity: BTreeMap::new() }
     }
 
     /// A random recipe of exactly this height, its folk chosen by it, in a style.
@@ -445,7 +450,9 @@ pub struct CharactersPlugin;
 
 impl Plugin for CharactersPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(SpringSettings::from_env())
+        app.init_resource::<Thumbs>()
+            .add_systems(PreUpdate, thumb_pictures)
+            .insert_resource(SpringSettings::from_env())
             .init_resource::<SpringClock>()
             .init_resource::<SpringStats>()
             .add_systems(Update, (shape, recolor, rig_springs, outfit::dress, rebuilt, frames))
@@ -457,6 +464,9 @@ impl Plugin for CharactersPlugin {
 /// name and its spring bones.
 struct FileInfo {
     rest: HashMap<String, Vec3>,
+    /// Rest translations a file's nodes record of their own (`extras.rest_translation`, written
+    /// by compose.py when it moves an identity bone): where identity values start from.
+    rest_extras: HashMap<String, Vec3>,
     springs: Vec<GroupDef>,
     colliders: Vec<ColliderDef>,
 }
@@ -492,6 +502,13 @@ fn file_info(file: &str) -> Arc<FileInfo> {
             Some((n["name"].as_str()?.to_string(), t))
         })
         .collect();
+    let rest_extras = nodes
+        .iter()
+        .filter_map(|n| {
+            let t = n["extras"]["rest_translation"].as_array()?;
+            Some((n["name"].as_str()?.to_string(), Vec3::new(t.first()?.as_f64()? as f32, t.get(1)?.as_f64()? as f32, t.get(2)?.as_f64()? as f32)))
+        })
+        .collect();
     let sec = &json["extensions"]["VRM"]["secondaryAnimation"];
     let springs = sec["boneGroups"]
         .as_array()
@@ -516,7 +533,7 @@ fn file_info(file: &str) -> Arc<FileInfo> {
             spheres: c["colliders"].as_array().into_iter().flatten().map(|s| (v3(&s["offset"]), s["radius"].as_f64().unwrap_or(0.0) as f32)).collect(),
         })
         .collect();
-    let info = Arc::new(FileInfo { rest, springs, colliders });
+    let info = Arc::new(FileInfo { rest, rest_extras, springs, colliders });
     cache.lock().unwrap().insert(file.to_string(), info.clone());
     info
 }
@@ -643,6 +660,22 @@ pub fn shape(
                 }
             }
         }
+        // Identity: the type's identity bones moved from their rest by the recipe's values
+        // (`identity.rs`), once; no clip keys them. They sit inside the head, so the recipe's
+        // `head` (the head bone's own scale above) carries them, and they need no helper joints:
+        // their children are meant to ride their scale. A scene spawned again comes back here.
+        if !ch.recipe.identity.is_empty() {
+            let mut moved = 0;
+            for (name, change) in identity::transforms(identity::rig(), &ch.recipe.identity) {
+                let Some(&bone) = by_name.get(name.as_str()) else { continue };
+                let rest = info.rest_extras.get(&name).or_else(|| info.rest.get(&name)).copied().unwrap_or(Vec3::ZERO);
+                if let Ok(mut tf) = bones.get_mut(bone) {
+                    *tf = change.transform(rest);
+                    moved += 1;
+                }
+            }
+            debug!("characters: {}: {} identity values on {moved} bones", ch.recipe.name, ch.recipe.identity.len());
+        }
         // Heights in model units along the rest skeleton (rest rotations are identity).
         let s = |n: &str| own.get(n).copied().unwrap_or(Vec3::ONE);
         let k0 = root.scale.x.max(1e-6);
@@ -759,25 +792,89 @@ fn tag_color(c: Srgba) -> u32 {
     b(c.red) | b(c.green) << 8 | b(c.blue) << 16 | 1 << 24
 }
 
-/// A material's mean colour (linear) over the texels its mesh's vertices use.
-fn mean_color(toon: &Toon, mesh: &Mesh, images: &Assets<Image>) -> Option<Vec3> {
+/// A material's mean colour (linear) over the texels its mesh's vertices use, read from its
+/// texture's summary ([`Thumbs`]).
+fn mean_color(toon: &Toon, mesh: &Mesh, thumbs: &Thumbs) -> Option<Vec3> {
     let base = toon.base.base_color.to_linear();
     let base = Vec3::new(base.red, base.green, base.blue);
     let Some(tex) = toon.base.base_color_texture.as_ref() else { return Some(vertex_mean(mesh).map_or(base, |v| v * base)) };
-    let img = images.get(tex)?;
-    let (w, h) = (img.width().max(1), img.height().max(1));
+    let thumb = thumbs.0.get(&tex.id())?;
     let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else { return Some(base) };
     let (mut sum, mut wsum) = (Vec3::ZERO, 0.0);
     let step = (uvs.len() / 4000).max(1);
     for uv in uvs.iter().step_by(step) {
-        let x = ((uv[0].rem_euclid(1.0) * w as f32) as u32).min(w - 1);
-        let y = ((uv[1].rem_euclid(1.0) * h as f32) as u32).min(h - 1);
-        let Ok(c) = img.get_color_at(x, y) else { continue };
-        let l = c.to_linear();
-        sum += Vec3::new(l.red, l.green, l.blue) * l.alpha;
-        wsum += l.alpha;
+        let c = thumb.at(uv[0], uv[1]);
+        sum += c.truncate();
+        wsum += c.w;
     }
     (wsum > 0.0).then(|| sum / wsum * base)
+}
+
+/// Cells a side of a texture's summary.
+const THUMB: u32 = 64;
+/// Samples a side within each cell.
+const THUMB_SAMPLES: u32 = 4;
+
+/// A texture's colours in a [`THUMB`]² grid: each cell's mean linear colour times alpha, and its
+/// mean alpha. Enough for a mean over the texels a mesh uses (`mean_color`), which is all the
+/// client reads of a character's pictures on the CPU.
+pub struct Thumb {
+    cells: Vec<Vec4>,
+}
+
+impl Thumb {
+    fn of(img: &Image) -> Option<Self> {
+        let (w, h) = (img.width().max(1), img.height().max(1));
+        img.data.as_ref()?;
+        let n = THUMB * THUMB_SAMPLES;
+        let mut cells = vec![Vec4::ZERO; (THUMB * THUMB) as usize];
+        for sy in 0..n {
+            for sx in 0..n {
+                let (x, y) = (((sx as f32 + 0.5) / n as f32 * w as f32) as u32, ((sy as f32 + 0.5) / n as f32 * h as f32) as u32);
+                let Ok(c) = img.get_color_at(x.min(w - 1), y.min(h - 1)) else { continue };
+                let l = c.to_linear();
+                cells[((sy / THUMB_SAMPLES) * THUMB + sx / THUMB_SAMPLES) as usize] += Vec4::new(l.red * l.alpha, l.green * l.alpha, l.blue * l.alpha, l.alpha);
+            }
+        }
+        let k = 1.0 / (THUMB_SAMPLES * THUMB_SAMPLES) as f32;
+        Some(Self { cells: cells.into_iter().map(|c| c * k).collect() })
+    }
+
+    /// The cell under a texture coordinate (wrapped).
+    fn at(&self, u: f32, v: f32) -> Vec4 {
+        let x = ((u.rem_euclid(1.0) * THUMB as f32) as u32).min(THUMB - 1);
+        let y = ((v.rem_euclid(1.0) * THUMB as f32) as u32).min(THUMB - 1);
+        self.cells[(y * THUMB + x) as usize]
+    }
+}
+
+/// Character pictures' summaries, by image.
+#[derive(Resource, Default)]
+pub struct Thumbs(HashMap<AssetId<Image>, Thumb>);
+
+/// The pictures of character files (`lookdev/`) keep a summary of their colours ([`Thumb`]) and
+/// leave their pixels to the GPU: their usage becomes the render world's alone, so Bevy drops
+/// the main world's copy once it has uploaded them. A town's face pages were about 500 MiB kept
+/// on the CPU for nothing but the recolouring's mean colour, which the shader already applies
+/// per fragment (`toon.wesl` `recolor`, mode 3). `LIVING_GAME_PERF=keeppixels` keeps them.
+fn thumb_pictures(mut events: MessageReader<AssetEvent<Image>>, mut images: ResMut<Assets<Image>>, assets: Res<AssetServer>, mut thumbs: ResMut<Thumbs>) {
+    let keep = crate::perf::has("keeppixels");
+    for ev in events.read() {
+        let AssetEvent::Added { id } = ev else { continue };
+        let Some(path) = assets.get_path(*id) else { continue };
+        if !path.path().starts_with("lookdev") {
+            continue;
+        }
+        let Some(img) = images.get(*id) else { continue };
+        if let Some(t) = Thumb::of(img) {
+            thumbs.0.insert(*id, t);
+        }
+        if !keep {
+            if let Some(mut img) = images.get_mut(*id) {
+                img.asset_usage = bevy::asset::RenderAssetUsages::RENDER_WORLD;
+            }
+        }
+    }
 }
 
 /// A mesh's mean vertex colour (linear), weighted by area: the outfit pieces' colours are per
@@ -813,7 +910,7 @@ pub fn recolor(
     parents: Query<&ChildOf>,
     chars: Query<&Character>,
     mut toons: ResMut<Assets<Toon>>,
-    images: Res<Assets<Image>>,
+    thumbs: Res<Thumbs>,
     meshes: Res<Assets<Mesh>>,
     mut ready: Local<std::collections::HashSet<AssetId<Toon>>>,
 ) {
@@ -843,7 +940,7 @@ pub fn recolor(
         };
         if !ready.contains(&mat.0.id()) {
             let Some(toon) = toons.get(&mat.0) else { continue };
-            let Some(mean) = meshes.get(&mesh.0).and_then(|m| mean_color(toon, m, &images)) else { continue };
+            let Some(mean) = meshes.get(&mesh.0).and_then(|m| mean_color(toon, m, &thumbs)) else { continue };
             let m = hsv(mean);
             if let Some(mut t) = toons.get_mut(&mat.0) {
                 t.extension.params.recolor = Vec4::new(0.0, 0.0, 0.0, 3.0);

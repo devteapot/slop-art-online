@@ -441,7 +441,7 @@ pub fn convert(
         if beast {
             if done.1.insert(mesh.0.id()) {
                 if let Some(mut m) = meshes.get_mut(&mesh.0) {
-                    let _ = m.generate_outline_normals(&Default::default());
+                    crate::style::outline_normals(&mut m);
                 }
             }
             commands.entity(e).remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(palette.vertex.clone()), Converted, outline(Outlined::Person, &style)));
@@ -536,7 +536,7 @@ pub fn convert(
         let volume = owner.vrm || owner.file.starts_with("lookdev/") || owner.file.starts_with("view/");
         if volume && done.1.insert(mesh.0.id()) {
             if let Some(mut m) = meshes.get_mut(&mesh.0) {
-                let _ = m.generate_outline_normals(&Default::default());
+                crate::style::outline_normals(&mut m);
             }
         }
         // Characters get shell outlines. Environment models only take part as stencils (they hide
