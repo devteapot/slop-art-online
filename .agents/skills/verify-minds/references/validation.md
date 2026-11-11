@@ -1,5 +1,10 @@
 # Internal mind validation
 
+
+## 2026-11-12 the timing of one's own known fighting moves (mind-skill-timings, Spark)
+
+Branch `mind-skill-timings` at c6af2ff6, the trial service (port 3320), fake model. Scoped maintain-verification-skill pass on `features/deliberation.md`: its citations brought to the current lines (`perceive.rs:270`, `mind.rs:1286`, `:1812`, authority `mind.rs:360`, `:409`, `brain.rs:517`), the `timings` case and `LIVING_SKILL_TIMINGS` mapped. Live: `minds-time3-234118` `roundtrip`, `acts`, `timings` pass, `minds-time3-off-234118-roundtrip` passes with the switch off; `reasons` passed in `minds-time3-233156`, and its later attempts stopped in the suite's own `cargo test -p living-mind` on two timing tests of `llm.rs` (`a_failed_poll_keeps_the_batch…`, `unreachable_provider_holds_calls`; the file is main's) at a load average of 76 on 20 cores.
+
 ## 2026-11-11 greeting switches on by default (exp-greet after main 990ab80, Spark)
 
 Branch `exp-greet` with origin/main and `greet-result` merged. The defaults are now `LIVING_GREET=nearest`, `LIVING_PARK=concurrent` and the law `speech_audience` on. Trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, host load 24–32 from other batches.
