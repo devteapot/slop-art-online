@@ -236,12 +236,14 @@ class OwnerLines(unittest.TestCase):
             self.assertEqual(s.owner_lines, {"wassup mate", "hi there"})
             self.assertIn("a stranger", s.player_labels)
             st = {r["path"]: r["status"] for r in rows}
-            self.assertEqual(st["FEEDBACK.md"], "held")
+            self.assertEqual(st["FEEDBACK.md"], "excluded")              # outside session/: held by rule
             self.assertEqual(st["ffprof/prefs.js"], "refused")
             self.assertEqual(st["ffprof/extensions.json"], "refused")
-            self.assertEqual(st["shot.png"], "held")
+            self.assertEqual(st["shot.png"], "excluded")
+            self.assertEqual(st["diagnosis/REPORT.md"], "excluded")
             self.assertEqual(st["session/journal/Linnet_Abbot.jsonl"], "held")
-            rep = data["diagnosis/REPORT.md"].decode()
+            # the redaction itself, on the report's text
+            rep = s.scrub_text("First “hi there” at 07:59. Ada typed “wassup mate”.", store.Findings())
             self.assertNotIn("hi there", rep)
             self.assertNotIn("wassup", rep)
             self.assertTrue("[owner line]" in rep or "[line dropped" in rep)
@@ -613,26 +615,26 @@ class SessionDrop(unittest.TestCase):
                    "- [1188] day 1 09:15 You said to a child: “a line nobody heard” {someone=#11}")
             write(t, "session/journal/Ada.jsonl",
                   journal_entry("Ada", "internalize", mem, '{"edges": [{"props": {"what": "a line nobody heard"}}]}') + "\n")
-            write(t, "rows.jsonl", json.dumps({"subject": 9, "text": "A stranger said: “wassup” {someone=#26}"}) + "\n" +
+            write(t, "session/run/authority.jsonl", json.dumps({"subject": 9, "text": "A stranger said: “wassup” {someone=#26}"}) + "\n" +
                   json.dumps({"subject": 9, "text": "Bram waved"}) + "\n")
-            write(t, "notes.txt", "first line\nhe kept saying wassup\nlast line\n")
-            write(t, "report/index.html", "<p>&ldquo;wassup&rdquo;</p>")
+            write(t, "session/run/notes.txt", "first line\nhe kept saying wassup\nlast line\n")
+            write(t, "session/run/index.html", "<p>&ldquo;wassup&rdquo;</p>")
             write(t, "FEEDBACK.md", "mine")
             s = scrubber({"model_exchanges": "include", "owner_notes": "hold"}, kind="play-session")
             rows, totals, data = store.scrub_source(t, s, keep_data=True)
             self.assertIn("a line nobody heard", s.owner_lines)
             st = {r["path"]: r["status"] for r in rows}
             self.assertEqual(st["FEEDBACK.md"], "excluded")
-            self.assertEqual(st["report/index.html"], "excluded")
+            self.assertEqual(st["session/run/index.html"], "excluded")
             m = data["session/journal/Mercy.jsonl"].decode().splitlines()
             self.assertEqual(len(m), 1)                       # the talk and the consolidation dropped
             self.assertIn("a quiet day", m[0])
             self.assertNotIn("nobody heard", "".join(v.decode() for v in data.values()))
-            r = data["rows.jsonl"].decode().splitlines()
+            r = data["session/run/authority.jsonl"].decode().splitlines()
             self.assertEqual(len(r), 1)
             self.assertIn("Bram waved", r[0])
-            self.assertNotIn("wassup", data["notes.txt"].decode())
-            self.assertIn("first line", data["notes.txt"].decode())
+            self.assertNotIn("wassup", data["session/run/notes.txt"].decode())
+            self.assertIn("first line", data["session/run/notes.txt"].decode())
             self.assertGreaterEqual(len(s.dropped), 4)
             for d in s.dropped:
                 self.assertNotIn("wassup", d["why"])
@@ -746,6 +748,62 @@ class ManyBatches(unittest.TestCase):
                 store.verify_pack(out, other, cfg, "test")
             with self.assertRaises(store.Refused):
                 store.verify_pack(out, src, cfg, "laptop")
+
+
+class SessionAllowList(unittest.TestCase):
+    """A play session publishes session/journal, session/run, the scene's skills.rhai and a README
+    that describes the scene; everything else is held and listed with its reason."""
+
+    def test_allow_list(self):
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "playtest-9")
+            write(src, "session/run/client.log", "playing character #26\n")
+            write(src, "session/run/mind.log", "INFO started\n")
+            write(src, "session/run/created_utc", "2026-11-11T12:00:00Z\n")
+            write(src, "session/run/installed_script.txt", "script\n")
+            write(src, "session/journal/Bram.jsonl", journal_entry("Bram", "think", "the square", '{"thought": "quiet"}') + "\n")
+            write(src, "session/journal/system/abc.txt", "You are a person.")
+            write(src, "session/skills.rhai", "// sight 48 m\n")
+            write(src, "session/README.md", "# A small town\n\n17 residents of Brackenford, all minds, on the island seed.\n")
+            write(src, "session/CHECKLIST.md", "- [ ] owner arrives\n")
+            write(src, "session/notes.md", "scene notes\n")
+            write(src, "session/run/screen.mp4", "\x00\x00video")
+            write(src, "session/run/blob.bin2", "\x00\x01")
+            write(src, "session/journal/extra/thing.jsonl", "{}\n")
+            write(src, "diagnosis/REPORT.md", "what the owner meant\n")
+            write(src, "review/check.py", "print(1)\n")
+            write(src, "FEEDBACK.md", "mine\n")
+            write(src, "report/index.html", "<p>page</p>")
+            cfg = store.load_config(local_config="/nonexistent/config.json")
+            s = store.Scrubber(ident(), cfg=cfg, machine="test", kind="play-session")
+            rows, totals, data = store.scrub_source(src, s, keep_data=True)
+            st = {r["path"]: (r["status"], r["reason"]) for r in rows}
+            published = {"session/run/client.log", "session/run/mind.log", "session/run/created_utc",
+                         "session/run/installed_script.txt", "session/journal/Bram.jsonl",
+                         "session/journal/system/abc.txt", "session/skills.rhai", "session/README.md"}
+            self.assertEqual(set(data), published)
+            for path in ("session/CHECKLIST.md", "session/notes.md", "session/run/screen.mp4", "session/run/blob.bin2",
+                         "session/journal/extra/thing.jsonl", "diagnosis/REPORT.md", "review/check.py",
+                         "FEEDBACK.md", "report/index.html"):
+                self.assertEqual(st[path][0], "excluded", path)
+                self.assertTrue(st[path][1].startswith("held"), (path, st[path][1]))
+            # a README about the owner is held
+            for text in ("You arrive on the square.\n", "The owner wants to test greetings.\n",
+                         "Ada plays a newcomer.\n", "Run play.sh as adaq\n"):
+                write(src, "session/README.md", text)
+                s = store.Scrubber(ident(), cfg=cfg, machine="test", kind="play-session")
+                rows, _, data = store.scrub_source(src, s, keep_data=True)
+                self.assertNotIn("session/README.md", data, text)
+                r = [x for x in rows if x["path"] == "session/README.md"][0]
+                self.assertTrue(r["reason"].startswith("held: the README"), r["reason"])
+            # the unit still publishes, and its manifest lists what was held, with reasons
+            out = os.path.join(t, "packed")
+            man = store.pack_session(src, out, store.Scrubber(ident(), cfg=cfg, machine="test", kind="play-session"),
+                                     machine="test")
+            store.check_publishable(man, s)
+            held = {h["path"]: h["reason"] for h in man["held"]}
+            for path in ("diagnosis/REPORT.md", "FEEDBACK.md", "session/CHECKLIST.md", "session/README.md"):
+                self.assertIn(path, held)
 
 
 if __name__ == "__main__":

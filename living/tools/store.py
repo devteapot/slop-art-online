@@ -765,6 +765,42 @@ class EchoMatcher:
         return merged
 
 
+# Play sessions publish an allow-list: the record of the run, not analysis of the person who played.
+SESSION_ALLOW = (
+    ("journal/*.jsonl", "the minds' journals"),
+    ("journal/system/*.txt", "the journals' system prompts"),
+    ("journal/batches/*.json", "the journals' provider batch records"),
+    ("run/*.log", "the run's logs"),
+    ("run/*.jsonl", "the run's recorded rows"),
+    ("run/*.txt", "the run's installed script"),
+    ("run/*.rhai", "the run's installed rules"),
+    ("run/created_utc", "the run's creation time"),
+    ("skills.rhai", "the scene's rules"),
+    ("README.md", "the scene's description (only if it does not describe the owner)"),
+)
+OWNER_WORDS = re.compile(r"(?i)\b(owner|owner's|you|your|you're|yourself|feedback|play-?test(?:er)?s?|intends?|"
+                         r"intention|wants? to|wishes|liked|disliked|felt)\b")
+
+
+def session_rel(relpath):
+    """The path inside the session folder ("session/journal/x.jsonl" -> "journal/x.jsonl"), or None."""
+    parts = relpath.replace("\\", "/").split("/")
+    if "session" not in parts[:-1]:
+        return None
+    return "/".join(parts[parts.index("session") + 1:])
+
+
+def session_allowed(relpath):
+    """(allowed?, reason) under the play-session allow-list."""
+    inner = session_rel(relpath)
+    if inner is None:
+        return False, "held: outside session/ (feedback, reports, agents' analysis of the owner's play)"
+    for pat, what in SESSION_ALLOW:
+        if fnmatch.fnmatchcase(inner, pat) and inner.count("/") == pat.count("/"):
+            return True, what
+    return False, f"held: not on the session allow-list (session/{inner})"
+
+
 class Scrubber:
     """Redacts what must not be public from text, refuses whole files that cannot be made safe,
     and holds back files in categories the owner has not decided."""
@@ -1102,6 +1138,10 @@ class Scrubber:
                 return "skipped", f"build output or cache ({p}/)"
         if name.endswith(BUILD_EXT):
             return "skipped", "build output"
+        if self._session():
+            allowed, why = session_allowed(relpath)
+            if not allowed:
+                return "excluded", why
         if name.endswith(MEDIA_EXT) and self._session():
             return self._decision("session_media")
         if name.endswith((".html", ".htm")) and self._session():
@@ -1149,6 +1189,14 @@ class Scrubber:
             return "ok", "binary (scanned for secrets and identity)", data, acc
         if PRIVATE_KEY.search(text):
             return "refused", "contains a private key", None, acc
+        if self._session() and session_rel(relpath) == "README.md":
+            hit = OWNER_WORDS.search(text)
+            idn = None if hit else (self.first_name.search(text) if self.first_name else None) or \
+                (self.owner_name.search(text) if self.owner_name else None) or \
+                (self.login.search(text) if self.login else None)
+            if hit or idn:
+                return "excluded", ("held: the README describes the owner or their intentions "
+                                    f"({'mentions “' + hit.group(0) + '”' if hit else 'names the owner'})"), None, acc
         if name.endswith(".jsonl"):
             out = []
             for line in text.splitlines():
@@ -1306,7 +1354,7 @@ def scrub_source(src, scrubber, keep_data=False):
             raw = load()
         if raw is not None:
             st2, why2, out, acc = scrubber.scrub_bytes(inner, raw)
-            if st2 == "refused":
+            if st2 in ("refused", "excluded") and st != "excluded":
                 st, why = st2, why2
             elif st == "ok":
                 why = why or why2
@@ -1505,6 +1553,8 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
                      {"path": scrubber.publish_path(r["path"]),
                       "redactions": {c: v["count"] for c, v in r["findings"].items()}} for r in rows],
            "models": _model_counts(calls),
+           "held": [{"path": scrubber.publish_path(r["path"]), "reason": r["reason"]}
+                    for r in rows if r["status"] in ("excluded", "held")],
            "dropped": [{"file": scrubber.publish_path(d["file"]), "where": d["where"],
                         "why": "quotes an owner line" if d["why"].startswith("quotes") else "repeats an owner line"}
                        for d in scrubber.dropped],

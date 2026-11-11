@@ -42,6 +42,17 @@ follows scripts and behaviour graphs. A batch runs several trials, mind variants
 parallel, and records what the mind perceived, said, planned and did. `docs/TRIALS.md` in the code
 repository describes the format.
 
+A **play session** (`sessions/<machine>/<name>/`) is a run in which a person played one character
+among residents that are all model minds.
+- **The person's typed lines are removed:** each is replaced by `[owner line]`, and model replies,
+  rows and lines that quote or repeat one are dropped.
+- **Their character is called "Player".**
+- **Kept:** what that character did in the world (where it went, what it did, who it fought) is part
+  of the record.
+- **Published:** only the record of the run (the minds' journals, the run's logs, the scene's rules and
+  description). The person's feedback, screenshots and video, and any analysis of their play, are
+  not published.
+
 A seed does not make inference repeatable. Replicates are separate runs: compare them side by
 side rather than averaging them into one.
 
