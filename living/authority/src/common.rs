@@ -9,10 +9,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-// Behavior switches from the seed's `rules` block (build.rs writes the file; each lab arm
-// compiles its own). True is the enforced rule; false hands the behavior to the minds.
-include!(concat!(env!("OUT_DIR"), "/rules_flags.rs"));
-
 thread_local! {
     static MAP: RefCell<Option<Rc<Map>>> = const { RefCell::new(None) };
     static SCRIPTS: RefCell<Option<(u32, Rc<Scripts>)>> = const { RefCell::new(None) };
@@ -175,11 +171,11 @@ pub fn flush_counts(k: &mut Clock) -> bool {
 }
 
 /// Who controls a seeded or newborn character that has no player: the admin's minds, which
-/// deliberate and receive experiences (the default), or, with the seed's `rules.minds` false,
-/// the database itself, so the character lives on its behaviour graph alone and no
+/// deliberate and receive experiences (the default), or, with the `minds` law false (a seed's
+/// `rules`), the database itself, so the character lives on its behaviour graph alone and no
 /// experiences or deliberation requests are written for it.
 pub fn mind_controller(ctx: &ReducerContext) -> (spacetimedb::Identity, bool) {
-    if MINDS {
+    if laws(ctx).minds {
         (world(ctx).admin, true)
     } else {
         (ctx.database_identity(), false)
@@ -298,13 +294,19 @@ pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terr
     Ok(())
 }
 
-/// World laws from the installed scripts (cached with them).
+/// World laws from the installed scripts, with the world's own values over them (its seed's
+/// `rules`, `world_law`). Cached with the scripts: writing a world law moves `scripts_rev`.
 pub fn laws(ctx: &ReducerContext) -> living_rules::script::Laws {
     let rev = scripts_rev(ctx);
     if let Some(l) = LAWS.with(|l| l.get().filter(|(r, _)| *r == rev).map(|(_, l)| l)) {
         return l;
     }
-    let l = scripts(ctx).laws();
+    let over: Vec<(String, serde_json::Value)> = ctx.db.world_law().iter().filter_map(|w| serde_json::from_str(&w.value).ok().map(|v| (w.name, v))).collect();
+    let sc = scripts(ctx);
+    let l = sc.laws_with(&over).unwrap_or_else(|e| {
+        log::warn!("world laws: {e}; the script's own values hold");
+        sc.laws()
+    });
     LAWS.with(|c| c.set(Some((rev, l))));
     l
 }

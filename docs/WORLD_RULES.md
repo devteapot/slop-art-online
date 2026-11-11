@@ -153,6 +153,14 @@ Two couplings that let a law and the engine disagree are fixed:
 - **Bond offers** were dropped after 180 s whatever `bond_window_s` said; now 60 s after the window, like trade offers.
 - **Need rates' key.** `settle_needs` (`brain.rs`) re-asks `rates(a)` when a body's state changes. Its key compared hunger and energy with 100, 70, 15 and 0, copies of the law's `starving_at`, `fed_below`, `rested_above` and `spent_at`. A world whose law moved a threshold kept stale rates until something else changed the key. The key now compares with the thresholds the law last gave that body (`NeedLaw::cuts`, kept per body for the module instance; unknown after a restart, which asks the law once).
 
+**A world's own laws.** A seed's `rules` block used to be compiled into the module (`build.rs` wrote `rules_flags.rs`: `MINDS`, `CRY_PROMPTS_CARERS`), so each lab arm and each floor seed needed its own build (`LIVING_RULES` for a floor module). Now:
+
+- `minds` and `cry_prompts_carers` are `laws()` constants (true in the shipped script), described like any law.
+- A seed's `rules` is a map of law names to the world's own values: `{"minds": false}` on the island, or `{"fire_warmth": 5}`. Any constant of `laws()` can be set this way.
+- When a world is created (`floor::begin`, for a compiled seed and for `create_floor`), its `rules` are kept in the private table `world_law` (name, value as JSON) and `clock.scripts_rev` moves, so every cache reads them. `common::laws` reads the script's laws with the world's values over them (`Scripts::laws_with`), once per script revision. An install moves the revision past the clock's.
+- A name that is not a law, or a value of another kind (a number for `minds`), is refused: by `init` for a compiled seed, by `create_floor` for a floor's ("seed rules: `mindz` is not a law of this world (laws are …)").
+- Table design: one row per law a world sets (two on the island), primary key the name, read in full once per script revision; never written after creation. No subscription; private ([tables](https://spacetimedb.com/docs/tables/)). Adding a table is an automatic migration ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations)); a world created before this change has no rows, and its laws are the script's (`minds` true), not its seed's `minds: false`. Recreate such a world, or insert its rows as the owner.
+
 **Old scripts.** A script installed before a required law existed (`REQUIRED_LAWS`: `senses`, `motion`) runs with the shipped script's functions underneath its own until its next install, and `install_script` refuses a script without it. An old `laws()` with `sight_day`, `run_speed`, `turn_rate` and the rest is ignored: those keys are no longer read.
 
 ## Primitives

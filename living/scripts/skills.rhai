@@ -44,6 +44,10 @@ fn laws() {
         spawn_hunger: 25.0, spawn_energy: 85.0,
         // Grazing each grassy or forest tile holds.
         pasture_per_tile: 0.02,
+        // Characters nobody plays have minds (false: they live on their behaviour graphs
+        // alone), and a crying infant makes its carers think about it (false: it is only
+        // heard). A world sets these in its seed's `rules`, like any law here.
+        minds: true, cry_prompts_carers: true,
     }
 }
 

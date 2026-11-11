@@ -496,6 +496,9 @@ pub struct Seed {
     /// Records the world starts with (a community's regard for another; docs/WORLD_RULES.md).
     #[serde(default)]
     pub records: Vec<crate::records::SeedRecord>,
+    /// The world's own values of laws (`laws()` in the script), by name: `{"minds": false}`.
+    #[serde(default)]
+    pub rules: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Deserialize, Default)]

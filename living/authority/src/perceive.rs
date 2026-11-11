@@ -222,7 +222,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
             percept(ctx, &c, now, "signal", baby.id, 0, at, text, if c.kind == "person" { 0.8 } else { 0.64 });
         }
     }
-    if !common::CRY_PROMPTS_CARERS {
+    if !common::laws(ctx).cry_prompts_carers {
         // The cry is only a percept (above): no mind is made to think about it, and
         // whether a culture attends to its infants is left to the minds themselves.
         if old.as_ref() != Some(&cry) {

@@ -373,6 +373,11 @@ pub struct Laws {
     pub spawn_energy: f32,
     /// Grazing each grassy or forest tile holds (grazing units).
     pub pasture_per_tile: f32,
+    /// Characters nobody plays have minds (the world's admin's mind service deliberates for them
+    /// and they receive experiences); false: they live on their behaviour graphs alone.
+    pub minds: bool,
+    /// A crying infant makes its carers think about it; false: the cry is only heard.
+    pub cry_prompts_carers: bool,
 }
 
 
@@ -412,6 +417,8 @@ impl Default for Laws {
             spawn_hunger: 25.0,
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
+            minds: true,
+            cry_prompts_carers: true,
         }
     }
 }
@@ -1164,14 +1171,45 @@ impl Scripts {
         Ok((v as f32).clamp(0.2, 12.0))
     }
 
+    /// The world constants (`laws()`).
     pub fn laws(&self) -> Laws {
-        let mut l = Laws::default();
+        self.laws_with(&[]).unwrap_or_default()
+    }
+
+    /// The names of the world constants (`laws()`'s keys).
+    pub fn law_names(&self) -> Vec<String> {
+        self.laws_map().keys().map(|k| k.to_string()).collect()
+    }
+
+    fn laws_map(&self) -> Map {
         if !self.has("laws") {
-            return l;
+            return Map::new();
         }
-        let Ok(m) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws", ()).map(|d| d.try_cast::<Map>().unwrap_or_default()) else { return l };
+        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws", ()).ok().and_then(|d| d.try_cast::<Map>()).unwrap_or_default()
+    }
+
+    /// The world constants with a world's own values over the script's (a seed's `rules`: a
+    /// number or true/false by law name). A name that is not a law, or a value of another
+    /// kind than the law's, is refused.
+    pub fn laws_with(&self, over: &[(String, serde_json::Value)]) -> Result<Laws, String> {
+        let mut m = self.laws_map();
+        for (k, v) in over {
+            let Some(cur) = m.get(k.as_str()) else {
+                let mut names: Vec<String> = m.keys().map(|k| k.to_string()).collect();
+                names.sort();
+                return Err(format!("`{k}` is not a law of this world (laws are {})", names.join(", ")));
+            };
+            let d = match v {
+                serde_json::Value::Bool(b) if cur.is_bool() => Dynamic::from(*b),
+                serde_json::Value::Number(n) if number(cur).is_some() => Dynamic::from(n.as_f64().unwrap_or(0.0)),
+                _ => return Err(format!("law `{k}` takes {}, not {v}", if cur.is_bool() { "true or false" } else { "a number" })),
+            };
+            m.insert(k.as_str().into(), d);
+        }
+        let l = Laws::default();
         let g = |k: &str, d: f32| m.get(k).and_then(number).map(|v| v as f32).unwrap_or(d);
-        l = Laws {
+        let flag = |k: &str, d: bool| m.get(k).and_then(|v| v.as_bool().ok()).unwrap_or(d);
+        let l = Laws {
             fire_warmth: g("fire_warmth", l.fire_warmth),
             shelter_warmth: g("shelter_warmth", l.shelter_warmth),
             gestation_days: g("gestation_days", l.gestation_days),
@@ -1205,8 +1243,10 @@ impl Scripts {
             spawn_hunger: g("spawn_hunger", l.spawn_hunger).clamp(0.0, 100.0),
             spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
+            minds: flag("minds", l.minds),
+            cry_prompts_carers: flag("cry_prompts_carers", l.cry_prompts_carers),
         };
-        l
+        Ok(l)
     }
 
     /// What an observer perceives of a target (`perceived_of(p)`, docs/PERCEPTION.md): which
@@ -1618,6 +1658,12 @@ mod tests {
         c.target.dist = 9.0;
         assert!(sc.check("appraise", &c).is_err());
         assert_eq!(sc.laws().takeover_s, 30.0);
+        // A world's own values (a seed's `rules`) over the script's: names and kinds are the laws'.
+        let over = |k: &str, v: serde_json::Value| sc.laws_with(&[(k.to_string(), v)]);
+        assert!(!over("minds", serde_json::json!(false)).unwrap().minds && sc.laws().minds);
+        assert_eq!(over("fire_warmth", serde_json::json!(5)).unwrap().fire_warmth, 5.0);
+        assert!(over("mindz", serde_json::json!(false)).unwrap_err().starts_with("`mindz` is not a law of this world"));
+        assert!(over("minds", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));

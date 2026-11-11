@@ -64,6 +64,8 @@ PRIVATE = ['clock', 'steer', 'walk_route', 'wake', 'familiar', 'deliberation', '
            'woken', 'prior', 'prior_head', 'guest', 'judged',
            # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
            'record', 'record_party', 'record_clock',
+           # A world's own law values (its seed's `rules`; docs/WORLD_RULES.md, since laws-2).
+           'world_law',
            # A floor module's staged genesis (floor.rs), private since floors were added.
            'floor_seed', 'genesis_timer']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).

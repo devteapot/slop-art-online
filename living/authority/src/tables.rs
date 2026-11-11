@@ -120,6 +120,17 @@ pub struct Clock {
     pub missed: u64,
 }
 
+/// A world's own value of a law (a seed's `rules`: `minds`, `fire_warmth`, …), over the
+/// script's `laws()`. Written when the world is created; read with the laws, once per script
+/// revision (docs/WORLD_RULES.md, "A world's own laws").
+#[spacetimedb::table(accessor = world_law)]
+pub struct WorldLaw {
+    #[primary_key]
+    pub name: String,
+    /// The value as JSON: a number, or true or false.
+    pub value: String,
+}
+
 #[spacetimedb::table(accessor = script, public)]
 pub struct Script {
     #[primary_key]
