@@ -10,7 +10,9 @@
     "goals": [
       "clear what I owe Aethelred Tanner",
       "keep Baldwin Wade's custom at the Bell and Bush",
-      "see Martin made a master with his own mark"
+      "see Martin made a master with his own mark",
+      "teach Martin the last of what I know, hoop-setting and all, before he leaves my bench",
+      "own a stack of seasoned oak I did not have to buy dear through the gate"
     ],
     "mood": "steady, a little worn",
     "traits": {
@@ -131,7 +133,13 @@
         "why": "I was years at the bench before my father let me sign a cask."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sitting at the Bell and Bush with a mug of Baldwin Wade's ale, talking barrels and weather",
+      "walking the west wall at dusk to check the wood store against rain",
+      "carving little noggins and spoons from offcut staves for the house"
+    ],
+    "calling": "I am a cooper, and a barrel that holds is a promise kept — I'd have no other trade."
   },
   "Juliana Cooper": {
     "narrative": "I am Juliana Cooper and I mind the wooden-ware stall in the square: barrels, buckets, noggins, whatever Benedict and Martin turn out. I know what a thing is worth and I do not let a buyer talk me down twice. The stall pays the Guild its rent and the household eats because of it. I keep the house and the store and I count what comes in.",
@@ -144,7 +152,9 @@
     "goals": [
       "sell off the small wares before winter",
       "see Martin married to a decent trade",
-      "keep a little by against a bad year"
+      "keep a little by against a bad year",
+      "have a proper stock of noggins and buckets laid by for the winter market",
+      "put a little aside in marks that Benedict does not know about, against a lean year"
     ],
     "mood": "brisk, watchful",
     "traits": {
@@ -258,7 +268,13 @@
         "why": "Martin has skill but he has not yet earned the master's word."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "minding the wooden-ware stall in the square and swapping the day's gossip with Enid Fletcher",
+      "keeping the household ledger by the fire of an evening",
+      "walking to the chapel on market days to hear the sisters read the calendar"
+    ],
+    "calling": "I keep the stall and the house, and I'd sooner be at the square selling than anywhere."
   },
   "Martin Cooper": {
     "narrative": "I am Martin Cooper, seventeen, and I am apprenticed to my father at the cooper's bench. I can raise a barrel from staves and set a hoop true, and I am better at it than he was at my age, whatever he says. I want my own mark and my own shed, and I will not spend my life under his eye. The gate-due and the Kettlebridge price make everything dear, and I am sick of hearing of it.",
@@ -271,7 +287,9 @@
     "goals": [
       "finish my indenture and be made a master",
       "earn enough to set up my own bench",
-      "take a wife when I have a trade to keep her"
+      "take a wife when I have a trade to keep her",
+      "save enough marks for my own tools and a bench of my own",
+      "make a name at the market so a master's mark comes to me, not through my father"
     ],
     "mood": "restless, proud",
     "traits": {
@@ -379,6 +397,12 @@
         "why": "A man with no shed of his own has no business courting."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "dicing at the Bell and Bush with Cedric Tanner and Stephen Hobson",
+      "walking out the south gate along the stone road when the day's work is done",
+      "practising a new hoop-setting on scrap staves after hours, to be quicker than my father"
+    ],
+    "calling": "I can raise a barrel true as any man on this island, and one day the mark on it will be mine."
   }
 }

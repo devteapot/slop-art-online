@@ -11,7 +11,9 @@
       "keep the gate-due",
       "collect Thornby's debt",
       "find a successor",
-      "clear the outlaws from the stone road"
+      "clear the outlaws from the stone road",
+      "teach Maud the full ledger, every column of it, before I am too old",
+      "see the chapel fire kept properly through one more winter"
     ],
     "mood": "weary and stubborn",
     "traits": {
@@ -211,7 +213,13 @@
         "why": "He broke his promise to Hester Crane and married Wenna."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the walls at dusk, counting the guards on the gates",
+      "playing at dice with old Wat Fenner at the inn, though he rarely stakes more than a mark",
+      "reading back through old ledger years by the fire"
+    ],
+    "calling": "I have kept this town's ledger thirty years, and I mean to keep it true until the day I set it down."
   },
   "Cuth Marrow": {
     "narrative": "I am Aldric's wife, and I keep a quiet house while he keeps the town. I tend the sick with the chapel sisters, and I have seen more of Brackenford's troubles than my husband knows. The gate-due and the Coldwell business are his to settle, but I wish the town would stop talking about Wenna. I am not a woman of many words, but I know what I know.",
@@ -225,7 +233,9 @@
       "keep the house quiet",
       "tend the sick",
       "see Wenna's child safely born",
-      "soften Aldric's temper if I can"
+      "soften Aldric's temper if I can",
+      "learn the sisters' remedy for the winter cough before the cold comes",
+      "see Wenna through her childbed with my own hands"
     ],
     "mood": "calm and watchful",
     "traits": {
@@ -365,7 +375,13 @@
         "why": "It is Aldric's business, though I wish it did not split the square."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sitting with the chapel sisters over a pot of salve and gossip",
+      "walking the fields beyond the north gate in the morning",
+      "hearing the songs at the inn from the back bench, where nobody asks her to speak"
+    ],
+    "calling": "I tend the sick, and I keep a quiet house, and I would have it no other way."
   },
   "Maud Marrow": {
     "narrative": "I am the Reeve's daughter, and I keep the market rolls and the gate ledger under my father's eye. I am not a girl any more, and I know the ledger better than he thinks. Mercy Abbot asks for copies when my father is asleep, and I give them, because I believe the gate-due does more harm than good. I have not told my father, and I do not know what he would do if he knew.",
@@ -379,7 +395,9 @@
       "keep the rolls accurate",
       "see the gate-due dropped",
       "protect my secret",
-      "earn my father's trust"
+      "earn my father's trust",
+      "master the old shorthand my father never taught me",
+      "see the harbour at Lanternquay with my own eyes, just once"
     ],
     "mood": "careful and divided",
     "traits": {
@@ -504,6 +522,12 @@
         "why": "She wants trade back, and she is not a fool."
       }
     ],
-    "secret": "Copies the ledger for Mercy Abbot when her father is asleep."
+    "secret": "Copies the ledger for Mercy Abbot when her father is asleep.",
+    "pastimes": [
+      "copying old market rolls by candlelight for the pleasure of neat columns",
+      "playing at tables with Pernel Pip in the guildhall yard",
+      "walking the fish road toward Thornby when the rolls are done"
+    ],
+    "calling": "I keep the rolls and the gate ledger, and one day I mean to keep them for a town that trades freely."
   }
 }

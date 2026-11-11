@@ -11,7 +11,9 @@
       "see the gate-due dropped so my clay comes cheaper",
       "sell enough this season to put by for winter",
       "keep Anselm's hands busy and out of the kiln",
-      "get Mercy Abbot seated as Reeve"
+      "get Mercy Abbot seated as Reeve",
+      "throw a great storm-cloud glazed jug good enough to keep for myself",
+      "teach myself to fire the kiln hotter without cracking the big pots"
     ],
     "mood": "restless and put-upon",
     "traits": {
@@ -146,7 +148,13 @@
         "why": "Their clay is in half my pots. I cannot hate the hand that feeds my wheel."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "arguing the gate-due over a cup at the Bell and Bush",
+      "turning a jug on the wheel just to feel the clay come right",
+      "walking the market square on a fair morning to see what other hands have made"
+    ],
+    "calling": "I am a potter, and a good one — a jug that pours true and a pot that keeps its glaze is worth more than any ledger says."
   },
   "Alice Potter": {
     "narrative": "I keep the house and I keep the stall, and I keep Edwin from shouting at the gate guards more than once a week. My hands know a glaze better than his do; a little ash, a little lead, and the pot comes out of the kiln the colour of a storm cloud. I do not say much at the Guild meetings. I listen, and I count what we have left, and I make it stretch.",
@@ -159,7 +167,9 @@
     "goals": [
       "get through winter with the store full",
       "teach Anselm the wheel before he breaks every jug in the shed",
-      "see Edwin less angry about the due"
+      "see Edwin less angry about the due",
+      "build up a glaze recipe book of my own to hand down",
+      "see the store full and the house quiet through a whole winter without borrowing"
     ],
     "mood": "steady, a little tired",
     "traits": {
@@ -269,7 +279,13 @@
         "why": "The Guild rents our stall; a civil word keeps it."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mixing glazes by the shed door, testing ash and lead on a shard",
+      "sitting with Enid Fletcher at the stall and trading gossip between customers",
+      "walking to the chapel of an evening to hear the sisters keep the calendar"
+    ],
+    "calling": "My hands know a glaze better than anyone's — a little ash, a little lead, and the pot comes out the colour of a storm cloud."
   },
   "Anselm Potter": {
     "narrative": "The clay is cold and squishy and smells like the river bottom. I make a pot and it falls over and I make another one and it falls over and Mama says that is how it goes. When Father is at the square I play in the shed, and sometimes I get the wheel to spin for a long time before it stops.",
@@ -280,7 +296,8 @@
     ],
     "goals": [
       "make a pot that stands up by itself",
-      "see the kiln fire up close when Father lets me"
+      "see the kiln fire up close when Father lets me",
+      "watch the kiln fire up close when Father lets me"
     ],
     "mood": "busy and happy",
     "traits": {
@@ -332,6 +349,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "playing in the clay shed, making pots that fall over",
+      "spinning the wheel and watching how long it turns",
+      "running about the square with Bram Fenner"
+    ],
+    "calling": "When I am big I want to make pots like Mama and Father, but ones that stand up."
   }
 }

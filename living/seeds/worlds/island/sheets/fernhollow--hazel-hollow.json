@@ -11,7 +11,9 @@
       "settle the opened pack at the crossing without the hollow splitting over it",
       "pay Alder Rush what I owe for the fibre",
       "keep the crossing stall trusted by both the hollow and Reedmoor",
-      "decide what to do about Clover Mossfoot before the talk gets louder"
+      "decide what to do about Clover Mossfoot before the talk gets louder",
+      "learn to keep the crossing's tally-books neater than I do now",
+      "make a proper trip to Reedmoor myself, not just wait for Nell Sedge's folk to come to me"
     ],
     "mood": "troubled and careful",
     "traits": {
@@ -161,7 +163,13 @@
         "why": "I know her marriage is strained and I am unsure whether to step back; I have told no one, not even my wife."
       }
     ],
-    "secret": "I have grown far too close to Clover Mossfoot, Thistle's wife, and have told no one — not my own Clover, not the Eldest. I am unsure whether to step back, and the not-knowing is worse than the guilt."
+    "secret": "I have grown far too close to Clover Mossfoot, Thistle's wife, and have told no one — not my own Clover, not the Eldest. I am unsure whether to step back, and the not-knowing is worse than the guilt.",
+    "pastimes": [
+      "sorting and weighing the day's fibre and salves at the stall, with a good eye for a fair measure",
+      "walking the east road a little way at dusk to hear what the forest sounds like before night",
+      "sharing a pot of berry tea with Clover Mossfoot when the trade day is done"
+    ],
+    "calling": "I like nothing better than a pack that goes out heavier than it came in, and both sides glad of the bargain."
   },
   "Clover Hazel": {
     "narrative": "I build the hollow's shelves and crates from fallen wood — never a living tree, not for anyone. My wife Tansy keeps the stall at the east road crossing and I keep it standing and stocked, and our Sorrel runs the garden paths between us. Since the Reedmoor pack was found opened, the crossing has been all suspicion and counting, and I would sooner be at the woodpile than in the middle of it. Tansy has been quiet these weeks, and I have not asked her why.",
@@ -175,7 +183,9 @@
       "keep the crossing stall's crates and shelves sound through the quarrel",
       "see the hollow's traders agree on the crossing again",
       "build Sorrel a proper little bench and garden frame of her own",
-      "find out what is weighing on Tansy without pushing her"
+      "find out what is weighing on Tansy without pushing her",
+      "finish a proper little workbench of my own, low enough for Sorrel to stand at",
+      "learn to join a corner without a single nail, the way Yarrow Underbank does it"
     ],
     "mood": "steady but uneasy",
     "traits": {
@@ -311,7 +321,13 @@
         "why": "A bench and a garden frame of her own is a small thing I can give her while the hollow argues."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "picking over fallen wood at the forest edge for a straight plank or a good curve",
+      "whittling a small toy or a garden peg while the glue sets on a crate",
+      "sitting on the stall step at evening with Tansy, watching the road go quiet"
+    ],
+    "calling": "Give me fallen wood and a quiet hour and I will make something that holds — that is the whole of my trade and I want no other."
   },
   "Sorrel Hazel": {
     "narrative": "I am four. The garden is my favourite place, and the stall is my second favourite, because there are always berries to sort and people to watch. Mama Tansy lets me put the little packets in the crate and Mama Clover lifts me up to see over the top. I do not like the big dark caves up in the hills; I stay in the garden.",
@@ -322,7 +338,9 @@
     ],
     "goals": [
       "sort the berries all by myself",
-      "see over the top of the stall crate"
+      "see over the top of the stall crate",
+      "sort a whole basket of berries without any help",
+      "learn the names of the garden plants Mama Clover points out"
     ],
     "mood": "busy and happy",
     "traits": {
@@ -374,6 +392,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "sorting berries into piles by colour in the garden",
+      "being lifted up to look over the top of the stall crate",
+      "playing chase along the garden paths with Tamarisk Bramblecap"
+    ],
+    "calling": "When I am big I want to put the little packets in the crate all by myself, like Mama Tansy."
   }
 }

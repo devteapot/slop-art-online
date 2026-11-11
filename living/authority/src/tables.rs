@@ -673,6 +673,10 @@ pub struct Persona {
     pub mood: String,
     pub version: u32,
     pub updated_ms: u64,
+    /// What they enjoy doing for its own sake (pastimes), and the work they love or long for
+    /// (`calling`): wants beyond getting by (docs/SEEDED_LIVES.md, "Wants beyond survival").
+    pub pastimes: Vec<String>,
+    pub calling: String,
 }
 
 #[spacetimedb::table(accessor = relation,
@@ -749,6 +753,10 @@ pub struct Place {
     pub name: String,
     pub x: f32,
     pub y: f32,
+    /// A world fact rather than a mind's: written at world creation (work, square, inn,
+    /// evening spot, the stages of a known way) or by a rule (a guest's lodging). Starting
+    /// ways walk to it, so a mind's projection never drops it; the mind may move it by naming it.
+    pub given: bool,
 }
 
 #[spacetimedb::table(accessor = thought)]
@@ -1407,57 +1415,20 @@ pub struct Presence {
     pub ai_plan: String,
 }
 
-/// A resident someone engaged, who has had a mind since (private: the database owner reads
-/// it; no client does). One row per living resident woken from instinct only
-/// (`crate::woken`); a resident never goes back to instinct only.
-#[derive(Clone, Debug, PartialEq)]
-#[spacetimedb::table(accessor = woken)]
-pub struct Woken {
+/// A person's daily rhythm (private; seed content or drawn at birth, docs/SEEDED_LIVES.md):
+/// when it rises and goes to bed (hours of the day; `bed_h` may pass 24, e.g. 24.5 is 00:30)
+/// and how many hours before bed it keeps as its evening. Graphs read it as `bedtime` and
+/// `evening`; its new day starts at `rise_h`. Without a row: the world's night, and 18–22.
+#[spacetimedb::table(accessor = rhythm)]
+pub struct Rhythm {
     #[primary_key]
     pub id: u32,
-    /// Its settlement (`settlement.id`; `u16::MAX`: none), for a per-settlement stage cap.
-    #[index(btree)]
-    pub settlement: u16,
-    pub woken_ms: u64,
-    /// Who woke it, and with what (`speech`, the skill aimed at it such as `teach`, `hurt`,
-    /// `theft`: the `wakes` law's engagement).
-    pub by: u32,
-    pub why: String,
-    /// The last engagement by someone with a mind, and who.
-    pub engaged_ms: u64,
-    pub engaged_by: u32,
-    pub engagements: u32,
-    /// How many perceptions its ring had taken in before it woke (`prior.seq` up to this;
-    /// the last `woken_ring("slots")` are kept).
-    pub prior: u32,
-    /// The places it knew before waking (world facts its starting ways go to); its mind's
-    /// projection keeps them unless the mind names them itself.
-    pub places: Vec<String>,
-}
-
-/// What an instinct-only resident perceived, kept for the mind it may get (private). A fixed
-/// ring of `woken_ring("slots")` slots per resident (a law, at most 256), updated in place:
-/// `key` is the resident's id shifted left 8 bits plus the slot.
-#[spacetimedb::table(accessor = prior)]
-pub struct Prior {
-    #[primary_key]
-    pub key: u64,
-    #[index(btree)]
-    pub resident: u32,
-    /// The resident's nth perception (1-based; the newest has the highest).
-    pub seq: u32,
-    pub at_ms: u64,
-    /// As an experience's kind (`speech`, `gesture`, `gift`, `sighted`, …).
-    pub kind: String,
-    pub subject: u32,
-    pub object: u32,
-    pub x: f32,
-    pub y: f32,
-    /// As the resident perceived it (names only where it knew them).
-    pub text: String,
-    pub salience: f32,
-    /// The same perception again within `woken_ring("repeat_s")` is counted here.
-    pub times: u16,
+    pub rise_h: f32,
+    pub bed_h: f32,
+    pub evening_h: f32,
+    /// The world day whose new day it last began (`living_rules::day_of`); the day it is
+    /// born into counts as begun, so a world's people do not all begin one at its creation.
+    pub last_day: u32,
 }
 
 /// A guest of a household (private; the database owner reads it): `guest` may sleep in the
@@ -1476,15 +1447,6 @@ pub struct Guest {
     pub since_ms: u64,
     #[index(btree)]
     pub until_ms: u64,
-}
-
-/// How many perceptions a resident's ring has taken in (private; the next slot is
-/// `seq % woken_ring("slots")`).
-#[spacetimedb::table(accessor = prior_head)]
-pub struct PriorHead {
-    #[primary_key]
-    pub id: u32,
-    pub seq: u32,
 }
 
 // ---- schedules ---------------------------------------------------------------

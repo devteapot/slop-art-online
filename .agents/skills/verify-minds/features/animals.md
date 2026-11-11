@@ -16,9 +16,10 @@ Sources: `living/mind/src/mind/animal.rs`, `living/mind/src/prompts.rs` (`animal
 .agents/skills/verify-minds/scripts/verify_minds.py --run minds-$(date +%Y%m%d-%H%M%S) --case animals
 ```
 
-Three adult deer are gathered where the first grazes and a person is placed beside them (animals think only near people) with all switches on. The lead's request is answered by one `choose` call with a valid pick and the built graph installed; the other two deer's requests are answered from the lead's decision without a call; the lead asked again is answered by instinct. Every request carries a dawn reason: installing a graph counts as having just thought, and within `think_min_s` the authority asks an animal only for urgent reasons; dawn is one and is not news to the salience check. The fake log must hold exactly one `choose` request and no compile request.
+Three adult deer are gathered where the first grazes and a person is placed beside them (animals think only near people) with all switches on. The lead's request is answered by one `choose` call with a valid pick and the built graph installed; the other two deer's requests are answered from the lead's decision without a call; the lead asked again, once its `think_min_s` (240 s) after its chosen option has passed, is answered by instinct. A mind's install counts as having just thought, and within `think_min_s` the authority asks an animal only for urgent reasons, which are all news to the salience check; a fresh deer has not thought, so the first requests go through. (Until 2026-11-11 every request carried a dawn reason, which was urgent; the dawn broadcast is gone.) The fake log must hold exactly one `choose` request and no compile request.
 
 ## Gotchas
 
-- See above for why every request in the case is a dawn reason.
+- See above for why the lead's second request waits out its throttle (the case takes about four minutes longer).
 - Pack members are who the deciding animal sees now; there is no stored pack.
+- **Known gap since 2026-11-11:** the last step (asked again with nothing new, it lives by instinct) cannot be reached: only urgent reasons pass the deer's 240 s `think_min_s`, every urgent reason is news to the salience check, and waiting the throttle out makes the deer hungrier (also news). The case removes wolves near the herd and waits the throttle out, and fails there. Proving it needs a fixture with a shorter deer `think_min_s` or a needs scene reducer.

@@ -10,7 +10,9 @@
     "goals": [
       "Keep Marta and her children fed without Wat finding out",
       "See Bram and Sissly grow up safe",
-      "Hold my tongue at the inn when the talk turns to outlaws"
+      "Hold my tongue at the inn when the talk turns to outlaws",
+      "Learn to make the Bell and Bush's honey cakes so well that Baldwin Wade asks her to teach him something for once",
+      "Get a proper garden patch of her own, even a small one, where she can grow what she remembers from Coldwell"
     ],
     "mood": "quietly anxious",
     "traits": {
@@ -165,7 +167,13 @@
         "why": "I have enough troubles without shouting about them."
       }
     ],
-    "secret": "I carry food out to Coldwell by the south gate when Wat is not on watch; Marta knows, Wat does not."
+    "secret": "I carry food out to Coldwell by the south gate when Wat is not on watch; Marta knows, Wat does not.",
+    "pastimes": [
+      "Baking bread and pies at the Bell and Bush, and slipping the odd loaf into her basket for the walk to Coldwell",
+      "Tending the little herb pot on the kitchen sill and swapping cuttings with Sister Elspeth",
+      "Sitting with Sissly in the warm kitchen, telling her old Coldwell stories while the pot simmers"
+    ],
+    "calling": "I cook at the Bell and Bush and I cook well; my hands were made for a hearth and a full pot."
   },
   "Wat Fenner": {
     "narrative": "I have kept the south gate for seven years, and I know every carter and every load. The due pays our wages and keeps the wolves off the road, but the carters curse me for it. My wife's sister is an outlaw, and that shames me, though I say nothing. I do my duty and I go home.",
@@ -178,7 +186,9 @@
     "goals": [
       "Keep the gate and the due running smoothly",
       "See Bram and Sissly safe",
-      "Keep my post and my family's name clean"
+      "Keep my post and my family's name clean",
+      "Master the gate ledger and the due so no carter can cheat it and no captain can fault it",
+      "Take Bram out along the wall one day and show him the signals himself, when the boy is old enough"
     ],
     "mood": "weary and watchful",
     "traits": {
@@ -335,7 +345,13 @@
         "why": "I do my job and I do not make a fuss."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "Playing dice with Walter and Edric at the gatehouse on slow afternoons",
+      "Walking the wall at dusk, counting the carts and watching the road for wolves",
+      "Carving little wooden guards and gates for Bram, badly but with care"
+    ],
+    "calling": "I keep the south gate, and I mean to keep it as long as they'll have me; a gate kept well is a road kept safe."
   },
   "Bram Fenner": {
     "narrative": "I am nine and I can name every guard at the south gate. When I grow up I will be a guard too, and maybe a captain like Tobin Marrow. Mother says I must not go near the woods, but I know the guards' names and they let me watch.",
@@ -347,7 +363,9 @@
     "goals": [
       "Become a gate guard",
       "Learn all the guards' names and signals",
-      "See a wolf without getting eaten"
+      "See a wolf without getting eaten",
+      "Learn every guard's name and signal by heart",
+      "See a real wolf from a safe place, just once"
     ],
     "mood": "eager",
     "traits": {
@@ -444,7 +462,13 @@
         "why": "I know all the guards' names and I am learning the signals."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "Watching the guards at the south gate and copying their signals with a stick",
+      "Playing at gates and wolves with the other children in the square",
+      "Climbing the low wall by the gatehouse to get a better view"
+    ],
+    "calling": "When I grow up I'll be a gate guard, and maybe captain like Tobin Marrow."
   },
   "Sissly Fenner": {
     "narrative": "I am six and I follow Mother in the kitchen. It is warm and smells of bread and onions. Sometimes I get to stir the pot. I do not like the woods; they are dark.",
@@ -455,7 +479,9 @@
     ],
     "goals": [
       "Stay close to Mother",
-      "Get a taste of the pie filling"
+      "Get a taste of the pie filling",
+      "Get a taste of the pie filling before it goes in the oven",
+      "Learn to stir the pot all by herself without spilling"
     ],
     "mood": "content",
     "traits": {
@@ -515,6 +541,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "Stirring the pot in the kitchen when Mother lets her",
+      "Playing house with Petra Wade among the tables at the inn",
+      "Following Mother around the market square, holding her skirt"
+    ],
+    "calling": "I want to cook like Mother when I'm big, with a warm kitchen all my own."
   }
 }

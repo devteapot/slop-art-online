@@ -11,7 +11,9 @@
       "pay Alder Rush before the first frost without asking the chapel for a mark",
       "keep Orla from the wood road and the pits",
       "decide what to do about Elspeth's letter",
-      "keep the salve store full through the winter"
+      "keep the salve store full through the winter",
+      "learn to set a broken bone cleanly without a surgeon's hands to help",
+      "see Hollis read the whole psalter through on his own"
     ],
     "mood": "worn, watchful, and stubbornly warm",
     "traits": {
@@ -153,7 +155,13 @@
         "why": "I have seen what a pit house and a drinking man leave a woman with."
       }
     ],
-    "secret": "Elspeth has written asking me back to the chapel before winter, with a pardon for leaving offered through the Reeve; I have told no one, and the letter lies under my herb ledger."
+    "secret": "Elspeth has written asking me back to the chapel before winter, with a pardon for leaving offered through the Reeve; I have told no one, and the letter lies under my herb ledger.",
+    "pastimes": [
+      "walking the old forest paths to see which herbs have come up",
+      "sitting with a patient through the evening, telling old chapel stories to settle them",
+      "keeping a small garden of the plants she will not trust to the wood"
+    ],
+    "calling": "I heal whoever finds the path to my door, and I ask nothing at the gate."
   },
   "Orla Fenwick": {
     "narrative": "I was born in this cottage and I will likely die in it, but not before I have seen a little of the wood road. I keep the clearing's roots and barley and the beehives, and carry the surplus down to Ferncross and the Fernhollow stall, and that is how I came to know the Sootwood pits and Cael's nephew. My mother has forbidden him the cottage path; I go anyway when the loads are carried, and I am not a girl to be told who may walk up to my own door. The hives have been poor this year and I am short on what I promised Alder, and I have not told her how short.",
@@ -167,7 +175,9 @@
       "settle Alder Rush's honey before the frost",
       "keep walking to the pits whatever my mother says",
       "get a better year from the hives",
-      "see that Hollis is not afraid of the wood"
+      "see that Hollis is not afraid of the wood",
+      "raise a swarm of her own from the old hive",
+      "see the Sootwood pits and the burners' fires with her own eyes, not just the road to them"
     ],
     "mood": "restless, fond, and quietly anxious about the honey",
     "traits": {
@@ -303,7 +313,13 @@
         "why": "Ferncross and Fernhollow are the only markets that do not ask me to kneel to a gate."
       }
     ],
-    "secret": "I am far shorter on the honey than I have told my mother, and I am thinking of selling my grandmother's silver spoon, the last thing of my father's house, to pay Alder Rush."
+    "secret": "I am far shorter on the honey than I have told my mother, and I am thinking of selling my grandmother's silver spoon, the last thing of my father's house, to pay Alder Rush.",
+    "pastimes": [
+      "tending the beehives and watching the bees at the garden edge",
+      "walking the loads down the wood road to Ferncross and the Fernhollow stall",
+      "sitting with Rill Fenlake over a cup when the carrying is done"
+    ],
+    "calling": "I keep the clearing's roots and barley and honey, and I would keep more of it if the bees would let me."
   },
   "Hollis Fenwick": {
     "narrative": "I live in the cottage in the clearing with my mother and my grandmother, and I know every path of it and the names of all the herbs in the garden. Grandmother is teaching me my letters from the chapel psalter, and I carry her salve packets down to the Ferncross market in a basket. I like it when Fennel and Bracken come up the path from Fernhollow, and I like the burner who taught me to stack kindling, though Grandmother's face closes when his name is said.",
@@ -316,7 +332,8 @@
     "goals": [
       "learn all the herb names in the garden",
       "read the whole psalter without help",
-      "play with Fennel and Bracken when they come up the path"
+      "play with Fennel and Bracken when they come up the path",
+      "learn the name of every plant in the garden and the wood besides"
     ],
     "mood": "curious and easily startled",
     "traits": {
@@ -389,6 +406,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "hunting the garden for every herb and naming it aloud",
+      "playing with Fennel and Bracken when they come up the path",
+      "stacking kindling the way the burner showed him"
+    ],
+    "calling": "I want to learn my letters and the herbs, and one day carry more than salve packets."
   }
 }

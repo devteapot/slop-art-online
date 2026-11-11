@@ -10,7 +10,9 @@
     "goals": [
       "see the tide lanterns lit for every name on the list",
       "keep Wick's boat in nets and out of debt",
-      "see a seawall built before another surge takes the rest of the lower quay"
+      "see a seawall built before another surge takes the rest of the lower quay",
+      "learn to splice the new tarred twine as well as I once did the old",
+      "sit with Ostrander Sallow over a pot of fish stew and trade stories of the quay before the Surge"
     ],
     "mood": "quiet, weathered, slow to anger but slow to forgive",
     "traits": {
@@ -181,6 +183,12 @@
         "why": "A light lit late is a boat lost. I have seen it."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending nets on the quay steps, one knot at a time",
+      "watching Wick's boat come in from the harbour steps",
+      "reading over the list of the drowned when the tide lanterns are lit"
+    ],
+    "calling": "I mend nets, and a net mended is a boat saved."
   }
 }

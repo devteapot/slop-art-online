@@ -348,12 +348,8 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             common::chronicle(ctx, now, "time", 0, 0, (0.0, 0.0), format!("Night falls on day {day}."));
         } else if hour == 6 {
             common::chronicle(ctx, now, "time", 0, 0, (0.0, 0.0), format!("Dawn of day {day}."));
-            // Each person plans the day ahead (work, meals, learning, time with others).
-            let season = common::season(ctx, now);
-            let planners: Vec<u32> = ctx.db.character().kind().filter("person").filter(|c| c.alive && c.ai).map(|c| c.id).collect();
-            for id in planners {
-                crate::perceive::request_deliberation(ctx, id, &format!("Dawn of day {day} ({season}). A new day."), now);
-            }
+            // No one is asked to think at dawn: each person's new day begins at its own rising
+            // (brain.rs, `rhythm.last_day`).
         }
         k.last_hour = hour;
     }

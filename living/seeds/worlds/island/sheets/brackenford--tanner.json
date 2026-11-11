@@ -9,7 +9,9 @@
     "goals": [
       "keep the tannery profitable despite the gate-due",
       "see Cedric settled in a trade that suits him",
-      "hold my ground against the Kettlebridge leather sellers"
+      "hold my ground against the Kettlebridge leather sellers",
+      "take on an apprentice and teach him the trade properly",
+      "save enough marks to buy a second tanning pit"
     ],
     "mood": "wary and calculating",
     "traits": {
@@ -180,7 +182,13 @@
         "why": "A hard bargainer keeps his thoughts to himself until the price is named."
       }
     ],
-    "secret": "I've quietly sold a few hides to a Kettlebridge leather man through Silas Pike, knowing the Guild would not like it. The marks were too good to refuse."
+    "secret": "I've quietly sold a few hides to a Kettlebridge leather man through Silas Pike, knowing the Guild would not like it. The marks were too good to refuse.",
+    "pastimes": [
+      "walking the west wall at dusk to check the hides hung out to dry",
+      "sitting by the tannery fire with a cup of something warm after the day's work",
+      "dicing at the inn with the other tradesmen on market eve"
+    ],
+    "calling": "I've tanned hides by the west wall for thirty years, and I'd not trade it—every good pair of boots in Brackenford starts in my yard."
   },
   "Mildred Tanner": {
     "narrative": "I keep the tannery books and the house, and I can spot a bad hide across the yard. Aethelred is a hard man in a bargain, but he's fair to me and Cedric, and I've no complaints. The gate-due eats into our profit and I write it down every time, but I don't say so in the square. Cedric wants to build in stone; I want him to have a roof and a wife and not worry about what the Kettlebridge men charge.",
@@ -192,7 +200,9 @@
     "goals": [
       "keep the tannery books in order",
       "see Cedric settled",
-      "make the house a comfort to Aethelred"
+      "make the house a comfort to Aethelred",
+      "learn to read the chapel's calendar and keep the feast days straight myself",
+      "save a small purse of my own against a hard winter"
     ],
     "mood": "steady and watchful",
     "traits": {
@@ -318,7 +328,13 @@
         "why": "I keep the peace at home so Aethelred can do his work."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the herb pots by the kitchen door",
+      "visiting Sister Elspeth at the chapel on quiet afternoons",
+      "listening to the sisters tell the old stories at the common fire on feast days"
+    ],
+    "calling": "I keep the books and the house, and there's a proper satisfaction in a ledger that balances and a hearth that's warm when Aethelred comes in."
   },
   "Cedric Tanner": {
     "narrative": "I make cart frames and barrels for Osric Abbot and my father's tannery, but what I want is to build houses in stone. The town is short of good stone and the Kettlebridge men charge dear for it, so I make do with wood. I'm friendly with Stephen Hobson, who's a mason's son, and we talk about what we'd build if we could. My father thinks I should stick to wood; my mother just wants me settled.",
@@ -330,7 +346,9 @@
     "goals": [
       "learn stonework from the Kettlebridge masons",
       "build something that lasts",
-      "earn enough to set up my own workshop"
+      "earn enough to set up my own workshop",
+      "find a way to learn stonework from the Kettlebridge masons",
+      "build a proper stone hearth and chimney for my mother's house"
     ],
     "mood": "restless and hopeful",
     "traits": {
@@ -453,6 +471,12 @@
         "why": "My parents have given me a trade and a home; I won't forget it."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "helping Stephen Hobson shape stones in the mason's yard when there's no cart work",
+      "sketching plans for houses and bridges on scraps of bark",
+      "walking the stone road out of the south gate to look at the walls and gatehouses"
+    ],
+    "calling": "I make good cart frames, but what I want is to lay stone—to build something that'll still be standing when my father's tannery is a story."
   }
 }

@@ -9,7 +9,9 @@
     "goals": [
       "clear the stall fee owed to Mara Quell",
       "keep the salt-fish trade with the Reedmoor reed-cutters steady",
-      "see the seawall built so the lower quay trades again"
+      "see the seawall built so the lower quay trades again",
+      "buy a second cart so the Reedmoor run doesn't cost me the morning stalls",
+      "learn to read the ledger figures Mara Quell keeps, so I know what I'm owed to the mark"
     ],
     "mood": "brisk, a little put-upon",
     "traits": {
@@ -141,7 +143,13 @@
         "why": "Everything I own keeps because I salt it and wait; that's the whole of my trade."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the tide steps at low water, checking what the sea has left",
+      "dicing with the other carters at the back of the market when the day's trade is done",
+      "telling the old wreck stories to whoever's drinking at the stall"
+    ],
+    "calling": "I'm a carter, and a good one: salt and dried fish up and down this shore, and no load spoiled under my tarpaulin yet."
   },
   "Dory Sedge": {
     "narrative": "I've smoked fish in the shed behind the market for near twenty years, and the morning stalls know my smoke by the smell of it. Brannock carts what I smoke and I keep the shed and the boy and the fire. The cough goes round the poor terrace every winter and I've buried neighbours from it. I'd feed the whole quay if the shed held more.",
@@ -153,7 +161,9 @@
     "goals": [
       "keep the smoke shed and the morning stall paying",
       "see the winter cough off the poor terrace",
-      "keep Tam out of the night harbour"
+      "keep Tam out of the night harbour",
+      "learn to smoke a new cure that keeps through the summer heat",
+      "see Tam learn his letters, even if I never did"
     ],
     "mood": "steady, tired, warm",
     "traits": {
@@ -285,7 +295,13 @@
         "why": "The harbour at night took my uncle and I'll not have it take Tam."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "singing the old harbour songs while the racks smoke",
+      "tending a few pots of herbs behind the shed",
+      "sitting on the step at dusk with Brannock and a cup of something warm"
+    ],
+    "calling": "I smoke fish, and I'd have it no other way: slow smoke, fresh sell, and the shed smelling right by dawn."
   },
   "Tam Sedge": {
     "narrative": "I help Mam in the smoke shed, turning the racks and keeping the fire low, and I know the smell of fish smoke better than I know my letters. Da lets me ride the cart sometimes when it goes no further than the morning stalls. I don't like the harbour when it's dark; the water makes noises like breathing. Dory Gull and me play under the stalls where the lamps don't reach.",
@@ -296,7 +312,9 @@
     ],
     "goals": [
       "be trusted with the whole smoke rack",
-      "not go down to the harbour at night"
+      "not go down to the harbour at night",
+      "be trusted with the whole smoke rack by myself",
+      "learn to swim so the dark water isn't so frightening"
     ],
     "mood": "watchful, pleased with himself",
     "traits": {
@@ -368,6 +386,12 @@
         "why": "She says a low fire smokes sweet, and she's never wrong about fish."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "playing under the stalls with Dory Gull where the lamps don't reach",
+      "turning the smoke racks and being trusted with the fire",
+      "riding the cart as far as the morning stalls"
+    ],
+    "calling": "When I'm big I want to run the smoke shed like Mam, or maybe drive the cart like Da."
   }
 }

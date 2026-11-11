@@ -1,5 +1,18 @@
 # Core validation record
 
+
+## 2026-11-11 lives-2 after merging laws-2 (dev-box)
+
+Branch `lives-2` at `2c1fb5a` (main `8e6bae4` merged), own container `lives2-stdb` (2.14.1, port 3461), private `CARGO_TARGET_DIR`. The script installs (every law described, `minds` gone). `core-laws-053424`: tick, needs, food, refusal pass. `town.py` `core-laws-town-054630`: 21 of 23; own hours, one new day each and evenings out pass; "faces someone who comes up behind" (recorded flake) and "faces someone who speaks" failed, and both passed on a fresh world (`core-laws-speak-*`: speak, approach, speak), so a timing flake. Also verify-minds `resident` and verify-client 30 of 30 on the same build; `just living-check` exits 0; rules tests 130, mind tests 82.
+
+## 2026-11-11 every person a mind, survival secondary, no lockstep (lives-2, dev-box)
+
+On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
+
+- Unit 1 baseline `core-l2u1-015035`: tick, needs, food, refusal, seize, sight pass.
+- Units 2-4 `core-l2b-022738`: needs, food, refusal, seize, sight pass; tick missed 60 Hz at load 44 (49.7 Hz); `core-l2c-030713-tick` passes at load 34. Reruns `core-l2c-030713`: needs (the new cold law: a cloak removes the cold's tiring, an ordinary night does not hurt), food, refusal pass; infant passes (a summer night's cold does not hurt the exposed infant).
+- `town.py` `core-l2c-030713-town`: 21 of 23. New checks pass: each keeps their own hours (277 rhythms, rising 4.0-8.0 h sd 0.75, bed 19.5-25.4 h sd 1.22), each person's new day begins once (268 people, at most 1 each), the square and the inn fill with those whose evening is out. The two failures are recorded flakes: step-aside (three approaches, no step) and facing someone who comes up behind. `core-l2b-022738-town` failed the evening check before it counted only evenings out (people whose evening place is their work were "at their evening place" at midday).
+
 ## 2026-11-11 laws-2 (dev-box)
 
 Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. The first parallel batch (`*-l6`, eleven worlds at once) overloaded the server and then filled the dev-box disk; its tick (45 Hz) and needs timeouts were load, and its failures are kept.

@@ -9,7 +9,9 @@
     "goals": [
       "Keep the southern woods clear of wolves",
       "See Pike Tarn's snares moved off the village paths",
-      "Find a healer who can help Thea"
+      "Find a healer who can help Thea",
+      "Master the high-country trapping that Cuthbert learned from the hill herders",
+      "Build a proper drying rack so the winter meat keeps longer"
     ],
     "mood": "worried, keeping busy",
     "traits": {
@@ -154,7 +156,13 @@
         "why": "The woods have rules. People make excuses."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the southern woods at first light to read tracks",
+      "whittling snare pegs by the fire",
+      "sharing a cup at the Elmwick hearth with Cuthbert Stave"
+    ],
+    "calling": "I keep the woods, and the woods keep the village — that is the work I was made for."
   },
   "Rowan Wray": {
     "narrative": "I fish the forest streams and smoke the catch for the village, and I know every pool and eddy better than anyone. But my Thea has coughed since the spring, and no stream herb will shift it. Sibley Toller fears it may be the winter cough. I am frightened, and I do not like asking the village for help.",
@@ -166,7 +174,9 @@
     "goals": [
       "See Thea well again",
       "Keep the smokehouse going",
-      "Find a remedy that works"
+      "Find a remedy that works",
+      "Learn the old herb-lore well enough to treat coughs without Sibley's help",
+      "Keep a small garden of healing plants behind the smokehouse"
     ],
     "mood": "anxious, tired",
     "traits": {
@@ -292,7 +302,13 @@
         "why": "The pools have never lied to me, unlike people."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "fishing the quiet forest pools at dusk",
+      "tending the smokehouse fire and judging the cure by smell",
+      "trading herbs and news with Thistle Mossfoot when the pedlar passes"
+    ],
+    "calling": "I smoke what the streams give us, and I would know every herb in the wood by name and use."
   },
   "Thea Wray": {
     "narrative": "I am tired and cross and my chest hurts when I cough. Mother keeps me by the fire and I want to be out with Cerdic and the goats. I mend nets but my hands are slow now.",
@@ -301,7 +317,9 @@
       "mother's cooking"
     ],
     "goals": [
-      "To feel better and go out to play"
+      "To feel better and go out to play",
+      "To get strong enough to run out to the goats again",
+      "To learn one whole story by heart to tell the other children"
     ],
     "mood": "tired and cross",
     "traits": {
@@ -376,6 +394,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending nets beside her mother",
+      "playing at goats with Cerdic Garrow",
+      "listening to Leofgifu Garrow's stories at the village hearth"
+    ],
+    "calling": "When I am big I want to fish the streams like Mother, and know all the pools."
   }
 }

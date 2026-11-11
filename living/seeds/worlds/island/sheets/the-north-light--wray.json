@@ -11,7 +11,9 @@
       "keep the north light burning every night",
       "get enough lamp oil and salt to last the winter without asking Thornby",
       "raise Colm to be a lightkeeper",
-      "clear her name of the wrecking slander"
+      "clear her name of the wrecking slander",
+      "learn to make her own lamp oil from what the cape gives, so she need never ask Thornby for it",
+      "see Colm tend the light on his own, and be proud of him for it"
     ],
     "mood": "weary and defiant",
     "traits": {
@@ -130,7 +132,13 @@
         "why": "He is the only kin I have, and I will keep him safe and raise him right."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "smoking fish over a slow driftwood fire",
+      "walking the cape at dusk to watch the sea change",
+      "mending the lamp's brass and glass with her own hands"
+    ],
+    "calling": "I keep the north light, as my mother did, so that every boat that passes the cape comes home."
   },
   "Colm Wray": {
     "narrative": "I live at the north light with my grandmother, and I trim the wick and haul the water and keep the oil jars in order. The stair down to the lamp is dark and I do not like going down it, but I do because she needs me. When the Thornby children come up the cape I play with Wren and Hob, but I do not tell them what the village says about us. I saw the light burn low one night last winter, and I have not told anyone, not even her.",
@@ -144,7 +152,9 @@
       "help grandmother keep the light",
       "not be afraid of the dark stair",
       "play with Wren and Hob when they come up",
-      "understand why the light burned low"
+      "understand why the light burned low",
+      "climb down the dark stair without a lamp in his hand, just once",
+      "keep a secret tally of every boat that passes the cape, so he knows the light did its work"
     ],
     "mood": "anxious and loyal",
     "traits": {
@@ -241,6 +251,12 @@
         "why": "I do not know what would happen if I told, and I am afraid."
       }
     ],
-    "secret": "I saw Grandmother's light burn low one night last winter, and I have told no one."
+    "secret": "I saw Grandmother's light burn low one night last winter, and I have told no one.",
+    "pastimes": [
+      "racing Wren and Hob along the cliff path when they come up the cape",
+      "skimming stones into the surf below the light",
+      "counting the ships that pass and naming them aloud"
+    ],
+    "calling": "I want to keep the light like grandmother does, someday, when I am not afraid of the stair."
   }
 }

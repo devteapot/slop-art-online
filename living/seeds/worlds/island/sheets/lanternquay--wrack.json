@@ -12,7 +12,9 @@
       "build the seawall in stone from the ridge",
       "clear my debt to Josiah Crane",
       "see Gideon Fenwick get his due",
-      "keep my family fed and housed"
+      "keep my family fed and housed",
+      "learn to read the tide tables well enough to plan a season's work ahead",
+      "make something with his hands that Nia will keep after him — a good table, a strong door"
     ],
     "mood": "bitter but determined",
     "traits": {
@@ -160,7 +162,13 @@
         "why": "They sell stone dear and call it fair trade."
       }
     ],
-    "secret": "I once took a small block of dressed stone from a Kettlebridge yard without paying, the week before we left. I tell myself it was owed wages."
+    "secret": "I once took a small block of dressed stone from a Kettlebridge yard without paying, the week before we left. I tell myself it was owed wages.",
+    "pastimes": [
+      "walking the shore at low tide, turning over stone and salvage to see what the sea's given back",
+      "sitting on the unfinished seawall with a mug of something hot, watching the boats come in",
+      "mending his own tools and boots by the lamp, slowly and well"
+    ],
+    "calling": "I build to last — concrete and salvage where I must, but stone is what a wall wants, and I know stone."
   },
   "Odile Wrack": {
     "narrative": "I keep a healer's room behind the fish market and set the builders' bones when they fall. I came down from Kettlebridge with Marrow and Nia after the Surge, and the cold welcome we got there still stings. I know the quarrel cost us our house, and I wish Marrow would let it go, but I won't say so to his face. I want Nia settled with a man who has a roof, not a man who borrows boats.",
@@ -175,7 +183,9 @@
       "keep my family healthy and fed",
       "see Nia married to someone steady",
       "build up my stock of salves",
-      "avoid open quarrel with Kettlebridge"
+      "avoid open quarrel with Kettlebridge",
+      "grow her stock of salves until she can sell a little beyond the quay",
+      "see Nia settled with a man who has a roof of his own"
     ],
     "mood": "weary but watchful",
     "traits": {
@@ -332,7 +342,13 @@
         "why": "The winter cough takes the poor terrace every year, and I mean to have salve and fuel."
       }
     ],
-    "secret": "I wrote to my sister in Kettlebridge last month, without telling Marrow, to ask if there was work for him there if the quarrel could be mended."
+    "secret": "I wrote to my sister in Kettlebridge last month, without telling Marrow, to ask if there was work for him there if the quarrel could be mended.",
+    "pastimes": [
+      "gathering herbs and seaweed along the rocks at dawn for her salves",
+      "sitting with Maren Vane over tea, trading gossip and complaints about their men",
+      "listening to the singers at the inn on a slow night, though she never sings herself"
+    ],
+    "calling": "I set bones and mend what's broken — a healer's hands are the work I'd choose again."
   },
   "Nia Wrack": {
     "narrative": "I cook at Ilse Ostrander's noodle stall and I want a stall of my own one day. Jory Pike makes me laugh and he knows boats better than anyone, but my mother measures him by his debts and I can't blame her. I like Tam Harrow too, but Jory's the one who makes me feel like the quay is a place I could belong. I wish my father would let the Kettlebridge quarrel go, but I'd never say so.",
@@ -347,7 +363,9 @@
       "save enough for my own stall",
       "see where things go with Jory Pike",
       "keep my parents from worrying too much",
-      "learn more recipes from Ilse"
+      "learn more recipes from Ilse",
+      "save enough marks for her own stall and a good pot of her own",
+      "learn Ilse's noodle recipes properly, every one of them"
     ],
     "mood": "hopeful but pulled two ways",
     "traits": {
@@ -489,6 +507,12 @@
         "why": "A hot bowl on a cold night is worth more than a mark in the box."
       }
     ],
-    "secret": "I've been putting aside a few marks each week for a stall of my own, and I haven't told my mother, because she'd want it for the winter store."
+    "secret": "I've been putting aside a few marks each week for a stall of my own, and I haven't told my mother, because she'd want it for the winter store.",
+    "pastimes": [
+      "cooking for the stall and trying new broths on Sella Mackerel for honest opinions",
+      "walking the harbour at night to look at the tide lanterns",
+      "laughing with Jory Pike on the boats, learning the names of rigging and wind"
+    ],
+    "calling": "I cook at Ilse's stall, and one day the stall will be mine, with my name on it."
   }
 }

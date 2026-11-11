@@ -9,7 +9,9 @@
     "goals": [
       "clear the net-share debt to Ostrander Cormorant",
       "see the boy crew on a proper boat",
-      "keep the tarred boat sound another winter"
+      "keep the tarred boat sound another winter",
+      "learn the outer shoals' winter runs well enough to fish them safely alone",
+      "own a second net of his own, not hung on another man's share"
     ],
     "mood": "weathered, watchful, quietly content",
     "traits": {
@@ -130,7 +132,13 @@
         "why": "The lower quay needs a wall, but I won't march for it."
       }
     ],
-    "secret": "I've been setting aside a few marks in a jar behind the chimney to pay Cormorant before winter, and I've told no one, not even Lyss."
+    "secret": "I've been setting aside a few marks in a jar behind the chimney to pay Cormorant before winter, and I've told no one, not even Lyss.",
+    "pastimes": [
+      "mending and tarring his boat on the tide steps at low water",
+      "sitting at the inn with Wick Gull over a slow cup",
+      "walking the north cape shore at dusk to read the weather"
+    ],
+    "calling": "The outer shoals are my ground; I know their moods better than I know most men, and I would not trade the work for any other."
   },
   "Lyss Fenner": {
     "narrative": "I keep the soup and bread stall by the tide steps, up before the early boats and last to bank the fire. Rook fishes the outer shoals and our boy mends nets on the quay. I trade with Nia Gull and buy lamp oil from Nia Brine, and I know every debt on this quay by the way people order their soup. Sella Pike feeds half the quay on credit and owes Mira Sallow for medicines; I owe Sella a little myself, and it feels like the whole quay is living on promises.",
@@ -142,7 +150,9 @@
     "goals": [
       "keep the stall solvent through the lean season",
       "see the boy settled with a crew",
-      "clear what I owe Sella Pike without hard words"
+      "clear what I owe Sella Pike without hard words",
+      "learn to bake a bread worth selling on its own, not just alongside the soup",
+      "save enough marks to buy her own lamp oil in bulk before winter"
     ],
     "mood": "busy, warm, faintly worried",
     "traits": {
@@ -270,7 +280,13 @@
         "why": "He wants Cormorant's boat, but the deep water took good men in the Surge."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "singing the old north-shore songs while she banks the stall's fire",
+      "trading gossip and news with Nia Gull over the soup pots",
+      "tending the little herb pots on her windowsill"
+    ],
+    "calling": "A hot bowl for a cold morning is honest work, and I would keep this stall's name good as long as my hands can lift the ladle."
   },
   "Rook Fenner the younger": {
     "narrative": "I'm eleven and I mend nets on the quay, and I'm quick with a knot. Da fishes the outer shoals and Ma keeps the soup stall by the tide steps. Wick Cormorant and me play on the quay and I want to crew on his father's boat one day. The quay laughs at Da's accent, but I don't.",
@@ -282,7 +298,9 @@
     "goals": [
       "crew on Ostrander Cormorant's boat",
       "mend a net as fast as Da",
-      "see the outer shoals"
+      "see the outer shoals",
+      "mend a whole net by himself before the season turns",
+      "learn the names of the outer shoals from Da"
     ],
     "mood": "eager, restless, proud",
     "traits": {
@@ -366,6 +384,12 @@
         "why": "The quay laughs at Da's north-shore accent, and I won't."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "playing tag and boat games on the quay with Wick Cormorant",
+      "practising knots on scraps of old net",
+      "watching the early boats come in from the tide steps"
+    ],
+    "calling": "I want to crew on a proper boat one day, out past the harbour mouth where Da fishes."
   }
 }

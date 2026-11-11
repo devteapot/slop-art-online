@@ -263,7 +263,8 @@ pub struct SeedTownLife {
     /// Occupation -> the kinds its workplace may be (as above); spread over the matching lots.
     #[serde(default)]
     pub work: std::collections::BTreeMap<String, Vec<String>>,
-    /// Places some households go in the evening (alternating by household), e.g. inn, square.
+    /// Places some households go in the evening (alternating by household), e.g. inn, square,
+    /// `work` (working late) or `home` (an evening in).
     #[serde(default)]
     pub evening: Vec<String>,
     /// Places spread over their spots like workplaces (each resident the nearest of the least
@@ -370,7 +371,7 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
         let own: Vec<crate::town::SeedPlace> = seeded[si].and_then(|t| t.residents.iter().find(|r| r.name == c.name)).map(|r| r.places.clone()).unwrap_or_default();
         let mine = |name: &str| own.iter().any(|p| p.name == name);
         let put = |name: &str, at: (f32, f32)| {
-            ctx.db.place().insert(Place { id: 0, actor: id, name: name.into(), x: at.0, y: at.1 });
+            ctx.db.place().insert(Place { id: 0, actor: id, name: name.into(), x: at.0, y: at.1, given: true });
         };
         for p in &own {
             if let [a, b] = p.between.as_slice() {
@@ -429,8 +430,12 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
                 households.push(hk);
                 households.len() - 1
             });
+            // `home` keeps the evening at home; any other name is one of the places just given
+            // (`inn`, `square`, `work`: working late).
             let name = &life.evening[n % life.evening.len()];
-            if let Some(p) = ctx.db.place().actor().filter(id).find(|p| p.name == *name) {
+            if name == "home" {
+                put("evening", home);
+            } else if let Some(p) = ctx.db.place().actor().filter(id).find(|p| p.name == *name) {
                 put("evening", (p.x, p.y));
             }
         }
@@ -477,7 +482,7 @@ pub fn host(ctx: &ReducerContext, me: u32, a: &Activity, at: (f32, f32), until_h
             ctx.db.place().id().update(p);
         }
         None => {
-            ctx.db.place().insert(Place { id: 0, actor: guest, name: "lodging".into(), x: house.x, y: house.y });
+            ctx.db.place().insert(Place { id: 0, actor: guest, name: "lodging".into(), x: house.x, y: house.y, given: true });
         }
     }
     let when = format!("{:02}:00", until_hour.floor() as u32);

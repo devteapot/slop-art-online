@@ -104,7 +104,7 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 8] = ["perceived_of", "record_text", "items", "structure_traits", "occupation_knows", "source_of", "wakes", "woken_ring"];
+pub const ENGINE_LAWS: [&str; 6] = ["perceived_of", "record_text", "items", "structure_traits", "occupation_knows", "source_of"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.

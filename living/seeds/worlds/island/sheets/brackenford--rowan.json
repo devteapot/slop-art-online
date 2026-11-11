@@ -10,7 +10,9 @@
     "goals": [
       "bring in a good harvest from the north field",
       "see Wulf settled on a strip of his own when the time is right",
-      "keep the Rowan name on good terms with both the store and the Guild"
+      "keep the Rowan name on good terms with both the store and the Guild",
+      "learn to judge the weather better than his father did, so the seed is never lost",
+      "keep a barrel of the best cider back each year for the household's own table"
     ],
     "mood": "steady, a little stubborn",
     "traits": {
@@ -173,7 +175,13 @@
         "why": "I grumble at it like any man, but the guards keep the wolves off the road and I need the road."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the boundary of the north field strip at dusk, checking the hedges",
+      "sitting at the inn with Osbert Ashby over a cup and old harvests",
+      "mending harness and tools by the barn on a wet afternoon"
+    ],
+    "calling": "I am a farmer, and the north field strip is mine to bring in — that is work worth a man's whole life."
   },
   "Elfgifu Rowan": {
     "narrative": "I am Elfgifu Rowan, and I keep the dairy, the orchard and the house, and a little cider that sells at the Guild stall. Godric sees to the field and I see to everything that comes off it after the reaping — the butter, the cheese, the apples, the barrels. I have a soft spot for my Wulf and his Hilda, and if Godric had his way they would wait until the grain is in and the girl's father had his wool promised twice over. I say a wedding is cheaper than a sulking son, but I keep that to myself in front of Godric.",
@@ -186,7 +194,9 @@
     "goals": [
       "keep the dairy and orchard thriving",
       "see Wulf and Hilda matched when the time is right",
-      "put a little by for the winter and for Leofric's future"
+      "put a little by for the winter and for Leofric's future",
+      "teach Leofric to churn and press so the work is not all on her",
+      "see the orchard's oldest tree bear well one more year"
     ],
     "mood": "warm, watchful",
     "traits": {
@@ -310,7 +320,13 @@
         "why": "He is the farmer and the field is his; the house and the dairy are mine, and that is a fair division."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "churning butter early, before the house wakes",
+      "tending the orchard and grafting a new apple variety",
+      "sitting with Aldith Weaver at the Guild stall, trading news between customers"
+    ],
+    "calling": "I make the butter, the cheese and the cider, and I would have the dairy known as the best in Brackenford before I am done."
   },
   "Wulf Rowan": {
     "narrative": "I am Wulf Rowan, eighteen and ploughing the north field beside my father, and I want Hilda Marsh for my wife and a strip of my own to plough. My father says wait for the harvest, and her father wants the wool secured first, and neither of them is the one lying awake at night. I am strong and I am willing, and I have waited long enough to be told when my life may begin.",
@@ -323,7 +339,9 @@
     "goals": [
       "marry Hilda Marsh",
       "take a strip of land of my own",
-      "prove to my father I am ready"
+      "prove to my father I am ready",
+      "save enough marks from harvest work to put toward a household of his own",
+      "learn the whole of the ploughing and sowing from his father, not just the labour of it"
     ],
     "mood": "restless, hopeful",
     "traits": {
@@ -460,7 +478,13 @@
         "why": "Edwin Marsh is a hard bargainer, but he is to be my good-father and I will not cross him openly."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "wrestling and lifting with the other young men after the day's work",
+      "walking out to the meadow with Hilda Marsh in the long evenings",
+      "practising with a bow by the barn, though he would not call it practice"
+    ],
+    "calling": "I am a ploughman and I want a strip of my own to plough — that is the work I love, and the work I am kept from."
   },
   "Leofric Rowan": {
     "narrative": "I am Leofric Rowan, thirteen, and I help with the beasts and carry water to the field, but what I really want is to be a gate guard like Tobin Marrow. I practise with a stick by the barn and I know all the guards' names, and one day I will wear the cloak and stand at the south gate. My father says the field is my future, but the gate is where things happen.",
@@ -473,7 +497,9 @@
     "goals": [
       "become a gate guard",
       "be noticed by Tobin Marrow",
-      "learn to use a real bow"
+      "learn to use a real bow",
+      "learn to use a real bow, not a stick",
+      "get Tobin Marrow to speak to him by name"
     ],
     "mood": "eager, daydreaming",
     "traits": {
@@ -556,6 +582,12 @@
         "why": "My mother says a boy who will not carry water will not carry a sword either."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "drilling with a stick by the barn, imagining the south gate",
+      "watching the gate guards change over whenever he is sent to town",
+      "climbing the orchard trees and racing the other lads"
+    ],
+    "calling": "I want to be a gate guard like Tobin Marrow — that is the work I long for, not the field."
   }
 }

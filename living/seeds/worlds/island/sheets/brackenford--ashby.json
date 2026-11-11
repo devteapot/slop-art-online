@@ -10,7 +10,8 @@
     "goals": [
       "bring in a harvest that leaves a surplus after the town store and the Guild are paid",
       "see Roland settled with land of his own",
-      "keep the Ashby name clear of the Coldwell quarrels"
+      "keep the Ashby name clear of the Coldwell quarrels",
+      "learn to judge the market before the Guild sets its terms, so a good harvest is not sold cheap"
     ],
     "mood": "steady, watchful of the weather and the ledger",
     "traits": {
@@ -167,7 +168,13 @@
         "why": "A son who ploughs like that should not wait for his father to die for a strip."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the meadow boundaries at first light, checking the hedges and ditches",
+      "sitting at the inn over a mug with Godric Rowan, trading weather-talk and old harvest stories",
+      "watching the grain being threshed and weighing out the sacks himself"
+    ],
+    "calling": "The land is my work and my father's before me — I would have a full barn and a fair price for it, and no shame in either."
   },
   "Edith Ashby": {
     "narrative": "I keep the dairy and the hens and the house, and I like it that way — the churn and the cheeses are mine, and the eggs go to the square with Cecily Carter's. I was glad when the Tolleys took the Coldwell fields, for someone had to work them, though I would not say so to Agnes Fenner at the inn. What I want is a quiet harvest and my son married to a girl who will not spend his inheritance on ribbons.",
@@ -180,7 +187,9 @@
     "goals": [
       "see Roland properly betrothed and set up",
       "keep the hens laying through winter",
-      "hold the household together through whatever the town's quarrels bring"
+      "hold the household together through whatever the town's quarrels bring",
+      "see Roland properly betrothed and set up with a girl who will not spend his inheritance on ribbons",
+      "keep the hens laying through the winter"
     ],
     "mood": "content, with an eye on the weather and the neighbours",
     "traits": {
@@ -319,7 +328,13 @@
         "why": "I have seen one bad year and I do not want another."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "churning butter and turning cheeses in the dairy, which she will let no one else do",
+      "tending the hens and trading eggs with Cecily Carter on the square",
+      "an evening at the chapel for the sisters' calendar-days, and a word with Sister Alys after"
+    ],
+    "calling": "I keep the dairy and the house, and it is good work — a clean churn, a full larder, and a quiet house at night."
   },
   "Roland Ashby": {
     "narrative": "I plough and reap my father's meadows and I am good at it, but the meadows are his and will be his for a long while yet. I want a strip of my own — not given, earned — and I have been courting Linnet Abbot, who is cleverer than me and does not seem to mind. The town talks of nothing but the gate-due and the outlaws, and I would rather talk of a field and a roof and a girl.",
@@ -332,7 +347,8 @@
     "goals": [
       "earn or win a strip of my own to farm",
       "win Linnet Abbot and her mother's consent",
-      "prove I am more than my father's ploughman"
+      "prove I am more than my father's ploughman",
+      "earn or win a strip of land of his own to farm"
     ],
     "mood": "restless and hopeful",
     "traits": {
@@ -454,6 +470,12 @@
         "why": "The fields do not care what the square says."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking out to the meadows at dusk to look at the land and think about a strip of his own",
+      "an evening at the inn with Wulf Rowan, dice and talk of anything but the gate-due",
+      "finding excuses to pass the Guild house to see Linnet Abbot"
+    ],
+    "calling": "I plough and reap and I am good at it — but I would rather work a field that is mine, earned and not given."
   }
 }

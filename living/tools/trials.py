@@ -871,15 +871,16 @@ class Instance:
         budget = self.trial.get("budget", {})
         env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=URL, LIVING_DB=self.db, LIVING_RUN=self.db,
                    LIVING_SEED=self.shared["seed_rel"][world_key(self.trial, self.rep)], LIVING_MODELS=str(path),
-                   # A trial whose `minds.only` names `woken` also lets the mind think for
-                   # residents as they wake (docs/TOWN_LIFE.md, "Layer 2").
-                   LIVING_ONLY=",".join([*map(str, self.roles["subject"]), *(["woken"] if "woken" in self.trial.get("minds", {}).get("only", []) else [])]),
+                   LIVING_ONLY=",".join(map(str, self.roles["subject"])),
                    LIVING_TOKEN=self.shared["token"],
                    LIVING_NEO4J_URI=f"127.0.0.1:{NEO4J_PORT}", LIVING_NEO4J_PASSWORD=self.shared["neo4j_pw"],
                    # Off (0) unless a trial asks for a rate: trials measure, they do not cap.
                    LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY="4",
                    LIVING_VERIFY_FAKE_KEY="dummy-local-only", NO_PROXY="127.0.0.1,localhost",
                    RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
+        # `minds.only: "all"`: the service thinks for every person and animal (no LIVING_ONLY).
+        if self.trial.get("minds", {}).get("only") == "all":
+            env.pop("LIVING_ONLY")
         if self.opts.fake:
             # A fake run must never reach a provider: no provider keys in its environment.
             for k in ("MISTRAL_API_KEY", "CARLID_NPC_API_KEY", "TYPESAFE_API_KEY"):
@@ -1045,7 +1046,7 @@ class Instance:
                         ("skill_use", f"SELECT * FROM skill_use WHERE actor = {S}"), ("deliberation", f"SELECT * FROM deliberation WHERE actor = {S}"),
                         ("structure", f"SELECT * FROM structure WHERE owner = {S}"), ("chronicle", "SELECT * FROM chronicle"),
                         ("character", "SELECT * FROM character WHERE " + " OR ".join(f"id = {i}" for ids in self.roles.values() for i in ids)),
-                        ("stats", "SELECT * FROM stats"), ("woken", "SELECT * FROM woken")):
+                        ("stats", "SELECT * FROM stats")):
             try:
                 snap[name] = self.rows(q)
             except RuntimeError as e:
@@ -1448,13 +1449,9 @@ def summarize(d, trial, extra):
 
 
 def social(s, d, S, chron, exps, samples, j, extra):
-    """Probes for residents who wake (town life layer 2): who woke and why, who answered the
-    subject, what was done for it (food, a lesson, lodging), where it slept, stage-cap binds,
-    and what the residents' minds cost per engaged resident-hour."""
-    final = json.loads((d / "final.json").read_text()) if (d / "final.json").exists() else {}
-    woken = final.get("woken") if isinstance(final.get("woken"), list) else []
-    s["residents_woken"] = len(woken)
-    s["woken_why"] = dict(Counter(w.get("why", "") for w in woken))
+    """Probes for residents who answer: who answered the subject, what was done for it (food,
+    a lesson, lodging), where it slept, and what the residents' minds cost per resident-hour
+    (every resident has a mind; with `minds.only: "all"` this service thinks for all of them)."""
     speech_to = [c for c in chron if c.get("kind") == "speech" and c.get("b") == S and c.get("a") != S]
     s["answers_to_subject"] = len(speech_to)
     s["answering_people"] = len({c["a"] for c in speech_to})
@@ -1467,17 +1464,18 @@ def social(s, d, S, chron, exps, samples, j, extra):
     sleeps = [x for x in samples if (x.get("activity") or [None])[0] == "sleep" and x.get("pos")]
     inside = [x for x in sleeps if any(dist((t["x"], t["y"]), x["pos"]) <= t["radius_m"] for t in setts)] if setts else []
     s["slept_inside_walls"] = f"{len(inside)}/{len(sleeps)} sleep samples" if sleeps else None
-    s["stage_cap_binds"] = sum(1 for r in j if r.get("purpose") == "stage_cap")
     sub_name = (s.get("subject") or "").split("#")[0]
     res = [r for r in j if not r.get("_ref", "").split("/journal/")[-1].startswith(sub_name + ".jsonl")]
-    if woken and samples:
-        end_ms = max((r.get("at_ms") or 0) for r in j) if j else 0
-        hours = sum(max(0, end_ms - w["woken_ms"]) for w in woken) / 3.6e6
+    thinking = {r.get("_ref", "").split("/journal/")[-1].split(".jsonl")[0] for r in res}
+    s["residents_thinking"] = len(thinking)
+    if res:
+        at = [r.get("at_ms") or 0 for r in res if r.get("at_ms")]
+        hours = len(thinking) * (max(at) - min(at)) / 3.6e6 if at else 0
         tok = sum(r.get("tokens") or 0 for r in res)
         s["residents_tokens"] = tok
         s["residents_calls"] = len(res)
-        s["tokens_per_engaged_resident_hour"] = round(tok / hours) if hours > 0 else None
-        s["cost_per_engaged_resident_hour"] = round(sum((cost(r.get("model"), r.get("prompt_tokens") or 0, r.get("completion_tokens") or 0, r.get("cached_tokens") or 0) or 0) for r in res) / hours, 4) if hours > 0 else None
+        s["tokens_per_resident_hour"] = round(tok / hours) if hours > 0 else None
+        s["cost_per_resident_hour"] = round(sum((cost(r.get("model"), r.get("prompt_tokens") or 0, r.get("completion_tokens") or 0, r.get("cached_tokens") or 0) or 0) for r in res) / hours, 4) if hours > 0 else None
 
 
 def strictness(text):

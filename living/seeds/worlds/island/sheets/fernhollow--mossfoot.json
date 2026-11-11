@@ -10,7 +10,9 @@
     "goals": [
       "get the hollow to back me and stop trading at the crossing until the opened pack is answered",
       "settle the smoke complaint with Sootwood without closing the road",
-      "keep my marriage whole and my packs full"
+      "keep my marriage whole and my packs full",
+      "learn the reed-cutters' way of binding a load so nothing shifts on the wet road",
+      "take Tansy out along the first stretch of the east road one day, when she is older"
     ],
     "mood": "tired, wary, caught between people he likes",
     "traits": {
@@ -237,7 +239,13 @@
         "why": "The hollow's talk will not stop by itself, and I would rather hear it from her than from the stall."
       }
     ],
-    "secret": "I am sure the Ferncross man opened my pack, but I did not see him do it and I have told the hollow I did."
+    "secret": "I am sure the Ferncross man opened my pack, but I did not see him do it and I have told the hollow I did.",
+    "pastimes": [
+      "walking the east road at first light to learn its ruts and moods",
+      "sitting with the Coombes at the Lakemead over a bowl and the news of the reeds",
+      "carving little reed whistles and shell trinkets for Tansy"
+    ],
+    "calling": "Carrying what the hollow grows down the east road and bringing back what it lacks — a fair pack, honestly weighed."
   },
   "Clover Mossfoot": {
     "narrative": "I keep the hollow's fibre patch and the flax that fills Thistle's packs, and I trade with the Reedmoor reed-cutters when the road brings them near. I want a larger garden of my own, and Sorrel Underbank and I have argued over the seed rows more than once. Thistle is often away, and Tansy Hazel and I have grown close over the fibre trade until the hollow has begun to talk. I have not told Thistle, and I do not know what I want.",
@@ -250,7 +258,9 @@
     "goals": [
       "win a larger garden of my own from the hollow's plots",
       "settle matters with Sorrel Underbank over the seed rows",
-      "decide what I am to Tansy Hazel before the hollow decides for me"
+      "decide what I am to Tansy Hazel before the hollow decides for me",
+      "grow the finest flax in the hollow, row by row",
+      "have a garden of her own, larger than the strip she works now"
     ],
     "mood": "guilty, restless, quietly happy and quietly afraid",
     "traits": {
@@ -389,7 +399,13 @@
         "why": "The patch needs the shelter of the trees, and every felled margin takes a little of the flax with it."
       }
     ],
-    "secret": "I am drawn to Tansy Hazel and have not told Thistle, and I do not know whether I want it to go further or to stop."
+    "secret": "I am drawn to Tansy Hazel and have not told Thistle, and I do not know whether I want it to go further or to stop.",
+    "pastimes": [
+      "working the flax rows early, before the hollow wakes",
+      "trading measure and gossip with the Reedmoor reed-cutters when they pass",
+      "sitting with Tansy Hazel over the fibre and a cup of something warm"
+    ],
+    "calling": "Good flax, honestly measured — the fibre patch is mine to keep, and I mean to keep it well."
   },
   "Tansy Mossfoot": {
     "narrative": "I am five and I run the garden paths of the hollow. I know every flower by name, and I follow my grandmother Betony about the salve shed and hand her the little jars. When Papa comes back from the road he brings me a reed whistle or a shell, and I keep them on the shelf by my bed.",
@@ -467,6 +483,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "running the garden paths and naming every flower she passes",
+      "handing Betony the little jars in the salve shed",
+      "lining up her reed whistles and shells on the shelf by her bed"
+    ],
+    "calling": "When I am big I want to help Betony make the salves, and know all the plants by heart."
   }
 }

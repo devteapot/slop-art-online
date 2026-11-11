@@ -5,9 +5,6 @@
  "gradient": "Arrive safely in a lean land -> find food where berries are scarce (the bow, fishing, trapping, the town's gardens and stores) -> meet wolves when ranging toward the villages -> safety (fire, shelter, the walled town) -> a place that holds.",
  "world": {
   "seed": "island",
-  "rules": {
-   "minds": false
-  },
   "overrides": {
    "resource_scale": {
     "berry_bush": 0.3

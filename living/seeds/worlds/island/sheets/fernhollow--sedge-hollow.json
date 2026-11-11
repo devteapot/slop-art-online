@@ -10,7 +10,9 @@
     "goals": [
       "find out who cut the fibre pack's ties without setting the hollow against the crossing",
       "finish the benches for the common table before the cold sets in",
-      "keep the hollow's tools whole and accounted for"
+      "keep the hollow's tools whole and accounted for",
+      "learn to joint a bench back so it holds without pegs showing",
+      "make Sorrel a small wooden box of her own with a lid that fits"
     ],
     "mood": "quietly troubled",
     "traits": {
@@ -152,7 +154,13 @@
         "why": "Wood tells you what it will do; people tell you what suits them."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "whittling pegs and handles from fallen-wood offcuts at the bench",
+      "walking the hollow's edge at dusk to check the frames and gates he built",
+      "sitting by the common fire with a borrowed tool in his hands, putting it right"
+    ],
+    "calling": "I build the hollow's frames and gates from fallen wood, and I keep the tools that hold the hollow together."
   },
   "Tansy Sedge": {
     "narrative": "I keep the hollow's kitchen and the common table, and the elders eat at the root table from my pots, so I hear more of the hollow's business than most. The opened pack has set the traders against each other and I feel it at every meal: Thistle will not sit by a Ferncross man and Alder counts the marks twice. I cook, I listen, and I keep my own counsel, but I would sooner mend a quarrel than a pot.",
@@ -165,7 +173,9 @@
     "goals": [
       "keep the common table calm while the pack quarrel runs",
       "trade the hollow's bread at the Reedmoor market for fish before the cold",
-      "see Sorrel learn the garden without fear of the woods"
+      "see Sorrel learn the garden without fear of the woods",
+      "learn a Reedmoor fish stew worth setting before the elders",
+      "teach Sorrel the garden so she knows every bed by name"
     ],
     "mood": "watchful and warm",
     "traits": {
@@ -313,7 +323,13 @@
         "why": "The hollow needs fish and Reedmoor needs bread; a quarrel at the crossing does not fill a pot."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "baking bread for the common table in the early morning",
+      "tending the herb and vegetable beds by the kitchen door",
+      "listening to the elders' talk over her pots and sorting it out later"
+    ],
+    "calling": "I feed the hollow and keep its common table, and I would sooner mend a quarrel than a pot."
   },
   "Sorrel Sedge": {
     "narrative": "I am eight and I follow my mother about the kitchen and the garden, and I know which pot is for the elders and which is for us. When the wolves come down the track I sit very still by the fire and listen, and my father sits up with the axe. I like the smell of bread and the wood shavings my father makes, and I do not like the dark beyond the garden gate.",
@@ -324,7 +340,9 @@
     ],
     "goals": [
       "learn to bake a loaf that does not burn",
-      "see the wolves without being seen by them"
+      "see the wolves without being seen by them",
+      "bake a loaf that does not burn, all by herself",
+      "see the wolves from the garden gate without them seeing her"
     ],
     "mood": "curious and a little afraid",
     "traits": {
@@ -384,6 +402,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "helping her mother knead dough and shaping small loaves of her own",
+      "playing hide-and-seek among the garden beds with Tansy Mossfoot",
+      "watching her father work wood and gathering the shavings"
+    ],
+    "calling": "When I am big I want to bake the elders' bread like my mother."
   }
 }

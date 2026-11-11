@@ -11,7 +11,9 @@
       "See the fold through the winter without begging from Kettlebridge",
       "Keep Hollbrenna's trust and the hide trade with Orrum",
       "Find a way to get grain without breaking the shelf's ban",
-      "Teach Soren to hunt and Jorunn to lead"
+      "Teach Soren to hunt and Jorunn to lead",
+      "Teach Soren to move quiet and shoot true before the wolves come again",
+      "Bring Jorunn along on the high hunt so she learns the fold's ground as I did"
     ],
     "mood": "weary and watchful",
     "traits": {
@@ -157,7 +159,13 @@
         "why": "Jorunn and Soren must know the paths and the bow if the fold is to last."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the high pasture at first light to read the deer tracks",
+      "mending and re-stringing his bow by the hearth",
+      "sitting with Torek and letting the old man tell the shelf stories"
+    ],
+    "calling": "I am a hunter and the fold's head; the bow and the word are my work, and I would not trade them for a quill and a ledger."
   },
   "Elska Voss": {
     "narrative": "I keep the fold's plots and the goats, and I have counted the store three times: it will not last the winter. Rannoch will not go to Kettlebridge while Hollbrenna says no, and Torek's leg is going bad. I have sent word to Yrsa on the shelf for a poultice, and I am not too proud to ask Fernhollow for roots. But grain is what we need, and I will find a way to get it.",
@@ -171,7 +179,9 @@
       "Get grain before the winter",
       "Heal Torek's leg",
       "Keep the goats safe from wolves",
-      "Persuade Rannoch that Kettlebridge is not the only answer"
+      "Persuade Rannoch that Kettlebridge is not the only answer",
+      "Learn which roots and salves Fernhollow will trade for, and go herself if she must",
+      "Make the store last one more winter than anyone thinks it can"
     ],
     "mood": "anxious and determined",
     "traits": {
@@ -308,7 +318,13 @@
         "why": "The goats are our milk and our wool; the wolves have taken two already."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the goat plots and talking to the nannies by name",
+      "counting and re-counting the store by lamplight, making her lists",
+      "walking down to Gaudra's with a basket to trade news and cheese"
+    ],
+    "calling": "I keep the fold's plots and goats and its store, and I would have it said that no one under this roof went hungry while I counted."
   },
   "Jorunn Voss": {
     "narrative": "I hunt the high pastures with my father and know every trap and path of the fold. Since the cairn cutting, the shelf folk look at us sideways, and I feel it. I have offered to help Liv dress stone without pay, to prove we are still friends. I want to see Lanternquay one day, but first I want the fold to be safe and the shelf to trust us again.",
@@ -322,7 +338,9 @@
       "Prove the fold's friendship to the shelf",
       "Learn stonework from Liv",
       "Help my mother get grain",
-      "See Lanternquay and the tide lanterns"
+      "See Lanternquay and the tide lanterns",
+      "Master the mason's eye well enough to set a block true without Liv's help",
+      "Earn a place at the shelf's fires again, so the sideways looks stop"
     ],
     "mood": "eager and a little stung",
     "traits": {
@@ -467,7 +485,13 @@
         "why": "I have heard of Lanternquay and the tide lanterns, and I want to see them."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "setting and checking traps along the fold's paths",
+      "watching Liv dress stone and copying the strokes in the dirt",
+      "shooting at a mark with Harl and arguing over who was closer"
+    ],
+    "calling": "I hunt the high pastures with my father, but I would learn the stonework too, so the shelf knows our hands are good for more than a bow."
   },
   "Soren Voss": {
     "narrative": "I help my father skin and smoke the catch and my mother with the goats. Since the wolves came up the track and took two goats, I am afraid to go out alone. I sleep by the hearth now, and I follow Grandfather about the yard. I dream of the shelf and the stone blocks and the giants' slow voices.",
@@ -479,7 +503,9 @@
     "goals": [
       "Be brave like my father and sister",
       "See the shelf and the stone blocks again",
-      "Keep the goats safe"
+      "Keep the goats safe",
+      "Go out to the goat pen alone without being afraid",
+      "See the shelf and the great stone blocks again with Vellmund"
     ],
     "mood": "frightened but hopeful",
     "traits": {
@@ -569,7 +595,13 @@
         "why": "My father is not afraid, and I want to be like him."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "following Grandfather about the yard and handing him snares",
+      "playing at stone blocks with pebbles by the hearth",
+      "watching his father skin and smoke the catch"
+    ],
+    "calling": "I want to be a hunter like my father, and I am not brave enough yet."
   },
   "Torek Voss": {
     "narrative": "I am too stiff for the high hunt now, but I keep the fold's snares and tell the old stories of the shelf. I fell in the dark setting snares for the wolves and my leg is bad, though I say it is nothing. I remember the Lean Year and the wolves after it, and I fear a hungry winter more than I fear the giants' displeasure. I have said so at the table.",
@@ -583,7 +615,9 @@
       "See the fold through the winter",
       "Heal my leg",
       "Keep the wolves from the goats",
-      "Pass the old stories to Soren and Jorunn"
+      "Pass the old stories to Soren and Jorunn",
+      "Get his leg sound again before the cold sets in",
+      "See the fold fed through the winter without a begging trip to Kettlebridge"
     ],
     "mood": "ashamed and anxious",
     "traits": {
@@ -712,6 +746,12 @@
         "why": "We need grain, and I do not care whose town it comes from."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "setting and mending the fold's snares from his stool",
+      "telling the old shelf stories to Soren and Jorunn by the fire",
+      "sitting in the sun with Steinar when he comes up the track"
+    ],
+    "calling": "I was a hunter of the high pastures, and now my work is the snares and the stories, and I would keep both true."
   }
 }

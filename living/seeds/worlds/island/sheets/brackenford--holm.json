@@ -10,7 +10,9 @@
     "goals": [
       "keep the stall rent paid to the Market Guild",
       "catch enough to salt and smoke for winter",
-      "teach Knut to swim and handle a line"
+      "teach Knut to swim and handle a line",
+      "learn to read the north shore currents well enough to fish it in rougher weather",
+      "own a second, smaller boat for the shallows"
     ],
     "mood": "steady, watchful, a little tired",
     "traits": {
@@ -135,7 +137,13 @@
         "why": "A full smokehouse is a quiet winter, and quiet winters are what I want."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending and tarring his boat on a slow afternoon",
+      "sitting on the bank at dusk with a line out, not minding if nothing bites",
+      "sharing a quiet drink with Beorn at the inn"
+    ],
+    "calling": "I'm a riverman and a fisherman; I know the water's moods and it pays me back honest."
   },
   "Astrid Holm": {
     "narrative": "I keep the house by the river and the smokehouse behind it, and I sell our fish at the Guild stall in the square. Sweyn brings the catch in and I make it worth marks — smoked, salted, laid out clean. I worry about the stall rent and about the winters, but I don't say so much. Knut is never far from the water and I've stopped trying to keep him from it.",
@@ -148,7 +156,9 @@
     "goals": [
       "keep the smokehouse full enough to sell through winter",
       "clear the stall rent each week without borrowing",
-      "see Knut grow up strong and river-wise"
+      "see Knut grow up strong and river-wise",
+      "learn to cure fish a new way, so the winter stall has something different to sell",
+      "have a proper brick smokehouse built one day, instead of the lean-to"
     ],
     "mood": "busy, warm, quietly anxious",
     "traits": {
@@ -265,7 +275,13 @@
         "why": "Debt is how a household loses what it has — I've seen it happen to better-off folk than us."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "singing the old hearth songs while she works the smokehouse",
+      "tending the little herb plot behind the house",
+      "visiting Sigrun at the stall for gossip between customers"
+    ],
+    "calling": "I make a good catch worth good marks — smoking and salting is my craft as much as Sweyn's fishing is his."
   },
   "Knut Holm": {
     "narrative": "The water is loud and cold and I like it. I sit on the bank and watch the little fish dart and the big boat come in. Mother smells of smoke and father's hands are wet and rough. I want to touch the boat but they say not yet.",
@@ -276,7 +292,9 @@
     ],
     "goals": [
       "get into the boat",
-      "catch a fish with my hands"
+      "catch a fish with my hands",
+      "get into the boat without being told not yet",
+      "catch a fish with his own hands"
     ],
     "mood": "curious, happy, impatient",
     "traits": {
@@ -321,6 +339,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "paddling at the river's edge and chasing minnows",
+      "playing boats with sticks and bits of bark",
+      "following his mother around the smokehouse"
+    ],
+    "calling": "When I'm big I'll go out in the boat with Father and bring back the biggest fish."
   }
 }

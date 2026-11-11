@@ -11,7 +11,9 @@
       "see the Coldwell outlaws driven off the stone road for good",
       "keep the south gate's due flowing so the guards are paid",
       "see Godiva settled in honest work at the inn",
-      "earn Tobin Marrow's regard enough to keep the south gate posting"
+      "earn Tobin Marrow's regard enough to keep the south gate posting",
+      "get his hands on a good spear of his own, balanced right",
+      "take Godiva out along the wall one evening and show her the trade, whether she wants it or not"
     ],
     "mood": "short-fused and watchful",
     "traits": {
@@ -148,7 +150,13 @@
         "why": "Talk at the inn is cheap; a fist or a spear settles it."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "a cup and a quiet game of dice at the Bell and Bush after a shift",
+      "walking the wall at dusk to see the road clear before he turns in",
+      "mending his own boots and gear by the fire"
+    ],
+    "calling": "I stand the south gate, and I mean to stand it well — the due pays honest men and keeps the wolves off the stone road."
   },
   "Edith Stanhope": {
     "narrative": "I keep the house by the south gate and sell pies to whoever passes — carters, guards, the odd pedlar — and I hear more news at that gate than the Reeve does. Walter comes home hot from a shift and I've learned to have his supper ready and my opinions to myself until he's eaten. Godiva is a good girl and a better hand with pastry than I was at her age, and I mean to see her in a proper kitchen before some guard's son comes courting. I don't hold with the outlaws, but I don't wish a hanging on anyone either.",
@@ -162,7 +170,9 @@
       "get Godiva taken on at the Bell and Bush",
       "keep the pie trade steady through the winter",
       "put a little by against a bad year",
-      "keep Walter from a fight he can't walk away from"
+      "keep Walter from a fight he can't walk away from",
+      "learn a new pie from Petra Wade and make it her own",
+      "see the gate-house kitchen fitted with a proper oven before winter"
     ],
     "mood": "steady, a little tired",
     "traits": {
@@ -278,7 +288,13 @@
         "why": "Walter's temper is bad enough without the drink and the outlaws on top of it."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "baking a pie for the household on her day off, just for the pleasure of it",
+      "sitting with Sigrid Marsh over a pot of tea and the week's gossip",
+      "tending the little herb bed by the gate-house door"
+    ],
+    "calling": "I've a hand for pastry and a head for news, and the gate-house kitchen suits me better than any shop."
   },
   "Godiva Stanhope": {
     "narrative": "I help Mother with the pies at the gate and I'm faster at the pastry than she'll admit. The guards talk freely in front of a girl with flour on her hands, and I keep it all — who's owed what, who's feuding, who came through with a load they'd rather not declare. What I want is the Bell and Bush: a proper kitchen, a proper wage, and a room that isn't my parents'. Father thinks the gate is a fine life; I've watched it and I'd rather carry a tray than a spear.",
@@ -292,7 +308,9 @@
       "get taken on at the Bell and Bush",
       "learn Petra Wade's pies and Baldwin's accounts",
       "keep enough by to buy a good apron and knives of my own",
-      "not be married off to a guard before I've had my chance"
+      "not be married off to a guard before I've had my chance",
+      "save enough for a good apron and a set of knives of her own",
+      "learn Baldwin Wade's accounts as well as Petra's pies"
     ],
     "mood": "restless and eager",
     "traits": {
@@ -402,6 +420,12 @@
         "why": "I'll not be some guard's wife before I've had a kitchen of my own."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "practising pastry shapes with the scraps after the morning bake",
+      "listening at the gate for the news the guards let slip",
+      "walking to the square on errands to see who's come in with what"
+    ],
+    "calling": "I want a proper kitchen and a proper wage — the Bell and Bush, if they'll have me, and a trade that's mine."
   }
 }

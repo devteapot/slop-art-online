@@ -10,7 +10,9 @@
     "goals": [
       "see Wenna held in respect in the square again",
       "keep my loom busy and my cloth selling at the Guild stall",
-      "never let the Reeve's family forget how they used my girl"
+      "never let the Reeve's family forget how they used my girl",
+      "weave a length of broadcloth fine enough to hang in the chapel for a feast day",
+      "teach some young girl at the Guild stall the loom properly, as I was taught"
     ],
     "mood": "proud, sore, and quicker to speak than she means to be",
     "traits": {
@@ -160,7 +162,13 @@
         "why": "One of us must hold the house calm, and it will not be me."
       }
     ],
-    "secret": "I think Tobin Marrow ruined my daughter's name, and I would see him pay for it in the square if I could do it without hurting Wenna."
+    "secret": "I think Tobin Marrow ruined my daughter's name, and I would see him pay for it in the square if I could do it without hurting Wenna.",
+    "pastimes": [
+      "walking the market square on a Guild-stall morning, feeling the cloth between her fingers",
+      "an evening at the chapel fire with the sisters, hearing the calendar kept",
+      "a mug at the inn with Elfgifu Rowan, trading market gossip"
+    ],
+    "calling": "I weave cloth that lasts a lifetime, and I'll not have it said a weaver's cloth is worth less than a Reeve's word."
   },
   "Leofwine Weaver": {
     "narrative": "I make looms and mend what the market breaks, and I keep my opinions where they belong — in my own head. My Aldith speaks for the house and I let her; she has the words and the right of it, mostly. Osric Abbot pays me steady for the stalls and benches, and a quiet man with steady work has little to complain of. I would like my daughter's name to be easy in the square again, and I would like my bench to stay busy while it happens.",
@@ -173,7 +181,9 @@
     "goals": [
       "keep the market stalls and benches sound for Osric Abbot",
       "build a loom good enough to sell to another weaver",
-      "see Wenna easy in the town again without a quarrel in the square"
+      "see Wenna easy in the town again without a quarrel in the square",
+      "build a loom of his own design and see it working in another weaver's house",
+      "take Wenna's children — when there are any — out to the woods and teach them timber"
     ],
     "mood": "even, watchful, a little tired",
     "traits": {
@@ -308,6 +318,12 @@
         "why": "The Reeve's licence keeps the market standing, and my bench in it."
       }
     ],
-    "secret": "I think Tobin Marrow did wrong by Hester Crane, and I think he will do wrong by Wenna in some smaller way, and I have never said so to anyone."
+    "secret": "I think Tobin Marrow did wrong by Hester Crane, and I think he will do wrong by Wenna in some smaller way, and I have never said so to anyone.",
+    "pastimes": [
+      "dice at the inn on a slow evening",
+      "walking out to the woods at dusk to look over timber before it's bought",
+      "carving small things at his bench — a spoon, a toy for a neighbour's child"
+    ],
+    "calling": "A loom that runs true is a quiet kind of good work, and I'd rather be known for that than for talk."
   }
 }

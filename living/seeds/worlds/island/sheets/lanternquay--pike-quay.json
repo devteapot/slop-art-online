@@ -11,7 +11,9 @@
       "ask Nia Wrack properly, with her mother's blessing if I can get it",
       "pay off what I owe Wick Gull and the rest",
       "save enough for a net of my own, maybe a boat",
-      "help my mother clear her debt to Mira Sallow"
+      "help my mother clear her debt to Mira Sallow",
+      "learn to read the weather off the western sky well enough to keep a boat out through a squall",
+      "save enough to buy a boat of my own and paint her name on the bow"
     ],
     "mood": "hopeful, a little anxious about Odile Wrack's cold eye",
     "traits": {
@@ -152,7 +154,13 @@
         "why": "My mother says it, and she's right; a wall doesn't fill a belly."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "rowing out past the harbour mouth at first light just to watch the water",
+      "dicing and drinking at the quay stalls with Ostrander Mackerel",
+      "mending nets on the tide steps while the boats come in"
+    ],
+    "calling": "I'm a harbour fisherman — a borrowed boat now, but the water's mine as much as anyone's."
   },
   "Sella Pike": {
     "narrative": "I've kept a fried-fish stall by the tide steps for thirty years and fed half the quay on credit, and now the lean season has come round and I'm the one who owes. Mira Sallow's medicines kept me breathing through the winter and I haven't paid her a mark of it. My Jory is a good lad with a borrowed boat and a sweetheart, and I wish he'd ask the girl properly instead of leaving me to watch Odile Wrack's face. The stall-keepers are starting to talk about who pays and who doesn't, and I can hear my name in it.",
@@ -166,7 +174,9 @@
       "pay Mira Sallow what I owe her for the medicines",
       "see Jory ask Nia Wrack properly, with her mother's leave",
       "keep the stall going through the lean weeks",
-      "stop the stall-keepers' talk before it hardens"
+      "stop the stall-keepers' talk before it hardens",
+      "get the stall's roof patched and a second pan before next winter",
+      "see the lean weeks through without borrowing another mark from anyone"
     ],
     "mood": "weary, proud, quietly ashamed of the tally",
     "traits": {
@@ -312,6 +322,12 @@
         "why": "I'll pay Mira Sallow before the stall-keepers can say I didn't."
       }
     ],
-    "secret": "I've been selling the stall's best fish cheap to Lyss Fenner under the counter so I can put by a few marks for Mira without anyone seeing me save."
+    "secret": "I've been selling the stall's best fish cheap to Lyss Fenner under the counter so I can put by a few marks for Mira without anyone seeing me save.",
+    "pastimes": [
+      "trading gossip with Lyss Fenner and Ilse Ostrander over the stall between customers",
+      "walking the tide steps at dusk to see which boats are still out",
+      "singing the old quay songs while she fries the evening catch"
+    ],
+    "calling": "Thirty years I've fried fish by the tide steps, and I'd have it no other way — a hot meal for anyone who comes down hungry."
   }
 }
