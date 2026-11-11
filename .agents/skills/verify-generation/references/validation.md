@@ -1,5 +1,14 @@
 # Validation record (generation)
 
+## 2026-11-11 hearth-1: a household's own structures inside its lot (dev-box)
+
+Branch `hearth-1` (from `9c6ca13c`; merged with origin/main `d124c0f7`), own container `hearth1-stdb` (2.14.1, port 3331, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. The plan format gained `lots[].inside`; an owned structure placed for a lot without a spot stands on the lot's own tiles ([authored plans](../../../../docs/AUTHORED_PLANS.md#a-households-own-things-stand-inside-its-lot)); `check_plans` gained three checks (inside its lot, within 1.5 m of a tile joined to the door, each household's house, store and fire).
+
+- `generation-hearth1-20261111-223528` (`--feature worlds --seeds island,plan-test,cullet,floor-megacity-2k`): **island 979, plan-test 86, cullet 332, floor-megacity-2k 77**, all pass; `land` digests equal `floor_preview`'s. plan-test: 4 household structures inside (`storage` 3, `campfire` 1; 3 on a floor); Cullet: 43 (`hearth` 21, `house_store` 22; all on a floor), 22 households with house, store and fire.
+- `generation-hearth1m-20261111-225211` (merged tree, `--seeds island,plan-test,cullet`): 979, 86 and 332 pass; original seeds unchanged.
+- `generation-hearth1base-20261111-223941` (the branch point, `git archive 9c6ca13c` into `.local/hearth1/base`, `--seeds island,floor-megacity-2k`): 979 and 77 pass; its `structure`, `lot`, `resource_node` and `land` snapshots equal the branch's (`.local/hearth1/unplanned-compare.json`).
+- Not run: `authored`, `guards` (the native `seed::tests` ran separately: 21 pass), floor-megacity-4k and the other seeds.
+
 ## 2026-11-11 layout-2: plan fixtures that block, open lots with spots (dev-box)
 
 Branch `layout-2` merged with main `e301aa9f` (kit-2, rules-3), own container `layout2-stdb` (2.14.1, port 3329, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. The plan format gained `fixtures[]` (lines with gaps and rectangles; those with `blocks` become `Wall` or `Low` tiles at hosting) and Cullet's courts and plots became open lots with spots ([authored plans](../../../../docs/AUTHORED_PLANS.md#fixtures-that-block), [Cullet's layout, pass 2](../../../../docs/CULLET_LAYOUT.md#pass-2-2026-11-11)). A scoped maintain pass on the plans feature went with it: `check_plans` gained four checks, the `lot:` place check holds each resident's place to one of the lot's spots (it allowed anything near the door), and spots are computed from the plan (`spot_pt`), since `lot_pt` reads the front off the row's door and is wrong for a lot whose door point was moved to walkable ground.

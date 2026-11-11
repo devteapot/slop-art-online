@@ -1,0 +1,12 @@
+{
+ "about": "Fake model latencies near the real ones (journal of the owner's play-test: a deliberation's think plus compile about 10 s, a talk turn 1-2 s), so that conversation timing (LIVING_PARK) can be tried with --fake. Talk replies leave the exchange open (no end, nothing settled), so stamina and the 90 s quiet end it, as with real models; the fake's default reply settles every exchange at its first turn. Other replies are the fake server's defaults.",
+ "replies": {
+  "talk": {"thought": "I heard you.", "say": "verify fake: I heard you.", "to": 0, "acts": [], "end": false, "settled": null}
+ },
+ "rules": [
+  {"purpose": "think", "delay_s": 5.0, "times": -1},
+  {"purpose": "deliberate", "delay_s": 4.0, "times": -1},
+  {"purpose": "talk", "delay_s": 1.5, "times": -1},
+  {"purpose": "consolidate", "delay_s": 2.0, "times": -1}
+ ]
+}

@@ -141,6 +141,15 @@ async fn main() -> Result<()> {
                 queries.push(lived);
                 queries.push("SELECT * FROM settlement".into());
             }
+            // Who heard each line and how they stood (private, kept a minute), for the
+            // conversation switches that need it (`LIVING_GREET`, `nearest` by default): its own
+            // subscription, so that a world whose module has no such table (built before it)
+            // still starts; `LIVING_GREET` then falls back to the old rule there (talk.rs).
+            if mind::greet_audience() {
+                c.subscription_builder()
+                    .on_error(|_, e| log::warn!("no `audience` subscription ({e:?}): this world does not keep who heard a line; LIVING_GREET falls back to `off` here"))
+                    .subscribe(["SELECT * FROM audience".to_string()]);
+            }
             c.subscription_builder()
                 .on_applied(move |_| {
                     if let Some(tx) = ready.lock().unwrap().take() {

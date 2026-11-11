@@ -10,6 +10,7 @@ How the mind service chooses models, schedules sleep, thinks for animals, keeps 
 | 4. Jev judgments | `judged` graph condition; background refresh through TypeSafe | `LIVING_JEV` | off |
 | 5. Recall budget | token budget on recalled lines; no repeated `rel` property | `LIVING_RECALL_TOKENS` | `decide=800` |
 | 6. Rethink gate | a fast judge (Jev, or a cheap LLM) in front of non-urgent deliberations decides when the slow mind thinks | `LIVING_RETHINK` (`jev`, `llm`) | off |
+| 7. Conversation switches | who answers a stranger's line to the room, and whether a line waits out a running deliberation ([LIVING_CORE.md, Conversations](LIVING_CORE.md#conversations-checkpoint-4-item-6-first-part); [gr1/gr2](TRIALS.md#greeting-batches-gr1gr2-2026-11-11)) | `LIVING_GREET` (`nearest`, `off`, `curious`, `facing`), `LIVING_PARK` (`concurrent`, `wait`); the world's `speech_audience` law | `nearest`, `concurrent`, law on (since 2026-11-11) |
 
 ## 1. Per-purpose model mixes
 

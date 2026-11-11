@@ -54,6 +54,12 @@ pub enum Event {
 
 pub use lived::enabled as player_memory;
 
+/// Whether the conversation switches read who heard each line (`LIVING_GREET`; the
+/// `audience` table, subscribed only then).
+pub fn greet_audience() -> bool {
+    talk::Config::from_env().map(|c| c.audience()).unwrap_or(false)
+}
+
 #[derive(Default)]
 struct ActorMind {
     consolidating: bool,
@@ -195,6 +201,8 @@ pub struct Minds {
     /// Bound concurrent background memory work independently of network admission.
     slow: Semaphore,
     talk: Mutex<talk::Talks>,
+    /// Conversation switches (`LIVING_GREET`, `LIVING_PARK`; talk.rs).
+    talk_cfg: talk::Config,
     only: Option<std::collections::HashSet<u32>>,
     /// The land's settlements and lots, read once for residents' world facts (facts.rs).
     layout: tokio::sync::OnceCell<Arc<facts::Layout>>,
@@ -361,13 +369,17 @@ impl Minds {
             prompts::set_judgments(j.grammar());
         }
         let only_env = std::env::var("LIVING_ONLY").ok();
+        let talk_cfg = talk::Config::from_env()?;
+        if talk_cfg.greet != talk::Greet::Off || talk_cfg.park != talk::Park::Wait {
+            log::info!("conversation switches: {talk_cfg:?}");
+        }
         let lived_cfg = lived::Config::from_env();
         if lived_cfg.on {
             if let Some(route) = &lived_cfg.profile {
                 llm.warn_effort_gaps("LIVING_PLAYER_MEMORY_MODEL", route, &["internalize"]);
             }
         }
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -1671,7 +1683,7 @@ impl Minds {
         carry(&mut self.actors.lock().unwrap().entry(d.actor).or_default().carried, lines)
     }
 
-    async fn deliberate(&self, d: &Deliberation) -> Result<()> {
+    async fn deliberate(self: &Arc<Self>, d: &Deliberation) -> Result<()> {
         let actor = d.actor;
         let lane = self.deliberation_lane(d);
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
@@ -1713,6 +1725,8 @@ impl Minds {
             let n = all.len();
             all.iter().skip(n.saturating_sub(16)).map(|e| self.exp_line(e, &fmt, false)).collect()
         };
+        // Lines heard from now on are not in this prompt (`LIVING_PARK=concurrent`).
+        self.deliberation_prompt(actor);
         let pruned = self.actors.lock().unwrap().entry(actor).or_default().pruned.clone();
         let mut reason = d.reason.clone();
         if !pruned.is_empty() {
@@ -1754,17 +1768,23 @@ impl Minds {
                 }
             }
         }
+        // Lines waiting on this deliberation that its words are not for get their turn now
+        // (`LIVING_PARK=concurrent`).
+        self.deliberation_decided(actor, &decision);
         let intend: Vec<String> = decision["intend"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
         // Which open project the decision says it serves (recorded on the thought row; served
         // projects are reinforced once the decision is carried out).
         let served = open.as_ref().and_then(|(p, _)| projects::serves(&decision["serves"], p));
         let project_detail = open.as_ref().map(|(p, _)| projects::detail(p, &decision["serves"], served.as_deref())).unwrap_or(Value::Null);
         let serves_note = served.as_ref().map(|k| format!(" [serves {k}]")).unwrap_or_default();
-        let decided = format!(
+        let mut decided = format!(
             "{}\nIntentions (in order): {}",
             decision["thought"].as_str().unwrap_or_default(),
             if intend.is_empty() { "(nothing new: carry on)".to_string() } else { intend.join("; ") }
         );
+        if let Some(said) = self.said_alongside(actor) {
+            decided.push_str(&format!("\n{said}"));
+        }
         let system = prompts::deliberate_system();
         let user = prompts::compile_user(&decided, prompts::deliberate_user(&ctx, &d.scene, &outline, &plan, &reason, &repertoire));
         let mut messages = vec![Msg { role: "system", content: system }, Msg { role: "user", content: user }];
@@ -1833,6 +1853,7 @@ impl Minds {
                     };
                     // A format placeholder ("text", "your words") is not something to say aloud.
                     let say = if living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
+                    let say = self.unanswered_say(actor, say, to);
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
                     let acts = acts_of(&v);
                     let t = ThoughtIn {
@@ -1880,6 +1901,7 @@ impl Minds {
                     };
                     // A format placeholder ("text", "your words") is not something to say aloud.
                     let say = if living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
+                    let say = self.unanswered_say(actor, say, to);
                     let plan = v["plan"].as_str().unwrap_or_default().to_string();
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
                     self.decided_stances(actor, &v, &thought_ref).await?;

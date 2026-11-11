@@ -33,6 +33,19 @@ Start it right after launch: the day checks need the world's morning, then the s
 - The scene needs the seed's lamp (`structure` kind `lamp`) with an open line from it; without one it fails "the seed has a lamp with an open line of sight from it". Since `goods-1` the lamp burns oil and lights only while lit: the seed gives it 8 units (32 game hours, past the scene's night at 21:00); a lamp seeded without fuel is dark and the lamplight check fails.
 - These checks do not measure cost: longer sight and re-projection every sweep cost more per player (docs/CULLET_RULES.md, "Costs").
 
+## Who heard a line (`speech_audience`, 2026-11-11, branch `exp-greet`)
+
+A shipped law, on by default since 2026-11-11 (the minds' default `LIVING_GREET=nearest` reads it; a seed may turn it off in its `rules`). With it on, `speak` (`living/authority/src/perceive.rs`) writes one row per line to the private `audience` table (`tables.rs` `Audience`, `Hearer`). The row lists each person who heard the line (the speaker's hearers within hearing), the distance to each and how far each stood off the speaker's facing (`common::heading`, radians, 0 straight ahead). Rows older than 60 s are deleted by the next line (range on the `at_ms` index). Nothing reads it but the mind service under `LIVING_GREET` (verify-minds `greet`). With the law off nothing is written; the laws are read for `address_m` anyway, so the cost is one more flag test per line. Expired rows are deleted only by a line said while the law is on: rows written before the law was turned off stay until it is on again. With it on, a line costs one insert, the distance and angle per hearer, and the expired rows' deletes, and the only subscriber is the mind service.
+
+```bash
+R=core-audience-$(date +%H%M%S)
+python3 "$V" launch --run "$R" && python3 "$V" doctor --run "$R"
+python3 .agents/skills/verify-core/scripts/scenes.py audience --run "$R" > ".local/living/verify/$R/audience.txt" 2>&1
+python3 "$V" cleanup --run "$R"
+```
+
+The scene places a speaker, a person 1 m east, one 4 m east and one 13 m east (beyond the shipped 9 m hearing), turns the speaker east (`face`) and speaks through `mind_say` (way `""`, that is `say`). Checks: law off (the shipped script with `speech_audience: false`, installed with `install_script`), no row. Law on (the shipped script again): one row, said to no one, with the two within hearing and not the third, distances about 1 and 4 m, both under 0.35 rad off the facing. A line 61 s later deletes the first row. The shipped script is installed again at the end. Evidence: `audience-line.json`, `audience-audience-off.json`, `audience-audience-on.json`, `audience-audience-later.json`, `audience-results.json`.
+
 ## Decay
 
 Since `rates-2` (docs/CULLET_RULES.md, "The other rates in game time"): spoiling (`spoil_per_h(item)`), resource regrowth (a kind's `regrow_per_h`, read by `regrow_per_h(kind)`), grass regrowth (`laws().pasture_regen_per_h`), traps (`trap_every_h`) and remains (a kind's `remains_h`) are written in game time; the engine keeps them in real time for the world's day (`Scripts::spoil_per_min`, `regrow_per_min`, `trap_every_ms`, `remains_ms`, `Laws::pasture_regen`; `resource_node.regen` stays per real minute). A script that defines the old real-time law (`spoil_rate`, `regrow`, `trap_every_s`, `remains_s`, `pasture_regen`) is read as before.

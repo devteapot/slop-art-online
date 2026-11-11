@@ -17,6 +17,8 @@ pub mod activity_table;
 pub mod activity_type;
 pub mod artifact_table;
 pub mod artifact_type;
+pub mod audience_table;
+pub mod audience_type;
 pub mod background_table;
 pub mod background_type;
 pub mod belief_in_type;
@@ -85,6 +87,7 @@ pub mod heard_sound_type;
 pub mod heard_sounds_table;
 pub mod heard_table;
 pub mod heard_type;
+pub mod hearer_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
 pub mod human_face_reducer;
@@ -141,6 +144,7 @@ pub mod missile_type;
 pub mod motion_seen_table;
 pub mod motion_seen_type;
 pub mod motion_type;
+pub mod moving_type;
 pub mod my_act_outcomes_table;
 pub mod my_body_table;
 pub mod my_characters_table;
@@ -290,6 +294,8 @@ pub use activity_table::*;
 pub use activity_type::Activity;
 pub use artifact_table::*;
 pub use artifact_type::Artifact;
+pub use audience_table::*;
+pub use audience_type::Audience;
 pub use background_table::*;
 pub use background_type::Background;
 pub use belief_in_type::BeliefIn;
@@ -358,6 +364,7 @@ pub use heard_sound_type::HeardSound;
 pub use heard_sounds_table::*;
 pub use heard_table::*;
 pub use heard_type::Heard;
+pub use hearer_type::Hearer;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
 pub use human_face_reducer::human_face;
@@ -414,6 +421,7 @@ pub use missile_type::Missile;
 pub use motion_seen_table::*;
 pub use motion_seen_type::MotionSeen;
 pub use motion_type::Motion;
+pub use moving_type::Moving;
 pub use my_act_outcomes_table::*;
 pub use my_body_table::*;
 pub use my_characters_table::*;
@@ -1067,6 +1075,7 @@ pub struct DbUpdate {
     act_queue: __sdk::TableUpdate<PlannedAct>,
     activity: __sdk::TableUpdate<Activity>,
     artifact: __sdk::TableUpdate<Artifact>,
+    audience: __sdk::TableUpdate<Audience>,
     background: __sdk::TableUpdate<Background>,
     belief: __sdk::TableUpdate<Belief>,
     body: __sdk::TableUpdate<Body>,
@@ -1113,7 +1122,7 @@ pub struct DbUpdate {
     missile: __sdk::TableUpdate<Missile>,
     motion_seen: __sdk::TableUpdate<MotionSeen>,
     my_act_outcomes: __sdk::TableUpdate<ActOutcome>,
-    my_body: __sdk::TableUpdate<Motion>,
+    my_body: __sdk::TableUpdate<Moving>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
@@ -1151,7 +1160,7 @@ pub struct DbUpdate {
     routine: __sdk::TableUpdate<Routine>,
     routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
-    seen_bodies: __sdk::TableUpdate<Motion>,
+    seen_bodies: __sdk::TableUpdate<Moving>,
     seen_characters: __sdk::TableUpdate<SeenCharacter>,
     seen_doing: __sdk::TableUpdate<Doing>,
     seen_fighters: __sdk::TableUpdate<Fighter>,
@@ -1200,6 +1209,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "artifact" => db_update
                     .artifact
                     .append(artifact_table::parse_table_update(table_update)?),
+                "audience" => db_update
+                    .audience
+                    .append(audience_table::parse_table_update(table_update)?),
                 "background" => db_update
                     .background
                     .append(background_table::parse_table_update(table_update)?),
@@ -1565,6 +1577,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.artifact = cache
             .apply_diff_to_table::<Artifact>("artifact", &self.artifact)
             .with_updates_by_pk(|row| &row.id);
+        diff.audience = cache
+            .apply_diff_to_table::<Audience>("audience", &self.audience)
+            .with_updates_by_pk(|row| &row.id);
         diff.background = cache
             .apply_diff_to_table::<Background>("background", &self.background)
             .with_updates_by_pk(|row| &row.id);
@@ -1824,7 +1839,7 @@ impl __sdk::DbUpdate for DbUpdate {
             .apply_diff_to_table::<ActOutcome>("my_act_outcomes", &self.my_act_outcomes)
             .with_updates_by_pk(|row| &row.id);
         diff.my_body = cache
-            .apply_diff_to_table::<Motion>("my_body", &self.my_body)
+            .apply_diff_to_table::<Moving>("my_body", &self.my_body)
             .with_updates_by_pk(|row| &row.id);
         diff.my_characters = cache
             .apply_diff_to_table::<Character>("my_characters", &self.my_characters)
@@ -1868,7 +1883,7 @@ impl __sdk::DbUpdate for DbUpdate {
             .apply_diff_to_table::<Vitals>("my_vitals", &self.my_vitals)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_bodies = cache
-            .apply_diff_to_table::<Motion>("seen_bodies", &self.seen_bodies)
+            .apply_diff_to_table::<Moving>("seen_bodies", &self.seen_bodies)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_characters = cache
             .apply_diff_to_table::<SeenCharacter>("seen_characters", &self.seen_characters)
@@ -1903,6 +1918,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "artifact" => db_update
                     .artifact
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "audience" => db_update
+                    .audience
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "background" => db_update
                     .background
@@ -2256,6 +2274,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "artifact" => db_update
                     .artifact
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "audience" => db_update
+                    .audience
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "background" => db_update
                     .background
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2598,6 +2619,7 @@ pub struct AppliedDiff<'r> {
     act_queue: __sdk::TableAppliedDiff<'r, PlannedAct>,
     activity: __sdk::TableAppliedDiff<'r, Activity>,
     artifact: __sdk::TableAppliedDiff<'r, Artifact>,
+    audience: __sdk::TableAppliedDiff<'r, Audience>,
     background: __sdk::TableAppliedDiff<'r, Background>,
     belief: __sdk::TableAppliedDiff<'r, Belief>,
     body: __sdk::TableAppliedDiff<'r, Body>,
@@ -2644,7 +2666,7 @@ pub struct AppliedDiff<'r> {
     missile: __sdk::TableAppliedDiff<'r, Missile>,
     motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
     my_act_outcomes: __sdk::TableAppliedDiff<'r, ActOutcome>,
-    my_body: __sdk::TableAppliedDiff<'r, Motion>,
+    my_body: __sdk::TableAppliedDiff<'r, Moving>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
@@ -2682,7 +2704,7 @@ pub struct AppliedDiff<'r> {
     routine: __sdk::TableAppliedDiff<'r, Routine>,
     routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
-    seen_bodies: __sdk::TableAppliedDiff<'r, Motion>,
+    seen_bodies: __sdk::TableAppliedDiff<'r, Moving>,
     seen_characters: __sdk::TableAppliedDiff<'r, SeenCharacter>,
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
@@ -2728,6 +2750,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<PlannedAct>("act_queue", &self.act_queue, event);
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
         callbacks.invoke_table_row_callbacks::<Artifact>("artifact", &self.artifact, event);
+        callbacks.invoke_table_row_callbacks::<Audience>("audience", &self.audience, event);
         callbacks.invoke_table_row_callbacks::<Background>("background", &self.background, event);
         callbacks.invoke_table_row_callbacks::<Belief>("belief", &self.belief, event);
         callbacks.invoke_table_row_callbacks::<Body>("body", &self.body, event);
@@ -2802,7 +2825,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.my_act_outcomes,
             event,
         );
-        callbacks.invoke_table_row_callbacks::<Motion>("my_body", &self.my_body, event);
+        callbacks.invoke_table_row_callbacks::<Moving>("my_body", &self.my_body, event);
         callbacks.invoke_table_row_callbacks::<Character>(
             "my_characters",
             &self.my_characters,
@@ -2884,7 +2907,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Script>("script", &self.script, event);
-        callbacks.invoke_table_row_callbacks::<Motion>("seen_bodies", &self.seen_bodies, event);
+        callbacks.invoke_table_row_callbacks::<Moving>("seen_bodies", &self.seen_bodies, event);
         callbacks.invoke_table_row_callbacks::<SeenCharacter>(
             "seen_characters",
             &self.seen_characters,
@@ -3585,6 +3608,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         act_queue_table::register_table(client_cache);
         activity_table::register_table(client_cache);
         artifact_table::register_table(client_cache);
+        audience_table::register_table(client_cache);
         background_table::register_table(client_cache);
         belief_table::register_table(client_cache);
         body_table::register_table(client_cache);
@@ -3700,6 +3724,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "act_queue",
         "activity",
         "artifact",
+        "audience",
         "background",
         "belief",
         "body",
