@@ -118,6 +118,9 @@ fn relevant<'a>(model: &'a HudModel, project: impl Fn(Vec3) -> Option<Vec2>) -> 
         .actors
         .iter()
         .filter(|a| a.hovered || a.targeted || a.greeted || a.exact.is_some() || a.stance == Stance::Hostile)
+        // A speaker's bubble carries the name: a plate that would add nothing else (no health, not
+        // hostile) under it only repeats it, which in a crowd doubled every hovered speaker.
+        .filter(|a| a.hp.is_some() || a.exact.is_some() || a.stance == Stance::Hostile || !model.bubbles.iter().any(|b| b.speaker == a.id))
         .filter_map(|a| {
             let p = project(a.head)?;
             let mut alpha = 1.0 - smoothstep(14.0, 32.0, a.distance);
