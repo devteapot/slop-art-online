@@ -407,7 +407,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && spec.needs_item) {
         let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some() || spec.items.iter().any(|w| w == i);
         if !known {
-            return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::ITEMS.iter().map(|x| x.name).collect::<Vec<_>>().join(", ")));
+            return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::item_names().join(", ")));
         }
     }
     Ok(json!({"do": out}))

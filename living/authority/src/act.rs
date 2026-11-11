@@ -81,10 +81,10 @@ fn balked(ctx: &ReducerContext, id: u32, target: &Resolved, why: &str, now: u64)
     common::chronicle(ctx, now, "balk", id, target.id as u32, at, format!("{} held back from attacking {} ({why})", common::display(ctx, id), common::name_of(ctx, target.id as u32)));
 }
 
-/// Skills done while the body keeps whatever motion it has (a glide to a stop, a player's
-/// walk); every other skill stands still to perform.
+/// Every skill stands still to be done, except those whose spec says `moving` (waiting, eating,
+/// a call): they keep whatever motion the body has (a glide to a stop, a player's walk).
 fn rooted(skill: &str) -> bool {
-    !matches!(skill, "wait" | "eat" | "signal")
+    !catalog::skill(skill).is_some_and(|k| k.moving)
 }
 
 /// A resolved target at the moment an action starts.
@@ -114,20 +114,15 @@ pub fn warmth(ctx: &ReducerContext, at: (f32, f32)) -> (bool, bool) {
     let mut near_fire = false;
     let mut near_shelter = false;
     let laws = common::laws(ctx);
+    let sc = common::scripts(ctx);
     for (s, d) in common::structures_near(ctx, at, laws.fire_warmth.max(laws.shelter_warmth)) {
-        if s.kind == "campfire" && d <= laws.fire_warmth {
-            near_fire = true;
-        }
-        if s.kind == "shelter" && d <= laws.shelter_warmth {
-            near_shelter = true;
-        }
-        // Houses, halls and inns have a roof and a hearth; a workshop has a roof.
-        if matches!(s.kind.as_str(), "house" | "hall" | "inn") && d <= laws.shelter_warmth {
-            near_shelter = true;
-            near_fire = true;
-        }
-        if s.kind == "workshop" && d <= laws.shelter_warmth {
-            near_shelter = true;
+        // What each kind does is the script's (`structure_traits()`): a hearth warms, a roof
+        // shelters. An open fire warms within `fire_warmth`; a building within `shelter_warmth`.
+        let t = sc.structure(&s.kind);
+        let reach = if t.roof { laws.shelter_warmth } else { laws.fire_warmth };
+        if d <= reach {
+            near_fire |= t.warms;
+            near_shelter |= t.roof;
         }
     }
     (near_fire, near_shelter)
@@ -294,7 +289,8 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
     actor.practice = common::practice_of(ctx, id);
     let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     actor.kin_near = common::creatures_near(ctx, from, common::laws(ctx).kin_near_m, now).iter().filter(|c| c.id != id && *c.kind == *actor.kind).count() as u32;
-    if a.skill == "graze" {
+    // The grass where it stands, for skills whose rules read it (grazing).
+    if common::scripts(ctx).skill_reads_actor(&a.skill, "pasture") {
         actor.pasture = common::pasture_now(ctx, chunk_of(from.0, from.1), now);
     }
     let hour = common::hour(&w, now);
@@ -354,6 +350,8 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
             target.owner = ctx.db.structure().id().find(a.target.id).map_or(0, |s| s.owner);
             if target.owner != 0 {
                 target.home = crate::records::home_of(ctx, target.owner);
+                target.community = crate::records::community_party(ctx, target.owner);
+                target.hosts = crate::town::guest_of(ctx, id, target.owner, now);
             }
         }
         _ => {}
@@ -591,7 +589,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             }
         }
         "eat" | "give" | "store" if item == "food" => {
-            item = common::best_food(ctx, id as u64).ok_or("no food in your pack (food: gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt)")?;
+            item = common::best_food(ctx, id as u64).ok_or_else(|| format!("no food in your pack (food: {})", common::scripts(ctx).text_of("source_of", "food").unwrap_or_default()))?;
         }
         "take" if item == "food" && target.class == 2 => {
             item = common::best_food(ctx, STRUCTURE_BIT | target.id).ok_or("no food in there")?;
@@ -887,7 +885,7 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
     }
     // Routine successes (gathering a berry, arriving somewhere) are not experiences worth
     // recording; failures and meaningful acts are.
-    if !repeat && (!ok || matches!(a.skill.as_str(), "build" | "craft" | "cook" | "give" | "store" | "take" | "attack" | "conceive" | "threaten" | "yield")) {
+    if !repeat && (!ok || catalog::skill(&a.skill).is_some_and(|k| k.notable)) {
         tell(ctx, a.id, ok, &a.label, why, now);
     }
     common::wake(ctx, a.id);
@@ -985,13 +983,6 @@ fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
     }
     if ok {
         common::practise(ctx, a.id, &a.skill);
-        // Grazing eats the grass where it happens.
-        if a.skill == "graze" {
-            if let Some(b) = ctx.db.body().id().find(a.id) {
-                let p = pos(&b, now);
-                common::graze_pasture(ctx, chunk_of(p.0, p.1), now);
-            }
-        }
     }
     if a.node != ORPHAN && !held(a.node) {
         routine_outcome(ctx, a.id, a.revision, a.node, ok, why, now);
@@ -1240,12 +1231,9 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 common::inv_add(ctx, me as u64, &item, qty);
                 move_tablets(ctx, &item, STRUCTURE_BIT | a.target.id, me as u64, qty);
                 notes.push(format!("took {qty} {item}"));
-                if let Some(s) = ctx.db.structure().id().find(a.target.id) {
-                    let same_people = |x: u32, y: u32| match (ctx.db.membership().member().find(x), ctx.db.membership().member().find(y)) {
-                        (Some(p), Some(q)) => p.community == q.community,
-                        _ => false,
-                    };
-                    if s.owner != 0 && s.owner != me && !same_people(s.owner, me) && !crate::town::guest_of(ctx, me, s.owner, now) {
+                // Whether taking it is theft is the `theft(a)` law's to say.
+                if let Some(s) = ctx.db.structure().id().find(a.target.id).filter(|_| common::scripts(ctx).holds("theft", sctx)) {
+                    {
                         let owner_sees = ctx.db.body().id().find(s.owner).is_some_and(|b| crate::perception::sees(ctx, s.owner, pos(&b, now), at, &common::world(ctx), &common::map(ctx), now));
                         if owner_sees {
                             crate::woken::engage(ctx, s.owner, me, "theft", true, now);
@@ -1479,6 +1467,9 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 witnessed(ctx, now, at, "community", me, 0, &format!("{{a}} left {cname}"), 0.6, &[me]);
                 notes.push(format!("left {cname}"));
             }
+            Effect::Graze => {
+                common::graze_pasture(ctx, chunk_of(at.0, at.1), now);
+            }
             Effect::Plant => {
                 let sc = common::scripts(ctx);
                 common::invalidate_resources(ctx, None);
@@ -1489,7 +1480,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     y: at.1,
                     chunk: chunk_of(at.0, at.1),
                     amount: 0.0,
-                    max: 5.0,
+                    max: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
                     regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
                     at_ms: now,
                 });

@@ -93,12 +93,17 @@ fn describe(c: &SkillCtx) -> String {
 /// The functions the engine calls with a context: `<skill>_check`, `_duration`, `_done`, `_hit`,
 /// `_missile`, and the need laws.
 pub const SKILL_PARTS: [&str; 5] = ["_check", "_duration", "_done", "_hit", "_missile"];
-pub const CTX_LAWS: [&str; 5] = ["rates", "body_state", "move_speed", "senses", "motion"];
+pub const CTX_LAWS: [&str; 6] = ["rates", "body_state", "move_speed", "senses", "motion", "theft"];
 
 pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     if let Some(f) = s.borrowed.first() {
-        return Err(format!("install refused: the script has no `{f}(a)` law (the engine asks it; see the shipped script)"));
+        return Err(format!("install refused: the script has no `{f}` law (the engine asks it; see the shipped script)"));
     }
+    // The samples are the script's own items and skills, not the process's world's.
+    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits))
+}
+
+fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     // Every law reads only fields the engine provides.
     for f in s.ctx_laws() {
         Plan::of(&f, s.fields.of(&f, 1).and_then(|u| u.first()), true).map_err(|e| format!("install refused: {e}"))?;
@@ -115,6 +120,7 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     needs(&mut p)?;
     skills(&mut p)?;
     hooks(&mut p)?;
+    yes_or_no(&mut p)?;
     record_texts(&mut p)?;
     regard(&mut p)?;
     Ok(p.report)
@@ -145,6 +151,29 @@ fn laws_and_tables(p: &mut Probe) -> Result<(), String> {
     ruled.dedup();
     if let Some(k) = ruled.iter().find(|k| s.skills.get(k).is_none()) {
         return Err(format!("install refused: `{k}` has rules but no `{k}_spec()` (every skill declares its arguments and a description for minds)"));
+    }
+    Ok(())
+}
+
+/// Laws that say yes or no of an act (`theft(a)` for a take), over each body and target.
+fn yes_or_no(p: &mut Probe) -> Result<(), String> {
+    let s = p.s;
+    for f in ["theft"] {
+        if !s.has(f) {
+            continue;
+        }
+        for a in actors() {
+            for t in targets() {
+                let mut c = sample("take", &a, &t, "berries");
+                for hosts in [false, true] {
+                    c.target.hosts = hosts;
+                    let d = p.ctx(f, &c)?;
+                    if !d.is_bool() {
+                        return Err(format!("install refused: `{f}` must return true or false, got {} ({})", d.type_name(), describe(&c)));
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -372,7 +401,7 @@ fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx 
 
 /// People of each age and both animals, in the states the engine hands the laws.
 pub fn actors() -> Vec<ActorFacts> {
-    let all_items: Vec<(String, u32)> = catalog::ITEMS.iter().map(|i| (i.name.to_string(), 3)).collect();
+    let all_items: Vec<(String, u32)> = catalog::item_names().into_iter().map(|i| (i, 3)).collect();
     let all_known: Vec<String> = catalog::TECHNIQUES.iter().map(|t| t.name.to_string()).collect();
     let base = ActorFacts { id: 1, kind: "person".into(), hp: 70.0, hunger: 40.0, energy: 80.0, terrain: "grass".into(), age: 20.0, stage: "adult".into(), life: 0.3, kin_near: 2, pasture: 5.0, room: 25, ..Default::default() };
     vec![
@@ -416,7 +445,7 @@ pub fn targets() -> Vec<TargetFacts> {
 
 /// Every item and technique, and the words the engine passes as items.
 pub fn items() -> Vec<String> {
-    let mut v: Vec<String> = catalog::ITEMS.iter().map(|i| i.name.to_string()).chain(catalog::TECHNIQUES.iter().map(|t| t.name.to_string())).collect();
+    let mut v: Vec<String> = catalog::item_names().into_iter().chain(catalog::TECHNIQUES.iter().map(|t| t.name.to_string())).collect();
     v.extend(catalog::STRUCTURES.iter().chain(catalog::TERRAIN_BUILDS).map(|s| s.to_string()));
     v.extend(["food", "top level", "retire", "tablet", "sign", "alarm"].map(String::from));
     v.sort();

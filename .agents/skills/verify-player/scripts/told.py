@@ -4,7 +4,7 @@
 
 Two commands, each beside an AI character given the same graph as the control:
 
-- refused at start: `{"do":"graze"}` ("only deer graze"); sent twice, the second inside the
+- refused at start: `{"do":"graze"}` ("only grazing animals graze"); sent twice, the second inside the
   window must add no line;
 - failed after starting: a gift (`{"seq":[give]}`, so it runs as a graph, not a deliberate
   act) whose receiver is moved 6 m away (out of reach, still in sight) while it is handed over

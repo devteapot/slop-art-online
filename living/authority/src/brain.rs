@@ -80,7 +80,6 @@ struct Ev<'a> {
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
 /// holding (sleeping until rested, not until barely awake). Movement and combat stay reactive.
-const LATCHES: &[&str] = &["sleep", "rest", "eat", "gather", "build", "craft", "cook", "teach", "experiment", "write", "read", "plant", "store", "take", "give"];
 
 pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let Some(me) = ctx.db.character().id().find(id) else { return };
@@ -109,7 +108,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
-    ev.latched = cur.filter(|a| a.revision == ev.st.revision && (LATCHES.contains(&a.skill.as_str()) || sc.shows().aside(&a.skill))).map(|a| a.node);
+    ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
     ev.alerts();
     let root = ev.g.clone();
     let played = !ev.me.ai;

@@ -12,7 +12,7 @@ pub const TOP: [&str; 17] = ["actor", "target", "routine", "item", "qty", "night
 pub const ACTOR: [&str; 29] = [
     "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor",
 ];
-pub const TARGET: [&str; 22] = ["class", "id", "kind", "name", "amount", "hp", "max_hp", "stage", "hurt_ago", "alive", "dist", "inv", "knows", "activity", "yielded_ago", "near_fire", "company", "bearing", "closing", "community", "owner", "home"];
+pub const TARGET: [&str; 23] = ["class", "id", "kind", "name", "amount", "hp", "max_hp", "stage", "hurt_ago", "alive", "dist", "inv", "knows", "activity", "yielded_ago", "near_fire", "company", "bearing", "closing", "community", "owner", "home", "hosts"];
 pub const ROUTINE: [&str; 4] = ["exists", "ok", "failed", "changed_s"];
 
 const _: () = assert!(crate::genes::BODY.len() == 4);
@@ -357,6 +357,7 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "community" => Val::I(t.community as i64),
             "owner" => Val::I(t.owner as i64),
             "home" => Val::Str(&t.home),
+            "hosts" => Val::B(t.hosts),
             _ => Val::F(t.closing),
         };
         f(Level::Target, name, v);

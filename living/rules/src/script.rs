@@ -105,6 +105,8 @@ pub struct TargetFacts {
     pub community: u64,
     /// A structure's owner (0: none).
     pub owner: u32,
+    /// The actor is a guest of this creature, or of this structure's owner (`host`).
+    pub hosts: bool,
     /// Where a creature's household lives, or a structure's owner's (`"x,y"`; empty: none).
     pub home: String,
 }
@@ -235,6 +237,8 @@ pub enum Effect {
     Harvest { qty: f32 },
     /// Change the actor's needs.
     Vitals { hp: f32, hunger: f32, energy: f32 },
+    /// Eat the grass where the actor stands (the chunk's pasture).
+    Graze,
     /// Damage the target creature.
     Damage { amount: f32 },
     /// Restore the target creature's health (tending wounds).
@@ -515,7 +519,7 @@ pub const LAW_TRAITS: &[&str] = &["about", "cadence", "topic", "reach"];
 /// Laws the engine asks for that a script installed before they existed may lack: such a script
 /// runs with the shipped script's functions underneath its own until its next install, and an
 /// install without them is refused.
-pub const REQUIRED_LAWS: &[&str] = &["senses", "motion"];
+pub const REQUIRED_LAWS: &[&str] = &["senses", "motion", "items", "structure_traits"];
 
 /// Distinct states whose senses or moves are kept before the memo starts over.
 const CREATURE_MEMO: usize = 1_024;
@@ -630,6 +634,17 @@ pub struct Scripts {
     reach: Reach,
     /// Required laws the script lacks, taken from the shipped script (an install refuses them).
     borrowed: Vec<String>,
+    /// What each kind of structure does for those near it (`structure_traits()`).
+    structures: HashMap<String, StructureTraits>,
+}
+
+/// What a kind of structure does for those near it (`structure_traits()`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct StructureTraits {
+    /// A hearth: near it counts as near a fire.
+    pub warms: bool,
+    /// A roof: near it counts as sheltered.
+    pub roof: bool,
 }
 
 /// Largest script source accepted. `skills.rhai` is about 56 KB; compile time and memory grow
@@ -684,7 +699,8 @@ fn engine_with(l: Limits) -> Engine {
 fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
     let skills: Vec<String> = s.shapes.names().map(String::from).chain(s.skills.names().map(String::from)).collect();
     let kinds: Vec<String> = crate::catalog::CREATURES.iter().map(|k| k.to_string()).collect();
-    let items: Vec<String> = crate::catalog::ITEMS.iter().map(|i| i.name.to_string()).collect();
+    let items: Vec<String> = s.skills.items.iter().map(|i| i.name.clone()).collect();
+    let structures: Vec<String> = crate::catalog::STRUCTURES.iter().map(|k| k.to_string()).collect();
     let resources: Vec<String> = crate::catalog::RESOURCES.iter().map(|(k, _)| k.to_string()).collect();
     let mut out = Vec::new();
     let mut add = |f: &str, d: &[String]| {
@@ -704,6 +720,8 @@ fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
     add("spoil_rate", &items);
     add("nutrition", &items);
     add("regrow", &resources);
+    add("planted_max", &resources);
+    add("kept_spoil", &structures);
     for f in ["trap_every_s", "trap_holds"] {
         add(f, &["meat".to_string()]);
     }
@@ -735,7 +753,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), laws: Default::default(), reach, borrowed };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -746,7 +764,10 @@ impl Scripts {
         }
         s.shapes = s.read_shapes()?;
         s.shows = s.read_shows()?;
-        s.skills = std::sync::Arc::new(s.read_specs(&declared)?);
+        let mut skills = s.read_specs(&declared)?;
+        skills.items = s.read_items()?;
+        s.skills = std::sync::Arc::new(skills);
+        s.structures = s.read_structures()?;
         s.laws = s.read_laws()?;
         s.reach = s.read_reach()?;
         for (f, names) in name_laws(&s) {
@@ -872,6 +893,75 @@ impl Scripts {
     /// Every skill the script declares.
     pub fn skills(&self) -> &std::sync::Arc<crate::catalog::Skills> {
         &self.skills
+    }
+
+    /// The world's items and their traits (`items()`: a list of maps with a `name`), read once.
+    fn read_items(&self) -> Result<Vec<crate::catalog::ItemSpec>, String> {
+        let a = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "items", ()).map_err(|e| format!("items: {e}"))?.try_cast::<Array>().ok_or("items must return a list of maps")?;
+        let mut out: Vec<crate::catalog::ItemSpec> = Vec::new();
+        for d in a {
+            let m = d.try_cast::<Map>().ok_or("items: each item is a map with a name")?;
+            let name = m.get("name").and_then(|v| v.clone().into_string().ok()).filter(|n| !n.is_empty()).ok_or("items: each item has a name")?;
+            if out.iter().any(|i| i.name == name) {
+                return Err(format!("items: `{name}` twice"));
+            }
+            let traits = m.iter().filter(|(k, _)| k.as_str() != "name").map(|(k, v)| (k.to_string(), v.to_string())).collect();
+            out.push(crate::catalog::ItemSpec { name, traits });
+        }
+        Ok(out)
+    }
+
+    /// What each kind of structure does for those near it (`structure_traits()`), read once.
+    fn read_structures(&self) -> Result<HashMap<String, StructureTraits>, String> {
+        let m = self.law_map("structure_traits")?;
+        let mut out = HashMap::new();
+        for (k, v) in m {
+            let t = v.try_cast::<Map>().ok_or_else(|| format!("structure_traits: `{k}` must be a map of traits"))?;
+            if let Some(x) = t.keys().find(|x| !["warms", "roof"].contains(&x.as_str())) {
+                return Err(format!("structure_traits: unknown trait `{x}` of `{k}` (traits are warms, roof)"));
+            }
+            let flag = |x: &str| t.get(x).is_some_and(|v| v.as_bool().unwrap_or(false));
+            out.insert(k.to_string(), StructureTraits { warms: flag("warms"), roof: flag("roof") });
+        }
+        Ok(out)
+    }
+
+    /// What a kind of structure does for those near it.
+    pub fn structure(&self, kind: &str) -> StructureTraits {
+        self.structures.get(kind).copied().unwrap_or_default()
+    }
+
+    /// A list of words a law of one name gives (`occupation_knows("fisher")`); empty when the
+    /// script has no such law or it gives something else.
+    pub fn words_of(&self, f: &str, arg: &str) -> Vec<String> {
+        if !self.has(f) {
+            return Vec::new();
+        }
+        let Ok(d) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)) else { return Vec::new() };
+        d.try_cast::<Array>().unwrap_or_default().into_iter().filter_map(|x| x.into_string().ok()).collect()
+    }
+
+    /// The text a law of one name gives (`source_of("food")`).
+    pub fn text_of(&self, f: &str, arg: &str) -> Option<String> {
+        if !self.has(f) {
+            return None;
+        }
+        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok()?.into_string().ok()
+    }
+
+    /// A yes-or-no law of a context (`theft(a)`); false when the script has none or it fails.
+    pub fn holds(&self, f: &str, ctx: &SkillCtx) -> bool {
+        self.has(f) && self.call(f, ctx).ok().and_then(|d| d.as_bool().ok()).unwrap_or(false)
+    }
+
+    /// Whether a skill's rules read a field of the actor (its check, duration or effects), so the
+    /// engine works it out only for skills that read it (`pasture`).
+    pub fn skill_reads_actor(&self, skill: &str, field: &str) -> bool {
+        let Some(i) = context::ACTOR.iter().position(|f| *f == field) else { return false };
+        ["_check", "_duration", "_done"].iter().any(|p| {
+            let f = format!("{skill}{p}");
+            self.has(&f) && self.plan(&f).actor & (1 << i) != 0
+        })
     }
 
     /// What each law is (`<law>_law()`), read once here.
@@ -1319,7 +1409,7 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
 fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
@@ -1358,6 +1448,11 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         listed: flag("listed", true)?,
         talk: flag("talk", false)?,
         items: list("items")?,
+        latch: flag("latch", false)?,
+        notable: flag("notable", false)?,
+        moving: flag("moving", false)?,
+        moment: flag("moment", false)?,
+        reflex: flag("reflex", false)?,
     })
 }
 
@@ -1508,6 +1603,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "remove" => Effect::Remove { item: s("item"), qty: qty()? },
         "harvest" => Effect::Harvest { qty: n("qty") as f32 },
         "vitals" => Effect::Vitals { hp: n("hp") as f32, hunger: n("hunger") as f32, energy: n("energy") as f32 },
+        "graze" => Effect::Graze,
         "damage" => Effect::Damage { amount: n("amount") as f32 },
         "heal" => Effect::Heal { amount: n("amount") as f32 },
         "gate" => Effect::Gate { open: n("open") > 0.0 },
@@ -1571,6 +1667,47 @@ mod tests {
         SkillCtx { actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), inv, ..Default::default() }, night, ..Default::default() }
     }
 
+    /// Items, kinds and skills are declared with traits, and the rules read the traits: the
+    /// lists the engine had (catalog::ITEMS, LATCHES, the notable skills, MOVES, the skills done
+    /// moving) come out of the script unchanged, and a new item or kind is a line of script.
+    #[test]
+    fn rules_read_traits_not_lists() {
+        let s = scripts();
+        let names: Vec<String> = s.skills().items.iter().map(|i| i.name.clone()).collect();
+        assert_eq!(names.join(" "), "berries fish meat cooked_fish cooked_meat wood stone fiber spear hide cloak torch tablet clay axe pick smoked_fish smoked_meat net basket bow arrow salve leather armor mark");
+        let with = |f: fn(&crate::catalog::SkillSpec) -> bool| s.skills().iter().filter(|k| f(k)).map(|k| k.name.clone()).collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>().join(" ");
+        assert_eq!(with(|k| k.latch), "build cook craft eat experiment gather give plant read rest sleep store take teach write");
+        assert_eq!(with(|k| k.notable), "attack build conceive cook craft give store take threaten yield");
+        assert_eq!(with(|k| k.moving), "eat signal wait");
+        assert_eq!(with(|k| k.moment), "flee follow graze rest sleep wait wander");
+        assert_eq!(with(|k| k.reflex), "flee");
+        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (StructureTraits { warms: true, roof: true }, StructureTraits { warms: true, roof: false }, StructureTraits { warms: false, roof: true }, StructureTraits::default()));
+        assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
+        assert_eq!((s.num_of("kept_spoil", "storage", 0.0), s.num_of("planted_max", "berry_bush", 0.0)), (1.0 / 3.0, 5.0));
+        assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.num_of("carcass_meat", "deer", 0.0), s.num_of("dodge_speed", "person", 0.0)), (55.0, 1.8, 5.0, 5.2));
+        // The words minds and players read are the ones the lists gave.
+        assert_eq!(s.text_of("source_of", "food").unwrap(), "gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt");
+        let cook = |s: &Scripts, item: &str| {
+            let c = SkillCtx { actor: ActorFacts { kind: "person".into(), stage: "adult".into(), knows: vec!["cooking".into()], inv: vec![(item.to_string(), 1)], ..Default::default() }, target: TargetFacts { class: "structure".into(), kind: "campfire".into(), ..Default::default() }, item: item.into(), skill: "cook".into(), ..Default::default() };
+            s.check("cook", &c).and_then(|_| s.done("cook", &c))
+        };
+        assert_eq!(cook(&s, "berries").unwrap_err(), "only raw fish or meat can be cooked");
+        assert!(matches!(&cook(&s, "fish").unwrap()[1], Effect::Add { item, .. } if item == "cooked_fish"));
+        // A world with roots that bake: one item line, no rule changed.
+        let src = include_str!("../../scripts/skills.rhai").replace("fn items() {", "fn base_items() {");
+        let roots = Scripts::new(&format!("{src}\nfn items() {{ base_items() + [#{{ name: \"roots\", cooks_to: \"baked_roots\" }}, #{{ name: \"baked_roots\" }}] }}")).unwrap();
+        assert!(matches!(&cook(&roots, "roots").unwrap()[1], Effect::Add { item, .. } if item == "baked_roots"));
+        assert_eq!(cook(&roots, "berries").unwrap_err(), "only raw fish, meat or roots can be cooked");
+        assert!(crate::catalog::scoped(roots.skills().clone(), || crate::catalog::item("roots").is_some()) && crate::catalog::item("roots").is_none());
+        // Who grazes is a trait of the kind.
+        let graze = |kind: &str| {
+            let c = SkillCtx { actor: ActorFacts { kind: kind.into(), stage: "adult".into(), terrain: "grass".into(), pasture: 5.0, ..Default::default() }, skill: "graze".into(), ..Default::default() };
+            s.check("graze", &c)
+        };
+        assert!(graze("deer").is_ok() && graze("wolf").unwrap_err() == "only grazing animals graze");
+        assert!(s.done("graze", &SkillCtx::default()).unwrap().contains(&Effect::Graze));
+    }
+
     /// How a creature moves besides its walk is a law per creature, with the values the engine
     /// had (run 1.5 × walk, flight 1.15, stepping aside 0.8, turning 6 rad/s keeping 0.4 of its
     /// speed in the sharpest turns, keeping 0.8 m from others at weight 0.9).
@@ -1621,7 +1758,7 @@ mod tests {
         let old = Scripts::new(&src.replace("fn senses(a)", "fn senses_gone(a)")).unwrap();
         assert_eq!(old.borrowed(), ["senses".to_string()]);
         assert_eq!(old.senses(&creature(false, false)).unwrap().sight, 11.0);
-        assert!(old.validate().unwrap_err().contains("has no `senses(a)` law"));
+        assert!(old.validate().unwrap_err().contains("has no `senses` law"));
         // A law declared without a description is refused.
         assert!(Scripts::new(&format!("{src}\nfn odd_law() {{ #{{ cadence: \"event\" }} }}")).err().unwrap().contains("odd_law: `about`"));
     }

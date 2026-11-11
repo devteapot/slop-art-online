@@ -13,7 +13,7 @@ use serde_json::Value;
 // Which skills are ongoing or real-time (they belong in the behavior graph, not in an act)
 // and which are reflexes (they take the body back from an act) is
 // `living_rules::combat::Shapes::real_time` / `reflex`: the walking and resting skills
-// (`combat::MOVES`), and each combat skill as its script declares. A single walk (`goto`) may
+// (skills whose spec says `moment`), and each combat skill as its script declares. A single walk (`goto`) may
 // be an act: minds use it as the step before an interaction ("go to the child, then teach");
 // in the first lab minutes 16 of 29 acts were such walks.
 
