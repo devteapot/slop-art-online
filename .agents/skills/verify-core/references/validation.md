@@ -1,6 +1,10 @@
 # Core validation record
 
 
+## 2026-11-11 exp-arrive after merging main 6caebe2 (Spark)
+
+`newcomers` 18 of 18 (`core-arrive-n9`, hamlet, with rates-2's Cullet laws).
+
 ## 2026-11-11 exp-arrive after merging main 087be68 (Spark)
 
 `newcomers` 18 of 18 (`core-arrive-n8`, hamlet).

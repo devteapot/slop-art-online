@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-11-11 exp-arrive after merging main 6caebe2 (Spark)
+
+Trials `af8`: `arrive` and `arrive-answer` × control and `arrive-all`, 6 minutes, fake. All four ran to their duration with one mind start each and concurrency 64; the player answered once. `just living-check` exits 0 (`.local/living/arrive/living-check-6.log`).
+
 ## 2026-11-11 exp-arrive after merging main 087be68 (Spark)
 
 Trials `af7`: `arrive` and `arrive-answer` × control and `arrive-all`, 6 minutes, fake. All four ran to their duration with one mind start each and concurrency 64. The answered resident replied in 1.5 s. `just living-check` exits 0 (`.local/living/arrive/living-check-5.log`).
