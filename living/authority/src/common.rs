@@ -695,38 +695,66 @@ pub fn hearing_for(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
     senses_of(ctx, id, w, now).hearing
 }
 
-thread_local! {
-    /// Senses by creature for one moment (`now`): every look in a tick asks the same few
-    /// creatures again. Cleared when the moment or the script revision changes.
-    static SENSES: RefCell<(u64, u32, HashMap<u32, living_rules::script::Senses>)> = RefCell::new((0, 0, HashMap::new()));
+/// A creature's answers from the laws asked per creature on the hot path, for one moment.
+#[derive(Clone, Copy, Default)]
+struct Hot {
+    senses: Option<living_rules::script::Senses>,
+    moves: Option<living_rules::script::Moves>,
 }
 
-/// A creature's senses now: the `senses` law over the few facts it reads (gathered by its plan),
-/// kept per state by the scripts and per creature for this moment here.
-pub fn senses_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> living_rules::script::Senses {
+thread_local! {
+    /// The hot laws' answers by creature for one moment (`now`): every look and step in a tick
+    /// asks the same few creatures again. Cleared when the moment or the script revision changes.
+    static HOT: RefCell<(u64, u32, HashMap<u32, Hot>)> = RefCell::new((0, 0, HashMap::new()));
+}
+
+/// A hot law's answer for creature `id` now: kept for this moment here, else the law over the
+/// few facts it reads (gathered by its plan), kept per state by the scripts.
+fn hot<T: Copy>(ctx: &ReducerContext, id: u32, w: &World, now: u64, law: &str, slot: fn(&mut Hot) -> &mut Option<T>, ask: impl FnOnce(&Scripts, &living_rules::script::SkillCtx) -> T) -> T {
     let rev = scripts_rev(ctx);
-    if let Some(s) = SENSES.with(|c| {
-        let c = c.borrow();
-        (c.0 == now && c.1 == rev).then(|| c.2.get(&id).copied()).flatten()
+    if let Some(v) = HOT.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.0 != now || c.1 != rev {
+            return None;
+        }
+        c.2.get_mut(&id).and_then(|h| *slot(h))
     }) {
-        return s;
+        return v;
     }
     let sc = scripts(ctx);
-    let plan = sc.law_plan("senses");
-    let c = crate::act::law_ctx(ctx, id, w, now, &plan);
-    let s = sc.senses(&c).unwrap_or_else(|e| {
-        log::warn!("senses for {id}: {e}");
-        let r = sc.reach();
-        living_rules::script::Senses { sight: r.sight(c.night), hearing: r.hearing }
-    });
-    SENSES.with(|c| {
+    let c = crate::act::law_ctx(ctx, id, w, now, &sc.law_plan(law));
+    let v = ask(&sc, &c);
+    HOT.with(|c| {
         let mut c = c.borrow_mut();
         if c.0 != now || c.1 != rev {
             *c = (now, rev, HashMap::new());
         }
-        c.2.insert(id, s);
+        *slot(c.2.entry(id).or_default()) = Some(v);
     });
-    s
+    v
+}
+
+/// A creature's senses now (the `senses` law).
+pub fn senses_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> living_rules::script::Senses {
+    hot(ctx, id, w, now, "senses", |h| &mut h.senses, |sc, c| {
+        sc.senses(c).unwrap_or_else(|e| {
+            log::warn!("senses for {id}: {e}");
+            let r = sc.reach();
+            living_rules::script::Senses { sight: r.sight(c.night), hearing: r.hearing }
+        })
+    })
+}
+
+/// How a creature moves now (the `motion` law): its run, flight and step aside as shares of its
+/// walk, its turning and how far it keeps from others.
+pub fn moves_of(ctx: &ReducerContext, id: u32, now: u64) -> living_rules::script::Moves {
+    let w = world(ctx);
+    hot(ctx, id, &w, now, "motion", |h| &mut h.moves, |sc, c| {
+        sc.moves(c).unwrap_or_else(|e| {
+            log::warn!("motion for {id}: {e}");
+            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0 }
+        })
+    })
 }
 
 /// Techniques a character knows, by their current names (a row a world kept from before a

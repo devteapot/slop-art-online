@@ -325,27 +325,17 @@ pub struct Laws {
     pub repeat_failure_s: f32,
     /// Walking speed multiplier on road tiles.
     pub road_speed: f32,
-    // ---- steering (see `steer.rs`) ----
-    /// Turn rate while moving, rad/s.
-    pub turn_rate: f32,
-    /// Share of speed kept in the sharpest turns.
-    pub turn_slow: f32,
+    // ---- steering (see `steer.rs`; how each creature turns and keeps apart is its `motion`) ----
     /// Distance from a destination where walkers start slowing down, tiles.
     pub slow_radius: f32,
     /// Distance from a path corner where steering already aims past it, tiles.
     pub corner_radius: f32,
-    /// Walkers keep this far from other bodies when they can, tiles.
-    pub separation: f32,
-    /// How strongly separation bends the way (relative to the goal direction).
-    pub separation_weight: f32,
     /// Longest a walker goes without looking again when alone, seconds.
     pub steer_s: f32,
     /// Steering rate among other bodies, while chasing or following, and in a fight (Hz).
     pub crowd_hz: f32,
     pub chase_hz: f32,
     pub combat_hz: f32,
-    /// Running speed multiplier (a player's run, a flight).
-    pub run_speed: f32,
     /// Movement input a player may send per second (sustained) and in a burst.
     pub input_hz: f32,
     pub input_burst: f32,
@@ -363,12 +353,6 @@ pub struct Laws {
     pub takeover_s: f32,
 }
 
-impl Laws {
-    /// Steering constants for [`crate::steer::plan`].
-    pub fn tuning(&self) -> crate::steer::Tuning {
-        crate::steer::Tuning { turn_rate: self.turn_rate, turn_slow: self.turn_slow, road_speed: self.road_speed, ..Default::default() }
-    }
-}
 
 impl Default for Laws {
     fn default() -> Self {
@@ -382,17 +366,12 @@ impl Default for Laws {
             danger_far: 12.0,
             repeat_failure_s: 120.0,
             road_speed: 1.4,
-            turn_rate: 6.0,
-            turn_slow: 0.4,
             slow_radius: 1.2,
             corner_radius: 0.9,
-            separation: 0.8,
-            separation_weight: 0.9,
             steer_s: 2.0,
             crowd_hz: 3.0,
             chase_hz: 4.0,
             combat_hz: 8.0,
-            run_speed: 1.5,
             input_hz: 30.0,
             input_burst: 15.0,
             pasture_regen: 0.006,
@@ -429,6 +408,30 @@ impl Reach {
         } else {
             self.day
         }
+    }
+}
+
+/// How a creature moves besides its walking pace (`motion(a)`): shares of its walk for a run,
+/// a flight and stepping aside; its turning; how far it keeps from other bodies.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Moves {
+    pub run: f32,
+    pub flee: f32,
+    pub aside: f32,
+    /// Turn rate while moving, rad/s.
+    pub turn_rate: f32,
+    /// Share of speed kept in the sharpest turns.
+    pub turn_slow: f32,
+    /// Keep this far from other bodies when it can (metres), and how strongly that bends the
+    /// way (relative to the goal direction).
+    pub separation: f32,
+    pub separation_weight: f32,
+}
+
+impl Moves {
+    /// Steering constants for [`crate::steer::plan`] (the road's speed is the world's).
+    pub fn tuning(&self, road_speed: f32) -> crate::steer::Tuning {
+        crate::steer::Tuning { turn_rate: self.turn_rate, turn_slow: self.turn_slow, road_speed, ..Default::default() }
     }
 }
 
@@ -472,10 +475,10 @@ pub const LAW_TRAITS: &[&str] = &["about", "cadence", "topic", "reach"];
 /// Laws the engine asks for that a script installed before they existed may lack: such a script
 /// runs with the shipped script's functions underneath its own until its next install, and an
 /// install without them is refused.
-pub const REQUIRED_LAWS: &[&str] = &["senses"];
+pub const REQUIRED_LAWS: &[&str] = &["senses", "motion"];
 
-/// Distinct states whose senses are kept before the memo starts over.
-const SENSES_MEMO: usize = 1_024;
+/// Distinct states whose senses or moves are kept before the memo starts over.
+const CREATURE_MEMO: usize = 1_024;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Rates {
@@ -569,8 +572,9 @@ pub struct Scripts {
     names: RefCell<HashMap<String, HashMap<String, Option<f64>>>>,
     /// `rates(a)` by the values of the fields it reads: bodies in the same state share it.
     needs: RefCell<HashMap<Vec<u8>, NeedLaw>>,
-    /// `senses(a)` the same way.
+    /// `senses(a)` and `motion(a)` the same way.
     senses: RefCell<HashMap<Vec<u8>, Senses>>,
+    moves: RefCell<HashMap<Vec<u8>, Moves>>,
     /// Every law the script declares (`<law>_law()`), by name.
     laws: std::collections::BTreeMap<String, LawSpec>,
     /// The farthest senses reach (from `senses_law()`).
@@ -682,7 +686,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default(), senses: Default::default(), laws: Default::default(), reach, borrowed };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), laws: Default::default(), reach, borrowed };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -876,22 +880,38 @@ impl Scripts {
         self.plan(f)
     }
 
-    /// A creature's senses (`senses(a)`): kept per state, by the values of the fields the law
-    /// reads, so creatures in the same state share one call. Held to the reach.
-    pub fn senses(&self, ctx: &SkillCtx) -> Result<Senses, String> {
-        let plan = self.plan("senses");
+    /// A hot law's answer for a creature, kept per state: by the values of the fields the law
+    /// reads, so creatures in the same state share one call.
+    fn per_state<T: Copy>(&self, law: &str, memo: &RefCell<HashMap<Vec<u8>, T>>, ctx: &SkillCtx, ask: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+        let plan = self.plan(law);
         let mut key = Vec::with_capacity(16);
         context::key(ctx, "", &plan, &mut key);
-        if let Some(v) = self.senses.borrow().get(&key) {
+        if let Some(v) = memo.borrow().get(&key) {
             return Ok(*v);
         }
-        let v = self.senses_unshared(ctx)?;
-        let mut memo = self.senses.borrow_mut();
-        if memo.len() >= SENSES_MEMO {
-            memo.clear();
+        let v = ask()?;
+        let mut m = memo.borrow_mut();
+        if m.len() >= CREATURE_MEMO {
+            m.clear();
         }
-        memo.insert(key, v);
+        m.insert(key, v);
         Ok(v)
+    }
+
+    /// A creature's senses (`senses(a)`), kept per state and held to the reach.
+    pub fn senses(&self, ctx: &SkillCtx) -> Result<Senses, String> {
+        self.per_state("senses", &self.senses, ctx, || self.senses_unshared(ctx))
+    }
+
+    /// How a creature moves (`motion(a)`), kept per state.
+    pub fn moves(&self, ctx: &SkillCtx) -> Result<Moves, String> {
+        self.per_state("motion", &self.moves, ctx, || self.moves_unshared(ctx))
+    }
+
+    /// The same, asking the law every time.
+    #[doc(hidden)]
+    pub fn moves_unshared(&self, ctx: &SkillCtx) -> Result<Moves, String> {
+        decode_moves(self.call("motion", ctx)?)
     }
 
     /// The same, asking the law every time (benchmarks and install checks).
@@ -1119,17 +1139,12 @@ impl Scripts {
             danger_far: g("danger_far", l.danger_far),
             repeat_failure_s: g("repeat_failure_s", l.repeat_failure_s),
             road_speed: g("road_speed", l.road_speed),
-            turn_rate: g("turn_rate", l.turn_rate).clamp(0.5, 50.0),
-            turn_slow: g("turn_slow", l.turn_slow).clamp(0.05, 1.0),
             slow_radius: g("slow_radius", l.slow_radius).clamp(0.0, 8.0),
             corner_radius: g("corner_radius", l.corner_radius).clamp(0.0, 4.0),
-            separation: g("separation", l.separation).clamp(0.0, 4.0),
-            separation_weight: g("separation_weight", l.separation_weight).clamp(0.0, 5.0),
             steer_s: g("steer_s", l.steer_s).clamp(0.1, 10.0),
             crowd_hz: g("crowd_hz", l.crowd_hz).clamp(0.5, 30.0),
             chase_hz: g("chase_hz", l.chase_hz).clamp(0.5, 30.0),
             combat_hz: g("combat_hz", l.combat_hz).clamp(0.5, 30.0),
-            run_speed: g("run_speed", l.run_speed).clamp(1.0, 4.0),
             input_hz: g("input_hz", l.input_hz).clamp(1.0, 120.0),
             input_burst: g("input_burst", l.input_burst).clamp(1.0, 240.0),
             pasture_regen: g("pasture_regen", l.pasture_regen).clamp(0.0, 1.0),
@@ -1181,6 +1196,20 @@ impl Scripts {
         }
         self.call(f, ctx).ok().and_then(|d| number(&d)).unwrap_or(default)
     }
+}
+
+fn decode_moves(d: Dynamic) -> Result<Moves, String> {
+    let m = d.try_cast::<Map>().ok_or("motion must return a map")?;
+    let g = |k: &str, lo: f32, hi: f32| m.get(k).and_then(number).map(|v| (v as f32).clamp(lo, hi)).ok_or_else(|| format!("motion: `{k}` must be a number"));
+    Ok(Moves {
+        run: g("run", 1.0, 4.0)?,
+        flee: g("flee", 0.5, 4.0)?,
+        aside: g("aside", 0.2, 2.0)?,
+        turn_rate: g("turn_rate", 0.5, 50.0)?,
+        turn_slow: g("turn_slow", 0.05, 1.0)?,
+        separation: g("separation", 0.0, 4.0)?,
+        separation_weight: g("separation_weight", 0.0, 5.0)?,
+    })
 }
 
 fn decode_senses(d: Dynamic, reach: &Reach, night: bool) -> Result<Senses, String> {
@@ -1447,6 +1476,27 @@ mod tests {
     fn creature(night: bool, torch: bool) -> SkillCtx {
         let inv = if torch { vec![("torch".to_string(), 1)] } else { Vec::new() };
         SkillCtx { actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), inv, ..Default::default() }, night, ..Default::default() }
+    }
+
+    /// How a creature moves besides its walk is a law per creature, with the values the engine
+    /// had (run 1.5 × walk, flight 1.15, stepping aside 0.8, turning 6 rad/s keeping 0.4 of its
+    /// speed in the sharpest turns, keeping 0.8 m from others at weight 0.9).
+    #[test]
+    fn moves_are_a_law_per_creature() {
+        let s = scripts();
+        let m = s.moves(&creature(false, false)).unwrap();
+        assert_eq!(m, Moves { run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9 });
+        assert_eq!(s.law_plan("motion").describe(), Vec::<String>::new(), "the shipped law reads nothing: one answer for everyone");
+        let spec = &s.law_specs()["motion"];
+        assert_eq!(spec.cadence, Cadence::Hot);
+        assert!(spec.about.contains("Grown people walk 2.6, wolves 3.4, deer 3.7") && spec.about.contains("Running is 1.5 times one's walk and a flight 1.15 times"), "{}", spec.about);
+        // A floor where wolves run harder: the law reads the kind, and only wolves change.
+        let src = include_str!("../../scripts/skills.rhai").replace("fn motion(a)", "fn base_motion(a)");
+        let f = Scripts::new(&format!("{src}\nfn motion(a) {{ let m = base_motion(a); if a.actor.kind == \"wolf\" {{ m.run = 2.0; }} m }}")).unwrap();
+        let mut wolf = creature(false, false);
+        wolf.actor.kind = "wolf".into();
+        assert_eq!((f.moves(&wolf).unwrap().run, f.moves(&creature(false, false)).unwrap().run), (2.0, 1.5));
+        assert!(f.validate().is_ok());
     }
 
     /// Sight and hearing are a law per creature in the script, with the values the engine had

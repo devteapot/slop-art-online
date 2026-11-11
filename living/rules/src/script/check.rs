@@ -93,7 +93,7 @@ fn describe(c: &SkillCtx) -> String {
 /// The functions the engine calls with a context: `<skill>_check`, `_duration`, `_done`, `_hit`,
 /// `_missile`, and the need laws.
 pub const SKILL_PARTS: [&str; 5] = ["_check", "_duration", "_done", "_hit", "_missile"];
-pub const CTX_LAWS: [&str; 4] = ["rates", "body_state", "move_speed", "senses"];
+pub const CTX_LAWS: [&str; 5] = ["rates", "body_state", "move_speed", "senses", "motion"];
 
 pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     if let Some(f) = s.borrowed.first() {
@@ -170,6 +170,8 @@ fn needs(p: &mut Probe) -> Result<(), String> {
                 let d = p.ctx("move_speed", &c)?;
                 super::number(&d).ok_or_else(|| format!("install refused: move_speed must return a number ({})", describe(&c)))?;
             }
+            let d = p.ctx("motion", &c)?;
+            super::decode_moves(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
             // Senses, with and without a torch in the pack: within the law's own reach.
             for torch in [false, true] {
                 let mut c = c.clone();

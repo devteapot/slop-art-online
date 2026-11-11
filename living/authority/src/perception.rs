@@ -50,7 +50,7 @@ pub const KEEP_MARGIN: f32 = 1.0;
 /// `heading` at `t_ms`, moving at velocity `(vx, vy)`, turning at `turn` rad/s for `turn_s`
 /// seconds, until `next_ms` (the segment's end, when steering looks again; `u64::MAX` at
 /// rest). `speed` is the cruising speed of the movement under way, which tells its gait
-/// (a walk, or a run at the rules' `run_speed` times a walk). About 52 B against the `body`
+/// (a walk, or a run at the creature's `motion` law's `run` times a walk). About 52 B against the `body`
 /// row's 70 B plus 16 B per path corner.
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
 pub struct Motion {

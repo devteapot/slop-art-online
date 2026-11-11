@@ -780,6 +780,54 @@ def senses(s):
         s.call("install_script", shipped)
 
 
+def moves(s):
+    """How a creature moves besides its walk is the script's `motion(a)` law: a flight at 1.15
+    times the walk, turning on the spot at 6 rad/s. A person walks off (its cruising speed is
+    its walk), then flees a second person (1.15 times that), then turns to face someone behind
+    it (the body row's turn rate). An installed overlay with a flight of 2 and turning at 3
+    shows both changed; the shipped script is installed again at the end."""
+    line = open_line(s)
+    a, b = s.people(2)
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+
+    def body(label):
+        return s.rows(f"SELECT * FROM body WHERE id = {a}", label)[0]
+
+    def measure(label):
+        s.call("place_at", a, *line[3])
+        s.call("place_at", b, *line[0])
+        time.sleep(1)
+        s.graph(a, {"seq": [{"do": {"skill": "goto", "target": {"at": [line[15][0], line[15][1]]}}}, {"wait": 300}]})
+        time.sleep(1.5)
+        walk = body(f"{label}-walk")["speed"]
+        s.call("place_at", a, *line[3])
+        s.graph(a, {"seq": [{"do": {"skill": "flee", "target": {"id": b}}}, {"wait": 300}]})
+        time.sleep(1.5)
+        flee = body(f"{label}-flee")["speed"]
+        s.graph(a, {"wait": 300})
+        time.sleep(2.5)
+        h = body(f"{label}-stand")["heading"]
+        here = body_at(s, a)
+        s.call("place_at", b, here[0] - 3 * math.cos(h), here[1] - 3 * math.sin(h))
+        time.sleep(0.5)
+        s.graph(a, {"seq": [{"do": {"skill": "face", "target": {"id": b}}}, {"wait": 300}]})
+        time.sleep(2)
+        turn = abs(body(f"{label}-face")["turn"])
+        return {"walk": walk, "flee": flee, "ratio": round(flee / walk, 3) if walk else None, "turn": round(turn, 3)}
+
+    try:
+        got = measure("shipped")
+        s.expect("shipped law: a flight is 1.15 times the walk", got["ratio"] and abs(got["ratio"] - 1.15) < 0.02, got)
+        s.expect("shipped law: turning on the spot at 6 rad/s", abs(got["turn"] - 6.0) < 0.01, got)
+        src = shipped.replace("fn motion(a)", "fn base_motion(a)", 1) + "\nfn motion(a) { let m = base_motion(a); m.flee = 2.0; m.turn_rate = 3.0; m }\n"
+        s.call("install_script", src)
+        got = measure("overlay")
+        s.expect("an installed law changes the flight: 2 times the walk", got["ratio"] and abs(got["ratio"] - 2.0) < 0.03, got)
+        s.expect("an installed law changes turning: 3 rad/s", abs(got["turn"] - 3.0) < 0.01, got)
+    finally:
+        s.call("install_script", shipped)
+
+
 def body_at(s, actor, now=None, row=None):
     """A body's position now, from its segment (straight-line; turns are short)."""
     b = row or s.rows(f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {actor}")[0]
@@ -1002,7 +1050,7 @@ def dealings(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves}
 
 
 def main():

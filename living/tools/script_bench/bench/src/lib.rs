@@ -44,13 +44,15 @@ pub enum Law {
     Senses = 6,
     /// `senses(a)` asked every time: the law's own cost. Rhai only.
     SensesLaw = 7,
+    /// `motion(a)` as the authority asks it: one answer per state (`Scripts::moves`). Rhai only.
+    Moves = 8,
 }
 
 impl Law {
     /// The laws every engine runs (run.sh's equivalence check).
     pub const ALL: [Law; 3] = [Law::Rates, Law::Strike, Law::Cooldown];
     /// Cases added after the spike, run when asked (`sb-host --laws`).
-    pub const EXTRA: [Law; 5] = [Law::Perceived, Law::RatesLaw, Law::Hook, Law::Senses, Law::SensesLaw];
+    pub const EXTRA: [Law; 6] = [Law::Perceived, Law::RatesLaw, Law::Hook, Law::Senses, Law::SensesLaw, Law::Moves];
     pub fn from_u32(v: u32) -> Option<Law> {
         Self::ALL.into_iter().chain(Self::EXTRA).find(|l| *l as u32 == v)
     }
@@ -67,6 +69,7 @@ impl Law {
             Law::Hook => "hook",
             Law::Senses => "senses",
             Law::SensesLaw => "senses-law",
+            Law::Moves => "moves",
         }
     }
 }
@@ -90,6 +93,10 @@ pub trait Engine {
     /// Sight and hearing; `shared` asks as the authority does (one answer per state).
     fn senses(&mut self, _c: &SkillCtx, _shared: bool) -> (f32, f32) {
         unimplemented!("senses are benchmarked for rhai only")
+    }
+    /// Run share and turn rate (`motion(a)`, one answer per state).
+    fn moves(&mut self, _c: &SkillCtx) -> (f32, f32) {
+        unimplemented!("moves are benchmarked for rhai only")
     }
 }
 
@@ -217,6 +224,10 @@ pub fn run(e: &mut dyn Engine, fx: &fixtures::Fixtures, law: Law, cursor: &mut u
                 let (s, h) = e.senses(&fx.rates[i % fx.rates.len()], law == Law::Senses);
                 (s.to_bits() ^ h.to_bits().rotate_left(11)) as u64
             },
+            Law::Moves => {
+                let (r, t) = e.moves(&fx.rates[i % fx.rates.len()]);
+                (r.to_bits() ^ t.to_bits().rotate_left(11)) as u64
+            },
         });
         i += 1;
     }
@@ -263,6 +274,11 @@ pub fn dump(e: &mut dyn Engine, fx: &fixtures::Fixtures, law: Law) -> String {
         Law::Senses | Law::SensesLaw => {
             for (i, c) in fx.rates.iter().enumerate() {
                 let _ = writeln!(s, "{i} {:?}", e.senses(c, law == Law::Senses));
+            }
+        },
+        Law::Moves => {
+            for (i, c) in fx.rates.iter().enumerate() {
+                let _ = writeln!(s, "{i} {:?}", e.moves(c));
             }
         },
     }

@@ -11,11 +11,11 @@ fn laws() {
         crowd: 6, danger_near: 8.0, danger_far: 12.0,
         repeat_failure_s: 120.0,
         road_speed: 1.4,
-        // Steering: how bodies turn, slow, keep apart and how often they look again.
-        turn_rate: 6.0, turn_slow: 0.4, slow_radius: 1.2, corner_radius: 0.9,
-        separation: 0.8, separation_weight: 0.9,
+        // Steering: where bodies slow down and cut corners, and how often they look again
+        // (how each creature turns and keeps apart is its `motion` law).
+        slow_radius: 1.2, corner_radius: 0.9,
         steer_s: 2.0, crowd_hz: 3.0, chase_hz: 4.0, combat_hz: 8.0,
-        run_speed: 1.5, input_hz: 30.0, input_burst: 15.0,
+        input_hz: 30.0, input_burst: 15.0,
         // Grass regrowth per grassy tile per growing minute: about one grazer per 300 grassy
         // tiles (it was one per 70, and the wilds filled with deer).
         pasture_regen: 0.0015,
@@ -46,8 +46,8 @@ fn light_of(a) { if !a.night { "day" } else if inv(a, "torch") > 0 { "torch" } e
 
 fn senses(a) { #{ sight: sight_in(light_of(a)), hearing: hearing_of_people() } }
 
-// A whole number of metres without its ".0" (for descriptions).
-fn metres(x) { if x == x.floor() { `${x.to_int()}` } else { `${x}` } }
+// A number for descriptions: at most two decimals, a whole number without its ".0".
+fn short(x) { let r = (x * 100.0).round() / 100.0; if r == r.floor() { `${r.to_int()}` } else { `${r}` } }
 
 fn senses_law() {
     let night_most = if sight_in("torch") > sight_in("night") { sight_in("torch") } else { sight_in("night") };
@@ -57,7 +57,29 @@ fn senses_law() {
         // The farthest anyone sees by day and by night, and hears: the engine gathers onlookers
         // within these before testing each one's own senses, and holds every answer to them.
         reach: #{ day: sight_in("day"), night: night_most, hearing: hearing_of_people() },
-        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${metres(sight_in("day"))} m; at night ${metres(sight_in("night"))} m, or ${metres(sight_in("torch"))} m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries ${metres(hearing_of_people())} m.`,
+        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; at night ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.`,
+    }
+}
+
+// ---- moving (a law per creature, on the hot path) -----------------------------------
+// How a creature moves besides its walking pace (`move_speed`): its run, its flight and the
+// pace it steps aside at, as shares of its walk; how fast it turns (radians a second) and how
+// much of its speed it keeps in the sharpest turns; how far it keeps from other bodies
+// (metres) and how strongly that bends its way. Asked per creature at every steering step and
+// kept per state, like senses: the shipped law reads nothing, so every creature shares it.
+fn motion(a) {
+    #{ run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9 }
+}
+
+// A grown, rested body of a kind at its normal pace (for descriptions).
+fn walk_of(kind) { move_speed(#{ actor: #{ kind: kind, stage: "adult", speed: 1.0, energy: 100.0 } }) }
+
+fn motion_law() {
+    let m = motion(#{ actor: #{ kind: "person", stage: "adult" }, night: false });
+    #{
+        cadence: "hot",
+        topic: "moving",
+        about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. Running is ${short(m.run)} times one's walk and a flight ${short(m.flee)} times; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can.`,
     }
 }
 

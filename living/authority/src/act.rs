@@ -707,13 +707,13 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 target: if creature { target.id as u32 } else { 0 },
                 at: target.at,
                 keep: dist(here, target.at) + common::laws(ctx).flee_clear,
-                speed: sp * 1.15,
+                speed: sp * common::moves_of(ctx, id, now).flee,
                 flags: 0,
             },
             "follow" if creature => Goal::creature(target.id as u32, r, sp, 0),
             "goto" if creature => Goal::creature(target.id as u32, r, sp, motion::FLAG_EARLY),
             "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
-            _ if aside => Goal::point(target.at, sp * 0.8, 0),
+            _ if aside => Goal::point(target.at, sp * common::moves_of(ctx, id, now).aside, 0),
             // Closing in on a creature: every look checks whether it is within reach.
             _ if creature => Goal::creature(target.id as u32, (r - 0.25).max(0.4), sp, motion::FLAG_EACH),
             _ => {
