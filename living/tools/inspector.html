@@ -58,7 +58,7 @@ ul.tight { margin:4px 0; padding-left:20px; } ul.tight li { margin:2px 0; }
 <div id="wrap"><aside id="side"><input id="filter" placeholder="filter residents"><div id="plist"></div></aside><main id="main"></main></div>
 <script>
 const B64 = "__DATA__";
-let D, LANES = ["perceive","recall","decide","graph","body","talk","log"], laneOn = new Set(LANES);
+let D, LANES = ["perceive","recall","decide","graph","body","talk","log"], laneOn = new Set(LANES), routine = false;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"'`\\]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;","`":"&#96;","\\":"&#92;"}[c]));
 const num = v => (v != null && v !== "" && isFinite(+v)) ? +v : null;
@@ -70,8 +70,8 @@ function tcell(ms) { return `<td class="t">${wall(ms)}<br><span class="mut">${re
 function nm(id) { if (!id) return "no one"; id = String(id).replace(/^#/, ""); const p = D.people[id]; return p ? p.name : "#" + id; }
 function plink(id, a, b) { if (!id) return "no one"; return `<a href="#v=people&r=${id}${a != null ? `&a=${Math.round(a)}&b=${Math.round(b)}` : ""}">${esc(nm(id))}</a>`; }
 function parseHash() { const h = {}; location.hash.slice(1).split("&").forEach(kv => { const [k, v] = kv.split("="); if (!k) return; try { h[k] = decodeURIComponent(v || ""); } catch (e) { h[k] = v || ""; } });
-  if (h.ln != null) laneOn = new Set(h.ln.split(",").filter(x => LANES.includes(x))); return h; }
-function go(h) { if (h.v === "people" && laneOn.size < LANES.length) h.ln = [...laneOn].join(","); location.hash = Object.entries(h).filter(([k, v]) => v != null && v !== "").map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&"); }
+  return h; }
+function go(h) { location.hash = Object.entries(h).filter(([k, v]) => v != null && v !== "").map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&"); }
 
 async function boot() {
   const bin = Uint8Array.from(atob(B64), c => c.charCodeAt(0));
@@ -90,7 +90,7 @@ function sidebar() {
     return `<div class="p ${h.r == i ? "on" : ""}" onclick="go({v:'people',r:${i}})"><span>${esc(p.name)} ${p.player ? "🎮" : ""}${p.died ? " †" : ""}</span><small>${+i > 0 ? "#" + i : "id ?"} · ${p.calls}</small></div>`; }).join("");
 }
 function route() {
-  const h = parseHash(); const v = h.v || (h.l != null ? "lines" : (h.r ? "people" : "lines"));
+  const h = parseHash(); laneOn = h.ln != null ? new Set(h.ln.split(",").filter(x => LANES.includes(x))) : new Set(LANES); routine = h.rt === "1"; const v = h.v || (h.l != null ? "lines" : (h.r ? "people" : "lines"));
   ["people", "lines", "about"].forEach(x => $("#nav-" + x).classList.toggle("on", x === v)); sidebar();
   if (v === "about") return about(); if (v === "lines") return h.l != null ? lineView(+h.l) : linesView(h); return personView(h);
 }
@@ -114,18 +114,22 @@ function personView(h) {
   const last = evs.length ? evs[evs.length - 1][0] : D.meta.start, end = p.died || last;
   let a = num(h.a), b = num(h.b); if (a != null && b == null) b = a + 180000; if (a == null) b = null;
   const hl = num(h.h);
-  const shown = evs.filter(e => laneOn.has(e[1]) && (a == null || (e[0] >= a && e[0] <= b)));
+  const shown = evs.filter(e => laneOn.has(e[1]) && (a == null || (e[0] >= a && e[0] <= b)) && !(routine && e[1] === "perceive" && ROUTINE.test(e[2])));
+  const keep = h.ln ? `,ln:'${[...laneOn].join(",")}'` : "";
   const lanes = LANES.map(l => `<button class="${laneOn.has(l) ? "on" : ""}" onclick="toggleLane('${l}')"><span class="lane l-${l}">${l}</span></button>`).join("");
   $("#main").innerHTML = `<div class="bar"><span class="k" style="font-size:16px">${esc(p.name)}</span><span class="mut">${+id > 0 ? "#" + id : "id unknown"}${p.kind ? " · " + esc(p.kind) : ""}${p.player ? " · player" : ""}${p.died ? ` · died ${wall(p.died)} (${esc(p.cause)})` : ""}${p.takeover ? ` · AI took over at ${wall(p.takeover)}` : ""} · ${p.calls} model exchanges</span></div>
-  <div class="bar"><button onclick="go({v:'people',r:${id}})" class="${a == null ? "on" : ""}">whole run</button>
-   <button onclick="go({v:'people',r:${id},a:${end - 90000},b:${end + (p.died ? 2000 : 0)}})">last 90 s${p.died ? " of their life" : ""}</button>
-   <span class="mut">around</span><input id="at" size="10" placeholder="hh:mm:ss or +m:ss" value="${a != null ? wall((a + b) / 2).slice(0, 8) : ""}"><select id="span">${[30, 60, 90, 300].map(v => `<option value="${v}" ${(a != null ? Math.abs((b - a) / 2000 - v) < 1 : v === 90) ? "selected" : ""}>±${v < 300 ? v + " s" : "5 min"}</option>`).join("")}</select><button onclick="around(${id})">show</button>
+  <div class="bar"><button onclick="go({v:'people',r:${id}${keep}})" class="${a == null ? "on" : ""}">whole run</button>
+   <button class="${a === end - 90000 ? "on" : ""}" onclick="go({v:'people',r:${id},a:${end - 90000},b:${end + (p.died ? 2000 : 0)}${keep}})">last 90 s${p.died ? " of their life" : ""}</button>
+   <span class="mut">around</span><input id="at" size="10" placeholder="hh:mm:ss or +m:ss" value="${a != null ? wall((a + b) / 2).slice(0, 8) : ""}"><select id="span">${(() => { const half = a != null ? (b - a) / 2000 : 90, opts = [30, 60, 90, 300], hit = opts.find(v => Math.abs(half - v) < 1);
+     return (hit ? "" : `<option value="${Math.round(half)}" selected>±${Math.round(half)} s</option>`) + opts.map(v => `<option value="${v}" ${v === hit ? "selected" : ""}>±${v < 300 ? v + " s" : "5 min"}</option>`).join(""); })()}</select><button onclick="around(${id})">show</button>
    ${a != null ? `<span class="mut">window ${wall(a)} → ${wall(b)}</span>` : ""}</div>
-  <div class="bar">${lanes}</div>
+  <div class="bar">${lanes}<button class="${routine ? "on" : ""}" onclick="toggleRoutine()">hide routine sightings</button></div>
   <table><thead><tr><th>time</th><th>lane</th><th>what <span class="mut">(click a row for the evidence)</span></th></tr></thead><tbody>${shown.map((e, k) =>
     `<tr class="ev${hl != null && Math.abs(e[0] - hl) <= 1500 ? " hl" : ""}" onclick="openEv(this, ${evs.indexOf(e)}, ${id})">${tcell(e[0])}<td><span class="lane l-${e[1]}">${e[1]}</span></td><td>${esc(e[2])}</td></tr>`).join("") || `<tr><td colspan=3 class="mut">nothing in this window</td></tr>`}</tbody></table>`;
 }
-function toggleLane(l) { laneOn.has(l) ? laneOn.delete(l) : laneOn.add(l); route(); }
+function toggleLane(l) { laneOn.has(l) ? laneOn.delete(l) : laneOn.add(l); go({...parseHash(), ln: laneOn.size < LANES.length ? [...laneOn].join(",") : ""}); }
+function toggleRoutine() { go({...parseHash(), rt: routine ? "" : "1"}); }
+const ROUTINE = /^(You notice an? |You are among a crowd|You come to a place new to you|For the first time you see a (house|storage))/;
 function parseTime(s) {
   s = s.trim(); if (!s) return null;
   if (s[0] === "+") { const [m, sec] = s.slice(1).split(":").map(Number); return D.meta.start + ((m || 0) * 60 + (sec || 0)) * 1000; }

@@ -46,7 +46,8 @@ QUIET_MS = 90_000        # an exchange quiet this long is over
 ADDRESS_M = 6.0          # the authority's default `address_m` law
 CLOSE = ["family", "partner", "friend", "parent", "mother", "father", "child", "son", "daughter", "sibling",
          "brother", "sister", "spouse", "wife", "husband", "lover"]
-DEFAULT_DAY_MS = 720_000  # a game day is 12 real minutes in current worlds
+DEFAULT_DAY_MS = 720_000
+WALK = 2.0               # m/s: how far a body can have moved between a seen distance and a line  # a game day is 12 real minutes in current worlds
 RULE_NOTE = ("Gate as in talk.rs on_speech: a line gets a turn if it is addressed (said to the listener, "
              "or to no one with salience >= 0.8: the only hearer within address_m 6 m, or named), or the pair's "
              "exchange is active (a line within 90 s), or the listener cares (family or close label, |affinity| >= 40 "
@@ -478,7 +479,7 @@ class Run:
             self.body[i].append([x["at_ms"], f"chronicle {kind}: {x.get('text')}", src])
         if a and x.get("x") is not None and kind not in ("time", "family") and reps == 1:
             # Attack, killing and death rows hold the victim's position (act.rs).
-            who = b if kind in ("attack", "killing") and b else a
+            who = b if kind in ("attack", "killing", "threat") and b else a
             self.track[who].append((x["at_ms"], x["x"], x["y"], src))
 
     def add_exp(self, x, src):
@@ -493,7 +494,7 @@ class Run:
         self.exps[obs][key] = row
         if row["kind"] == "speech" and row["subject"]:
             self.cands.append(dict(ms=row["ms"], exact=True, speaker=row["subject"], to=row["object"], text=quoted(row["text"]),
-                                   src=src, hearer=obs, sal=row["sal"], via="experience"))
+                                   src=src, hearer=obs, sal=row["sal"], via="experience", eid=row["id"]))
         if row["kind"] in ("said", "speech") and x.get("x") is not None and row["ms"]:
             self.track[obs if row["kind"] == "said" else row["subject"]].append((row["ms"], x["x"], x["y"], src))
         if row["kind"] == "said":
@@ -682,7 +683,7 @@ class Run:
                         to = obs if tolabel == "you" else ((self.by_name.get(tolabel) or (ann[1][1] if len(ann) > 1 else 0)) if tolabel else 0)
                         if speaker and speaker != obs:
                             self.cands.append(dict(ms=ms, exact=False, speaker=speaker, to=to or 0, text=words, src=c["src"], hearer=obs,
-                                                   sal=0.9 if tolabel == "you" else None, via="request"))
+                                                   sal=0.9 if tolabel == "you" else None, via="request", eid=pc["id"]))
         # mind.log lines -> events, speech candidates.
         names_re = "|".join(re.escape(n) for n in sorted(by_name, key=len, reverse=True) if n) or "$^"
         N = rf"((?:{names_re})|#\d+)(?: \(#\d+\))?"
@@ -789,7 +790,10 @@ class Run:
                     elif "reworks routines" in t or "decided:" in t:
                         outcome = f"deliberation installs ({x[3]})"
                         break
+                c["outcome"] = outcome.split(" (")[0].replace("deliberation ", "")
                 self.graphs[c["actor"]].append([c["end"], outcome + " — " + "; ".join(parts), c["src"], json.dumps(shown) if shown else None, c["i"]])
+            elif c["purpose"] == "deliberate" and c["reply"]:
+                self.graphs[c["actor"]].append([c["end"], f"deliberation reply not readable as JSON here (finish: {c['finish']}); see the mind log for what was installed", c["src"], None, c["i"]])
         self.build_lines()
 
     def id_of(self, label):
@@ -857,7 +861,8 @@ class Run:
             tol = c.get("tol") or (1500 if c["exact"] else 2500)
             hit = None
             for cl in clusters[k]:
-                if abs(c["ms"] - cl["ms"]) <= max(tol, cl.get("tol", 0)):
+                lim = 50 if (c["exact"] and cl["exact"]) else max(tol, cl.get("tol", 0))
+                if abs(c["ms"] - cl["ms"]) <= lim:
                     hit = cl
                     break
             if hit is None:
@@ -865,7 +870,7 @@ class Run:
                            reps=1, tol=tol)
                 clusters[k].append(hit)
             if c["exact"] and not hit["exact"]:
-                hit["ms"], hit["exact"] = c["ms"], True
+                hit["ms"], hit["exact"], hit["tol"] = c["ms"], True, 50
             if c.get("to") and not hit["to"]:
                 hit["to"] = c["to"]
             if c.get("reps", 1) > 1:
@@ -873,6 +878,8 @@ class Run:
                 # them all, and the row's time is the latest repeat's.
                 hit["reps"] = max(hit["reps"], c["reps"])
             hit["srcs"].append(f"{c['via']}: {c['src']}")
+            if c.get("eid") is not None:
+                hit.setdefault("eids", set()).add(c["eid"])
             if c.get("hearer") and c["hearer"] != c["speaker"]:
                 h = hit["hearers"].setdefault(c["hearer"], dict(id=c["hearer"], srcs=[], sal=None, d=None))
                 h["srcs"].append(f"{c['via']}: {c['src']}")
@@ -923,6 +930,10 @@ class Run:
             if sil:
                 l["unheard"] = sil
                 continue
+            cov = self.consolidation_skips(l, to)
+            if cov:
+                l["unheard"] = cov
+                continue
             l["hearers"][to] = dict(id=to, srcs=["(said to them; no row shows the hearing)"], sal=None, d=None, assumed=True)
         # Distances from requests' scenes when the audience did not give them: the hearer's
         # scene nearest in time that shows the speaker (a scene is taken at or before its
@@ -969,6 +980,23 @@ class Run:
                     self.turn_of[(cand[-1]["i"], c["actor"])] = c
         for l in lines:
             self.fates(l)
+
+    def consolidation_skips(self, l, who):
+        """A later consolidation of `who` whose experience ids span the line's other hearers'
+        rows but does not list the line: they did not hear it (the authority writes every
+        hearer's row in the same reducer, so the ids are adjacent)."""
+        eids = l.get("eids") or set()
+        if not eids:
+            return None
+        lo, hi = min(eids), max(eids)
+        words = norm(l["text"])
+        for c in self.calls_by_actor.get(who, []):
+            if c["purpose"] != "consolidate" or c["queued"] < l["ms"] or c["queued"] > l["ms"] + 600_000:
+                continue
+            ids = [pc["id"] for pc in c["percepts"] if pc["id"] is not None]
+            if ids and min(ids) < lo and max(ids) > hi and not any(words in norm(pc["text"]) for pc in c["percepts"]):
+                return f"their consolidation of experiences {min(ids)}–{max(ids)} ({c['src']}) does not list it, though the other hearers' rows for it are {lo}–{hi}"
+        return None
 
     def silence_for(self, l):
         """Evidence that the one a line was said to did not hear it: the speaker's 'No answer'
@@ -1104,6 +1132,28 @@ class Run:
                             how=how + ": not among the people they know" + (" (the list is full at 16, so a weak relation could be cut)" if full else ""))
         return None
 
+    def familiarity(self, hid, sp, ms, rel):
+        """How the hearer stands toward the speaker for LIVING_GREET (talk.rs familiarity()):
+        known (family, one community, a close or warm bond), hostile, barely (met), stranger
+        (not met), or None when the evidence does not say."""
+        if rel and rel.get("label") is not None:
+            lab = (rel["label"] or "").lower()
+            if any(w in lab for w in CLOSE) or (rel.get("affinity") or 0) >= 40 or (rel.get("trust") or 0) >= 60:
+                return "known"
+            if (rel.get("affinity") or 0) <= -40:
+                return "hostile"
+        c = self.nearest_call(hid, ms, lambda c: c["scene"] and any(cr.get("id") == sp for cr in c["scene"].get("creatures", [])), within=60_000)
+        if c:
+            cr = next(cr for cr in c["scene"]["creatures"] if cr.get("id") == sp)
+            if cr.get("family") or cr.get("community") == "yours":
+                return "known"
+            if not cr.get("name"):
+                return "stranger"
+            return "barely"
+        if rel and rel.get("label") is not None:
+            return "barely"
+        return None
+
     def heard(self, l, i):
         """Whether `i` (a party of the line) is shown to have heard it."""
         if l["speaker"] == i:
@@ -1118,13 +1168,20 @@ class Run:
         only = {int(x) for x in re.findall(r"\d+", self.env.get("LIVING_ONLY") or "")}
         n_close = sum(1 for h in l["hearers"].values() if h.get("d") is not None and h["d"] <= ADDRESS_M and not h.get("assumed"))
         # Who on this line was drawn in or took a turn (a line to no one has one claimant).
+        # A line to no one has one claimant among those drawn in by it (talk.rs `claimed`): a
+        # hearer the mind logs as drawn in, or one who took an overheard turn on it.
         claim = {}
-        for hid in l["hearers"]:
-            if (l["i"], hid) in self.turn_of:
-                claim[hid] = "took a turn on it"
-        for x in self.logs[bisect.bisect_left(self.log_ms, ms - 1000): bisect.bisect_left(self.log_ms, ms + 3000)]:
-            if x[4] in ("drawn", "faced") and x[5] and x[5][1] == sp and x[5][0] in l["hearers"]:
-                claim.setdefault(x[5][0], "was drawn in" if x[4] == "drawn" else "was faced")
+        faced_ids = set()
+        if not l["to"]:
+            for x in self.logs[bisect.bisect_left(self.log_ms, ms - 1000): bisect.bisect_left(self.log_ms, ms + 3000)]:
+                if x[5] and x[5][1] == sp and x[5][0] in l["hearers"]:
+                    if x[4] == "drawn":
+                        claim.setdefault(x[5][0], "was drawn in")
+                    elif x[4] == "faced":
+                        faced_ids.add(x[5][0])
+            for hid, h in l["hearers"].items():
+                if (l["i"], hid) in self.turn_of and hid not in faced_ids and not ((h.get("sal") or 0) >= 0.8):
+                    claim.setdefault(hid, "took an overheard turn on it")
         for hid, h in l["hearers"].items():
             ev, why = [], []
             fate = None
@@ -1154,6 +1211,8 @@ class Run:
             lo = bisect.bisect_left(self.log_ms, ms - 1000)
             hi = bisect.bisect_left(self.log_ms, min(nxt - 1000, ms + 180_000))
             pair_logs = [x for x in self.logs[lo:max(lo, hi)] if x[5] and ((x[5][0] == hid and x[5][1] == sp) or (x[4] in ("earshot", "reopen") and set(x[5]) == {hid, sp}))]
+            if l["to"] and l["to"] != hid:
+                pair_logs = []   # a line said to someone else never passes this hearer's gate
             first_kind = None
             for x in pair_logs:
                 if x[4] == "said":
@@ -1210,15 +1269,17 @@ class Run:
                 dist = {x["id"]: (x["d"], x.get("d_dt", 0)) for x in l["hearers"].values() if x.get("d") is not None}
                 for x in l.get("near", []):
                     dist.setdefault(x["id"], (x["d"], x["dt"]))
+                # A distance seen dt from the line bounds where they stood at the line, at a walk
+                # of up to WALK m/s.
                 fresh = {i: v for i, v in dist.items() if abs(v[1]) <= 10_000}
-                close = {i: v for i, v in fresh.items() if v[0] <= ADDRESS_M}
+                close = {i: v for i, v in fresh.items() if v[0] + WALK * abs(v[1]) / 1000 <= ADDRESS_M}
                 show = lambda d: ", ".join(f"{self.name(i)} {v[0]} m ({fmt_dt(v[1])})" for i, v in sorted(d.items(), key=lambda kv: kv[1][0]))
                 if len(close) >= 2:
                     addressed = False
                     why.append(f"to no one, and {len(close)} people stood within {ADDRESS_M:g} m of the speaker, so it addressed nobody ({show(close)}; each distance seen at the time given)")
-                elif hid in fresh and fresh[hid][0] > ADDRESS_M:
+                elif hid in fresh and fresh[hid][0] - WALK * abs(fresh[hid][1]) / 1000 > ADDRESS_M:
                     addressed = False
-                    why.append(f"to no one, and they were {fresh[hid][0]} m away ({fmt_dt(fresh[hid][1])}): only the one hearer within {ADDRESS_M:g} m is addressed")
+                    why.append(f"to no one, and they were {fresh[hid][0]} m away ({fmt_dt(fresh[hid][1])}), beyond {ADDRESS_M:g} m even at a walk: only the one hearer within {ADDRESS_M:g} m is addressed")
                 elif hid in close:
                     why.append(f"to no one; they are the only one known within {ADDRESS_M:g} m ({show(close)}), so it may have been marked addressed; others nearby may be missing")
                 elif hid in dist:
@@ -1228,6 +1289,7 @@ class Run:
             if addressed:
                 why.insert(0, f"addressed: {addressed}")
             rel = self.relation_at(hid, sp, ms)
+            fam = self.familiarity(hid, sp, ms, rel)
             cares, known_rel = None, False
             if rel:
                 if rel.get("label") is None and rel.get("trust") is None:
@@ -1247,8 +1309,9 @@ class Run:
                 why.append("cares: unknown (no relation row or request near the line)")
             # Their exchange with the speaker: lines between them within 90 s that the other heard.
             prior = [x for x in self.lines[: l["i"]] if ms - x["ms"] <= QUIET_MS]
-            with_sp = [x for x in prior if {x["speaker"], x["to"]} == {hid, sp} and self.heard(x, x["to"])] + \
-                      [x for x in prior if (x["i"], hid) in self.turn_of and x["speaker"] == sp] + \
+            # A pair's exchange exists in the mind once a line between them passed a gate: a talk
+            # turn on it, by either side.
+            with_sp = [x for x in prior if (x["i"], hid) in self.turn_of and x["speaker"] == sp] + \
                       [x for x in prior if (x["i"], sp) in self.turn_of and x["speaker"] == hid]
             with_sp.sort(key=lambda x: x["ms"])
             other = [x for x in prior if hid in (x["speaker"], x["to"]) and sp not in (x["speaker"], x["to"]) and x["to"] and self.heard(x, x["to"] if x["speaker"] == hid else hid)]
@@ -1256,11 +1319,13 @@ class Run:
             ends = [(x[0], set(x[5])) for x in self.logs[j:bisect.bisect_left(self.log_ms, ms - 1000)] if x[4] == "earshot" and x[5]]
             other = [o for o in other if not any(t >= o["ms"] - 1000 and pr == {o["speaker"], o["to"]} for t, pr in ends)]
             closed = None
+            # The mind logs "out of earshot" only for a pair it holds, so it proves an exchange
+            # existed and ended, with or without a talk turn in the journal.
+            for t, pr in ends:
+                if pr == {hid, sp} and (not with_sp or t >= with_sp[-1]["ms"] - 1000):
+                    closed = f"out of earshot {fmt_dt(t - ms)}"
             if with_sp:
                 last_ms = with_sp[-1]["ms"]
-                for t, pr in ends:
-                    if pr == {hid, sp} and t >= last_ms - 1000:
-                        closed = f"out of earshot {fmt_dt(t - ms)}"
                 for c in self.calls_by_actor.get(hid, []) + self.calls_by_actor.get(sp, []):
                     r_ = c["reply_obj"]
                     if c["purpose"] == "talk" and isinstance(r_, dict) and {c["actor"], (c["say"] or [0, 0])[1]} == {hid, sp} and last_ms - 15_000 <= c["end"] <= ms:
@@ -1290,18 +1355,26 @@ class Run:
                            f"remark draw {remark:.4f} → {'passes' if remark < answers else 'refuses'}; overheard draw {over:.4f} → {'passes' if over < answers else 'refuses'}")
             elif tmp:
                 why.append("draws: the line's time is not exact (read from requests), so the deterministic draws cannot be recomputed")
-            busy = next((c for c in self.calls_by_actor.get(hid, []) if c["purpose"] == "talk" and c["queued"] <= ms <= c["end"] + 7000
+            def turn_done(c):
+                said = self.spoken_after(hid, None, c["end"], (c["say"] or [""])[0], within=10_000) if c["say"] and c["say"][0] else None
+                return said["ms"] if said else c["end"]
+            busy = next((c for c in self.calls_by_actor.get(hid, []) if c["purpose"] == "talk" and c["queued"] <= ms <= turn_done(c)
                          and self.turn_of.get((l["i"], hid)) is not c), None)
             others_claim = {k: v for k, v in claim.items() if k != hid}
             if not fate:
                 if addressed or (active and not l["to"]):
                     base = "addressed" if addressed else "their exchange was active and the line was to no one"
-                    stranger = greet != "off" and not known_rel
-                    if busy:
-                        reason = (f"{base}, but a talk turn of theirs was in flight (queued {fmt_dt(busy['queued'] - ms)}, on "
-                                  f"“{(busy['answering'] or ['', '?'])[1][:50]}”, {busy['src']}): a line heard meanwhile waits, and afterwards only a speaker who still has the last word is answered")
+                    # With LIVING_GREET, an addressed line from an unfamiliar speaker skips the remark draw.
+                    stranger = greet != "off" and fam in ("stranger", "barely")
+                    ended = closed and not closed.startswith("settled")
+                    if ended:
+                        reason = (f"{base}, but their exchange had ended ({closed}); a line reopens an ended exchange only when it says something new "
+                                  "(half its words new to the exchange; not recomputed here)")
                     elif not asks and remark is not None and remark >= answers and not stranger:
                         reason = f"{base}, but the remark draw refused it: {remark:.4f} ≥ {answers:.3f} (the line asks nothing, and they let a remark pass by their sociability)"
+                    elif busy:
+                        reason = (f"{base}, but a talk turn of theirs was in flight (queued {fmt_dt(busy['queued'] - ms)}, on "
+                                  f"“{(busy['answering'] or ['', '?'])[1][:50]}”, {busy['src']}): a line heard meanwhile waits, and afterwards only a speaker who still has the last word is answered")
                     else:
                         reason = (f"{base}, so a turn was due, but none is in the journal: " +
                                   ("the remark draw passed, so " if remark is not None and not asks and remark < answers else "") +
@@ -1317,6 +1390,10 @@ class Run:
                 elif cares:
                     if over is not None and over >= answers:
                         fate = dict(kind="none", short=f"no turn: {hn} cares about {sn}, but the overheard draw refused it ({over:.4f} ≥ {answers:.3f})")
+                    elif other:
+                        fate = dict(kind="none", short=f"no turn: {hn} cares about {sn}, but was in another exchange, and an overheard line draws only a listener who is free")
+                    elif not asks and remark is not None and remark >= answers:
+                        fate = dict(kind="none", short=f"no turn: {hn} cares about {sn} and the overheard draw passed ({over:.4f}), but the remark draw then refused it ({remark:.4f} ≥ {answers:.3f})")
                     else:
                         fate = dict(kind="none", short=f"no turn: {hn} cares about {sn}" + (", and the overheard draw passed" if over is not None else "") +
                                     ", but the overheard path did not fire: " + ("they were in another exchange" if other else "drawn in within 60 s or another hearer claimed it (not logged)"))
@@ -1412,6 +1489,9 @@ class Run:
                     lane = "talk"
                 else:
                     lane = "perceive"
+                if not r["exact"] and r["text"].startswith("You said") and any(
+                        x["speaker"] == obs and norm(x["text"]) == norm(quoted(r["text"])) and abs(x["ms"] - r["ms"]) <= 3000 for x in self.lines):
+                    continue   # the line itself is on the timeline already
                 tag = "" if r["exact"] else " ≈"
                 sal = f" [salience {r['sal']}]" if r.get("sal") is not None else ""
                 ev(obs, r["ms"], lane, f"{r['text']}{sal}{tag}", r["src"], {"c": call_idx[r["call"]]} if r.get("call") in call_idx else None)
@@ -1433,6 +1513,8 @@ class Run:
                     head += f" | says to {self.name(c['say'][1]) if c['say'][1] else 'no one'}: “{c['say'][0][:140]}”"
                 if c["purpose"] == "deliberate" and isinstance(r, dict) and r.get("plan"):
                     head += f" | plan: {r['plan'][:140]}"
+                if c.get("outcome"):
+                    head += f" → {c['outcome']}"
             else:
                 summ = r.get("summary") if isinstance(r, dict) else None
                 head = f"{c['purpose']}" + (f": {summ[:220]}" if summ else "")
@@ -1612,8 +1694,8 @@ def fate_tag(f):
     elif k == "settled":
         tag = "not a mind" if "not a mind" in s else "settled"
     elif k == "none" or tag is None:
-        for pat, t in (("no turn: said to ", "said to another"), ("first; a line to no one", "another took it"), ("draw refused", "draw refused"),
-                       ("in flight", "busy with another turn"), ("a turn was due", "turn due, none ⚠"), ("nothing in the gate", "not addressed, no bond"),
+        for pat, t in (("a turn was due, but none", "turn due, none ⚠"), ("no turn: said to ", "said to another"), ("first; a line to no one", "another took it"), ("draw refused", "draw refused"),
+                       ("was in flight (queued", "busy with another turn"), ("had ended", "exchange ended"), ("nothing in the gate", "not addressed, no bond"),
                        ("no turn either way", "no bond; draw refused"), ("does not care", "no bond"), ("cares about", "cares, not drawn")):
             if pat in s:
                 tag = t
@@ -1621,7 +1703,7 @@ def fate_tag(f):
         else:
             tag = "no turn"
         if "Later, a deliberation" in s:
-            tag += " (later answered)"
+            tag += " (later spoke to them)"
     return tag
 
 
