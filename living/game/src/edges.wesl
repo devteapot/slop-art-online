@@ -126,8 +126,8 @@ fn rgb_of(c: vec3<f32>) -> vec3<f32> {
 // How deep the shade goes (the lit value's share, linear light) by day and by night, and how
 // far it cools by night.
 const SHADE_DAY: f32 = 0.30;
-const SHADE_NIGHT: f32 = 0.35;
-const SHADE_NIGHT_COOL: f32 = 0.4;
+const SHADE_NIGHT: f32 = 0.22;
+const SHADE_NIGHT_COOL: f32 = 0.5;
 
 // Shade (the default since play-test 5: "more similar to the shadows than this grey overlay"):
 // what I don't see lies in shadow, in the scene's own shadow tone (the toon shader's hue shift,
@@ -137,6 +137,14 @@ const SHADE_NIGHT_COOL: f32 = 0.4;
 // sight's zones (focal, side, near) fade in rather than band; the radius fades over 6 m. By
 // night, when the scene's shadows are already dark, the shade darkens less and leans to the
 // cool hue, so unseen ground still reads as shadow rather than black.
+// How far in shade this pixel is (the shade look), for the fog banks laid over it after.
+var<private> shade_amount: f32 = 0.0;
+
+// The darkening the shade gives at this light (linear share of the lit value).
+fn shade_depth(light: f32) -> f32 {
+    return mix(SHADE_NIGHT, SHADE_DAY, light);
+}
+
 fn look_shade(color: vec3<f32>, p: vec3<f32>, reach: f32, r: f32, ground: f32, light: f32) -> vec3<f32> {
     let d = p.xz - edges.sight.xy;
     let dl = max(length(d), 1e-3);
@@ -154,6 +162,7 @@ fn look_shade(color: vec3<f32>, p: vec3<f32>, reach: f32, r: f32, ground: f32, l
     }
     let hid = 1.0 - smoothstep(0.05, 0.95, seen / total);
     let s = max(hid, smoothstep(r - 2.0, r + 4.0, reach)) * ground;
+    shade_amount = s;
     if (s <= 0.001) {
         return color;
     }
@@ -171,7 +180,7 @@ fn look_shade(color: vec3<f32>, p: vec3<f32>, reach: f32, r: f32, ground: f32, l
     dh = dh - round(dh);
     hsv.x = fract(hsv.x + dh * shift);
     hsv.y = clamp(hsv.y * edges.sight_shade.z, 0.0, 1.0);
-    hsv.z = hsv.z * mix(SHADE_NIGHT, SHADE_DAY, light);
+    hsv.z = hsv.z * shade_depth(light);
     var shade = rgb_of(hsv) * edges.sight_tint.rgb;
     shade = mix(shade, vec3<f32>(0.62, 0.74, 1.1) * luma(shade), SHADE_NIGHT_COOL * (1.0 - light));
     return mix(color, shade, s);
@@ -527,7 +536,10 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         }
         let thick = acc / f32(steps) * len * 0.045 * edges.bank.x;
         let a = (1.0 - exp(-thick)) * 0.85;
-        color = mix(color, edges.bank_color.rgb, a);
+        // Mist over unseen ground lies in the same shade (the shade look): a bright bank over it
+        // read as a haze, not as shadow.
+        let bank = edges.bank_color.rgb * mix(1.0, shade_depth(edges.sight_extra.y), shade_amount);
+        color = mix(color, bank, a);
     }
 
     // Rain: four layers at set distances, near ones larger, faster and brighter, far ones finer
