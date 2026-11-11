@@ -71,6 +71,7 @@ All agent work on this project runs on Claude.
 
 - **Coordinators:** each machine has one coordinator thread on Claude Opus 5.5 (`claude-opus-5-5`) at high reasoning effort.
 - **Subagents:** Claude Opus 5.5 at high reasoning effort by default.
+- **Ultracode:** off for coordinators and subagents. Turn it on only when the owner asks for it for a named piece of work, and only for that work.
 - **Fable exceptions:** use Claude Fable 5.2 (`claude-fable-5-2`) at high reasoning effort for asset generation, such as 3D models and textures, and for a task that Opus has attempted and could not solve. Say in the report when a task was moved to Fable and why.
 - A model or provider the owner asks for by name overrides these defaults for that task.
 - A model named inside a skill does not override this section. This section does not switch the model of a thread the owner started.
