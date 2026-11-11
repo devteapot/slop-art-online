@@ -13674,7 +13674,7 @@
               "name": "work",
               "in": "Kettlebridge",
               "kinds": [
-                "plaza"
+                "storage"
               ],
               "stages": 10
             }
@@ -16086,7 +16086,7 @@
               "name": "work",
               "in": "Reedmoor",
               "kinds": [
-                "plaza"
+                "storage"
               ],
               "stages": 10
             }
@@ -21438,7 +21438,7 @@
               "name": "work",
               "in": "Brackenford",
               "kinds": [
-                "plaza"
+                "storage"
               ],
               "stages": 12
             }
@@ -26143,7 +26143,7 @@
               "name": "work",
               "in": "Kettlebridge",
               "kinds": [
-                "plaza"
+                "storage"
               ],
               "stages": 14
             }
@@ -36131,7 +36131,7 @@
               "name": "work",
               "in": "Kettlebridge",
               "kinds": [
-                "plaza"
+                "storage"
               ],
               "stages": 14
             }
@@ -48094,7 +48094,7 @@
                     "if": {
                       "near": {
                         "target": {
-                          "place": "square"
+                          "place": "store"
                         },
                         "within": 6
                       }
@@ -48114,7 +48114,7 @@
                         "if": {
                           "near": {
                             "target": {
-                              "place": "square"
+                              "place": "store"
                             },
                             "within": 100
                           }
@@ -48122,7 +48122,7 @@
                         "then": {
                           "do": "goto",
                           "target": {
-                            "place": "square"
+                            "place": "store"
                           }
                         }
                       },
@@ -48321,7 +48321,7 @@
               "if": {
                 "near": {
                   "target": {
-                    "place": "square"
+                    "place": "store"
                   },
                   "within": 8
                 }
@@ -48338,7 +48338,7 @@
             {
               "do": "goto",
               "target": {
-                "place": "square"
+                "place": "store"
               }
             }
           ]
@@ -48659,7 +48659,7 @@
                     "if": {
                       "near": {
                         "target": {
-                          "place": "square"
+                          "place": "store"
                         },
                         "within": 6
                       }
@@ -48679,7 +48679,7 @@
                         "if": {
                           "near": {
                             "target": {
-                              "place": "square"
+                              "place": "store"
                             },
                             "within": 180
                           }
@@ -48687,7 +48687,7 @@
                         "then": {
                           "do": "goto",
                           "target": {
-                            "place": "square"
+                            "place": "store"
                           }
                         }
                       },
@@ -48918,7 +48918,7 @@
               "if": {
                 "near": {
                   "target": {
-                    "place": "square"
+                    "place": "store"
                   },
                   "within": 8
                 }
@@ -48935,7 +48935,7 @@
             {
               "do": "goto",
               "target": {
-                "place": "square"
+                "place": "store"
               }
             }
           ]
@@ -49184,7 +49184,7 @@
                     "if": {
                       "near": {
                         "target": {
-                          "place": "square"
+                          "place": "store"
                         },
                         "within": 6
                       }
@@ -49202,7 +49202,7 @@
                     "if": {
                       "near": {
                         "target": {
-                          "place": "square"
+                          "place": "store"
                         },
                         "within": 115
                       }
@@ -49210,7 +49210,7 @@
                     "then": {
                       "do": "goto",
                       "target": {
-                        "place": "square"
+                        "place": "store"
                       }
                     }
                   },
@@ -49371,7 +49371,7 @@
               "if": {
                 "near": {
                   "target": {
-                    "place": "square"
+                    "place": "store"
                   },
                   "within": 8
                 }
@@ -49388,7 +49388,7 @@
             {
               "do": "goto",
               "target": {
-                "place": "square"
+                "place": "store"
               }
             }
           ]
@@ -49637,7 +49637,7 @@
                     "if": {
                       "near": {
                         "target": {
-                          "place": "square"
+                          "place": "store"
                         },
                         "within": 6
                       }
@@ -49655,7 +49655,7 @@
                     "if": {
                       "near": {
                         "target": {
-                          "place": "square"
+                          "place": "store"
                         },
                         "within": 100
                       }
@@ -49663,7 +49663,7 @@
                     "then": {
                       "do": "goto",
                       "target": {
-                        "place": "square"
+                        "place": "store"
                       }
                     }
                   },
@@ -49824,7 +49824,7 @@
               "if": {
                 "near": {
                   "target": {
-                    "place": "square"
+                    "place": "store"
                   },
                   "within": 8
                 }
@@ -49841,7 +49841,7 @@
             {
               "do": "goto",
               "target": {
-                "place": "square"
+                "place": "store"
               }
             }
           ]

@@ -20,7 +20,7 @@ Findings move from the lab to the game when a core version is released and the g
 - **A 3D world in Bevy, desktop first.** Other platforms may come later. The simulation stays a flat tile plane; the client renders it in 3D.
 - **ARPG-style camera.** Isometric or top-down, as in League of Legends, Supervive and Path of Exile, tweaked for the genre. No first person, and no free 360° orbiting camera.
 - **Interactive combat** with both targeted skills and aimed skillshots.
-- **Proximity chat.** Players type free text. Only characters within earshot hear it, which the authority already enforces (`perceive::speak`).
+- **Proximity chat.** Players type free text. Only characters within earshot hear it, which the authority already enforces (`speech::speak`; ways of speaking in docs/COMMUNICATION.md).
 - **Many human players.** No fixed number: as many as the core can support. This makes the scale gates of the [performance contract](PERFORMANCE_CONTRACT.md) game requirements.
 - **The world continues offline.** When a player leaves, their character keeps living under an AI mind. That mind's behavior should come from how the player actually played, so the character stays recognizably theirs. A custom external mind supplied by the player is a later option.
 - **Running cost** of model calls is set aside for now.

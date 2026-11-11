@@ -370,7 +370,7 @@ impl Minds {
         notes.extend(self.canonical_people(actor, &mut patch));
         self.keep_refused_merges(actor, &notes);
         notes.extend(self.perceived_people_only(actor, batch, &mut patch));
-        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
+        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "whisper" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
         self.name_people(actor, &mut patch);
         patch.lived_under = Some("human".into());

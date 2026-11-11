@@ -382,6 +382,108 @@ All of this is in `skills.rhai`. It is the same for players, minds and graphs: t
 - A skill whose spec reads `want` offers one choice per thing to ask for, from what the player carries and the skill's `items`: `offer`, and now `offer_terms`.
 - What the rules tell the player (experiences of kind `record`) shows as a toast.
 
+### Answering: accept and decline by id
+
+**Status:** built on branch `rules-offers-2`, 2026-11-11. Before it, `accept` toward a person took their oldest standing terms first and only then their trade offer, so a player who pressed accept on the trade the window showed could agree to different terms instead. It also had no way to say no.
+
+**The acts** are the same for both controllers: `human_act`, `mind_act` and graph leaves. They are parsed by the shared grammar (`graph::Action` `offer`/`record`, `normalize.rs`):
+
+```json
+{"do": "accept",  "target": {"id": 4}, "offer": 17}
+{"do": "accept",  "target": {"id": 4}, "record": 12}
+{"do": "decline", "target": {"id": 4}, "offer": 17}
+{"do": "decline", "target": {"id": 4}, "record": 12}
+{"do": "accept",  "target": {"id": 4}}
+{"do": "decline", "target": {"id": 4}}
+```
+
+- `offer` is a `trade_offer` id, as a player reads it in `my_offers` and a mind in its scene. `record` is a record id, as in `my_records` and a mind's dealings.
+- Without either, `accept` is what it always was: the person's oldest standing terms, then their trade. `decline` takes the one `accept` would take. A mind's existing acts parse and behave as before, and the stored act is byte-identical (test `answers_carry_what_they_name`).
+- `offer_id` and `record_id` are accepted as aliases, and so is a number written as text. 0 or null means none. Anything else is refused: "the id of the trade offer you answer". A skill whose spec does not list the argument ignores the word, as before.
+- The client's `ui::act_node` sends `"offer"` for `ActTarget::Offer` (left out when the id is 0).
+
+**Rules.** Both are ordinary skills in `skills.rhai`:
+
+- `accept_spec` and `decline_spec` (`args: ["offer", "record"]`, `talk`, reach 3);
+- `accept_check` and `decline_check` share `answer_refused`; `decline_duration` is 1 s;
+- `decline_ui()` declares only a look, the trade icon.
+
+The context gains `a.offer_id`, `a.record_id` and `a.offer`. `a.offer` is the trade offer at hand: the named one, read by id, or, when that one is gone or none is named, the target's standing offer to the actor. The engine fills it only for a law that reads it (`Scripts::skill_reads`), as it does `a.records`. A named record is found among `a.records`.
+
+Refused, with these words, at the start and again at completion:
+
+| Case | Refusal |
+| --- | --- |
+| a named offer that no longer exists | "that offer is gone" |
+| it is gone, and another offer from them stands | "they have changed their offer: now their 2 fish for your 1 hide" |
+| addressed to someone else, or not theirs | "that offer is not addressed to you" |
+| past its window | "that offer has expired" |
+| a named record not among the actor's | "that proposal is gone", or "they have changed their terms: now you give …, they give …" while other terms of theirs stand |
+| the actor's own proposal, or someone else's | "that proposal is not addressed to you" |
+| agreed already | "you have already agreed to it" |
+| run out (`not taken`) | "that proposal has expired" |
+| otherwise closed | "that proposal was declined" (or its status) |
+| a demand or a regard named | "that is not a proposal of terms" |
+| both named | "name one thing to answer: the offer or the proposal" |
+
+**Effects.**
+
+- `accept` with an offer returns the op `#{ op: "accept", offer: id }`. The engine takes only that offer, and only from the target to the actor while it stands. With a record, the agreement is made as before.
+- `decline` with a proposal closes it as `declined`, readable for 1 world hour. With a trade offer it returns `#{ op: "decline", offer: id }`, which ends that offer and nothing else. The engine refuses an offer not addressed to the actor, and with nothing standing: "they have no standing offer for you".
+- A decline tells the maker with `tell`, as kind `record`, salience 0.7, without asking its mind to think:
+  - "Bram declined your offer of 2 fish for 1 hide."
+  - "Bram declined your terms: you give 3 berries, they give 10 wood."
+- Onlookers witness "{a} turned down {b}'s offer." or "{a} turned down what {b} proposed."
+- The decliner's own outcome is the rules' line: "declined Bram's offer of 2 fish for 1 hide".
+- There is no cost and no limit on declining. Anything of the kind would be a law of the script.
+
+**What minds see:**
+
+- the scene's "asked of you" and "you are waiting on" entries carry `"offer": id`;
+- a proposal to them reads "…; accept or decline (toward them, record N)" in their dealings (`record_text`);
+- the talk turn's "between" lines name the offer ("(offer 17: accept to exchange, or decline)");
+- a trade offer's deliberation request names it ("You may accept or decline it (offer 17), or let it pass.");
+- the act forms (`prompts::ACTS`) and the talk examples show `accept` with `"offer"` and `decline`.
+
+The deliberation grammar lists both skills from their specs. `decline` is in `TALK_SHOWN`.
+
+**SpacetimeDB check** (consulted 2026-11-11; the docs' version selector reads 2.0.0; checked against the 2.14.1 crates pinned in `living/Cargo.toml`):
+
+| Source | What it says | What follows here |
+| --- | --- | --- |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) | New columns only "to the end of a table with a default value"; "Adding columns without a default value" and "Removing or modifying existing columns", including changing their type, are forbidden. | The act's reference is two columns at the end of `activity` with `#[default(0u64)]` (`offer`, `record`). `activity` is no other table's column type, so no embedded row type changes (unlike `line_seen.line`, [COMMUNICATION.md](COMMUNICATION.md#10-spacetimedb-documentation-and-data-paths)). `trade_offer` and `record` are unchanged. |
+| `spacetimedb-lib-2.14.1/src/db/raw_def/v9.rs` | `RawMiscModuleExportV9::ColumnDefaultValue`: "A default value for a column added during a supervised automigration." | The macro's `#[default]` is the migration's default. |
+| [Tables](https://spacetimedb.com/docs/tables/) | "Tables can be private (default) or public". | `activity` stays private. Clients never read it; they read their own offers through `my_offers` and records through `my_records`, unchanged. |
+| [Performance](https://spacetimedb.com/docs/tables/performance/) | "Use the smallest integer type that fits"; "Be mindful of unbounded table growth". | Ids are `u64`, as `trade_offer.id` and `record.id` are. `activity` holds one row per acting creature, so 16 bytes a row and no growth. |
+
+Migration proven on the trial server (`slop-trials-stdb`, v2.14.1). Main's module (`b004e6e`) ticked on a fresh world. The world was then updated in place to this branch's module (`verify.py launch --keep-data`). It kept ticking from tick 6,012, its 233 existing `activity` rows read `offer = 0, record = 0`, and accept and decline then worked on it.
+
+**Data paths.**
+
+- An answer reads the named `trade_offer` by primary key, or the target's offers by the `from` index (a maker holds one at a time).
+- It reads the actor's records by `record_party.party`, as `accept` already did at completion. Its check now reads them at the start too.
+- It writes:
+  - a trade: two inventory moves and one row deleted, as before;
+  - a declined trade: one row deleted;
+  - a declined proposal: one record closed;
+  - for the maker: one experience row;
+  - for onlookers in sight: one witnessed row each.
+- Nothing is read or written per tick. Recipients are the parties' own `my_experience` rows, the mind service (owner) and the onlookers' perception. No benchmarks were run; this change adds no per-tick or per-subscriber work.
+
+**Verification** (Spark, trial server, fake model, 2026-11-11):
+
+- `just living-check` ok;
+- rules tests `answers_take_what_they_name`, `answers_carry_what_they_name` and `an_act_toward_an_offer_names_it`;
+- verify-core `scenes.py answers` 17 of 17, `dealings` 13 of 14 (regard needs the island);
+- verify-player `answers.py` 9 of 9, `offers.py` 17 of 17, `deal.py` 13 of 13;
+- verify-minds `answers` and `acts` pass. `dealings` failed 2 of 11 runs (cause not established; see verify-minds' validation record).
+
+Records are in each skill's `references/validation.md`. Not covered:
+
+- the game client drawing and sending these acts;
+- a real model choosing to decline;
+- `verify-client`: no view or public table changed, and `activity` is private.
+
 ## Goods, recipes and fuel
 
 **Status:** built on branch `goods-1`, 2026-11-11, for Cullet's phase 4 ([small city](SMALL_CITY.md#the-land-that-feeds-it), decision 9: goods and fire that eats fuel now; pane decay and the tide later). The owner's standing decisions it follows: items satisfy requirements by traits, not lists; the world is self-sufficient; world rules are Rhai laws over Rust primitives; no hard-coded guardrails and no engine behaviour for tests.

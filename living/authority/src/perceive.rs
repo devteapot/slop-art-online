@@ -10,11 +10,12 @@ use spacetimedb::{ReducerContext, Table};
 /// Experiences kept per character (older ones leave the hot window).
 const WINDOW: usize = 400;
 
-pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) {
+/// Write an experience row for `observer`; its id, or `None` when nobody would read it.
+pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
     // Only minds and human players consume percepts. Infants have no mind yet to form
     // memories; a benchmark crowd's bodies (`common::instinct_only`) have no reader.
     if !observer.alive || observer.stage == 0 || common::instinct_only(ctx, observer) {
-        return;
+        return None;
     }
     let row = ctx.db.experience().insert(Experience {
         id: 0,
@@ -41,12 +42,14 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
             ids.sort_unstable();
             for id in &ids[..ids.len() - WINDOW] {
                 ctx.db.experience().id().delete(*id);
+                crate::speech::forget_line(ctx, *id);
             }
         }
     }
     if salience >= 0.6 {
         common::wake(ctx, observer.id);
     }
+    Some(row.id)
 }
 
 /// People within `r` of `at` (excluding `exclude`).
@@ -263,119 +266,6 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     Ok("made a baby crying".into())
 }
 
-/// The shortest gap between two lines one speaker says (ms).
-pub const SPEAK_GAP_MS: u64 = 2_000;
-
-/// Whether `speaker` must still wait before its next line (the speaking limit in `speak`).
-pub fn too_soon_to_speak(ctx: &ReducerContext, speaker: u32, now: u64) -> bool {
-    ctx.db.mind_state().id().find(speaker).is_some_and(|st| now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS)
-}
-
-pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) -> Result<(), String> {
-    let text = text.trim();
-    if text.is_empty() {
-        return Ok(());
-    }
-    let text: String = text.chars().take(400).collect();
-    let Some(me) = ctx.db.character().id().find(speaker) else { return Err("no speaker".into()) };
-    let Some(b) = ctx.db.body().id().find(speaker) else { return Err("no body".into()) };
-    if let Some(mut st) = ctx.db.mind_state().id().find(speaker) {
-        if now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS {
-            return Err("speaking too fast".into());
-        }
-        st.spoke_ms = now;
-        ctx.db.mind_state().id().update(st);
-    }
-    // Saying nearly the same thing again is still spoken and heard; the speaker notices it
-    // (feedback, not suppression).
-    let echo = said_recently(ctx, speaker, &text, now);
-    let at = pos(&b, now);
-    let to_name = if to != 0 { common::name_of(ctx, to) } else { String::new() };
-    let line = if to != 0 { format!("{} to {}: “{}”", me.name, to_name, text) } else { format!("{}: “{}”", me.name, text) };
-    common::chronicle(ctx, now, "speech", speaker, to, at, line);
-    // Every speaker perceives its own words, whoever controls it: a person's become lived
-    // memory (docs/PLAYER_MEMORY.md), a mind's are in its experience like anyone's.
-    let said = if to != 0 { format!("You said to {}: “{}”", common::label_for(ctx, &me, to), text) } else { format!("You said: “{}”", text) };
-    percept(ctx, &me, now, "said", speaker, to, at, said, 0.5);
-    if let Some((ago_s, said)) = echo {
-        let when = if ago_s < 5 { "just now".to_string() } else { format!("{ago_s} s ago") };
-        percept(ctx, &me, now, "repeat", speaker, to, at, format!("You said almost the same thing {when}: “{said}”."), 0.3);
-    }
-    // Each listener hears as far as its own senses reach (gathered within the farthest anyone
-    // hears). Animals hear a voice, not words.
-    let w = common::world(ctx);
-    let hears = |id: u32, d: f32| d <= common::hearing_for(ctx, id, &w, now);
-    for (c, _) in minds_near(ctx, at, common::widest_hearing(ctx), now, &[speaker]).into_iter().filter(|(c, d)| &*c.kind != "person" && hears(c.id, *d)) {
-        let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
-        percept(ctx, &c, now, "signal", speaker, 0, at, format!("You hear a person's voice, {dir}."), 0.25);
-    }
-    let hearers: Vec<(Character, f32)> = people_near(ctx, at, common::widest_hearing(ctx), now, &[speaker]).into_iter().filter(|(c, d)| hears(c.id, *d)).collect();
-    // Silence is information: calling someone out of earshot (far away, or dead) gets no answer.
-    if to != 0 && !hearers.iter().any(|(c, _)| c.id == to) {
-        let who = common::label_for(ctx, &me, to);
-        percept(ctx, &me, now, "silence", to, speaker, at, format!("No answer from {who}; they don't seem to be within earshot."), 0.35);
-    }
-    let address = common::laws(ctx).address_m;
-    let close = hearers.iter().filter(|(_, d)| *d <= address).count();
-    // Saying one's own name tells it to everyone who hears (an introduction).
-    let introduces = mentions(&text, &me.name);
-    for (c, d) in hearers {
-        if introduces {
-            crate::perception::introduce(ctx, c.id, speaker, now);
-        }
-        let addressed = to == c.id || (to == 0 && (close == 1 && d <= address || mentions(&text, &c.name)));
-        let who = common::label_cap(ctx, &c, speaker);
-        let heard = if to == c.id {
-            format!("{who} said to you: “{}”", text)
-        } else if to != 0 {
-            format!("{who} said to {}: “{}”", common::label_for(ctx, &c, to), text)
-        } else {
-            format!("{who} said: “{}”", text)
-        };
-        percept(ctx, &c, now, "speech", speaker, to, at, heard, if addressed { 0.9 } else { 0.45 });
-        if let Some(mut st) = ctx.db.mind_state().id().find(c.id) {
-            st.heard_ms = now;
-            st.speaker = speaker;
-            ctx.db.mind_state().id().update(st);
-        }
-        // Whether and how to answer is the listener's mind's affair: its service sees this
-        // experience and gives the listener a conversation turn. Speech no longer requests a
-        // full deliberation.
-    }
-    Ok(())
-}
-
-/// The most similar line this speaker said within the last 90 s, when nearly the same
-/// (word-set Jaccard >= 0.6): seconds ago and the words.
-fn said_recently(ctx: &ReducerContext, speaker: u32, text: &str, now: u64) -> Option<(u64, String)> {
-    let words = |t: &str| -> std::collections::HashSet<String> {
-        t.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() > 2).map(String::from).collect()
-    };
-    let mine = words(text);
-    let mut latest: Option<(u64, String)> = None;
-    for c in ctx.db.chronicle().at_ms().filter(now.saturating_sub(90_000)..).filter(|c| c.kind == "speech" && c.a == speaker) {
-        // Chronicle rows count exact repeats as "… (×n)".
-        let base = c.text.rsplit_once(" (×").map_or(c.text.as_str(), |(b, _)| b);
-        let said = base.split_once('“').map(|(_, t)| t.trim_end_matches('”')).unwrap_or(base);
-        let theirs = words(said);
-        let same = if mine.is_empty() || theirs.is_empty() {
-            said.trim().eq_ignore_ascii_case(text.trim())
-        } else {
-            mine.intersection(&theirs).count() as f32 / mine.union(&theirs).count() as f32 >= 0.6
-        };
-        if same && latest.as_ref().map_or(true, |l| c.at_ms >= l.0) {
-            latest = Some((c.at_ms, said.to_string()));
-        }
-    }
-    latest.map(|(at, said)| (now.saturating_sub(at) / 1000, said))
-}
-
-fn mentions(text: &str, name: &str) -> bool {
-    let t = text.to_lowercase();
-    let n = name.to_lowercase();
-    t.split(|ch: char| !ch.is_alphanumeric()).any(|w| w == n)
-}
-
 /// Ask the mind to reconsider. Reasons merge while a request is pending.
 pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u64) {
     request(ctx, id, reason, now, false);
@@ -506,7 +396,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let laws = common::laws(ctx);
     let join_ms = (laws.join_window_s * 1000.0) as u64;
     for o in ctx.db.trade_offer().to().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
-        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange)", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
+        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange, or decline)", o.give_qty, o.give_item, o.want_qty, o.want_item), "offer": o.id, "when": ago(o.at_ms)}));
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
         for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= join_ms) {
@@ -521,7 +411,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
     }
     for o in ctx.db.trade_offer().from().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
-        mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
+        mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "offer": o.id, "when": ago(o.at_ms)}));
     }
     if !mine.is_empty() {
         you.insert("you are waiting on".into(), Value::Array(mine));

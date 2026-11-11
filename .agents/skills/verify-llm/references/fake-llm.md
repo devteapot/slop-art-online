@@ -63,6 +63,7 @@ A rule with `"cite": true` fills placeholders in its `reply` from the experience
 | --- | --- |
 | `$EXP:<words>` | the id of the first line whose text contains `<words>` (case-insensitive; 0 if none) |
 | `$EXPS` | every line's id, as a list |
+| `$EXPTEXT:<words>` | the text of the first line containing `<words>` (its time kept, its `{Name=#id}` tags dropped; `''` if none): a reply that repeats what it was told, for privacy checks (`verify-minds/scripts/privacy.py`) |
 | `$PERSON` | `person:<id>` of the first tagged person |
 | `$PERSON_ID` | that id, as a number |
 

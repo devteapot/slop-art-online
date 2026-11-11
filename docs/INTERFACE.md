@@ -1,6 +1,6 @@
 # Interface from rules and skills
 
-Status: Approved 2026-11-11 as the design; steps are built in order; open questions below are not yet settled. Step 1 is built on `ui-decl-1` (in review by the Spark, not yet merged); nothing else is built. Line references are to `origin/main` at `bade5c09` unless a branch is named.
+Status: Approved 2026-11-11 as the design; steps are built in order; open questions below are not yet settled. Step 1 is built on `ui-decl-1` (in review by the Spark, not yet merged); nothing else is built. Line references are to `origin/main` at `bade5c09` unless a branch is named. Section 8 (the wheel, from play-test 5) is proposed, not yet approved; its open questions are at its end.
 
 The owner's idea: "Most of the UI is related to the world rules or skills. So I think we should have a way to compose the UI by those rules and skills, with a kind of framework that attaches to exposed primitives from the game engine that can be scripted by the rules and skills, in addition to the behaviour. They should also describe how the user interacts with these systems and how they plug into the world."
 
@@ -18,7 +18,7 @@ The owner's idea: "Most of the UI is related to the world rules or skills. So I 
 
 Anything that changes what a character may do is a rule, not a declaration. For example, "a strike needs the weapon drawn" belongs in the combat shape, where the authority enforces it for players and minds alike. `_ui()` only says how the client presents it.
 
-The client owns a small fixed set of primitives (section 2: bar, slot, meter, pill, list, grid, chips, prompt, marker, plate, progress, note, tip, drop target, window, text field, confirm). It draws and themes them, and it keeps movement, camera, input feel, combat timing, theme and layout. A skill with no `_ui()` gets a default derived from its spec and combat shape, so a world that declares nothing plays exactly as today. No new SpacetimeDB table is needed for the first steps. The first piece moved is the skill bar: `combat.rs`'s name matching and the step-4 WIP's guessed roles become declarations, and ui-1 step 4 is built on them.
+The client owns a small fixed set of primitives (section 2: bar, slot, meter, pill, list, grid, chips, prompt, marker, plate, progress, note, tip, drop target, window, text field, confirm; the wheel is proposed in section 8). It draws and themes them, and it keeps movement, camera, input feel, combat timing, theme and layout. A skill with no `_ui()` gets a default derived from its spec and combat shape, so a world that declares nothing plays exactly as today. No new SpacetimeDB table is needed for the first steps. The first piece moved is the skill bar: `combat.rs`'s name matching and the step-4 WIP's guessed roles become declarations, and ui-1 step 4 is built on them.
 
 ## 1. Audit: where the interface comes from today
 
@@ -230,6 +230,7 @@ The client keeps a fixed vocabulary. The rules choose names from it, and only th
 | `window` | A floating window built from the above, at the client's anchors | `ui/win.rs` | Existing |
 | `text_field` | Words, a "to whom" label and a character limit | `ui/say.rs` | Existing |
 | `confirm` | A two-button question | none; the nearest is Leave the world's click-again row (`ui/top.rs:10`) | `Node` |
+| `wheel` (proposed, section 8) | Up to eight sections round a hub, at fixed compass directions, for the acts on one target; chosen by moving toward one and letting go | none; it would replace the hold-F `list` where the world's `menus()` asks for it | `Node`s placed by angle; prim.rs's `slot` per section (`ui-1-step4`) |
 
 ### The input a rule can ask for
 
@@ -257,7 +258,7 @@ The client keeps a fixed vocabulary. The rules choose names from it, and only th
 | `self` | C, the acts on oneself | `human_act` with no target |
 | `item` | Clicking an item in the pack | as for `self`, with that item |
 | `box` | The ways chips in the text box | `human_speak(text, to, way)` |
-| `offer` | An incoming offer or proposal | `human_act` toward its sender, `target: {"id": sender}`; the offer's id as the act's reference once rules-offers-2 adds one |
+| `offer` | An incoming offer or proposal | `human_act` toward its sender, `target: {"id": sender}`, with the offer it answers, `"offer": id` (docs/WORLD_RULES.md, "Answering") |
 
 Declarations can add rows to two fixed window kinds: `person` (pinned acts) and `skills` (descriptions). A new window kind is a client change (section 4).
 
@@ -302,7 +303,7 @@ The client's theme maps each name to assets. The lists live in `living_rules::ui
 | `order` | A number: position within its place or list. For a way, only `_speech()` sets it | Script order |
 | `input` | An input kind (section 2) | From the combat aim: creature → `tap`; self_or_ally → `tap`, on the hovered ally, else oneself; point → `aim_point`; facing → `hold`; dash → `tap`. Otherwise `tap` |
 | `picks` | What must be chosen. `target` needs a spec with `target: true`; `item` needs `item`; `qty`, `want` and `words` need those args (`qty`, `want`, `text`) | From the spec |
-| `choose` | How an item is chosen: `list` or `grid` | `list` |
+| `choose` | How an item is chosen: `list` or `grid`; `wheel` is proposed for a small fixed set (section 8.1) | `list` |
 | `detail` | The name of a script function that takes a choice's name and returns a text describing it | none |
 | `unready` | What a press does while the skill's combat `stance` is not met: `toggle` (the press switches the state instead) or `grey` | `grey` |
 | `toggles` | The body state this declaration switches | none |
@@ -572,7 +573,7 @@ Each step leaves the game playable. A step that ships no declarations changes no
 
 **Act building.**
 - `act_node()` is `verbs.rs` `Choice::node`, moved here; `Picked` adds `topic`.
-- `ActTarget::Offer` names the sender. The offer's id joins the act once the grammar carries a reference (rules-offers-2); a test fails when it does.
+- `ActTarget::Offer` names the sender and the offer it answers: `{"do": "accept"|"decline", "target": {"id": sender}, "offer": id}`, with `"offer"` left out when the id is 0 (test `an_act_toward_an_offer_names_it`). A proposal of terms is answered with `"record": id` (docs/WORLD_RULES.md, "Answering").
 - `bar_act()` returns `Option`: the leaf a press means, resolved as `use_skill` resolves it, and `None` where the authority refuses. The equivalence covers intent and target only: a press is used where the body stands, while a leaf with `{"id": n}` walks into reach first.
 
 **`Scripts`.** Methods `ui(name)`, `ui_specs()`, `ui_default(name)` and `ui_errors()`. `validate()` refuses any `ui_errors`, listing up to 12. The read keeps the default per field, so the rest of a declaration holds. Checks against the rules:
@@ -622,6 +623,8 @@ Each step leaves the game playable. A step that ships no declarations changes no
 - **Item icons:** from the item's `icon` trait, falling back to today's substring guess.
 - **Amounts:** `pick_qty` arrives.
 - **Outcomes:** if the Spark adds a structured outcome, the note stops parsing English.
+
+**Step 4a (proposed): the wheel** (section 8), with step 4 or right after it: the hold-F list's folding becomes the world's `menus()` layouts.
 
 **Step 5: speech, after `speech-1` merges.** The chips come from `<way>_speech()` and `_ui()`, which replaces `talk.rs`'s `MODES`. The box sends `human_speak`, and kinds are drawn by `rows`. Whisper arrives with speech-2 with no client change beyond its look names.
 
@@ -754,6 +757,228 @@ The Spark's build order: `my_offers`, the teach fix, `my_senses`, `act_outcome`,
 **Defects:**
 - **Teaching:** `teach_check` refusing fire_bolt and wound_tending is the Spark's to fix, with a verify-core case.
 - **`make`:** never offered at a fuel-burning workplace, probably because the client fakes facts. `my_senses` and `offered()` remove that cause, and the Spark also checks the rules side.
+
+## 8. The wheel (proposed, play-test 5)
+
+Status: proposed 2026-11-11 for the owner's decision; nothing is built. Line references in this section are to `origin/main` at `25c1fb92`, or to `origin/ui-1-step4` (`4cdf6442`) where named.
+
+The owner, play-test 5 (`.local/living/playtest-5/FEEDBACK.md`, item 5): "I think we could introduce some interactions that work with the wheel. You go in a direction and you get the wheel that you can select, kind of like in a pie chart, a section of the pie chart to do a specific thing. I wouldn't put it necessarily everywhere, but it could make sense in some specific locations."
+
+**The design in one paragraph.** The wheel is a client primitive: up to eight sections round a hub, for the acts on one target. You hold F on a person or a thing, move toward a section and let go. It replaces the hold-F list only on the places and target kinds the world's `menus()` names; everywhere else the list stays. Its sections are the F list's acts, built on the same `offered()`, `plan` and `_check` path, so the wheel can show nothing the list could not and send nothing a mind could not write. An act the world pins to a direction keeps that direction whatever the rules allow at the moment. A refused pinned act greys in place and is never removed, so a flick learned once keeps working. That is the point of a wheel over a list.
+
+A schematic of the shipped person wheel (the look is the theme's, glass by play-test 5; the owner judges it in-game):
+
+```text
+                      [talk] Talk                         n
+        [wave] Wave                [give] Give ›       nw     ne
+  [eye] Look over      ( Bram Fenner )     [trade] Trade ›   w   hub   e
+     [hand] Their window           [book] Teach ›      sw     se
+                      [dots] More ›                        s
+
+  hub: the target's name; when a section is hovered, its label and the first sentence of its
+  `about`; when that section is greyed, the rules' reason in grey instead.
+```
+
+### 8.1 How it is declared
+
+There are two declarations, both script data read at compile time into `living_rules::ui`. With neither, every place keeps its list and the game plays exactly as today.
+
+**Which places get a wheel, and its layout: `menus()`**. This is a world-level table, like `meters()` (section 3). A seed's laws overlay can replace it, as Cullet's does for other tables.
+
+```rhai
+fn menus() { [
+    // A person: the social acts, pinned. Anything else the rules offer goes behind More.
+    #{ on: "person", kinds: ["person"], choose: "wheel", fill: false,
+       wheel: #{ n: "talk", ne: "give", e: "offer", se: "teach", s: "more", sw: "window", w: "appraise", nw: "wave" } },
+    // A fire that burns fuel: making and feeding pinned, the rest filled in as the rules allow.
+    // (A campfire needs no feeding, so it takes the general row below.)
+    #{ on: "thing", kinds: ["hearth", "oven", "furnace", "smokehouse"], choose: "wheel",
+       wheel: #{ n: "make", e: "feed" } },
+    // Any other creature or thing: a wheel of what the rules allow, nothing pinned.
+    #{ on: "person", choose: "wheel" },
+    #{ on: "thing", choose: "wheel" },
+] }
+```
+
+The keys of a row:
+- **`on`:** `person` (any creature, as `On::Person` is), `thing` or `self`. These are the places whose list F or C opens.
+- **`kinds`:** the target kinds the row covers, spelt as the world names its structures, resources and species. When it is absent, the row covers every target at that place. The first matching row wins.
+- **`choose`:** `list` (today's) or `wheel`.
+- **`wheel`:** a map from a direction to a section. A section is either a skill's name or one of the client's own sections:
+  - `talk`, `window` and `introduce`: the list's Talk, Their window and Introduce yourself rows (`verbs.rs` `Row`), on a person only;
+  - `more`: the full list.
+- **`fill`:** whether the acts the row does not pin fill its free directions (default `true`).
+
+**What goes where.** `wheel_of` lays out a wheel in three passes:
+1. Pinned sections take their directions.
+2. With `fill`, the other acts take the free directions clockwise from north. They come in the list's order (rules-checked first, as `in_order` sorts at `verbs.rs:229`, then script order). Only acts the rules allow at that moment fill a direction.
+3. Whatever is left goes behind More. More takes its pinned direction, else the first free one clockwise from south.
+
+Why pinned and filled sections behave differently. A pinned act greys in place when the rules refuse it. A filled act shows only while allowed, as the list does today. The rules' checks cannot tell "never applies to this target" from "not now". `appraise_check` answers "no one there" for every thing (`skills.rhai:2079-2080`), so a wheel that kept every refused act would grey Look over on every bush. Pinning is how a world says "this one belongs here".
+
+**A sub-choice on a wheel: `choose: "wheel"` in a skill's `_ui()`**. Today `choose` says how a skill's item is chosen (`list` or `grid`). The value `wheel` would make a section's `›` open a second wheel. It is allowed only for a small fixed set (at most eight items) that does not change as you carry or learn things:
+- `spec_items`, such as `build`'s kinds;
+- `signals`;
+- `products`, when a world makes at most eight.
+
+A pack, the world's items or what a target holds change from moment to moment, so their directions would not hold. Those sub-choices keep their `list` or `grid`, opened beside the hub.
+
+**What a section shows.**
+- **Icon:** `look.icon`, mapped to an image by the theme, or the theme's empty icon.
+- **Label:** `label`, on one short line.
+- **`›`:** the act needs a further choice (`picks` has `item`, `want` or `topic`); choosing it opens that choice.
+- **`…`:** the act needs words; choosing it opens the text box, as the list's `words` rows do.
+- **Grey:** a dimmed icon and label. The reason is shown only in the hub, on hover, so the ring stays clean (play-test 4: less density).
+- **Running:** an arc on its rim (8.4).
+- **Number:** a faint 1–8, clockwise from north, for keys.
+
+There is one section per skill, not one per item. Give is one section whatever you carry, so your pack never moves the layout.
+
+**Vocabulary changes.** All lists are append-only (`the_vocabulary_only_grows`).
+- `Choose` gains `Wheel` at its end: `CHOOSE { List, Grid, Wheel }`.
+- A new `Dir` with `DIRS` `n, ne, e, se, s, sw, w, nw`.
+- A new `Section` with `SECTIONS` `talk, window, introduce, more`: the client's own sections.
+- `MENU_TRAITS`: `on, kinds, choose, wheel, fill`.
+
+**Types and functions.**
+- `MenuSpec { on, kinds, choose, wheel: [Option<Section>; 8], fill }`, where a `Section` is a skill name or a client section.
+- `Scripts::menus()` and `Scripts::menu_for(on, kind)`.
+- A pure layout function, `wheel_of(&MenuSpec, &[Candidate]) -> Wheel`, in `living_rules::ui`, so the layout is tested without Bevy and the client only draws it. Each `Candidate` gives a skill, whether it is allowed now, and whether it needs a further choice.
+
+Read leniently into `ui_errors` and refused by `validate()` at install, as for `_ui()` (section 3):
+- a direction not in `DIRS`, or a section named twice;
+- a skill whose `on` does not include the row's place. For example: `menus: person wheel names eat, but eat is not on person`;
+- `talk`, `window` or `introduce` on a row that is not `person`;
+- a row on `bar`, `box`, `offer`, `item` or `ground`;
+- a kind that is no structure, resource or species;
+- two rows with the same `on` and `kinds`;
+- a full wheel (eight pinned) without `more`;
+- `choose: "wheel"` on a changing source, or on more than eight items.
+
+No skill name is spelt in Rust: the names are in `menus()`, which is world data.
+
+### 8.2 Input
+
+The owner's only pointer is a laptop trackpad. On a trackpad, one finger moves the cursor, a two-finger swipe pans, a two-finger press is the right button (RMB), and a pinch zooms (`pointer.rs`). The thresholds below are the client's input feel (section 4), kept with `HOLD_S` and tunable in the F1 input panel.
+
+**Opening.**
+- **Hold F** (`HOLD_S`, 0.28 s, `verbs.rs:42`) on a target whose `menu_for` is `wheel`. A tap of F is unchanged: the likely act, or talking to a peaceful person. The target is whatever F aims at today (`verbs.rs` `aim`, from `:769`): pick.rs's body under the cursor (through combat's target), else a thing within 1.6 m of the cursor's ground point, else the nearest creature or thing within 3 m.
+- **F and a flick:** with F down, moving past `FLICK_PX` (30 logical px) before `HOLD_S` opens the wheel with that direction already chosen, so an experienced player never waits for it to draw (marking menus). The press must also last at least 80 ms, so a tap of F while the hand is still moving stays a tap.
+- **A tap of F with nothing likely** opens the wheel *sticky*, where today it opens the list (`verbs.rs:960`). It stays open until you choose or cancel.
+- **The two-finger press** is bound to `Secondary`, a bar skill (`keys.rs:143`), so on a trackpad it already strikes. It stays the secondary skill until sheathe and draw lands. After that, the proposal is: a held RMB opens the wheel where the press would not strike, i.e. with the weapon sheathed. This is the same rule as "a tap talks while sheathed" in example 1 (open question 1).
+
+**While it is open.**
+- **The cursor is held.** Pointer motion (one finger, or a two-finger swipe) moves a selection vector out from the hub instead of moving the cursor:
+  - the drawn cursor hides, and a short line from the hub shows the vector;
+  - facing does not swing while you choose, because the cursor has not moved;
+  - the view does not turn by hand: a pan and a left drag go to the wheel, and a pinch is ignored.
+- **The cursor-pan rule** (main `48cd0223`: a turn or zoom by hand keeps the cursor at its screen position). When the wheel closes, the cursor is exactly where it was on screen. If the camera followed you as you walked meanwhile, what the cursor points at follows the view, as after a pan. verify-ui checks it to 1 px, as `turns` does.
+- **Sectors.**
+  - **Dead zone:** below `DEAD_PX` (20 logical px) the hub is selected, which means cancel.
+  - **Sectors:** beyond it, each section owns its 45° round its direction, plus half of each empty neighbour's. Two sections at n and s split the circle in half; eight get 45° each. Directions never move, and fewer sections are easier to hit.
+  - **Hysteresis:** `HYST_DEG` (8°) at each border stops flicker.
+  - **Clamp:** the vector stops at `MAX_PX` (90), so reversing is quick.
+- **Where it is drawn:** centred where the cursor was, moved inward to fit on screen. It does not follow the target, so it never slides under the finger. Walking (WASD) goes on.
+- **The target is held.** The wheel keeps the target it opened on and does not re-read pick.rs each frame: another body may walk under the held cursor.
+  - The target leaving sight, dying or being removed closes the wheel with a note ("Bram Fenner is out of sight").
+  - Being out of reach does not close it. A person act walks into reach (`{"id": n}`), a thing act walks there (`seq[goto, act]`), and the authority refuses what it refuses.
+- **Buttons and keys.**
+  - The wheel holds `UiWants.menu`, as the list does. combat.rs (`:391`) and pointer.rs (`:166`) already keep clicks and drags off the fight and the view while a menu is open.
+  - Digits belong to the wheel, as they do to the list.
+  - Any other bar key (Q, E, R, Shift, Space) closes the wheel without choosing and does its skill, so a player attacked mid-choice can fight.
+
+**Choosing.**
+- **Held** (opened by holding F or flicking): letting go of F chooses the selected section. Letting go in the hub or toward an empty direction cancels, and nothing is sent.
+- **Sticky:**
+  - a click (a one-finger press), Enter or F chooses;
+  - Esc, a click on the hub or a two-finger press cancels.
+- **Keys:**
+  - The arrows set the direction: Up is n, Up+Right is ne, and so on. The arrows are unbound by default (`keys.rs:133-169`). Letting go of F (held) or Enter (sticky) chooses.
+  - 1–8 choose at once, numbered clockwise from north.
+- **Esc** follows the game's Esc order (`ui/win.rs`): it closes the sub-choice first, then the wheel.
+- **Sub-choices.** A `›` section opens its sub-choice:
+  - a `choose: "wheel"` set opens as a second wheel centred on the chosen section, with the vector restarted, and with F still held, letting go on a sub-section chooses it;
+  - a `list` or `grid` opens beside the hub, picked by click or digit as today.
+
+  A wheel never goes deeper than two levels.
+
+**How many.** At most eight sections: past eight, accuracy without looking drops. A wheel has no pages, because a page changes what a direction means. Whatever does not fit is behind More, which opens today's full list, unfolded. The prompt's "hold F · more" (`ui/prompt.rs:161-163`) names the wheel where one opens.
+
+### 8.3 Where it goes and where it does not
+
+| Target | Wheel | Why |
+|---|---|---|
+| A person | **Yes** | The owner's case: a handful of social acts on one target, and the place a fixed direction pays off most. Its pinned layout replaces `Menu::rows`' folding by name (`"give" \| "offer"`, `"wave" \| "appraise"`, `verbs.rs:485-486`), so the client stops naming skills there. |
+| An animal | Yes | A few acts (looking it over, and whatever else the rules allow toward it), with `fill` and nothing pinned. Hunting stays on the bar. |
+| A workplace (hearth, oven, furnace, smokehouse; a campfire through the general row) | **Yes** | Make › and Feed › in fixed directions. Feeding an out fire also lights it (`feed_spec`, `skills.rhai:1934-1937`). Make › opens the products grid (example 4). Needs the lit and fuel facts that `ui-1-step4` reads (`4cdf6442`); without them, nothing is offered at a fuel fire. |
+| A resource (bush, tree, rock, kelp bed) | Yes, light | Usually one act, which the tap does. Holding F gives a small wheel rather than a one-row list, so holding F on a thing always means a wheel. |
+| Storage, remains | Later | Store › and Take ›. Take's items come from `world` until a client can see what a target holds (`ItemSource::TargetHolds`), so its sub-list offers every item there is. Becomes a wheel once contents are visible. |
+| An item on the ground | Not yet | Nothing to open it on: `drop` leaves items "kept for no one" (`skills.rhai:1944`), with no row a client sees. Once dropped items become things, they are a `thing` row. |
+| Oneself (C) | No, for now | Fourteen or more acts, many with item choices: a list fits better (open question 3). |
+| An item in the pack | No | A click in a window; a wheel would cover the neighbouring cells. The list beside the cell stays. |
+| The skill bar | No | One key per skill, answered in the same frame (section 4); a wheel adds a step and covers the fight. |
+| Talking, ways of speaking | No | You are typing; the ways are chips in the box. The person wheel's Talk opens the box. |
+| An incoming offer | No | Two buttons on the offer card (`ui-1-step4`). |
+| The ground (build at a point) | No | `aim_point` already picks the point. Build's kinds could later be a `choose: "wheel"` sub-choice. |
+
+### 8.4 Refusals, grey hints and progress
+
+- **Grey is a hint,** as in step 1. A pinned section greys when the client's `_check` refuses it on the facts the client has. A section with items greys only when no item passes.
+- **Choosing a greyed section still sends the act.** The authority decides, and the note shows its words, as for any act (`verbs.rs` `outcomes`). A fact the client still fakes cannot hide an act from the player.
+- **The reason** is shown in grey in the hub on hover. It is the `_check`'s own text, the same a mind receives as failure feedback (section 5, "One refusal"); the client writes no reason of its own.
+- **Inside a sub-choice:** a grid greys a cell as example 4 says, and a list keeps today's rule.
+- **Running.** While an act chosen from this target is pending (`verbs.rs` `Pending`) or running as my behaviour:
+  - its section shows an arc on its rim, as `running.show` says;
+  - `progress` fills over the act's duration, from the rules' `_duration`, called once when it is sent;
+  - `none` shows a dot.
+
+  If an outcome arrives while the wheel is open, the section flashes green or red, as prim.rs's slot does (`refused`). Choosing a running section sends the act again, and the authority decides.
+
+### 8.5 What the anti-drift tests must add
+
+In `living/rules/src/ui/tests.rs`:
+1. **The wheel and More together are exactly the list.** For the island and Cullet, and each target fixture (a person, an animal, a bush, a furnace lit and unlit, remains), the acts reachable through the wheel and its More are the F list's for the same facts: no act only in one.
+2. **A pinned section never moves.** Its direction is the same across facts (an empty and a full pack, night, a technique learned or not); only greys change.
+3. **A filled section shows only while allowed**, as the list does.
+4. **Every section's act is one a mind could write.** `every_default_act_is_one_a_mind_could_write` is extended to the sections and their sub-choices.
+5. **One refusal.** The hub's grey text equals the `_check` text a mind gets for the same facts (extend `the_same_facts_allow_the_same_acts_to_both`).
+6. **Renaming is invisible.** Renaming every skill, in `menus()` too, keeps every direction (extend `renamed_skills_are_placed_and_presented_alike`).
+7. **The rules do not change.** They are the same with `menus()` and every `choose: "wheel"` stripped, and minds' references stay byte-identical (extend `the_rules_are_the_same_without_any_declaration`).
+8. **A world that declares nothing** resolves every place to `list`.
+9. **Install refusals:** each refusal in 8.1 has a case, like `a_bad_declaration_is_logged_by_a_client_and_refused_at_install`.
+10. **The vocabulary:** `Wheel` at the end of `CHOOSE`, and `DIRS` and `SECTIONS` new (`the_vocabulary_only_grows`).
+11. **The ratchet:** the wheel's client code names no skill. The `verbs.rs` and `ui/verbs.rs` entries in `CLIENT_NAMES_TODAY` shrink once the folding goes.
+
+In the game crate (unit tests):
+- a vector's sector: the dead zone, hysteresis, the clamp, and widening into empty neighbours;
+- digits clockwise from north;
+- letting go in the hub sends nothing;
+- a flick shorter than 80 ms is a tap.
+
+In verify-ui: a new `wheel` scenario and feature map, kept in the same change through `maintain-verification-skill`:
+- hold F on a resident, move east and let go: the `human_act` node in the log, then the outcome note;
+- Esc and a release in the hub send nothing;
+- a greyed section sends, and the note shows the authority's words;
+- the cursor is within 1 px of its screen position after closing;
+- Cullet's furnace: Make › opens the grid.
+
+No reducer changes, so verify-player is not needed.
+
+### 8.6 Costs
+
+- **Frame time.** One wheel is spawned once, hidden: eight sections from prim.rs's `slot`, the hub and one sub-wheel. It is updated in place. The node count with nothing open must not grow, and the A/B gate of step 2 applies.
+- **Script calls.** Opening runs the checks the list runs today (`options`, within the 1 ms budget at `verbs.rs:58`). The layout is cached per script revision, place and target kind. Hovering runs no script.
+- **SpacetimeDB.** There is no new table, view, reducer or subscription: acts go through `human_act` as today, and `menus()` adds under 1 kB to the `script` row. Section 7's documentation check covers these paths. The official documentation was not re-read for this section, because nothing on the data path changes.
+
+### 8.7 Open questions for the owner
+
+1. **The two-finger press.** Should it open the wheel?
+   - Recommended: not at first; hold F is the one way in. Once sheathe and draw lands, a held two-finger press opens the wheel while the weapon is sheathed, and strikes while it is drawn.
+2. **Choosing before it draws.** Should F plus a quick flick choose without waiting for the wheel to appear? Recommended: yes, with the 80 ms and 30 px guards, tunable in F1.
+3. **A wheel for yourself (C).** Recommended: not now. Revisit after playing with the person wheel.
+4. **The person layout.**
+   - Recommended: the schematic above (Talk n, Give ne, Trade e, Teach se, More s, Their window sw, Look over w, Wave nw), with fixed directions and gaps where a target has fewer acts, rather than spreading the sections evenly.
+   - Tried in-game, not judged from the schematic.
 
 ## References
 
