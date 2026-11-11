@@ -167,7 +167,7 @@ The states cover every skill's verdict and words, duration and effects:
 The results:
 
 - **Carry forced to 1:** this branch answers every state exactly as main does. Error messages are compared without the script line numbers they carry.
-- **This branch as built:** 1,274 states differ from main, and every one holds an arrow or a mark. In the run shown: gathering and clearing a full pack now go ahead. Nothing else differs.
+- **This branch as built:** 1,274 states differ from main, and every one holds an arrow or a mark: give 792, clear 336, take 96, gather 48, the food law's words, and the world text that carries them. A pack of 39 stones and 5 arrows is no longer full, so gathering goes ahead. Nothing else differs. Run against main `94c9e60f`, after merging it.
 
 ## For the client (the laptop)
 
@@ -203,11 +203,17 @@ The recipe grid shows a recipe that needs a tool, a workplace or a lit fire from
 - **Schema.** No table, column, reducer or view changed. The generated bindings are unchanged, and no seed format changed.
 - **Seeds.** `cullet.json`'s residents changed through `author_world.py cullet --compile-only` from the cast: 6 inventories gained their tools. The compile changed nothing else.
 - **Reads and writes.** Building and making write what they did before: the structure row, inventory rows, and a fire's `lit_until_ms` when heat is drawn. A tool is read from the pack the check already reads. No scan was added.
-- **Operations** at install (the most over the samples; limit 2,000; `--nocapture` on `goods_are_data_matched_by_trait_and_fires_eat_fuel` and `descriptions_fit_their_budget`): see [Verification](#verification).
+- **Operations at install** (the most over the samples; the limit is 2,000 and the policy half of it; `--nocapture` on `goods_are_data_matched_by_trait_and_fires_eat_fuel`). The shipped script's heaviest is `smoke_check`, 520. Cullet's is `seasons_text`, 853, unchanged from rules-3. Cullet's other heavy checks:
+  - `make_check` 676, down from 1,262 before the lookups were made cheaper;
+  - `store_check` 821, down from 1,766;
+  - `cook_check` and `smoke_check` 536;
+  - `make_done` 362;
+  - `feed_check` 179.
+- **Operations at compile** (`descriptions_fit_their_budget`, budget 20,000). The island's heaviest are `craft_spec` 1,633, `making_law` 1,453 and `food_law` 945. Cullet's are `workplaces_law` 3,894, `build_spec` 1,945 and `food_law` 1,775.
 
 ## Verification
 
-See the report in [Cullet's rules](CULLET_RULES.md#verification-goods-3).
+See [Cullet's rules](CULLET_RULES.md#goods-3).
 
 ## The generated tables
 
