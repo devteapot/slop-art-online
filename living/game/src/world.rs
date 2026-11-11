@@ -605,6 +605,17 @@ fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
     (m.build(), glow)
 }
 
+/// Whether a structure burns at `now` (authority ms): one whose kind `burns` fuel while its
+/// `lit_until_ms` is ahead, any other always; `burns` None while the world's rules are not
+/// compiled here yet, when one never lit (0) or lit till later counts as burning.
+fn burning(burns: Option<bool>, until: u64, now: u64) -> bool {
+    match burns {
+        Some(true) => living_rules::fire::lit(until, now),
+        Some(false) => true,
+        None => until == 0 || living_rules::fire::lit(until, now),
+    }
+}
+
 /// On a land world the island draws these itself: buildings as lots, gates in its walls, and
 /// trees as its forest (an act names a tree by kind, the nearest one).
 const LAND_DRAWS: &[&str] = &["tree", "house", "hall", "inn", "workshop", "market", "gate"];
@@ -613,19 +624,46 @@ const LAND_DRAWS: &[&str] = &["tree", "house", "hall", "inn", "workshop", "marke
 /// ground under them is known): on tile worlds all of them; on a land world (the island) what it
 /// does not draw itself, standing on its ground (what `verbs.rs` lets F act on).
 #[allow(clippy::too_many_arguments)]
-pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>, island: Option<Res<crate::island::Island>>, assets: Res<AssetServer>) {
+pub fn things(
+    mut commands: Commands,
+    net: NonSend<Net>,
+    mut scene: NonSendMut<Scene>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut mats: ResMut<Assets<Toon>>,
+    mut palette: ResMut<Palette>,
+    style: Res<Style>,
+    island: Option<Res<crate::island::Island>>,
+    (assets, rules): (Res<AssetServer>, Option<NonSend<crate::verbs::Rules>>),
+    mut shown_lit: Local<HashMap<(u8, u64), bool>>,
+) {
     let Some(conn) = &net.conn else { return };
     let mut seen: HashSet<(u8, u64)> = HashSet::new();
     let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
+    // Whether a structure burns now: a kind that `burns` fuel while `lit_until_ms` is ahead of
+    // the authority's clock, any other always (a plain campfire). Before the world's rules have
+    // compiled here, one never lit (0) or lit till later counts as burning.
+    let now = scene.now_ms.max(0.0) as u64;
+    let sc = rules.as_ref().and_then(|r| r.scripts.as_ref());
+    let lit = |kind: &str, until: u64| burning(sc.map(|sc| sc.structure(kind).burns.is_some()), until, now);
     let rows = resources
         .iter()
-        .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.4, 1.0)))
-        .chain(structures.iter().map(|s| ((1u8, s.id), s.kind, s.x, s.y, 1.0)))
+        .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.4, 1.0), true))
+        .chain(structures.iter().map(|s| {
+            let on = lit(&s.kind, s.lit_until_ms);
+            ((1u8, s.id), s.kind, s.x, s.y, 1.0, on)
+        }))
         .filter(|r| island.is_none() || !LAND_DRAWS.contains(&r.1.as_str()));
     let ready = scene.ready() || island.is_some();
     let scene = &mut *scene;
-    for (key, kind, x, y, fill) in rows {
+    for (key, kind, x, y, fill, lit) in rows {
         seen.insert(key);
+        // A kit's fire is drawn again when it is lit or goes out (its glow is in its materials).
+        if shown_lit.get(&key).is_some_and(|was| *was != lit) {
+            if let Some(e) = scene.things.remove(&key) {
+                commands.entity(e).despawn();
+            }
+            shown_lit.remove(&key);
+        }
         if !ready || scene.things.contains_key(&key) {
             continue;
         }
@@ -640,19 +678,27 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
             .clone();
         let at = island.as_ref().map_or_else(|| scene.at3(x, y), |i| Vec3::new(x, i.height(x, y), y));
         // A planned settlement's kit may model the structure (`island::structure_model`): drawn
-        // at its real size, fitted and converted like a lot's model. A fire keeps its flame
-        // unless the model glows itself.
+        // at its real size, fitted and converted like a lot's model. A lit fire's own glowing
+        // materials are damped by daylight as a lot's lit panes are (`lookdev::NightGlow`); one
+        // that is out has none (`lookdev::Unlit`). A model without glow keeps the drawn flame
+        // while it burns.
         if let Some((file, yaw)) = island.as_ref().filter(|_| key.0 == 1).and_then(|i| crate::island::structure_model(&i.land, &kind, Vec2::new(x, y))) {
             let model = crate::lookdev::Model { vrm: false, file: file.clone(), height: 0.0, ground_y: at.y, glow: None };
             let root = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
             let e = commands.spawn((Thing(Vec2::new(x, y)), model, bevy::world_serialization::WorldAssetRoot(root), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)), Visibility::Hidden)).id();
-            if let (Some((g, color)), false) = (glow, crate::lookdev::has_glow(&file)) {
+            if lit {
+                commands.entity(e).insert(crate::lookdev::NightGlow);
+            } else {
+                commands.entity(e).insert(crate::lookdev::Unlit);
+            }
+            shown_lit.insert(key, lit);
+            if let (Some((g, color)), false, true) = (glow, crate::lookdev::has_glow(&file), lit) {
                 let mat = palette.color(&mut mats, &style, color, true);
                 commands.entity(e).with_children(|c| {
                     c.spawn((Mesh3d(g), MeshMaterial3d(mat), Transform::default()));
                 });
             }
-            debug!("things: {kind} #{} drawn as {file}", key.1);
+            debug!("things: {kind} #{} drawn as {file}{}", key.1, if lit { "" } else { " (out)" });
             scene.things.insert(key, e);
             continue;
         }
@@ -672,6 +718,7 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
         }
         scene.things.insert(key, e);
     }
+    shown_lit.retain(|k, _| seen.contains(k));
     scene.things.retain(|k, e| {
         let keep = seen.contains(k);
         if !keep {
@@ -724,5 +771,21 @@ pub fn fade_trees(
         if &mat.0 != want {
             mat.0 = want.clone();
         }
+    }
+}
+
+#[cfg(test)]
+mod fire_tests {
+    use super::burning;
+
+    #[test]
+    fn a_fire_that_eats_fuel_burns_only_until_its_fuel_runs_out() {
+        assert!(burning(Some(true), 2_000, 1_000));
+        assert!(!burning(Some(true), 1_000, 1_000));
+        assert!(!burning(Some(true), 0, 1_000), "never lit");
+        // A plain campfire always burns.
+        assert!(burning(Some(false), 0, 1_000));
+        // Before the rules are known: never lit, or lit till later, burns; run out does not.
+        assert!(burning(None, 0, 1_000) && burning(None, 2_000, 1_000) && !burning(None, 500, 1_000));
     }
 }

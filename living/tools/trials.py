@@ -1715,6 +1715,10 @@ def purpose_model(j, thoughts):
                   "errors": o["errors"], "empty": o["empty"], "repaired": o["repaired"], "invalid": o["invalid"], "profiles": dict(o["profiles"]),
                   "cached": o["cached"], "cost_usd": round(c, 4) if c is not None else None}
     retries = pruned = rejected = 0
+    # Reasons each deliberation carried (`detail.reasons`, since 2026-11-11): `reused` counts
+    # reasons an earlier deliberation of the same service already carried (same words, same
+    # arrival), which should be 0 since the stale-reasons fix.
+    carried = reused = max_before = 0
     for t in thoughts:
         if t.get("kind") == "error":
             rejected += 1
@@ -1725,7 +1729,12 @@ def purpose_model(j, thoughts):
         if isinstance(det, dict):
             retries += max(0, (det.get("attempts") or 1) - 1)
             pruned += 1 if det.get("pruned") else 0
-    res["deliberations"] = {"retried_attempts": retries, "pruned_graphs": pruned, "rejected": rejected}
+            for r in det.get("reasons") or []:
+                carried += 1
+                reused += 1 if r.get("carried_before") else 0
+                max_before = max(max_before, r.get("carried_before") or 0)
+    res["deliberations"] = {"retried_attempts": retries, "pruned_graphs": pruned, "rejected": rejected,
+                            "reasons_carried": carried, "reasons_reused": reused, "max_carried_before": max_before}
     return res
 
 

@@ -318,6 +318,13 @@ pub struct Steer {
     /// Movement input bucket of a player (tokens refill at the `input_hz` law).
     pub tokens: f32,
     pub input_ms: u64,
+    /// A player's look (`human_face`): held while `look_on`, the direction (radians, the same
+    /// angle as `body.heading`) the body turns to. It is an input, like the movement direction
+    /// in `gx`/`gy`; the body's facing is still only `body.heading`.
+    #[default(false)]
+    pub look_on: bool,
+    #[default(0.0f32)]
+    pub look: f32,
 }
 
 /// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):
@@ -676,6 +683,11 @@ pub struct Deliberation {
     pub updated_ms: u64,
     pub scene: String,
     pub revision: u32,
+    /// When each line of `reason` arrived, in milliseconds separated by spaces and aligned with
+    /// its lines: a deliberation consumes the lines its prompt contained (living_rules::reasons).
+    /// A string because a column default must be a constant.
+    #[default("")]
+    pub arrived: String,
 }
 
 // ---- mind projections (observer and behavior inputs) ----------------------
