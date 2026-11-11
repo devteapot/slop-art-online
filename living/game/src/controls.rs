@@ -5,7 +5,8 @@
 //!   intent changes (`input_hz`/`input_burst` laws).
 //! - The mouse buttons and Q/E/R/Shift are the skill bar (`combat.rs`); scripts can still walk
 //!   to a point with `goto`.
-//! - Enter opens proximity chat (`human_say`); only characters within earshot hear it.
+//! - Enter opens proximity chat (`human_say`); only characters within earshot hear it. It is
+//!   addressed to the person pointed at, or the nearest within earshot (`talk.rs`).
 
 use crate::camera::Cam;
 use crate::net::Net;
@@ -174,11 +175,13 @@ pub fn movement(
     let _ = (&mouse, &ui, &time);
 }
 
-/// Send a chat line to whoever is in earshot. Returns whether it was sent.
-pub fn say(net: &Net, text: &str) -> bool {
+/// Send a chat line to whoever is in earshot, addressed to `to` (0: no one in particular).
+/// Returns whether it was sent.
+pub fn say(net: &Net, text: &str, to: u32) -> bool {
     let text = text.trim();
     let Some(conn) = net.conn.as_ref().filter(|_| !text.is_empty()) else { return false };
-    let r = conn.reducers.human_say_then(text.to_string(), 0, net.on_reply("say"));
+    info!("say: \"{text}\" to {}", if to == 0 { "no one in particular".to_string() } else { format!("#{to}") });
+    let r = conn.reducers.human_say_then(text.to_string(), to, net.on_reply("say"));
     let ok = r.is_ok();
     net.report("say", r);
     ok

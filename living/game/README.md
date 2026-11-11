@@ -121,7 +121,7 @@ The simulation logs its cost every 3 s. A 78-joint character costs about 9 µs o
 | Two-finger double tap, middle tap | turn the view until the direction you face is straight ahead |
 | Right click (two-finger click), Q, E, R, Shift | the bow shot, fire bolt, block, heal, dodge |
 | Space | jump (a 1.6 m hop; `jump.rs`, the rules' `jump`) |
-| Enter | say something; only characters within earshot hear it (`human_say`). Enter says it, Esc cancels |
+| Enter | say something; only characters within earshot hear it (`human_say`). The box says whom it is to ("Say to a stranger"): the person under the cursor, else the nearest within earshot by the rules' hearing (`talk.rs`); Tab picks the next one. Enter says it to them, Esc cancels |
 | Alt + mouse | glance around; the view eases back on release |
 | F | act on what is under the cursor or within 3 m: a tap does the likely act (never a gesture), holding opens the list of what the rules allow (`verbs.rs`) |
 | C | the list of acts on yourself (eat, sleep, craft, build, write, …) |

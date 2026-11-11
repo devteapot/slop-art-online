@@ -41,6 +41,7 @@ mod route;
 mod sight;
 mod sightedge;
 mod sky;
+mod talk;
 mod style;
 mod terrain;
 mod town;
@@ -157,6 +158,8 @@ fn main() {
         app.add_plugins(town::TownPlugin);
         // Verbs: acts on what is in front of me and on myself, offered from the world's rules.
         app.add_plugins(verbs::VerbsPlugin);
+        // Whom the text box speaks to: the person pointed at or the nearest within earshot.
+        app.add_plugins(talk::TalkPlugin);
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
         if let Some(d) = demo::Demo::from_env() {

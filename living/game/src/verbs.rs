@@ -512,7 +512,7 @@ impl Plugin for VerbsPlugin {
 
 // ---- what I know of myself and of what I aim at ----------------------------------------
 
-fn stage_name(s: u8) -> &'static str {
+pub(crate) fn stage_name(s: u8) -> &'static str {
     match s {
         0 => "infant",
         1 => "child",
@@ -1016,7 +1016,7 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
         v.errors_seen = 0;
     }
     for e in errs.iter().skip(v.errors_seen) {
-        if let Some(why) = e.strip_prefix("act refused: ") {
+        if let Some(why) = e.strip_prefix("act refused: ").or_else(|| e.strip_prefix("say refused: ")) {
             v.toasts.push(Toast { text: why.to_string(), ok: Some(false), at: now });
         }
     }

@@ -51,7 +51,7 @@ pub struct Last {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, mut last: Local<Last>) {
+pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, talk: Option<Res<crate::talk::Talk>>, mut last: Local<Last>) {
     let now_ms = scene.now_ms;
     let now = now_ms / 1000.0;
     model.shown = true;
@@ -59,8 +59,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.hint = None;
 
     // Requests from the UI.
-    for line in out.say.drain(..) {
-        if controls::say(&net, &line) {
+    for (line, to) in out.say.drain(..) {
+        if controls::say(&net, &line, to) {
             input.said.push((now_ms as u64, line.trim().to_string()));
         }
     }
@@ -219,8 +219,10 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             exact: (c.hp >= 0.0 && c.max_hp > 0.0).then_some((c.hp, c.max_hp)),
         });
     }
-    // Targeted skills go to the creature under or nearest the cursor (`combat.rs` picks it).
-    let target_id = combat.target;
+    // Targeted skills go to the creature under or nearest the cursor (`combat.rs` picks it);
+    // while the text box is open, the target shown is whom it speaks to (`talk.rs`).
+    let speaking_to = talk.as_ref().filter(|_| input.chat_open).and_then(|t| t.to);
+    let target_id = speaking_to.or(combat.target);
     for a in &mut actors {
         a.targeted = Some(a.id as u32) == target_id;
     }
