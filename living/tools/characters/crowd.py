@@ -3,7 +3,8 @@
 and memory, with every person a different file, at the game camera.
 
     python3 living/tools/characters/crowd.py TOWN_DIR OUT_DIR [--count 64] [--seconds 24] [--size 1600x900]
-                                             [--runs empty,vroid,ours[,same]] [--perf FLAGS] [--springs 0|1] [--tag=-NAME]
+                                             [--runs empty,vroid,ours[,far][,same]] [--set NAME=TOWN_DIR ...]
+                                             [--repeat N] [--perf FLAGS] [--springs 0|1] [--tag=-NAME]
 
 TOWN_DIR is a town made by town.py (its `town.json` names the people; their models are
 lookdev/anim/own-<name>.glb). The people stand in the game's own crowd (`LIVING_GAME_CROWD`,
@@ -12,6 +13,11 @@ people are what is measured; `cullet` is the grey city with its own walkers), se
 default game camera (22 m, 28° down), each playing its idle clip. Three runs, each in a fresh process, uncapped:
 
 - `ours`: --count generated people, each a different file;
+- `far` (not run by default): the same people's far models (lookdev/far/own-<name>.glb, town.py
+  --lod near,far). At the game camera everyone is beyond 10 m, so this is what a client that
+  switches models by distance would draw;
+- any `--set NAME=TOWN_DIR`: another town's people under that name, and `NAME-far` their far
+  models. Name a run twice in --runs to interleave two sets (`--runs old,new,new,old`);
 - `same` (not run by default): --count generated people, all one file, to tell what many
   different files cost from what many people cost;
 - `vroid`: the same count of the VRoid bases the game used before (two files, recoloured);
@@ -83,9 +89,10 @@ def crowd_slots(n, seed):
     return out
 
 
-def book_for(people, n):
-    """A recipe book whose crowd of n is n different people: the bases list and the crowd's seed."""
-    files = [f"lookdev/own-{p['name']}.glb" for p in people]
+def book_for(people, n, sub=""):
+    """A recipe book whose crowd of n is n different people: the bases list and the crowd's seed.
+    `sub` is the models' folder under lookdev/ (`far/` for the far models)."""
+    files = [f"lookdev/{sub}own-{p['name']}.glb" for p in people]
     for length in (4093, 8191, 16381):
         for seed in range(1, 400):
             idx = [base_draw(s, folk) % length for folk, s in crowd_slots(n, seed)]
@@ -223,6 +230,7 @@ def main():
     ap.add_argument("--seconds", type=float, default=24)
     ap.add_argument("--size", default="1600x900")
     ap.add_argument("--runs", default="empty,vroid,ours")
+    ap.add_argument("--set", action="append", default=[], metavar="NAME=TOWN_DIR", help="another town's people as a run of that name (and NAME-far, their far models)")
     ap.add_argument("--perf", default="", help="more LIVING_GAME_PERF flags for every run (e.g. nooutlines)")
     ap.add_argument("--springs", default="", help="LIVING_GAME_SPRINGS for every run (0 turns spring bones off)")
     ap.add_argument("--repeat", type=int, default=1, help="run the whole list this many times, interleaved; frame times are then reported as median, least and most (a shared machine's load moves them)")
@@ -230,6 +238,11 @@ def main():
     ap.add_argument("--env", default="meadow", help="the environment the crowd stands in (envs/<id>.json; `lineup` is the look-dev line-up, which also shows every file in lookdev/)")
     a = ap.parse_args()
     people = json.load(open(os.path.join(a.town, "town.json")))["people"]
+    sets = {"ours": (people, ""), "same": (people, ""), "far": (people, "far/")}
+    for item in a.set:
+        name, town = item.split("=", 1)
+        other = json.load(open(os.path.join(town, "town.json")))["people"]
+        sets[name], sets[name + "-far"] = (other, ""), (other, "far/")
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
     extra = {}
@@ -245,12 +258,16 @@ def main():
             return run_game(out, name + a.tag, extra, a.seconds, a.size, a.env, photo)
         if name == "vroid":
             return run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:1"), a.seconds, a.size, a.env, photo)
-        if name in ("ours", "same"):
+        if name in sets:
             book = json.loads(original)
-            bases, seed = book_for(people, a.count)
+            who, sub = sets[name]
+            missing = [p["name"] for p in who if not os.path.exists(os.path.join(REPO, "living", "game", "assets", "lookdev", sub, f"own-{p['name']}.glb"))]
+            if missing:
+                raise SystemExit(f"--runs {name}: no model lookdev/{sub}own-{missing[0]}.glb ({len(missing)} missing)")
+            bases, seed = book_for(who, a.count, sub)
             if name == "same":
                 # Everyone the same file: what the people cost when nothing differs between them.
-                grown = next(p for p in people if p["params"]["age"] >= 18)
+                grown = next(p for p in who if p["params"]["age"] >= 18)
                 bases = [f"lookdev/own-{grown['name']}.glb"]
             one_ = dict(height=[1.72, 1.72], **{k: [1.0, 1.0] for k in ("legs", "arms", "torso", "neck", "head", "shoulders", "hips", "build", "hands", "feet")})
             small = dict(one_, height=[1.25, 1.25], head=[1.2, 1.2])
@@ -262,7 +279,7 @@ def main():
             finally:
                 with open(RECIPES, "w") as f:
                     f.write(original)
-        raise SystemExit(f"--runs: {name!r} is not one of empty, vroid, ours, same")
+        raise SystemExit(f"--runs: {name!r} is not one of empty, vroid, {', '.join(sets)}")
 
     def load():
         return float(open("/proc/loadavg").read().split()[0])
@@ -271,10 +288,10 @@ def main():
         for k in range(a.repeat):
             for name in a.runs.split(","):
                 before = load()
-                r = one(name, photo=k == a.repeat - 1)
+                r = one(name, photo=name not in rounds)  # each set is photographed once, on its first run
                 r["load_average"] = round((before + load()) / 2, 1)
                 rounds.setdefault(name, []).append(r)
-                print(json.dumps({x: r.get(x) for x in ("run", "frame_ms", "interval_ms_p50", "gpu_ms", "people_materials", "people_meshes", "people_ktris", "rss_mb", "gpu_mb", "load_average")}))
+                print(json.dumps({x: r.get(x) for x in ("run", "frame_ms", "interval_ms_p50", "gpu_ms", "people_materials", "people_meshes", "people_ktris", "rss_mb", "gpu_mb", "load_average")}), flush=True)
         for name, rs in rounds.items():
             r = dict(rs[-1])
             for key in ("frame_ms", "interval_ms_p50", "interval_ms_p95", "interval_ms_p99", "gpu_ms", "rss_mb", "gpu_mb", "springs_us", "anim_us", "load_average"):
@@ -283,6 +300,8 @@ def main():
                     r[key] = vals[len(vals) // 2]
                     r[key + "_range"] = [vals[0], vals[-1]]
             r["rounds"] = len(rs)
+            # Every run of this set in the order it was made, to compare sets round by round.
+            r["each"] = [{k: x.get(k) for k in ("frame_ms", "interval_ms_p50", "gpu_ms", "rss_mb", "gpu_mb", "load_average")} for x in rs]
             results.append(r)
     finally:
         with open(RECIPES, "w") as f:

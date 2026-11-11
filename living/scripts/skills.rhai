@@ -129,6 +129,78 @@ fn senses_law() {
     }
 }
 
+// ---- ways of speaking (read once per script revision; the speech primitive applies them) ----
+// Each `<way>_speech()` is a way to say a line (docs/COMMUNICATION.md). Speech is not a skill: it
+// never interrupts what the body is doing. The engine reads these maps when the script compiles
+// and refuses a key it does not know, so a way cannot claim what the engine does not do.
+//   about        what the way is, for minds (the world text) and players (the talk box).
+//   label, order the word a client shows for it, and where it comes among the ways.
+//   to           "optional" (the room, or one person) or "required" (one person).
+//   words        who receives the words: `hearing` a share of each listener's own hearing,
+//                or `within_m` metres (and never beyond the listener's hearing); `only_to:
+//                true` gives them to the addressee alone.
+//   noticed      who learns only that it was said, between whom: within `within_m`, those who
+//                see the speaker (`seen`), as rows of `kind` reading `text` ({a} the speaker,
+//                {b} the addressee as each one knows them).
+//   said, said_to, heard, heard_to, heard_to_you   the words of the rows, before the line
+//                itself (`: "…"` follows): {a} the speaker, {b} the addressee, {d} how far
+//                the speaker is from the one who reads it (metres).
+//   kind         the kind of the rows that carry the words ("speech").
+//   animals      what an animal in range hears ("" nothing).
+//   gap_s        seconds between two lines of this way (never under the 2 s speaking limit).
+//   max_chars    longer lines are cut short.
+//   needs        a technique of `know_how()` the speaker must know.
+//   reach        the addressee must be within this many metres.
+//   needs_sight  the addressee must be in sight.
+//   introduces   a line with the speaker's own name tells it to those who receive the words.
+//   names        a line to someone that holds their name tells it to those who receive the
+//                words and see whom it was for (default: unless the words are for one ear).
+//   salience     #{ addressed, overheard }.
+// A way's refusals are its `<way>_check(a)`: "" accepts the line, anything else refuses it in
+// those words. The reducer returns exactly them, and the game client, which compiles this
+// script, runs the same check before it sends, so a player sees the same words either way.
+// `a.target` is the addressee (class "none" for the room; one who is not there, absent or dead,
+// is a creature not alive and very far), `a.text` the line, `a.qty` the milliseconds since the
+// speaker's last line in this way (4000000000 if never); nothing else (the install refuses a
+// check that reads another field, such as the hour, which a client could not give). Both call
+// `living_rules::script::speech::check_way`. A way that requires an addressee, a
+// reach, a technique or a gap must refuse a line that breaks it (the install tries). Only the
+// engine's own refusals are not here: a way it does not know, and two lines within 2 s.
+fn say_speech() {
+    #{ label: "Say", order: 0, about: "Speak aloud. Everyone within earshot hears you, also when you speak to one person.",
+       words: #{ hearing: 1.0 }, to: "optional", gap_s: 2.0, max_chars: 400 }
+}
+// How far a whisper goes, and how near one sees that someone whispered.
+fn whisper_reach() { 1.5 }
+fn whisper_noticed_within() { 6.0 }
+fn whisper_check(a) {
+    if a.target.class == "none" { return "a whisper needs someone to whisper to"; }
+    if !a.target.alive || a.target.dist > whisper_reach() { return "too far to whisper: step closer"; }
+    ""
+}
+fn whisper_speech() {
+    #{ label: "Whisper", order: 1,
+       about: `Whisper to someone beside you (within ${short(whisper_reach())} m). Only they hear the words; people within ${short(whisper_noticed_within())} m who see you may notice that you whispered to them, but not what.`,
+       to: "required", reach: whisper_reach(), words: #{ within_m: whisper_reach(), only_to: true }, kind: "whisper",
+       noticed: #{ within_m: whisper_noticed_within(), seen: true, kind: "whispered", text: "{a} whispers something to {b}.", salience: 0.3 },
+       said: "You whispered", said_to: "You whispered to {b}", heard_to_you: "{a} whispers to you", gap_s: 2.0, max_chars: 400 }
+}
+// A call carries this many times a voice, to people and animals alike, and comes at most once
+// every few seconds.
+fn call_carry() { 2.5 }
+fn call_gap_s() { 6.0 }
+fn call_check(a) {
+    if a.qty < (call_gap_s() * 1000.0).to_int() { return "too soon to call out again: wait a few seconds"; }
+    ""
+}
+fn call_speech() {
+    #{ label: "Call out", order: 2,
+       about: `Call out over a distance: everyone within ${short(hearing_of_people() * call_carry())} m hears you, and animals too (a shout can startle deer or draw wolves). Short lines (80 characters), at most one every ${short(call_gap_s())} s.`,
+       to: "optional", words: #{ hearing: call_carry() }, animals: "a person shouting",
+       said: "You called out", said_to: "You called out to {b}", heard: "{a} calls out from about {d} m", heard_to: "{a} calls out to {b} from about {d} m", heard_to_you: "{a} calls out to you from about {d} m",
+       gap_s: call_gap_s(), max_chars: 80 }
+}
+
 // ---- moving (a law per creature, on the hot path) -----------------------------------
 // How a creature moves besides its walking pace (`move_speed`): its run, its flight and the
 // pace it steps aside at, as shares of its walk; how fast it turns (radians a second) and how
@@ -183,12 +255,15 @@ fn inv(a, item) {
 //           holds: the most units it takes }. It is lit only while it holds fuel, warms and
 //           lights only while lit, goes out when its fuel is spent and is lit again by feeding
 //           it (feed). Its fuel is not an item to take back.
+//   holds   a store: the most things it holds in all (store into it, take from it)
+//   like    the kind it counts as wherever a kind is asked by name (a world's `store` with
+//           `like: "storage"` is found by a graph's `nearest storage`)
 // Other traits are the rules' own data.
 fn structures() {
     [
         #{ name: "campfire", warms: true },
         #{ name: "shelter", roof: true },
-        #{ name: "storage" }, #{ name: "remains" }, #{ name: "sign" }, #{ name: "bush_patch" },
+        #{ name: "storage", holds: 120 }, #{ name: "remains" }, #{ name: "sign" }, #{ name: "bush_patch" },
         #{ name: "house", warms: true, roof: true }, #{ name: "gate" }, #{ name: "trap" },
         #{ name: "hall", warms: true, roof: true }, #{ name: "workshop", roof: true }, #{ name: "market" },
         #{ name: "inn", warms: true, roof: true },
@@ -476,6 +551,8 @@ fn gather_duration(a) {
 // Every kind of resource, in order (read once when the script compiles):
 //   yields      what one gathering gives
 //   regrow_per_h  units it regrows a game hour of growing time, up to its max
+//   regrow_by_season  the share of that rate in each season, #{ spring, summer, autumn,
+//               winter } (a season left out, or no trait: full, and none in winter)
 //   max         units a node of it holds when full
 //   ground      the ground a settlement's promised nodes of it are placed on (`resources` in a
 //               town of the seed), and by_water: only beside water
@@ -847,13 +924,15 @@ fn give_check(a) {
 fn give_duration(a) { 1000 }
 fn give_done(a) { [#{ op: "give", item: a.item, qty: amount(a) }] }
 
-// A storage holds this many things in all; a full one takes no more.
-fn storage_holds(x) { 120 }
+// A store holds what its kind `holds` in all (a storage 120 things); a full one takes no more.
+// () for a kind that is no store.
+fn holds_of(kind) { structure_trait(kind, "holds") }
 fn store_check(a) {
-    if a.target.kind != "storage" { return "can only store in a storage"; }
+    let room = holds_of(a.target.kind);
+    if room == () { return "can only store in a storage"; }
     let held = 0;
     for k in a.target.inv.keys() { held += a.target.inv[k]; }
-    if held + amount(a) > storage_holds(0) { return `the storage is full (it holds ${held} of ${storage_holds(0)} things)`; }
+    if held + amount(a) > room { return `the storage is full (it holds ${held} of ${room} things)`; }
     if inv(a, a.item) < amount(a) { return `not enough ${a.item} (${a.item}: ${source_of(a.item)})`; }
     ""
 }
@@ -861,7 +940,7 @@ fn store_duration(a) { 1000 }
 fn store_done(a) { [#{ op: "store", item: a.item, qty: amount(a) }] }
 
 fn take_check(a) {
-    if a.target.kind != "storage" && a.target.kind != "remains" && a.target.kind != "trap" { return "nothing to take from"; }
+    if holds_of(a.target.kind) == () && a.target.kind != "remains" && a.target.kind != "trap" { return "nothing to take from"; }
     let have = a.target.inv[a.item];
     if have == () || have < 1 { return `no ${a.item} there`; }
     if pack_full(a) { return "your pack is full (eat, store, give or drop some first)"; }
@@ -1729,6 +1808,38 @@ fn leave_done(a) { [#{ op: "leave" }] }
 // Specs are read by minds to compose routines from skills: build them from the same numbers
 // as the rules so they change when the rules do.
 
+// How much each kind of store holds: "a storage holds 120 things in all", and any other's.
+fn stores_text() {
+    let out = "";
+    for k in having("structures", "holds") {
+        out += if out == "" { `a ${k} holds ${holds_of(k)} things in all` } else { `; a ${k} ${holds_of(k)}` };
+    }
+    out
+}
+// What minds are told winter does to the land, after the calendar (`Scripts::seasons_words`):
+// from each resource kind's share of its regrowth in winter (`regrow_by_season`).
+fn winter_share(kind) {
+    let r = entry_of("resources", kind);
+    if r == () || r.regrow_by_season == () || r.regrow_by_season.winter == () { 0.0 } else { r.regrow_by_season.winter }
+}
+fn and_list(parts) {
+    let out = "";
+    for i in 0..parts.len() { if i > 0 { out += if i == parts.len() - 1 { " and " } else { ", " }; } out += parts[i]; }
+    out
+}
+fn seasons_text() {
+    let ever = []; let slow = []; let rest = [];
+    for k in names_of("resources") {
+        let w = winter_share(k);
+        if w <= 0.0 { rest.push(k); } else if w < 1.0 { slow.push(k); } else { ever.push(k); }
+    }
+    if ever.is_empty() && slow.is_empty() { return "In winter nothing regrows and nights are colder: store food before it."; }
+    let parts = [];
+    if !ever.is_empty() { parts.push(`${and_list(ever)} regrow${if ever.len() == 1 { "s" } else { "" }} as in the other seasons or more`); }
+    if !slow.is_empty() { parts.push(`${and_list(slow)} more slowly`); }
+    let none = if rest.is_empty() { "" } else { `, and ${and_list(rest)} not at all` };
+    `In winter ${parts[0]}${if parts.len() > 1 { ", " + parts[1] } else { "" }}${none}. Nights are colder: store food before it.`
+}
 fn list(parts) {
     let out = "";
     for p in parts { if out != "" { out += ", "; } out += p; }
@@ -1865,7 +1976,7 @@ fn give_spec() {
 fn store_spec() {
     #{ latch: true, notable: true, target: true, item: true, args: ["qty"], reach: 1.5,
        about: "Put items from your pack into a storage beside you. Storing into someone's household store is how goods are delivered to them while they are away.",
-       takes: `the items from your pack, a storage in reach with room (a storage holds ${storage_holds(0)} things in all)`, gives: "the items in the storage" }
+       takes: `the items from your pack, a storage in reach with room (${stores_text()})`, gives: "the items in the storage" }
 }
 fn take_spec() {
     #{ latch: true, notable: true, target: true, item: true, args: ["qty"], reach: 1.5,
@@ -2098,7 +2209,7 @@ fn rest_shows() { #{ look: "rest" } }
 // The sections of the minds' world text, in order: [topic, heading]. `seasons` and `life` are
 // the world's own (its calendar and its people's life table) and come from the seed.
 fn world_topics() {
-    [["time", ""], ["senses", "SENSES"], ["moving", "MOVING"], ["seasons", "SEASONS"], ["body", "BODY"], ["know_how", "KNOW-HOW"],
+    [["time", ""], ["senses", "SENSES"], ["speech", "SPEAKING"], ["moving", "MOVING"], ["seasons", "SEASONS"], ["body", "BODY"], ["know_how", "KNOW-HOW"],
      ["food", "FOOD"], ["making", "MAKING"], ["settlements", "SETTLEMENTS"], ["life", "LIFE"], ["combat", "COMBAT"], ["force", "FORCE"],
      ["communities", "COMMUNITIES"], ["purpose", "TIME"], ["others", "OTHERS"]]
 }

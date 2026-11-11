@@ -15,7 +15,7 @@ Preconditions: run from the repository root. If SpacetimeDB is down, run `docker
 .agents/skills/verify-llm/scripts/verify_llm.py --run llm-$(date +%Y%m%d-%H%M%S)
 ```
 
-The command builds with `cargo build --manifest-path living/Cargo.toml -p living-mind --release`, checks all nine fake-server scenarios, runs the `llm::tests` checks, including pacing, priority and a direct fake HTTP exchange, then launches one fresh `verify-llm-*` database per case through `verify.py`. Each launch passes `doctor` before any mind starts. It drives every local feature in [features/README.md](features/README.md). The first `think` node waits for the authority's 45-second settling period. The timeout case deliberately waits for the real 180-second HTTP timeout.
+The command builds with `cargo build --manifest-path living/Cargo.toml -p living-mind --release`, checks all ten fake-server scenarios, runs the `llm::tests` checks, including pacing, priority and a direct fake HTTP exchange, then launches one fresh `verify-llm-*` database per case through `verify.py`. Each launch passes `doctor` before any mind starts. It drives every local feature in [features/README.md](features/README.md). The first `think` node waits for the authority's 45-second settling period. The timeout case deliberately waits for the real 180-second HTTP timeout.
 
 To repeat a specific case on a new database:
 
@@ -31,7 +31,7 @@ The runner checks that the container's `/wasm` bind mount exists and is writable
 
 ## Evidence and cleanup
 
-The command prints each evidence directory under `.local/living/verify/<suite>-<case>/`. The suite directory contains `build.log`, `cargo-tests.log` and `results.json`. Each case keeps the temporary models file, fake scripts and request logs, `mind.log`, `driver.log`, shared `actions.log`, authority snapshots, `result.json` or `failure.txt`, and `cleanup.json`.
+The command prints each evidence directory under `.local/living/verify/<suite>-<case>/`. The suite directory contains `build.log`, `cargo-tests.log` and `results.json`. Each case keeps the temporary models file, fake scripts and request logs, the mind's consolidation outcome lines (`journal/outcomes/consolidations.jsonl`), `mind.log`, `driver.log`, shared `actions.log`, authority snapshots, `result.json` or `failure.txt`, and `cleanup.json`.
 
 Cleanup sends SIGTERM by owned pid and records any SIGKILL escalation. It copies every actor journal into the case's `journal/`, checks byte equality, then removes only `.local/living/journal/verify-llm-<suite>-<case>/`. Shared `verify.py cleanup` deletes the database and confirms HTTP SQL 404 before marking state unpublished. The helper records that verified state in `cleanup.json`. The existing SpacetimeDB container stays running.
 
@@ -45,7 +45,7 @@ Never use a reference world or a broad process-name kill. Use a new run name for
 
 ## Reuse the fake server
 
-[references/fake-llm.md](references/fake-llm.md) documents the interface shared with `verify-minds` and `verify-knowledge`, including scripted replies, 429 and 500, delay, timeout, malformed JSON, content arrays and a closed listening port.
+[references/fake-llm.md](references/fake-llm.md) documents the interface shared with `verify-minds` and `verify-knowledge`, including scripted replies, 429 (a rate limit or Mistral's out-of-capacity body) and 500, delay, timeout, malformed JSON, content arrays and a closed listening port.
 
 ```bash
 .agents/skills/verify-llm/scripts/fake_llm.py --port 18181 --log .local/living/verify/llm-manual/requests.jsonl --scenario valid

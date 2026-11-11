@@ -176,7 +176,10 @@ def talk(run, c):
 def items(run, c):
     s = "items"
     a, b = residents(run)
-    before = sum(r["qty"] for r in sql(run, f"SELECT item, qty FROM inventory WHERE owner = {a} AND item = 'berries'"))
+    # The gives are proven by their outcomes, not by the receiver's berries: a resident is free
+    # until the scene holds it (sync:scene, once the client is ready) and eats, gathers and gives
+    # berries meanwhile, so a count taken before the drive is no baseline (verify-player's rule).
+    t0 = int(time.time() * 1000) - 1000
     plan = ("ready;sync:scene;sync:kit;wait:1.5;menu:f@id:{A};wait:0.5;click:@acts:0:window;wait:0.6;dump:01;key:KeyI:tap;wait:0.6;shot:01_pack_person;dump:02;"
             "click:@pack:berries;wait:0.5;shot:02_item_acts;dump:03;key:Escape:tap;wait:0.3;slide:@pack:berries>@win:Person{A}:head:0.8;wait:2;shot:03_dropped;dump:04;"
             "menu:f@id:{A};wait:0.5;shot:04_hold_f;dump:05;click:@acts:0:give;wait:0.5;shot:05_give_sub;dump:06;click:@acts:1:berries;wait:2;shot:06_given;quit").replace("{A}", str(a))
@@ -194,8 +197,18 @@ def items(run, c):
     c.check(s, "Give › opens the items beside the list", ((d["06"] or {}).get("acts") or {}).get("group") == "give")
     gives = len(re.findall(rf'"do":"give","item":"berries","qty":1,"target":\{{"id":{a}\}}', L))
     c.check(s, "two gives sent through human_act", gives == 2, f"{gives} sent")
-    after = sum(r["qty"] for r in sql(run, f"SELECT item, qty FROM inventory WHERE owner = {a} AND item = 'berries'"))
-    c.check(s, "the authority moved 2 berries to them", after - before == 2, f"{before} -> {after}")
+    me = (json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}).get("me")
+    # The authority goes on after the client quits: wait up to 10 s for both outcomes.
+    gave, gifts = [], []
+    for _ in range(20):
+        gave = [r for r in sql(run, f"SELECT at_ms, text FROM experience WHERE observer = {me} AND kind = 'act'") if r.get("at_ms", 0) >= t0] if me else []
+        gifts = [r for r in sql(run, f"SELECT at_ms, text FROM experience WHERE observer = {a} AND kind = 'gift'") if r.get("at_ms", 0) >= t0]
+        if len([r for r in gave if "gave 1 berries" in r["text"]]) >= 2 and len(gifts) >= 2:
+            break
+        time.sleep(0.5)
+    done = [r["text"] for r in gave if "gave 1 berries" in r["text"]]
+    c.check(s, "the rules carried out both gives (the player's act outcomes)", len(done) == 2, f"{len(done)} done; outcomes {[r['text'] for r in gave]}")
+    c.check(s, "and both reached them (their gift experiences)", len(gifts) == 2, f"{len(gifts)} gifts")
 
 
 def themes(run, c):

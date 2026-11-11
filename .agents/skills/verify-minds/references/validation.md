@@ -1,5 +1,34 @@
 # Internal mind validation
 
+## 2026-11-11 speech-2: whisper and call through minds; privacy for every way (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `privacy.py` passes for each way, with the trial Neo4j (0 nodes left):
+  - `minds-privacy2-say` and `minds-privacy2-ctl` (control: caught in experience rows, prompts, memory and the client);
+  - `minds-privacy4-whisper`: only the addressee has the words; the bystander mind and the near player each got four "… whispers something to …" rows without them;
+  - `minds-privacy4-call`: carry 22.5 m, the far group beyond it.
+- `minds-privacy3-whisper` was refused at publish ("has no `whisper_check(a)`"): it was built from a half-edited tree during the refactor. That is the install check working; the run is void.
+- `speech` case: `minds-speech10` passes: a reply with `"way": "say"` spoken; `"shout"` said aloud; a whispered question from 1 m answered "(whisper)" with no way named (the prompt says it was whispered); a call from 15 m answered "(call)" (the prompt reads "MindsTeller calls out to you from about 14 m. An ordinary voice carries 9 m …" and lists the ways); `introduced`, `heard` and the tagged consolidation as on `speech-1`. Earlier attempts on `speech-2` failed on the case's own scripting: `-2b` (the fake's rules matched an earlier line kept in the conversation; the latest line's rule comes first now); `-5` (a listener takes at most its stamina's turns per exchange, so the call now waits out the 90 s quiet); `-6` and `-7` (lines that asked nothing were answered only by chance; the lines are questions now); `-8` and `-9` (the distance was missing from the prompt; the mind now quotes its own row's words, then the assertion allowed only 15 m against the 14 m measured).
+- The mind's own tests pass (82). One run (`minds-speech2d`) failed `fake_transport_records_caching_usage_and_paced_429_recovery` on its 180 ms queue-wait bound under load; `llm.rs` is not changed here, and it passed in every other run.
+- After merging origin/main (`93019a3`): `minds-speech12` passes (mind tests 92 passed); `minds-privacy6-whisper` passes. `minds-speech11` stopped at the mind's own tests: `llm::tests::unreachable_provider_holds_calls` exceeded its timing bound (1.99 s) under load. `llm.rs` is not changed on this branch, and the test passed on the rerun.
+- After merging origin/main (`48cd022`, fov-1; the table renamed `line_heard`): `minds-speech13` passes (mind tests 93 passed); `minds-privacy9-whisper` and `minds-privacy9-say` pass.
+
+## 2026-11-11 speech-1: ways and the privacy of words (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `privacy.py` (new), with the trial stack's Neo4j under each run's own name (0 nodes left after):
+  - `minds-privacy-say2` passes: no violations, all positive controls, every mind consolidated after the lines.
+  - `minds-privacy-ctl2` (`--control`) passes: the check caught the bystander's words in experience rows, prompts and memory, and the near player's in `my_experience`.
+  - `-say1`/`-ctl1` failed on the driver's own defects: the fake fills placeholders only for rules marked `cite`; the prompt channel read the reply too; the wait could end on a consolidation from before the lines.
+- `speech` case (new): `minds-speech4` passes: a reply with `"way": "say"` spoken, `"shout"` said aloud, one `introduced` row, a `heard` row, the second talk prompt reads the mind's line "(heard by MindsTeller, …)", and the consolidation request carries the tagged introduction.
+- Earlier attempts:
+  - `minds-speech1` spoke before the mind's first deliberation (no turn).
+  - `minds-speech2` had the "heard by" assertion too narrow (residents nearby are listed too).
+  - `minds-speech3` (and on `speech-2` `-4b` and `-6`): the player's first line drew no talk turn. The cause is not a race in the mind. The line ("I am MindsTeller. Good day to you.") asks nothing, and talk.rs answers a remark that asks nothing with probability 0.3 + 0.65 × sociability/100, as designed; it logs the skip only at debug level. The case's first line is now a question.
+- Not run: the rest of the suite.
+
 ## 2026-11-11 rules-offers-2: a mind answers by id (Spark)
 
 Branch `rules-offers-2`, on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. Scoped maintain pass on dealings (dealings.md, README, SKILL.md).
