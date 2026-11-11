@@ -363,16 +363,16 @@ pub struct Character {
 /// side; turning counter-clockwise seen from above). Callers add their own markers.
 pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at: Vec3, yaw: f32) -> Entity {
     let file = crate::lookdev::animated(&recipe.base);
-    let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
     // VRM 0.x models face −Z.
     let model = Model { vrm: true, file: file.clone(), height: recipe.height, ground_y: at.y, glow: None };
+    let root = kept(assets, &file);
     commands
         .spawn((
             model,
             Character { recipe: recipe.clone(), stride: 1.0 },
             crate::lookdev::CastsShadow::default(),
-            WorldAssetRoot(handle),
-            FileHandle(kept(assets, &file)),
+            SceneOf(root.clone()),
+            FileHandle(root),
             Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw + PI)),
             Visibility::Hidden,
         ))
@@ -383,6 +383,7 @@ pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at:
 /// root go once loaded; the clips' later load of the root (`lookdev::clips`) then read the whole
 /// file again, which replaced its scene asset and rebuilt every instance about 20 frames in, with
 /// new bone entities: proportions, outfits and springs set up on the old bones were lost.
+/// Loading the label and the root together read it twice as well ([`SceneOf`]).
 ///
 /// The root is also kept for the rest of the session ([`kept`]): when the last character of a
 /// base despawned (leaving a town drops its people), the next one to spawn read the whole file
@@ -405,12 +406,119 @@ pub fn kept(assets: &AssetServer, file: &str) -> Handle<bevy::gltf::Gltf> {
     KEPT.get_or_init(Default::default).lock().unwrap().entry(file.to_string()).or_insert_with(|| assets.load(file.to_string())).clone()
 }
 
-/// Warn if a shaped character's skeleton is replaced anyway (a scene asset changed): its
-/// proportions, outfit and springs stay on the old bones.
+/// A model whose scene spawns from its file's root glTF once that is loaded ([`place_scenes`]),
+/// in place of a `WorldAssetRoot` of the file's `#Scene0` label from the start.
+///
+/// Bevy 0.20 loads a label by force-loading its root (`HandleLoadingMode::Force` in
+/// `AssetServer::load_internal`) even while a load of the root itself is under way
+/// (bevy#10549). A character asked for both in the same frame (its scene's label and the root
+/// [`kept`] for its clips), so a file was read twice. The second read replaced the scene asset
+/// (`AssetEvent::Modified`), and Bevy respawned every instance already made from the first, on
+/// new bone entities: 0 to 6 of 64 people a run lost their proportions (crowd-1). Asking for the
+/// root alone reads it once, and the scene is the root's own `scenes[0]`.
+#[derive(Component)]
+pub struct SceneOf(pub Handle<bevy::gltf::Gltf>);
+
+/// Give each [`SceneOf`] model its scene once its file is in.
+pub fn place_scenes(mut commands: Commands, gltfs: Res<Assets<bevy::gltf::Gltf>>, assets: Res<AssetServer>, q: Query<(Entity, &SceneOf), Without<WorldAssetRoot>>) {
+    for (e, s) in &q {
+        if let Some(g) = gltfs.get(&s.0) {
+            match g.scenes.first() {
+                Some(scene) => {
+                    commands.entity(e).insert(WorldAssetRoot(scene.clone()));
+                }
+                None => {
+                    warn!("characters: {:?} has no scene", assets.get_path(&s.0));
+                    commands.entity(e).remove::<SceneOf>();
+                }
+            }
+        } else if let Some(bevy::asset::LoadState::Failed(err)) = assets.get_load_state(&s.0) {
+            warn!("characters: {:?} did not load: {err}", assets.get_path(&s.0));
+            commands.entity(e).remove::<SceneOf>();
+        }
+    }
+}
+
+/// How many times a character's scene has been spawned.
+#[derive(Component)]
+pub struct Spawns(pub u32);
+
+/// A character's scene was spawned again (on new bone entities): what was built on the old ones
+/// was let go ([`forget_scene`]) and is built again by the usual systems — fitting, proportions
+/// (`shape`), the rig, springs, outfit, the far model's lists, the clips and the look's bones.
+/// Anything else that sets a character's bones once must listen to this: a type's identity bones
+/// (docs/CHARACTERS.md, "The client format") belong in `shape`, which runs again.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Rebuilt {
+    // Nothing reads it yet: step 3's identity bones will.
+    #[allow(dead_code)]
+    pub entity: Entity,
+}
+
+/// Count each character's scene spawns; on a second one, let go of what was built on the old
+/// scene, so it is built again on the new one.
+fn on_ready(
+    ev: On<bevy::world_serialization::WorldInstanceReady>,
+    mut commands: Commands,
+    mut chars: Query<(&Character, Option<&mut Spawns>)>,
+    children: Query<&Children>,
+    pieces: Query<(), With<outfit::Piece>>,
+    mut rebuilt: MessageWriter<Rebuilt>,
+) {
+    let e = ev.entity;
+    let Ok((ch, spawns)) = chars.get_mut(e) else { return };
+    let Some(mut n) = spawns else {
+        commands.entity(e).insert(Spawns(1));
+        return;
+    };
+    n.0 += 1;
+    if crate::perf::has("nokeep") {
+        return;
+    }
+    info!("characters: {}'s scene was spawned again ({} times); fitting and shaping it again", ch.recipe.name, n.0);
+    forget_scene(&mut commands, e, children.get(e).into_iter().flatten().copied().filter(|c| pieces.contains(*c)));
+    rebuilt.write(Rebuilt { entity: e });
+}
+
+/// `LIVING_GAME_PERF=rebuild=S` (perf.rs): S seconds after the first load's cover lifts, spawn
+/// every character's scene again, through Bevy's own respawn of a changed `WorldAssetRoot`.
+fn force_rebuild(loading: Option<Res<crate::loading::Loading>>, time: Res<Time>, mut roots: Query<(&Character, &mut WorldAssetRoot)>, mut at: Local<Option<f32>>, mut done: Local<bool>) {
+    let Some(after) = crate::perf::value("rebuild") else { return };
+    if *done || !crate::loading::Loading::clear(loading.as_deref()) {
+        return;
+    }
+    let now = time.elapsed_secs();
+    let at = *at.get_or_insert(now + after);
+    if now < at {
+        return;
+    }
+    *done = true;
+    let mut n = 0;
+    for (_, mut root) in &mut roots {
+        root.set_changed();
+        n += 1;
+    }
+    info!("characters: spawning {n} characters' scenes again (LIVING_GAME_PERF=rebuild)");
+}
+
+/// Let go of what was built on a character's old scene (it is built again on the new one), and
+/// hide it until it is fitted again; its outfit pieces (skinned to the old bones) go.
+pub fn forget_scene(commands: &mut Commands, e: Entity, pieces: impl IntoIterator<Item = Entity>) {
+    commands
+        .entity(e)
+        .remove::<(Fitted, Shaped, Springs, outfit::Dressed, crate::lookdev::Rig, crate::lookdev::Lod, crate::anim::Anim, crate::anim::Bound, crate::twist::Spine, crate::ik::Legs)>()
+        .insert((crate::lookdev::CastsShadow::default(), Visibility::Hidden));
+    for p in pieces {
+        commands.entity(p).despawn();
+    }
+}
+
+/// Warn if a shaped character's skeleton is replaced anyway and [`on_ready`] did not let go of
+/// it: its proportions, outfit and springs stay on the old bones.
 fn rebuilt(chars: Query<(Entity, &Character, &Shaped)>, alive: Query<()>, mut seen: Local<std::collections::HashSet<Entity>>) {
     for (e, c, sh) in &chars {
         if sh.hips.is_some_and(|h| alive.get(h).is_err()) && seen.insert(e) {
-            warn!("characters: {}'s scene was rebuilt; its proportions and outfit are lost", c.recipe.name);
+            warn!("characters: {}'s scene was rebuilt and not shaped again; its proportions and outfit are lost", c.recipe.name);
         }
     }
 }
@@ -445,7 +553,10 @@ pub struct CharactersPlugin;
 
 impl Plugin for CharactersPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(SpringSettings::from_env())
+        app.add_message::<Rebuilt>()
+            .add_observer(on_ready)
+            .add_systems(PreUpdate, (place_scenes, force_rebuild))
+            .insert_resource(SpringSettings::from_env())
             .init_resource::<SpringClock>()
             .init_resource::<SpringStats>()
             .add_systems(Update, (shape, recolor, rig_springs, outfit::dress, rebuilt, frames))
@@ -1213,5 +1324,39 @@ pub fn springs(
             );
         }
         *stats = SpringStats::default();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::world_serialization::{WorldInstanceReady, WorldInstanceSpawner};
+
+    #[test]
+    fn a_second_spawn_of_a_characters_scene_lets_go_of_what_was_built_on_the_old_one() {
+        let mut app = App::new();
+        app.add_message::<Rebuilt>().add_observer(on_ready);
+        let recipe = Recipe { name: "test".into(), base: "lookdev/own-test.glb".into(), height: 1.2, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new() };
+        let shaped = Shaped { hips: None, hips_k: 1.0, written: Vec3::NAN, scales: HashMap::new(), helpers: HashMap::new() };
+        let fitted = Fitted { y_off: 0.0, size: Vec3::ONE, center: Vec3::ZERO };
+        let e = app.world_mut().spawn((Character { recipe, stride: 0.6 }, fitted, shaped, outfit::Dressed, crate::anim::Bound, Visibility::Inherited)).id();
+        let piece = app.world_mut().spawn((outfit::Piece { slot: "head".into(), material: "Hat".into() }, ChildOf(e))).id();
+        let other = app.world_mut().spawn(ChildOf(e)).id();
+        let instance = WorldInstanceSpawner::default().spawn_as_child(Handle::default(), e);
+        // The first spawn: counted, nothing let go.
+        app.world_mut().trigger(WorldInstanceReady { entity: e, instance_id: instance });
+        app.world_mut().flush();
+        assert_eq!(app.world().get::<Spawns>(e).map(|s| s.0), Some(1));
+        assert!(app.world().get::<Shaped>(e).is_some() && app.world().get::<Fitted>(e).is_some());
+        // Spawned again (a changed scene asset): fitted, shaped, dressed and bound again from scratch.
+        app.world_mut().trigger(WorldInstanceReady { entity: e, instance_id: instance });
+        app.world_mut().flush();
+        let w = app.world();
+        assert_eq!(w.get::<Spawns>(e).map(|s| s.0), Some(2));
+        assert!(w.get::<Shaped>(e).is_none() && w.get::<Fitted>(e).is_none() && w.get::<outfit::Dressed>(e).is_none() && w.get::<crate::anim::Bound>(e).is_none());
+        assert_eq!(w.get::<Visibility>(e), Some(&Visibility::Hidden), "hidden until fitted again");
+        assert!(w.get_entity(piece).is_err(), "the outfit pieces on the old bones go");
+        assert!(w.get_entity(other).is_ok(), "only outfit pieces go");
+        assert_eq!(w.resource::<Messages<Rebuilt>>().iter_current_update_messages().count(), 1);
     }
 }

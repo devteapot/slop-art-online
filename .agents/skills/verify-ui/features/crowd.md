@@ -6,6 +6,7 @@ What a town of generated people costs in the client and whether the client draws
 
 - `faces`: a face whose file has no `<file>.face.png` takes the map its material's glTF extras name (`face_map`, share.py `pages`). Every face on a page is one `Face` material.
 - `far`: a file built with `LOD=both` holds `Far*` mesh nodes on the same skeleton. Beyond `LIVING_GAME_FAR` metres (default 10, for a 1.75 m person, scaled by height) the far meshes show and the full ones hide. A far person comes back to the full model once it is `LIVING_GAME_FAR_BAND` (default 1.5 m) nearer.
+- `rebuild`: a character's scene spawned again is fitted, shaped, dressed and bound again (`characters::on_ready`), and a file is read once (`characters::SceneOf`).
 - `clips`: `own-*` files (and `lookdev/types/`) take their clips from `lookdev/anim/own-clips.glb` when it is there. A file without clips of its own is given its player and bone targets (`anim::bind`). `LIVING_GAME_SHARED_CLIPS=0` plays each file's own clips.
 
 ## How to get to it
@@ -41,10 +42,14 @@ Each run's log (`LIVING_GAME_PERF=frames,diag`) holds what the check reads:
 | `anim: lookdev/…/own-<name>.glb bound to lookdev/anim/own-clips.glb` | once a person for files without clips |
 | `anim: lookdev/anim/own-clips.glb: 29 clips, …` | one graph for every generated person |
 | `assets: … N clips (C curves); G graphs; …` | `lod` with the shared file: the VRoid bases' clips plus one set (159, 2 graphs); own clips: 64 sets (1,986, 65 graphs) |
+| `characters: … scene was rebuilt and not shaped again` | never. Before rebuild-keep, 0–10 people a run lost their proportions |
+| `LIVING_GAME_PERF=…,rebuild=4`: `characters: X's scene was spawned again (2 times); fitting and shaping it again` | once per character; then each is fitted, shaped (the same `characters: <recipe> … stride` line as at the start) and bound again (`bound to`) |
 
 Same-framing stills of the full and the far model come from the asset view (`LIVING_GAME_VIEW=recipe:…`) with `LIVING_GAME_FAR=1000` (always full) and `LIVING_GAME_FAR=0.01` (always far). Face close-ups from a client before `crowd-1` show a paged face shaded as skin; with it, the swept shadow edge.
 
 Foot slide with the shared clips: you as a town person (`LIVING_GAME_PLAYER=<recipe>`), `LIVING_GAME_AUTOWALK=90 LIVING_GAME_RAMP=4.5:14:2 LIVING_GAME_FEET=<file>`, then `living/tools/foot_slide.py <file> --bins 0.5`. Compare `LIVING_GAME_SHARED_CLIPS=0` on the full file with the shared clips on the stripped file, for the shortest and the tallest person.
+
+A rebuilt person, before and after: `LIVING_GAME_PLAYER=<a child's town recipe>`, `LIVING_GAME_SEQ=<dir>:2:6:3`, `LIVING_GAME_SEQ_VIEW=0:10:3.5:35` and `LIVING_GAME_PERF=frames,rebuild=4`, with and without `nokeep`. Without the letting go, the child is drawn at its height with an adult's proportions from 8 s on.
 
 ## Gotchas
 

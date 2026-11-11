@@ -10,6 +10,15 @@ Branch `goods-3`, own container `goods3-stdb` (2.14.1, port 3333), `scoped`, no 
 - `maintain-verification-skill`, scoped to `features/goods.md`: the source reader found no wrong refusal string or scene order. It found three overstatements, now corrected: the rules test checks products and does not make them; no test builds Cullet's other kinds; `making` depends on the seeded hearth's first 12 minutes, not on `goods`. The run block's time was corrected to 11 minutes. Both harness fixes were re-driven live (`core-g3-goods2`).
 - Not run: the rest of the baseline, `laws`, `decay`, `winter`, `rhythm`, `mechanics` and steering. The carry count has no scene; the rules' comparison `goods_check` covers it.
 
+## 2026-11-12 fix-dealings: sight through one wall's corner is the same both ways (dev-box)
+
+Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14.1, port 3332, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, no model calls. `Map::sight_walk` now goes through an exact tile corner into the diagonal tile and is stopped there only when both tiles beside the corner are opaque. Before, it broke the tie toward one side, so one of two people across one wall's end saw the other and not back.
+
+- `core-fixdeal-c1`: `sight` (6 PASS), `fov` (18 PASS) and `placement` (7 PASS) pass on the new rule.
+- `cargo test -p living-rules` in `living-check`: `sight_across_one_walls_corner_is_the_same_both_ways` (the gateway corner both ways, `place_near`'s own tile choice beside a gateway, a segment ending on a corner, a shut gate) and `sight_between_tile_centres_is_symmetric` (20,000 random tile-centre pairs) pass; both fail on the old walk. "Two walls meeting at a corner hide" holds both ways.
+- `living/rules/examples/corner_census.rs` on start-state dumps of fresh worlds (default, island, Cullet): every changed line goes from hidden to seen (0.44%, 0.77% and 0.65% of the lines near walls; 1, 1 and 0 of the resident lines within 30 m), none from seen to hidden, and no pair is seen one way only any more (9,896, 551,139 and 34,521 one-way pairs before).
+- Not changed: missiles (`combat.rs` `wall_along` samples the line and may stop at a corner point; docs/PERCEPTION.md), `Low`/`Drop` tiles and models' `eye_solid` (decided at hosting, upstream of the walk).
+
 ## 2026-11-11 who heard a line (exp-greet, Spark)
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`. New scene `audience` (`features/laws.md`), run `core-audience-150613`: all 8 checks pass. Law off: no row. Law on: one row, the two hearers within the shipped 9 m and not the one at 13 m, distances about 1 and 4 m, both ahead of the speaker. A line 61 s later deleted the first row. Only `speak` changed in the authority (`speech_audience`, off by default). The other scenes were not rerun.

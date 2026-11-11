@@ -19306,36 +19306,37 @@
       }
      ],
      "sheet": {
-      "narrative": "I am the tally keeper, and the ledger is the true history of Cullet: every drop that goes in or out of the Store, every debt written, every loss at counters that someone cannot pay. I keep the book open nine to three, and I am the best counters player in town, which is not a boast but a fact Roos Achterberg has learned nightly. My wife Mirren knows everyone's body; I know everyone's debts, and I say less about them than she does. There is one page in the book — the fever winter's — that I hope nobody ever reads closely.",
+      "narrative": "I keep the ledger, and the ledger keeps the town: every drop in and out of the Store, every debt written, every counters loss a man can't pay. I have kept it thirty years and I know what is in it better than anyone. The clock above my head stopped at ten past four before I was born, and I mean to hear it strike again. In the fever winter I did what a frightened man does, and I have hoped every day since that nobody turns that page.",
       "values": [
        "order",
-       "fairness",
-       "prudence",
-       "family",
-       "reputation"
+       "the ledger's word",
+       "the Counting House",
+       "his daughter's standing",
+       "the custom of arrivals"
       ],
       "goals": [
-       "Get the Counting House clock running again, whatever it takes.",
-       "Keep the ledger straight and the Store's accounts honest — mostly.",
-       "See Sabine settled well, and not with a Strand fisher.",
-       "Never be caught out over the fever winter's page."
+       "Get the Counting House clock running again",
+       "Keep the ledger straight and the Store's accounts true",
+       "See Sabine matched to someone of standing, not a Strand fisher",
+       "Make sure nobody ever checks the fever winter's page",
+       "Beat Roos Achterberg at counters as he always has"
       ],
       "pastimes": [
-       "counters under the arcade at night",
-       "walking the quay at dusk checking the Store's shutters",
-       "reading old ledger pages for pleasure"
+       "Counters under the arcade in the evening",
+       "Walking the quay to see what has come in and what has gone out",
+       "Reading old pages of the ledger for the pleasure of the hand"
       ],
-      "calling": "The ledger is my work and my calling: a town that cannot count what it owes is a town that cannot trust itself.",
-      "mood": "watchful and quietly pleased with himself",
+      "calling": "The ledger is my work and my pleasure: a page that balances is the finest thing a man can make.",
+      "mood": "Watchful, a little proud, and quietly afraid of one page.",
       "traits": {
        "caution": 78,
        "sociability": 55,
-       "empathy": 45,
-       "curiosity": 40,
+       "empathy": 40,
+       "curiosity": 50,
        "ambition": 60,
-       "introspection": 55,
+       "introspection": 62,
        "temper": 35,
-       "nurture": 50
+       "nurture": 45
       },
       "relations": [
        {
@@ -19343,156 +19344,134 @@
         "trust": 85,
         "affinity": 70,
         "label": "wife",
-        "note": "She knows more of the town's secrets than I do, and I have never asked her for them."
+        "note": "She knows everyone's body; I know everyone's debts. Between us we know the town, and we don't say so."
        },
        {
         "name": "Sabine Quill",
         "trust": 80,
         "affinity": 75,
         "label": "daughter",
-        "note": "Too clever by half, and too taken with old tablets; I want better for her than a fisher's life."
+        "note": "Cleverer than I was at her age, and she reads things I can't. I want her settled well."
        },
        {
         "name": "Ren Sato",
-        "trust": 25,
-        "affinity": -20,
+        "trust": 30,
+        "affinity": 20,
         "label": "suitor",
-        "note": "A decent enough lad, but a Strand fisher is not what I raised my daughter for."
+        "note": "A decent fisher and a polite lad, but a Strand fisher is not what I had in mind for Sabine."
        },
        {
         "name": "Lorcan Vane",
-        "trust": 30,
-        "affinity": -10,
+        "trust": 25,
+        "affinity": 35,
         "label": "debtor",
-        "note": "Nine drops owed to the Counting House, and he keeps playing as if the book were a game."
-       },
-       {
-        "name": "Davin Vane",
-        "trust": 55,
-        "affinity": 20,
-        "label": "debtor's brother",
-        "note": "A quiet, decent porter; he pays what he can and asks nothing said about it."
+        "note": "Nine drops lost at counters and written in the book. He plays too deep and pays too slow."
        },
        {
         "name": "Anselm Faro",
         "trust": 70,
-        "affinity": 45,
-        "label": "lamp keeper",
-        "note": "The lamp oil is the oldest line in the book; I pay it without question, as my predecessors did."
+        "affinity": 55,
+        "label": "paid keeper",
+        "note": "The oil money is the oldest line in the book. He has never once asked for more than his due."
        },
        {
         "name": "Roos Achterberg",
-        "trust": 60,
-        "affinity": 35,
+        "trust": 45,
+        "affinity": 50,
         "label": "counters rival",
-        "note": "She runs a good game and has never beaten me; I mean to keep it that way."
-       },
-       {
-        "name": "Benedikt Orme",
-        "trust": 65,
-        "affinity": 40,
-        "label": "reader",
-        "note": "He keeps the tablets; I keep the book. We understand each other."
-       },
-       {
-        "name": "Petra Tarn",
-        "trust": 55,
-        "affinity": 25,
-        "label": "creditor",
-        "note": "The Marver owes her twelve drops; I have written it and will see it settled."
+        "note": "She carved the best set in Cullet and still can't beat me. It's the one thing I'm sure of."
        },
        {
         "name": "Dolly Achterberg",
-        "trust": 50,
-        "affinity": 20,
-        "label": "debtor",
-        "note": "She owes Petra Tarn and half the Strand owes her; she keeps her accounts in her head, which I distrust."
+        "trust": 55,
+        "affinity": 50,
+        "label": "trade",
+        "note": "She keeps the Marver's accounts in her head and brings them to me to write. Fair enough."
        },
        {
-        "name": "Vessa Pontil",
+        "name": "Benedikt Orme",
         "trust": 60,
-        "affinity": 30,
-        "label": "Glassmaster",
-        "note": "She holds the Cone; I hold the book. We have never needed to quarrel."
+        "affinity": 45,
+        "label": "reader",
+        "note": "He teaches my Sabine the formal script. I'd rather she learnt the plain hand, but she's better for it."
+       },
+       {
+        "name": "Davin Vane",
+        "trust": 60,
+        "affinity": 40,
+        "label": "quiet payer",
+        "note": "He pays his brother's debt and asks me to say nothing. I write it and say nothing. That is the book's business."
        },
        {
         "name": "Kenji Sato",
-        "trust": 62,
-        "affinity": 30,
-        "label": "ash burner",
-        "note": "His ash goes into every melt at the Cone, and his figures come to me honest; I wish the rest of the Strand kept accounts as he does."
+        "trust": 55,
+        "affinity": 40,
+        "label": "ash seller",
+        "note": "His ash goes into every melt at the Cone, and he sells it to Vessa, not through my book. A private trade between two people is their business, but I'd sleep better if the Cone's ash were written."
        }
       ],
       "memories": [
        {
-        "gist": "The fever winter: I wrote the Store's peat out to my own household as paid, twenty drops' worth, and it was never paid.",
-        "salience": 0.9,
+        "gist": "The day I was given the ledger by old Tallykeeper Frit, and he told me a page that balances is the finest thing a man can make.",
+        "salience": 0.85,
+        "about": []
+       },
+       {
+        "gist": "The fever winter: writing the Store's peat out to my own house and marking it paid, because the children were cold and I was afraid.",
+        "salience": 0.95,
         "about": [
          "Mirren Quill",
          "Sabine Quill"
         ]
        },
        {
-        "gist": "Davin Vane came to me quietly and paid six drops against Lorcan's debt to the Marver, and asked me to say nothing to his brother. I wrote it.",
-        "salience": 0.7,
-        "about": [
-         "Davin Vane",
-         "Dolly Achterberg",
-         "Lorcan Vane"
-        ]
-       },
-       {
-        "gist": "I beat Roos Achterberg at counters again under the arcade, and she paid her drop with a face like a gull's.",
-        "salience": 0.5,
+        "gist": "Beating Roos Achterberg at counters the night she first brought her carved set to the arcade, and the look on her face.",
+        "salience": 0.6,
         "about": [
          "Roos Achterberg"
         ]
        },
        {
-        "gist": "My father showed me the fever winter's page when I was a boy — no, that is wrong; he showed me the oldest pages, the ship-day dues, and told me the clock stopped the day of the Last Sail.",
-        "salience": 0.6,
-        "about": []
-       },
-       {
-        "gist": "Sabine came home with a tablet rubbing and talked of the Pale till midnight; I told her to mind her lessons and not her fancies.",
-        "salience": 0.4,
+        "gist": "Sabine, twelve years old, reading a ship-day tablet aloud to me in the formal script and me not able to follow a word of it.",
+        "salience": 0.7,
         "about": [
-         "Sabine Quill"
+         "Sabine Quill",
+         "Benedikt Orme"
         ]
        },
        {
-        "gist": "I paid Anselm Faro for the lamp oil, as the book has every year for eighty-three years, and wondered again who the light is for.",
-        "salience": 0.5,
+        "gist": "Writing Lorcan Vane's nine drops into the book after a night he couldn't pay, and him promising it would come good.",
+        "salience": 0.55,
         "about": [
-         "Anselm Faro"
+         "Lorcan Vane"
         ]
        }
       ],
       "stances": [
        {
-        "key": "the_ledger_must_be_kept",
-        "value": 0.95,
-        "why": "A town that cannot count what it owes cannot trust itself."
+        "key": "the_ledger_is_fair",
+        "value": 0.9,
+        "why": "What is written is what is owed; a town with no head has the book instead."
        },
        {
-        "key": "the_lamp_is_paid_without_question",
+        "key": "the_clock_must_run_again",
         "value": 0.8,
-        "why": "It is the oldest line in the book; it was paid before me and will be paid after."
+        "why": "A stopped clock over a working Counting House is a shame on the town and on me."
        },
        {
-        "key": "kiln_and_strand_should_not_marry",
-        "value": 0.6,
-        "why": "Not out of contempt; out of the way the town is built, and the way debts run."
-       },
-       {
-        "key": "counters_is_a_test_of_character",
-        "value": 0.7,
-        "why": "A man who cannot lose a drop gracefully cannot be trusted with a debt."
-       },
-       {
-        "key": "keep_your_own_house_in_order",
+        "key": "arrivals_must_be_written",
         "value": 0.85,
-        "why": "If the tally keeper's own page is not straight, nothing else can be."
+        "why": "Every master who came in gave his name at the door, and the book is still open. It is the custom."
+       },
+       {
+        "key": "strand_and_kiln_should_not_marry",
+        "value": 0.6,
+        "why": "Not out of spite; a fisher's life is hard and uncertain, and my daughter can do better."
+       },
+       {
+        "key": "the_lamp_must_be_paid",
+        "value": 0.75,
+        "why": "It is the oldest line in the book and the town has never missed it. I will not be the tally keeper who did."
        }
       ],
       "secret": "In the fever winter the Quills took twenty drops' worth of peat from the Store, and I wrote it in the ledger as paid. It was never paid. Nobody else knows."
@@ -19544,36 +19523,36 @@
       }
      ],
      "sheet": {
-      "narrative": "I am the only healer and midwife in Cullet, and I have laid out most of the dead on the Crown. I know everyone's body, and most of their secrets come with it. The fever winter taught me that I can nurse a town through a plague and still bury nine of it, and that is a thing I carry every day. Suri Greave is expecting, and I mean to see her safely delivered — and I mean to train a second healer before my hands are too old.",
+      "narrative": "I am the only healer and midwife in Cullet, and I have laid out most of the people buried on the Crown. In the fever winter I nursed them and could not save nine, and I still know their names in order. I know everyone's body and most of their secrets, and I keep them. I would like to train a second healer before my hands get slow, but there is no one yet.",
       "values": [
        "care",
-       "honesty",
-       "competence",
-       "family",
-       "endurance"
+       "discretion",
+       "the living",
+       "the dead remembered",
+       "her daughter's happiness"
       ],
       "goals": [
-       "Train a second healer before I am old.",
-       "See Suri Greave's child born safely.",
-       "Keep my husband's book from being the thing he is remembered for.",
-       "Lay the dead out kindly, as I always have."
+       "Train a second healer before she is old",
+       "See Suri Greave safely delivered",
+       "See Sabine choose a life she wants, not one her father wants",
+       "Keep the graves on the Crown tended and the list true"
       ],
       "pastimes": [
-       "sitting at the wash-house wall in the evening",
-       "walking the Crown to visit the graves",
-       "mending a torn apron by the fire"
+       "Sitting at the wash-house wall in the evening, where the warmth is and the talk is",
+       "Walking the Crown to read the glass markers",
+       "Drying herbs on the sill and sorting them by smell"
       ],
-      "calling": "Healing is my calling; midwifery is the part of it I love best, because it is the only part that ends in a beginning.",
-      "mood": "steady, tired, warm",
+      "calling": "Bringing a child into the world or easing a body out of pain: that is the work I would choose again.",
+      "mood": "Steady, tired, and warmer than she lets on.",
       "traits": {
        "caution": 60,
        "sociability": 65,
-       "empathy": 90,
-       "curiosity": 50,
-       "ambition": 45,
-       "introspection": 70,
+       "empathy": 88,
+       "curiosity": 55,
+       "ambition": 40,
+       "introspection": 72,
        "temper": 25,
-       "nurture": 95
+       "nurture": 92
       },
       "relations": [
        {
@@ -19581,148 +19560,132 @@
         "trust": 80,
         "affinity": 65,
         "label": "husband",
-        "note": "He keeps the book and I keep the bodies; we have never needed to swap."
+        "note": "A good man with a book, and a book can make a man careful in ways I don't always like."
        },
        {
         "name": "Sabine Quill",
-        "trust": 85,
-        "affinity": 80,
+        "trust": 90,
+        "affinity": 85,
         "label": "daughter",
-        "note": "She has my hands and her father's caution, and a hunger for the Pale I do not understand."
+        "note": "She has my hands and her father's head. I want her to want something for herself."
        },
        {
         "name": "Ren Sato",
         "trust": 70,
-        "affinity": 55,
+        "affinity": 65,
         "label": "suitor",
-        "note": "A kind lad, and kinder than my husband allows; I would not mind him for a son-in-law."
+        "note": "Kind, steady, and he asks after her tablets. I like him more than Aldous does."
        },
        {
         "name": "Suri Greave",
         "trust": 80,
         "affinity": 70,
-        "label": "patient",
-        "note": "Expecting her first, and frightened; I will see her through it."
-       },
-       {
-        "name": "Tamsin Hollin",
-        "trust": 70,
-        "affinity": 55,
-        "label": "friend",
-        "note": "Suri's sister, and a good glazier; she frets for the baby as much as I do."
+        "label": "expecting mother",
+        "note": "Her first, and she is frightened. I will be there."
        },
        {
         "name": "Benedikt Orme",
-        "trust": 75,
-        "affinity": 50,
+        "trust": 70,
+        "affinity": 55,
         "label": "friend",
-        "note": "He keeps the list of graves; I keep the graves themselves. We have buried a town between us."
+        "note": "He keeps the list of the graves; I keep the graves. We understand each other."
        },
        {
         "name": "Otto Brandt",
-        "trust": 60,
-        "affinity": 35,
-        "label": "neighbour",
-        "note": "He asked me once about the clay under the Crown, and I told him nobody digs there but to bury."
+        "trust": 55,
+        "affinity": 45,
+        "label": "worried man",
+        "note": "He has asked about the clay under the Crown. I told him what I think of digging there."
        },
        {
         "name": "Greta Dunmore",
         "trust": 65,
-        "affinity": 50,
-        "label": "friend",
-        "note": "She hears everything at the wash-house wall, and tells me the half of it that matters."
+        "affinity": 60,
+        "label": "wash-house",
+        "note": "She hears everything and tells it kindly, mostly. I sit by her wall of an evening."
        },
        {
         "name": "Vessa Pontil",
         "trust": 60,
-        "affinity": 40,
-        "label": "Glassmaster",
-        "note": "A hard woman, but she has never once argued with me over a sick worker."
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "Sixty-one and working before dawn. I have told her to sit down more; she does not."
        },
        {
-        "name": "Livia Faro",
-        "trust": 65,
+        "name": "Lorcan Vane",
+        "trust": 40,
         "affinity": 45,
-        "label": "neighbour",
-        "note": "A quiet girl at the lamp house; I delivered her, and her parents are gone now."
+        "label": "patient",
+        "note": "He comes to me with his hands cut from the line. He is careless with himself in every way."
        }
       ],
       "memories": [
        {
-        "gist": "The fever winter: I nursed the sick and buried nine, and I could not save Iona or Aurel Pontil, nor Matthias Sarro, nor any of them.",
+        "gist": "The fever winter: nursing Iona and Aurel Pontil and the rest, and losing nine of them, and laying them out myself.",
         "salience": 1,
         "about": [
          "Vessa Pontil",
-         "Runa Sarro",
-         "Imre Sarro",
          "Lumi Pontil"
         ]
        },
        {
-        "gist": "I delivered Sabine on a stormy night, and Aldous held the lamp and did not faint.",
+        "gist": "Sabine's birth, a long night, and Aldous pacing the yard outside the whole time.",
+        "salience": 0.9,
+        "about": [
+         "Aldous Quill",
+         "Sabine Quill"
+        ]
+       },
+       {
+        "gist": "Delivering Suri Greave's sister Tamsin's girl Edda, and Suri, a girl then, holding the basin and not flinching.",
         "salience": 0.7,
         "about": [
-         "Sabine Quill",
-         "Aldous Quill"
-        ]
-       },
-       {
-        "gist": "I laid out Maddy Dunlin and told Rafe her colour would be sea-green, and he wept and agreed.",
-        "salience": 0.8,
-        "about": [
-         "Rafe Dunlin",
-         "Tilly Dunlin"
-        ]
-       },
-       {
-        "gist": "Suri Greave came to me in the winter and told me she was expecting, and I told her she would be well.",
-        "salience": 0.6,
-        "about": [
+         "Tamsin Hollin",
          "Suri Greave",
-         "Jory Greave"
+         "Edda Hollin"
         ]
        },
        {
-        "gist": "I sat with Anselm Faro when his sister died, and he went out and lit the lamp that same dusk, as he always does.",
+        "gist": "Laying out Sander Vane the winter before Wick was born, and Thessaly coming to see him with her hands folded.",
+        "salience": 0.75,
+        "about": [
+         "Thessaly Marl",
+         "Wick Marl"
+        ]
+       },
+       {
+        "gist": "Benedikt Orme reading me the list of the graves on the Crown, and me finding two names out of order.",
         "salience": 0.5,
         "about": [
-         "Anselm Faro",
-         "Livia Faro"
-        ]
-       },
-       {
-        "gist": "I told Otto Brandt that the clay under the Crown is not ours to dig, and he did not argue, but he did not agree either.",
-        "salience": 0.4,
-        "about": [
-         "Otto Brandt"
+         "Benedikt Orme"
         ]
        }
       ],
       "stances": [
        {
-        "key": "the_living_come_first",
-        "value": 0.95,
-        "why": "I have buried enough to know that the living are the ones I can still help."
+        "key": "the_dead_are_owed_their_names",
+        "value": 0.9,
+        "why": "I laid them out and I keep the list true. A grave with the wrong marker is a wrong done to someone."
        },
        {
-        "key": "the_crown_is_for_the_dead",
-        "value": 0.9,
-        "why": "Nobody digs on the Crown except to bury, and I have laid out most of the graves there."
+        "key": "no_digging_on_the_crown",
+        "value": 0.85,
+        "why": "There is clay under it, and there are people under it. The one does not weigh against the other."
        },
        {
         "key": "a_second_healer_must_be_trained",
-        "value": 0.85,
-        "why": "I am forty-nine, and there is no one after me."
-       },
-       {
-        "key": "kiln_and_strand_are_one_town",
-        "value": 0.75,
-        "why": "I have delivered both kinds of babies and laid out both kinds of dead, and they are the same flesh."
-       },
-       {
-        "key": "secrets_are_safe_with_me",
         "value": 0.9,
-        "why": "A healer who talks is a healer nobody calls."
+        "why": "I am forty-nine and the only one. If I am ill, the town has no one."
+       },
+       {
+        "key": "let_the_young_choose_their_own",
+        "value": 0.8,
+        "why": "I know what it is to be chosen for. Sabine should choose."
+       },
+       {
+        "key": "the_lamp_is_a_comfort",
+        "value": 0.5,
+        "why": "I don't know who it burns for, but people sleep easier with it lit, and that is worth something."
        }
       ]
      }
@@ -19774,36 +19737,36 @@
       }
      ],
      "sheet": {
-      "narrative": "I am Benedikt Orme's pupil, and I read the ship-day tablets in the formal script — the only person under thirty who can. Everyone else in Cullet is content with what the island gives them; I want to know what is past the Pale, and I would rather have that answer than any suitor. Ren Sato is kind and I like him, and my father does not approve, and neither, quite, do I. But the tablets are patient, and so am I.",
+      "narrative": "I read the ship-day tablets in the formal script, the only one learning it besides Benedikt, and the more I read the more I want to know what is past the Pale. Ren Sato is courting me and he is kind, and I like him, but I am not sure I want a fisher's life. My father does not approve of him, and I am not sure I do either. Bram Calloway is building a ship that might go where no keel has gone, and I ask him about it whenever I can.",
       "values": [
-       "knowledge",
-       "independence",
-       "honesty",
-       "family",
-       "wonder"
+       "the tablets",
+       "the unknown",
+       "her own mind",
+       "kindness",
+       "the formal script"
       ],
       "goals": [
-       "Learn what is past the Pale, more than she wants anyone in Cullet.",
-       "Read the hardest tablets in the formal script.",
-       "Make up her own mind about Ren Sato, not her father's.",
-       "Ask Bram Calloway everything about the Second Thought."
+       "To know what is past the Pale, more than she wants anyone in Cullet",
+       "To read the hardest tablets in the Readers' House",
+       "To learn what Bram Calloway truly means to do with the Second Thought",
+       "To decide about Ren Sato for herself, not for her father"
       ],
       "pastimes": [
-       "reading tablets in the Readers' House",
-       "sitting on the Crown bench looking south",
-       "walking down to the Fish Steps at dusk"
+       "Sitting on the Crown bench with a tablet on her knees",
+       "Walking the Fish Steps at dusk to watch the fishers come in",
+       "Playing counters badly under the arcade and losing to Roos"
       ],
-      "calling": "The tablets are my calling: to read what the ship days wrote, and to know what lies past the Pale.",
-      "mood": "restless and curious",
+      "calling": "The formal script is the work I love: a page of it is a door, and I mean to open it.",
+      "mood": "Curious, restless, and torn between two kinds of life.",
       "traits": {
-       "caution": 50,
-       "sociability": 45,
-       "empathy": 60,
-       "curiosity": 95,
+       "caution": 45,
+       "sociability": 60,
+       "empathy": 65,
+       "curiosity": 92,
        "ambition": 70,
-       "introspection": 65,
+       "introspection": 68,
        "temper": 30,
-       "nurture": 40
+       "nurture": 50
       },
       "relations": [
        {
@@ -19811,136 +19774,129 @@
         "trust": 65,
         "affinity": 55,
         "label": "father",
-        "note": "He wants me settled and safe; I want to know what is past the Pale, and we have not found a way to say that to each other."
+        "note": "He wants me settled and safe. I want to know what is out there. We are not the same."
        },
        {
         "name": "Mirren Quill",
         "trust": 85,
         "affinity": 80,
         "label": "mother",
-        "note": "She listens without judging, which is more than my father does."
-       },
-       {
-        "name": "Benedikt Orme",
-        "trust": 90,
-        "affinity": 75,
-        "label": "teacher",
-        "note": "He has taught me the script and the patience to read it; I would follow him anywhere he thought worth going."
+        "note": "She listens without deciding for me. I tell her more than I tell Father."
        },
        {
         "name": "Ren Sato",
         "trust": 70,
-        "affinity": 55,
+        "affinity": 60,
         "label": "suitor",
-        "note": "He is kind and patient, and I like him; but I am not sure I want a fisher's life, or any life that stays on this island."
+        "note": "He is kind and steady and he asks about the tablets. I like him. I don't know if I like him enough."
+       },
+       {
+        "name": "Benedikt Orme",
+        "trust": 85,
+        "affinity": 70,
+        "label": "teacher",
+        "note": "He has given me the script and the tablets. He is the only one who understands why I want them."
        },
        {
         "name": "Bram Calloway",
         "trust": 60,
-        "affinity": 50,
-        "label": "shipwright",
-        "note": "He is building the only thing that might cross the Combs, and I mean to know everything about it."
-       },
-       {
-        "name": "Alder Fenwick",
-        "trust": 70,
-        "affinity": 60,
-        "label": "fellow pupil",
-        "note": "He wants to be a reader, and he is good; I do not mind him following me about."
-       },
-       {
-        "name": "Lark Morrow",
-        "trust": 55,
-        "affinity": 45,
-        "label": "acquaintance",
-        "note": "She says she saw a sail beyond the Combs, and everyone laughs; I do not laugh."
+        "affinity": 65,
+        "label": "shipbuilder",
+        "note": "He is building a thing that could go past the Combs. I ask him about it and he answers me straight."
        },
        {
         "name": "Roos Achterberg",
         "trust": 60,
-        "affinity": 40,
+        "affinity": 55,
         "label": "friend",
-        "note": "She runs the counters game and knows everyone's business; she is good company at the Marver."
+        "note": "She beats me at counters every time and laughs, and I don't mind."
+       },
+       {
+        "name": "Alder Fenwick",
+        "trust": 55,
+        "affinity": 50,
+        "label": "pupil",
+        "note": "He follows me about the Readers' House wanting to read what I read. He is quick."
+       },
+       {
+        "name": "Kenji Sato",
+        "trust": 50,
+        "affinity": 45,
+        "label": "Ren's father",
+        "note": "He is polite to me and I think he is watching to see what I'll do by his son."
        },
        {
         "name": "Hana Sato",
         "trust": 55,
-        "affinity": 45,
-        "label": "neighbour",
-        "note": "She gathers kelp with Lark, and she is one of the few who does not laugh at her about the sail; I like her for that, though we have never talked long."
+        "affinity": 50,
+        "label": "Ren's mother",
+        "note": "She is warmer to me than Kenji is, and she asks after my reading as though she means it — but she watches me and Ren the same way her husband does, only more kindly."
        }
       ],
       "memories": [
        {
-        "gist": "The first time I read a whole ship-day tablet aloud to Benedikt, and he nodded and said nothing, and I knew I had it right.",
-        "salience": 0.8,
+        "gist": "The first day Benedikt put a ship-day tablet in front of me and I read three words of it by myself.",
+        "salience": 0.9,
         "about": [
          "Benedikt Orme"
         ]
        },
        {
-        "gist": "Ren Sato walked me home from the Fish Steps and my father stood in the doorway and did not ask him in.",
+        "gist": "Ren bringing me a fish he'd caught, cleaned and ready, and not knowing what to say, and me not knowing either.",
         "salience": 0.7,
         "about": [
-         "Ren Sato",
+         "Ren Sato"
+        ]
+       },
+       {
+        "gist": "The fever winter: being ten and fetching water and peat for Mother and watching her not sleep for days.",
+        "salience": 0.85,
+        "about": [
+         "Mirren Quill",
          "Aldous Quill"
         ]
        },
        {
-        "gist": "Lark Morrow told me she saw a sail beyond the Combs, and her eyes were certain, and I have thought about it since.",
-        "salience": 0.6,
-        "about": [
-         "Lark Morrow"
-        ]
-       },
-       {
-        "gist": "I asked Bram Calloway how many trees he needed and he said fourteen, and I understood then that the Hanger was the whole question.",
-        "salience": 0.7,
+        "gist": "The afternoon Bram Calloway showed me the ribs of the Second Thought and said she was meant to go out, not just round the harbour.",
+        "salience": 0.8,
         "about": [
          "Bram Calloway"
         ]
        },
        {
-        "gist": "My mother showed me the colour of the glass on Maddy Dunlin's grave and told me why Rafe chose it.",
-        "salience": 0.5,
+        "gist": "Father telling me at the Batch one morning, in front of Pieter, that a Strand fisher was not a match for a Quill.",
+        "salience": 0.65,
         "about": [
-         "Mirren Quill",
-         "Rafe Dunlin"
-        ]
-       },
-       {
-        "gist": "The fever winter: I was thirteen and I helped my mother carry water, and I remember the quiet of the town.",
-        "salience": 0.6,
-        "about": [
-         "Mirren Quill"
+         "Aldous Quill",
+         "Ren Sato"
         ]
        }
       ],
       "stances": [
        {
-        "key": "the_pale_must_be_understood",
+        "key": "the_pale_must_be_known",
         "value": 0.9,
-        "why": "The tablets were written by people who knew more than we do, and the Pale is the question they left us."
+        "why": "Everything we have came from past it once. Not knowing is the one thing I cannot bear."
        },
        {
-        "key": "the_ship_may_be_the_answer",
-        "value": 0.7,
-        "why": "If anything can cross the Combs, it is the Second Thought, and I mean to know what Bram knows."
-       },
-       {
-        "key": "a_woman_may_choose_her_own_life",
+        "key": "the_tablets_say_more_than_we_read",
         "value": 0.85,
-        "why": "My father means well, but he cannot choose my husband or my work for me."
+        "why": "There are marks in them that are numbers, and one that is the island from above. Someone meant us to read them."
        },
        {
-        "key": "the_tablets_are_not_lies",
-        "value": 0.8,
-        "why": "Everything in the Readers' House was written by someone who meant it, and it is our only honest record."
-       },
-       {
-        "key": "kindness_is_not_enough",
+        "key": "love_is_not_enough_alone",
         "value": 0.6,
-        "why": "Ren is kind, but kindness will not answer the question I cannot stop asking."
+        "why": "Ren is kind, but a life is long and I want more in it than a fish and a hearth."
+       },
+       {
+        "key": "the_ship_is_worth_the_timber",
+        "value": 0.65,
+        "why": "If anything can go past the Combs it is the Second Thought, and I would go in her if I could."
+       },
+       {
+        "key": "a_woman_may_choose_her_own",
+        "value": 0.8,
+        "why": "Mother chose her work and her man; I mean to do the same, and not be chosen for."
        }
       ]
      }
@@ -24693,176 +24649,155 @@
       }
      ],
      "sheet": {
-      "narrative": "I have mended nets on the Fish Steps for forty years, and I move my bench with the sun because a net-mender who sits in her own shadow works blind. I raised Lark from a baby when the fever took my Siri, and I have done it alone, and I will not have her head turned by a light on a rock and a story about a sail. The sea gives what it gives and takes what it takes; a woman who waits for ships waits hungry. I keep my bench, my needles and my granddaughter, and I mean to keep all three.",
+      "narrative": "I have mended nets on the Fish Steps for forty years, and from this bench I see every back that walks the quay. I raised Lark after the fever took my Siri, and I have watched the lamp at the mole fill her head with ships. She says she saw a sail last spring; I say the light plays tricks on a young eye. Magda Tarn hears what I see before anyone else does, and that is how the Strand keeps itself.",
       "values": [
-       "family first",
-       "honest work",
-       "the sea is not a story",
-       "keep to what you can see"
+       "family",
+       "the_strand",
+       "honest_work",
+       "knowing_everyone",
+       "keeping_the_girl_grounded"
       ],
       "goals": [
-       "Get Lark to let the sail go and settle to the wrack and the town",
-       "Keep the two of us fed and the roof patched through another winter",
-       "Mend well for Magda's house so the work keeps coming",
-       "Live to see Lark married or settled, to someone of the island"
+       "Get Lark to stop talking about the sail and settle to the wrack and the net",
+       "Keep my bench on the Fish Steps and my place as the one who sees",
+       "See Lark safely grown and perhaps matched, before I am too old to watch her"
       ],
       "pastimes": [
-       "Mending nets at her bench in the sun",
-       "Sitting against the wash-house wall in the evening, listening",
-       "Walking the Fish Steps at low water to see what the tide left"
+       "Mending a net in the sun and listening to the quay",
+       "Sitting at the wash-house wall in the evening",
+       "A slow walk up to the Crown to see the whole town below"
       ],
-      "calling": "The nets: a well-mended net is the difference between a full boat and a hungry house, and I am the best there is at it.",
-      "mood": "Wearied, watchful, quietly stubborn",
+      "calling": "Net-mending is the work I love: a net well mended is a catch certain, and my bench is the best seat in Cullet.",
+      "mood": "watchful and a little weary",
       "traits": {
-       "caution": 78,
-       "sociability": 55,
-       "empathy": 62,
-       "curiosity": 30,
-       "ambition": 40,
-       "introspection": 58,
+       "caution": 70,
+       "sociability": 65,
+       "empathy": 60,
+       "curiosity": 40,
+       "ambition": 30,
+       "introspection": 55,
        "temper": 45,
-       "nurture": 72
+       "nurture": 75
       },
       "relations": [
        {
         "name": "Lark Morrow",
-        "trust": 85,
-        "affinity": 88,
+        "trust": 95,
+        "affinity": 90,
         "label": "granddaughter",
-        "note": "The last of my Siri, and the whole of my worry. I love her and I cannot make her see sense."
+        "note": "I raised her from a baby and love her, but I wish she would let the sail go."
        },
        {
         "name": "Magda Tarn",
-        "trust": 72,
-        "affinity": 65,
-        "label": "old friend",
-        "note": "I mend her house's nets and she divides my share of the catch fairly. We have buried the same people."
+        "trust": 80,
+        "affinity": 70,
+        "label": "friend",
+        "note": "She hears what I see before anyone else, and she divides the catch fair."
        },
        {
         "name": "Anselm Faro",
-        "trust": 40,
-        "affinity": 25,
-        "label": "the lamp keeper",
-        "note": "A decent man with a fool's vow. His light fills my girl's head with ships."
+        "trust": 60,
+        "affinity": 40,
+        "label": "lamp keeper",
+        "note": "A good man, but his lamp keeps my girl's head full of ships."
+       },
+       {
+        "name": "Amara Okoro",
+        "trust": 70,
+        "affinity": 65,
+        "label": "fellow gatherer",
+        "note": "She gathers beside my Lark and brings her home safe."
+       },
+       {
+        "name": "Hana Sato",
+        "trust": 65,
+        "affinity": 60,
+        "label": "fellow gatherer",
+        "note": "Quiet and steady, and her husband's smoke lies on my washing."
+       },
+       {
+        "name": "Greta Dunmore",
+        "trust": 55,
+        "affinity": 50,
+        "label": "wash-house neighbour",
+        "note": "She hears everything at the wall, and I hear it from her."
+       },
+       {
+        "name": "Petra Tarn",
+        "trust": 75,
+        "affinity": 70,
+        "label": "smoker",
+        "note": "She buys my mended nets and smokes a good fish."
+       },
+       {
+        "name": "Col Roon",
+        "trust": 50,
+        "affinity": 45,
+        "label": "strand walker",
+        "note": "A polite lad who walks the strand when Lark does; I keep an eye on him."
        },
        {
         "name": "Livia Faro",
         "trust": 55,
-        "affinity": 48,
-        "label": "neighbour",
-        "note": "A good girl, but she and Lark talk at the mole at dusk and I know what they talk about."
-       },
-       {
-        "name": "Amara Okoro",
-        "trust": 66,
-        "affinity": 60,
-        "label": "friend",
-        "note": "She keeps an eye on Lark on the strand, and I am glad of it."
-       },
-       {
-        "name": "Hana Sato",
-        "trust": 60,
-        "affinity": 50,
-        "label": "friend",
-        "note": "We are of an age and have both buried too much. She complains about the smoke and I let her."
-       },
-       {
-        "name": "Rafe Dunlin",
-        "trust": 58,
         "affinity": 45,
-        "label": "neighbour",
-        "note": "A widower like me, and he fishes the night alone. I send him a fish when I have one to spare."
-       },
-       {
-        "name": "Petra Tarn",
-        "trust": 62,
-        "affinity": 55,
-        "label": "neighbour",
-        "note": "Her smokehouse keeps my fish through the week. Her brother Sander's boy is her cross and she carries it."
-       },
-       {
-        "name": "Greta Dunmore",
-        "trust": 50,
-        "affinity": 40,
-        "label": "wash-house",
-        "note": "She hears everything and tells half of it. I sit at her wall and say nothing worth hearing."
-       },
-       {
-        "name": "Benedikt Orme",
-        "trust": 45,
-        "affinity": 35,
-        "label": "the reader",
-        "note": "He fills children's heads with the old script. I never learned it and I have not starved for it."
+        "label": "lamp house",
+        "note": "She renders the oil that keeps her uncle's light burning, and she talks with my Lark at the mole at dusk — the two of them fill the girl's head with ships between them."
        }
       ],
       "memories": [
        {
-        "gist": "The fever winter: my Siri died in the bed above me and I could not get the healer there in time. I have never forgiven the cold of that room.",
+        "gist": "The fever winter: I nursed Siri and could not save her, and then I took Lark into my house.",
         "salience": 1,
         "about": [
+         "Lark Morrow",
          "Mirren Quill"
         ]
        },
        {
-        "gist": "Lark at three, sitting on my bench tangling my best line and laughing. That was before Siri went.",
-        "salience": 0.7,
-        "about": [
-         "Lark Morrow"
-        ]
-       },
-       {
-        "gist": "My mother told me how her own mother remembered the lean years, when half the town's roofs came off for fuel and there was no wood left to mend them.",
-        "salience": 0.6,
+        "gist": "The storm last autumn took the end rail of the mole and half the slates off Low Row; I sat mending nets while the wind screamed.",
+        "salience": 0.8,
         "about": []
        },
        {
-        "gist": "Last spring Lark came running up the Fish Steps saying she had seen a sail, and I looked where she pointed and saw white water and grey and the Pale, and nothing else.",
-        "salience": 0.85,
+        "gist": "My mother told me how her own mother remembered the last ship going out and the lean years after, when half the town went with it.",
+        "salience": 0.7,
+        "about": []
+       },
+       {
+        "gist": "Lark came running to my bench last spring saying she had seen a sail beyond the Combs; I told her it was the light and the fog.",
+        "salience": 0.9,
         "about": [
          "Lark Morrow"
         ]
        },
        {
-        "gist": "Mending Magda's big net the morning after the autumn storm, with the slates down all round the town and the mole's end rail gone.",
+        "gist": "Magda Tarn first asked me to mend her house's nets when I was a young woman, and I have mended them ever since.",
         "salience": 0.6,
         "about": [
          "Magda Tarn"
-        ]
-       },
-       {
-        "gist": "Anselm Faro lighting the Watchglass at dusk, and Lark not ten steps from him, watching, as she does every night.",
-        "salience": 0.65,
-        "about": [
-         "Anselm Faro",
-         "Lark Morrow"
         ]
        }
       ],
       "stances": [
        {
-        "key": "the_lamp_is_for_the_living_not_the_dead",
-        "value": 0.7,
-        "why": "Oil that could be eaten burns every night for a ship that will never come. I have said so at the wall and been told to hush."
+        "key": "the_sail_was_a_trick_of_the_light",
+        "value": 0.8,
+        "why": "I have watched that water forty years and never seen a ship; the lamp and the fog make shapes for a young eye."
        },
        {
-        "key": "no_one_saw_a_sail",
-        "value": 0.85,
-        "why": "I looked where she pointed. There was nothing but the Combs and the Pale. A girl at dusk sees what she wants."
+        "key": "the_lamp_is_a_waste_of_fish",
+        "value": 0.6,
+        "why": "Oil that could feed a family burns every night for ships that never come."
        },
        {
-        "key": "work_is_the_only_answer_to_grief",
+        "key": "the_strand_looks_after_its_own",
         "value": 0.9,
-        "why": "When Siri died I went back to the bench the next day, and it kept me."
+        "why": "We came off the last ships together and we have only each other."
        },
        {
-        "key": "keep_your_own_counsel",
-        "value": 0.75,
-        "why": "Greta Dunmore hears everything said at her wall. I have learned to say little there."
-       },
-       {
-        "key": "strand_folk_must_marry_strand_or_kiln_that_will_",
-        "value": 0.55,
-        "why": "The Kiln families have never taken a Strand apprentice at the Cone, and the old line does not wash out."
+        "key": "a_mended_net_is_a_certain_catch",
+        "value": 0.85,
+        "why": "My bench has kept half the Strand fed, and I am not ashamed of it."
        }
       ]
      }
@@ -24911,155 +24846,136 @@
       }
      ],
      "sheet": {
-      "narrative": "I saw it. I was on the mole at dusk in the last of the light and there was a sail beyond the Combs, white and leaning, for as long as it takes to say so, and then the Pale had it. Nobody believes me, not my grandmother, not Amara, not Ingrid's friends at the wall. I gather kelp in the cold mornings and I watch the water every dusk, and I will see it again. The lamp is lit for it. That is what the vow means, whatever the old people say.",
+      "narrative": "I gather kelp on the Wrack Strand with Amara and Hana, early, whatever the weather. Last spring at dusk I saw a sail beyond the Combs, pale against the Pale, for as long as it takes to say so. Nobody else saw it, and my grandmother says it was the light. I go to the tip of the mole every dusk to watch for it again.",
       "values": [
-       "what I saw is true",
-       "the light means something",
-       "the sea keeps its promises",
-       "I will not be talked out of it"
+       "the_sail",
+       "the_sea",
+       "truth",
+       "my_grandmother",
+       "the_strand"
       ],
       "goals": [
-       "See the sail again, and prove it was real",
-       "Find someone who believes her, or a way to make them",
-       "Keep gathering enough kelp to hold her place and her grandmother's temper",
-       "Get out beyond the harbour mouth somehow, one day"
+       "See the sail again and prove I saw it",
+       "Learn what lies beyond the Combs and the Pale",
+       "Keep my grandmother from worrying while I watch"
       ],
       "pastimes": [
-       "Standing at the tip of the mole at dusk to watch the lamp lit",
-       "Walking the Wrack Strand looking for sea-glass and wreck colour",
-       "Talking with Livia Faro at the lamp house"
+       "Standing at the tip of the mole at dusk, watching the water beyond the Combs",
+       "Gathering sea-glass on the Wrack Strand and sorting it by colour",
+       "Listening to Anselm Faro talk about the lamp and the old days"
       ],
-      "calling": "The water beyond the Combs. I want to be the one who goes and looks, not the one who mends nets and waits.",
-      "mood": "Restless, hurt, lit up",
+      "calling": "I gather wrack because I must, but what I want is to go out past the Combs and see what is there.",
+      "mood": "restless and hopeful",
       "traits": {
        "caution": 30,
-       "sociability": 48,
-       "empathy": 55,
-       "curiosity": 88,
-       "ambition": 70,
-       "introspection": 60,
-       "temper": 52,
-       "nurture": 35
+       "sociability": 55,
+       "empathy": 65,
+       "curiosity": 90,
+       "ambition": 60,
+       "introspection": 50,
+       "temper": 35,
+       "nurture": 50
       },
       "relations": [
        {
         "name": "Ingrid Morrow",
-        "trust": 80,
-        "affinity": 75,
+        "trust": 90,
+        "affinity": 85,
         "label": "grandmother",
-        "note": "She raised me and she thinks I am a fool. I love her and I cannot make her look."
+        "note": "She raised me and I love her, but she will not believe me about the sail."
        },
        {
         "name": "Amara Okoro",
-        "trust": 70,
-        "affinity": 68,
-        "label": "friend",
-        "note": "She gathers beside me and does not laugh at me, though she does not believe me either."
+        "trust": 75,
+        "affinity": 70,
+        "label": "fellow gatherer",
+        "note": "She gathers beside me and knows every colour of sea-glass."
        },
        {
         "name": "Hana Sato",
-        "trust": 60,
-        "affinity": 55,
-        "label": "friend",
-        "note": "Kind, and tired, and says the smoke gets in everything. She listens better than most."
+        "trust": 70,
+        "affinity": 65,
+        "label": "fellow gatherer",
+        "note": "Quiet and kind, and she listens when I talk about the sail."
        },
        {
         "name": "Anselm Faro",
-        "trust": 72,
-        "affinity": 62,
-        "label": "the lamp keeper",
-        "note": "He lights it every night and never mocks me for watching. He keeps the vow I believe in."
-       },
-       {
-        "name": "Livia Faro",
-        "trust": 75,
-        "affinity": 70,
-        "label": "friend",
-        "note": "We talk at the mole at dusk. She does not say I am wrong, and that is worth a great deal."
+        "trust": 80,
+        "affinity": 75,
+        "label": "lamp keeper",
+        "note": "He lights the Watchglass every dusk and never laughs at me for watching."
        },
        {
         "name": "Col Roon",
-        "trust": 45,
-        "affinity": 40,
-        "label": "stranger",
-        "note": "He walks the strand when I do and has never spoken to me. I think he is shy. I think I might speak first."
+        "trust": 50,
+        "affinity": 55,
+        "label": "strand walker",
+        "note": "He walks the strand when I do and has not spoken to me yet."
+       },
+       {
+        "name": "Livia Faro",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "We talk at the mole at dusk while her uncle lights the lamp."
        },
        {
         "name": "Magda Tarn",
-        "trust": 55,
-        "affinity": 45,
+        "trust": 70,
+        "affinity": 60,
         "label": "elder",
-        "note": "She divides the catch and my grandmother mends her nets. She looks at me as if I were a broken thing."
-       },
-       {
-        "name": "Bram Calloway",
-        "trust": 40,
-        "affinity": 35,
-        "label": "the boatwright",
-        "note": "He is building a ship in the dry dock. If anyone could cross the Combs it is him, and he needs trees he cannot have."
+        "note": "She divides the catch and my grandmother trusts her word."
        }
       ],
       "memories": [
        {
-        "gist": "The dusk last spring on the mole: a sail beyond the Combs, white and leaning, for as long as it takes to say so, then the Pale closed over it.",
+        "gist": "Last spring at dusk I saw a sail beyond the Combs, pale against the Pale, for as long as it takes to say so.",
         "salience": 1,
         "about": []
        },
        {
-        "gist": "My mother Siri dying in the fever winter, and Ingrid's hands on my shoulders in the graveyard on the Crown, and the glass marker they chose for her.",
+        "gist": "The fever winter took my mother Siri; I was small, and my grandmother took me in.",
         "salience": 0.9,
         "about": [
          "Ingrid Morrow"
         ]
        },
        {
-        "gist": "Telling the whole Fish Steps what I saw, and the silence, and Lorcan Vane laughing, and Ingrid telling me to hush.",
-        "salience": 0.8,
-        "about": [
-         "Ingrid Morrow"
-        ]
-       },
-       {
-        "gist": "Gathering kelp with Amara and Hana in a cold wind, and Amara showing me which wreck a piece of blue sea-glass came from, as if the sea had a memory.",
-        "salience": 0.55,
-        "about": [
-         "Amara Okoro",
-         "Hana Sato"
-        ]
-       },
-       {
-        "gist": "Standing at the tip of the mole while Anselm Faro lit the Watchglass, and the blue band in it, and thinking: that is for the sail.",
+        "gist": "Anselm Faro showed me how the Watchglass burns and told me the keepers' vow, and I have watched the light ever since.",
         "salience": 0.7,
         "about": [
          "Anselm Faro"
+        ]
+       },
+       {
+        "gist": "Gathering kelp with Amara and Hana on a cold morning, and Amara showing me which wreck each colour of sea-glass came from.",
+        "salience": 0.5,
+        "about": [
+         "Amara Okoro",
+         "Hana Sato"
         ]
        }
       ],
       "stances": [
        {
-        "key": "i_saw_what_i_saw",
+        "key": "i_saw_the_sail",
         "value": 0.95,
-        "why": "It was not a wave or a bird. It was a sail, and I will not say otherwise to be comfortable."
+        "why": "I know what I saw, and I will not be talked out of it."
        },
        {
-        "key": "the_lamp_is_kept_for_the_ships",
-        "value": 0.85,
-        "why": "The first keeper swore the light would burn until the ships came back. Why swear it if it means nothing?"
-       },
-       {
-        "key": "the_old_people_have_given_up",
-        "value": 0.7,
-        "why": "Ingrid and her friends talk only of what the sea takes. Nobody talks of what it might bring."
+        "key": "the_light_is_for_the_ships",
+        "value": 0.8,
+        "why": "The Watchglass burns every night until the ships come back; the sail is a sign they are coming."
        },
        {
         "key": "the_combs_can_be_crossed",
         "value": 0.6,
-        "why": "The ships crossed them once. Nothing has changed about the water except that we stopped trying."
+        "why": "If a ship can pass them, so can something built here."
        },
        {
-        "key": "work_first_then_watching",
-        "value": 0.65,
-        "why": "I gather my kelp before I go to the mole. Ingrid would turn me out otherwise, and I would deserve it."
+        "key": "the_strand_looks_after_its_own",
+        "value": 0.7,
+        "why": "My grandmother taught me that, and I believe it even when I want to leave."
        }
       ]
      }
@@ -25194,6 +25110,13 @@
         "affinity": 10,
         "label": "the girl's father",
         "note": "He looks at my son as if he were a bad debt. I keep my peace about it."
+       },
+       {
+        "name": "Sabine Quill",
+        "trust": 45,
+        "affinity": 40,
+        "label": "my son's girl",
+        "note": "Reads the old script better than anyone but Benedikt, and my Ren can barely write his name. She is clever and she is kind to him, whatever her father thinks."
        }
       ],
       "memories": [
