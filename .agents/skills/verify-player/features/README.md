@@ -9,6 +9,7 @@
 | Verbs from the game client: F on a thing or person, C on oneself, words for writing, the pack and know-how panels, refusals shown with the rules' reason, a skill the world adds appearing with no client change | [verbs.md](verbs.md) |
 | Dealings: the player proposes terms through the verbs' node, reads the record in `my_records`, is told it was accepted, what it owes and that it is kept; a demand on the player told, and unpaid when it falls due; `record` and `record_party` private | [dealings.md](dealings.md) |
 | What a player perceives of others: names only when known, health as a band, `appraise` revealing exact health to the appraiser only, an introduction teaching a name; what others perceive of a walking player (`approach.py`: `walk → person`, as an AI's `goto → person`) | [perception.md](perception.md) |
+| Across a drop between ground levels: players above and below see each other, the one above cannot step off it or walk over it, and an arrow flies over it (`drop.py`, plan-test seed) | [drop.md](drop.md) |
 
 Baseline: `verify-<run>` published by `$V launch` and `$V doctor` passing. One identity per run; `join` succeeds once per identity while its character lives. For a second player, use a second run name, or mint another identity with `curl -X POST http://127.0.0.1:3300/v1/identity` (`appraise.py` keeps one as `token2` in the run's state).
 

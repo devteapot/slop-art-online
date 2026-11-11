@@ -1,5 +1,22 @@
 # Validation record (player)
 
+
+
+## 2026-11-11 eye-2: across a drop, unchanged (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. `drop.py` on plan-test (`player-eye2v-drop`): 6 of 6 (both see each other across one drop tile, the walk stops at the edge, the route never crosses, the arrow over the drop strikes). Plan-test's lots name no measured model, so eye-2 changes none of its tiles. Maintained: drop.md (the script reads plan-test's plan whatever the seed; the search's full conditions), comments in `combat.py` and `gesture.py` (open stalls and wells no longer hide).
+
+## 2026-11-11 drop-1: across a drop (dev-box)
+
+Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `player-drop1b-20261111-155119` (plan-test): `drop.py` 6 of 6: the players above (the row, 6.5 m) and below (the quay, 2.5 m), 2 m apart across one drop tile, see each other in `seen_bodies` and `seen_characters`; the one above walking straight at the drop slides 2.65 m along its edge and never stands on it or on the quay; told to go below, it walks 20.3 m by the stair and its route never crosses the drop; its arrow over the drop strikes ("struck Below: hit for 16").
+- An earlier run (`player-drop1-20261111-154955`) failed only "stops at its edge": the check wanted the player inside the row's polygon, and steering had slid it past the plan's west end into the skirt (neither level). The check is now "never on a blocked tile and never on the lower level".
+
+## 2026-11-11 goods-1 (dev-box)
+
+Own container `goods1-stdb` (port 3313), merged build (rules-1, plan-1). `player-g3-11111531`: `new_skill.py` 6 of 6 (it installs the script, now over HTTP through the harness) and `told.py` 12 of 12 pass. The player path did not change; `feed` and `make` are skills from the script like `whittle`, and are not offered in the shipped world (no fires that burn fuel, no recipes).
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.

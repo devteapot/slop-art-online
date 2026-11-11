@@ -59,6 +59,21 @@ hour of the run; a game day is the summary's `day_ms` (720 s on current seeds).
    from the addressee to the subject (each such row answers one line only); silence: 1 - answered / addressed; heard: lines addressed to
    the subject by anyone; no_earshot: "No answer from …; not within earshot" percepts. In
    single-mind trials residents do not think, so silence near 1 is the expected finding.
+7. Own project (sustained own-project activity). The plans are the installed plans (in a window,
+   with the plan held when it opened, a "carried" graphs row) and the replies' `intend` lists, in
+   time order. Content words as in 2, minus food, warmth, sleep and routine words (PROJECT_STOP): a
+   project word appears in at least half (and at least 2) of the plans about neither food nor
+   warmth, and in both the first and the last third of all plans, so it is held across the stretch,
+   not mentioned once. project: the up to 3 most frequent such words.
+   Project words match through small classes of one sense (wood/timber/trees/logs; house/home/
+   shelter/frame; writing/tablets/letters; teaching/lessons; fish/nets; traps; storage; planting).
+   project_acts: decided acts, attempts it perceived (done or failed: "You did what you had
+   decided", "did not work") and its own lines (asking for it) whose words meet the project, with a
+   few skill senses added (gather at a tree serves wood; build serves house, shelter, storage; write
+   serves writing; teach serves lessons). project_progress: 1 when an act it decided toward the project
+   was done ("You did what you had decided: ..." percepts, or a build, learn or write row of its own,
+   whose words meet the project), else 0. own_project: the share of all plans holding the project when
+   at least one act served it, else 0. A keyword measure like the others: read the examples.
 6. Distinctiveness, per batch x trial x variant: the mean (range) of 1 - cosine over pairs of
    runs, of three profiles. skill_diss: counts of decided acts by skill (the mind's choices);
    body_diss: the share of samples per activity (activity[0], "idle" when none; what the body
@@ -135,10 +150,11 @@ def run(d, variants):
     samples = [x for x in jl(d / "samples.jsonl") if x.get("pos")]
     chron = jl(d / "chronicle.jsonl")
     exps = jl(d / "experiences.jsonl")
-    graphs = [g for g in jl(d / "graphs.jsonl") if g.get("source") == "mind"]
+    all_graphs = [g for g in jl(d / "graphs.jsonl") if g.get("source") == "mind"]
+    graphs = [g for g in all_graphs if not g.get("carried")]  # a carried row is the plan held when a window opens: 7 only
     # As trials.py reads it: the mind's live journal while it exists, else the copy taken at the stop.
     live = d.parents[2] / "journal" / f"{trials.PREFIX}{d.parent.name}-{d.name}"
-    journal = jl((live if live.exists() else d / "journal") / f"{name}.jsonl")
+    journal = jl((live if live.exists() else d / "journal") / trials.journal_file(name))
     speech = [c for c in chron if c.get("kind") == "speech"]
     to_me = sorted(int(c["at_ms"]) for c in speech if c.get("b") == S and c.get("a") != S)
     ex = defaultdict(list)
@@ -316,6 +332,16 @@ def run(d, variants):
     unanswered = [c["text"][:120] for c in addressed if all(c is not x for x, _ in answered)]
     ex["silence"] = unanswered[:: max(1, len(unanswered) // 2)][:2]
 
+    # 7. Own project.
+    texts = [(g["t"], g.get("plan") or "") for g in all_graphs if g.get("t") is not None]
+    for r in journal:  # what the mind said it intends, beside the plans it installed
+        it = reply(r).get("intend")
+        if isinstance(it, list) and it and r.get("at_ms"):
+            texts.append(((int(r["at_ms"]) - t0_ms) / 1000, "; ".join(str(x) for x in it)))
+    proj, proj_hold, proj_acts, proj_prog = project([t for _, t in sorted(texts, key=lambda x: x[0])], acts, exps, chron, S)
+    if proj:
+        ex["project"] = [f"project {'/'.join(proj)}: held in {proj_hold:.0%} of plans, {proj_acts} acts toward it, progress {proj_prog}"]
+
     # 6. Distinctiveness inputs.
     body = Counter((x.get("activity") or ["idle"])[0] for x in samples)
     decided = Counter(a["do"] for _, a, _ in acts)
@@ -346,13 +372,85 @@ def run(d, variants):
         "answered": len(answered), "silence": share(len(addressed) - len(answered), len(addressed)),
         "heard": len(to_me), "no_earshot": no_earshot,
         "cost_h": round(cost / hours, 2) if cost is not None else None,
+        "own_project": round(proj_hold, 2) if proj and proj_acts else 0.0, "project_acts": proj_acts, "project_progress": proj_prog,
         "_body": body, "_decided": decided, "_vocab": vocab, "_ex": ex,
     }
 
 
+PROJECT_STOP = {w[:5] for w in """gather walk sleep rest back light dawn dark night morni eveni midda noon until stay watch carry bring
+place spot near close north south east west there where while ready first later today tonig every along small large
+whate someo anyon anyth thing other again still offer quiet plain asked answe speak greet wave words word better
+pack full work worki down over look might secon cente stand livin push deepe towar show till turn pass besid throu
+reach start begin want need take give hold hand hands time long more less most some many much good well true right
+plan their them they your mine yours self around past head side road path ground groun""".split()}
+# Warmth for the project's sake is the fire and the cold itself; a cloak or a shelter can be a craft project.
+WARM_STRICT = re.compile(r"\b(warm\w*|cold|fire|campfire|freez\w*)\b", re.I)
+SENSES = {"gather": {"wood", "timbe", "tree", "logs", "fiber", "reeds", "stone"}, "build": {"build", "house", "home", "shelt", "stora", "frame", "raise", "walls", "hut"},
+          "write": {"write", "writi", "table", "lette", "recor"}, "teach": {"teach", "lesso", "learn", "taugh"}, "read": {"read", "readi", "lette"},
+          "experiment": {"work", "learn", "craft"}, "craft": {"craft", "make"}, "fish": {"fish", "fishi"}, "plant": {"plant", "field", "seed"}}
+
+
+# Words that serve one project: a stem in a class matches any stem of the class.
+CLASSES = [{"timbe", "wood", "woods", "logs", "tree", "trees", "lumbe"}, {"house", "home", "hut", "shelt", "frame", "walls", "roof", "cabin"},
+           {"write", "writi", "wrote", "table", "lette", "recor", "sign"}, {"teach", "lesso", "taugh", "learn", "train"},
+           {"fish", "fishi", "nets", "net"}, {"trap", "traps", "snare"}, {"stora", "store", "grana"}, {"plant", "field", "seed", "seeds", "sow"}]
+
+
+def widen(ws):
+    return set(ws) | {w for c in CLASSES if c & set(ws) for w in c}
+
+
+def project(plans, acts, exps, chron, S):
+    """(project words, share of plans holding them, acts serving them, 1 if one was done) -- see 7."""
+    plans = [p for p in plans if p]
+    # Names and places (capitalised words inside a sentence) are who and where, not the project.
+    names = {w[:5].lower() for p in plans for w in re.findall(r"(?<![.!?;:]\s)(?<!^)\b[A-Z][a-z]+", p)}
+    pw = [{w for w in words(p) if w not in PROJECT_STOP and w not in names and not FOOD.search(w) and not WARM.search(w) and len(w) >= 4}
+          for p in plans]
+    # Candidate words come only from plans about neither food nor the fire and the cold: wood for a
+    # house can be a project, wood for the night's fire cannot.
+    other = [ws for p, ws in zip(plans, pw) if not FOOD.search(p) and not WARM_STRICT.search(p)]
+    if len(other) < 2:
+        return [], 0.0, 0, 0
+    third = max(1, len(pw) // 3)
+    count = Counter(w for ws in other for w in ws)
+    held = [w for w, n in sorted(count.items(), key=lambda wn: (-wn[1], wn[0])) if n >= max(2, len(other) / 2)
+            and any(w in ws for ws in pw[:third]) and any(w in ws for ws in pw[-third:])][:3]
+    if not held:
+        return [], 0.0, 0, 0
+    P = widen(held)
+    hold = sum(1 for ws in pw if ws & P) / len(pw)
+
+    def act_words(a):
+        text = " ".join(str(a.get(k) or "") for k in ("do", "item", "text", "say")) + " " + json.dumps(a.get("target") or "")
+        w = set(words(text))
+        do = a.get("do")
+        if do == "gather" and not re.search(r"tree|wood|fiber|reeds|stone|boulder", text, re.I):
+            return w
+        return w | SENSES.get(do, set())
+    def senses(t):
+        t2 = FAIL.sub("", t).replace("You did what you had decided:", "")  # the message's own wording is not the act
+        w = set(words(t2))
+        for k, v in SENSES.items():
+            if re.search(rf"\b{k}\b", t2) and (k != "gather" or re.search(r"tree|wood|fiber|reeds|stone|boulder", t2, re.I)):
+                w |= v
+        return w
+    own = [e["text"] for e in exps if e.get("observer", S) == S and (FAIL.match(e.get("text", "")) or e.get("text", "").startswith("You did what you had decided:"))]
+    said = [c.get("text", "") for c in chron if c.get("kind") == "speech" and c.get("a") == S]
+    # Acts toward it, each counted once: decided acts (spoken ones are its lines, counted there) or, when it
+    # decided none toward it, the attempts it perceived (done or failed); plus its own lines that name it.
+    decided = sum(1 for _, a, _ in acts if a.get("do") not in ("say",) and "say" not in a and act_words(a) & P)
+    tried = sum(1 for t in own if senses(t) & P)
+    n_acts = (decided or tried) + sum(1 for t in said if set(words(t)) & P)
+    done = [t for t in own if t.startswith("You did what you had decided:")] + \
+           [c.get("text", "") for c in chron if c.get("kind") in ("build", "learn", "write") and c.get("a") == S]
+    prog = 1 if any(senses(t) & P for t in done) else 0
+    return held, hold, n_acts, prog
+
+
 KEYS = ["min", "died", "starved", "plans_other", "acts_other", "self_started", "prompted", "goals", "goals_1d", "goals_2d",
         "goals_1d_other", "goals_reached", "fail_repeats_h", "fail_streak", "plan_repeats_h", "cells_h", "late_cells_h", "far_m",
-        "lines", "addressed", "people", "answered", "silence", "heard", "cost_h"]
+        "lines", "addressed", "people", "answered", "silence", "heard", "cost_h", "own_project", "project_acts", "project_progress"]
 
 
 def spread(xs):
@@ -410,7 +508,7 @@ def main():
     labels = [("plan_other", "plans not about food or warmth"), ("social", "self-started social acts"), ("making", "self-started making acts"),
               ("exploring", "self-started exploring acts"), ("goal_2d", "goals held 2+ game days"), ("goal_reached", "goals with an outcome"),
               ("loop", "failure loops"), ("plan_repeat", "plans re-installed"), ("far", "farthest point"),
-              ("answered", "addressed lines answered"), ("silence", "addressed lines unanswered")]
+              ("answered", "addressed lines answered"), ("silence", "addressed lines unanswered"), ("project", "own project")]
     for (b, t, v), rs in groups.items():
         print(f"### {b} {t} {v}\n")
         for r in rs[: a.examples]:

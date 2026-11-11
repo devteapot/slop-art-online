@@ -76,7 +76,7 @@ def run(d):
     plans = [g.get("plan") or "" for g in graphs]
     plan_other = [p for p in plans if not FOOD.search(p) and not WARM.search(p)]
     acts = []
-    for r in jl(d / "journal" / f"{name}.jsonl"):
+    for r in jl(d / "journal" / trials.journal_file(name)):
         for a in reply(r).get("acts") or []:
             if isinstance(a, dict) and a.get("do"):
                 acts.append(a)

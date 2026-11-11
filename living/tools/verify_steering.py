@@ -92,7 +92,7 @@ def pose(r, t):
 
 
 def walkable(db):
-    """Terrain lookup for choosing open ground (water, rock and walls block)."""
+    """Terrain lookup for choosing open ground (water, rock, walls, drops and low things block)."""
     cache = {}
 
     def ok(x, y):
@@ -104,7 +104,7 @@ def walkable(db):
             cache[cid] = bytes.fromhex(hexes[0][2:]) if hexes else b""
         t = cache[cid]
         i = (int(y) % 16) * 16 + int(x) % 16
-        return i < len(t) and t[i] not in (2, 4, 7)
+        return i < len(t) and t[i] not in (2, 4, 7, 8, 9)
 
     return ok
 
@@ -219,7 +219,11 @@ def main():
     results["player direction input moves, turns and stops"] = east and south and stopped
     print(f"  player: east v=({r1['vx']},{r1['vy']}), south v=({r2['vx']},{r2['vy']}) speed {r2['speed']}, stop v=({r3['vx']},{r3['vy']})")
     src = (ROOT / "living/scripts/skills.rhai").read_text().replace("input_hz: 30.0, input_burst: 15.0", "input_hz: 0.2, input_burst: 2.0")
-    call(db, "install_script", src)
+    # Over HTTP: the script is past the 128 KiB one command-line argument may hold.
+    from install_script import install
+    code, body = install(db, src)
+    if code != 200:
+        raise RuntimeError(f"install_script: {code} {body[-300:]}")
     outcomes = [call(db, "human_move", dx, dy, False, check=False).returncode == 0 for dx, dy in [(1, 0), (0, 1), (-1, 0), (0, -1)]]
     results["movement input is rate-limited"] = outcomes[:2] == [True, True] and not all(outcomes[2:])
     print(f"  rate limit: accepted {outcomes}")

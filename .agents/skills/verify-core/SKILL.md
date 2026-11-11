@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm, places, weather, gestures), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm, places, weather, gestures), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -39,6 +39,7 @@ python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
 python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
+python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
 # The starter combat skills under graphs use the island seed (its newcomer kit, pack and
@@ -47,7 +48,17 @@ K=$R-skirmish
 mkdir -p ".local/living/verify/$K"
 python3 "$V" launch --run "$K" --seed island > ".local/living/verify/$K/launch.txt" 2>&1
 python3 "$C/scenes.py" skirmish --run "$K" > ".local/living/verify/$K/skirmish.txt" 2>&1
+# The drop scene over low tiles (9: a cart, an open stall, a well, a building's overhang: open at eye height) on the same island world.
+python3 "$C/scenes.py" low --run "$K" > ".local/living/verify/$K/low.txt" 2>&1
 python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
+
+# Drops between ground levels hide nothing and block the foot (features/sight.md, about 1 min)
+# on a planned settlement's land.
+P=$R-drop
+mkdir -p ".local/living/verify/$P"
+python3 "$V" launch --run "$P" --seed plan-test > ".local/living/verify/$P/launch.txt" 2>&1
+python3 "$C/scenes.py" drop --run "$P" > ".local/living/verify/$P/drop.txt" 2>&1
+python3 "$V" cleanup --run "$P" > ".local/living/verify/$P/cleanup.txt" 2>&1
 
 # Dealings on the world's records on an island world (about 3 min): agreements, demands, regard
 # (features/dealings.md, docs/WORLD_RULES.md).
@@ -72,6 +83,15 @@ mkdir -p ".local/living/verify/$L"
 python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.txt" 2>&1
 python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
 python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
+
+# Goods, fires that eat fuel and recipes over Cullet's goods (about 7 min), and a seeded
+# fishing ground's shared stock (features/goods.md, docs/WORLD_RULES.md).
+G=$R-goods
+mkdir -p ".local/living/verify/$G"
+python3 "$V" launch --run "$G" --seed "$PWD/$C/goods" > ".local/living/verify/$G/launch.txt" 2>&1
+python3 "$C/scenes.py" goods --run "$G" > ".local/living/verify/$G/goods.txt" 2>&1
+python3 "$C/scenes.py" stock --run "$G" > ".local/living/verify/$G/stock.txt" 2>&1
+python3 "$V" cleanup --run "$G" > ".local/living/verify/$G/cleanup.txt" 2>&1
 
 # A world's own day and laws (about 30 min; it waits for the world's own night):
 # day_minutes, the laws overlay, rates per game hour, sight, names, lamplight
@@ -108,7 +128,7 @@ cargo test --manifest-path living/Cargo.toml -p living-mind
 cargo test --manifest-path living/Cargo.toml -p living-viewer sync::tests
 ```
 
-The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets. Only its test step runs rules tests. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
+The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets. Only its test step runs rules tests. It skips a step that already passed on this machine on identical inputs (docs/TOOLING.md); `just living-check-full` runs every step, and `LIVING_CHECK_SERIAL=1` shows cargo's output and the test counts on the terminal. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
 
 ## Drive the existing mechanics and steering scripts
 
@@ -142,6 +162,15 @@ python3 "$V" launch --run "$L" --seed stage1-acts > ".local/living/verify/$L/lau
 python3 "$V" doctor --run "$L" > ".local/living/verify/$L/doctor.txt" 2>&1
 python3 "$C/scenes.py" lifecycle --run "$L" > ".local/living/verify/$L/lifecycle.txt" 2>&1
 python3 "$V" cleanup --run "$L"
+
+# The laws of starting a family and of the longing for a child (about 2 min, longer if it
+# must wait for day): conceive_roof, conceive_food, longing_after_min, longing_food.
+F=$R-family-laws
+mkdir -p ".local/living/verify/$F"
+python3 "$V" launch --run "$F" --seed stage1-acts > ".local/living/verify/$F/launch.txt" 2>&1
+python3 "$V" doctor --run "$F" > ".local/living/verify/$F/doctor.txt" 2>&1
+python3 "$C/scenes.py" family_laws --run "$F" > ".local/living/verify/$F/family_laws.txt" 2>&1
+python3 "$V" cleanup --run "$F"
 
 W=$R-wildlife
 mkdir -p ".local/living/verify/$W"

@@ -140,7 +140,7 @@ def dummy(st, near, dx, dy, graph='{"wait":60}', name_hint=None):
     raise RuntimeError("no resident to use as a dummy")
 
 
-OPAQUE = {4, 7}  # rock, wall (living_rules::map::Terrain); buildings are wall tiles
+OPAQUE = {4, 7}  # rock, wall (living_rules::map::Terrain): a building where it is solid at eye height; a drop (8) and a low or open thing (9: a cart, an open stall, a well, a building's overhang) are see-through
 
 
 def tiles(st, xs, ys):

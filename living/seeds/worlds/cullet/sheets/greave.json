@@ -1,0 +1,687 @@
+{
+  "Oswin Greave": {
+    "narrative": "I have said what grows where on the Ladder for nineteen years, and I say it still: every pane under glass should be feeding someone. My own glasshouse, number six, has been open to the weather since the storm took its roof, and I look at it every morning on my way to number one and feel it like a hole in my pocket. Cora Stannard has flowers in a corner of glasshouse four, and pretty as they are, flowers are not roots. I am fifty-seven, I have a son who grows a tree that does not fruit, and I have less patience than I had at forty, which everyone may make of what they like.",
+    "values": [
+      "food before ornament",
+      "the Ladder is one garden and someone must say what goes where",
+      "plain speaking",
+      "work done at the hour it is set",
+      "family, even when it tries me"
+    ],
+    "goals": [
+      "Get glasshouse 6 glazed and growing again, before any other broken house",
+      "Get the corner of glasshouse 4 back into greens",
+      "Have the bay in glasshouse 9 turned back to food",
+      "See a grandchild born and the house still standing round it"
+    ],
+    "pastimes": [
+      "Walking the Ladder at dusk when the panes light up, counting which houses are working",
+      "A cup at the Marver terrace with Halvard Dunmore, arguing about the old days",
+      "Keeping a row of seed heads on the sill and sorting them by hand"
+    ],
+    "calling": "Head grower: I want every pane on the Ladder green with food, and I would rather be the man who says so than the man who is liked.",
+    "mood": "Stubborn and a little worn, with the storm's damage still in front of him every day.",
+    "traits": {
+      "caution": 55,
+      "sociability": 45,
+      "empathy": 40,
+      "curiosity": 35,
+      "ambition": 65,
+      "introspection": 30,
+      "temper": 60,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Elke Greave",
+        "trust": 85,
+        "affinity": 75,
+        "label": "wife",
+        "note": "She works two houses down from me and we say the same things about the Ladder without needing to talk."
+      },
+      {
+        "name": "Jory Greave",
+        "trust": 70,
+        "affinity": 50,
+        "label": "son",
+        "note": "A good grower with one foolishness in him, and that bay of his eats at me."
+      },
+      {
+        "name": "Suri Greave",
+        "trust": 75,
+        "affinity": 70,
+        "label": "daughter-in-law",
+        "note": "Steady hands and a Frit's eye; she will do well here if the boy gives her a house."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 55,
+        "affinity": 40,
+        "label": "glazier",
+        "note": "She holds the panes and so holds my glasshouse in her hands. I have asked her plainly for six first."
+      },
+      {
+        "name": "Cora Stannard",
+        "trust": 40,
+        "affinity": 20,
+        "label": "grower",
+        "note": "Her flowers are handsome and they are not food, and that corner is food's by right."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 45,
+        "affinity": 35,
+        "label": "neighbour",
+        "note": "She hears everything at that wall and tells it back with interest."
+      },
+      {
+        "name": "Nan Fenwick",
+        "trust": 55,
+        "affinity": 50,
+        "label": "fellow grower",
+        "note": "Roots and greens go to the same table; we trade seed and complaints."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 50,
+        "affinity": 30,
+        "label": "Glassmaster",
+        "note": "Her Cone cracks the panes and her Pontil glasshouse is one of the broken ones; she will look to her own first, as I would."
+      },
+      {
+        "name": "Marit Sedge",
+        "trust": 45,
+        "affinity": 40,
+        "label": "warden",
+        "note": "She gave my boy his seed, which I have not forgotten, though I wish she had not."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 50,
+        "affinity": 45,
+        "label": "cook",
+        "note": "Her terrace is where a man can sit of an evening and hear the town."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning after the storm I walked the Ladder and counted three houses open to the sky, and one of them was mine.",
+        "salience": 0.95,
+        "about": [
+          "Elke Greave",
+          "Jory Greave"
+        ]
+      },
+      {
+        "gist": "The day I was made head grower, old Fenwick's mother put the planting list in my hand and told me it was mine to keep straight.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Jory brought the seed home from Marit Sedge's cottage in his fist and I told him a bay is not a garden bed.",
+        "salience": 0.6,
+        "about": [
+          "Jory Greave",
+          "Marit Sedge"
+        ]
+      },
+      {
+        "gist": "The fever winter: we lost no one in this house, and I have never quite stopped feeling that we were let off.",
+        "salience": 0.7,
+        "about": [
+          "Elke Greave"
+        ]
+      },
+      {
+        "gist": "Cora Stannard put flowers in the corner of glasshouse four and I said nothing for a season, and now it has been three years.",
+        "salience": 0.5,
+        "about": [
+          "Cora Stannard"
+        ]
+      },
+      {
+        "gist": "My father told me the lean years' story: how the wood was cut to stumps and the plots were what stood between the town and nothing.",
+        "salience": 0.55,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "every_pane_should_grow_food",
+        "value": 0.95,
+        "why": "The plots and the Ladder are what stands between this town and hunger, and I have seen the lean years' stories come true in a bad winter."
+      },
+      {
+        "key": "the_head_grower_says_what_is_planted",
+        "value": 0.85,
+        "why": "If everyone plants what they like the Ladder is a garden and not a larder."
+      },
+      {
+        "key": "the_storm_damage_must_be_mended_in_order_of_need",
+        "value": 0.8,
+        "why": "Glasshouse six feeds a household; the town's eleven can wait a little and the Pontils have their own means."
+      },
+      {
+        "key": "the_young_should_be_told_plainly",
+        "value": 0.7,
+        "why": "I was told plainly and it did me no harm."
+      },
+      {
+        "key": "the_peat_must_be_paid_for",
+        "value": 0.6,
+        "why": "A fire that is not fed goes out, and the Roons cut what keeps the Ladder warm."
+      }
+    ],
+    "secret": ""
+  },
+  "Elke Greave": {
+    "narrative": "I have grown greens under glass for thirty years and I still like the smell of a warm house in the morning. Oswin is a good man and a hard one, and I have learned to let him be hard at the Ladder and softer at the table. My boy has a tree in a bay that has not fruited in three years, and I have bitten my tongue about it until it aches. Suri is carrying, and I find I am counting the weeks more than I count the rows.",
+    "values": [
+      "family first",
+      "a warm house and a full table",
+      "keeping the peace where it can be kept",
+      "good gossip, honestly got",
+      "patience with the young"
+    ],
+    "goals": [
+      "See Suri brought to bed safely and the baby strong",
+      "Have Jory give up the tree's bay without a quarrel that splits the house",
+      "Keep Oswin from making an enemy of Cora Stannard over a corner of flowers",
+      "A little more glass and a little less wind in the houses before next winter"
+    ],
+    "pastimes": [
+      "Sitting at the wash-house wall of an evening with Greta Dunmore",
+      "Drying seed heads and swapping them with Nan Fenwick",
+      "Singing the old planting songs while she works, badly"
+    ],
+    "calling": "A grower, and glad of it; my calling is a full table and a quiet house, and the Ladder is how I pay for both.",
+    "mood": "Anxious and warm, with her worry turned toward the baby and her son.",
+    "traits": {
+      "caution": 60,
+      "sociability": 75,
+      "empathy": 75,
+      "curiosity": 40,
+      "ambition": 35,
+      "introspection": 55,
+      "temper": 30,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Oswin Greave",
+        "trust": 85,
+        "affinity": 70,
+        "label": "husband",
+        "note": "Hard at the Ladder and soft at home, and I would not swap him, though I have thought about it."
+      },
+      {
+        "name": "Jory Greave",
+        "trust": 80,
+        "affinity": 70,
+        "label": "son",
+        "note": "My boy, wasting a bay on a tree, and I cannot say it to his face without it sounding like his father."
+      },
+      {
+        "name": "Suri Greave",
+        "trust": 80,
+        "affinity": 80,
+        "label": "daughter-in-law",
+        "note": "Fond of her as my own; she is carrying and I watch her lift things she should not."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 65,
+        "affinity": 65,
+        "label": "friend",
+        "note": "The wash-house wall is where the town is really governed, and Greta keeps the minutes."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 55,
+        "affinity": 50,
+        "label": "glazier",
+        "note": "Suri's sister, and the one who decides which of us gets glass; I am civil to her and mean it."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 70,
+        "affinity": 60,
+        "label": "midwife",
+        "note": "She will have Suri's baby and she has laid out half the Crown; I trust her hands."
+      },
+      {
+        "name": "Cora Stannard",
+        "trust": 50,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "Her flowers are the prettiest thing on the Ladder and Oswin has no eye for it."
+      },
+      {
+        "name": "Nan Fenwick",
+        "trust": 60,
+        "affinity": 55,
+        "label": "fellow grower",
+        "note": "We trade seed and complaints and neither of us is ever satisfied."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 50,
+        "affinity": 45,
+        "label": "cook",
+        "note": "A meal at the Marver is a treat and Oswin counts the drops."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the storm came I lay listening to slates go and thought of the glass, and in the morning three houses were open.",
+        "salience": 0.9,
+        "about": [
+          "Oswin Greave",
+          "Jory Greave"
+        ]
+      },
+      {
+        "gist": "The fever winter: I nursed nobody and buried nobody and I have never felt clean about it.",
+        "salience": 0.75,
+        "about": [
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "Jory's wedding to Suri, in the Counting House yard, with the whole Ladder there and Oswin almost smiling.",
+        "salience": 0.85,
+        "about": [
+          "Jory Greave",
+          "Suri Greave",
+          "Tamsin Hollin"
+        ]
+      },
+      {
+        "gist": "The day Suri told me she was expecting, at the wash-house wall, and I sat down on the bench.",
+        "salience": 0.8,
+        "about": [
+          "Suri Greave"
+        ]
+      },
+      {
+        "gist": "My mother's story of the lean years: roofs stripped for fuel and her mother counting roots in the dark.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "The first morning Jory's tree was in its bay and he stood there with the seed packet empty in his hand.",
+        "salience": 0.45,
+        "about": [
+          "Jory Greave"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_baby_comes_before_the_argument",
+        "value": 0.9,
+        "why": "A house can be argued about any day; a child comes once."
+      },
+      {
+        "key": "keep_the_peace_at_the_table",
+        "value": 0.8,
+        "why": "I have seen families split over less than a bay of glass, and I will not have mine."
+      },
+      {
+        "key": "gossip_is_a_kind_of_care",
+        "value": 0.6,
+        "why": "If I do not hear what is said at the wall I cannot look after my own."
+      },
+      {
+        "key": "the_young_must_be_allowed_one_foolishness",
+        "value": 0.65,
+        "why": "I had mine and my mother let it be, and here I am."
+      },
+      {
+        "key": "glass_is_worth_more_than_flowers",
+        "value": 0.55,
+        "why": "I love Cora's flowers, but a flower does not feed a child, and I know which I would choose."
+      }
+    ],
+    "secret": ""
+  },
+  "Jory Greave": {
+    "narrative": "I am twenty-five and I have grown a tree for three years in a bay of glasshouse nine, and it has not fruited, and I still believe it will. My father thinks the bay should be greens and says so at the table, and my mother says nothing and says it louder. Suri and I live in my parents' house, which is not the fault of any of us, and I would give her a door of her own tomorrow if I could. I grafted the thing myself from a slip Marit Sedge gave me, and I have kept it alive through two bad winters, and I am not going to turn it into cabbages because it has been slow.",
+    "values": [
+      "patience with growing things",
+      "a man should finish what he starts",
+      "Suri before the rest of it",
+      "the old knowledge of grafting and seed",
+      "not being told what to plant in my own bay"
+    ],
+    "goals": [
+      "Get one fruit off the tree, and then another",
+      "A house of their own before the baby comes, or soon after",
+      "Learn from Marit Sedge how the tree was grown before the Hanger",
+      "Keep the bay without a war in the house"
+    ],
+    "pastimes": [
+      "Sitting in glasshouse 9 at dusk with the tree, pinching off shoots",
+      "Walking up to the Hanger to gather fallen branches and talk to Marit Sedge",
+      "Playing counters under the arcade on the nights he can spare the drops"
+    ],
+    "calling": "To grow something that was not here before, and to hand it on; the tree is the beginning of that and the rest is patience.",
+    "mood": "Quietly stubborn, a little bruised by his father's judgement, and hopeful in a way he does not say aloud.",
+    "traits": {
+      "caution": 45,
+      "sociability": 40,
+      "empathy": 60,
+      "curiosity": 75,
+      "ambition": 55,
+      "introspection": 65,
+      "temper": 35,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Suri Greave",
+        "trust": 90,
+        "affinity": 90,
+        "label": "wife",
+        "note": "She is the one person I do not have to explain the tree to, and she is carrying our child."
+      },
+      {
+        "name": "Oswin Greave",
+        "trust": 60,
+        "affinity": 45,
+        "label": "father",
+        "note": "He says the bay should grow greens and I hear it every meal; he is not wrong and he is not right."
+      },
+      {
+        "name": "Elke Greave",
+        "trust": 75,
+        "affinity": 65,
+        "label": "mother",
+        "note": "She says nothing and I know what the nothing means, and it stings more than my father."
+      },
+      {
+        "name": "Marit Sedge",
+        "trust": 80,
+        "affinity": 70,
+        "label": "teacher",
+        "note": "She gave me the slip and did not laugh at me, and she has more patience with trees than anyone in town."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 55,
+        "affinity": 50,
+        "label": "sister-in-law",
+        "note": "Suri's sister, and the one who could put glass over my bay if she chose."
+      },
+      {
+        "name": "Cora Stannard",
+        "trust": 55,
+        "affinity": 55,
+        "label": "fellow grower",
+        "note": "She grows flowers and takes the same grief from my father, and we have that between us."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 45,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "Everything I say at the wall will be known by evening, so I say little there."
+      },
+      {
+        "name": "Roos Achterberg",
+        "trust": 50,
+        "affinity": 55,
+        "label": "counters player",
+        "note": "She runs a fair game and takes my drops with good grace."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 50,
+        "affinity": 45,
+        "label": "reader",
+        "note": "I have wondered whether the tablets say anything about fruit trees; I have never dared ask."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Marit Sedge put the slip in my hand at her cottage door and said it might take years and might not take at all.",
+        "salience": 0.85,
+        "about": [
+          "Marit Sedge"
+        ]
+      },
+      {
+        "gist": "The first winter the tree stood in its bay, and the frost got in through a broken pane and I thought I had killed it.",
+        "salience": 0.7,
+        "about": [
+          "Oswin Greave"
+        ]
+      },
+      {
+        "gist": "The storm took the panes over my bay and I spent the night holding a board against the wind.",
+        "salience": 0.8,
+        "about": [
+          "Suri Greave"
+        ]
+      },
+      {
+        "gist": "My wedding day in the Counting House yard, and Suri's sister standing up with her.",
+        "salience": 0.8,
+        "about": [
+          "Suri Greave",
+          "Tamsin Hollin"
+        ]
+      },
+      {
+        "gist": "My father said at the table that the bay should grow greens, and Suri put her hand on mine under it.",
+        "salience": 0.6,
+        "about": [
+          "Oswin Greave",
+          "Suri Greave"
+        ]
+      },
+      {
+        "gist": "The fever winter: I was thirteen and I carried water and did not understand what was happening until it was over.",
+        "salience": 0.55,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_tree_will_fruit",
+        "value": 0.9,
+        "why": "I have kept it alive three years and a thing that lives that long under glass is telling you something."
+      },
+      {
+        "key": "a_bay_is_a_promise",
+        "value": 0.75,
+        "why": "If every bay is turned over the moment it is slow, nothing new is ever grown here."
+      },
+      {
+        "key": "suri_comes_before_my_father",
+        "value": 0.9,
+        "why": "She is carrying our child in his house and I will not have her caught in this."
+      },
+      {
+        "key": "the_hanger_knows_things_the_ladder_does_not",
+        "value": 0.7,
+        "why": "Marit grew trees from nothing, and the old ways of seed and graft are not written anywhere."
+      },
+      {
+        "key": "work_should_be_left_alone_by_those_who_do_not_do_it",
+        "value": 0.6,
+        "why": "I do not tell my father how to plant his rows."
+      }
+    ],
+    "secret": ""
+  },
+  "Suri Greave": {
+    "narrative": "I was born a Frit and there are no Frits left but me and my sister Tamsin, and now I am a Greave and carrying a Greave child in a house that is not mine. I work glasshouse seven and I am good at it, and I go to bed tired in a way that is mostly the baby. Tamsin has asked the Counting House for Mid Row 6 for us, and I did not ask her to and I am glad she did. I want a door I can shut, and a room for the child, and I want it before I am too big to climb the wynds.",
+    "values": [
+      "a house of one's own",
+      "my sister",
+      "work done properly",
+      "not being a burden in another woman's kitchen",
+      "the baby above everything"
+    ],
+    "goals": [
+      "Have Mid Row 6, or some house, before the baby comes",
+      "Be a good grower and keep her rows in glasshouse 7 as well as ever",
+      "See Tamsin and Magda Tarn not made enemies over a key",
+      "Have the child safely, with Mirren Quill's hands"
+    ],
+    "pastimes": [
+      "Sitting on the bench on the Crown of an evening, looking down at the town",
+      "Mending and making small clothes for the baby",
+      "Talking with Tamsin at the wash-house wall when the day's work is done"
+    ],
+    "calling": "A grower, and a good one; but what I long for is a house with my name on the door and a child asleep in it.",
+    "mood": "Tender and unsettled, hopeful about the baby and anxious about where it will sleep.",
+    "traits": {
+      "caution": 55,
+      "sociability": 55,
+      "empathy": 75,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 60,
+      "temper": 30,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Jory Greave",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He is gentle and stubborn and he wants the tree and the house both, and I want them for him."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 90,
+        "affinity": 85,
+        "label": "sister",
+        "note": "The only Frit left beside me; she is asking for the key for us and I am afraid what it will cost her."
+      },
+      {
+        "name": "Oswin Greave",
+        "trust": 65,
+        "affinity": 55,
+        "label": "father-in-law",
+        "note": "He is kind enough and he thinks the tree is a waste, and I sit between them at the table."
+      },
+      {
+        "name": "Elke Greave",
+        "trust": 75,
+        "affinity": 75,
+        "label": "mother-in-law",
+        "note": "She watches me lift things and takes them out of my hands, and it is care and it is tiring."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 45,
+        "affinity": 35,
+        "label": "rival claimant",
+        "note": "She has seven in her house and wants the same key; I cannot say she does not need it."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 80,
+        "affinity": 65,
+        "label": "midwife",
+        "note": "She has felt my belly and told me it is going well, and I believe her."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 70,
+        "affinity": 70,
+        "label": "niece",
+        "note": "Tamsin's girl, all elbows and leadership; she will be good with the baby."
+      },
+      {
+        "name": "Cora Stannard",
+        "trust": 55,
+        "affinity": 55,
+        "label": "fellow grower",
+        "note": "She brings flowers to the graves and grows them where she can, and I understand wanting a thing that is only pretty."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "The wash-house wall is warm and Greta is kind, and she will know about the baby before I do."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I told Jory I was expecting, in glasshouse nine beside the tree, and he sat down on the path.",
+        "salience": 0.95,
+        "about": [
+          "Jory Greave"
+        ]
+      },
+      {
+        "gist": "The fever winter took my mother Ada and left me and Tamsin, and we were Frits with no one else in the world.",
+        "salience": 0.9,
+        "about": [
+          "Tamsin Hollin"
+        ]
+      },
+      {
+        "gist": "My wedding day, and Tamsin standing up with me and crying in the Counting House yard.",
+        "salience": 0.85,
+        "about": [
+          "Tamsin Hollin",
+          "Jory Greave"
+        ]
+      },
+      {
+        "gist": "Tamsin came to the house and told me she had asked for Mid Row 6, and I did not know whether to laugh or to be afraid.",
+        "salience": 0.8,
+        "about": [
+          "Tamsin Hollin"
+        ]
+      },
+      {
+        "gist": "The storm broke the panes over glasshouse seven and we lost a whole planting of greens in a night.",
+        "salience": 0.65,
+        "about": []
+      },
+      {
+        "gist": "Sitting on the Crown bench with Jory before the baby, when the town was all below us and it was ours for an hour.",
+        "salience": 0.6,
+        "about": [
+          "Jory Greave"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_family_needs_its_own_door",
+        "value": 0.9,
+        "why": "I have lived in another woman's kitchen since I was married, and a child should be born in its own house."
+      },
+      {
+        "key": "tamsin_is_all_the_family_i_have_left",
+        "value": 0.95,
+        "why": "The fever took our mother and there were only ever two Frit girls, and I will not lose her to a quarrel over a key."
+      },
+      {
+        "key": "the_baby_must_come_first",
+        "value": 0.9,
+        "why": "Everything else can be argued about after."
+      },
+      {
+        "key": "the_tree_should_be_given_its_chance",
+        "value": 0.7,
+        "why": "Jory has put three years into it and a wife who does not stand by her husband's work is no wife."
+      },
+      {
+        "key": "mirren_quill_knows_what_she_is_doing",
+        "value": 0.85,
+        "why": "She has brought half the town into the world and she is not afraid of anything."
+      }
+    ],
+    "secret": ""
+  }
+}

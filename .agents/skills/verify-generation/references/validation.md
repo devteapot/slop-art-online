@@ -1,5 +1,35 @@
 # Validation record (generation)
 
+
+## 2026-11-11 kit-1: Cullet's lots name their models (dev-box)
+
+Branch `kit-1` (origin/main `a107fdfa` merged at `cba7d89b` for the runs below; `view-1`, `29cd401f`, merged afterwards at `4e080ecf`: it changes only the game client and docs, so the generation run was not repeated), own container `kit1-stdb` (2.14.1, port 3316, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. Evidence under the worktree's `.local/living/verify/`. The seed changed only in its plan lots' content: 73 lots carry `model` (`cullet/<folder>/<id>.glb`), every lot a `seed`, and three glasshouses a `repair` of 0.9; no shape changed, so no maintain pass.
+
+- `generation-kit1b-20261111-165531` (`--feature worlds --seeds cullet,plan-test`): cullet 65 and plan-test 72 checks pass; `land` digests equal `floor_preview`'s; original seeds unchanged. Before the merge, `generation-kit1-20261111-163847`: cullet 64, plan-test 71.
+- The real game client connected to `verify-kit1-cullet-170011`, and after merging `view-1` to `verify-kit1-cullet-172154` (a fresh player, headless): digests matched (tiles `07290076efd70ae6`, heights `bc0680832fd92c40`, layout `bc262d3ed04f5cb2`), the `lot` rows' models drew, none reported as not on disk.
+- After merging main again (`ee477fbc`: Cullet's 64 residents compiled into the seed, ui-1, the asset board), `generation-kit1c-20261111-173034` (same features and seeds): cullet 301 and plan-test 72 checks pass; original seeds unchanged. The seed then has both the residents and the lots' models (`cullet_plan.py --check` passes).
+- Not covered: `authored`, `guards`, the other seeds (unchanged by this branch).
+
+
+## 2026-11-11 eye-2: eye-height cells in the model table (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. `generation.py --feature worlds --seeds island,plan-test,cullet,floor-megacity-2k` (`generation-eye2v`): every world passes (island 977 checks, cullet 65, floor-megacity-2k 75, plan-test passes), original seeds unchanged. The island's live and native tiles digest is `e051dd1788c4d9f9` (heights `0d2f77752781845c`, layout `8ff57472b004a13f`), with 9,153 low and 4,116 drop tiles; plan-test 595 low and 188 drop. The blocking-lot check now accepts a drop at a lot's centre (a part of a model that does not hide over a drop's edge stays `Drop`) and reports `wall_at_centre` separately. Maintained: seeded-world.md, plans.md (pinned digests since eye-2), SKILL.md (rerun after the model table is regenerated).
+
+## 2026-11-11 drop-1: drop (8) and low (9) tiles (dev-box)
+
+Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `generation-drop1b-20261111-151550` (`--feature worlds --seeds island,plan-test,floor-megacity-2k,cullet-laws`): island 977, plan-test 70, floor-megacity-2k 75 and cullet-laws 41 checks pass; original seeds unchanged. Tiles: island drop 4,116, low 61, wall 44,253; plan-test drop 198, low 3 (`a planned settlement's drops are drop tiles`); megacity drop 0, low 590. Blocking lots stand on wall or low tiles: 450, 42, 2,468 of as many. `land` digests equal `floor_preview`'s: island `1a2a9a096caa8e21 0d2f77752781845c 8ff57472b004a13f`, plan-test `00d85c20a07e8312 b668d5f2c3e777c2 089870648749a822`, megacity `a3d6f6164c07192c c06f16f3dcac1290 0c6b3f2c51f13129`.
+- After merging main `3f2f3443` (plan-2's Cullet), `generation-drop1m-20261111-160203` (`--seeds cullet,plan-test,island`): cullet 65 (drop 1,753, low 0, wall 4,362; `a planned settlement's drops are drop tiles`), plan-test 72 (drop 188, low 3) and island 977 checks pass; native digests match (cullet `07290076efd70ae6 bc0680832fd92c40 18b1e66d0eb92a78`, plan-test `8ebb2aa8efa58eb7`, island `1a2a9a096caa8e21`); original seeds unchanged.
+- The first attempt (`generation-drop1-20261111-151031`) failed the native digest comparison on the three lands with low tiles: `floor_preview` counted tiles by class in an array of 8 and panicked on class 9; fixed in the example. cullet-laws is not a land seed (no drops or low tiles there).
+## 2026-11-11 the hamlet seed (exp-hamlet-births, Spark)
+
+Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`; its port is published on `0.0.0.0`, which `verify.py` now accepts as local), private target dirs. `generation.py --feature worlds --seeds hamlet,authored-test` (`generation-hamlet-20261111-141545`): `hamlet` 59 of 59 checks (both settlements' 8 and 4 authored residents, sheets, parents, memberships, promised fishing spots and berry bushes, no animals), `authored-test` 40 of 40, original seeds unchanged. `--seeds` now accepts any tracked seed. The first attempt stopped at launch: the harness refused the trial service's `0.0.0.0` port binding.
+
+After merging main `fd2030c` (rules-1), with the hamlet on Cullet's day (`day_minutes` 48) and laws (`laws_file` `worlds/cullet/laws.rhai`), `life_pace` 0.0357: `generation-hamlet-20261111-150942`, `hamlet` 61 of 61 and `authored-test` 42 of 42, original seeds unchanged.
+
+After merging main `7837320`: `generation-hamlet-20261111-160615`, `hamlet` 61 of 61, original seeds unchanged.
+
 ## 2026-11-11 plan-2: Cullet's plan, authored relief, plan resources (dev-box)
 
 Branch `plan-2` (from the plan-1 merge `bcbde99d`), own container `plan2-stdb` (2.14.1, port 3314, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. A maintain pass of this skill ran with it: a source reader each for [plans](../features/plans.md) and [seeded-world](../features/seeded-world.md) (the features the change touched; plan-1's pass earlier the same day covered the rest), then every feature driven live. Drift fixed: the `cullet` seed and the authored resources and relief in plans, seeded-world and SKILL.md; the seed-test count (seven); the people-less town's checks.

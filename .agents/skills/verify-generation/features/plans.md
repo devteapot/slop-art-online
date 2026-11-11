@@ -4,7 +4,7 @@
 
 - A land seed's `map.params.plans` (`living_rules::settle::PlanSpec`, docs/AUTHORED_PLANS.md): levels at exact heights, streets, stairs, a square, a harbour (`sea`) and lots with explicit kinds, sizes, models and heights, in the plan's own frame (`origin`, `rotation_deg`).
 - The planned settlement is one settlement row in the plan's `style` and `kind`; a seed town takes it by `site: <plan id>` (`Site::id` is the plan's id; `island::match_seed`).
-- Its lot rows are the plan's lots in plan order (contiguous ids), each with its kind, `width_m` × `depth_m`, `model` ("" without one), `height_m` (6 for a building without one) and its level's height as `floor_m`; every door is walkable; blocking lots stand on `Wall` tiles like any lot.
+- Its lot rows are the plan's lots in plan order (contiguous ids), each with its kind, `width_m` × `depth_m`, `model` ("" without one), `height_m` (6 for a building without one) and its level's height as `floor_m`; every door is walkable; blocking lots stand on unwalkable tiles like any lot (`Wall` where the model hides at eye height, `Low` where it does not; a lot naming no model in the table, as Cullet's and plan-test's do until Cullet's kit enters it, is `Wall` throughout above the eye).
 - `homes` (household key → lot id): that household's members live at the lot's door (`character.home_x/y`) and own its house structure.
 - `buildings[].lot`: the named building's sign stands at that lot's door (and its structure is the lot's own when the kinds match).
 - `town_life` kinds `lot:<id>` (places and `work`): residents' `place` rows stand at that lot (its spots, else its door).
@@ -12,7 +12,8 @@
 - Authored land (`map.params.relief.outline`, `relief.stamps`: a coastline and stamps of height, region kind and ground; docs/AUTHORED_PLANS.md): checked here only through the land digests against `floor_preview` and the refusals; the shape is proved natively (`land::tests::an_authored_outline_and_stamps_shape_the_land`, `settle::plan::tests::the_cullet_seed_is_valid_and_reachable`).
 - The `land` row's digests equal a native regeneration (`floor_preview`), as for every land.
 - Refusals before anything is written: `create_floor` (and `init`, through `island::params_of`) refuses a plan the generator cannot honour (`settle::validate_plans`: a stair whose rise disagrees with its levels, overlapping lots or levels, unknown levels, anything off the land, a resource off the land or without a kind, ...) and bad authored relief (`land::validate_relief`); hosting refuses a plan whose building doors no one reaches (`settle::stranded_doors`). `seed::tests::the_cullet_seed_is_hosted` runs those same checks on Cullet's seed natively.
-- Lands without `plans`, `relief.outline` or `relief.stamps` are byte-identical to before: proved natively by `host::tests::pinned_digests_hold` (`cargo test -p living-rules`), not by this driver.
+- The drops between its levels are `drop` tiles (8: unwalkable, see-through; docs/PERCEPTION.md "Drops"): `a planned settlement's drops are drop tiles` (at least one on the hosted tiles). That sight and the foot agree across them is proved by `verify-core`'s `drop` scene and `verify-player`'s `drop.py`.
+- Lands without `plans`, `relief.outline` or `relief.stamps` keep their pinned digests (`host::tests::pinned_digests_hold`, `cargo test -p living-rules`, not this driver). Since eye-2 the pinned tiles digests are those of the eye-height cells; the test also checks that the height rule (no model's `eye_cells`) still gives the digests before eye-2 exactly, and that every moved tile went from `Wall` to `Low` or `Drop`.
 
 `living/rules/src/settle/plan.rs` (`resolve`, `validate`, `Ground`, `stamp_macro`, `site`, `build`, `retaining`, `stranded_doors`); `living/rules/src/land.rs` (`hydro_pass`: the authored outline and relief stamps, then the plans' stamps; `macro_pass` places the plan's site first and applies region stamps; `tile_rows` ground stamps; `connect_pass` leaves a planned site's disc as it is; `validate_relief`); `living/rules/src/settle.rs` (`Staged` step `Plan`, the generated steps skipping `Settlement::planned`); `living/authority/src/island.rs` (`params_of`, `host`, `PlannedLot.key`/`spots`, `Planned.lots`, `Hosted.resources`); `living/authority/src/seed.rs` (`authored_households` with `homes`, `buildings` with `lot`, `plan_resources`); `living/authority/src/town.rs` (`spots_of` for `lot:<id>`).
 
@@ -30,7 +31,7 @@ The `plan-test` child runs every land check plus `check_plans` (`plan plan_test:
 
 ## Gotchas
 
-- The rules' `settle::plan::tests` cover the frame, every refusal, the lay-out as written, continuous ground with walled drops and repeatability natively; this driver proves the authority's rows and refusals, not the ground's shape.
+- The rules' `settle::plan::tests` cover the frame, every refusal, the lay-out as written, continuous ground with drops closed to walking, sight but not walking across the drop (`people_see_across_the_plans_drop_but_cannot_walk_across`) and repeatability natively; this driver proves the authority's rows and refusals, not the ground's shape.
 - The plan is part of the compiled seed: editing `plan-test.json` without a rebuild changes nothing.
 - Planned lots have no style margin: a row of houses sharing walls blocks with no gap between them.
 - `KNOWN_RESOURCES` in the driver is a copy of `living_rules::catalog::RESOURCES`; when goods become script data (goods-1), keep it in step, or the resource checks misjudge which kinds should be placed.

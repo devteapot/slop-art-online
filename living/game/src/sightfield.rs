@@ -2,7 +2,7 @@
 //! only: the authority decides whom I perceive; this draws why.
 //!
 //! The authority's sight is a radius and a clear line (`perception::in_sight`:
-//! `Map::sight_clear`, rock, walls and shut gates block; docs/PERCEPTION.md). The client has the
+//! `Map::sight_clear`, rock, walls and shut gates block, drops and things below eye height do not; docs/PERCEPTION.md). The client has the
 //! same tiles: the land regenerated as the authority hosted it (`living_rules::host::hosted_map`,
 //! `live.rs`), the `terrain_chunk` rows of its window where they differ (tiles edited since), and
 //! the shut gates (`gate`). So it runs the same `Map::sight_clear` on them:
