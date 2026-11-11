@@ -283,7 +283,8 @@ fn land(
     // The mood of the environment made for this land (its `world` names the row's seed and
     // size), else the first world environment's.
     let mine = defs.iter().find(|d| d.world.as_ref().is_some_and(|w| w.seed == row.seed && w.size == row.size));
-    if let Some(def) = mine.or_else(|| defs.iter().find(|d| d.world.is_some())) {
+    let env = mine.or_else(|| defs.iter().find(|d| d.world.is_some()));
+    if let Some(def) = env {
         crate::envs::apply_mood(&def.mood, &mut style, &mut look, &mut lights, &mut cams, &mut clear);
         // The camera's fog, and how far landmarks are drawn, follow this mood (`world::Draw`).
         draw.mood(&def.mood);
@@ -292,7 +293,10 @@ fn land(
     live.hosted = Some(built.hosted);
     let arrive = Vec2::new(row.arrive_x, row.arrive_y);
     roam.pos = arrive;
-    commands.insert_resource(Island::hosted(built.land, &defs, arrive, &built.params));
+    // Its ground map is the environment made for this land's; the first world environment's
+    // (the island's, which has none) never paints another land.
+    let island = Island::hosted(built.land, &defs, mine, arrive, &built.params);
+    commands.insert_resource(island);
 }
 
 fn regenerate(row: &LandInfo) -> Result<Built, String> {

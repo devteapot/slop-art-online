@@ -126,6 +126,10 @@ pub struct GroundDef {
     pub color: [u8; 3],
     pub radius: f32,
     pub relief: f32,
+    /// Every other key: those with a colon are the environment's ground map (`ground.rs`,
+    /// `street:setts`, `class:Road`, …); the rest are ignored, as they always were.
+    #[serde(flatten)]
+    pub keys: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -698,7 +702,8 @@ pub fn switch(
         let done = envs.land.as_ref().and_then(|slot| slot.lock().unwrap().take());
         if let Some(generated) = done {
             envs.land = None;
-            let island = crate::island::Island::new(generated, &envs.defs);
+            let env = envs.current.and_then(|i| i.checked_sub(1)).and_then(|i| envs.defs.get(i));
+            let island = crate::island::Island::new(generated, &envs.defs, env);
             roam.pos = island.start;
             commands.insert_resource(island);
             spawn_player(&mut commands, &mut meshes, &palette, &style, &look, &assets);

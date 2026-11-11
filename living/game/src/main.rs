@@ -22,6 +22,7 @@ mod daylight;
 mod demo;
 mod envs;
 mod gait;
+mod ground;
 mod ik;
 mod twist;
 mod fade;
