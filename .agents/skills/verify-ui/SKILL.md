@@ -56,7 +56,7 @@ Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:
 - the log: `log:tab:0|1|2` (Heard, People, Events), `log:person:<I>`;
 - the list of acts: `acts:0:<skill>:<I>` (`talk`, `window`, `introduce`, `give`, `more`, …), its sub-list `acts:1:<item>:<I>`;
 - the pack: `pack:<item>:<I>`; know-how: `skill:<I>`; the tip: `tip:ok`, `tip:all`;
-- Settings: `settings:page:play|controls`, `settings:theme:clear|night|linen|walnut`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:look:memory|grey|wash|lantern|shadows|hatch`, `settings:facing_sight` (the switch; shown only with the admin link), `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
+- Settings: `settings:page:play|controls`, `settings:theme:clear|night|linen|walnut`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:look:memory|grey|wash|lantern|shadows|hatch`, `settings:facing_sight` (the switch; shown only with the admin link), `settings:walk:2.6|3.0|3.4` (the walk law's choices; shown only with the admin link and the law in the script), `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
 
 Facing sight (`check.py field`, [features/field.md](features/field.md)): drive.py's `--admin-link` gives the client the world admin's token in a mode-600 file it deletes after the drive, as `play.py` does for a scene with `"law_toggle": true`; a `--sync NAME='sql|QUERY;…'` call snapshots the authority (owner SQL, `{me}`, `{ident}`) into `scene.json`'s `snaps`.
 
