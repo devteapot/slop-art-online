@@ -222,7 +222,10 @@ def check_seed(seed, rows):
     equal("all terrain chunk ids", sorted(r["id"] for r in rows["terrain_chunk"]), ids)
     # SpacetimeDB JSON encodes Vec<u8> as a hex string.
     tiles = [bytes.fromhex(r["tiles"]) if isinstance(r["tiles"], str) else bytes(r["tiles"]) for r in rows["terrain_chunk"]]
-    present("terrain chunks contain 256 valid tiles", all(len(t) == 256 and max(t) <= 7 for t in tiles))
+    # Classes 0..8 (living_rules::map::Terrain): 7 wall (buildings, town walls), 8 drop (a
+    # terrace's or a plan's edge: unwalkable, see-through).
+    counts = {k: sum(t.count(k) for t in tiles) for k in range(9)}
+    present("terrain chunks contain 256 valid tiles", all(len(t) == 256 and max(t) <= 8 for t in tiles), {"wall": counts[7], "drop": counts[8], "rock": counts[4]})
     chars = {r["id"]: r for r in rows["character"]}
     by_name = {r["name"]: r for r in chars.values() if r["kind"] == "person"}
     bgs = {r["id"]: json.loads(r["text"]) for r in rows["background"]}
@@ -392,6 +395,11 @@ def check_land(seed, rows, side, tiles):
     blocking = [l for l in lots if l["kind"] in BLOCKING]
     walled = [l["id"] for l in blocking if tile(l["x"], l["y"]) == 7]
     present("blocking lots stand on wall tiles", len(walled) == len(blocking), {"blocking": len(blocking), "wall_at_centre": len(walled), "open": [l["id"] for l in blocking if l["id"] not in walled][:20]})
+    # Drops between ground levels are `drop` (8), not `wall` (7): people see across them
+    # (docs/PERCEPTION.md). A planned settlement always has some; terraced towns usually do.
+    drops = sum(t.count(8) for t in tiles)
+    if plans:
+        present("a planned settlement's drops are drop tiles", drops > 0, {"drop_tiles": drops})
     present("open lots stay walkable", all(tile(l["x"], l["y"]) in WALKABLE | {2} for l in lots if l["kind"] in ("garden", "field", "lamp")))
     houses = {s["id"] for s in structures.values() if s["kind"] == "house"}
     lot_houses = {l["structure"] for l in lots if l["kind"] in ("house", "townhouse")}

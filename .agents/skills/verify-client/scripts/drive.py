@@ -83,8 +83,8 @@ SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
 OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how']
-OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
-UNWALKABLE = {2, 4, 7}      # water, rock, wall
+OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) is see-through
+UNWALKABLE = {2, 4, 7, 8}   # water, rock, wall, drop
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
 # `my_combat`, so these calls succeed for any living character.
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block']}

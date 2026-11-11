@@ -103,7 +103,7 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 
 1. reads the character's body and its sight now (`sight_for`: the night and torch rules);
 2. takes the creatures within sight + 1 tile from the per-tick chunk-body cache that minds' perception already fills (`common::creatures_near`), at their positions now along their segments;
-3. keeps those within sight (a creature already perceived stays until it is 1 tile beyond: no flicker at the edge) and with a clear sight line on the cached map (`Map::sight_clear`: a grid traversal of the exact tiles between; rock, walls and shut gates hide, water and forest do not; the two ends' own tiles never block);
+3. keeps those within sight (a creature already perceived stays until it is 1 tile beyond: no flicker at the edge) and with a clear sight line on the cached map (`Map::sight_clear`: a grid traversal of the exact tiles between; rock, walls and shut gates hide, water, forest and drops do not ([Drops](#drops-sight-across-ground-levels)); the two ends' own tiles never block);
 4. compares with the player's `perceived` rows (point lookup on `perceived.viewer`) and inserts or deletes only the difference.
 
 A join sweeps the newcomer at once (`perception::sweep_now`), so the world is there on the first frame. A death deletes the player's rows (`perception::forget`). A player's own character is never a `perceived` row: the views add it.
@@ -144,6 +144,16 @@ Privacy is unchanged: every copy is a private table written only for viewers who
 ### The moving-body stream
 
 `seen_bodies` returns a narrow product type, `Motion`: `id`, `x`, `y`, `t_ms`, `vx`, `vy`, `heading`, `turn`, `turn_s`, `next_ms` (the segment's end, when steering looks again) and `speed` (the cruising speed of the movement, which tells walk from run). The client extrapolates with `living_rules::steer::pose` exactly as from a `body` row. It leaves out the path (16 B a corner), the chunk and the kind (on the creature's character row). That is 52 B of columns against `body`'s 70 B plus 16 B per path corner. No table was added and no column removed, so a running world updates in place: the view maps rows that are written anyway.
+
+### Drops: sight across ground levels
+
+Since 2026-11-11 (branch `drop-1`). A drop between two ground levels, a terrace's or a planned settlement's (docs/AUTHORED_PLANS.md), is its own terrain class, `Terrain::Drop` (tile byte 8), not `Wall` (7). Before, `terrace::paint_drops` painted it `Wall`, so on Cullet nobody on Mid Row saw anyone on Low Row a few metres below, while the client drew both plainly (docs/SMALL_CITY.md, the owner's answer to decision 6: what the screen shows of the ground and of people must agree).
+
+- **The foot:** a drop blocks like a wall. `Terrain::walkable` is false for it, so steering (`Map::free`), straight walks (`line_clear`), A* (`Map::path`), regions, areas and connected ground (`nav.rs`), click targets (`nearest_reachable`) and building (`build wall`/`gate` need a walkable tile; a road is laid where one stands) all refuse it. Only roads, ramps and stairs join levels, as before. Generation keeps drops like walls: `land::connect_walled` never cuts a ford through one, roads and plazas painted later leave it alone.
+- **The eye:** `Terrain::opaque` is true only for rock and walls. A drop is open air: `Map::sight_clear` and its per-chunk fast path pass over it, so every perception path (players' perceived sets, minds' scenes, graphs' `sees`, witnessed events, the combat feed) sees across it.
+- **Missiles:** they follow the sight rule and fly over a drop (`Map::passable_missile`, which sight already shared). This is not a balance choice but the same physical rule as sight: the drop is open air, and the authority has no height (sight lines ignore height, docs/FLOORS.md "Verticality"), so it cannot tell a shot down a terrace from one up a retaining wall. Stopping missiles at a drop would make a visible target unshootable for no visible reason. If shooting up a wall should be harder, that is a height rule for the step in FLOORS.md where levels become layers, not a terrain class.
+- **What stands on a drop hides:** a building's footprint or a blocking prop over a drop tile becomes `Wall` on the hosted map (`host::hosted_map`). On the island no footprint does (4,116 drop tiles, none under a footprint).
+- **Not modelled:** a retaining wall's face. Someone at the foot of a 4 m wall sees someone a few metres back on the level above, which the eye would not; the 2D authority sees over every drop both ways. The game client's top-down camera shows both, which is what the owner asked to agree.
 
 ### Minds see what their character sees
 

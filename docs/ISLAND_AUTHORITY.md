@@ -159,7 +159,7 @@ The planner now dresses settlements with props, terraces sloping sites, and lays
 
 **Terraces are ground and tiles.**
 - Their levels are part of `Land::height`, so the heights digest covers them.
-- A drop that no one can step up (more than 0.8 m between neighbouring tiles) is `Wall` in the land's own tiles. Stair tiles are `Road`. Sealed slivers of under 150 tiles are closed, like the land's small pockets.
+- A drop that no one can step up (more than 0.8 m between neighbouring tiles) is `Drop` in the land's own tiles (unwalkable, see-through; `Wall` before 2026-11-11, [perception](PERCEPTION.md#drops-sight-across-ground-levels)). Stair tiles are `Road`. Sealed slivers of under 150 tiles are closed, like the land's small pockets.
 - Movement goes by tiles, so the authority needs no new code: terraces connect only through streets, ramps and stairs.
 
 **Styled towns are settlements of kind `town`** whose `settlement.style` names their models (`steampunk`, `cyberpunk`).

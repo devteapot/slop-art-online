@@ -10,6 +10,7 @@
 - `town_life` kinds `lot:<id>` (places and `work`): residents' `place` rows stand at that lot (its spots, else its door).
 - The `land` row's digests equal a native regeneration (`floor_preview`), as for every land.
 - Refusals before anything is written: `create_floor` (and `init`, through `island::params_of`) refuses a plan the generator cannot honour (`settle::validate_plans`: a stair whose rise disagrees with its levels, overlapping lots or levels, unknown levels, anything off the land, ...); hosting refuses a plan whose building doors no one reaches (`settle::stranded_doors`).
+- The drops between its levels are `drop` tiles (8: unwalkable, see-through; docs/PERCEPTION.md "Drops"): `a planned settlement's drops are drop tiles` (at least one on the hosted tiles). That sight and the foot agree across them is proved by `verify-core`'s `drop` scene and `verify-player`'s `drop.py`.
 - Lands without `plans` are byte-identical to before: proved natively by `host::tests::pinned_digests_hold` (`cargo test -p living-rules`), not by this driver.
 
 `living/rules/src/settle/plan.rs` (`resolve`, `validate`, `Ground`, `stamp_macro`, `site`, `build`, `retaining`, `stranded_doors`); `living/rules/src/land.rs` (`hydro_pass` stamps, `macro_pass` places the plan's site first); `living/rules/src/settle.rs` (`Staged` step `Plan`, the generated steps skipping `Settlement::planned`); `living/authority/src/island.rs` (`params_of`, `host`, `PlannedLot.key`/`spots`, `Planned.lots`); `living/authority/src/seed.rs` (`authored_households` with `homes`, `buildings` with `lot`); `living/authority/src/town.rs` (`spots_of` for `lot:<id>`).
@@ -28,6 +29,6 @@ The `plan-test` child runs every land check plus `check_plans` (`plan plan_test:
 
 ## Gotchas
 
-- The rules' `settle::plan::tests` cover the frame, every refusal, the lay-out as written, continuous ground with walled drops and repeatability natively; this driver proves the authority's rows and refusals, not the ground's shape.
+- The rules' `settle::plan::tests` cover the frame, every refusal, the lay-out as written, continuous ground with drops closed to walking, sight but not walking across the drop (`people_see_across_the_plans_drop_but_cannot_walk_across`) and repeatability natively; this driver proves the authority's rows and refusals, not the ground's shape.
 - The plan is part of the compiled seed: editing `plan-test.json` without a rebuild changes nothing.
 - Planned lots have no style margin: a row of houses sharing walls blocks with no gap between them.

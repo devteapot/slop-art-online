@@ -64,7 +64,7 @@ Anything else (`wear`, `door_colour`, `keepsake`, notes for the asset generator)
    - its ground ([`settle::plan::Ground`](../living/rules/src/settle/plan.rs) in `Land::height`'s modifications, applied before roads and pads): each level flat at its height; a smooth, steep drop inside a lower level where a higher one meets it; the outer edge blended into the natural ground over `skirt_m`, except over water, where a quay stands straight out of the sea (it falls to the bed within 0.5 m). It is continuous everywhere;
    - its streets as roads at the ground's height, ending at the square (`RoadEnd::Plaza`) where they touch it;
    - the settlement (`Settlement::planned`), its square as the plaza, its lots (contiguous, in plan order), its stairs as sloped pads and `stairs` props, and `retaining_wall` props along the drops.
-4. **Everything else steps aside.** Street, lot, stair, terrace and ornament generation skip planned settlements; road profiles and road shaping leave their streets alone; their lots are their models' footprints exactly (no style margin, so terraced houses share walls with no gap). `terrace::paint_drops` walls every drop no one can step up (more than 0.8 m between neighbouring tiles) inside a plan as on terraces, except beside water.
+4. **Everything else steps aside.** Street, lot, stair, terrace and ornament generation skip planned settlements; road profiles and road shaping leave their streets alone; their lots are their models' footprints exactly (no style margin, so terraced houses share walls with no gap). `terrace::paint_drops` makes every drop no one can step up (more than 0.8 m between neighbouring tiles) a `Drop` tile inside a plan as on terraces, except beside water: no one walks across it, everyone sees across it ([perception](PERCEPTION.md#drops-sight-across-ground-levels); before 2026-11-11 it was `Wall`).
 5. **Island roads** never route through a plan's levels or harbour. When a plan has a `trunk` street, the network starts from it, and roads from the other settlements join it where it leaves the town; that is how they reach the square. Without one, the other settlements connect among themselves.
 
 `Land::plans` (`settle::Laid`) keeps each planned lot's id, name and spots, and each street's road id and surface, for the authority. It is not digested.
@@ -94,7 +94,7 @@ The plan rides in `land.params` and the existing rows; no table, column, reducer
 For the later task that writes Cullet's 65 lots:
 - Keep the plan in `living/seeds/worlds/cullet/plan.json` and merge it into `living/seeds/cullet.json`'s `map.params.plans` (the rough seed was written by a throwaway script; replace it).
 - Coordinates as in SMALL_CITY: origin at the Fish Steps, x east, y north (uphill). Choose `origin` and `rotation_deg` so the Strand's south edge lies on the coast; the `sea` polygon forces the harbour either way.
-- Give each row its own level and the drop between rows will be walled; join levels by stairs (the wynds) or by a street that leaves the levels (the skirt is walkable where it is gentle).
+- Give each row its own level and the drop between rows will be closed to walking (and open to sight); join levels by stairs (the wynds) or by a street that leaves the levels (the skirt is walkable where it is gentle).
 - Terraced houses: put neighbours' rectangles edge to edge (sharing a wall is allowed); leave a gap at least a stair's width at each wynd.
 - Every building's front must face walkable ground within half a metre (its door); validation and hosting say which door is stranded.
 - Lots on the Counting House's arcade, the market and the Marver's seats are places through `spots`; name them in `town_life` as `lot:<id>`.
@@ -103,7 +103,7 @@ For the later task that writes Cullet's 65 lots:
 
 ## Not done, and next steps
 
-- **A see-through drop.** Drops are `Wall` tiles, and the authority is 2D: `Wall` and `Rock` block sight (`map.rs`), so 48 m sight does not cross the Rows' retaining walls. A `Drop` terrain class (unwalkable, transparent) would fix it. Cost: a ninth `Terrain` value through `map.rs` (`from_u8`, `walkable`, opacity), every exhaustive match on terrain in rules, authority, viewer and game client (tile colours), verify-generation's tile check (`max(t) <= 7`), `paint_drops` writing it in plan zones only (so other lands keep their digests), and a perception check in verify-core. About half a day with verification; not done here.
+- **A see-through drop:** done on 2026-11-11 (`drop-1`, [perception](PERCEPTION.md#drops-sight-across-ground-levels)). Drops are `Drop` tiles on every land with them, terraces included, so the island's tile digest moved too.
 - **Spots as more than places.** Spots feed `lot:<id>` places; nothing yet seats a person at a spot or lets a client know where they are (SMALL_CITY "Places need spots").
 - **Streets that cross levels** are drawn at the ground's height, so a street across a drop is a cliff; use stairs, or split the street at the level's edge.
 - **Height in the rules.** The ground's levels are presentation and tiles; the rules still move and see in 2D.

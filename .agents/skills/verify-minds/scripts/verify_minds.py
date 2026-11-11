@@ -21,8 +21,8 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked')
-OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
-UNWALKABLE = {2, 4, 7}      # water, rock, wall
+OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) is see-through
+UNWALKABLE = {2, 4, 7, 8}   # water, rock, wall, drop
 
 
 class Run(shared.Run):
