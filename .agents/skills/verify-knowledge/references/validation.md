@@ -1,5 +1,9 @@
 # Knowledge validation
 
+## 2026-11-11 projects (exp-projects, DGX Spark)
+
+Worktree from `origin/main` `e09365b`, branch `exp-projects` (the `LIVING_PROJECTS=1` experiment: docs/LIVING_CORE.md, "Projects"), against the trial server `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`) beside a running trial batch, fake model only. `knowledge-20261111-132650`: all proofs pass, including the new ignored test `projects_are_pursued_served_ended_and_faded` (taken up, revised with since kept, served and reinforced, an ended one closed with `outcome` and refused when served, every unreinforced one faded at a 90-minute fade, history kept). The shared harness needed one fix first: the trial server publishes its port on `0.0.0.0` and `verify.py local_urls` accepted only `127.0.0.1` bindings (a failed `minds-20261111-131717` launch; fixed in the same change).
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.

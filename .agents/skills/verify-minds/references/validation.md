@@ -1,5 +1,13 @@
 # Internal mind validation
 
+## 2026-11-11 projects (exp-projects, DGX Spark)
+
+Worktree from `origin/main` `e09365b`, branch `exp-projects` (`LIVING_PROJECTS=1`, off by default: docs/LIVING_CORE.md, "Projects"), against the trial server `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`, its port published on `0.0.0.0`) while a six-mind trial batch ran on it, private `CARGO_TARGET_DIR`, fake model only.
+
+- The first suite (`minds-20261111-131717`) failed at launch: `verify.py` accepted only `127.0.0.1` port bindings. Fixed (`local_urls` accepts `0.0.0.0` and `[::]`).
+- Full suite `minds-20261111-131832`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev and rethink pass; consolidation is its known XFAIL; `animals` fails at its last step (`nothing new: no call`), the known gap recorded under lives-2 above. The run was stopped by the session's 30-minute limit during `rethink-llm` (its database deleted with shared cleanup, its PIDs already gone); `rethink-llm` passes alone (`minds-rl-20261111-134903`). `dealings` and `parked` pass, run separately (`minds-dp-20261111-135539`).
+- Projects (new feature file [projects.md](../features/projects.md)) cannot be reached by these cases (`LIVING_NEO4J=off`). Driven by the fake trial batch `fp1` (`life` × `default`, `projects`, 10 minutes; evidence `.local/living/trials/fp1/`): with the switch, 7 of 7 think requests carry `# Your projects` (`(none)` before the first consolidation, then `- project:verify_fake_shelter: …`) and `"serves"`, no compile request does, 6 deliberation rows end `[serves project:verify_fake_shelter]` with `detail.projects.serves` set, and Neo4j held one open `PURSUES` edge (`Project` label, progress revised to step 2, `served` 6, `firsthand`); without it no request carries the section or the field and the run has no `PURSUES` edge (`neo4j-projects.txt`). Tokens (`project-tokens.json`, Llama 3 tokenizer): think system +23, the section 21 empty and 63 with one project; consolidation system +157.
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.

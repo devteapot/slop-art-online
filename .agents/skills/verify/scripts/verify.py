@@ -23,7 +23,7 @@ Paths and ports: SpacetimeDB http://127.0.0.1:3300, the local container's port (
 only name that port, so publishing and HTTP calls always reach the same server); observer
 http://127.0.0.1:8330 (VERIFY_OBSERVER_PORT); Chromium from Playwright's cache (VERIFY_CHROME).
 A worker with its own server sets LIVING_STDB_CONTAINER to that container's name and
-LIVING_STDB_URL to its published port on 127.0.0.1; the helper never starts or stops such a container.
+LIVING_STDB_URL to its published port on 127.0.0.1 (bound to 127.0.0.1 or 0.0.0.0); the helper never starts or stops such a container.
 """
 import argparse
 import glob
@@ -58,7 +58,9 @@ def local_urls():
     if CONTAINER == SHARED:
         return {"http://127.0.0.1:3300", "http://localhost:3300"}
     r = subprocess.run(["docker", "port", CONTAINER, "3000/tcp"], capture_output=True, text=True)
-    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith("127.0.0.1:")}
+    # A port published on every interface (the Spark's trial server, for LAN observers) is
+    # reachable on loopback too.
+    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith(("127.0.0.1:", "0.0.0.0:", "[::]:"))}
     return {f"http://{h}:{p}" for p in ports for h in ("127.0.0.1", "localhost")}
 
 
