@@ -481,4 +481,79 @@ python3 living/tools/mind_load.py <db> <run>           # model load per person, 
 
 `just living-publish` updates the module in place and installs the current skill rules. LLM exchanges are journaled to `.local/living/journal/<run>/<name>.jsonl`.
 
+### Play with one command
+
+`just living-play <scene>` (`living/tools/play.py`) starts a play session from prebuilt binaries:
+
+1. the scene's world, created on the first start or resumed;
+2. its memory store, a Neo4j container for the minds;
+3. the mind service;
+4. the game client.
+
+The session ends when the client exits, whether you close the window or it crashes. The launcher then does the following, in order:
+
+- **Pauses the world.** No ticks run, and the offline takeover of your character (`takeover_s`, 30 s) does not fire while the world is paused.
+- **Stops the mind service.** It uses the recorded PID only, after checking that PID's start time and command.
+- **Stops the memory store.** It uses the exact container name; the volume is kept.
+- **Prints the session's cost.** The cost is read from the run's journal at `living/tools/trials.py`'s prices. A model with no price there, such as the fake model server, is counted and named, not priced.
+- **Runs tool 1's report** (`living/tools/play_report.py`), when that file exists. While a session runs, the report tool's recorder keeps the authority's rows, and the client gets `LIVING_GAME_RECORD`.
+
+A detached warden does the same steps if the launcher itself dies. It leaves a running game alone and closes the session when the game exits.
+
+```bash
+just living-play .local/play3                      # create or resume the world, then play
+just living-play .local/play3 --fresh              # delete the current world first; says what it deletes, asks (--yes)
+just living-play .local/play3 --no-minds           # the world and the client only; no model calls
+just living-play .local/play3 --status             # world, session, mind and store state, the run's cost so far
+just living-play .local/play3 --stop               # close a session left open (by its recorded PIDs)
+python3 living/tools/play.py --cost <journal dir>  # price any journal (an evidence folder holding journal/ works too)
+```
+
+**Resume and fresh.**
+- **Resume.** Each start resumes the world named in `<scene>/current.json`, with the same `LIVING_RUN`, the same Neo4j volume and the same player token. That means the same world, the same minds and the same character. The world stays paused until the client's connection opens, so a pending takeover is cancelled rather than fired.
+- **`--fresh`.** It lists what it will delete: the database and everything in it. It also lists what it keeps: the run's logs, the journal, and the old run's nodes in the store (minds are keyed by run). From a terminal it asks before deleting; otherwise it needs `--yes`.
+- **Refusals.**
+  - A start refuses a world whose laws read-back fails; use `--fresh`.
+  - A start refuses while another session of the scene is open.
+
+**The cost guard.** A scene with minds refuses `--no-client`, because paid minds would run with nobody playing. With `--minds-without-client` it runs anyway, shows the scene's cost per hour (and the rate measured on the world's earlier sessions), and prints the cost so far every 5 minutes. It runs until Ctrl-C, `--stop` or `--minutes N`. A scene without minds has nothing to guard.
+
+**Logs.** Each session keeps its logs in `<scene>/runs/<run>/sessions/<stamp>/`:
+- `client.log` (the client's stderr) and `mind.log`;
+- `launcher.log` and `warden.log`;
+- `session.json` and `teardown.json`, which record what was stopped and how;
+- `cost.json`;
+- the laws read-back;
+- `capture/` and `report/`, from tool 1.
+
+The journal stays under the mind root at `.local/living/journal/<run>/`.
+
+**Scene config.** A scene is a directory holding `play.json`. Relative paths are relative to that directory. `{scene}` and `{state}` expand anywhere. `{db}`, `{seed}` and `{outdir}` (the session directory) expand in `laws_check`, and `{db}` and `{session}` in client environment values.
+
+```json
+{
+  "name": "play3",
+  "about": "Brackenford, 17 LLM residents",
+  "db": "verify-play3-{stamp}",
+  "run": "play3-{stamp}",
+  "world": {"wasm": "/abs/bin/living_authority_play2.wasm"},
+  "seed": "/abs/bin/scene.built.json",
+  "laws_check": ["python3", "{scene}/check_laws.py", "{server}", "{db}", "{seed}", "{outdir}"],
+  "client": {"bin": "/abs/bin/living-game", "cwd": "/abs/main-checkout", "name": "Diego",
+             "token": "{state}/tokens/{db}.token", "env": {}},
+  "minds": {"bin": "/abs/bin/living-mind", "root": "/abs/worktree-at-the-build-commit",
+            "dotenv": "/abs/main-checkout/.env", "env": {}, "cost_per_hour": "about $1.50 (measured)"},
+  "neo4j": {"container": "play3-neo4j", "port": 7719, "volume": "play3-neo4j-data",
+            "image": "neo4j:2026.10.1", "password_file": "{state}/neo4j.env"}
+}
+```
+
+- **`db`** must start with `verify-` and contain `{stamp}`. The launcher only deletes or resumes databases that match it.
+- **`world.wasm`** is the authority compiled with the scene's seed. For a floor module (`LIVING_SEED=none`), add `"create_floor": "<seed.json>"`, which is given to `create_floor` after publishing; the launcher then waits for `genesis.done`.
+- **`minds.root`** is a checkout at the build's commit. The mind reads `living/seeds/species.json` there, along with its `.env`, and writes its journal there. `dotenv` links that checkout's `.env` when it has none. `seed` is passed relative to it. `minds.env` adds settings, for example `LIVING_MODELS` pointing at the fake model server for a free test.
+- **`neo4j`** names the scene's own container. The shared lab store (`sao-living-neo4j-1`, `:7689`) is refused. The password is generated into `password_file` (mode 600) at first start and passed only through child environments.
+- **A walk (world only).** Leave out `minds` and `neo4j`, and `seed` and `laws_check` if there is no laws overlay to check. The world is created or resumed, the client runs, and the world is paused when the client exits.
+
+The launcher clears inherited `LIVING_*` and `TRIALS_*` variables from the shell before starting children. The admin token, the store's password and provider keys reach the children only through their environments; they are never printed or logged.
+
 **Public observer: retired (2026-11-09).** The public observer at `https://sos.carlid.dev` is gone. The user stopped and disabled its services on the dev-box (`sao-tunnel.service`, the Cloudflare tunnel, and `sao-observer-web.service`, which served the static bundle on 127.0.0.1:8331), and the site returns 530. After the perception work, the observer reads private developer truth as the database owner, which a public page cannot do without handing admin rights to every visitor ([perception](PERCEPTION.md#the-mind-service-and-the-observer)). The lab observer is local: `just living-web`, opened with the owner's token in the page fragment (`#token=…`). `just living-web-dist` still builds the optimized bundle into `.local/living/web`; nothing serves it.

@@ -72,6 +72,10 @@ living-floor name db=living_db:
 living-sql query:
     {{living_stdb}} sql -s local {{living_db}} "{{query}}"
 
+# One command to play a scene (world, memory store, minds, client); paid parts stop when the client exits.
+living-play scene *args:
+    python3 living/tools/play.py {{scene}} {{args}}
+
 living-mind:
     living/tools/run-mind.sh
 
