@@ -131,6 +131,17 @@ living-game-assets:
 living-board *args:
     python3 living/tools/board/board.py "$@"
 
+# People from the character generator (docs/CHARACTERS.md; git-ignored output): presets, seeds or
+# parameter files, each generated, given the clip library and the face's shading data.
+# `just living-people` makes the presets; `just living-people 12 halvard=halvard.json` others.
+living-people *args:
+    living/tools/blender/gen_person.sh {{args}}
+
+# A household or a whole town of people and the page to check them by (line-up, game camera,
+# every face): `just living-town .local/town`, `--household kiln-03`, `--town cullet.json`.
+living-town *args:
+    python3 living/tools/characters/town.py {{args}}
+
 # The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
 # (numpy and Pillow through uv): `--set ground` (the default) the ground's layers for
 # terrain.rs, `--set material` the model surfaces (bark, planks, plaster, stone, brick,
