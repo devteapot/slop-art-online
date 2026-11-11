@@ -1288,6 +1288,9 @@ fn jump_ui() { #{ label: "Jump", place: "jump", look: #{ icon: "jump", clip: "ju
 fn accept_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
 fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }
 fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
+// A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
+// theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
+fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
 fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.

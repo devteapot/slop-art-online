@@ -237,9 +237,10 @@ impl Scripts {
                     None => {}
                 }
             }
-            // A presentation may move a skill, not take it from players only.
-            if ok && on.is_empty() && !u.on.is_empty() {
-                err(format!("{f}: `on` is empty, which would take `{name}` from players while minds keep it; to hide a skill from both, its spec says `listed: false`"));
+            // A presentation may move a skill, not take it from players only: an empty `on` says in
+            // its `tip` how a player does it instead (face: the look, `human_face`).
+            if ok && on.is_empty() && !u.on.is_empty() && !m.contains_key("tip") {
+                err(format!("{f}: `on` is empty, which would take `{name}` from players while minds keep it; say in `tip` how a player does it instead, or to hide a skill from both, its spec says `listed: false`"));
                 ok = false;
             }
             if ok {

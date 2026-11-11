@@ -226,7 +226,10 @@ fn the_three_looks_by_name_are_declared_not_coded() {
     // decline (rules-offers-2) are also answers on an offer's card, with the trade icon.
     let mut declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
     declared.sort();
-    assert_eq!(declared, ["accept", "block", "bowshot", "decline", "dodge", "firebolt", "heal", "jump", "shoot", "strike", "throw"], "the shipped script declares these");
+    assert_eq!(declared, ["accept", "block", "bowshot", "decline", "dodge", "face", "firebolt", "heal", "jump", "shoot", "strike", "throw"], "the shipped script declares these");
+    // Face is in no list of a player's (play-test 5): a player faces where it looks, as the tip says.
+    let face = s.ui("face").unwrap();
+    assert!(face.on.is_empty() && face.tip.is_some() && !s.ui_default("face").unwrap().on.is_empty(), "{face:?}");
     for skill in ["accept", "decline"] {
         let u = s.ui(skill).unwrap();
         assert!(u.look.icon == Some("trade") && u.is_on(On::Offer) && u.is_on(On::Person), "{skill}: {u:?}");
@@ -322,7 +325,8 @@ fn defaults_reproduce_todays_aims_and_lists() {
     for (world, s) in worlds() {
         for spec in s.skills().iter() {
             let name = spec.name.as_str();
-            let u = s.ui(name).unwrap();
+            // The defaults (a declaration may move a skill: face is in no list of a player's).
+            let u = s.ui_default(name).unwrap();
             // The F and C lists: where `plan()` offered it.
             assert_eq!(u.is_on(On::Me), plan_offers(&s, name, Aimed::Me), "{world}: `{name}` toward myself");
             assert_eq!(u.is_on(On::Person), plan_offers(&s, name, Aimed::OwnKind), "{world}: `{name}` toward a person");
@@ -676,7 +680,7 @@ fn a_bad_declaration_is_logged_by_a_client_and_refused_at_install() {
         // The review's rule-safety cases (findings 1 and 6): a presentation may not take a skill
         // from players only, send an act the grammar refuses, or pair an input with nothing.
         ("fn wave_ui() { #{ on: \"self\" } }", "`self` sends no target, and `wave_spec()` needs one"),
-        ("fn gather_ui() { #{ on: [] } }", "to hide a skill from both, its spec says `listed: false`"),
+        ("fn gather_ui() { #{ on: [] } }", "say in `tip` how a player does it instead"),
         ("fn gather_ui() { #{ on: \"ground\" } }", "`ground` needs a combat aim of `point`"),
         ("fn rest_ui() { #{ on: \"offer\" } }", "`offer` needs a spec with `target: true`"),
         ("fn dodge_ui() { #{ input: \"toggle\" } }", "`input: \"toggle\"` needs `toggles`"),
