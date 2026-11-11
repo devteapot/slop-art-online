@@ -138,11 +138,13 @@ fn described(s: &Scripts) -> Result<(), String> {
 /// The interface declarations (`<name>_ui()`) read without a problem: an install refuses what a
 /// client would only log and play on without (docs/INTERFACE.md §3).
 fn interface(s: &Scripts) -> Result<(), String> {
-    match s.ui_errors() {
-        [] => Ok(()),
-        [e] => Err(format!("install refused: {e}")),
-        [e, rest @ ..] => Err(format!("install refused: {e} (and {} more interface problems)", rest.len())),
+    const SHOWN: usize = 12;
+    let e = s.ui_errors();
+    if e.is_empty() {
+        return Ok(());
     }
+    let more = if e.len() > SHOWN { format!("; and {} more", e.len() - SHOWN) } else { String::new() };
+    Err(format!("install refused: {}{more}", e.iter().take(SHOWN).cloned().collect::<Vec<_>>().join("; ")))
 }
 
 fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String> {

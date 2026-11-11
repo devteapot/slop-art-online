@@ -559,6 +559,9 @@ pub struct Verbs {
     pub toward: Option<(u32, Vec<Choice>)>,
     pub open_group: Option<(u32, String)>,
     pub send: Vec<(Aim, Choice)>,
+    /// Acts built by the rules' presentation (`living_rules::ui::act_node`: an offer's Accept),
+    /// sent as built, reported on as any act.
+    pub send_node: Vec<(Aim, Choice, serde_json::Value)>,
     pub drop_item: Option<(u32, String)>,
     /// Asked of the game UI: open this person's window (the list's "Their window").
     pub open_window: Option<u32>,
@@ -938,7 +941,12 @@ fn send(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, 
         net.report("say", r);
         return;
     }
-    let node = c.node(aim, text);
+    dispatch(net, conn, rules, aim, c, c.node(aim, text), now_ms, v);
+}
+
+/// Send an act's node through `human_act` and await its outcome.
+#[allow(clippy::too_many_arguments)]
+fn dispatch(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, node: serde_json::Value, now_ms: f64, v: &mut Verbs) {
     // An act (a one-off the authority reports on) or behavior (ongoing: the body shows it).
     let act = node.get("do").is_some() && living_rules::acts::not_an_act(&c.skill, rules.shapes()).is_none();
     info!("verbs: {} → {}", c.label, node);
@@ -1081,6 +1089,9 @@ pub fn input(
         } else {
             send(&net, conn, sc, &aim, &c, None, now_ms, &mut v, &mut controls);
         }
+    }
+    for (aim, c, node) in std::mem::take(&mut v.send_node) {
+        dispatch(&net, conn, sc, &aim, &c, node, now_ms, &mut v);
     }
     if let Some((id, item)) = v.drop_item.take() {
         let aim = Aim::Creature { id };

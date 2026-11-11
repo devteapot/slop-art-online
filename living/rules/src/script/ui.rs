@@ -87,9 +87,9 @@ impl Scripts {
         // Declarations: functions of no parameter named `<name>_ui`, in the script's order.
         let mut decls: Vec<&String> = self.nullary.iter().filter(|f| f.ends_with("_ui") && f.len() > 3).collect();
         let at = |f: &str| self.source.rfind(&format!("fn {f}(")).unwrap_or(usize::MAX);
-        decls.sort_by_key(|f| (at(f), (*f).clone()));
+        decls.sort_by_cached_key(|f| (at(f), (*f).clone()));
         for f in decls {
-            let name = f.trim_end_matches("_ui");
+            let Some(name) = f.strip_suffix("_ui") else { continue };
             let skill = self.skills.get(name).is_some() || self.shapes.get(name).is_some();
             let way = self.has(&format!("{name}_speech"));
             if skill && way {
@@ -135,7 +135,6 @@ impl Scripts {
                 claimed.insert(key, n.clone());
             }
         }
-        r.errors.extend(self.item_look_errors());
         r.order = names;
         r
     }
@@ -179,7 +178,8 @@ impl Scripts {
                     u.label = l;
                 }
             }
-            if let Some(o) = field!("order", |v: &Dynamic| v.as_int().map_err(|_| format!("{f}: `order` must be a whole number"))) {
+            let most = ui::MOST_SKILL_KEYS as i64;
+            if let Some(o) = field!("order", |v: &Dynamic| v.as_int().ok().filter(|o| (0..most).contains(o)).ok_or_else(|| format!("{f}: `order` is a whole number 0..{most}"))) {
                 u.order = Some(o);
             }
         }
@@ -196,7 +196,11 @@ impl Scripts {
                 let why = match p {
                     On::Box if !way => Some("a skill is not in the text box; `box` is for ways of speaking".to_string()),
                     _ if way && p != On::Box => Some(format!("a way of speaking is in the text box (`box`), not `{s}`")),
-                    On::Person | On::Thing | On::Ground if !spec.is_some_and(|k| k.needs_target) => Some(format!("`{s}` needs a spec with `target: true`")),
+                    On::Person | On::Thing | On::Offer if !spec.is_some_and(|k| k.needs_target) => Some(format!("`{s}` needs a spec with `target: true`")),
+                    // A point is a target only to a skill whose rules aim it at one.
+                    On::Ground if !shape.is_some_and(|s| s.aim == crate::combat::Aim::Point) => Some("`ground` needs a combat aim of `point` (a skill that takes a point)".to_string()),
+                    // Toward oneself a skill that needs a target sends an act the grammar refuses.
+                    On::Me if spec.is_some_and(|k| k.needs_target) => Some(format!("`self` sends no target, and `{name}_spec()` needs one")),
                     On::Item if !spec.is_some_and(|k| k.needs_item) => Some("`item` needs a spec with `item`".to_string()),
                     On::Bar if shape.is_some() && !self.shapes.on_bar(name) => Some(format!("`{name}` is a combat skill: on the bar it must be in `skill_bar()`")),
                     _ => None,
@@ -210,6 +214,11 @@ impl Scripts {
                     None => {}
                 }
             }
+            // A presentation may move a skill, not take it from players only.
+            if ok && on.is_empty() && !u.on.is_empty() {
+                err(format!("{f}: `on` is empty, which would take `{name}` from players while minds keep it; to hide a skill from both, its spec says `listed: false`"));
+                ok = false;
+            }
             if ok {
                 u.on = on;
             }
@@ -221,14 +230,8 @@ impl Scripts {
                 err(format!("{f}: `place` is a place on the bar, and `{name}` is not on it (`on` has no `bar`)"));
             }
         }
-        if let Some(i) = field!("input", |v| one_of(f, "input", v, ui::Input::parse, ui::INPUTS)) {
-            let point = shape.is_some_and(|s| s.aim == crate::combat::Aim::Point) || spec.is_some_and(|k| k.needs_target);
-            if i == ui::Input::AimPoint && !point {
-                err(format!("{f}: `input: \"aim_point\"` needs a combat aim of `point` or a spec with `target: true`"));
-            } else {
-                u.input = i;
-            }
-        }
+        // The input is checked against the rest once every field is read.
+        let input = field!("input", |v| one_of(f, "input", v, ui::Input::parse, ui::INPUTS));
         if let Some(list) = field!("picks", |v| texts(f, "picks", v)) {
             let mut picks = Vec::new();
             let mut ok = true;
@@ -253,14 +256,30 @@ impl Scripts {
         if let Some(c) = field!("choose", |v| one_of(f, "choose", v, ui::Choose::parse, ui::CHOOSE)) {
             u.choose = c;
         }
+        if let Some(src) = field!("source", |v| one_of(f, "source", v, ui::ItemSource::parse, ui::SOURCES)) {
+            use ui::ItemSource as S;
+            let why = match (src, spec) {
+                (_, None) => Some(format!("`{name}` has no spec")),
+                (_, Some(k)) if !k.needs_item => Some(format!("`{name}_spec()` takes no item")),
+                (S::SpecItems | S::Products, Some(k)) if k.items.is_empty() => Some(format!("`{name}_spec()` lists no `items`")),
+                (S::TargetHolds, Some(k)) if !k.needs_target => Some(format!("`{name}_spec()` takes no target")),
+                _ => None,
+            };
+            match why {
+                Some(w) => err(format!("{f}: `source: {}`: {w}", src.as_str())),
+                None => u.source = Some(src),
+            }
+        }
         if let Some(d) = field!("detail", |v| text(f, "detail", v)) {
             match self.detail_errors(f, &d, spec) {
                 Some(e) => err(e),
                 None => u.detail = Some(d),
             }
         }
-        if let Some(x) = field!("unready", |v| one_of(f, "unready", v, ui::Unready::parse, ui::UNREADY)) {
-            u.unready = x;
+        if field!("unready", |v| one_of(f, "unready", v, ui::Unready::parse, ui::UNREADY)).is_some() {
+            // What a press does while a stance is not met needs a stance, and no combat shape has
+            // one yet (the Spark's drawn state).
+            err(format!("{f}: `unready` needs a combat `stance` on `{name}_combat()`, and the rules have none yet"));
         }
         if let Some(s) = field!("toggles", |v| text(f, "toggles", v).and_then(|s| named(f, "toggles", &s, ui::STATES))) {
             u.toggles = Some(s);
@@ -311,6 +330,31 @@ impl Scripts {
         if let Some(t) = field!("tip", |v| text(f, "tip", v)) {
             u.tip = Some(t);
         }
+        if let Some(i) = input {
+            use crate::combat::Aim;
+            use ui::Input as I;
+            let aim = shape.map(|s| s.aim);
+            let why = match i {
+                I::AimPoint if !(aim == Some(Aim::Point) || spec.is_some_and(|k| k.needs_target)) => Some("needs a combat aim of `point` or a spec with `target: true`"),
+                I::Hold if !shape.is_some_and(|s| s.aim == Aim::Facing || s.hold_ms > 0) => Some("needs a held combat shape (aim `facing`, or `hold_ms`)"),
+                I::AimDir if !matches!(aim, Some(Aim::Facing | Aim::Dash)) => Some("needs a combat aim of `facing` or `dash`"),
+                I::Toggle if u.toggles.is_none() => Some("needs `toggles`, the body state it switches"),
+                I::PickTarget if !u.picks.contains(&Pick::Target) => Some("needs `target` in `picks`"),
+                I::PickItem if !u.picks.contains(&Pick::Item) => Some("needs `item` in `picks`"),
+                I::PickQty if !u.picks.contains(&Pick::Qty) => Some("needs `qty` in `picks`"),
+                I::Words if !u.picks.contains(&Pick::Words) => Some("needs `words` in `picks`"),
+                I::DragOnto if u.drag.is_none() => Some("needs `drag`"),
+                _ => None,
+            };
+            match why {
+                Some(w) => err(format!("{f}: `input: \"{}\"` {w}", i.as_str())),
+                None => u.input = i,
+            }
+        }
+        if u.toggles.is_some() && u.input != ui::Input::Toggle {
+            err(format!("{f}: `toggles` is switched by `input: \"toggle\"`"));
+            u.toggles = None;
+        }
         if way {
             let mut w = u.way.take().unwrap_or_default();
             w.alias = field!("alias", |v| text(f, "alias", v)).or(w.alias);
@@ -359,8 +403,8 @@ impl Scripts {
             }
         }
         if let Some(v) = m.get("effect") {
-            match text(f, "look.effect", v).and_then(|s| named(f, "look.effect", &s, ui::EFFECTS)) {
-                Ok(e) => l.effect = Some(e),
+            match text(f, "look.effect", v).and_then(|s| if s == "none" { Ok(None) } else { named(f, "look.effect", &s, ui::EFFECTS).map(Some) }) {
+                Ok(e) => l.effect = e,
                 Err(e) => errors.push(e),
             }
         }
@@ -384,24 +428,6 @@ impl Scripts {
             }
         }
         None
-    }
-
-    /// An item's `icon` names an item icon, and its `group` a group of the pack.
-    fn item_look_errors(&self) -> Vec<String> {
-        let t = self.tables.borrow();
-        let mut out = Vec::new();
-        for n in t.names("items") {
-            let Some(m) = t.entry("items", n) else { continue };
-            for (k, list) in [("icon", ui::ITEM_ICONS), ("group", ui::ITEM_GROUPS)] {
-                if let Some(v) = m.get(k) {
-                    match v.clone().into_string() {
-                        Ok(s) if ui::name_in(list, &s).is_some() => {}
-                        _ => out.push(format!("items: the `{k}` of `{n}` is one of {} (not {v})", list.join(", "))),
-                    }
-                }
-            }
-        }
-        out
     }
 
     /// How a skill (or way of speaking) is presented: its `<name>_ui()` over its defaults. None

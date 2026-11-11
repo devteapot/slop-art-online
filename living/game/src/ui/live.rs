@@ -303,7 +303,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
                 })
                 .collect()
         }
-        _ => default_bar(|_| SkillState::Ready),
+        _ => Vec::new(),
     };
 
     // Floating numbers over whoever they happened to.
@@ -338,17 +338,17 @@ fn missing(item: &str) -> String {
     }
 }
 
-/// The starter skills on their keys (docs/GAME_BRIEF.md, 2026-11-09), for the UI sample with
-/// no world connected; F interacts.
+/// Slots for the UI sample with no world connected: icons and states on keys, no skills (with
+/// no rules there is no bar to name; the cluster is drawn from the rules' bar, `combat::Roles`).
 pub fn default_bar(state: impl Fn(Key) -> SkillState) -> Vec<Skill> {
-    let slot = |key: Key, icon: SkillIcon, name: &str, cost: f32, count: Option<u32>| Skill { key, icon, state: if icon == SkillIcon::Empty { SkillState::Empty } else { state(key) }, name: name.into(), cost, count };
+    let slot = |key: Key, icon: SkillIcon, cost: f32, count: Option<u32>| Skill { key, icon, state: if icon == SkillIcon::Empty { SkillState::Empty } else { state(key) }, name: String::new(), cost, count };
     vec![
-        slot(Key::Lmb, SkillIcon::Sword, "strike", 2.0, None),
-        slot(Key::Rmb, SkillIcon::Bow, "bowshot", 1.5, Some(28)),
-        slot(Key::Q, SkillIcon::Fire, "firebolt", 6.0, None),
-        slot(Key::E, SkillIcon::Shield, "block", 1.0, None),
-        slot(Key::R, SkillIcon::Heal, "heal", 8.0, None),
-        slot(Key::Shift, SkillIcon::Dodge, "dodge", 4.0, None),
+        slot(Key::Lmb, SkillIcon::Sword, 2.0, None),
+        slot(Key::Rmb, SkillIcon::Bow, 1.5, Some(28)),
+        slot(Key::Q, SkillIcon::Fire, 6.0, None),
+        slot(Key::E, SkillIcon::Shield, 1.0, None),
+        slot(Key::R, SkillIcon::Heal, 8.0, None),
+        slot(Key::Shift, SkillIcon::Dodge, 4.0, None),
     ]
 }
 
