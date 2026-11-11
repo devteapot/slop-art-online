@@ -1,6 +1,9 @@
 # The store: heavy outputs in one place
 
-Status: **built, nothing published** (2026-11-11, branch `tool-store`, on the Spark). The tool, its tests, this proposal and the draft dataset cards are in the repository. Nothing has been uploaded, no repository has been created, and the Hugging Face token was not used. Publishing is switched off until the owner agrees (see [Publishing is gated](#publishing-is-gated)).
+Status: **publishing, paused at step 4** (2026-11-11, branch `tool-store-2`, on the Spark). Public at <https://huggingface.co/datasets/carlid/slop-art-online-runs>: the fake batch `hm1` and the real batch `l9`, with the card.
+- **`l9` fetch-back.** Fetched from the Hub, it is byte-identical to the local pack (all six files). Unpacked, it matches the scrubbed source byte for byte (170 of 170 files).
+- **Paused.** The viewer's conversion of the `calls` table failed: "Couldn't cast array of type string to null". `hm1`'s `error` column is null throughout, so the column was typed null. The card now declares every column's type (`dataset_info`), and that fix is not yet uploaded. The other 60 batches are packed and checked in `~/store-dryrun-2026-11-11/stage-batches/`.
+- **Held.** `b1`–`b3` (unverified models), the motion library and play sessions.
 
 ## Why
 

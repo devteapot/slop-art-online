@@ -12,6 +12,75 @@ tags:
 - ai-generated
 size_categories:
 - 100K<n<1M
+# Explicit column types: a column that is null throughout one file (error, at_ms) would
+# otherwise be typed null from the first file and fail to cast the next.
+dataset_info:
+- config_name: instances
+  features:
+  - name: batch
+    dtype: string
+  - name: instance
+    dtype: string
+  - name: summary
+    dtype: string
+  - name: cast
+    dtype: string
+  - name: state
+    dtype: string
+  - name: models
+    dtype: string
+  - name: mind_env
+    dtype: string
+- config_name: calls
+  features:
+  - name: batch
+    dtype: string
+  - name: instance
+    dtype: string
+  - name: file
+    dtype: string
+  - name: seq
+    dtype: int64
+  - name: actor
+    dtype: string
+  - name: at_ms
+    dtype: int64
+  - name: purpose
+    dtype: string
+  - name: model
+    dtype: string
+  - name: tokens
+    dtype: int64
+  - name: latency_ms
+    dtype: int64
+  - name: error
+    dtype: string
+  - name: entry
+    dtype: string
+- config_name: rows
+  features:
+  - name: batch
+    dtype: string
+  - name: instance
+    dtype: string
+  - name: stream
+    dtype: string
+  - name: seq
+    dtype: int64
+  - name: at_ms
+    dtype: int64
+  - name: row
+    dtype: string
+- config_name: prompts
+  features:
+  - name: batch
+    dtype: string
+  - name: instance
+    dtype: string
+  - name: ref
+    dtype: string
+  - name: text
+    dtype: string
 configs:
 - config_name: instances
   data_files: "batches/*/*/instances.jsonl.gz"

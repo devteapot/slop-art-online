@@ -12,6 +12,7 @@ import io
 import json
 import os
 import random
+import re
 import string
 import sys
 import tempfile
@@ -806,6 +807,34 @@ class SessionAllowList(unittest.TestCase):
             held = {h["path"]: h["reason"] for h in man["held"]}
             for path in ("diagnosis/REPORT.md", "FEEDBACK.md", "session/CHECKLIST.md", "session/README.md"):
                 self.assertIn(path, held)
+
+
+class Cards(unittest.TestCase):
+    """The runs card declares every column the packer writes, with a type (the Hub's viewer
+    otherwise types a column that is null throughout the first file as null)."""
+
+    def test_runs_card_features(self):
+        card = os.path.join(os.path.dirname(os.path.abspath(store.__file__)), "store_cards", "runs.md")
+        with open(card, encoding="utf-8") as f:
+            head = f.read().split("---")[1]
+        declared, conf = {}, None
+        for line in head.splitlines():
+            m = re.match(r"- config_name: (\w+)", line)
+            if m:
+                conf = m.group(1)
+            m = re.match(r"\s+- name: (\w+)", line)
+            if m and conf:
+                declared.setdefault(conf, []).append(m.group(1))
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "l9")
+            fake_batch(src)
+            out = os.path.join(t, "p")
+            store.pack_batch(src, out, scrubber({"model_exchanges": "include"}), machine="test")
+            for conf in ("instances", "calls", "rows", "prompts"):
+                with gzip.open(os.path.join(out, f"{conf}.jsonl.gz"), "rt") as f:
+                    cols = set(json.loads(f.readline()))
+                self.assertEqual(set(declared.get(conf, [])), cols, conf)
+        self.assertNotIn("DRAFT", head)
 
 
 if __name__ == "__main__":
