@@ -17,6 +17,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+pub mod body;
 mod check;
 pub mod context;
 pub mod fields;
@@ -24,6 +25,7 @@ pub mod speech;
 mod ui;
 pub use ui::UiWork;
 pub use check::Report;
+pub use body::{Alarm, BodyFacts, Meter, MeterMax, Status, Think};
 
 #[derive(Clone, Debug, Default)]
 pub struct ActorFacts {
@@ -837,6 +839,8 @@ pub struct Scripts {
     /// How each skill is presented (`<name>_ui()` over its defaults), and what was wrong with
     /// the declarations (an install refuses them; a client plays on with the defaults).
     ui: ui::UiRead,
+    /// The body's meters and the memo of its statuses (`meters()`, `status_of(a)`).
+    body: body::Body,
 }
 
 /// What a kind of structure does for those near it (its traits in `structures()`).
@@ -1058,7 +1062,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default(), body: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1093,6 +1097,8 @@ impl Scripts {
         // Presentation last: it reads the skills, shapes, shows and tables, and never fails the
         // compile (`ui_errors`).
         s.ui = s.read_ui();
+        // The body's meters: never fail the compile either (`meter_errors`, refused at install).
+        s.body = s.read_body();
         Ok(s)
     }
 
@@ -2323,7 +2329,7 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
 /// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
@@ -2366,6 +2372,19 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         return Err(format!("{f}: `about` describes the skill for a mind: what it does, when it is useful, what it is not"));
     }
     let reach = m.get("reach").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `reach` must be a number")))?;
+    // What the target may be: a class or a list of them.
+    let target_class = match m.get("target_class") {
+        None => Vec::new(),
+        Some(v) if v.is_string() => vec![v.clone().into_string().unwrap_or_default()],
+        Some(_) => list("target_class")?,
+    };
+    let classes = crate::catalog::TARGET_CLASSES;
+    if let Some(c) = target_class.iter().find(|c| !classes.contains(&c.as_str())) {
+        return Err(format!("{f}: `target_class` '{c}' is not a target class ({})", classes.join(", ")));
+    }
+    if !target_class.is_empty() && !flag("target", false)? {
+        return Err(format!("{f}: `target_class` needs `target: true`"));
+    }
     Ok(crate::catalog::SkillSpec {
         name: skill.to_string(),
         needs_target: flag("target", false)?,
@@ -2384,6 +2403,7 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         moving: flag("moving", false)?,
         moment: flag("moment", false)?,
         reflex: flag("reflex", false)?,
+        target_class,
     })
 }
 

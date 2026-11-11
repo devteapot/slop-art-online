@@ -2135,7 +2135,40 @@ def placement(s):
              {"request": deep, "exit": r.returncode, "error": out[-300:]})
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement}
+def alarms(s):
+    """A body's alarms are the world's `status_of` law's (docs/WORLD_RULES.md, "The body: meters
+    and statuses"): an overlay adds a status with an alarm to every body; a person the minds hold
+    is told it once while it lasts (a `body` line), asked to think with its words ("Your body:
+    …"), and told again only after it has ended and begun again. A meter naming a field the vitals
+    row lacks is refused at install. The shipped script is installed again at the end."""
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    word = "You feel the verify alarm."
+    status = 'fn status_of(a) { let out = base_status_of(a); out.push(#{ name: "verify", tone: "warn", text: "Verify", alarm: "%s", salience: 0.6, think: "always" }); out }' % word
+    on = compose(shipped, {"status_of": status})
+    a = s.people(1)[0]
+    try:
+        s.expect("the shipped law gives no such alarm", not s.told(a, word, "body"))
+        s.call("install_script", on)
+        s.wait(lambda: s.told(a, word, "body"), seconds=30)
+        time.sleep(6)
+        once = s.told(a, word, "body")
+        s.expect("an alarm the law gives is told once while it lasts", len(once) == 1, once)
+        reasons = s.rows(f"SELECT reason FROM deliberation WHERE actor = {a}", "alarm-requests")
+        s.expect("think: always asks the mind to think, in the alarm's words", any(f"Your body: {word}" in r["reason"] for r in reasons), reasons)
+        s.call("install_script", shipped)
+        time.sleep(5)
+        s.call("install_script", on)
+        s.wait(lambda: len(s.told(a, word, "body")) >= 2, seconds=30)
+        s.expect("ended and begun again, it is told again", len(s.told(a, word, "body")) == 2, s.told(a, word, "body"))
+        bad = compose(shipped, {"meters": 'fn meters() { base_meters() + [#{ name: "stamina", value: "stamina", max: 100.0 }] }'})
+        r = s.call("install_script", bad, check=False)
+        out = (r.stdout or "") + (r.stderr or "")
+        s.expect("a meter naming a field the vitals row lacks is refused at install", r.returncode != 0 and "not a my_vitals field" in out, out[-300:])
+    finally:
+        s.call("install_script", shipped)
+
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms}
 
 
 def goods(s):

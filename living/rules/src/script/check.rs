@@ -104,7 +104,7 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 13] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years"];
+pub const ENGINE_LAWS: [&str; 15] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.
@@ -173,6 +173,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     daylight(&mut p)?;
     life_years(s)?;
     ways(&mut p)?;
+    body(&mut p)?;
     if s.has("seasons_text") {
         let d = p.raw("seasons_text", (), &|| String::new())?;
         if !d.is_string() {
@@ -238,6 +239,25 @@ fn ways(p: &mut Probe) -> Result<(), String> {
         if !d.clone().into_string().unwrap_or_default().is_empty() {
             return Err(format!("install refused: `{f}` refuses a line that breaks nothing the way `{}` requires (to someone {} m away, first of its kind): {}", w.name, ok.target.dist, d));
         }
+    }
+    Ok(())
+}
+
+/// `meters()` rows are well formed, and `status_of` returns statuses for every meter empty,
+/// half and full, by day and at night, hurt and not (on the shipped vitals; the authority
+/// checks the meters' fields against its own row).
+fn body(p: &mut Probe) -> Result<(), String> {
+    let s = p.s;
+    if let Some(e) = s.meter_errors().first() {
+        return Err(format!("install refused: {e}"));
+    }
+    if !s.has("status_of") {
+        return Ok(());
+    }
+    for b in s.sample_bodies(&super::body::SHIPPED_VITALS) {
+        let about = || format!("for a {} {}{} with {}", b.stage, b.kind, if b.night { " at night" } else { "" }, b.fields.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", "));
+        let _ = p.raw("status_of", (b.map_for_check(),), &about)?; // counts its operations for the fuel report
+        s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
     }
     Ok(())
 }

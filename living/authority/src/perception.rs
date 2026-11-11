@@ -868,7 +868,11 @@ pub fn player_character(ctx: &ReducerContext) -> Option<Character> {
 /// `who` plays `character` now.
 pub fn set_player(ctx: &ReducerContext, who: Identity, character: u32) {
     let row = Player { identity: who, character };
-    if ctx.db.player().identity().find(who).is_some() {
+    if let Some(old) = ctx.db.player().identity().find(who) {
+        // The character played before: its outcome rows have no reader any more.
+        if old.character != character {
+            crate::outcomes::forget(ctx, old.character);
+        }
         ctx.db.player().identity().update(row);
     } else {
         ctx.db.player().insert(row);
@@ -965,6 +969,22 @@ pub fn my_characters(ctx: &ViewContext) -> Vec<Character> {
 #[spacetimedb::view(accessor = my_vitals, public, primary_key = id)]
 pub fn my_vitals(ctx: &ViewContext) -> Vec<Vitals> {
     living(ctx).and_then(|c| ctx.db.vitals().id().find(c.id)).into_iter().collect()
+}
+
+/// What my living character senses now: how far it sees and hears, and how its sight narrows
+/// away from facing (the `senses` law with all its facts; `character_senses`). One point
+/// lookup; it re-runs only when a value changes (nightfall, dawn, a torch), not every tick.
+#[spacetimedb::view(accessor = my_senses, public, primary_key = id)]
+pub fn my_senses(ctx: &ViewContext) -> Vec<CharacterSenses> {
+    living(ctx).and_then(|c| ctx.db.character_senses().id().find(c.id)).into_iter().collect()
+}
+
+/// How my acts and my death came out lately, in codes (`act_outcome`, one row per line of
+/// `my_experience` that tells one, keyed by its id): of my living character, or of the one that
+/// died last until I join again (the death screen). One btree point read by character.
+#[spacetimedb::view(accessor = my_act_outcomes, public, primary_key = id)]
+pub fn my_act_outcomes(ctx: &ViewContext) -> Vec<ActOutcome> {
+    current(ctx).map(|c| ctx.db.act_outcome().observer().filter(c.id).collect()).unwrap_or_default()
 }
 
 /// What reached my character's senses lately: the newest `frame::LINES_SHOWN` lines of my
