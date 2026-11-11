@@ -2748,6 +2748,8 @@ def e_wall(k, rng, env, wear, w, inward):
     if n.dot(inward) > 0:  # n looks out of the enclosure
         n = -n
     h, style, th = w["h"], w["style"], w.get("th", 0.4)
+    if style == "paling":  # layout pass 2: a fence of hull planks
+        return e_paling(k, rng, env, wear, w, n)
     low = w.get("low", h)
     gaps = sorted(w.get("gaps", []))
     runs, a = [], 0.0
@@ -2773,6 +2775,10 @@ def e_wall(k, rng, env, wear, w, inward):
             else:
                 hh = h - 0.12
             hs.append(max(0.3, hh))
+        for i in range(m):  # layout pass 2: where the plan says a wall has slumped, it stands half its height
+            mid = r0 + (r1 - r0) * (i + 0.5) / m
+            if any(u <= mid <= v for u, v in w.get("slumps", ())):
+                hs[i] = max(0.3, hs[i] * rng.uniform(0.35, 0.55))
         for i in range(m):
             a0, a1, hh = r0 + (r1 - r0) * i / m, r0 + (r1 - r0) * (i + 1) / m, hs[i]
             rows = max(1, round(hh / course))
@@ -2803,6 +2809,13 @@ def e_wall(k, rng, env, wear, w, inward):
                 a0, a1 = r0 + (r1 - r0) * i / mc + 0.01, r0 + (r1 - r0) * (i + 1) / mc - 0.01
                 put(k, lbox(Vector((a0, -th / 2 - 0.04, h - 0.12)), Vector((a1, th / 2 + 0.04, h * rng.uniform(0.995, 1.0))), fn=lambda q: p0 + t * q.x + n * q.y + Z * q.z, open_bottom=True), jit(P.pale, rng, 0.025))
     raw(k, polys)
+    for u, v in w.get("slumps", ()):  # and its stones lie where they fell, on the lee side
+        for i in range(max(3, round((v - u) * 1.6))):
+            lee = Vector((*w["fall"], 0.0)) if w.get("fall") else -n
+            q = p0 + t * rng.uniform(u, v) + lee * rng.uniform(th / 2 + 0.25, th / 2 + 1.0)
+            sz = rng.uniform(0.13, 0.26)
+            S = Matrix.Translation(q) @ Matrix.Rotation(rng.uniform(0, PI), 4, "Z")
+            put(k, lbox(Vector((-sz, -sz * 0.7, 0)), Vector((sz, sz * 0.7, sz * 0.9)), fn=lambda q_, S=S: S @ q_, bevel=0.02, open_bottom=True), jit(P.basalt if i % 3 else P.pale, rng, 0.03))
     for g0, g1 in gaps:
         mid, gw = p0 + t * (g0 + g1) / 2, g1 - g0
         if w.get("gate"):  # a driftwood gate, a hand ajar
@@ -3364,6 +3377,737 @@ ENCLOSURES = dict(yard=3000, back_plot=3000, toft=3500, walled_garden=3500, oven
 GEN.update({kind: (gen_enclosure, budget) for kind, budget in ENCLOSURES.items()})
 
 
+# ---------------------------------------------------------------------------------------------
+# Layout pass 2 (docs/CULLET_LAYOUT.md, "Pass 2"): the Crown's ground, the quarry and the
+# Strand's working backs. As in pass 1 the plan writes every thing and its cause; this builds it.
+# Parts that touch are set a few millimetres apart or run into each other, never face to face in
+# one plane (the kit check's coplanar rule).
+
+GLASS = dict(green=P.green, amber=P.amber, aqua=P.aqua, smoke=P.smoke, cobalt=P.cobalt)
+GOOD_CLAY = on(mix(P.smoke, P.basalt, 0.32), "earth")  # the clay a crucible is made of, grey-blue while wet
+ROCK, ROCK_PALE = on(P.basalt, "boulder"), on(P.pale, "boulder")  # living rock, not laid stone
+ROPE = on(mix(P.sand, P.drift, 0.55), "cloth")
+ASH = mix(P.pale, P.oldlime, 0.5)
+
+
+def e_poly(k, M, pts, z0, z1, col, top=None):
+    """A flat stone of any outline [(x, y)] from z0 to z1 (no bottom): its top and its sides."""
+    n = len(pts)
+    up = [M @ Vector((x, y, z1)) for x, y in pts]
+    dn = [M @ Vector((x, y, z0)) for x, y in pts]
+    polys = [(oriented(up, Z), top if top is not None else col)]
+    cx, cy = sum(q[0] for q in pts) / n, sum(q[1] for q in pts) / n
+    c = M @ Vector((cx, cy, (z0 + z1) / 2))
+    for i in range(n):
+        j = (i + 1) % n
+        q = [dn[i], dn[j], up[j], up[i]]
+        polys.append((oriented(q, (q[0] + q[1]) / 2 - c), col))
+    raw(k, polys)
+
+
+def e_paling(k, rng, env, wear, w, n):
+    """A paling of hull planks (SMALL_CITY §1: hull planks are fences): tarred strakes set on
+    end between two rails, their tops as the boat's sheer left them; a grey board where one was
+    replaced. Gaps in it are gates of the same planks."""
+    p0, p1 = Vector((*w["from"], 0.0)), Vector((*w["to"], 0.0))
+    L = (p1 - p0).length
+    t = (p1 - p0) / L
+    h = w["h"]
+    runs, a = [], 0.0
+    for g0, g1 in sorted(w.get("gaps", [])):
+        if g0 - a > 0.25:
+            runs.append((a, g0))
+        a = g1
+    if L - a > 0.25:
+        runs.append((a, L))
+    for r0, r1 in runs:
+        x = r0 + 0.02
+        while x < r1 - 0.1:
+            pw = min(rng.uniform(0.15, 0.23), r1 - 0.02 - x)
+            ph = h * rng.uniform(0.9, 1.0) + 0.1 * sin(x * 0.9)
+            c = jit(P.drift, rng, 0.03) if rng.random() < 0.12 else jit(P.tar, rng, 0.025)
+            put(k, lbox(Vector((x, -0.015, 0.04)), Vector((x + pw, 0.015, ph)), fn=lambda q: p0 + t * q.x + n * q.y + Z * q.z), c)
+            x += pw + rng.uniform(0.012, 0.035)
+        for z in (0.38, h - 0.3):
+            put(k, beam(p0 + t * r0 - n * 0.045 + Z * z, p0 + t * r1 - n * 0.045 + Z * z, 0.05, 0.08), jit(mix(P.drift, P.tar, 0.4), rng, 0.02))
+        m = max(1, round((r1 - r0) / 2.2))
+        for i in range(m + 1):
+            q = p0 + t * (r0 + 0.06 + (r1 - r0 - 0.12) * i / m) - n * 0.12
+            put(k, tube([q, q + Z * (h - 0.12)], 0.05, 5), jit(P.drift, rng, 0.03))
+    for g0, g1 in w.get("gaps", []):
+        if w.get("gate"):  # a gate of the same planks, a hand ajar
+            hinge, gw = p0 + t * (g0 + 0.05), g1 - g0 - 0.1
+            d = (t * cos(rad(16)) - n * sin(rad(16))).normalized()
+            s = Vector((-d.y, d.x, 0))
+            x = 0.0
+            while x < gw - 0.08:
+                pw = min(0.2, gw - x)
+                put(k, lbox(Vector((x, -0.015, 0.08)), Vector((x + pw - 0.015, 0.015, h * 0.94)), fn=lambda q: hinge + d * q.x + s * q.y + Z * q.z), jit(P.tar, rng, 0.025))
+                x += pw
+            put(k, beam(hinge + s * 0.04 + Z * 0.3, hinge + d * gw + s * 0.04 + Z * (h - 0.35), 0.035, 0.08, up=s), jit(mix(P.drift, P.tar, 0.3), rng, 0.02))
+
+
+def c_grave_row(k, rng, M, o, f):
+    """A row of graves, each marked with a slab of the Cone's glass in a basalt socket (the bible,
+    "Customs"). The plan gives every grave its glass and its state: `new` (six years: unweathered,
+    the mound still humped), `kept`, `old` (lichen on the socket), `leaning`, `poor` (the lean
+    years: small, dark, some broken off short)."""
+    graves, L = o["graves"], o["len"]
+    n = len(graves)
+    small = o.get("small")
+    for i, g in enumerate(graves):
+        x = -L / 2 + L * (i + 0.5) / n
+        st = g.get("state", "kept")
+        glass = GLASS[g["glass"]]
+        w, h, th = (0.28, 0.4, 0.06) if small else (0.4, 0.66 if st == "new" else 0.6, 0.075)
+        if st == "poor":
+            glass = mix(glass, P.tar, 0.32)
+            if (i * 5 + f["seed"]) % 4 == 0:
+                h *= 0.5  # broken off
+        elif st in ("old", "leaning"):
+            glass = mix(glass, P.pale, 0.18)  # weathered dull
+        sock = jit(P.basalt if st != "new" else P.pale, rng, 0.03)
+        if st in ("old", "leaning", "poor") and (i + f["seed"]) % 2:
+            sock = mix(sock, P.lichen, 0.3)
+        e_box(k, M, (x - w / 2 - 0.09, -0.15, 0.0), (x + w / 2 + 0.09, 0.15, 0.15), sock, open_bottom=True)
+        lean_ = rad((9 + 4 * (i % 3)) * (1 if i % 2 else -1)) if st == "leaning" else rad(rng.uniform(-1.5, 1.5))
+        S = M @ Matrix.Translation((x, 0, 0.1)) @ Matrix.Rotation(lean_, 4, "X")
+        put(k, lbox(Vector((-w / 2, -th / 2, 0)), Vector((w / 2, th / 2, h)), fn=lambda q, S=S: S @ q, bevel=0.018), jit(glass, rng, 0.02))
+        if o.get("mound"):  # the earth has not sunk yet: a hump before the marker, grassed over
+            bm = sphere((0, 0, 0), 1.0, 2)
+            bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < -0.01], context="VERTS")
+            for v in bm.verts:
+                v.co = M @ Vector((x + v.co.x * 0.44, -1.2 + v.co.y * 0.95, v.co.z * 0.24))
+            put(k, bm, lambda co, nn, c=jit(mix(P.peat, P.grass, 0.55), rng, 0.03): c, closed=False)
+
+
+def c_ship_stones(k, rng, M, o, f):
+    """The ship days' graves: round-headed basalt stones cut in the formal script of the carved
+    lintels, a ledger slab before each. Lichened; one has fallen."""
+    n, L = o.get("n", 6), o["len"]
+    for i in range(n):
+        x = -L / 2 + L * (i + 0.5) / n
+        fallen = i == n - 2
+        S = M @ Matrix.Translation((x, 0, 0)) @ (Matrix.Translation((0, -0.5, 0.1)) @ Matrix.Rotation(rad(-84), 4, "X") if fallen else Matrix.Rotation(rad(rng.uniform(-3, 3)), 4, "X"))
+        w, h = 0.66, 1.02 + 0.08 * (i % 2)
+        prof = [(-w / 2, 0.0), (w / 2, 0.0), (w / 2, h - 0.24), (w * 0.3, h - 0.07), (0.0, h), (-w * 0.3, h - 0.07), (-w / 2, h - 0.24)]
+        c = jit(P.basalt, rng, 0.03)
+        put(k, prism([(s, z) for s, z in prof], -0.07, 0.07, lambda a, s, z, S=S: S @ Vector((s, a, z))),
+            lambda co, nn, c=c: mix(c, P.lichen, 0.3) if nz(co.x * 2.3, co.z * 2.3, 5.0 + co.y) > 0.2 else c)
+        # The cut script: rows of short pale strokes on the face that looks south.
+        strokes = []
+        for r in range(4):
+            z, xx = h - 0.36 - 0.12 * r, -w / 2 + 0.1
+            while xx < w / 2 - 0.12:
+                ww = rng.uniform(0.04, 0.1)
+                strokes.append((oriented([S @ Vector((xx, -0.074, z)), S @ Vector((xx + ww, -0.074, z)), S @ Vector((xx + ww, -0.074, z + 0.05)), S @ Vector((xx, -0.074, z + 0.05))], S.to_3x3() @ -Y), jit(P.pale, rng, 0.02)))
+                xx += ww + rng.uniform(0.02, 0.05)
+        raw(k, strokes)
+        if not fallen:
+            e_box(k, M, (x - 0.4, -1.95, 0.0), (x + 0.4, -0.2, 0.09 + 0.02 * (i % 3)), jit(mix(P.basalt, P.pale, 0.3), rng, 0.03), open_bottom=True)
+
+
+def c_steps(k, rng, M, o, f):
+    """Three stone steps up a bank between two terraces, worn in the middle."""
+    w, rise = o.get("w", 1.6), o.get("rise", 0.5)
+    for i in range(3):
+        y0 = -0.5 + 0.34 * i
+        e_box(k, M, (-w / 2 + 0.03, y0, 0.0), (w / 2 - 0.03, y0 + 0.36 + (0.25 if i == 2 else 0.0), rise * (i + 1) / 3 + 0.02), jit(mix(P.basalt, P.pale, 0.55), rng, 0.025), open_bottom=True)
+
+
+def c_apron(k, rng, M, o, f):
+    """The cistern's apron: a ring of flags round the tank, worn hollow and pale on the side the
+    town comes from (south)."""
+    r0, r1, n = o["r0"], o["r1"], 26
+    for i in range(n):
+        a0, a1 = i / n * TAU + 0.012, (i + 1) / n * TAU - 0.012
+        mid = (a0 + a1) / 2
+        south = max(0.0, -sin(mid))  # 1 due south
+        rm = r0 + (r1 - r0) * (0.45 + 0.1 * (i % 2))
+        for ra, rb in ((r0, rm - 0.012), (rm + 0.012, r1 - 0.25 * (i % 3 == 0))):
+            pts = [(cos(a0) * ra, sin(a0) * ra), (cos(a1) * ra, sin(a1) * ra), (cos(a1) * rb, sin(a1) * rb), (cos(a0) * rb, sin(a0) * rb)]
+            e_poly(k, M, pts, 0.0, 0.05 - 0.02 * south * (ra == r0) + 0.006 * rng.random(), jit(mix(P.basalt, P.pale, 0.3 + 0.55 * south), rng, 0.025))
+
+
+def c_dip_step(k, rng, M, o, f):
+    """The dipping step: two worn stones against the tank's wall, where buckets are filled."""
+    w = o.get("w", 2.2)
+    e_box(k, M, (-w / 2, -0.5, 0.0), (w / 2, 0.42, 0.2), jit(mix(P.basalt, P.pale, 0.7), rng, 0.02), bevel=0.02, open_bottom=True)
+    e_box(k, M, (-w / 2 + 0.35, 0.0, 0.0), (w / 2 - 0.35, 0.44, 0.42), jit(mix(P.basalt, P.pale, 0.6), rng, 0.02), bevel=0.02, open_bottom=True)
+
+
+def c_buckets(k, rng, M, o, f):
+    """Buckets and a yoke left on the apron: coopered, iron-hooped."""
+    for i in range(o.get("n", 2)):
+        Bm = M @ Matrix.Translation((0.55 * i - 0.3, 0.12 * (i % 2), 0.0))
+        barrel(k, rng, None, 0.17, 0.3, wood=P.drift, M=Bm, head=False, sides=8, hoops=(0.2, 0.85))
+        raw(k, [([Bm @ Vector((cos(j / 8 * TAU) * 0.13, sin(j / 8 * TAU) * 0.13, 0.24 if i else 0.05)) for j in range(8)], mix(P.smoke, P.tar, 0.55))])
+    put(k, beam(M @ Vector((-0.7, -0.5, 0.05)), M @ Vector((0.7, -0.42, 0.05)), 0.07, 0.05), jit(P.drift, rng, 0.03))
+
+
+def c_runnel(k, rng, M, o, f):
+    """The overflow's runnel: a channel cut in the rock, two rows of edging stones, dark water
+    and green growth between them."""
+    b = Vector((o["to"][0] - o["_at"][0], o["to"][1] - o["_at"][1], 0.0))
+    L = b.length
+    t, s = b / L, Vector((-b.y, b.x, 0)) / L
+    m = max(2, round(L / 1.3))
+    wet = mix(P.smoke, P.tar, 0.6)
+    for i in range(m):
+        a0, a1 = L * i / m + 0.015, L * (i + 1) / m - 0.015
+        for e in (-1, 1):
+            q = [t * a0 + s * (e * 0.16), t * a1 + s * (e * 0.16), t * a1 + s * (e * 0.3), t * a0 + s * (e * 0.3)]
+            e_poly(k, M, [(v.x, v.y) for v in q], 0.0, 0.06 + 0.02 * rng.random(), jit(mix(P.basalt, P.kelp, 0.3 + 0.25 * rng.random()), rng, 0.02))
+        raw(k, [(oriented([M @ (t * (a0 - 0.015) - s * 0.16 + Z * 0.012), M @ (t * (a1 + 0.015) - s * 0.16 + Z * 0.012), M @ (t * (a1 + 0.015) + s * 0.16 + Z * 0.012), M @ (t * (a0 - 0.015) + s * 0.16 + Z * 0.012)], Z),
+                 wet if i % 3 else mix(wet, P.kelp, 0.4))])
+
+
+def c_slab(k, rng, M, o, f):
+    """A basalt slab laid over the runnel where a path crosses it."""
+    e_box(k, M, (-1.1, -0.55, 0.075), (1.1, 0.55, 0.16), jit(mix(P.basalt, P.pale, 0.6), rng, 0.02), bevel=0.02)
+
+
+def c_tablet_bench(k, rng, M, o, f):
+    """The tablets' bench: a long basalt slab on three stones against the Readers' House, the
+    ship-day tablets laid out on it to be read in daylight: slate and fired clay, two leaning."""
+    L, n = o.get("len", 4.2), o.get("tablets", 8)
+    for x in (-L / 2 + 0.35, 0.0, L / 2 - 0.35):
+        e_box(k, M, (x - 0.16, -0.2, 0.0), (x + 0.16, 0.2, 0.46), jit(P.basalt, rng, 0.03), open_bottom=True)
+    e_box(k, M, (-L / 2, -0.26, 0.464), (L / 2, 0.26, 0.56), jit(mix(P.basalt, P.pale, 0.55), rng, 0.02), bevel=0.015)
+    for i in range(n):
+        x = -L / 2 + 0.3 + (L - 0.6) * i / (n - 1)
+        c = jit((P.slate, mix(P.newbrick, P.sand, 0.25), P.slate, P.brick)[i % 4], rng, 0.03)
+        if i in (2, n - 2):  # leaning on the wall behind
+            S = M @ Matrix.Translation((x, 0.16, 0.565)) @ Matrix.Rotation(rad(-74), 4, "X")
+        else:
+            S = M @ Matrix.Translation((x, -0.02 + 0.03 * (i % 3), 0.565)) @ Matrix.Rotation(rad(rng.uniform(-9, 9)), 4, "Z")
+        put(k, lbox(Vector((-0.15, -0.11, 0.0)), Vector((0.15, 0.11, 0.028)), fn=lambda q, S=S: S @ q), c)
+        raw(k, [([S @ Vector((-0.11, -0.07 + 0.045 * r, 0.0312)), S @ Vector((0.1 - 0.03 * (r % 2), -0.07 + 0.045 * r, 0.0312)), S @ Vector((0.1 - 0.03 * (r % 2), -0.055 + 0.045 * r, 0.0312)), S @ Vector((-0.11, -0.055 + 0.045 * r, 0.0312))],
+                 mix(c, P.lime, 0.5)) for r in range(4)])
+
+
+def c_stools(k, rng, M, o, f):
+    """Low stones in a half ring: the children's seats at lessons."""
+    for i, (x, y) in enumerate(o["at_each"]):
+        s = 0.19 + 0.02 * (i % 3)
+        S = M @ Matrix.Translation((x, y, 0)) @ Matrix.Rotation(rad(17 * i), 4, "Z")
+        put(k, lbox(Vector((-s, -s, 0.0)), Vector((s, s, 0.3 + 0.03 * (i % 2))), fn=lambda q, S=S: S @ q, bevel=0.03, open_bottom=True),
+            lambda co, nn, c=jit(P.basalt, rng, 0.03): mix(c, P.pale, 0.5) if nn.z > 0.5 else c)
+
+
+def c_sand_tray(k, rng, M, o, f):
+    """A tray of white sand from the Sand Spit, to write in and smooth again: there is nothing to
+    write on that is not kept."""
+    for x in (-0.4, 0.4):
+        e_box(k, M, (x - 0.1, -0.3, 0.0), (x + 0.1, 0.3, 0.36), jit(P.basalt, rng, 0.03), open_bottom=True)
+    wood = jit(P.drift, rng, 0.03)
+    e_box(k, M, (-0.6, -0.4, 0.364), (0.6, 0.4, 0.39), wood)
+    for x0, x1, y0, y1 in ((-0.6, 0.6, -0.4, -0.36), (-0.6, 0.6, 0.36, 0.4), (-0.6, -0.56, -0.356, 0.356), (0.56, 0.6, -0.356, 0.356)):
+        e_box(k, M, (x0, y0, 0.394), (x1, y1, 0.46), wood)
+    raw(k, [([M @ Vector((-0.556, -0.356, 0.43)), M @ Vector((0.556, -0.356, 0.43)), M @ Vector((0.556, 0.356, 0.43)), M @ Vector((-0.556, 0.356, 0.43))], jit(P.sand, rng, 0.02))])
+    raw(k, [([M @ Vector((-0.4 + 0.2 * i, -0.2, 0.4325)), M @ Vector((-0.34 + 0.2 * i, -0.2, 0.4325)), M @ Vector((-0.3 + 0.2 * i, 0.2, 0.4325)), M @ Vector((-0.36 + 0.2 * i, 0.2, 0.4325))], mix(P.sand, P.drift, 0.5)) for i in range(4)])
+
+
+def c_spoil(k, rng, M, o, f):
+    """A spoil heap: quarry waste tipped where the barrow run ended, a low cone of broken stone,
+    angular and pale; an old one has gone to grass on top."""
+    r, h = o.get("r", 2.4), o.get("h", 1.6)
+    at = M @ Vector((0, 0, 0))
+    grown = o.get("grown")
+    a_, b_, g_ = jit(ROCK, rng, 0.02), jit(ROCK_PALE, rng, 0.02), jit(mix(P.grass, P.basalt, 0.35), rng, 0.02)
+    n = 11
+    rim = [M @ Vector((cos(i / n * TAU) * r * (1 + 0.16 * nz(i * 1.3, at.x, at.y)), sin(i / n * TAU) * r * 0.85 * (1 + 0.16 * nz(i * 1.9, at.y, at.x)), 0.0)) for i in range(n)]
+    mid = [M @ Vector((cos((i + 0.5) / n * TAU) * r * 0.5, sin((i + 0.5) / n * TAU) * r * 0.42, h * (0.62 + 0.16 * nz(i * 2.1, at.x * 0.7, 2.0)))) for i in range(n)]
+    top = M @ Vector((0.1 * r, -0.05 * r, h))
+    polys = []
+    for i in range(n):
+        j_ = (i + 1) % n
+        c1, c2 = (b_ if (i * 7) % 3 else a_), (a_ if (i * 5) % 3 else b_)
+        polys += [([rim[i], rim[j_], mid[i]], c1), ([rim[j_], mid[j_], mid[i]], c2), ([mid[i], mid[j_], top], g_ if grown else (b_ if i % 2 else a_))]
+    raw(k, polys)
+    for i in range(16 if not grown else 5):  # broken stone on its flanks and round its foot
+        a, t_ = rng.uniform(0, TAU), rng.uniform(0.35, 1.12)
+        sz = rng.uniform(0.12, 0.3)
+        S = M @ Matrix.Translation((cos(a) * r * t_, sin(a) * r * 0.85 * t_, max(0.0, h * 0.7 * (1 - t_) / 0.65 - 0.05) if t_ < 1 else 0.0)) @ Matrix.Rotation(rng.uniform(0, PI), 4, "Z") @ Matrix.Rotation(rng.uniform(-0.4, 0.4), 4, "X")
+        put(k, lbox(Vector((-sz, -sz * 0.7, -0.05)), Vector((sz, sz * 0.7, sz * 0.8)), fn=lambda q, S=S: S @ q, bevel=0.02), jit(ROCK if i % 2 else ROCK_PALE, rng, 0.03))
+    if grown:
+        for i in range(8):
+            a, d = rng.uniform(0, TAU), r * rng.uniform(0.2, 0.9)
+            tuft(k, rng, M @ Vector((cos(a) * d, sin(a) * d * 0.85, h * max(0.0, 1 - d / r) * 0.75)), 0.24, 0.4, (P.grass, mix(P.grass, P.heather, 0.3))[i % 2], 4)
+
+
+def c_crane_foot(k, rng, M, o, f):
+    """The crane's standing: a bed of flags under its mast and winch (the crane is its own model)."""
+    for i, (x, y, sx, sy) in enumerate(((-0.75, -0.55, 0.7, 0.5), (0.7, -0.6, 0.72, 0.52), (-0.72, 0.56, 0.7, 0.5), (0.74, 0.5, 0.68, 0.54), (0.0, 0.0, 0.3, 0.3))):
+        e_box(k, M, (x - sx, y - sy, 0.0), (x + sx - 0.02, y + sy - 0.02, 0.045 + 0.008 * i), jit(mix(P.basalt, P.pale, 0.5), rng, 0.025), open_bottom=True)
+
+
+def c_stone_stack(k, rng, M, o, f):
+    """Squared stones waiting: dressed basalt on two bearers, three to a course, sawn faces pale."""
+    n = o.get("n", 9)
+    for y in (-0.48, 0.48):
+        e_box(k, M, (-1.5, y - 0.07, 0.0), (1.5, y + 0.07, 0.11), jit(mix(P.drift, P.tar, 0.4), rng, 0.02), open_bottom=True)
+    z, i = 0.114, 0
+    while i < n:
+        row = min(3, n - i)
+        zh = 0.38 + 0.03 * ((i // 3) % 2)
+        for j in range(row):
+            x0 = -1.46 + 0.98 * j + 0.06 * ((i // 3) % 2)
+            e_ = 0.84 + 0.06 * ((i + j) % 2)
+            put(k, lbox(Vector((x0, -0.42 + 0.03 * (j % 2), z)), Vector((x0 + e_, 0.4, z + zh)), fn=lambda q: M @ q, bevel=0.015),
+                lambda co, nn, c=jit(P.basalt, rng, 0.03): mix(c, P.pale, 0.5) if nn.z > 0.5 else mix(c, P.pale, 0.2))
+        z += zh + 0.004
+        i += row
+
+
+def c_sledge(k, rng, M, o, f):
+    """A stone sledge: two runners shod with iron and a bed of planks, one stone still on it,
+    the drag rope laid out before it."""
+    for y in (-0.42, 0.42):
+        put(k, beam(M @ Vector((-1.0, y, 0.09)), M @ Vector((1.0, y, 0.09)), 0.1, 0.18), jit(P.drift, rng, 0.03))
+        put(k, beam(M @ Vector((1.0, y, 0.09)), M @ Vector((1.28, y, 0.24)), 0.1, 0.16), jit(P.drift, rng, 0.03))
+    for i in range(4):
+        e_box(k, M, (-0.9 + 0.46 * i, -0.52, 0.184), (-0.9 + 0.46 * i + 0.4, 0.52, 0.23), jit(mix(P.drift, P.tar, 0.25), rng, 0.03))
+    if o.get("stone"):
+        put(k, lbox(Vector((-0.5, -0.32, 0.234)), Vector((0.42, 0.3, 0.66)), fn=lambda q: M @ q, bevel=0.02), lambda co, nn, c=jit(P.basalt, rng, 0.03): mix(c, P.pale, 0.5) if nn.z > 0.5 else c)
+    put(k, tube([M @ Vector(q) for q in ((1.26, -0.42, 0.22), (1.9, -0.1, 0.03), (2.5, 0.0, 0.03), (1.9, 0.12, 0.03), (1.26, 0.42, 0.22))], 0.022, 4, caps=False), ROPE, closed=False)
+
+
+def c_split_block(k, rng, M, o, f):
+    """A block lying half split: a row of iron wedges still in the line of drilled holes, the
+    two halves a hand apart, the half-holes showing pale on the open faces."""
+    c = jit(P.basalt, rng, 0.03)
+    for e in (-1, 1):
+        S = M @ Matrix.Translation((e * 0.02, 0, 0)) @ Matrix.Rotation(rad(e * 2.5), 4, "Y")
+        x0, x1 = (-0.95, -0.03) if e < 0 else (0.03, 0.8)
+        put(k, lbox(Vector((x0, -0.5, 0.0)), Vector((x1, 0.5, 0.78)), fn=lambda q, S=S: S @ q, bevel=0.02, open_bottom=True),
+            lambda co, nn, c=c, e=e: mix(c, P.pale, 0.55) if nn.dot(M.to_3x3() @ X) * -e > 0.6 or nn.z > 0.6 else c)
+    for i in range(5):
+        y = -0.36 + 0.18 * i
+        put(k, lbox(Vector((-0.035, y - 0.03, 0.74)), Vector((0.035, y + 0.03, 0.9)), fn=lambda q: M @ q), jit(mix(P.iron, P.rust, 0.5), rng, 0.02))
+    e_box(k, M, (0.3, -0.75, 0.0), (0.5, -0.56, 0.1), jit(mix(P.iron, P.rust, 0.4), rng, 0.02), open_bottom=True)  # the sledge hammer's head
+    put(k, beam(M @ Vector((0.4, -0.66, 0.06)), M @ Vector((1.2, -0.9, 0.04)), 0.035, 0.035), jit(P.drift, rng, 0.03))
+
+
+def c_clay_floor(k, rng, M, o, f):
+    """The pit's floor: stony till dug to the level a spade stops at, lumpy, wet in the middle."""
+    w, d = o["w"], o["d"]
+    nx, ny = max(3, round(w / 1.3)), max(3, round(d / 1.3))
+    at = M @ Vector((0, 0, 0))
+    px, py = o.get("puddle", [0.0, 0.0])
+
+    def zz(i, j):
+        edge = min(i, nx - i, j, ny - j) == 0
+        x, y = -w / 2 + w * i / nx, -d / 2 + d * j / ny
+        dip = max(0.0, 1 - math.hypot((x - px) / 2.6, (y - py) / 1.7))
+        return 0.012 if edge else 0.05 + 0.09 * (0.5 + 0.5 * nz(x * 0.9 + at.x, y * 0.9 + at.y, 3.3)) * (1 - dip)
+    polys = []
+    for i in range(nx):
+        for j in range(ny):
+            q = [M @ Vector((-w / 2 + w * a / nx, -d / 2 + d * b / ny, zz(a, b))) for a, b in ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1))]
+            t_ = 0.5 + 0.5 * nz(i * 1.7, j * 1.3, 8.0)
+            c = jit(mix(ROCK, P.pale, 0.2 + 0.5 * t_) if o.get("rock") else on(mix(P.sand, P.basalt, 0.5 + 0.22 * t_), "earth"), rng, 0.02)
+            polys += [([q[0], q[1], q[2]], c), ([q[0], q[2], q[3]], c)]
+    raw(k, polys)
+    if "puddle" in o:
+        ring = [M @ Vector((px + cos(a / 10 * TAU) * 2.1 * (1 + 0.12 * sin(a * 2.3)), py + sin(a / 10 * TAU) * 1.3 * (1 + 0.1 * cos(a * 1.7)), 0.062)) for a in range(10)]
+        raw(k, [(ring, on(mix(P.smoke, P.basalt, 0.6), "earth"))])
+    for i in range(6):
+        a, dd = rng.uniform(0, TAU), rng.uniform(0.3, 0.45)
+        S = M @ Matrix.Translation((rng.uniform(-w / 2 + 0.6, w / 2 - 0.6), rng.uniform(-d / 2 + 0.6, d / 2 - 0.6), 0.0)) @ Matrix.Rotation(a, 4, "Z")
+        put(k, lbox(Vector((-dd, -dd * 0.7, 0.0)), Vector((dd, dd * 0.7, 0.14 + dd * 0.4)), fn=lambda q, S=S: S @ q, bevel=0.03, open_bottom=True), jit(P.basalt, rng, 0.03))
+
+
+def c_clay_bank(k, rng, M, o, f):
+    """The last bank of good clay, under the face: grey-blue, cut in clean spade lifts, Otto
+    Brandt's spade standing in it."""
+    w, d = o.get("w", 5.0), o.get("d", 2.0)
+    lifts = ((-d / 2, 0.0, 0.42), (-d / 2 + 0.55, 0.424, 0.84), (-d / 2 + 1.1, 0.844, 1.26))
+    for j, (y0, z0, z1) in enumerate(lifts):
+        m = max(2, round(w / 0.5))
+        for i in range(m):
+            x0, x1 = -w / 2 + w * i / m + 0.004, -w / 2 + w * (i + 1) / m - 0.004
+            yy = y0 + 0.05 * ((i * 3 + j) % 3) + (0.5 if (i >= m - 3 and j == 0) else 0.0)  # where he is digging now
+            if yy >= d / 2 - 0.1:
+                continue
+            put(k, lbox(Vector((x0, yy, z0)), Vector((x1, d / 2, z1)), fn=lambda q: M @ q, open_bottom=j == 0), on(jit(mix(P.smoke, P.basalt, 0.26 + 0.12 * ((i + j) % 2)), rng, 0.02), "earth"))
+    S = M @ Matrix.Translation((w / 2 - 0.9, -d / 2 + 0.25, 0.0)) @ Matrix.Rotation(rad(12), 4, "X")
+    put(k, tube([S @ Vector((0, 0, 0.2)), S @ Vector((0, 0, 1.15))], 0.022, 5), jit(P.drift, rng, 0.03))
+    put(k, lbox(Vector((-0.09, -0.008, -0.05)), Vector((0.09, 0.008, 0.24)), fn=lambda q: S @ q), jit(mix(P.iron, P.rust, 0.45), rng, 0.02))
+    put(k, beam(S @ Vector((-0.1, 0, 1.15)), S @ Vector((0.1, 0, 1.15)), 0.03, 0.03), jit(P.drift, rng, 0.03))
+
+
+def c_clay_boards(k, rng, M, o, f):
+    """Dug clay on boards, kept damp under sacking till it goes down to the pot house."""
+    for i in range(o.get("n", 3)):
+        Bm = M @ Matrix.Translation((0.0, -0.75 + 0.75 * i, 0.0)) @ Matrix.Rotation(rad((-4, 3, -2)[i % 3]), 4, "Z")
+        for x in (-0.5, 0.5):
+            e_box(k, Bm, (x - 0.05, -0.26, 0.0), (x + 0.05, 0.26, 0.07), jit(mix(P.drift, P.tar, 0.4), rng, 0.02), open_bottom=True)
+        e_box(k, Bm, (-0.72, -0.28, 0.074), (0.72, 0.28, 0.11), jit(P.drift, rng, 0.03))
+        for j in range(3):
+            covered = (i + j) % 3 == 0
+            bm = sphere((0, 0, 0), 1.0, 1)
+            bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < -0.01], context="VERTS")
+            for v in bm.verts:
+                v.co = Bm @ Vector((-0.46 + 0.46 * j + v.co.x * 0.2, v.co.y * 0.2, 0.112 + v.co.z * 0.24))
+            put(k, bm, on(jit(mix(P.sand, P.drift, 0.5), rng, 0.02), "cloth") if covered else jit(GOOD_CLAY, rng, 0.02), closed=False)
+
+
+def c_plank_run(k, rng, M, o, f):
+    """A barrow run: planks laid end to end up the pit's bank."""
+    b = Vector((o["to"][0] - o["_at"][0], o["to"][1] - o["_at"][1], 0.0))
+    L = b.length
+    t, s = b / L, Vector((-b.y, b.x, 0)) / L
+    m = max(2, round(L / 2.1))
+    for i in range(m):
+        a0, a1 = L * i / m - (0.12 if i else 0.0), L * (i + 1) / m
+        z = 0.03 + 0.036 * (i % 2)
+        off = s * (0.04 * (i % 2))
+        put(k, lbox(Vector((a0, -0.16, z)), Vector((a1, 0.16, z + 0.032)), fn=lambda q: M @ (t * q.x + s * q.y + off + Z * q.z)), jit(mix(P.drift, P.sand, 0.25), rng, 0.03))
+
+
+def c_steam_box(k, rng, M, o, f):
+    """The steaming box: a long tarred trunk on trestles where a plank is steamed till it will
+    bend to the hull; a kettle on a brick firebox at one end and a pipe into it, rags stuffed
+    round the door, a plank's end sticking out."""
+    L = o.get("len", 5.4)
+    hl = L / 2
+    for x in (-hl + 0.5, 0.0, hl - 0.5):
+        for e in (-1, 1):
+            put(k, beam(M @ Vector((x, e * 0.42, 0.0)), M @ Vector((x, e * 0.16, 0.74)), 0.07, 0.07, up=M.to_3x3() @ X), jit(P.drift, rng, 0.03))
+        put(k, beam(M @ Vector((x, -0.3, 0.74)), M @ Vector((x, 0.3, 0.74)), 0.08, 0.08, up=M.to_3x3() @ X), jit(P.drift, rng, 0.03))
+    for j, (y0, y1, z0, z1) in enumerate(((-0.24, 0.24, 0.784, 0.82), (-0.24, 0.24, 1.2, 1.236), (-0.276, -0.244, 0.784, 1.236), (0.244, 0.276, 0.784, 1.236))):
+        for i in range(3):  # three lengths of board, butted with a batten over each joint
+            x0, x1 = -hl + L * i / 3 + 0.006, -hl + L * (i + 1) / 3 - 0.006
+            e_box(k, M, (x0, y0, z0), (x1, y1, z1), jit(P.tar, rng, 0.025))
+    for i in (1, 2):
+        x = -hl + L * i / 3
+        e_box(k, M, (x - 0.05, -0.3, 0.77), (x + 0.05, 0.3, 1.25), jit(mix(P.tar, P.drift, 0.3), rng, 0.02))
+    e_box(k, M, (hl - 0.03, -0.24, 0.824), (hl, 0.24, 1.196), jit(mix(P.tar, P.drift, 0.5), rng, 0.02))  # the door board
+    put(k, lbox(Vector((hl - 0.6, -0.11, 0.95)), Vector((hl + 0.75, 0.11, 0.985)), fn=lambda q: M @ q), jit(mix(P.drift, P.sand, 0.3), rng, 0.03))  # a plank coming out
+    raw(k, [([M @ Vector((hl + 0.004, -0.2, 0.9)), M @ Vector((hl + 0.004, 0.2, 0.9)), M @ Vector((hl + 0.004, 0.22, 1.08)), M @ Vector((hl + 0.004, -0.18, 1.1))], on(jit(P.oldlime, rng, 0.03), "cloth"))], two=True)
+    # The boiler at the other end: a brick firebox, an iron kettle, the pipe.
+    Bx = M @ Matrix.Translation((-hl - 0.75, 0, 0))
+    put(k, lbox(Vector((-0.42, -0.42, 0.0)), Vector((0.42, 0.42, 0.5)), fn=lambda q: Bx @ q, open_bottom=True), lambda co, nn, c=jit(P.brick, rng, 0.03): mix(c, P.tar, 0.4) if nn.z > 0.5 else c)
+    raw(k, [([Bx @ Vector((-0.2, -0.424, 0.06)), Bx @ Vector((0.2, -0.424, 0.06)), Bx @ Vector((0.2, -0.424, 0.34)), Bx @ Vector((-0.2, -0.424, 0.34))], P.tar)])
+    put(k, lathe([(0.2, 0.504), (0.34, 0.6), (0.36, 0.8), (0.28, 0.95), (0.12, 1.0), (0.12, 1.06)], 10, Bx), jit(mix(P.iron, P.rust, 0.35), rng, 0.02))
+    put(k, tube([Bx @ Vector((0.0, 0.0, 1.05)), Bx @ Vector((0.3, 0.0, 1.14)), Bx @ Vector((0.78, 0.0, 1.05))], 0.045, 6), jit(mix(P.iron, P.rust, 0.5), rng, 0.02))
+    for i in range(3):
+        e_box(k, Bx, (-0.5 + 0.02 * i, 0.5 + 0.2 * i, 0.0), (0.3, 0.66 + 0.2 * i, 0.12 + 0.02 * i), jit(P.peat, rng, 0.03), open_bottom=True)  # peat for the fire
+
+
+def c_sawhorses(k, rng, M, o, f):
+    """Two saw trestles with a plank across them and the saw left in the cut."""
+    for x in (-0.95, 0.95):
+        put(k, beam(M @ Vector((x, -0.4, 0.7)), M @ Vector((x, 0.4, 0.7)), 0.09, 0.09, up=M.to_3x3() @ X), jit(P.drift, rng, 0.03))
+        for ey in (-1, 1):
+            for ex in (-1, 1):
+                put(k, beam(M @ Vector((x + ex * 0.04, ey * 0.34, 0.66)), M @ Vector((x + ex * 0.3, ey * 0.46, 0.0)), 0.06, 0.06, up=M.to_3x3() @ Y), jit(P.drift, rng, 0.03))
+    put(k, lbox(Vector((-1.9, -0.14, 0.75)), Vector((1.7, 0.14, 0.79)), fn=lambda q: M @ q), jit(mix(P.drift, P.sand, 0.35), rng, 0.03))
+    raw(k, [([M @ Vector((0.3, -0.3, 0.6)), M @ Vector((0.3, 0.42, 0.72)), M @ Vector((0.3, 0.42, 0.86)), M @ Vector((0.3, -0.3, 0.98))], jit(mix(P.iron, P.rust, 0.3), rng, 0.02))], two=True)
+    bm = sphere((0, 0, 0), 1.0, 1)
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < -0.01], context="VERTS")
+    for v in bm.verts:
+        v.co = M @ Vector((0.3 + v.co.x * 0.4, v.co.y * 0.5, v.co.z * 0.1))
+    put(k, bm, jit(mix(P.sand, P.drift, 0.3), rng, 0.02), closed=False)  # sawdust
+
+
+def c_pitch_pot(k, rng, M, o, f):
+    """The pitch pot: an iron cauldron on three stones over a ring of ash, a ladle in it."""
+    for i in range(7):
+        a = i / 7 * TAU
+        S = M @ Matrix.Translation((cos(a) * 0.62, sin(a) * 0.62, 0)) @ Matrix.Rotation(a, 4, "Z")
+        put(k, lbox(Vector((-0.12, -0.16, 0.0)), Vector((0.12, 0.16, 0.17 + 0.04 * (i % 2))), fn=lambda q, S=S: S @ q, bevel=0.02, open_bottom=True), jit(mix(P.basalt, P.tar, 0.4), rng, 0.02))
+    raw(k, [([M @ Vector((cos(i / 8 * TAU) * 0.48, sin(i / 8 * TAU) * 0.48, 0.02)) for i in range(8)], jit(ASH, rng, 0.02))])
+    put(k, lathe([(0.16, 0.2), (0.33, 0.3), (0.36, 0.5), (0.31, 0.62), (0.26, 0.62), (0.3, 0.5)], 10, M, caps=(True, False)), jit(mix(P.iron, P.tar, 0.4), rng, 0.02), closed=False)
+    raw(k, [([M @ Vector((cos(i / 8 * TAU) * 0.28, sin(i / 8 * TAU) * 0.28, 0.56)) for i in range(8)], P.tar)])
+    put(k, tube([M @ Vector((0.1, 0.0, 0.56)), M @ Vector((0.5, 0.2, 0.86))], 0.018, 4), jit(P.drift, rng, 0.03))
+
+
+def c_peat_rick(k, rng, M, o, f):
+    """A stance of the town's peat: two bearers, and on them a rick under tarred cloth roped
+    down with stones (`full`), what is left of one (`half`), or nothing but the folded cloth
+    (`bare`): the stack is lower each week."""
+    st = o.get("state", "full")
+    for y in (-0.42, 0.42):
+        put(k, beam(M @ Vector((-1.5, y, 0.07)), M @ Vector((1.5, y, 0.07)), 0.12, 0.13), jit(mix(P.drift, P.tar, 0.35), rng, 0.02))
+    if st == "bare":
+        for i in range(3):
+            e_box(k, M, (-0.9 + 0.04 * i, -0.3 + 0.03 * i, 0.14 + 0.05 * i), (-0.1 - 0.03 * i, 0.3 - 0.02 * i, 0.185 + 0.05 * i), on(jit(P.tar, rng, 0.02), "cloth"))
+        for i in range(6):
+            x, y = rng.uniform(-1.3, 1.3), rng.uniform(-0.6, 0.6)
+            e_box(k, M, (x - 0.09, y - 0.06, 0.0), (x + 0.09, y + 0.06, 0.05), jit(P.peat, rng, 0.03), open_bottom=True)
+        return
+    x1, hgt = (1.45, 1.36) if st == "full" else (-0.1, 0.84)
+    rows = max(3, round(hgt / 0.16))
+    for j in range(rows):
+        ins = 0.014 * j
+        e_box(k, M, (-1.45 + ins, -0.6 + ins, 0.14 + hgt * j / rows), (x1 - ins - (0.12 * (j % 3) if st == "half" else 0.0), 0.6 - ins, 0.14 + hgt * (j + 1) / rows - 0.012),
+              jit(P.peat if j % 2 else mix(P.peat, P.grass, 0.12), rng, 0.03), open_bottom=True)
+    top = 0.14 + hgt
+    cloth = on(jit(P.tar, rng, 0.02), "cloth")
+    cx1 = x1 + 0.04 if st == "full" else x1 - 0.5  # half: the cloth is folded back from the open end
+    e_box(k, M, (-1.5, -0.66, top - 0.006), (cx1, 0.66, top + 0.04), cloth)
+    for e in (-1, 1):  # the cloth's skirts down the long sides, and the stones that hold it
+        raw(k, [([M @ Vector((-1.5, e * 0.664, top + 0.02)), M @ Vector((cx1, e * 0.664, top + 0.02)), M @ Vector((cx1, e * 0.7, top - 0.55)), M @ Vector((-1.5, e * 0.7, top - 0.5))], cloth)], two=True)
+        for x in (-1.2, -0.4, 0.5, 1.2):
+            if x > cx1 - 0.2:
+                continue
+            put(k, tube([M @ Vector((x, e * 0.69, top - 0.5)), M @ Vector((x, e * 0.74, 0.3))], 0.012, 3, caps=False), ROPE, closed=False)
+            e_box(k, M, (x - 0.1, e * 0.74 - 0.08, 0.14), (x + 0.1, e * 0.74 + 0.08, 0.32), jit(P.pale, rng, 0.03))
+
+
+def c_tally_post(k, rng, M, o, f):
+    """The tally keeper's slate on a post: the loads counted in and out, in strokes of chalk."""
+    put(k, tube([M @ Vector((0, 0, 0)), M @ Vector((0, 0, 1.55))], [0.06, 0.05], 5), jit(P.drift, rng, 0.03))
+    e_box(k, M, (-0.3, -0.075, 0.82), (0.3, -0.055, 1.5), jit(P.slate, rng, 0.02))
+    marks = []
+    for r in range(4):
+        for i in range(5 if r < 3 else 2):
+            x, z = -0.22 + 0.09 * i, 1.36 - 0.14 * r
+            marks.append(([M @ Vector((x, -0.0775, z)), M @ Vector((x + 0.02, -0.0775, z)), M @ Vector((x + 0.02, -0.0775, z + 0.09)), M @ Vector((x, -0.0775, z + 0.09))], P.lime))
+    raw(k, [(oriented(q, M.to_3x3() @ -Y), c) for q, c in marks])
+
+
+def c_peat_creels(k, rng, M, o, f):
+    """Back creels of peat set down: the wynds are stairs, so peat comes down on backs."""
+    n = o.get("n", 4)
+    for i in range(n):
+        C = M @ Matrix.Translation(((i % 3) * 0.62 - 0.6, (i // 3) * 0.6, 0.0)) @ Matrix.Rotation(rad(40 * i), 4, "Z")
+        creel(k, rng, C, r=0.25, h=0.58, sides=8, rows=4)
+        if i % 4 != 3:  # one is empty
+            for j in range(3):
+                Bm = C @ Matrix.Translation((-0.08 + 0.08 * j, 0.03 * (j % 2), 0.4 + 0.07 * j)) @ Matrix.Rotation(rad(25 * j), 4, "Z")
+                put(k, lbox(Vector((-0.16, -0.08, 0.0)), Vector((0.16, 0.08, 0.1)), fn=lambda q, Bm=Bm: Bm @ q), jit(P.peat, rng, 0.03))
+
+
+def c_bank(k, rng, M, o, f):
+    """A loading bank: dry basalt at the height of a cart's bed, its top worn; creels are tipped
+    over it into the handcart."""
+    L = o.get("len", 4.4)
+    m = max(3, round(L / 0.95))
+    for j, (z0, z1, ins) in enumerate(((0.0, 0.4, 0.0), (0.404, 0.78, 0.03))):
+        for i in range(m):
+            x0, x1 = -L / 2 + L * i / m + 0.006 + (0.0 if j == 0 or i == 0 else -0.3 * L / m), -L / 2 + L * (i + 1) / m - 0.006 - (0.0 if j == 0 or i == m - 1 else 0.3 * L / m)
+            put(k, lbox(Vector((x0, -0.55 + ins, z0)), Vector((x1, 0.55 - ins, z1)), fn=lambda q: M @ q, bevel=0.02, open_bottom=j == 0),
+                lambda co, nn, c=jit(P.basalt if (i + j) % 3 else P.pale, rng, 0.03), j=j: mix(c, P.pale, 0.5) if nn.z > 0.5 and j == 1 else c)
+    for i in range(5):
+        x = rng.uniform(-L / 2 + 0.3, L / 2 - 0.3)
+        e_box(k, M, (x - 0.08, -0.2 + 0.1 * (i % 3), 0.784), (x + 0.08, -0.08 + 0.1 * (i % 3), 0.83), jit(P.peat, rng, 0.03))  # crumbs of peat
+
+
+def c_gutting_table(k, rng, M, o, f):
+    """A gutting table at the quay's edge: a slate slab on two trestles, a runnel cut toward the
+    harbour, the morning's last fish, a knife, the gut bucket under it."""
+    for x in (-0.72, 0.72):
+        for e in (-1, 1):
+            put(k, beam(M @ Vector((x, e * 0.38, 0.0)), M @ Vector((x, e * 0.14, 0.8)), 0.07, 0.07, up=M.to_3x3() @ X), jit(P.drift, rng, 0.03))
+        put(k, beam(M @ Vector((x, -0.3, 0.8)), M @ Vector((x, 0.3, 0.8)), 0.08, 0.07, up=M.to_3x3() @ X), jit(P.drift, rng, 0.03))
+    top = jit(mix(P.slate, P.pale, 0.3), rng, 0.02)
+    e_box(k, M, (-1.0, -0.45, 0.838), (1.0, 0.45, 0.9), top, bevel=0.012)
+    raw(k, [([M @ Vector((-0.8, -0.449, 0.9035)), M @ Vector((-0.7, -0.449, 0.9035)), M @ Vector((-0.7, 0.3, 0.9035)), M @ Vector((-0.8, 0.3, 0.9035))], mix(top, P.tar, 0.5)),
+            ([M @ Vector((-0.5, -0.2, 0.9035)), M @ Vector((0.1, -0.3, 0.9035)), M @ Vector((0.2, 0.05, 0.9035)), M @ Vector((-0.45, 0.15, 0.9035))], mix(top, P.oxblood, 0.3))])
+    for i in range(3):
+        Fm = M @ Matrix.Translation((0.35 + 0.2 * i, -0.1 + 0.12 * i, 0.93)) @ Matrix.Rotation(rad(70 + 12 * i), 4, "Z")
+        bm = sphere((0, 0, 0), 1.0, 1)
+        for v in bm.verts:
+            v.co = Fm @ Vector((v.co.x * 0.2 * (1 - 0.35 * v.co.x), v.co.y * 0.055, v.co.z * 0.03))
+        put(k, bm, jit(mix(P.smoke, P.aqua, 0.3), rng, 0.02))
+    raw(k, [([M @ Vector((-0.3, 0.22, 0.906)), M @ Vector((-0.02, 0.26, 0.906)), M @ Vector((-0.02, 0.29, 0.906))], P.iron)], two=True)
+    Bm = M @ Matrix.Translation((-0.25, 0.75, 0.0))
+    barrel(k, rng, None, 0.19, 0.33, wood=P.drift, M=Bm, head=False, sides=8, hoops=(0.2, 0.85))
+    raw(k, [([Bm @ Vector((cos(j / 8 * TAU) * 0.15, sin(j / 8 * TAU) * 0.15, 0.22)) for j in range(8)], mix(P.oxblood, P.tar, 0.5))])
+
+
+def c_bait_tubs(k, rng, M, o, f):
+    """Bait tubs: half barrels of brine, limpets and mussels, one with its lid on."""
+    n = o.get("n", 3)
+    for i in range(n):
+        Bm = M @ Matrix.Translation((-0.75 + 0.75 * i, 0.12 * (i % 2), 0.0))
+        barrel(k, rng, None, 0.3, 0.46, wood=P.drift, M=Bm, salt=0.7, head=False, sides=10, hoops=(0.2, 0.8))
+        if i == n - 1:
+            put(k, B.cyl(Bm @ Vector((0, 0, 0.462)), Bm @ Vector((0, 0, 0.5)), 0.31, 0.31, 10), jit(P.drift, rng, 0.03))
+        else:
+            raw(k, [([Bm @ Vector((cos(j / 10 * TAU) * 0.24, sin(j / 10 * TAU) * 0.24, 0.36)) for j in range(10)], mix(P.smoke, P.tar, 0.5))])
+            for j in range(4):
+                put(k, sphere(Bm @ Vector((cos(j * 1.7) * 0.12, sin(j * 1.7) * 0.12, 0.362)), 0.045, 1, squash=0.5), jit(mix(P.tar, P.cobalt, 0.25), rng, 0.02))
+
+
+def c_mending_bench(k, rng, M, o, f):
+    """A net-mender's bench: a thwart on two stones, and beside it a net stretched on its frame
+    to be worked from the bench, a float still on its head rope; twine and a needle in a creel."""
+    for x in (-0.6, 0.6):
+        e_box(k, M, (x - 0.14, -0.17, 0.0), (x + 0.14, 0.17, 0.4), jit(P.basalt, rng, 0.03), open_bottom=True)
+    e_box(k, M, (-0.9, -0.2, 0.404), (0.9, 0.2, 0.46), jit(P.drift, rng, 0.03))
+    fy = 0.75
+    for x in (-0.95, 0.95):
+        put(k, tube([M @ Vector((x, fy, 0.0)), M @ Vector((x, fy, 1.62))], [0.045, 0.035], 5), jit(P.drift, rng, 0.03))
+        put(k, beam(M @ Vector((x, fy - 0.3, 0.0)), M @ Vector((x, fy, 0.5)), 0.04, 0.04, up=M.to_3x3() @ X), jit(P.drift, rng, 0.03))
+    put(k, tube([M @ Vector((-1.05, fy, 1.56)), M @ Vector((1.05, fy, 1.56))], 0.028, 4), jit(P.drift, rng, 0.03))
+    net = on(P.tar, "cloth")
+    nu, nv = 9, 5
+
+    def node(i, j):
+        return M @ Vector((-0.9 + 1.8 * i / nu, fy + 0.02 * sin(i * 1.3 + j), 1.54 - 1.2 * j / nv))
+    polys = []
+    for i in range(nu):
+        for j in range(nv):
+            if (i * 3 + j * 5 + f["seed"]) % 13 == 0:
+                continue  # the hole she is mending
+            for a, b in ((node(i, j), node(i + 1, j + 1)), (node(i + 1, j), node(i, j + 1))):
+                polys += [(q, jit(net, rng, 0.02)) for q in ribbon([a, b], 0.022, (b - a).cross(M.to_3x3() @ Y).normalized())]
+    raw(k, polys, two=True)
+    put(k, sphere(node(2, 0) + Vector((0, 0, 0.1)), 0.1, 1), jit(P.green, rng, 0.03))
+    creel(k, rng, M @ Matrix.Translation((1.25, -0.1, 0.0)), r=0.2, h=0.4, sides=8, rows=4)
+
+
+CONTENT.update(
+    grave_row=c_grave_row, ship_stones=c_ship_stones, steps=c_steps, apron=c_apron, dip_step=c_dip_step, buckets=c_buckets, runnel=c_runnel, slab=c_slab, tablet_bench=c_tablet_bench,
+    stools=c_stools, sand_tray=c_sand_tray, spoil=c_spoil, crane=c_crane_foot, stone_stack=c_stone_stack, sledge=c_sledge, split_block=c_split_block, clay_floor=c_clay_floor,
+    clay_bank=c_clay_bank, clay_boards=c_clay_boards, plank_run=c_plank_run, steam_box=c_steam_box, sawhorses=c_sawhorses, pitch_pot=c_pitch_pot, peat_rick=c_peat_rick,
+    tally_post=c_tally_post, peat_creels=c_peat_creels, bank=c_bank, gutting_table=c_gutting_table, bait_tubs=c_bait_tubs, mending_bench=c_mending_bench,
+)
+
+
+def gen_quarry_face(k, rng, lot):
+    """A length of the quarry's face: the raw rock a drop was cut into (the plan: `fall_m`,
+    `rock`, `drill`, `stain_at`). Basalt stands in columns and was worked in lifts a man can
+    reach. So the face is narrow columns, each broken off at its own heights, its faces turned
+    a little from its neighbours' and set back as it rises, its top where it happened to break:
+    no course and no level line runs along it, as they do along a built wall. Where it was split
+    along drilled holes (`drill`) the half-holes show: dark grooves down the pale, newest rock.
+    `clay`: the pit's face, cut in even spade lifts under a cap of thin rock and turf. Built of
+    its seen faces, each column a hair narrower than its place: no two parts meet in one plane."""
+    L, D = lot["size"]
+    fall, clay, drill = lot["fall_m"], lot.get("rock") == "clay", lot.get("drill")
+    env, w = Env(lot), lot["wear"]
+    lich = env.weather(-Y) * (0.3 + w["wind"])
+    stain = lot.get("stain_at")
+    a, n_col, polys, marks = -L / 2, 0, [], []
+    back = D / 2
+    while a < L / 2 - 1e-6:
+        b = a + (rng.uniform(0.7, 1.3) if clay else rng.uniform(0.4, 1.0))
+        b = L / 2 if L / 2 - b < 0.35 else b
+        n_col += 1
+        a0, a1 = a + 0.004, b - 0.004
+        am = (a + b) / 2
+        lifts = max(2, round(fall / (0.9 if clay else 1.0)))
+        top = fall if clay else fall - rng.choice((0.0, 0.0, 0.0, 0.15, 0.35, 0.6))
+        # Where this column was broken off, at its left and its right edge, and how far back.
+        zl, zr = [-0.25], [-0.25]
+        for j_ in range(1, lifts):
+            z = top * j_ / lifts + (rng.uniform(-0.1, 0.1) if clay else rng.uniform(-0.35, 0.35))
+            tilt = rng.uniform(-0.05, 0.05) if clay else rng.uniform(-0.18, 0.18)
+            zl.append(min(top - 0.3, max(zl[-1] + 0.35, z - tilt)))
+            zr.append(min(top - 0.3, max(zr[-1] + 0.35, z + tilt)))
+        zl.append(top + (0.0 if clay else rng.uniform(-0.1, 0.0)))
+        zr.append(top + (0.0 if clay else rng.uniform(-0.1, 0.0)))
+        y, yl, yr = -D / 2 + rng.uniform(0.0, 0.1 if clay else 0.28), [], []
+        for j_ in range(lifts):
+            skew = rng.uniform(-0.06, 0.06) if clay else rng.uniform(-0.13, 0.13)
+            yl.append(min(back - 0.12, y - skew))
+            yr.append(min(back - 0.12, y + skew))
+            y += (D - 0.35) / max(1, lifts - 1) * rng.uniform(0.3, 1.25)
+        shade = rng.choice((0.0, 0.0, 0.12, 0.22))
+        base = mix(jit(ROCK, rng, 0.04), P.tar, shade)
+        fresh = bool(drill) and rng.random() < 0.8
+        for j_ in range(lifts):
+            if clay:
+                c = on(jit(mix(P.sand, P.basalt, 0.6), rng, 0.02), "earth") if j_ == 0 else jit(mix(ROCK, P.peat, 0.45), rng, 0.02) if j_ == lifts - 1 else on(jit(mix(P.smoke, P.basalt, 0.45 + 0.15 * ((j_ + n_col) % 2)), rng, 0.03), "earth")
+            else:
+                c = mix(base, P.pale, 0.5) if fresh and j_ >= lifts - 2 else base
+                if stain is not None and abs(am + L / 2 - stain) < 0.8:
+                    c = mix(ROCK, P.kelp, 0.5)  # where the cistern's overflow runs down
+                elif not fresh and lich > 0.2 and nz(am * 0.7, j_ * 1.3, lot["seed"] * 0.01) > 0.3 - 0.4 * lich:
+                    c = mix(c, P.lichen, 0.25)
+                elif nz(am * 0.9, j_ * 1.7, 4.0 + lot["seed"] * 0.01) > 0.45:
+                    c = mix(c, P.rust, 0.22)  # iron in the rock, weeping
+            fl, fr = Vector((a0, yl[j_], zl[j_])), Vector((a1, yr[j_], zr[j_]))
+            tl, tr = Vector((a0, yl[j_], zl[j_ + 1])), Vector((a1, yr[j_], zr[j_ + 1]))
+            bl, br = Vector((a0, back, zl[j_ + 1])), Vector((a1, back, zr[j_ + 1]))
+            polys.append((oriented([fl, fr, tr], -Y), c))
+            polys.append((oriented([fl, tr, tl], -Y), c))
+            ledge = jit(mix(P.grass, P.peat, 0.3), rng, 0.02) if j_ == lifts - 1 and (clay or top > fall - 0.05) else mix(c, P.pale, 0.3)
+            polys.append((oriented([tl, tr, br], Z), ledge))
+            polys.append((oriented([tl, br, bl], Z), ledge))
+            side = mix(c, P.tar, 0.2)
+            polys.append((oriented([Vector((a0, back, zl[j_])), fl, tl, bl], -X), side))
+            polys.append((oriented([Vector((a1, back, zr[j_])), fr, tr, br], X), side))
+            if fresh and j_ >= lifts - 2 and b - a > 0.3:  # the half-holes of the split
+                u = rng.uniform(0.3, 0.7)
+                yy = yl[j_] + (yr[j_] - yl[j_]) * u - 0.006
+                x = a0 + (a1 - a0) * u
+                z0, z1 = max(0.0, zl[j_], zr[j_]) + 0.08, min(zl[j_ + 1], zr[j_ + 1]) - 0.12
+                if z1 - z0 > 0.3:
+                    marks.append((oriented([Vector((x - 0.022, yy, z0)), Vector((x + 0.022, yy, z0)), Vector((x + 0.022, yy, z1)), Vector((x - 0.022, yy, z1))], -Y), mix(P.basalt, P.tar, 0.6)))
+        a = b
+    raw(k, polys)
+    raw(k, marks)
+    # What has fallen to its foot.
+    for i in range(max(2, round(L / 1.4))):
+        x, sz = rng.uniform(-L / 2 + 0.3, L / 2 - 0.3), rng.uniform(0.09, 0.22)
+        S = Matrix.Translation((x, -D / 2 + rng.uniform(0.08, 0.2) + sz * 0.7, 0.0)) @ Matrix.Rotation(rng.uniform(0, PI), 4, "Z")
+        put(k, lbox(Vector((-sz, -sz * 0.7, 0)), Vector((sz, sz * 0.7, sz)), fn=lambda q, S=S: S @ q, bevel=0.02, open_bottom=True), jit(GOOD_CLAY if clay else (ROCK if i % 2 else ROCK_PALE), rng, 0.03))
+    return dict(ridge_m=round(fall, 3), fall_m=fall, columns=n_col)
+
+
+def gen_quarry_crane(k, rng, lot):
+    """The quarry's crane: a ship's spar for a mast, stepped in a stone and stayed by two raking
+    legs; a jib on a hook at its foot, held by a topping rope; a hand winch on the mast; the fall
+    rope down to a squared stone in its sling, a hand above the ground: waiting."""
+    wood, dark = jit(P.drift, rng, 0.03), jit(mix(P.drift, P.tar, 0.4), rng, 0.02)
+    put(k, lbox(Vector((-0.5, -0.5, 0.0)), Vector((0.5, 0.5, 0.32)), bevel=0.03, open_bottom=True), jit(P.basalt, rng, 0.03))
+    mast_top = Vector((0, 0, 6.0))
+    put(k, tube([Vector((0, 0, 0.3)), mast_top], [0.13, 0.085], 7), wood)
+    for e in (-1, 1):  # the legs behind
+        put(k, tube([Vector((e * 1.5, 1.9, 0.0)), Vector((e * 0.06, 0.1, 4.6))], 0.065, 5), dark)
+        put(k, lbox(Vector((e * 1.5 - 0.3, 1.6, 0.0)), Vector((e * 1.5 + 0.3, 2.2, 0.2)), bevel=0.02, open_bottom=True), jit(P.basalt, rng, 0.03))
+    jib_foot, jib_end = Vector((0, -0.16, 0.9)), Vector((0, -2.9, 4.5))
+    put(k, tube([jib_foot, jib_end], [0.095, 0.07], 6), wood)
+    put(k, tube([mast_top - Z * 0.15, jib_end + Z * 0.05], 0.02, 4, caps=False), ROPE, closed=False)  # the topping rope
+    put(k, lathe([(0.11, 5.7), (0.11, 5.86)], 7, None, caps=(False, False)), jit(mix(P.iron, P.rust, 0.5), rng, 0.02), closed=False)
+    # The winch: a drum between two cheeks on the mast, a crank each side.
+    for e in (-1, 1):
+        put(k, lbox(Vector((e * 0.3 - 0.03, -0.14, 0.75)), Vector((e * 0.3 + 0.03, 0.2, 1.25)), bevel=0.0), dark)
+        put(k, tube([Vector((e * 0.33, 0.24, 1.02)), Vector((e * 0.52, 0.24, 1.02)), Vector((e * 0.52, 0.24, 1.26)), Vector((e * 0.7, 0.24, 1.26))], 0.018, 4), jit(mix(P.iron, P.rust, 0.5), rng, 0.02))
+    put(k, B.cyl(Vector((-0.27, 0.24, 1.02)), Vector((0.27, 0.24, 1.02)), 0.11, 0.11, 8), wood)
+    # The fall: from the drum up the mast, out along the jib and down to the stone.
+    hook = jib_end - Z * 3.35
+    put(k, tube([Vector((0.0, 0.28, 1.1)), Vector((0.0, 0.12, 5.6)), jib_end + Z * 0.02, hook], 0.016, 4, caps=False), ROPE, closed=False)
+    if lot.get("load", True):
+        s0 = Vector((0.0, hook.y, 0.42))
+        put(k, lbox(Vector((-0.45, hook.y - 0.3, 0.42)), Vector((0.45, hook.y + 0.3, 0.86)), bevel=0.02), lambda co, nn, c=jit(P.basalt, rng, 0.03): mix(c, P.pale, 0.5) if nn.z > 0.5 else mix(c, P.pale, 0.2))
+        for e in (-1, 1):
+            put(k, tube([hook, Vector((e * 0.47, hook.y, 0.88)), Vector((e * 0.47, hook.y, 0.4)), s0 - Z * 0.02 + X * e * 0.1], 0.016, 4, caps=False), ROPE, closed=False)
+        for x in (-0.3, 0.3):  # chocks it will be set down on
+            put(k, lbox(Vector((x - 0.06, hook.y - 0.36, 0.0)), Vector((x + 0.06, hook.y + 0.36, 0.1)), open_bottom=True), dark)
+    return dict(ridge_m=6.0)
+
+
+def gen_kelp_kiln(k, rng, lot):
+    """A kelp kiln on the Wrack Strand: a round pit ringed with beach stone, burnt red and black
+    inside, a bed of grey ash, the rake left across it. Round, as everything that holds fire is."""
+    r, n = lot["size"][0] / 2 - 0.45, 14
+    for i in range(n):
+        a = i / n * TAU
+        S = Matrix.Translation((cos(a) * r, sin(a) * r, 0)) @ Matrix.Rotation(a, 4, "Z")
+        hh = rng.uniform(0.5, 0.72)
+        put(k, lbox(Vector((-0.24, -0.33, -0.3)), Vector((0.24, 0.33, hh)), fn=lambda q, S=S: S @ q, bevel=0.04),
+            lambda co, nn, c=jit(P.basalt, rng, 0.03), b=jit(mix(P.brick, P.tar, 0.4), rng, 0.02): b if math.hypot(co.x, co.y) < r - 0.05 else (mix(c, P.pale, 0.4) if nn.z > 0.5 else c))
+    ring = [Vector((cos(i / 12 * TAU) * (r - 0.2), sin(i / 12 * TAU) * (r - 0.2), 0.18)) for i in range(12)]
+    raw(k, [(ring, jit(ASH, rng, 0.02))])
+    if lot.get("load"):  # dried kelp heaped in for the next burn
+        kelp_heap(k, rng, (0.2, -0.1, 0.18), r * 0.55, r * 0.5, 0.45, fronds=6)
+    put(k, tube([Vector((-r + 0.1, 0.3, 0.8)), Vector((r * 0.4, -0.2, 0.3))], 0.02, 4), jit(P.drift, rng, 0.03))
+    return dict(ridge_m=0.72)
+
+
+# Pass 2's enclosure kinds and their own models.
+ENCLOSURES_2 = dict(kiln_road=2500, graveyard=4500, crown_ground=2500, readers_yard=3000, dyke=2500, clay_pit=3000, boatyard=5000, kelp_stance=5000, peat_stance=3000, creel_stand=3000, fish_quay=3000)
+GEN.update({kind: (gen_enclosure, budget) for kind, budget in ENCLOSURES_2.items()})
+GEN.update(quarry_face=(gen_quarry_face, 1500), quarry_crane=(gen_quarry_crane, 1500), kelp_kiln=(gen_kelp_kiln, 1500), quarry_bench=(gen_enclosure, 3500))
+
+
 def neighbours(plan):
     """Who stands against whom: a terrace's houses east to west (the plan's `terraces`), and the
     rank of net lofts. Each lot learns the lot on its west (-X) and east (+X) party wall."""
@@ -3405,7 +4149,7 @@ def main():
         if it["what"] == "fixture":
             f = it["facing"]
             b = rad(FACING[f] if isinstance(f, str) else float(f))
-            fx = dict(file=f"envs/{it['model']}", kind=folder, at=[round(ox + it["at"][0], 3), round(oy - it["at"][1], 3)], front=[round(sin(b), 5), round(-cos(b), 5)], floor=it["floor_m"], height=it["height_m"])
+            fx = dict(file=f"envs/{it['model']}", kind=folder, at=[round(ox + it["at"][0], 3), round(oy - it["at"][1], 3)], front=[round(sin(b), 5), round(-cos(b), 5)], floor=it["floor_m"], height=it["height_m"], size=it["size"])
             if folder == "quay_lamp":
                 fx.update(light="lamp", glow=list(LIGHT["Glow"][0]))
             placed.append(fx)

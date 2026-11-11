@@ -324,6 +324,14 @@ impl Island {
             let env = pr.model_file.as_deref().and_then(|f| f.split('/').next()).filter(|e| !e.is_empty()).unwrap_or(living_rules::settle::env_of(&land.settlements[pr.settlement as usize].style));
             let files = crate::envs::assets_for(env, pr.kind.id());
             let exact = pr.model_file.as_ref().map(|f| format!("envs/{f}")).filter(|f| files.contains(f));
+            // A planned settlement whose kit lists fixtures (below) brings its own flights and
+            // walls, each built for its place. Its folders are named as the props' kinds are
+            // (`stairs`, `retaining_wall`), so a prop without a model of its own must not take
+            // one of them at random: until layout-2 every drop of Cullet had a second, wrong
+            // wall standing in its own, and every flight a second flight.
+            if exact.is_none() && land.settlements[pr.settlement as usize].planned && !crate::envs::fixtures(env).is_empty() {
+                continue;
+            }
             let Some(file) = exact.or_else(|| (!files.is_empty()).then(|| pick(&files, pi, 17))) else {
                 // A planned settlement's stairs and retaining walls without models: grey
                 // treads and walls, so the grey city can be walked and read.
@@ -991,7 +999,8 @@ fn ready(assets: &AssetServer, scene: &Handle<WorldAsset>) -> bool {
 /// - its model file (`model`, under `envs/`) when it is on disk;
 /// - in a **planned** settlement (an authored plan, docs/AUTHORED_PLANS.md), otherwise a grey box
 ///   of its footprint and height, or for an open lot of no height a footprint marker
-///   ([`MARKER_H`]). A planned lot is never given another lot's model: its plan sized it for its
+///   ([`MARKER_H`]), unless a fixture of its kit stands on it (since layout-2: a court or a plot
+///   is an open lot, and its enclosure draws it). A planned lot is never given another lot's model: its plan sized it for its
 ///   own, and a terrace of borrowed houses would overlap. Its environment's folder may be empty
 ///   or missing (Cullet's before its kit is generated);
 /// - elsewhere, a model of its kind from its environment (a generated town's buildings are
@@ -1014,6 +1023,11 @@ fn lot_item(envs: &HashMap<String, EnvDef>, land: &Land, lot: &LotRow) -> Option
         let (w, d) = (lot.width_m.max(0.1), lot.depth_m.max(0.1));
         if lot.height_m > 0.0 {
             return Some(Item { size: Some(Vec3::new(w, lot.height_m, d)), ..base });
+        }
+        // An open lot a fixture of the kit stands on (a court's walls, a plot's beds, a
+        // graveyard's rows) is drawn by that fixture: no slab under it.
+        if crate::envs::fixtures(lot.env).iter().any(|f| f.covers(lot.at)) {
+            return None;
         }
         return planned.then(|| Item { size: Some(Vec3::new(w, MARKER_H, d)), height: MARKER_H, marker: true, solid: false, ..base });
     }

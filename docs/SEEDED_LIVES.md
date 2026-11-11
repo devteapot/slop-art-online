@@ -532,7 +532,9 @@ Cullet's starting ways are `living/seeds/worlds/cullet/ways.json`, merged into `
 | warden (1) | `lot:hanger_cottage` | keep the Hanger | go to work; keep (she fells nothing) |
 | child (13; Kit Calloway, 14, is a boatwright) | — | play | the island's (anyone young starts with it whatever their trade) |
 
-`town_life.places` gives everyone `square`, `store`, `peat barn` and `ash house`; `town_life.evening` is `home` for anyone without an evening place of their own (every cast member has one). No guardrail stops anyone doing anything else: a mind may rework any of it.
+Since `layout-2` ([Cullet's layout, pass 2](CULLET_LAYOUT.md#courts-and-plots-are-open-lots)) seven trades spend named hours at a place of the plan's open lots, as a first step of their routine (`{"if": {"hour": ...}}`, then go there and keep): the washer on the Bleach (11–13), readers and children in the Readers' yard (9–12), the pot-maker at the clay pit (7–10), the line-maker at the ropewalk (13–16), the wrack gatherers at the wrack stance (11–13), the boatwrights in the boatyard (13–16).
+
+`town_life.places` gives everyone `square`, `store`, `peat barn` and `ash house`, and since `layout-2` those six places (ten `place` rows a resident, where there were four); `town_life.evening` is `home` for anyone without an evening place of their own (every cast member has one). No guardrail stops anyone doing anything else: a mind may rework any of it.
 
 ### Verified
 

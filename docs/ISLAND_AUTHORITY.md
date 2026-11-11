@@ -207,6 +207,8 @@ The table step measures any model whose sidecar lacks the fields from its file (
 | Its model is measured, and `eye_m` lies in the band | `Wall` where a square of the model with a level of at least `solid` lands (the square's centre, placed as the client places the model: +X along `(front.1, -front.0)`), `Low` elsewhere |
 | No model, or not measured | All `Wall` |
 
+Since `layout-2` a plan's blocking fixtures (walls, fences: [authored plans](AUTHORED_PLANS.md#fixtures-that-block)) are hosted by the same rule with the plan's own numbers, since a fixture has no model in the table: `Low` when its `height_m` is no higher than the eye, or when it rises above it with an `eye_solid` under `solid`; `Wall` otherwise; `hides_m` by its `kind` first (`host::fixture_hides`).
+
 Each kind's model is the default; there is no list of kinds in the code. A drop under a square that does not hide stays `Drop`. The rule is land data, like drop-1's, for the same reason: the client hosts the same land for its own sight test.
 
 **Where the grid forces a choice.** A tile is all-or-nothing: one square at or above `solid` makes its whole tile hide.

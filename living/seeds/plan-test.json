@@ -48,7 +48,14 @@
             {"id": "house_b", "kind": "house", "at": [-14, 32.5], "size": [6, 9], "facing": "north", "level": "row", "height_m": 8.0},
             {"id": "house_c", "kind": "house", "at": [-8, 32.5], "size": [6, 9], "facing": "north", "level": "row", "height_m": 8.5},
             {"id": "house_d", "kind": "house", "at": [0, 47], "size": [7, 9], "facing": "south", "level": "row", "height_m": 9.0, "door_colour": "mustard"},
-            {"id": "house_e", "kind": "house", "at": [7, 47], "size": [7, 9], "facing": 180, "level": "row", "height_m": 8.0}
+            {"id": "house_e", "kind": "house", "at": [7, 47], "size": [7, 9], "facing": 180, "level": "row", "height_m": 8.0},
+            {"id": "garth", "kind": "lamp", "name": "the drying garth", "at": [19, 48.5], "size": [10, 7], "facing": "south", "level": "row", "height_m": 0, "spots": [{"name": "the bench", "at": [3, 1.5]}, {"name": "the lines", "at": [-2, -1]}], "note": "an open lot inside the garth wall: a place residents can be sent to (`lot:garth`), reached through the wall's gate"}
+          ],
+          "fixtures": [
+            {"id": "garth_wall", "kind": "yard_wall", "points": [[13, 44], [13, 53], [25, 53], [25, 44], [13, 44]], "gaps": [[36.4, 37.6]], "height_m": 2.0, "blocks": true, "note": "a 2 m wall round the garth, a gate in its south side onto the row: above the eye, so it hides (Wall tiles)"},
+            {"id": "quay_fence", "kind": "fence", "points": [[-25, 20.6], [-9.5, 20.6]], "height_m": 1.1, "blocks": true, "note": "a low fence behind the loft: below the eye, so it is seen over (Low tiles)"},
+            {"id": "net_rack", "kind": "net_rack", "at": [-34, 21.5], "size": [3, 1.5], "facing": "south", "height_m": 2.4, "eye_solid": 0.3, "blocks": true, "note": "a rack of drying nets: above the eye but mostly air, so it is seen through (Low tiles)"},
+            {"id": "bench", "kind": "bench", "at": [-6, 16], "size": [2, 0.6], "facing": "south", "height_m": 0.5, "note": "does not block: the rules ignore it"}
           ]
         }
       ]

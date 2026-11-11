@@ -7,9 +7,10 @@
 Writes
 - `living/seeds/worlds/cullet/plan.json`: the town as SMALL_CITY §1 and §2 describe it, in the
   plan frame (origin at the Fish Steps, x east, y north, metres): levels, streets, wynds, the
-  square, the harbour, 74 lots (65 buildings and 9 open lots), spots, authored resources, and the
-  asset generator's inputs per lot (wear, household, door colour, keepsake), which the engine
-  ignores;
+  square, the harbour, 203 lots (65 buildings and 138 open lots: courts, plots, yards), spots,
+  authored resources, the asset generator's inputs per lot (wear, household, door colour,
+  keepsake), which the engine ignores, its `fixtures` (every model that is not a lot's), and
+  `blocking` (the walls among them that block walking, as the seed carries them);
 - `living/seeds/cullet.json`: the land seed, the Wrack (an authored coastline and relief stamps,
   `docs/AUTHORED_PLANS.md`) with the plan merged into `map.params.plans`, and the starting ways
   and town life of `living/seeds/worlds/cullet/ways.json` (the trades' workplaces and habits) as
@@ -75,6 +76,18 @@ for _k, (_band, _y) in RUNG.items():
     H[_k] = H[_band] + 2.0
     BAND[_k] = (_y, BAND[_band][1])
 CROWN_LEDGE = (-58.0, 146.0)  # west of x -58 the Crown's level is a 12 m ledge over the Ladder's top wall
+# Layout pass 2 (docs/CULLET_LAYOUT.md, "Pass 2"): the quarry and the Crown's ground.
+# - The quarry bit a bay into the Crown: the upper terrace's level runs 6 m into it between x 8
+#   and 26, so the cut face has a plan (a bay with two returns), not a straight built wall.
+# - The clay pit is dug 0.7 m into the bench's east end (a bank a person walks down), right under
+#   the Crown's edge, where the graveyard's wall now stands: the bank is nearly dug out, and the
+#   good clay left is under the graves (the bible, "How things stand").
+# - The graveyard climbs the Crown's south-east corner in three terraces half a metre apart, the
+#   oldest graves at the top: its first band is the Crown's own level.
+QUARRY_BAY = (8.0, 26.0, 140.0)  # x from, to, and the y of its back
+CLAY_PIT = (41.0, 55.0, 126.0)  # x from, to, and the y of its south side; its back is the Crown's edge
+GRAVES_W, GRAVES_Y = 30.0, (143.0, 150.0, 157.5)  # the graveyard's upper terraces: their west side; where the second and third begin, and the third ends
+H.update(clay_pit=16.3, graves_2=20.5, graves_3=21.0)
 # The Heron stands on a stage out over the water, and the mole leaves the quay at x 126..146.
 HERON_STAGE = (-21.5, -12.5, -6.0)
 # The Fish Steps go down into the harbour from a 3 m notch in the quay's edge.
@@ -94,15 +107,24 @@ for lv in ("low", "mid", "high", "upper", "crown"):
         ys = _band_rung[lv][1]
         area = [[WEST[lv], y0], [EAST[lv], y0], [EAST[lv], y1], [LADDER_E, y1], [LADDER_E, ys], [WEST[lv], ys]]
     elif lv == "crown":
-        area = [[WEST[lv], y0], [EAST[lv], y0], [EAST[lv], y1], [CROWN_LEDGE[0], y1], [CROWN_LEDGE[0], CROWN_LEDGE[1]], [WEST[lv], CROWN_LEDGE[1]]]
+        area = [[WEST[lv], y0], [QUARRY_BAY[0], y0], [QUARRY_BAY[0], QUARRY_BAY[2]], [QUARRY_BAY[1], QUARRY_BAY[2]], [QUARRY_BAY[1], y0], [EAST[lv], y0],
+                [EAST[lv], GRAVES_Y[0]], [GRAVES_W, GRAVES_Y[0]], [GRAVES_W, GRAVES_Y[2]], [EAST[lv], GRAVES_Y[2]], [EAST[lv], y1],
+                [CROWN_LEDGE[0], y1], [CROWN_LEDGE[0], CROWN_LEDGE[1]], [WEST[lv], CROWN_LEDGE[1]]]
+    elif lv == "upper":
+        area = [[WEST[lv], y0], [EAST[lv], y0], [EAST[lv], CLAY_PIT[2]], [CLAY_PIT[0], CLAY_PIT[2]], [CLAY_PIT[0], y1], [QUARRY_BAY[1], y1], [QUARRY_BAY[1], QUARRY_BAY[2]],
+                [QUARRY_BAY[0], QUARRY_BAY[2]], [QUARRY_BAY[0], y1], [WEST[lv], y1]]
     else:
         area = rect(WEST[lv], y0, EAST[lv], y1)
     LEVELS.append({"id": lv, "height_m": H[lv], "area": area})
 LEVELS[2]["note"] = "Low Row, and west of the Net Wynd the Ladder's lowest terrace"
 LEVELS[3]["note"] = "Mid Row, and the Ladder's third terrace"
 LEVELS[4]["note"] = "High Row, and the Ladder's fifth terrace"
-LEVELS[5]["note"] = "the upper terrace: the Ladder's seventh, and the old quarry's bench below the Crown"
-LEVELS[6]["note"] = "the Crown, and a ledge over the Ladder's top wall"
+LEVELS[5]["note"] = "the upper terrace: the Ladder's seventh, and the old quarry's bench below the Crown, with the bay it cut into the Crown"
+LEVELS[6]["note"] = "the Crown, and a ledge over the Ladder's top wall; the quarry's bay and the graveyard's upper terraces are cut out of it"
+LEVELS.append({"id": "clay_pit", "height_m": H["clay_pit"], "area": rect(CLAY_PIT[0], CLAY_PIT[2], CLAY_PIT[1], BAND["upper"][1]),
+               "note": "the clay pit at the quarry bench's east end, dug 0.7 m down (a bank one walks), under the Crown's edge and the graveyard's wall"})
+LEVELS.append({"id": "graves_2", "height_m": H["graves_2"], "area": rect(GRAVES_W, GRAVES_Y[0], EAST["crown"], GRAVES_Y[1]), "note": "the graveyard's second terrace, half a metre up: the graves since the lean years"})
+LEVELS.append({"id": "graves_3", "height_m": H["graves_3"], "area": rect(GRAVES_W, GRAVES_Y[1], EAST["crown"], GRAVES_Y[2]), "note": "the graveyard's top terrace: the lean years' graves and the ship days' stones"})
 for _k, (_band, _y) in RUNG.items():
     LEVELS.append({"id": _k, "height_m": H[_k], "area": rect(LADDER_W, _y, LADDER_E, BAND[_band][1]),
                    "note": f"the Ladder's own terrace in the back half of the {_band} band, 2 m above it"})
@@ -303,6 +325,21 @@ def lot(id, kind, name, at, size, facing, level, height, building=True, age=0.6,
     return l
 
 
+def open_lot(id, name, x0, y0, x1, y1, level, district, spots, note, loose=False, **extra):
+    """An open lot on the rectangle x0..x1, y0..y1: a `lamp` lot of no height and no model (what
+    stands on it is a fixture), named, with spots given in the plan's frame. A place residents
+    can be sent to (`lot:<id>`, docs/AUTHORED_PLANS.md): each takes one of its spots."""
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    for n, q in spots:
+        assert loose or (x0 <= q[0] <= x1 and y0 <= q[1] <= y1), (id, n, q)
+    # A lot facing south: a spot is (metres east of its middle, metres south of it). The engine
+    # (`settle::plan::resolve`) takes a spot's first number along the lot's front toward the
+    # east for a front that faces south (toward the west for one that faces north), its second
+    # out from the middle toward the front.
+    return lot(id, "lamp", name, (cx, cy), (x1 - x0, y1 - y0), "south", level, 0, building=False, district=district, modelled=False,
+               spots=[(n, (q[0] - cx, cy - q[1])) for n, q in spots], note=note, **extra)
+
+
 def south_front(x0, x1, front_y, depth):
     """Centre and size of a lot facing south whose front runs x0..x1 at front_y."""
     return ((x0 + x1) / 2, front_y + depth / 2), (abs(x1 - x0), depth)
@@ -314,7 +351,7 @@ STRAND = "the Strand"
 # Open lots (steps, yards, a terrace, the graveyard) are `lamp` lots of no height: named, with
 # spots, never planted (a `garden` lot is planted) and drawn by nothing until their model exists.
 lot("fish_steps", "lamp", "the Fish Steps", (0, -1.5), (8, 3), "south", "strand", 0, building=False, age=1.0, repair=0.3, district=STRAND,
-    spots=[("the top step", (0, 1.0)), ("the second step, west", (2.5, 0.2)), ("the second step, east", (-2.5, 0.2)), ("Magda's place, where the catch is divided", (0, 2.4))],
+    spots=[("the top step", (0, 1.0)), ("the second step, west", (-2.5, 0.2)), ("the second step, east", (2.5, 0.2)), ("Magda's place, where the catch is divided", (0, -2.9))],  # layout pass 2: Magda's place stood in the harbour (2.4 m forward of the lot's middle is water); it is at the head of the steps, on the quay. West and east were each other's
     note="stone steps down into the harbour; the catch is divided here each morning")
 c, s = (-17.0, -3.25), (7.0, 5.0)
 lot("heron", "workshop", "the Heron", c, s, "north", "strand", 13.0, age=1.0, repair=0.5, district=STRAND,
@@ -347,13 +384,13 @@ lot("slip", "lamp", "the slip", (-119, 5), (10, 10), "south", "strand", 0, build
 # cullet shed, the ash house and the wash-house against the Cone's warm north wall.
 CINDER = "Cinder Row"
 lot("cone", "workshop", "the Cone", CONE, (14, 14), "south", "strand", 24.0, age=0.9, repair=0.55, district=CINDER,
-    spots=[("the west mouth", (6.1, 7.8)), ("the front mouth", (0, 7.8)), ("the east mouth", (-6.1, 7.8)), ("Halvard's bench at the mouth", (3.0, 9.2))],
+    spots=[("the west mouth", (-6.1, 7.8)), ("the front mouth", (0, 7.8)), ("the east mouth", (6.1, 7.8)), ("Halvard's bench at the mouth", (3.0, 9.2))],  # layout pass 2: west and east were each other's (a south front's spots run east)
     note="a brick cone, 14 m across, 24 m high, three arched mouths that glow; a band of newer, redder brick where it cracked (9 to 12 m, south-west side)")
 lot("cone_yard", "lamp", "the Cone yard", (150, 15.5), (36, 13), "south", "strand", 0, building=False, age=0.9, repair=0.5, district=CINDER,
     spots=[("the cullet heaps", (6, 2)), ("the trough", (-8, 2))], note="cinder underfoot; heaps of coloured broken glass")
 c = (147.0, 43.0)
 lot("wash_house", "workshop", "the wash-house", c, (12, 6), "north", "strand", pitched(1, 3.0, 6, 45), age=0.6, repair=0.6, district=CINDER,
-    spots=[("the warm wall, west", (-4, 3.6)), ("the warm wall", (0, 3.6)), ("the warm wall, east", (4, 3.6)), ("Greta's stool", (2, 4.2))],
+    spots=[("the warm wall, west", (4, 3.6)), ("the warm wall", (0, 3.6)), ("the warm wall, east", (-4, 3.6)), ("Greta's stool", (2, 4.2))],  # layout pass 2: west and east were each other's (a north front's spots run west)
     note="built against the Cone's warm north wall; the wall is where people gossip on cold evenings", leans_on="cone")
 c, s = south_front(82, 106, 12.0, 14)
 lot("lehr_house", "workshop", "the lehr house", c, s, "south", "strand", pitched(2, 3.6, 14, 45), age=1.0, repair=0.5, district=CINDER,
@@ -515,10 +552,22 @@ lot("readers_house", "hall", "the Readers' House", c, s, "south", "crown", pitch
     spots=[("the step", (0, 5.6)), ("the bench by the door", (3.0, 5.8))],
     household="orme", household_name="Orme", family="other", people=1, door_colour="chalk_blue", keepsake="a shelf of ship-day tablets in the window", address="the Readers' House",
     note="the school and the ship-day tablets; Benedikt Orme lives here")
-lot("graveyard", "lamp", "the graveyard", (-35.0, 176.0), (26, 18), "south", "crown", 0, building=False, age=1.0, repair=0.5, district=CROWN, note="glass markers")
+# Layout pass 2: the graveyard stands on the Crown's south-east corner, over the quarry and the
+# clay pit (it was a 26 x 18 m rectangle in the north-west, far from both). This lot is its lowest
+# band, on the Crown's own level, where the newest graves are; `graves_2` and `graves_3` above it
+# are the older rows (open lots too, below).
+GRAVE_X = (GRAVES_W + 0.4, EAST["crown"] - 0.6)  # inside its walls
+GRAVE_S = BAND["crown"][0] + 0.3  # its south wall stands on the Crown's lip
+open_lot("graveyard", "the graveyard", GRAVE_X[0], GRAVE_S + 0.5, GRAVE_X[1], GRAVES_Y[0] - 0.3, "crown", CROWN,
+         [("the gate", (GRAVE_X[0] + 1.2, 140.9)), ("the fever winter's row", (41.0, 138.6)), ("the row's east end, the next place", (52.6, 138.6)), ("the wall over the clay pit", (47.0, 135.9))],
+         "glass markers in rows up the Crown's south-east corner; this band is the newest graves, the fever winter's nine in one row; no lot model: its walls, rows and markers are fixtures", age=1.0, repair=0.5)
+open_lot("graves_middle", "the graveyard's middle rows", GRAVE_X[0], GRAVES_Y[0] + 0.5, GRAVE_X[1], GRAVES_Y[1] - 0.5, "graves_2", CROWN,
+         [("among the middle rows", (38.0, 146.6))], "the graves since the lean years: each a slab of the colour its family chose", age=1.0, repair=0.4)
+open_lot("graves_old", "the graveyard's old rows", GRAVE_X[0], GRAVES_Y[1] + 0.5, GRAVE_X[1], GRAVES_Y[2] - 1.1, "graves_3", CROWN,
+         [("by the ship-day stones", (44.0, 153.9))], "the lean years' graves, close set and small, and the ship days' carved stones above them", age=1.0, repair=0.2)
 lot("thorn", "lamp", "the thorn", (-22.0, 138.6), (2, 2), "south", "crown", 4.5, building=False, age=1.0, repair=0.0, district=CROWN, note="one wind-bent thorn, leaning north-east")
 lot("crown_bench", "lamp", "the Crown bench", (-17.5, 137.0), (2.2, 0.7), "south", "crown", 0.5, building=False, age=0.6, repair=0.5, district=CROWN,
-    spots=[("the bench, west seat", (0.55, 0.8)), ("the bench, east seat", (-0.55, 0.8))], note="the whole town below")
+    spots=[("the bench, west seat", (-0.55, 0.8)), ("the bench, east seat", (0.55, 0.8))], note="the whole town below")
 lot("peat_barn", "barn", "the peat barn", (44.0, 184.0), (12, 8), "west", "crown", pitched(1, 3.2, 8, 45), age=0.6, repair=0.5, district=CROWN, note="at the top of the Moss road; peat comes down here")
 
 # Outside town.
@@ -558,8 +607,22 @@ streets.append({"id": "the upper walk", "points": [[LADDER_W + 2, UPPER_WALK_Y],
 # beside the thorn, and north-east to the Readers' House (the children, every morning) past
 # the cistern (everyone's water), then on to the peat barn and the Moss road (the peat comes down
 # this way).
-streets.append({"id": "the Crown path", "points": [[-19, 139.0], [TALLY_X[4], 139.0], [14, 150.0], [24, 160.3]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": "crown"})
-streets.append({"id": "the peat road", "points": [[24, 160.3], [32.5, 160.3], [35, 176.0], [37.5, 192.5], [50, 192.5]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": "crown"})
+# Layout pass 2: four worn lines from the head of the Tally Wynd, each the shortest way feet
+# take to somewhere people go every day.
+# - west along the edge to the bench under the thorn;
+# - north to the cistern's dipping step (everyone's water, twice a day);
+# - north-east to the Readers' House's yard (the children, every morning), and on round the
+#   house's west gable to the peat barn's door and the gap in the dyke (the peat comes down this
+#   way on the cutters' backs: the straight line from the barn to the wynd runs through the
+#   Readers' House, so the path bends round its corner);
+# - east along the lip of the quarry's bay to the graveyard's gate.
+CROWN_J = [TALLY_X[4], 139.0]  # where they part
+PEAT_GAP_X = 51.3  # where the Moss road leaves the Crown through the dyke
+streets.append({"id": "the Tally Wynd's head", "points": [[TALLY_X[4], BAND["crown"][0] + 0.5], CROWN_J], "width_m": 3.0, "class": "lane", "surface": "setts", "level": "crown"})
+streets.append({"id": "the Crown path", "points": [[-19, 139.0], CROWN_J, [9.5, 146.5], [13.0, 152.5], [15.6, 156.6]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": "crown"})
+streets.append({"id": "the cistern path", "points": [CROWN_J, [-2.2, 147.0], [-4.5, 154.6]], "width_m": 2.2, "class": "lane", "surface": "earth", "level": "crown"})
+streets.append({"id": "the peat road", "points": [[13.0, 152.5], [14.2, 162.0], [16.3, 174.0], [30.0, 178.5], [37.4, 184.0], [37.6, 192.6], [50.5, 192.6]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": "crown"})
+streets.append({"id": "the grave path", "points": [CROWN_J, [6.5, 142.3], [27.2, 142.3], [GRAVES_W - 0.8, 140.9]], "width_m": 2.2, "class": "lane", "surface": "earth", "level": "crown"})
 # Low Row's end: the lane to the head of the Cinder Steps.
 streets.append({"id": "the Cinder Steps' head", "points": [[ROW_END["low"], ROW_Y["low"]], [ROW_END["low"], 50.0]], "width_m": 3.0, "class": "lane", "surface": "setts", "level": "low"})
 stairs = []
@@ -758,7 +821,7 @@ HOUSEHOLD_STORES = {
 assert sum(h["people"] for h in HOUSEHOLD_STORES["by_household"].values()) == RESIDENTS
 
 FEATURES = {
-    "kelp_kilns": {"note": "four round stone pits on the Wrack Strand, upwind (south-west) of Low Row; P2 props", "at": [[-150, 12], [-170, 15], [-190, 18], [-210, 22]]},
+    "kelp_kilns": {"note": "four round stone pits on the Wrack Strand, upwind (south-west) of Low Row; built since layout pass 2 as the fixtures kelp_kiln_1..4", "at": [[-150, 12], [-170, 15], [-190, 18], [-210, 22]]},
     "weirs": {"note": "stake fences in the shallows south-west of town; the shallows are a relief stamp", "between": WEIRS},
     "the_combs": {"note": "a reef 120 to 200 m off the south shore: a submerged relief stamp; nothing with a keel crosses it"},
 }
@@ -843,7 +906,7 @@ DROPS = [  # (lower, upper, axis, edge, from, to, facing)
     ("low", "mid", "x", 60.0, LADDER_E, 80.0, "south"),
     ("mid", "high", "x", 90.0, LADDER_E, EAST["high"], "south"),
     ("high", "upper", "x", 120.0, LADDER_E, 55.0, "south"),
-    ("upper", "crown", "x", 134.0, WEST["upper"], 55.0, "south"),
+    ("upper", "crown", "x", 134.0, WEST["upper"], QUARRY_BAY[0], "south"),  # east of the bay the drop is the quarry's raw face (pass 2, below)
     # The Ladder's seven walls (layout pass 1), the top one the Crown's above; and its wall on
     # the Net Wynd, where its own terraces stand 2 m over the Rows' backs.
     ("low", "lad_1", "x", 47.0, LADDER_W, LADDER_E, "south"),
@@ -883,6 +946,8 @@ for lo, hi, axis, edge, a, b, facing in DROPS:
             fixture(f"wall_{wn:03d}", "retaining_wall", at_, (u1 - u0, WALL_D), facing, H[lo], fall + COPING,
                     f"the drop from the {hi} level to the {lo} level ({fall:g} m)", age=0.9, repair=0.6, fall_m=fall, coping_m=COPING,
                     lower=lo, upper=hi, ends=[bool(stair_w and k == 0), bool(stair_e and k == len(secs) - 1)])
+    if (lo, hi) == ("upper", "crown"):
+        wn += 4  # the four lengths the quarry's face replaced (layout pass 2) keep their numbers, so every wall after them keeps its id, its seed and its model
 
 # The wynds' flights: one model for each of the plan's stairs, its treads the client's own
 # (0.18 m risers: round(rise / 0.18) treads over the flight's run), between basalt cheek walls.
@@ -958,7 +1023,9 @@ def enclosure(id, kind, x0, y0, x1, y1, level, cause, walls=(), contents=(), gro
         hw = opt.get("th", WALL_TH) / 2
         side_line = {"s": ((x0, y0 + hw), (x1, y0 + hw)), "n": ((x0, y1 - hw), (x1, y1 - hw)), "w": ((x0 + hw, y0), (x0 + hw, y1)), "e": ((x1 - hw, y0), (x1 - hw, y1))}
         a, b = side_line[side] if isinstance(side, str) else side
-        ws.append({"from": [r2(a[0] - cx), r2(a[1] - cy)], "to": [r2(b[0] - cx), r2(b[1] - cy)], "h": h, "style": style, "gaps": [[r2(g[0]), r2(g[1])] for g in gaps], **opt})
+        # Since layout pass 2 a wall blocks walking (the seed's `fixtures`, `barriers()` below)
+        # unless it says `"blocks": False`.
+        ws.append({"from": [r2(a[0] - cx), r2(a[1] - cy)], "to": [r2(b[0] - cx), r2(b[1] - cy)], "h": h, "style": style, "gaps": [[r2(g[0]), r2(g[1])] for g in gaps], "blocks": True, **opt})
         top = max(top, h)
     cs = []
     for c in contents:
@@ -967,9 +1034,12 @@ def enclosure(id, kind, x0, y0, x1, y1, level, cause, walls=(), contents=(), gro
         for k_ in ("to",):
             if k_ in opt:
                 opt[k_] = [r2(opt[k_][0] - cx), r2(opt[k_][1] - cy)]
+        if "via" in opt:
+            opt["via"] = [[r2(q[0] - cx), r2(q[1] - cy)] for q in opt["via"]]
         cs.append({"what": what, "at": [r2(at[0] - cx), r2(at[1] - cy)], **opt})
         top = max(top, CONTENT_H.get(what, 1.0))
-    f = fixture(id, kind, (cx, cy), (x1 - x0, y1 - y0), "south", H[level], top, cause, age=age, repair=repair, level=level, walls=ws, contents=cs, **extra)
+    # `level` is one of the plan's levels, or a height: ground off the levels (the beach).
+    f = fixture(id, kind, (cx, cy), (x1 - x0, y1 - y0), "south", H[level] if isinstance(level, str) else level, top, cause, age=age, repair=repair, level=level if isinstance(level, str) else None, walls=ws, contents=cs, **extra)
     if ground:
         f["ground"] = ground
     return f
@@ -980,6 +1050,10 @@ CONTENT_H = {
     "privy": 2.3, "lean_to": 2.2, "boat_shed": 2.0, "peat": 1.3, "butt": 1.1, "washing": 2.4, "hens": 1.3, "beds": 0.4, "herbs": 0.6, "flowers": 0.6, "boat": 1.3, "nets": 2.4,
     "kelp": 1.1, "frames": 0.6, "slates": 1.0, "blocks": 0.9, "pots": 0.9, "cullet": 0.8, "timber": 1.0, "handcart": 1.0, "barrels": 1.1, "creels": 0.9, "bench": 0.9, "weeds": 0.7,
     "rubble": 0.8, "hearth": 3.4, "paving": 0.06, "table": 0.9, "sundial": 1.1, "trough": 0.7, "ropewalk": 2.0, "barrow": 0.7, "wigwam": 1.9, "stoop": 0.4, "ash_sacks": 0.7,
+    # Layout pass 2.
+    "grave_row": 1.0, "ship_stones": 1.2, "steps": 0.6, "apron": 0.3, "dip_step": 0.5, "buckets": 0.5, "runnel": 0.1, "slab": 0.1, "tablet_bench": 0.9, "stools": 0.4, "sand_tray": 0.5,
+    "spoil": 2.0, "crane": 6.2, "stone_stack": 1.3, "sledge": 0.8, "split_block": 1.0, "clay_floor": 0.1, "clay_bank": 1.4, "clay_boards": 0.6, "plank_run": 0.3, "steam_box": 1.6, "sawhorses": 1.0,
+    "pitch_pot": 0.9, "peat_rick": 1.7, "tally_post": 1.6, "peat_creels": 0.8, "bank": 0.9, "gutting_table": 1.0, "bait_tubs": 0.6, "mending_bench": 1.7,
 }
 # A court's wall, by who keeps it: Kiln families cope theirs at 2 m; the others build dry.
 YARD_WALL = {"kiln": (2.0, "coped"), "strand": (1.5, "dry"), "ladder": (1.7, "dry"), "other": (1.8, "coped")}
@@ -1157,7 +1231,7 @@ yb, yc = fy["high"], fy["high"] + HOUSE_DEPTH + COURT_D["high"]
 for i, (use, who, why) in enumerate(GARDENS):
     a, b = x0 + i * tw, x0 + (i + 1) * tw
     door = (tw * 0.5 - 0.5, tw * 0.5 + 0.5)
-    walls = [("s", 2.0, "coped", [door], {"gate": use != "weeds", "boarded": use == "weeds"}), ("w", 2.0, "coped"), ("n", 2.0, "coped", [door], {"gate": True})] + ([("e", 2.0, "coped")] if i == n - 1 else [])
+    walls = [("s", 2.0, "coped", [door], {"gate": use != "weeds", "boarded": use == "weeds"}), ("w", 2.0, "coped"), ("n", 2.0, "coped", [door], {"gate": use != "weeds", "boarded": use == "weeds"})] + ([("e", 2.0, "coped")] if i == n - 1 else [])
     mx, my = (a + b) / 2, (yb + yc) / 2
     inside = {
         "beds": [("beds", (mx, my + 1.0), {"w": tw - 1.7, "d": 7.0}), ("bench", (mx, yb + 1.3)), ("butt", (b - 0.8, yc - 0.9))],
@@ -1215,37 +1289,489 @@ enclosure("net_green", "drying_green", -75.0, _sb0, LADDER_WYND_X - 2.4, _sb1 - 
           [("w", 1.0, "dry"), (((-75.0, _sb0 + 0.2), (LADDER_WYND_X - 2.4, _sb0 + 0.2)), 1.0, "dry", [(9.0, 12.0)])],
           [("nets", (-70.6 + 6.2 * j, _sb0 + 3.6 + (2.6 if j % 2 else 0.0)), {"len": 4.6}) for j in range(3)] + [("boat", (-60.0, _sb1 - 2.0), {"turn": 4}), ("creels", (-71.5, _sb1 - 1.6)), ("barrels", (-56.2, _sb0 + 1.8))],
           ground="earth", use="nets")
-enclosure("smoke_yard", "yard", -49.0, 17.0, -38.0, _sb1 - 3.2, "strand",
+enclosure("smoke_yard", "yard", -49.0, 16.3, -38.0, _sb1 - 3.2, "strand",
           "the smokehouses' yard: peat and driftwood for the smoke, fish barrels waiting on the Marver's drops (Petra Tarn)",
           [("n", 1.4, "dry", [(4.0, 5.4)]), ("e", 1.4, "dry")], [("peat", (-46.5, 24.0), {"n": 3}), ("barrels", (-41.0, 19.2)), ("barrels", (-43.6, 19.0)), ("timber", (-41.6, 25.0), {"len": 3.0}), ("creels", (-47.4, 19.0))],
           ground="earth", lot="smokehouse_1", family="strand", state="kept")
-enclosure("tally_court", "yard", -14.0, 23.0, 14.0, _sb1 - 0.3, "strand",
+enclosure("tally_court", "yard", -14.0, 22.3, 14.0, _sb1 - 0.3, "strand",
           "the Counting House's back court: the ship days' bonded yard, its wall still coped; the porter's cart and the Store's empties stand in it now",
           [("w", 2.2, "coped", [(2.2, 3.6)], {"gate": True}), ("e", 2.2, "coped")],
           [("barrels", (-8.0, 29.0)), ("barrels", (-5.4, 29.4)), ("handcart", (4.0, 27.0)), ("blocks", (10.0, 29.6)), ("weeds", (0.0, 25.0), {"r": 1.6}), ("butt", (12.6, 24.2))],
           ground="quay_flags", lot="counting_house", family="other", state="kept")
-enclosure("store_yard", "yard", 48.0, 21.0, 60.0, _sb1 - 0.3, "strand",
+enclosure("store_yard", "yard", 48.0, 20.3, 60.0, _sb1 - 0.3, "strand",
           "the Store's yard: the town's peat, counted in by the tally keeper, and the barrels going back to the smokehouses",
           [("w", 1.8, "coped", [(3.0, 4.4)], {"gate": True}), ("e", 1.8, "coped")], [("peat", (51.0, 29.4), {"n": 3}), ("peat", (56.0, 29.4), {"n": 3}), ("barrels", (57.4, 23.4)), ("timber", (52.0, 24.0), {"len": 3.4})],
           ground="earth", lot="store", family="other", state="kept")
-# The old quarry's bench (the upper terrace east of the Ladder): the basalt of every wall in town
-# came off this face (SMALL_CITY §1, materials). Cut blocks never carried down, and the waste.
-for i, x in enumerate((-12.0, 14.0, 27.0, 47.0)):
-    enclosure(f"quarry_{i + 1}", "quarry_bench", x - 4.5, 126.2, x + 4.5, BAND["upper"][1] - WALL_D, "upper", "the old quarry's bench below the Crown: cut stone never carried down, and waste under the face",
-              [], [("blocks", (x - 1.6, 131.0)), ("blocks", (x + 2.0, 129.6), {"turn": 30}), ("rubble", (x + 0.8, 131.9), {"r": 1.0}), ("weeds", (x - 2.6, 128.6), {"r": 1.2})], ground="earth", age=1.0, repair=0.2)
-# The graveyard's wall (the Crown): dry stone, a gate toward the Crown path.
-_g = next(l for l in lots if l["id"] == "graveyard")
-enclosure("graveyard_wall", "graveyard_wall", _g["at"][0] - _g["size"][0] / 2, _g["at"][1] - _g["size"][1] / 2, _g["at"][0] + _g["size"][0] / 2, _g["at"][1] + _g["size"][1] / 2, "crown",
-          "the graveyard's wall: dry stone, breast high, against the wind and the sheep the island no longer has; the gate faces the town",
-          [("s", 1.2, "dry", [(16.0, 17.4)], {"gate": True}), ("w", 1.2, "dry"), ("n", 1.2, "dry"), ("e", 1.2, "dry")], [], age=1.0, repair=0.5, lot="graveyard")
+# (The old quarry's bench and the graveyard's wall of pass 1 are rebuilt in layout pass 2, below.)
 # Benches on the Rows' sills, where the sun is, and washing across the wynds (SMALL_CITY §6).
 for row, x, who in (("low", 30.0, "the oven court's bench on the sill: the harbour below"), ("low", 0.0, "Ingrid Morrow's sill: the bench she mends on in the morning sun"),
                     ("mid", 16.0, "a bench before the tofts"), ("high", 20.0, "the Kiln's bench before the walled gardens: the whole harbour"), ("high", 52.0, "a bench before the Pontils' and the Hollins' doors")):
-    enclosure(f"sill_{row}_{int(x)}".replace("-", "m"), "sill", x - 1.6, BAND[row][0] + 0.25, x + 1.6, BAND[row][0] + 1.5, row, who, [], [("bench", (x, BAND[row][0] + 0.85), {"len": 2.4, "back": "s"})], age=0.6, repair=0.5)
+    # (Since layout pass 2 its rectangle takes in the strip one stands on before the bench: its open lot.)
+    enclosure(f"sill_{row}_{int(x)}".replace("-", "m"), "sill", x - 1.6, BAND[row][0] + 0.25, x + 1.6, BAND[row][0] + 2.0, row, who, [], [("bench", (x, BAND[row][0] + 0.85), {"len": 2.4, "back": "s"})], age=0.6, repair=0.5)
 for wid, x, row, why in (("net_low", NET_WYND_X, "low", "the Marls' and the Tarns' washing across the Net Wynd, from Low Row 10's gable to the Ladder's wall"),
                          ("tally_mid", TALLY_X[2], "mid", "washing across the Tally Wynd between the Sarros' gable and the first toft")):
     y = fy[row] + 3.0
     enclosure(f"wynd_washing_{wid}", "wynd_washing", x - 2.1, y - 0.4, x + 2.1, y + 0.4, row, why, [], [("washing", (x - 1.9, y), {"to": (x + 1.9, y), "cloth": "colours", "high": True})], age=0.5, repair=0.5)
+
+# ---------------------------------------------------------------------------------------------
+# Layout pass 2 (docs/CULLET_LAYOUT.md, "Pass 2"): the three places pass 1 left empty, and two
+# things every wall and court of the plan gains.
+# - The Crown: the graveyard in rows up its south-east corner, the cistern's apron and the paths
+#   worn to it, the Readers' House's yard, the thorn's stance, the dyke against the Moss.
+# - The quarry (the upper terrace east of the Ladder): the raw face and its bay, spoil, squared
+#   stones under a timber crane, and the clay pit under the graveyard's wall.
+# - The Strand's backs: the boatyard, the wrack stance behind the Heron, the peat stance, the
+#   creel stand, and the working quay at the Fish Steps.
+# - Walls block walking (`barriers()`): the seed's `fixtures` (docs/AUTHORED_PLANS.md).
+# - Courts and plots are open lots with spots (`lot:<id>` places).
+# As in pass 1, everything is written here with its cause and the kit builds exactly that.
+
+EYE_M = 1.6  # the rules' eye height (`LandParams.sight.eye_m`): a wall above it hides, one below is seen over
+
+
+def drop_wall(id, lo, hi, axis, edge, a, b, facing, cause, coping=0.12):
+    """A length of retaining wall under a drop whose low side lies any way (pass 1's DROPS loop
+    builds those facing south or east)."""
+    mid, fall = (a + b) / 2, H[hi] - H[lo]
+    off = {"south": (0, -1), "north": (0, 1), "east": (1, 0), "west": (-1, 0)}[facing]
+    at = (mid + off[0] * WALL_D / 2, edge + off[1] * WALL_D / 2) if axis == "x" else (edge + off[0] * WALL_D / 2, mid + off[1] * WALL_D / 2)
+    return fixture(id, "retaining_wall", at, (b - a, WALL_D), facing, H[lo], fall + coping, cause, age=0.9, repair=0.5, fall_m=fall, coping_m=coping, lower=lo, upper=hi, ends=[False, False])
+
+
+def face(id, lo, hi, axis, edge, a, b, facing, cause, rock="basalt", **extra):
+    """A length of the quarry's face: the raw rock a drop was cut into, not a built wall. It
+    stands in the lower level's drop strip like a retaining wall, 1.2 m deep at its foot."""
+    fall, depth = H[hi] - H[lo], 1.2
+    out = []
+    for k, (u0, u1) in enumerate(sections(a, b, 10.0)):
+        mid = (u0 + u1) / 2
+        off = {"south": (0, -1), "north": (0, 1), "east": (1, 0), "west": (-1, 0)}[facing]
+        at = (mid + off[0] * depth / 2, edge + off[1] * depth / 2) if axis == "x" else (edge + off[0] * depth / 2, mid + off[1] * depth / 2)
+        out.append(fixture(f"{id}_{k + 1}", "quarry_face", at, (u1 - u0, depth), facing, H[lo], fall + 0.15, cause, age=1.0, repair=0.1, fall_m=fall, rock=rock, lower=lo, upper=hi, **extra))
+    return out
+
+
+# --- The Crown ---------------------------------------------------------------------------------
+# The graveyard (the bible, "Customs": the dead are buried on the Crown; each grave is marked
+# with a slab of glass of the colour the dead person chose, or that their family chose). It
+# climbs the Crown's south-east corner in three bands half a metre apart: the oldest at the top,
+# the newest on the Crown's own level, at the lip over the clay pit. A marker is a cast slab no
+# wider than 0.45 m (no one can make a bigger piece of glass) in a basalt socket.
+# Colours are the town's glass: bottle green, amber, aqua, smoke. Cobalt is rationed to one thing
+# a district (SMALL_CITY §1, palette): the Crown's is Iona Pontil's marker.
+FEVER_WINTER = [  # (who, colour, the cause of the colour): the bible's nine, six years ago
+    ("Iona Pontil", "cobalt", "Vessa Pontil's only daughter: the Glassmaster cast her the Crown's one piece of cobalt"),
+    ("Aurel Pontil", "aqua", "Iona's husband, beside her: the Pontils chose"),
+    ("Arvo Dunmore", "amber", "Halvard and Greta's son: the colour of the Cone's mouths, his father's choice"),
+    ("Liss Dunmore", "amber", "Arvo's wife, beside him, of the same melt"),
+    ("Matthias Sarro", "green", "a blower, Runa's husband: bottle green, the glass he blew most of"),
+    ("Bett Brandt", "aqua", "Otto's sister, Juno's mother: the Brandts chose"),
+    ("Maddy Dunlin", "green", "Rafe's wife, Tilly's mother: sea green, a Strand family's choice"),
+    ("Ada Frit", "smoke", "the last of the Frits but her two daughters: smoke, the Frits' window glass"),
+    ("Siri Morrow", "aqua", "Ingrid's daughter, Lark's mother: the Morrows chose"),
+]
+BEFORE_THEM = [  # the bible's other named dead, "longer ago and more ordinarily"
+    ("Vessa Pontil's husband", "green"), ("Magda Tarn's husband, lost at the Weirs: a marker and no grave", "aqua"), ("the Vanes' mother", "amber"), ("the Vanes' father", "amber"),
+    ("Sander Vane, drowned off the mole: a marker and no grave", "aqua"), ("Livia Faro's mother", "smoke"), ("Livia Faro's father", "smoke"), ("Juno's father", "green"), ("Lark's father", "green"),
+]
+_gx0, _gx1 = GRAVES_W, EAST["crown"] - 0.2
+_gate = (138.6, 139.8)  # the gate in the west wall, on the aisle between the two newest rows: it faces the town
+_steps = ((GRAVE_X[0] + 6.0, GRAVE_X[0] + 7.6), (GRAVE_X[1] - 7.6, GRAVE_X[1] - 6.0))  # two flights of three stone steps up each bank
+
+
+def grave_row(y, x0, x1, graves, **opt):
+    return ("grave_row", ((x0 + x1) / 2, y), {"len": r2(x1 - x0), "graves": graves, **opt})
+
+
+enclosure("graveyard", "graveyard", _gx0, GRAVE_S - 0.2, _gx1, GRAVES_Y[0] + 0.5, "crown",
+          "the graveyard's lowest band, on the Crown's own level at the lip over the clay pit: the newest graves. The fever winter's nine lie in one row with room for one more at its east end; the wall's foot is the head of Otto Brandt's clay face",
+          [("s", 1.2, "dry"), ("w", 1.2, "dry", [(_gate[0] - GRAVE_S + 0.2, _gate[1] - GRAVE_S + 0.2)], {"gate": True}), ("e", 1.2, "dry"),
+           (((_gx0, GRAVES_Y[0] - 0.3), (_gx1, GRAVES_Y[0] - 0.3)), 0.55, "dry", [(a - _gx0, b - _gx0) for a, b in _steps], {"th": 0.5, "kerb": True})],
+          [grave_row(137.5, GRAVE_X[0] + 1.6, GRAVE_X[1] - 3.0, [{"who": w, "glass": c, "why": why, "state": "new"} for w, c, why in FEVER_WINTER], mound=True, note="the fever winter's nine, six years ago: mounds still humped, the glass unweathered"),
+           grave_row(141.3, GRAVE_X[0] + 1.6, GRAVE_X[1] - 1.6, [{"who": w, "glass": c, "state": "kept"} for w, c in BEFORE_THEM], note="the dead the living still name"),
+           *[("steps", ((a + b) / 2, GRAVES_Y[0] - 0.3), {"w": r2(b - a), "rise": 0.5}) for a, b in _steps]],
+          age=1.0, repair=0.6, lot="graveyard")
+_old = lambda n, glasses, state: [{"glass": glasses[i % len(glasses)], "state": state if (i * 7) % 5 else "leaning"} for i in range(n)]  # noqa: E731
+enclosure("graves_2", "graveyard", _gx0, GRAVES_Y[0], _gx1, GRAVES_Y[1] + 0.5, "graves_2",
+          "the graveyard's second band: two rows since the lean years, each slab the colour its family chose, lichen on the weather side",
+          [("w", 1.2, "dry"), ("e", 1.2, "dry"), (((_gx0, GRAVES_Y[1] - 0.3), (_gx1, GRAVES_Y[1] - 0.3)), 0.55, "dry", [(a - _gx0, b - _gx0) for a, b in _steps], {"th": 0.5, "kerb": True})],
+          [grave_row(145.4, GRAVE_X[0] + 1.6, GRAVE_X[1] - 1.6, _old(9, ("green", "aqua", "amber", "green", "smoke"), "old")), grave_row(148.3, GRAVE_X[0] + 1.6, GRAVE_X[1] - 1.6, _old(8, ("smoke", "green", "aqua", "amber"), "old")),
+           *[("steps", ((a + b) / 2, GRAVES_Y[1] - 0.3), {"w": r2(b - a), "rise": 0.5}) for a, b in _steps]],
+          age=1.0, repair=0.4, lot="graves_middle")
+enclosure("graves_3", "graveyard", _gx0, GRAVES_Y[1], _gx1, GRAVES_Y[2], "graves_3",
+          "the graveyard's top band: the lean years' graves, small dark slabs set close (half the town went or died), and above them the ship days' carved basalt stones, in the formal script nobody but Benedikt Orme reads",
+          [("w", 1.2, "dry"), ("e", 1.2, "dry"), ("n", 1.2, "dry")],
+          [grave_row(152.3, GRAVE_X[0] + 1.2, GRAVE_X[1] - 1.2, _old(17, ("green", "smoke", "green"), "poor"), small=True, note="the lean years: seventeen in one row, the glass poor and dark"),
+           ("ship_stones", ((GRAVE_X[0] + GRAVE_X[1]) / 2, 155.6), {"len": r2(GRAVE_X[1] - GRAVE_X[0] - 4.0), "n": 6})],
+          age=1.0, repair=0.2, lot="graves_old")
+# The banks the upper bands stand on, where they fall a metre or half a metre to the Crown.
+drop_wall("wall_graves_w3", "crown", "graves_3", "y", GRAVES_W, GRAVES_Y[1], GRAVES_Y[2], "west", "the graveyard's top band stands a metre over the Crown: a dry revetment under its wall")
+drop_wall("wall_graves_w2", "crown", "graves_2", "y", GRAVES_W, GRAVES_Y[0], GRAVES_Y[1], "west", "the graveyard's second band stands half a metre over the Crown")
+for _k, (_a, _b) in enumerate(sections(GRAVES_W, EAST["crown"], 12.5)):
+    drop_wall(f"wall_graves_n{_k + 1}", "crown", "graves_3", "x", GRAVES_Y[2], _a, _b, "north", "the graveyard's top band, a metre over the Crown on its north side")
+
+# The cistern (SMALL_CITY §2: 9 m across, rain-fed, everyone's water): its apron of flags, the
+# dipping step on the side the town comes from, and where the overflow runs: south-east in a
+# cut runnel to the quarry's bay, under a slab where each path crosses it, and down the face.
+_cis = next(l for l in lots if l["id"] == "cistern")
+_cx, _cy = _cis["at"]
+enclosure("cistern_apron", "crown_ground", _cx - 6.6, _cy - 6.6, _cx + 6.6, _cy + 6.6, "crown",
+          "the cistern's apron: a ring of flags worn hollow on the town's side, the dipping step where the path from the Tally Wynd ends, buckets and a yoke left on it",
+          [], [("apron", (_cx, _cy), {"r0": 4.62, "r1": 6.3, "worn_deg": 180}), ("dip_step", (_cx, _cy - 4.62 - 0.45), {"w": 2.2}), ("buckets", (_cx + 1.7, _cy - 5.3), {"n": 3})], age=1.0, repair=0.6, lot="cistern")
+_spout = (r2(_cx + 4.62 * math.cos(math.radians(-48))), r2(_cy + 4.62 * math.sin(math.radians(-48))))
+_fall = (10.6, QUARRY_BAY[2] + 0.35)  # where it goes over the lip of the bay
+_cross = [(7.25, 144.75), (9.3, 142.3)]  # where the Crown path and the grave path cross it
+enclosure("cistern_runnel", "crown_ground", _spout[0] - 0.6, _fall[1] - 0.4, _fall[0] + 0.8, _spout[1] + 0.6, "crown",
+          "the cistern's overflow: a runnel cut in the rock from its spout to the quarry's bay, a basalt slab over it where each path crosses; it stains the face green where it falls",
+          [], [("runnel", _spout, {"to": _fall}), *[("slab", q, {"turn": t}) for q, t in zip(_cross, (38, 0))]], age=1.0, repair=0.5)
+
+# The Readers' House's yard (the bible: lessons 09:00 to 12:00; the ship-day tablets): the
+# forecourt on its sunny side, a low coped wall one can sit on, the gate where the Crown path
+# comes in. The tablets' bench stands against the house wall west of the door (the lot's spot):
+# a long slab where the slates and fired clay are laid out to be read in daylight. Eight low
+# stones in a half ring before it for the children, and a tray of white sand to write in (there
+# is nothing to write on that is not kept: sand from the Sand Spit is smoothed and used again).
+_rh = next(l for l in lots if l["id"] == "readers_house")
+RY = (16.6, 153.6, 28.4, _rh["at"][1] - _rh["size"][1] / 2 - 0.1)
+_stools = [(r2(22.4 + 2.5 * math.cos(math.radians(a))), r2(158.6 + 2.5 * math.sin(math.radians(a)))) for a in (200, 222, 244, 266, 288, 310, 332, 354)]
+enclosure("readers_yard", "readers_yard", *RY, "crown",
+          "the Readers' House's yard: the school's forecourt in the morning sun, the tablets' bench under the window, eight stones for the children, a tray of white sand to write in",
+          [("w", 0.9, "coped", [(2.4, 3.6)], {"gate": True}), ("s", 0.9, "coped"), ("e", 0.9, "coped")],
+          [("paving", ((RY[0] + RY[2]) / 2, (RY[1] + RY[3]) / 2), {"w": RY[2] - RY[0] - 0.9, "d": RY[3] - RY[1] - 0.5}), ("tablet_bench", (20.9, RY[3] - 0.45), {"len": 4.2, "tablets": 9}),
+           ("stools", (22.4, 158.6), {"at_each": [[r2(x - 22.4), r2(y - 158.6)] for x, y in _stools]}), ("sand_tray", (26.4, 159.4), {"turn": 20})],
+          ground="setts", age=0.9, repair=0.65, lot="readers_house")
+
+# The thorn and its bench on the edge, the whole town below (the bible). A thorn lives here
+# because something breaks the south-westerly for it: a short dry wall on its weather side,
+# built for the bench and older than the tree. Flags under the bench, worn where feet rest.
+enclosure("crown_stance", "crown_ground", -27.0, BAND["crown"][0] + 0.4, -13.2, 141.2, "crown",
+          "the stance under the thorn: a dry wall on the weather side (the thorn grew in its lee and leans the way it points), flags under the bench, the town below",
+          [(((-25.8, BAND["crown"][0] + 0.6), (-25.8, 140.4)), 1.3, "dry", (), {"th": 0.5}), (((-25.8, 140.6), (-23.2, 140.6)), 1.3, "dry", (), {"th": 0.5})],
+          [("paving", (-17.5, 136.5), {"w": 5.4, "d": 2.6})], age=1.0, repair=0.5, lot="crown_bench")
+
+# The dyke: a dry-stone boundary round the Crown against the moor, from the ship days, when the
+# island had sheep (it has none now: no animals but gulls, fish and Fenn's hens), so nobody
+# mends it. The peat road goes through it at the Crown's north-east corner. One slump in the
+# north side is open: the children's short way to the Lintel, which they dare each other to touch.
+DYKE_IN = 0.6  # how far inside the Crown's edge it stands
+_dw, _dn, _de = CROWN_LEDGE[0] + DYKE_IN, BAND["crown"][1] - DYKE_IN, EAST["crown"] - DYKE_IN
+_lw, _ln = WEST["crown"] + DYKE_IN, CROWN_LEDGE[1] - DYKE_IN
+_peat_gap = (PEAT_GAP_X - 1.8, PEAT_GAP_X + 1.8)
+_child_gap = (-12.6, -11.4)
+DYKE = [  # (id, from, to, gaps along it, slumps along it, cause)
+    ("ledge_w", (_lw, BAND["crown"][0] + 0.5), (_lw, _ln), (), ((4.0, 6.5),), "the dyke's end on the ledge over the Ladder, where the wind wall stops"),
+    ("ledge_n", (_lw, _ln), (_dw, _ln), (), ((9.0, 12.0),), "the dyke along the ledge over the Ladder's top rank"),
+    ("west_1", (_dw, _ln), (_dw, 171.0), (), ((6.0, 9.0), (17.0, 19.5)), "the dyke on the Crown's west side, the weather side: lichened, slumped in two places"),
+    ("west_2", (_dw, 171.0), (_dw, _dn), (), ((10.0, 13.0),), "the dyke on the Crown's west side"),
+    ("north_1", (_dw, _dn), (-28.0, _dn), (), ((12.0, 15.0),), "the dyke against the Moss"),
+    ("north_2", (-28.0, _dn), (2.0, _dn), ((_child_gap[0] + 28.0, _child_gap[1] + 28.0),), ((6.0, 8.5),), "the dyke against the Moss: the slump the children keep open, the short way to the Lintel"),
+    ("north_3", (2.0, _dn), (30.0, _dn), (), ((14.0, 17.0),), "the dyke against the Moss, behind the Readers' House"),
+    ("north_4", (30.0, _dn), (_de, _dn), ((_peat_gap[0] - 30.0, _peat_gap[1] - 30.0),), (), "the dyke at the peat barn: the gap the peat road goes through, its jambs set with long stones"),
+    ("east_1", (_de, 176.0), (_de, _dn), (), ((7.0, 10.0),), "the dyke on the Crown's east side"),
+    ("east_2", (_de, GRAVES_Y[2] + 0.1), (_de, 176.0), (), (), "the dyke from the graveyard's corner"),
+]
+for _id, _a, _b, _gaps, _slumps, _why in DYKE:
+    _mid = ((_a[0] + _b[0]) / 2, (_a[1] + _b[1]) / 2)
+    _in = (0.0, -1.0) if _id.startswith(("north", "ledge_n")) else (1.0, 0.0) if _id.startswith(("west", "ledge_w")) else (-1.0, 0.0)  # toward the Crown's middle: where its stones fell
+    enclosure(f"dyke_{_id}", "dyke", min(_a[0], _b[0]) - 1.7, min(_a[1], _b[1]) - 1.7, max(_a[0], _b[0]) + 1.7, max(_a[1], _b[1]) + 1.7, "crown", _why,
+              [((_a, _b), 1.3, "dry", _gaps, {"th": 0.55, "slumps": [[r2(u), r2(v)] for u, v in _slumps], "fall": list(_in)})], [], age=1.0, repair=0.25)
+
+# --- The quarry --------------------------------------------------------------------------------
+# The basalt of every ground floor, the quay and every wall came off this face (SMALL_CITY §1,
+# materials: "the old quarry face behind High Row"). East of the Tally Wynd's last flight the
+# Crown's edge is that face, raw: benched in lifts a man can reach, split along rows of drilled
+# holes (the half-holes still show), with the bay the last working bit into the Crown.
+_qb0, _qb1, _qby = QUARRY_BAY
+face("face_bay_w", "upper", "crown", "y", _qb0, BAND["crown"][0], _qby, "east", "the bay's west return: the first cut, weathered grey", drill=False)
+face("face_bay", "upper", "crown", "x", _qby, _qb0, _qb1, "south", "the bay's back: the last working, the drill rows fresh and pale; the cistern's overflow runs down it", drill=True, stain_at=r2(_fall[0] - _qb0))
+face("face_bay_e", "upper", "crown", "y", _qb1, BAND["crown"][0], _qby, "west", "the bay's east return", drill=True)
+face("face_east", "upper", "crown", "x", BAND["crown"][0], _qb1, CLAY_PIT[0], "south", "the old face under the graveyard: worked out and left, the basalt thins here over the clay", drill=False)
+face("face_clay", "clay_pit", "crown", "x", BAND["crown"][0], CLAY_PIT[0], CLAY_PIT[1], "south",
+     "the clay pit's face under the graveyard's wall: dug in spade lifts to the wall's foot. Otto Brandt has perhaps a season's crucibles left in it; the good clay goes on under the graves", rock="clay")
+_qy0, _qy1 = 126.2, BAND["upper"][1] - 0.9  # between the upper walk and the foot of the face
+enclosure("quarry_old", "quarry_bench", -18.5, _qy0, -3.0, _qy1, "upper",
+          "the oldest working, west of the wynd: a spoil heap gone to grass, two blocks nobody wanted",
+          [], [("spoil", (-11.0, 129.9), {"r": 3.0, "h": 1.5, "grown": True}), ("blocks", (-15.6, 131.2)), ("weeds", (-6.0, 131.6), {"r": 1.6}), ("weeds", (-14.0, 127.6), {"r": 1.2})], ground="earth", age=1.0, repair=0.1)
+enclosure("quarry_bay", "quarry_bench", _qb0 + 0.9, _qy0, _qb1 - 0.9, _qby - 0.9, "upper",
+          "the bay and its floor: squared stones waiting on bearers under a timber crane (a ship's spar for its mast, a hand winch), cut in the ship days for a quay that needed no more; Gwil Stannard takes one when a wall wants it. A block lies half split, the wedges still in it",
+          [], [("clay_floor", (17.0, 132.6), {"w": _qb1 - _qb0 - 2.0, "d": _qby - 0.9 - _qy0 - 0.4, "rock": True}), ("crane", (17.0, 132.6), {}), ("stone_stack", (11.6, 129.4), {"n": 9}), ("stone_stack", (14.6, 128.2), {"n": 5, "turn": 90}), ("sledge", (19.6, 129.8), {"turn": 205, "stone": True}),
+               ("split_block", (20.4, 137.0), {"turn": 8}), ("rubble", (10.6, 137.4), {"r": 1.1}), ("rubble", (23.4, 136.6), {"r": 0.9}), ("weeds", (23.6, 127.6), {"r": 1.1})], ground="earth", age=1.0, repair=0.2)
+# The crane is a model of its own: tall things stand alone, so the client fades one, not a yard.
+fixture("quarry_crane", "quarry_crane", (17.0, 132.6), (4.4, 7.0), "south", H["upper"], 6.0,
+        "the quarry's crane at the mouth of the bay: a ship's spar for its mast, a hand winch, a squared stone hanging a hand above the ground, as it was left", age=1.0, repair=0.4, load=True)
+enclosure("quarry_spoil", "quarry_bench", _qb1 + 1.0, _qy0, CLAY_PIT[0] - 0.9, _qy1, "upper",
+          "the spoil: what the face gave that would not square, tipped where the barrow run ended; the Tally Wynd's flight comes up beside it",
+          [], [("spoil", (31.0, 130.2), {"r": 2.7, "h": 1.9}), ("spoil", (36.2, 131.2), {"r": 2.0, "h": 1.3}), ("rubble", (33.8, 127.4), {"r": 1.0}), ("barrow", (28.6, 127.6), {"turn": 200})], ground="earth", age=1.0, repair=0.1)
+# The clay pit (the bible: the clay bank is nearly dug out; there is good clay under the Crown,
+# where the graves are). Brick for the Cone came from it in the ship days; now only crucibles.
+_cpx0, _cpx1, _cpy0 = CLAY_PIT
+enclosure("clay_pit", "clay_pit", _cpx0 + 0.2, _cpy0 + 0.2, _cpx1 - 0.2, BAND["upper"][1] - 0.9, "clay_pit",
+          "the clay pit: its floor is stony till, wet in the middle; one bank of good clay is left in the north-east corner, under the graveyard's wall. Otto Brandt's boards of dug clay under sacking, his plank run up the bank, his spade",
+          [], [("clay_floor", ((_cpx0 + _cpx1) / 2, (_cpy0 + BAND["upper"][1] - 0.9) / 2), {"w": _cpx1 - _cpx0 - 1.2, "d": BAND["upper"][1] - 0.9 - _cpy0 - 0.8, "puddle": [1.5, -0.6]}),
+               ("clay_bank", (51.4, 132.0), {"w": 5.0, "d": 2.0}), ("clay_boards", (44.6, 128.2), {"n": 3}), ("plank_run", (41.4, 127.6), {"to": (46.6, 130.4)}), ("barrow", (47.4, 130.9), {"turn": 150})],
+          ground="earth", age=1.0, repair=0.2, who="Otto Brandt")
+
+# --- The Strand's backs: the working shore -------------------------------------------------------
+# The boatyard, between the dry dock and the net lofts (the bible: Bram Calloway has been
+# building the Second Thought for four years from ship-day timber, driftwood and the planks of
+# old sheds; the hull is framed). The timber is stacked by sort behind the boatshed; the steaming
+# box stands in the gap beside the dock, so a plank goes hot from the box to the hull; the
+# working floor is east of the shed. A paling of hull planks closes it from the slipway.
+_bs = next(l for l in lots if l["id"] == "boatshed")
+_bx0, _bx1 = _bs["at"][0] - _bs["size"][0] / 2, _bs["at"][0] + _bs["size"][0] / 2
+_by1 = _bs["at"][1] + _bs["size"][1] / 2
+BOATYARD = (-103.6, 9.6, -75.4, _sb1 - 0.2)
+TIMBER = [  # (at, length, sort)
+    ((-100.4, 26.4), 4.6, "ship-day oak, grey and sound: the keel's and the frames' timber"), ((-94.6, 26.4), 4.6, "ship-day oak"), ((-88.8, 26.4), 4.6, "driftwood, sorted by length"),
+    ((-97.6, 29.4), 4.6, "the planks of old sheds, tarred: for the hull's skin"), ((-91.8, 29.4), 4.6, "the planks of old sheds"),
+]
+enclosure("boatyard", "boatyard", *BOATYARD, "strand",
+          "the boatyard: the timber for the Second Thought stacked by sort behind the boatshed, the steaming box beside the dry dock, the working floor east of the shed. Bram Calloway needs fourteen trees more than this",
+          [(((BOATYARD[0], BOATYARD[1] + 0.2), (_bx0 - 0.6, BOATYARD[1] + 0.2)), 1.4, "paling", (), {"th": 0.12}),
+           (((_bx1 + 0.6, BOATYARD[1] + 0.2), (BOATYARD[2], BOATYARD[1] + 0.2)), 1.4, "paling", [(0.6, 2.2)], {"th": 0.12, "gate": True})],
+          [("steam_box", (-100.5, 16.6), {"turn": 90, "len": 5.4}), *[("timber", at, {"len": ln, "sort": sort}) for at, ln, sort in TIMBER], ("timber", (-86.4, 29.6), {"len": 3.2, "knees": True}),
+           ("sawhorses", (-80.0, 19.6), {"turn": 12}), ("pitch_pot", (-78.0, 25.0)), ("bench", (-77.0, 29.6), {"len": 2.2})],
+          ground="earth", age=0.7, repair=0.5, who="Bram Calloway", lot="boatshed")
+# The wrack stance behind the Heron (the bible: the Heron still lifts boats and kelp loads).
+# What is landed wet at the crane is hung to dry here before it goes west to the kilns: ranks of
+# racks set across the south-westerly, so the wind goes through them.
+KELP_STANCE = (-37.4, 11.0, -19.6, 28.4)
+_racks = [(-34.2, 15.2), (-29.4, 14.2), (-24.6, 15.2), (-32.0, 20.0), (-27.2, 19.0), (-22.6, 20.2), (-34.0, 25.0), (-29.0, 24.2), (-24.2, 25.2)]
+enclosure("kelp_stance", "kelp_stance", *KELP_STANCE, "strand",
+          "the wrack stance behind the Heron: kelp landed wet at the crane dries on nine racks set across the south-westerly, then goes west to the kilns on the handcart; two wet heaps wait",
+          [], [*[("kelp", q, {"len": 3.4, "rack": True, "turn": -45}) for q in _racks], ("kelp", (-21.4, 12.4), {"len": 2.2}), ("kelp", (-25.6, 11.9), {"len": 1.8}), ("barrow", (-36.0, 12.6), {"turn": 70}), ("creels", (-30.8, 12.0))],
+          ground="earth", age=0.6, repair=0.5)
+# The peat stance behind the yard (the bible: the peat stack is falling; about twelve days).
+# Loads come down the Store Wynd and are counted in from the east; the Rows take theirs from the
+# west end, by the Tally Wynd. So the west bearers are bare, their cloths folded.
+PEAT_STANCE = (26.2, 24.9, 47.4, _sb1 - 0.2)
+_ricks = [(28.6, "bare"), (32.5, "bare"), (36.4, "half"), (40.3, "full"), (44.2, "full")]
+enclosure("peat_stance", "peat_stance", *PEAT_STANCE, "strand",
+          "the peat stance between the Tally Wynd and the Store's yard: five bearers under Low Row's wall, two ricks full under tarred cloth, one half gone, two bare. The tally keeper's slate stands at its end",
+          [], [*[("peat_rick", (x, PEAT_STANCE[3] - 1.2), {"state": st}) for x, st in _ricks], ("tally_post", (27.0, 26.2)), ("barrow", (46.0, 26.4), {"turn": 100})], ground="earth", age=0.7, repair=0.5, who="Aldous Quill")
+# The creel stand at the foot of the Store Wynd. The wynds are stairs, so peat comes down from
+# the barn on backs, in creels; here it is tipped over a stone bank into the porter's handcart
+# for the Cone, which burns as much as all the hearths together.
+CREEL_STAND = (68.4, 11.0, 79.4, 25.6)
+enclosure("creel_stand", "creel_stand", *CREEL_STAND, "strand",
+          "the creel stand at the foot of the Store Wynd: a stone bank at cart height where the peat creels are tipped into Davin Vane's handcart for the Cone (a cart cannot use the wynds)",
+          [], [("bank", (73.4, 23.4), {"len": 4.4}), ("peat_creels", (71.6, 21.6), {"n": 5}), ("handcart", (75.8, 20.4), {"turn": 20}), ("bench", (70.0, 13.0), {"len": 2.0, "turn": 90})], ground="earth", age=0.7, repair=0.5, who="Davin Vane")
+# The working quay at the Fish Steps (the bible: Magda Tarn divides the catch here each morning;
+# Ingrid Morrow mends nets here, moving her bench with the sun). The gutting tables stand at the
+# quay's edge east of the steps, so the guts go to the harbour and the gulls; the bait tubs and
+# the mending benches west of them, toward the Heron.
+enclosure("fish_tables", "fish_quay", 7.7, 1.5, 13.6, 3.5, "strand",
+          "two gutting tables at the quay's edge east of the Fish Steps: slabs on trestles with a runnel to the harbour, a gut bucket each",
+          [], [("gutting_table", (9.2, 2.5), {}), ("gutting_table", (12.0, 2.5), {"turn": 4})], age=0.7, repair=0.5, lot="fish_steps")
+enclosure("fish_mending", "fish_quay", -14.2, 0.9, -7.2, 4.8, "strand",
+          "west of the Fish Steps: three bait tubs of brine and limpets, and the net-mending benches, a net stretched on its frame beside each. Ingrid Morrow's is the one she moves with the sun",
+          [], [("bait_tubs", (-8.3, 1.6), {"n": 3}), ("mending_bench", (-10.6, 3.6), {"turn": -8, "who": "Ingrid Morrow"}), ("mending_bench", (-13.0, 2.6), {"turn": 14})], age=0.6, repair=0.5, lot="fish_steps")
+# The Fish Steps' lot gains these places (spots are metres right of its front, then forward).
+_fs = next(l for l in lots if l["id"] == "fish_steps")
+for _n, _q in (("the gutting table, west", (9.2, 3.5)), ("the gutting table, east", (12.0, 3.5)), ("the mending bench", (-10.6, 4.5)), ("the bait tubs", (-8.3, 2.6))):
+    _fs["spots"].append({"name": _n, "at": [r2(_q[0] - _fs["at"][0]), r2(_fs["at"][1] - _q[1])]})
+
+# The approach to the kelp kilns (FEATURES: four round kilns on the Wrack Strand, upwind of Low
+# Row). West of the slip the strand path runs out along the beach; the first kiln is 25 m on.
+# Racks beside the path for what is gathered at this end, and the kilns themselves: round, as
+# everything that holds fire is. They stand on the beach, off the town's levels: `floor_m` is the
+# land's own height there (from a land dump; cullet_check.py checks it still is).
+KILN_FLOORS = (1.84, 1.15, 0.63, 0.67)  # the beach under each kiln (FEATURES["kelp_kilns"]), east to west
+enclosure("kiln_racks", "kiln_road", -146.4, 8.4, -131.0, 13.6, 1.88,
+          "the way out to the kilns: three racks beside the strand path for the wrack gathered at this end of the beach, and the ash burner's handcart. Kenji Sato burns on dry windy days, when the smoke lies along Low Row",
+          [], [("kelp", (-142.6, 11.4), {"len": 3.4, "rack": True, "turn": -45}), ("kelp", (-138.2, 10.8), {"len": 3.4, "rack": True, "turn": -45}), ("kelp", (-133.8, 10.2), {"len": 3.4, "rack": True, "turn": -45}),
+               ("kelp", (-136.0, 12.6), {"len": 1.8}), ("handcart", (-144.2, 9.6), {"turn": 190})], age=0.6, repair=0.5, who="Kenji Sato")
+for _k, (_q, _fl) in enumerate(zip(FEATURES["kelp_kilns"]["at"], KILN_FLOORS)):
+    fixture(f"kelp_kiln_{_k + 1}", "kelp_kiln", _q, (3.8, 3.8), "south", _fl, 0.75,
+            f"kelp kiln {_k + 1} of four on the Wrack Strand, upwind of Low Row: a round pit ringed with beach stone, where four loads of kelp burn to one of ash" + ("; loaded for the next dry day" if _k == 1 else ""),
+            age=0.9, repair=0.4, load=_k == 1, level=None)
+
+# ---------------------------------------------------------------------------------------------
+# Courts and plots as open lots (layout pass 2). An enclosure people work in is a place residents
+# can be sent to: an open lot on its rectangle, named for who keeps it, with a spot at its gate
+# and at each thing one works at. Seed data only: `lot:<id>` in a resident's places, a trade's
+# `town_life.work` or a named place (docs/AUTHORED_PLANS.md, "Places by lot").
+
+WORK_AT = {  # content -> (the spot's name, where one stands: metres from the thing, in the plan's frame)
+    "washing": ("the washing line", (0.0, -0.7)), "hens": ("the hen run", (0.0, -1.0)), "beds": ("the beds", (0.0, 0.0)), "herbs": ("the herb beds", (0.0, 0.0)), "flowers": ("the flower beds", (0.0, 0.0)),
+    "boat": ("the boat on its trestles", (0.0, -1.2)), "nets": ("the net poles", (0.0, -0.8)), "kelp": ("the wrack", (0.0, -0.9)), "frames": ("the cold frames", (0.0, -0.9)), "slates": ("the slates", (0.0, -0.9)),
+    "blocks": ("the cut stone", (0.9, -0.9)), "pots": ("the crucibles on their planks", (0.0, -0.9)), "cullet": ("the cullet", (0.0, -0.9)), "timber": ("the timber", (0.0, -1.0)), "handcart": ("the handcart", (0.0, -1.1)),
+    "barrels": ("the barrels", (0.0, -1.0)), "creels": ("the creels", (0.0, -0.8)), "bench": ("the bench", (0.0, -0.6)), "lean_to": ("the lean-to", (0.0, 1.3)), "boat_shed": ("the boat-roofed shed", (0.0, 1.3)),
+    "peat": ("the peat stack", (0.0, -1.0)), "table": ("the table", (0.0, -0.9)), "trough": ("the trough", (-0.9, 0.0)), "ropewalk": ("the ropewalk's wheel", (0.6, -0.8)), "ash_sacks": ("the ash sacks", (0.0, -0.9)),
+    "hearth": ("the old hearth", (0.0, -1.0)), "sundial": ("the sundial", (0.0, -0.9)), "weeds": ("among the weeds", (0.0, 0.0)), "rubble": ("the fallen stone", (0.0, -1.2)),
+    "crane": ("the crane", (-1.6, -1.4)), "stone_stack": ("the squared stones", (0.0, -1.5)), "split_block": ("the split block", (0.0, -1.4)), "spoil": ("the spoil heap", (0.0, -3.4)),
+    "clay_bank": ("the last of the clay", (-0.6, -1.6)), "clay_boards": ("the clay boards", (0.0, 1.0)), "steam_box": ("the steaming box", (1.5, 0.0)), "sawhorses": ("the saw trestles", (0.0, -1.2)),
+    "pitch_pot": ("the pitch pot", (-1.2, 0.0)), "peat_rick": ("the peat ricks", (0.0, -1.6)), "tally_post": ("the tally slate", (0.9, 0.0)), "bank": ("the loading bank", (0.0, -1.3)), "peat_creels": ("the creels", (0.0, -1.0)),
+    "tablet_bench": ("the tablets' bench", (0.0, -0.9)), "sand_tray": ("the sand tray", (0.0, -0.9)),
+}
+OPEN_LOT_KINDS = ("yard", "back_plot", "toft", "walled_garden", "oven_court", "drying_green", "ladder_corner", "ropewalk", "sill", "boatyard", "kelp_stance", "peat_stance", "creel_stand", "clay_pit", "readers_yard", "quarry_bench")
+OPEN_LOT_NAME = {
+    "oven_court": "the oven court", "plot_oven_court": "Low Row's drying green", "the_bleach": "the Bleach", "marver_yard": "the Marver's kitchen garden", "ropewalk": "the ropewalk", "net_green": "the net green",
+    "smoke_yard": "the smokehouses' yard", "tally_court": "the Counting House's back court", "store_yard": "the Store's yard", "boatyard": "the boatyard", "kelp_stance": "the wrack stance", "peat_stance": "the peat stance",
+    "creel_stand": "the creel stand", "clay_pit": "the clay pit", "readers_yard": "the Readers' House's yard", "quarry_bay": "the quarry", "quarry_old": "the old quarry", "quarry_spoil": "the quarry's spoil",
+}
+OPEN_LOT_DISTRICT = {"low": ROWS_D, "mid": ROWS_D, "high": ROWS_D, "lad_1": LADDER, "lad_2": LADDER, "lad_3": LADDER, "upper": "the quarry", "clay_pit": "the quarry", "crown": CROWN, "strand": STRAND}
+_ORD = ("first", "second", "third", "fourth", "fifth", "sixth", "seventh")
+
+
+def keeper(f):
+    """Whose an enclosure is, for its lot's name."""
+    by_id = {l["id"]: l for l in lots}
+    l = by_id.get(f.get("lot", ""))
+    if l is None:
+        return None
+    if l.get("household_name"):
+        return f"the {l['household_name']}s'" if not l["household_name"].endswith("s") else f"the {l['household_name']}'"
+    return f"{l['name']}'s" if not l["name"].endswith("s") else f"{l['name']}'"
+
+
+def open_lot_name(f):
+    i, kind = f["id"], f["kind"]
+    if i in OPEN_LOT_NAME:
+        return OPEN_LOT_NAME[i]
+    if kind == "yard":
+        return f"{keeper(f)} court"
+    if kind == "back_plot" and f.get("lot"):
+        return f"{keeper(f)} plot"
+    if kind == "toft":
+        return f"toft {i.rsplit('_', 1)[1]} on Mid Row ({f['who']})"
+    if kind == "walled_garden":
+        return f"walled garden {i.rsplit('_', 1)[1]} on High Row ({f['who']})"
+    if kind == "back_plot":
+        n = i.rsplit("_", 1)[1]
+        return f"the old plot behind toft {n}" if "toft" in i else f"the plot under the quarry behind garden {n}"
+    if kind == "ladder_corner":
+        r = i.rsplit("_", 1)[1]
+        return f"the Ladder's {_ORD[int(r.rstrip('w')) - 1]} working corner" + (", west" if r.endswith("w") else "")
+    if kind == "sill":
+        return {"sill_low_30": "the oven court's sill", "sill_low_0": "Ingrid Morrow's sill", "sill_mid_16": "the sill before the tofts", "sill_high_20": "the Kiln's sill", "sill_high_52": "the sill before the Pontils' door"}[i]
+    raise SystemExit(f"no name for the open lot {i}")
+
+
+def spot_points(f, x0, y0, x1, y1):
+    """The places one works at in an enclosure, in the plan's frame: just inside its gate, then
+    beside each thing in it, kept a metre inside the walls (a wall's tile may reach that far in)."""
+    cx, cy = f["at"]
+    w, d = x1 - x0, y1 - y0
+    m = min(1.05, w * 0.3), min(1.05, d * 0.3)
+    clamp = lambda q: (r2(min(max(q[0], x0 + m[0]), x1 - m[0])), r2(min(max(q[1], y0 + m[1]), y1 - m[1])))  # noqa: E731
+    out, seen = [], {}
+    for wl in f.get("walls", []):
+        for g in wl["gaps"]:
+            if wl.get("boarded") or wl.get("kerb"):
+                continue
+            (ax, ay), (bx, by) = wl["from"], wl["to"]
+            L = math.hypot(bx - ax, by - ay)
+            t = (g[0] + g[1]) / 2 / L
+            out.append(("the gate" if wl.get("gate") else "the way in", clamp((cx + ax + (bx - ax) * t, cy + ay + (by - ay) * t))))
+            break
+        if out:
+            break
+    for c in f.get("contents", []):
+        if c["what"] not in WORK_AT:
+            continue
+        name, (dx, dy) = WORK_AT[c["what"]]
+        at = (cx + c["at"][0], cy + c["at"][1])
+        if "to" in c:  # a line (washing, a ropewalk): its middle
+            at = (cx + (c["at"][0] + c["to"][0]) / 2, cy + (c["at"][1] + c["to"][1]) / 2)
+        if c["what"] == "kelp" and c.get("rack"):
+            name = "the wrack racks"
+        if c["what"] == "timber" and c.get("knees"):
+            name = "the ship's knees"
+        q = clamp((at[0] + dx, at[1] + dy))
+        seen[name] = seen.get(name, 0) + 1
+        if seen[name] > 3 or any(math.hypot(q[0] - p[0], q[1] - p[1]) < 0.9 for _, p in out):
+            continue
+        out.append((name if seen[name] == 1 else f"{name}, {seen[name]}", q))
+    if not out:
+        out.append(("its middle", (r2((x0 + x1) / 2), r2((y0 + y1) / 2))))
+    # Two things of a kind are "the first" and "the second".
+    return out
+
+
+OPEN_LOTS = {}  # lot id -> the fixture it stands on
+for f in [f for f in fixtures if f["kind"] in OPEN_LOT_KINDS]:
+    if f["id"] in ("boatyard",):
+        continue  # it surrounds the boatshed's lot: its open lot is its working floor (below)
+    if f.get("use") == "weeds" and f["kind"] == "walled_garden":
+        continue  # locked since the fever winter: no one is sent there, and no one can get in
+    hw, hd = f["size"][0] / 2, f["size"][1] / 2
+    ins = min(0.45, 0.2 * min(f["size"]))
+    x0, y0, x1, y1 = f["at"][0] - hw + ins, f["at"][1] - hd + ins, f["at"][0] + hw - ins, f["at"][1] + hd - ins
+    lv = f["level"]
+    spots = spot_points(f, x0, y0, x1, y1)
+    if f["kind"] == "sill":  # the bench stands on the parapet's own tile (a drop's edge): its lot is the strip before it, on the street's side, where one stands
+        y0, y1 = f["at"][1] + hd - 0.95, f["at"][1] + hd - 0.05
+        spots = [("the bench", (f["at"][0], r2(f["at"][1] + hd - 0.4)))]
+    open_lot(f["id"], open_lot_name(f), x0, y0, x1, y1, lv, OPEN_LOT_DISTRICT[lv], spots, f["cause"], age=f["wear"]["age"], repair=f["wear"]["repair"], stands_on=f["id"])
+    OPEN_LOTS[f["id"]] = f["id"]
+# The boatyard's lot is its working floor east of the shed; its spots reach the steaming box and
+# the timber too (a spot may lie outside its lot).
+_bf = next(f for f in fixtures if f["id"] == "boatyard")
+open_lot("boatyard", "the boatyard", _bx1 + 0.8, BOATYARD[1] + 0.8, BOATYARD[2] - 0.5, BOATYARD[3] - 0.4, "strand", STRAND,
+         [("the saw trestles", (-80.0, 18.4)), ("the pitch pot", (-79.2, 25.0)), ("the steaming box", (-98.9, 16.6)), ("the timber stacks", (-94.6, 25.2)), ("the gate", (-83.0, 11.2))],
+         _bf["cause"], loose=True, age=0.7, repair=0.5, stands_on="boatyard")
+OPEN_LOTS["boatyard"] = "boatyard"
+# The Readers' House's yard: a seat for each child and the reader's place at the bench.
+_ry = next(l for l in lots if l["id"] == "readers_yard")
+_ry["spots"] = [s_ for s_ in _ry["spots"] if s_["name"] != "the sand tray"]
+for _k, (_x, _y) in enumerate(_stools):
+    _ry["spots"].append({"name": f"stone {_k + 1} of the half ring", "at": [r2(_x - _ry["at"][0]), r2(_ry["at"][1] - (_y - 0.1))]})
+_ry["spots"].append({"name": "the sand tray", "at": [r2(26.2 - _ry["at"][0]), r2(_ry["at"][1] - 158.5)]})
+
+# The clay bank's node stands in the pit now, at the last of the clay (it was a point east of the Crown).
+for r_ in resources:
+    if r_["kind"] == "clay_bank":
+        r_["at"], r_["where"] = [50.6, 130.6], "the clay pit under the graveyard's wall: the last bank of good clay"
+
+
+# ---------------------------------------------------------------------------------------------
+# Walls that block (layout pass 2): the seed's `fixtures` (docs/AUTHORED_PLANS.md, "Fixtures
+# that block"). Every wall of an enclosure and every root plot's wall is a line of the plan with
+# its height and its gates; hosting turns the tiles it crosses into `Wall` (above the eye: it
+# hides) or `Low` (seen over). A stub wall, which falls along its length, is two lines: the part
+# above the eye and the part below. A boarded gap is shut. A paling's `eye_solid` is the share
+# of the view its planks block.
+
+
+def barriers():
+    out = []
+
+    def line(id, kind, a, b, h, gaps, eye_solid=None):
+        if math.hypot(b[0] - a[0], b[1] - a[1]) < 0.3:
+            return
+        fx = {"id": id, "kind": kind, "points": [[r2(a[0]), r2(a[1])], [r2(b[0]), r2(b[1])]], "height_m": r2(h), "blocks": True}
+        gs = [[r2(max(0.0, g0)), r2(g1)] for g0, g1 in gaps if g1 > 0.05 and g0 < math.hypot(b[0] - a[0], b[1] - a[1]) - 0.05]
+        if gs:
+            fx["gaps"] = gs
+        if eye_solid is not None:
+            fx["eye_solid"] = eye_solid
+        out.append(fx)
+
+    for f in fixtures:
+        cx, cy = f["at"]
+        for n, w in enumerate(f.get("walls", [])):
+            if not w.get("blocks", True):
+                continue
+            a, b = (cx + w["from"][0], cy + w["from"][1]), (cx + w["to"][0], cy + w["to"][1])
+            L = math.hypot(b[0] - a[0], b[1] - a[1])
+            gaps = [] if w.get("boarded") else [tuple(g) for g in w["gaps"]]
+            h, low, style = w["h"], w.get("low", w["h"]), w["style"]
+            kind = {"dry": "dry_wall", "coped": "coped_wall", "stub": "stub_wall", "paling": "paling"}[style]
+            if style == "stub" and low <= EYE_M < h:
+                # cullet.py e_wall: its top is low + (h - low) * (1 - f) ** 1.5 at the share f of its length.
+                cut = L * (1.0 - ((EYE_M - low) / (h - low)) ** (2.0 / 3.0))
+                at = lambda u: (a[0] + (b[0] - a[0]) * u / L, a[1] + (b[1] - a[1]) * u / L)  # noqa: E731
+                line(f"{f['id']}/{n}a", kind, a, at(cut), h, [(g0, min(g1, cut)) for g0, g1 in gaps if g0 < cut])
+                line(f"{f['id']}/{n}b", kind, at(cut), b, max(low, 0.5 * (low + EYE_M)), [(max(g0, cut) - cut, g1 - cut) for g0, g1 in gaps if g1 > cut])
+            else:
+                line(f"{f['id']}/{n}", kind, a, b, h, gaps, w.get("eye_solid"))
+        if f["kind"] == "plot_wall":  # cullet.py gen_plot_wall: 1 m of dry stone on the plot's rectangle, a 1.1 m gate in its south side
+            hw, hd = f["size"][0] / 2 - 0.22, f["size"][1] / 2 - 0.22
+            ring = [(cx - hw, cy - hd), (cx + hw, cy - hd), (cx + hw, cy + hd), (cx - hw, cy + hd), (cx - hw, cy - hd)]
+            fx = {"id": f["id"], "kind": "dry_wall", "points": [[r2(q[0]), r2(q[1])] for q in ring], "gaps": [[r2(hw + f["gate_at"] - 0.55), r2(hw + f["gate_at"] + 0.55)]], "height_m": 1.0, "blocks": True}
+            out.append(fx)
+    return out
 
 # ---------------------------------------------------------------------------------------------
 # The land: the Wrack, about 760 x 560 m in the middle of a 1024 m map (SMALL_CITY §2).
@@ -1327,6 +1853,7 @@ def plan():
         "structures": structures,
         "household_stores": HOUSEHOLD_STORES,
         "fixtures": fixtures,
+        "blocking": barriers(),
         "features": FEATURES,
         "terraces": terrace_lots,
         "count": count(),
@@ -1358,7 +1885,14 @@ def count():
 
 
 def seed(p):
-    rough = {k: v for k, v in p.items() if k not in ("fixtures", "features", "terraces", "count", "household_stores")}
+    rough = {k: v for k, v in p.items() if k not in ("fixtures", "blocking", "features", "terraces", "count", "household_stores")}
+    # The engine's own `fixtures` are the walls that block (the kit's list above is not the seed's).
+    # The seed's map parameters are the world's `land` row, which every client receives when it
+    # connects, so what the engine does not read is left out of what pass 2 adds: a wall's id,
+    # and an open lot's cause and wear (plan.json keeps them for the kit and the tools).
+    rough["fixtures"] = [{k: v for k, v in fx.items() if k != "id"} for fx in p["blocking"]]
+    lean = ("id", "kind", "name", "at", "size", "facing", "level", "height_m", "spots")
+    rough["lots"] = [{k: l[k] for k in lean if k in l} if "stands_on" in l else l for l in p["lots"]]
     ways = json.loads(WAYS.read_text())
     return {
         "run": "cullet",

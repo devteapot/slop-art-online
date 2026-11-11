@@ -1,5 +1,5 @@
 {
- "about": "Cullet's starting ways (docs/SEEDED_LIVES.md, docs/SMALL_CITY.md section 3), merged into the seed's `ways` and `town_life` by cullet_plan.py. They are starting graphs made of skills every character has, keyed by the occupation string as every world's are; a mind can rework any of them. A trade is what a person does, not a type the engine knows. Work comes in each person's own working hours (`work_hours`, their rhythm). The routines target the rules' kinds (furnace, oven, smokehouse, lamp, kelp_bed, peat_bank, greens_bed, root_plot) and keep their post where the world has none yet.",
+ "about": "Cullet's starting ways (docs/SEEDED_LIVES.md, docs/SMALL_CITY.md section 3), merged into the seed's `ways` and `town_life` by cullet_plan.py. They are starting graphs made of skills every character has, keyed by the occupation string as every world's are; a mind can rework any of them. A trade is what a person does, not a type the engine knows. Work comes in each person's own working hours (`work_hours`, their rhythm). The routines target the rules' kinds (furnace, oven, smokehouse, lamp, kelp_bed, peat_bank, greens_bed, root_plot) and keep their post where the world has none yet. Since layout pass 2 (docs/CULLET_LAYOUT.md) seven trades spend named hours at a place of the plan's open lots (`town_life.places`: the Bleach, the Readers' yard, the clay pit, the ropewalk, the wrack stance, the boatyard), as a first step of their starting routine: a habit, which a mind may drop.",
  "top": {
   "desires": [
    {
@@ -1444,6 +1444,39 @@
      },
      {
       "if": {
+       "hour": {
+        "above": 11,
+        "below": 13
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "if": {
+          "not": {
+           "near": {
+            "target": {
+             "place": "the wrack stance"
+            },
+            "within": 6
+           }
+          }
+         },
+         "then": {
+          "do": "goto",
+          "target": {
+           "place": "the wrack stance"
+          }
+         }
+        },
+        {
+         "do": "keep"
+        }
+       ]
+      }
+     },
+     {
+      "if": {
        "not": {
         "near": {
          "target": {
@@ -2337,6 +2370,39 @@
      },
      {
       "if": {
+       "hour": {
+        "above": 13,
+        "below": 16
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "if": {
+          "not": {
+           "near": {
+            "target": {
+             "place": "the ropewalk"
+            },
+            "within": 6
+           }
+          }
+         },
+         "then": {
+          "do": "goto",
+          "target": {
+           "place": "the ropewalk"
+          }
+         }
+        },
+        {
+         "do": "keep"
+        }
+       ]
+      }
+     },
+     {
+      "if": {
        "not": {
         "near": {
          "target": {
@@ -2397,6 +2463,39 @@
    "routine": "work on the boats",
    "graph": {
     "first": [
+     {
+      "if": {
+       "hour": {
+        "above": 13,
+        "below": 16
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "if": {
+          "not": {
+           "near": {
+            "target": {
+             "place": "the boatyard"
+            },
+            "within": 6
+           }
+          }
+         },
+         "then": {
+          "do": "goto",
+          "target": {
+           "place": "the boatyard"
+          }
+         }
+        },
+        {
+         "do": "keep"
+        }
+       ]
+      }
+     },
      {
       "if": {
        "not": {
@@ -2506,6 +2605,39 @@
     "first": [
      {
       "if": {
+       "hour": {
+        "above": 9,
+        "below": 12
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "if": {
+          "not": {
+           "near": {
+            "target": {
+             "place": "the Readers' yard"
+            },
+            "within": 5
+           }
+          }
+         },
+         "then": {
+          "do": "goto",
+          "target": {
+           "place": "the Readers' yard"
+          }
+         }
+        },
+        {
+         "do": "keep"
+        }
+       ]
+      }
+     },
+     {
+      "if": {
        "near": {
         "target": {
          "nearest": "sign"
@@ -2601,6 +2733,39 @@
     "first": [
      {
       "if": {
+       "hour": {
+        "above": 11,
+        "below": 13
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "if": {
+          "not": {
+           "near": {
+            "target": {
+             "place": "the Bleach"
+            },
+            "within": 5
+           }
+          }
+         },
+         "then": {
+          "do": "goto",
+          "target": {
+           "place": "the Bleach"
+          }
+         }
+        },
+        {
+         "do": "keep"
+        }
+       ]
+      }
+     },
+     {
+      "if": {
        "not": {
         "near": {
          "target": {
@@ -2627,6 +2792,39 @@
    "routine": "make pots",
    "graph": {
     "first": [
+     {
+      "if": {
+       "hour": {
+        "above": 7,
+        "below": 10
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "if": {
+          "not": {
+           "near": {
+            "target": {
+             "place": "the clay pit"
+            },
+            "within": 5
+           }
+          }
+         },
+         "then": {
+          "do": "goto",
+          "target": {
+           "place": "the clay pit"
+          }
+         }
+        },
+        {
+         "do": "keep"
+        }
+       ]
+      }
+     },
      {
       "if": {
        "not": {
@@ -2742,6 +2940,39 @@
    "routine": "play",
    "graph": {
     "first": [
+     {
+      "if": {
+       "hour": {
+        "above": 9,
+        "below": 12
+       }
+      },
+      "then": {
+       "first": [
+        {
+         "if": {
+          "not": {
+           "near": {
+            "target": {
+             "place": "the Readers' yard"
+            },
+            "within": 5
+           }
+          }
+         },
+         "then": {
+          "do": "goto",
+          "target": {
+           "place": "the Readers' yard"
+          }
+         }
+        },
+        {
+         "do": "keep"
+        }
+       ]
+      }
+     },
      {
       "if": {
        "all": [
@@ -2909,6 +3140,24 @@
    "ash house": [
     "lot:ash_house",
     "storage"
+   ],
+   "the Bleach": [
+    "lot:the_bleach"
+   ],
+   "the Readers' yard": [
+    "lot:readers_yard"
+   ],
+   "the clay pit": [
+    "lot:clay_pit"
+   ],
+   "the ropewalk": [
+    "lot:ropewalk"
+   ],
+   "the wrack stance": [
+    "lot:kelp_stance"
+   ],
+   "the boatyard": [
+    "lot:boatyard"
    ]
   },
   "evening": [
