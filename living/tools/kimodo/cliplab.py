@@ -73,6 +73,12 @@ runs hold the line at no speed from 2.6 to 3.8 (0 of 132; best 5.6-8 %). The bes
 run_v48 s0 (3.63 m/s natural on Vivi, run_fast's metres a cycle). A faster run needs another
 source: retiming (the bake's --target), another generator, or hand keys. Do not ask Kimodo again;
 the table is in docs/GAME_BRIEF.md (Clip lab, Kimodo's speed ceiling).
+The walk has a ceiling as well: a clean true walk (no flight, toe line held) stops at about 3.0 m/s
+on Vivi (3.14 raw: 1 of 88 passes; 3.28 to 3.56 raw: 0 of 192). Open goal: a clean, loopable run
+stride longer than 2.8 m a cycle raw; what was tried (faster paths, prompts, a 96-take search for
+the stride) and what was not (footfall constraints, stride lengthening in the bake) is listed in
+docs/GAME_BRIEF.md beside the ceiling table. Keep an entry's `cycle` upper bound under twice its
+step period, or the bake may cut two strides.
 
 Writes `<out>/<clip>/checks.json` (entry, limits, every take's metrics, checks and penalty, the
 winner and why), `<out>/<clip>/sheet.png` (every take: front and side poses, and the motion-energy

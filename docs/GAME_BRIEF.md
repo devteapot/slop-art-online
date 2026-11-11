@@ -313,6 +313,27 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
       - Backward, sideways and back-diagonal runs are worse: no take of 132 held the toe line at any path speed from 2.6 to 3.8 m/s raw (best 5.6–8 %, medians 8–16 %), and slide rises sharply above 3.4.
       - A faster run, or a 5.5 m/s road sprint, therefore needs another source: retiming a clean take (the bake's `--target`, or the game's phase rate), another motion generator, or hand keys.
       - Evidence: `~/kimodo-locomotion-2026-11-12/` on the Spark (`lab/run_v48*/checks.json`, `exp*/`), and `extra/` in the handoff `speed-1-forward-2026-11-11.tar.gz`.
+    - **Open goal: a clean run stride longer than 2.8 m a cycle raw** (2.68 on Vivi). No clip has one, which caps natural-looking running at about 4.3 m/s (the run speed was set to ×1.65 for that reason, 2026-11-12). Tried on 2026-11-11 and 12, all pinned to a path:
+      - **Faster paths.** Strides of 3.0 m or more appear above the ceiling (9 of 73 takes at 5.03 m/s raw, 4 of 24 at 4.2), never with clean feet: their best toe slide is 11.5 % and 9.1 %.
+      - **Prompts at the ceiling (3.8 m/s raw).** "fast with long strides", "sprints forward" and "with long bounding strides" give the same median stride (2.4–2.5 m); the seed decides more than the prompt. The longest clean, loopable stride of 84 takes is 2.80 m (`run_v48` s0).
+      - **A search for the stride itself** (`run_long` in the lab: 96 takes of "long bounding strides" and "huge leaping strides", loop cut held to 0.78–1.05 s, stride of 3.1 m asked): 2 takes reach 3.1 m, 8 hold the toe line, none passes. The one long stride with clean feet (s25 of the bounding prompt: 3.1, 3.7 and 3.4 m between right footfalls, toe slide 4.3 %) is uneven, each stride longer than the last (0.80, 0.97, 0.90 s), so it does not loop: pose 12.6 cm off (limit 8), velocity 0.93 m/s (limit 0.6).
+      - **Guidance, a ramped path, an 8 s take:** tried at 5.03 m/s raw only (above), not at the ceiling.
+      - **Not tried:** pinning footfalls at a long stride's spacing (Kimodo has `LeftFootConstraintSet` and `RightFootConstraintSet`; `batch.py` uses only the root path and full-body keyframes); keying a take's start and end to the same mid-stride pose a long stride apart; lengthening a clean take's stride in the bake (scaling the feet's travel and the belt together, then the leg IK). Retiming alone does not help: it changes how often a clip steps, not how far a step goes.
+    - **The walk has a ceiling too (2026-11-12):** a clean true walk (never both feet up, toe line held) stops at about 3.0 m/s on Vivi.
+
+      | Path speed, raw m/s (on Vivi) | Takes | Never both feet up | Also hold the 5 % toe line | Pass every check |
+      |---|---|---|---|---|
+      | 2.72 (2.60) | 62 | 41 | 30 | 6 (`walk_v26` s37) |
+      | 3.14 (3.00) | 88 | 40 | 12 | 1 with the plant rule, 2 without (`walk_v30` s82) |
+      | 3.28 (3.13) | 32 | 20 | 1 | 0 |
+      | 3.42 (3.27) | 72 | 48 | 1 | 0 (`walk_v34` s83 is the near-miss: toe slide 6.1 %, a 3.8-frame plant) |
+      | 3.56 (3.40) | 88 | 24 | 0 | 0 |
+
+      For a 3.4 m/s walk, `walk_v30` driven at 3.4 (time scale 1.14) is cleaner than any take made near 3.4.
+    - **Lessons from the laptop's verdicts on the speed takes (2026-11-12):**
+      - **Check plants at the game speed before a handoff.** A take that is time-scaled loses its short plants: the game's marker check found a foot that never registers as planted on three directional runs scaled 1.42–1.55. `plant_frames_min` emulates the bake's foot-down markers on the raw take at an entry's `game_speed` (heel or ball within 3 cm of standing height and at most 0.3 game m/s); the rule is 4 frames or more (`--expect 'plant_frames_min>=4'`). It does not reproduce the planted slide the laptop measured on those takes (21–40 cm), so its `plant_slide_cm` is a lower bound until the two are matched.
+      - **One stride a loop.** Keep the entry's `cycle` upper bound under twice the take's step period: two diagonal walks with a 0.6–0.68 s period and `cycle` up to 1.2 s were cut as two strides.
+      - **Directional takes are not worth more lab time for now.** None of the 14 backward, sideways and diagonal takes of the 2.6 m/s walk set and the 4.8 m/s run set was wired. Since look-walk the legs stay on the travel line, so directional loops play only after sudden turns and at the twist limit, where the procedural fallback does as well.
     - **Not covered:** it judges the raw take, not the retargeted VRoid clip. Skirts, grips, the game's foot IK and how a clip looks in the renderer are judged in the game.
   - **Loops:** idle, idle_look, walk, walk_brisk, run, run_fast, sneak, talk, talk_explain, listen and sit_idle are cut where pose and foot contacts match, and their seams are spread.
   - **One-shots:** wave, point, sit_down, stand_up, stand_up_ground, sword_slash, sword_overhead, sword_thrust, block, dodge, hit, death, cast and bow_shoot. Kimodo keyframes them to a shared neutral standing pose at the ends that should blend with idle. sit_idle and stand_up continue from sit_down.
