@@ -405,7 +405,8 @@ def infant(s):
         hunger = v["hunger"] + v["hunger_rate"] * max(0, now - v["at_ms"]) / 60000
         return (20 <= hour < 22 or hour < 2) and 70 <= hunger < 95
     print("Waiting for real night with infant hunger >=70 (no healing), so health shows only the cold.", flush=True)
-    s.wait(night_and_no_healing, seconds=2100, every=5)
+    # Hunger rises at the rules' pace (`person_pace`): a slower pace means a longer wait.
+    s.wait(night_and_no_healing, seconds=2100 / person_pace(), every=5)
     s.expect("infant is still alive and infant", s.rows(f"SELECT stage, alive FROM character WHERE id = {baby['id']}")[0] == {"stage": 0, "alive": True})
     s.call("place_near", baby["id"], warm_anchor)
     s.call("place_near", a, baby["id"])
@@ -471,7 +472,7 @@ def infant_cries(s, baby, a, b, carers, witness, warm_anchor):
         s.act(baby["id"], {"do": "eat", "item": "berries"})
         s.wait(lambda before=before: s.inventory(baby["id"]).get("berries", 0) < before)
     time.sleep(3)
-    s.wait(lambda: 55 < s.needs(baby["id"], "hunger-ready")["hunger"] < 80, seconds=300, every=2)
+    s.wait(lambda: 55 < s.needs(baby["id"], "hunger-ready")["hunger"] < 80, seconds=300 / person_pace(), every=2)
     for d in requests():
         clear(d)
     time.sleep(21)
