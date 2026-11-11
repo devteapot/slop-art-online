@@ -11,7 +11,9 @@ Writes
   asset generator's inputs per lot (wear, household, door colour, keepsake), which the engine
   ignores;
 - `living/seeds/cullet.json`: the land seed, the Wrack (an authored coastline and relief stamps,
-  `docs/AUTHORED_PLANS.md`) with the plan merged into `map.params.plans`.
+  `docs/AUTHORED_PLANS.md`) with the plan merged into `map.params.plans`, and the starting ways
+  and town life of `living/seeds/worlds/cullet/ways.json` (the trades' workplaces and habits) as
+  its `ways` and `town_life`.
 
 Every number that varies has a cause written beside it: a front's width comes from its household's
 size and family, a lot's wear from where it stands (height above the sea, distance and bearing
@@ -26,6 +28,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PLAN_OUT = ROOT / "living/seeds/worlds/cullet/plan.json"
+# Cullet's starting ways and town life (the trades' workplaces and habits), hand-written data
+# merged into the seed as they are (docs/SEEDED_LIVES.md).
+WAYS = ROOT / "living/seeds/worlds/cullet/ways.json"
 SEED_OUT = ROOT / "living/seeds/cullet.json"
 
 SEED = 83  # year 83 since the Last Sail
@@ -631,6 +636,7 @@ def count():
 
 def seed(p):
     rough = {k: v for k, v in p.items() if k not in ("features", "terraces", "count")}
+    ways = json.loads(WAYS.read_text())
     return {
         "run": "cullet",
         "seed": SEED,
@@ -655,6 +661,8 @@ def seed(p):
             ],
         }],
         "villages": [],
+        "ways": {k: ways[k] for k in ("top", "common", "occupations")},
+        "town_life": ways["town_life"],
     }
 
 

@@ -233,3 +233,25 @@ fn recipes() {
     ]
 }
 
+
+// ---- life (docs/CULLET_RULES.md, "People's lives") ----------------------------------------
+// The engine gives this law each species' life table in years (`species.json`: a person lives
+// 70 years, a child until 16.1, old from 59.5, deaths of old age from 60.9) and uses what it
+// returns. On the Wrack people live longer and grow up sooner: childhood ends at 15, deaths of old
+// age begin at 75 (each person's own point between 75 and the lifespan, 90). Infancy (2.1 years),
+// being old from 59.5, pregnancy and the years between births keep their ages. Animals keep
+// theirs.
+fn person_years() { #{ lifespan: 90.0, child: 15.0, old_age: 75.0 } }
+
+fn life_years(t) {
+    if t.kind != "person" { return t; }
+    let y = person_years();
+    for k in y.keys() { t[k] = y[k]; }
+    t
+}
+
+fn life_years_law() {
+    let y = person_years();
+    #{ cadence: "compile", topic: "",
+       about: `People live up to about ${short(y.lifespan)} years: a child until ${short(y.child)}, and deaths of old age come from about ${short(y.old_age)}.` }
+}
