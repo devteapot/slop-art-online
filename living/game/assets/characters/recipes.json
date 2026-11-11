@@ -4,6 +4,7 @@
   "recipes": [
     { "name": "vivi", "base": "lookdev/vroid-Vivi.glb", "height": 1.75 },
     { "name": "shino", "base": "lookdev/vroid-Sendagaya_Shino.glb", "height": 1.75 },
+    { "name": "cullet-man", "base": "lookdev/own-man.glb", "height": 1.8 },
     {
       "name": "smith",
       "base": "lookdev/vroid-Sendagaya_Shino.glb",
