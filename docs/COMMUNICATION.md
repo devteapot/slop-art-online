@@ -1,6 +1,6 @@
 # Communication: how characters speak, overhear, whisper and call
 
-Status: **design**, 2026-11-11, merged to main as the design with the six [owner choices](#11-open-choices-for-the-owner) still open. Gap items 3–5 (the `introduced` row, the `heard` table and `my_heard` view, ways as script specs with `human_speak`) are approved to build; whisper, call, overheard names, muffling and mindspeech wait for the owner's answers. This document builds nothing. It defines the building blocks of communication, shows that the owner's chat cases follow from them, and lists the work to build them, smallest first. What exists today is marked **built**. What is on an unmerged branch is marked **branch**. Proposals are marked **proposed**.
+Status: **design**, 2026-11-11, merged to main. The owner accepted all six [choices](#11-open-choices-for-the-owner) as recommended (2026-11-11). Approved to build, in order: gap items 3–5 (the `introduced` row, the `heard` table and `my_heard` view, ways as script specs with `human_speak`), then 6, 7, 8 and 10 (whisper, call, truthful silence, overheard names). Items 11–13 (muffling walls, mindspeech, signing) stay later. This document builds nothing. It defines the building blocks of communication, shows that the owner's chat cases follow from them, and lists the work to build them, smallest first. What exists today is marked **built**. What is on an unmerged branch is marked **branch**. Proposals are marked **proposed**.
 
 **The request** (the owner, after play-test 3): "I think it's okay that if your cursor is not on someone and you press enter, you go into general chat. If you are hovering someone and press enter, you enter chat with that person specifically. But I think that conversation should still be kind of public, unless you whisper. But to whisper, you should be close, or maybe through some skills that are telepathic or stuff like that. So I think we need to dig deep and define how communication can happen and have all the right building blocks to build such systems."
 
@@ -389,6 +389,17 @@ The RLS page (`/docs/rls`) returned an empty body, so the "unimplemented" status
 ## 11. Open choices for the owner
 
 Only choices that change how the game plays.
+
+**The owner's answers (2026-11-11): all six accepted as recommended.** In the owner's words: "Go with the as recommended settings, and we can iterate from there. This will not be the final game anyway, so it's just to see how properly defined environments play out." Choice 3 stands unless the paid greeting batches (`gr1a`/`gr1b`) contradict it. Detailed design and tuning choices below this level are decided by the lab, recorded here, and reported.
+
+| # | Answer |
+| --- | --- |
+| 1 | Whisper 1.5 m; onlookers within 6 m who see it learn that it happened and between whom, not the words. |
+| 2 | Calling out costs no energy; it is public to everyone within 30 m and to animals, lines are short (80 characters), 6 s apart. |
+| 3 | A line to the room is answered by the nearest free hearer within 6 m; lines heard during a deliberation are answered alongside it. |
+| 4 | Names are learned from someone saying their own name, or from hearing a person addressed by name when you can see who it was for; never from closeness or from noticing a whisper. |
+| 5 | Walls muffle speech: yes, later, as a law. |
+| 6 | Mindspeech and signing are ordinary taught techniques, for a later world, not Cullet's first version. |
 
 1. **Whisper range, and whether onlookers see a whisper happen.** Recommended: 1.5 m. Onlookers within 6 m who see the speaker learn "X whispers something to Y", without the words. Seeing people lean together is real, and it gives whispers social weight. The alternative is a silent whisper that nobody notices.
 2. **Whether calling out costs anything.** Recommended: no energy. Its costs are loudness (everyone within 30 m hears it, and so do animals, which can startle deer or draw wolves), lines of at most 80 characters, and 6 s between calls. A shout is cheap but public.
