@@ -424,7 +424,7 @@ fn bodies(
         let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
         // Standing still, the body's own segment: its heading, turning on the spot by `turn` over
         // `turn_s` (the display clock may trail the row's start: then the turn has not begun).
-        let row = conn.db.seen_bodies().id().find(&id);
+        let row = crate::net::find_motion(conn, id);
         let standing = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| {
             let into = ((scene.now_ms - b.t_ms as f64) / 1000.0).clamp(0.0, b.turn_s.max(0.0) as f64) as f32;
             b.heading + if b.turn_s > 0.0 { b.turn * into } else { 0.0 }
@@ -682,9 +682,9 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
     });
     info!(
         "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
-        conn.db.seen_bodies().count(),
+        conn.db.my_body().count() + conn.db.seen_bodies().count(),
         conn.db.seen_characters().count(),
-        conn.db.seen_doing().count(),
+        conn.db.my_doing().count() + conn.db.seen_doing().count(),
         conn.db.act_card().count(),
         conn.db.weather().iter().next().map_or("none", |w| if w.raining { "rain" } else { "dry" }),
         conn.db.lot().count(),

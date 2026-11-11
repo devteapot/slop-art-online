@@ -39,7 +39,7 @@ macro_rules! primary_tables {
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, doing, weather,
-            seen_bodies, seen_characters, seen_fighters, seen_doing, my_characters, my_vitals,
+            seen_bodies, seen_characters, seen_fighters, seen_doing, my_body, my_fighter, my_doing, my_characters, my_vitals,
             my_experience, my_places, my_inventory, my_know_how);
     };
 }
@@ -160,6 +160,9 @@ fn snapshot(c: &DbConnection) -> Value {
         seen_characters,
         seen_fighters,
         seen_doing,
+        my_body,
+        my_fighter,
+        my_doing,
         my_characters,
         my_vitals,
         my_experience,
@@ -174,6 +177,9 @@ fn snapshot(c: &DbConnection) -> Value {
         "seen_characters": ids(c.db.seen_characters().iter().map(|r| r.id).collect()),
         "seen_fighters": ids(c.db.seen_fighters().iter().map(|r| r.id).collect()),
         "seen_doing": ids(c.db.seen_doing().iter().map(|r| r.id).collect()),
+        "my_body": ids(c.db.my_body().iter().map(|r| r.id).collect()),
+        "my_fighter": ids(c.db.my_fighter().iter().map(|r| r.id).collect()),
+        "my_doing": ids(c.db.my_doing().iter().map(|r| r.id).collect()),
         "my_characters": c.db.my_characters().iter().map(|r| json!({"id":r.id,"controller":r.controller.to_hex().to_string(),"alive":r.alive,"ai":r.ai})).collect::<Vec<_>>(),
         "my_vitals": ids(c.db.my_vitals().iter().map(|r| r.id).collect()),
         "my_experience": c.db.my_experience().iter().map(|r| json!({"observer":r.observer,"controller":r.controller.to_hex().to_string()})).collect::<Vec<_>>(),

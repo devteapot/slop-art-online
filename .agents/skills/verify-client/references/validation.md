@@ -14,6 +14,14 @@ Branch `rules-2` (`eaee6b0`), own container `sao-rules2-stdb` (2.14.1, port 3342
 
 `record`, `record_party` and `record_clock` are refused to anonymous clients and players; `my_records` is in the view inventory, and verify-player `deal.py` proves its rows.
 
+## 2026-11-10 frames: per-viewer copies behind the views (dev-box)
+
+Own scratch container `scale-verify` (image `v2.14.1`, port 3427) named by `LIVING_STDB_CONTAINER` and `LIVING_STDB_URL` (no name shim: `run.py` and `drive.py` now take any local server the harness names); worktree `~/dev/slop-scale`, branch `scale-1` from `1693f3e` with the frames change (docs/PERCEPTION.md, "Frames": the private `motion_seen`, `fighter_seen`, `doing_seen` and `line_seen` tables, `projected.by_viewer_body`); bindings regenerated.
+
+- `client-scale-scoped-011217` (`run.py`, scoped default): 30 of 30. Private table visibility: 62 tables. Reducer permission matrix: 194 calls, 0 mismatches.
+- `client-scale-open-011435` (`LIVING_PERCEPTION=open`): 30 PASS and the known XFAIL (anonymous `experience` in the open build).
+- After merging main `fe6ec66` (megacity-1, soak-1): `client-scale-merge-scoped-091456` 30 of 30; private table visibility 63 tables; permission matrix 206 calls, 0 mismatches. The run before it stopped at the reducer inventory: megacity's `create_floor` (admin only, now in `ADMIN`) and `genesis_step` (scheduled only, now in `SCHEDULED` with `tick` and `housekeeping`) were not listed on main either.
+- The two runs before stopped at the driver's inventories: the four new private tables, and `judged` (table) and `mind_judged` (reducer) from the harness merge, which the driver did not list. Both inventories now name them; `mind_judged` is called with one judgment for the caller's own character and refused for others'.
 ## 2026-11-10 `guest`, and harness-1's `judged` and `mind_judged` (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
