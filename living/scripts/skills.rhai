@@ -1149,60 +1149,6 @@ fn welcome_done(a) { [#{ op: "welcome" }] }
 fn leave_duration(a) { 1000 }
 fn leave_done(a) { [#{ op: "leave" }] }
 
-// ---- residents who get a mind (docs/TOWN_LIFE.md, "Layer 2") -----------------------------
-// On a world whose residents live on their behaviour graphs alone, someone engaging a
-// resident can wake it into a mind, which it keeps. `e` is "<what>:<by>": what is `speech`
-// (spoken to), the name of a skill aimed at the resident as it starts (`wave`, `give`,
-// `teach`, `offer`, `attack`…), `hurt` (a blow or missile landed) or `theft` (taking from its
-// store as it watched); by is `player`, `mind` (what a mind decided: its acts and words),
-// `woken` (what a woken resident's mind decided), `habit` (what a minded character's behaviour
-// graph did by itself) or `instinct`. 1 wakes, 0 does not. Habits and instincts stay at the level of detail they happen at: a neighbour's
-// evening nod or a wolf's bite wakes nobody, whether or not the neighbour has a mind (the first
-// paid run, before `habit`, had woken residents' routine nods wake 11 of 15 in 9 minutes).
-// Read once per script revision for each engagement.
-fn wakes(e) {
-    let p = e.split(":");
-    if p.len() < 2 || p[1] == "instinct" || p[1] == "habit" { return 0; }
-    let what = p[0];
-    // A woken resident's words and gestures do not wake its neighbours; a blow or a theft does.
-    // Without this, woken residents talking to each other woke 41 of 48 in three social trials
-    // (docs/TRIALS.md, "Fast iterations", 6), the newcomer 7.
-    if p[1] == "woken" && !["hurt", "theft"].contains(what) && !["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 0; }
-    if ["speech", "hurt", "theft"].contains(what) { return 1; }
-    // Kindness, dealings, lessons, asking to belong, and anything hostile.
-    if ["wave", "nod", "give", "offer", "offer_terms", "demand", "accept", "teach", "tend", "heal", "join", "welcome", "host"].contains(what) { return 1; }
-    if ["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 1; }
-    0
-}
-
-// What a resident without a mind keeps of what it perceives, for the mind it may get: a ring
-// of `slots` (at most 256; 0 keeps nothing) per resident, of perceptions at least
-// `min_salience` (an answered greeting is 0.15, a greeting 0.3, someone coming into view 0.2,
-// overheard speech 0.45), the same perception again within `repeat_s` counted in its slot,
-// someone who came into view noted again only after `sighted_s`. Measured on the island
-// (docs/TOWN_LIFE.md): without the floor a fifth of the slots held answered greetings.
-// What a woken resident's mind gets, read by the mind service: at most `cap` woken residents of
-// one settlement are on stage (thinking and talking at the full rate) at once; beyond it the
-// least recently engaged is off stage (0: no cap). A woken resident's first thought waits at
-// most `wait_s` for its mind to be made (its identity from the world's facts, then its ring).
-fn woken_stage(k) {
-    switch k {
-        "cap" => 6,
-        "wait_s" => 60,
-        _ => 0,
-    }
-}
-
-fn woken_ring(k) {
-    switch k {
-        "slots" => 24,
-        "min_salience" => 0.2,
-        "repeat_s" => 120,
-        "sighted_s" => 600,
-        _ => 0,
-    }
-}
-
 // ---- text helpers for the skills' specs (below) -----------------------------------------
 // Specs are read by minds to compose routines from skills: build them from the same numbers
 // as the rules so they change when the rules do.

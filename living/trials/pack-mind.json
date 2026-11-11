@@ -1,7 +1,7 @@
 {
  "title": "A wolf pack with minds (harness check)",
  "about": "Animals with minds: the subject is the island's bold pack of four (LIVING_ONLY names all four); the mind routes them through the models file's species map (think: ministral, remember and compile: ministral-14b). The authority asks an animal's mind only while a person is within 25 tiles, so the pack is set down 20 tiles from a Brackenford resident.",
- "world": {"seed": "island", "rules": {"minds": true}},
+ "world": {"seed": "island"},
  "minutes": 6,
  "subject": {"pick": {"kind": "wolf", "stage": 2, "count": 4, "nearest": {"arrival": true}}, "clear_items": false},
  "cast": {"bait": {"pick": {"kind": "person", "stage": 2, "bg": {"town": "Brackenford"}}}},

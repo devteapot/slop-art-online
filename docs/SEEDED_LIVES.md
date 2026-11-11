@@ -130,12 +130,12 @@ Graphs are weighed again while a walk goes on (movement stays reactive), so each
 
 ## How it reaches play
 
-- **Instinct-only residents** (the island's `rules.minds = false`) act on their seeded routines and relations through the existing rules:
+- **Every resident has a mind from the start** (since 2026-11-11; before, the island's `rules.minds = false` kept residents instinct-only until someone engaged them). Its body acts on its seeded routines and relations through the existing rules while its mind thinks:
   - **Relations are rows.** World creation writes every sheet relation into `relation` (`seed::settle_authored`), so starting graphs can read them: the common ways now wave at a friend in sight away from home (chance 0.03 a check), stare at an enemy close by (`face`), and nod to a friend first in the evening. An outsider threatened while outnumbered and with no friend near yields (`stay safe`).
-  - **Places are rows:** work, square, inn and evening places as before, plus the places the author gave a person (`residents[].places`): a carrier's far market and the stages of the way, an outlaw's spot on the road.
+  - **Places are rows:** work, square, inn and evening places as before, plus the places the author gave a person (`residents[].places`): a carrier's far market and the stages of the way, an outlaw's spot on the road. They are **given** (`place.given`): a mind's projection never drops them, since the starting ways walk to them.
   - **Goods are stores and packs:** the seed's stores per settlement, a kit per occupation, a carrier's first load.
-- **Woken residents** (town life layer 2) keep all of that and gain a mind. Their authored sheet is installed into memory by the mind's existing path ([authored worlds](AUTHORED_WORLDS.md)): the narrative, relations as `FEELS`, stances as `JUDGES`, memories as formative `[before all this]` memories, and the secret in their own prompts only. The `prior` ring is internalized as layer 2 designs.
-- **Cost stays at authoring time.** Sheets are written once, by a model, before the world exists. A resident nobody engages costs no model call. Installing a sheet at waking costs no model call ([AUTHORED_WORLDS](AUTHORED_WORLDS.md#sheet)).
+- **The mind starts from its facts and its sheet.** At the mind service's start (`living/mind/src/mind/facts.rs`), a resident's world facts (household, family, settlement, every place with the lot it stands at) go into its memory marked `world`, then its authored sheet is installed by the existing path ([authored worlds](AUTHORED_WORLDS.md)): the narrative, relations as `FEELS`, stances as `JUDGES`, memories as formative `[before all this]` memories, and the secret in its own prompts only. A resident without a sheet gets one identity call written from the same facts.
+- **Authoring cost stays at authoring time.** Sheets are written once, by a model, before the world exists. Installing a sheet costs no model call ([AUTHORED_WORLDS](AUTHORED_WORLDS.md#sheet)). Living costs model calls for every resident; see [every person a mind](#every-person-a-mind).
 
 ### The seam with town life layer 2
 

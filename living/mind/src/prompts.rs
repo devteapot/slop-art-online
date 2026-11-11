@@ -129,22 +129,6 @@ pub fn talk_acts() -> String {
 /// are real-time behavior rather than acts.
 static SHAPES: std::sync::RwLock<Option<Arc<living_rules::combat::Shapes>>> = std::sync::RwLock::new(None);
 
-/// The world's laws for residents woken into minds (docs/TOWN_LIFE.md, "Layer 2"), read
-/// from the rule script with the rest: `woken_stage("cap")`, how many woken residents of one
-/// settlement may be on stage at once (0: no cap), and `woken_stage("wait_s")`, how long a
-/// woken resident's first thought waits for its mind to be made.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct WokenLaws {
-    pub stage_cap: u32,
-    pub wait_s: f64,
-}
-
-static WOKEN: std::sync::RwLock<WokenLaws> = std::sync::RwLock::new(WokenLaws { stage_cap: 0, wait_s: 0.0 });
-
-pub fn woken_laws() -> WokenLaws {
-    *WOKEN.read().unwrap()
-}
-
 /// Read the world's skills (what each is, takes and gives) and what each combat skill is from
 /// the world's rule script (once per revision).
 pub fn set_rules(revision: u32, source: &str) {
@@ -158,11 +142,6 @@ pub fn set_rules(revision: u32, source: &str) {
             *RULES_REV.write().unwrap() = Some(revision);
             *RULES_SOURCE.write().unwrap() = Some((revision, Arc::new(source.to_string())));
             *SHAPES.write().unwrap() = Some(Arc::new(s.shapes().clone()));
-            let w = WokenLaws { stage_cap: s.num_of("woken_stage", "cap", 0.0).max(0.0) as u32, wait_s: s.num_of("woken_stage", "wait_s", 0.0).max(0.0) };
-            if w != woken_laws() {
-                log::info!("woken residents: {w:?}");
-            }
-            *WOKEN.write().unwrap() = w;
         }
         Err(e) => log::warn!("rules revision {revision} unreadable: {e}"),
     }
@@ -480,32 +459,6 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
 /// The person's choices are the player's: their acts and words are recorded as acts and
 /// words, never with reasons nobody perceived. The identity (narrative, values, traits, mood)
 /// is inferred from that conduct (decided 2026-11-09), and only when it says something new.
-/// The memory of a resident who has just been woken into a mind: what it perceived before
-/// (its ring), with nothing it did not perceive and nothing about who it is (that comes from
-/// the world's facts).
-pub fn ring_system() -> String {
-    shared(format!(
-        "You are the memory of the person described under # Who you are, in a persistent simulated world. \
-Until now they lived by habit: the lines below are what they perceived around their daily life before this moment (what they saw and \
-heard, who came into view, what happened near them, and where). Record what they now know or can expect from it (who they saw, what \
-was said, what happened, where things are) and keep as memories only the few things they would still remember (at most 4, often \
-fewer), each with a gist in their own words that says what happened, not why. Never invent motives, feelings, plans or thoughts. \
-What others said stays what others claimed (person:4 -CLAIMED-> idea:wolves_at_ford). Someone they only saw is known by how they \
-looked to them, not by name. Keep the mind as a graph you shape freely and connect to existing concepts. IDENTITY: always null here.\n\n{}\n\n\
-KEYS: anchors connect the mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \
-\"kind:<wolf|deer|berry_bush|tree|...>\", \"know:<technique>\". Any other key is yours to invent. Reuse existing keys shown in the mind.\n\n\
-Reply with ONE JSON object, compact (at most 12 nodes and 20 edges):\n\
-{{\"summary\": \"what they perceived (1-2 sentences, no motives)\",\n\
- \"remember\": [{{\"exp\": experience id, \"gist\": \"...\"}}],\n\
- \"nodes\": [{{\"key\": \"person:4\", \"labels\": [\"Person\"], \"name\": \"Bram\", \"props\": {{...}}}}],\n\
- \"edges\": [{{\"from\": \"self\", \"rel\": \"SAW\", \"to\": \"person:4\", \"confidence\": 0.0-1.0, \"because\": [experience ids], \"props\": {{...}}}}],\n\
- \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"stranger|acquaintance|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
- \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
- \"identity\": null}}",
-        world_rules()
-    ))
-}
-
 pub fn internalize_system() -> String {
     shared(format!(
         "You are the memory of the person described under # Who you are, in a persistent simulated world. \

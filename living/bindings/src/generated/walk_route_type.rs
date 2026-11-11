@@ -6,47 +6,47 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub struct PriorHead {
+pub struct WalkRoute {
     pub id: u32,
-    pub seq: u32,
+    pub route: Vec<u32>,
 }
 
-impl __sdk::InModule for PriorHead {
+impl __sdk::InModule for WalkRoute {
     type Module = super::RemoteModule;
 }
 
-/// Column accessor struct for the table `PriorHead`.
+/// Column accessor struct for the table `WalkRoute`.
 ///
 /// Provides typed access to columns for query building.
-pub struct PriorHeadCols {
-    pub id: __sdk::__query_builder::Col<PriorHead, u32>,
-    pub seq: __sdk::__query_builder::Col<PriorHead, u32>,
+pub struct WalkRouteCols {
+    pub id: __sdk::__query_builder::Col<WalkRoute, u32>,
+    pub route: __sdk::__query_builder::Col<WalkRoute, Vec<u32>>,
 }
 
-impl __sdk::__query_builder::HasCols for PriorHead {
-    type Cols = PriorHeadCols;
+impl __sdk::__query_builder::HasCols for WalkRoute {
+    type Cols = WalkRouteCols;
     fn cols(table_name: &'static str) -> Self::Cols {
-        PriorHeadCols {
+        WalkRouteCols {
             id: __sdk::__query_builder::Col::new(table_name, "id"),
-            seq: __sdk::__query_builder::Col::new(table_name, "seq"),
+            route: __sdk::__query_builder::Col::new(table_name, "route"),
         }
     }
 }
 
-/// Indexed column accessor struct for the table `PriorHead`.
+/// Indexed column accessor struct for the table `WalkRoute`.
 ///
 /// Provides typed access to indexed columns for query building.
-pub struct PriorHeadIxCols {
-    pub id: __sdk::__query_builder::IxCol<PriorHead, u32>,
+pub struct WalkRouteIxCols {
+    pub id: __sdk::__query_builder::IxCol<WalkRoute, u32>,
 }
 
-impl __sdk::__query_builder::HasIxCols for PriorHead {
-    type IxCols = PriorHeadIxCols;
+impl __sdk::__query_builder::HasIxCols for WalkRoute {
+    type IxCols = WalkRouteIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
-        PriorHeadIxCols {
+        WalkRouteIxCols {
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
         }
     }
 }
 
-impl __sdk::__query_builder::CanBeLookupTable for PriorHead {}
+impl __sdk::__query_builder::CanBeLookupTable for WalkRoute {}

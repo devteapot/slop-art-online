@@ -125,10 +125,14 @@ pub fn create_floor(ctx: &ReducerContext, seed_json: String) -> Result<(), Strin
 fn check_rules(json: &str) -> Result<(), String> {
     let v: serde_json::Value = serde_json::from_str(json).map_err(|e| format!("seed: {e}"))?;
     let flag = |name: &str| v.get("rules").and_then(|r| r.get(name)).and_then(|f| f.as_bool()).unwrap_or(true);
-    for (name, compiled) in [("cry_prompts_carers", common::CRY_PROMPTS_CARERS), ("minds", common::MINDS)] {
+    for (name, compiled) in [("cry_prompts_carers", common::CRY_PROMPTS_CARERS)] {
         if flag(name) != compiled {
             return Err(format!("seed rule {name} = {} differs from this module's {compiled}; build the module with that seed", flag(name)));
         }
+    }
+    // Every person has a mind; a world of people without one is not an option.
+    if !flag("minds") {
+        return Err("seed rule minds = false is gone: every person has a mind (LIVING_ONLY limits which ones a mind service thinks for)".into());
     }
     Ok(())
 }

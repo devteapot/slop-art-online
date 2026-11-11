@@ -205,23 +205,6 @@ impl Store {
         Ok(())
     }
 
-    /// How far a woken resident's mind holds its ring of perceptions from before it woke (the
-    /// ring's `seq`; docs/TOWN_LIFE.md, "Layer 2"). None until it has been taken in.
-    pub async fn woken_upto(&self, actor: u32) -> Result<Option<u64>> {
-        let mut rows = self.g.execute(self.q("MATCH (s:Concept {run: $run, actor: $actor, key: 'self'}) RETURN s.woken_upto AS upto", actor)).await?;
-        Ok(match rows.next().await? {
-            Some(r) => r.get::<Option<i64>>("upto").ok().flatten().map(|x| x as u64),
-            None => None,
-        })
-    }
-
-    pub async fn set_woken_upto(&self, actor: u32, upto: u64, t: u64) -> Result<()> {
-        self.g
-            .run(self.q("MATCH (s:Concept {run: $run, actor: $actor, key: 'self'}) SET s.woken_upto = $upto, s.woken_t = $t", actor).param("upto", upto as i64).param("t", t as i64))
-            .await?;
-        Ok(())
-    }
-
     /// Apply one reasoning episode's patch transactionally (given up after a minute rather
     /// than left to hold a connection forever).
     pub async fn apply(&self, actor: u32, patch: &Patch, thought: &str, t: u64) -> Result<()> {
@@ -414,8 +397,8 @@ impl Store {
                 .param("secret", p(persona["secret"].as_str().filter(|x| !x.trim().is_empty()).map_or(Value::Null, |x| json!(x))))
                 .param("why", why)
                 .param("thought", thought)
-                // Who wrote it and from what, when the caller says (a woken resident's: the
-                // model, from the world's facts; docs/TOWN_LIFE.md).
+                // Who wrote it and from what, when the caller says (an identity a model wrote
+                // from the world's facts: mind/facts.rs).
                 .param("written_by", p(persona.get("written_by").cloned().unwrap_or(Value::Null)))
                 .param("from_facts", p(persona.get("from_facts").map_or(Value::Null, |f| json!(f.to_string()))))
                 .param("t", t as i64),

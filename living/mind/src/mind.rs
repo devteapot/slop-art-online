@@ -30,7 +30,7 @@ mod recall;
 pub mod rethink;
 mod sleep;
 mod talk;
-mod woken;
+mod facts;
 
 /// How much of a remembered thing's salience and confidence is kept after a step failed at it.
 const MISSED_WEAKEN: f64 = 0.5;
@@ -49,8 +49,6 @@ pub enum Event {
     Lived(Experience),
     /// With the rethink gate on: a percept of one of this service's characters.
     Percept(Experience),
-    /// A resident was woken into a mind (docs/TOWN_LIFE.md, "Layer 2").
-    Woken(u32),
 }
 
 pub use lived::enabled as player_memory;
@@ -157,10 +155,8 @@ pub struct Minds {
     slow: Semaphore,
     talk: Mutex<talk::Talks>,
     only: Option<std::collections::HashSet<u32>>,
-    /// `LIVING_ONLY` names `woken`: residents woken into minds are this service's too.
-    only_woken: bool,
-    /// Woken residents whose minds are being made, and stage-cap reports (woken.rs).
-    wakes: woken::WakesLock,
+    /// The land's settlements and lots, read once for residents' world facts (facts.rs).
+    layout: tokio::sync::OnceCell<Arc<facts::Layout>>,
     lod: lod::Lod,
     /// Pending deliberations by actor (kept only with the level of detail on, when many
     /// requests wait at once and scanning the view for each would be costly).
@@ -324,14 +320,13 @@ impl Minds {
             prompts::set_judgments(j.grammar());
         }
         let only_env = std::env::var("LIVING_ONLY").ok();
-        let only_woken = only_env.as_deref().is_some_and(|v| v.split(',').any(|x| x.trim() == "woken"));
         let lived_cfg = lived::Config::from_env();
         if lived_cfg.on {
             if let Some(route) = &lived_cfg.profile {
                 llm.warn_effort_gaps("LIVING_PLAYER_MEMORY_MODEL", route, &["internalize"]);
             }
         }
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), only_woken, wakes: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -346,11 +341,7 @@ impl Minds {
     /// configured. Otherwise assignment, rotation or the default. Logged when it changes.
     fn profile(&self, c: &Character) -> String {
         let group = if c.kind == "person" { self.group(c.id) } else { None };
-        // A resident woken into a mind takes the models file's `woken` route when it has one.
-        let woken = (c.kind == "person" && self.is_woken(c.id)).then(|| self.llm.woken_route(&c.name)).flatten();
-        let p = if let Some(w) = woken {
-            w
-        } else if c.kind == "person" {
+        let p = if c.kind == "person" {
             self.llm.person_profile(c.id, &c.name, group.as_deref(), c.stage <= 1)
         } else {
             self.llm.profile_for(c.id, &c.name)
@@ -379,11 +370,10 @@ impl Minds {
         g
     }
 
-    /// `LIVING_ONLY=3,7` limits this service to those characters (experiments on a seeded
-    /// world); the rest keep running on their instincts. `woken` in the list admits every
-    /// resident woken into a mind as well (`LIVING_ONLY=12,woken`).
+    /// `LIVING_ONLY=3,7` limits this service to those characters (trials: one mind in a
+    /// scripted world); the rest keep running on their starting ways, a deliberation pending.
     fn allowed(&self, id: u32) -> bool {
-        self.only.as_ref().map_or(true, |o| o.contains(&id) || (self.only_woken && self.is_woken(id)))
+        self.only.as_ref().map_or(true, |o| o.contains(&id))
     }
 
     /// How `me` knows `other`: their name where the authority counts it known
@@ -721,11 +711,6 @@ impl Minds {
                 store.ensure_self(c.id, &c.name).await?;
             }
             if self.conn.db.persona().id().find(&c.id).is_none() {
-                if self.is_woken(c.id) {
-                    // Its mind is made from its authored sheet or the world's facts, and its ring
-                    // (woken.rs, below).
-                    continue;
-                }
                 match self.origin(&c) {
                     // An authored sheet is installed as written (no model call); a background
                     // takes a model call. Both run concurrently with the rest.
@@ -753,9 +738,6 @@ impl Minds {
                     log::warn!("{}: projection at start failed: {e:#}", c.name);
                 }
             }
-        }
-        for c in self.mine().into_iter().filter(|c| self.is_woken(c.id)) {
-            self.clone().awaken(c.id);
         }
         for c in self.mine() {
             let model = match self.llm.species_profile(&c.kind, "think") {
@@ -834,59 +816,6 @@ impl Minds {
             mood: persona["mood"].as_str().unwrap_or_default().into(),
         };
         self.project(c.id, Some(persona), None).await
-    }
-
-    /// A seeded resident's starting identity, written by their mind from their background
-    /// (town, occupation, household or band history). Afterwards it is ordinary identity.
-    async fn background_persona(&self, c: &Character) -> Result<()> {
-        let bg: Value = self.conn.db.background().id().find(&c.id).and_then(|b| serde_json::from_str(&b.text).ok()).unwrap_or_default();
-        let profile = self.profile(&c);
-        let system = prompts::identity_system();
-        let knows: Vec<String> = self.conn.db.know_how().iter().filter(|k| k.actor == c.id).map(|k| k.technique).collect();
-        let born = self.born_temperament(c.id);
-        let user = prompts::identity_user(&c.name, c.id, &knows, &bg, born.as_ref());
-        let reply = {
-            let _slow = self.slow.acquire().await?;
-            self.llm.chat(&profile, self.attention(c.id, None), "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?
-        };
-        let v = llm::parse_json(&reply.content)?;
-        let thought = reference(c.id, "background");
-        let now = llm::now_ms();
-        let known: Vec<u32> = ["household", "companions"].iter().flat_map(|k| bg[*k].as_array().cloned().unwrap_or_default()).filter_map(|p| p["id"].as_u64().map(|i| i as u32)).collect();
-        let mut places = vec![json!({"name": "home", "x": c.home_x, "y": c.home_y})];
-        if let Some([x, y]) = bg["town_center"].as_array().map(|a| [a[0].as_f64().unwrap_or(0.0), a[1].as_f64().unwrap_or(0.0)]) {
-            places.push(json!({"name": format!("{} center", bg["town"].as_str().unwrap_or("town")), "x": x, "y": y}));
-        }
-        if let Some([x, y]) = bg["camp"].as_array().map(|a| [a[0].as_f64().unwrap_or(0.0), a[1].as_f64().unwrap_or(0.0)]) {
-            places.push(json!({"name": "camp", "x": x, "y": y}));
-        }
-        // Other towns one has heard of since childhood.
-        for t in bg["towns_known"].as_array().cloned().unwrap_or_default() {
-            if let (Some(name), Some(at)) = (t["name"].as_str(), t["at"].as_array()) {
-                places.push(json!({"name": name, "x": at[0].as_f64().unwrap_or(0.0), "y": at[1].as_f64().unwrap_or(0.0)}));
-            }
-        }
-        let relations: Vec<Value> = v["relations"].as_array().cloned().unwrap_or_default().into_iter().filter(|r| living_rules::normalize::reply_id(&r["id"]).map_or(false, |i| known.contains(&(i as u32)))).collect();
-        if let Some(store) = &self.store {
-            let mut patch = memory::Patch::default();
-            for id in &known {
-                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.name(*id)), props: Default::default() });
-            }
-            memory::sugar_into(&json!({"relations": relations, "places": places}), &mut patch, &[]);
-            store.ensure_self(c.id, &c.name).await?;
-            store.apply(c.id, &patch, &thought, now).await?;
-            store.set_identity(c.id, 1, &v, "who I was when this began", &thought, now).await?;
-        }
-        log::info!("{} (#{}) from background: {}", c.name, c.id, v["narrative"].as_str().unwrap_or_default());
-        let persona = PersonaIn {
-            narrative: v["narrative"].as_str().unwrap_or_default().into(),
-            values: strings(&v["values"]),
-            goals: strings(&v["goals"]),
-            traits: born.clone().unwrap_or_else(|| v["traits"].clone()).to_string(),
-            mood: v["mood"].as_str().unwrap_or("settled").into(),
-        };
-        let t = ThoughtIn { kind: "consolidate".into(), summary: "Who I am, from where I come from.".into(), detail: v.to_string(), latency_ms: reply.latency_ms, tokens: reply.tokens, model: reply.model, reference: thought };
-        self.project(c.id, Some(persona), Some(t)).await
     }
 
     /// The background of a person the world's author wrote, when it carries a sheet with a
@@ -1030,11 +959,11 @@ impl Minds {
     async fn first_identity(&self, c: &Character, origin: Origin) -> Result<()> {
         match origin {
             Origin::Sheet => match self.authored(c) {
-                Some(bg) => self.sheet_persona(c, &bg).await,
+                Some(bg) => self.sheet_identity(c, &bg).await,
                 None => Ok(()),
             },
             Origin::Birth => self.birth_persona(c).await,
-            Origin::Background => self.background_persona(c).await,
+            Origin::Background => self.facts_identity(c).await,
             Origin::Seed => self.seed_persona(c).await,
         }
     }
@@ -1214,9 +1143,7 @@ impl Minds {
                     Some(Event::Contact(actor)) => {
                         {
                             let mut actors = self.actors.lock().unwrap();
-                            if self.admit(actor, &mut actors) {
-                                actors.entry(actor).or_default().onstage_until = Some(Instant::now() + self.lod.sticky);
-                            }
+                            actors.entry(actor).or_default().onstage_until = Some(Instant::now() + self.lod.sticky);
                         }
                         if let Some(request) = self.pending.lock().unwrap().get(&actor) {
                             request.changed.notify_one();
@@ -1224,7 +1151,6 @@ impl Minds {
                     }
                     Some(Event::Lived(e)) => self.lived_add(e),
                     Some(Event::Percept(e)) => self.rethink_percept(&e),
-                    Some(Event::Woken(id)) => self.clone().awaken(id),
                     None => return Err(anyhow!("event channel closed")),
                 },
                 _ = tick.tick() => {
@@ -1234,8 +1160,6 @@ impl Minds {
                     self.clone().check_judgments();
                     self.clone().check_rethink();
                     self.clone().check_lived();
-                    let this = self.clone();
-                    tokio::spawn(async move { this.journal_cap_reports().await });
                 }
             }
         }
@@ -1268,16 +1192,6 @@ impl Minds {
             let started = Instant::now();
             while self.lived_waiting(actor) && started.elapsed() < self.lived_cfg.takeover_wait {
                 tokio::time::sleep(Duration::from_millis(500)).await;
-            }
-            // A resident just woken into a mind thinks once its mind is made: who it is from the
-            // world's facts, and what it perceived before (woken.rs; the `woken_stage("wait_s")` law).
-            if self.is_woken(actor) {
-                self.clone().awaken(actor);
-                let wait = Duration::from_secs_f64(prompts::woken_laws().wait_s);
-                let started = Instant::now();
-                while self.woken_waiting(actor) && started.elapsed() < wait {
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                }
             }
             let mut seen = 0u64;
             loop {
@@ -1422,11 +1336,7 @@ impl Minds {
         if !seen {
             return false;
         }
-        // A woken resident goes on stage only within its settlement's cap (woken.rs).
         let mut actors = self.actors.lock().unwrap();
-        if !self.admit(actor, &mut actors) {
-            return false;
-        }
         actors.entry(actor).or_default().onstage_until = Some(now + self.lod.sticky);
         true
     }
@@ -1607,10 +1517,7 @@ impl Minds {
             if let Some(store) = &self.store {
                 store.ensure_self(c.id, &c.name).await?;
             }
-            // A woken resident's identity is made by its waking (woken.rs), from the world's facts.
-            if !self.is_woken(actor) {
-                self.first_identity(&c, self.origin(&c)).await?;
-            }
+            self.first_identity(&c, self.origin(&c)).await?;
             for _ in 0..20 {
                 if self.conn.db.persona().id().find(&actor).is_some() {
                     break;
@@ -1953,17 +1860,6 @@ impl Minds {
     // ---- consolidation ------------------------------------------------------------
 
     async fn consolidate(&self, actor: u32) -> Result<()> {
-        // A woken resident's mind is made first (woken.rs): its identity, from its sheet or the
-        // world's facts, then its ring. A consolidation started meanwhile would be shown no
-        // identity ("(no persona yet)") and write one afresh over the one being installed, so it
-        // waits, as the first deliberation does (the `woken_stage("wait_s")` law).
-        if self.is_woken(actor) {
-            let wait = Duration::from_secs_f64(prompts::woken_laws().wait_s);
-            let started = Instant::now();
-            while self.woken_waiting(actor) && started.elapsed() < wait {
-                tokio::time::sleep(Duration::from_millis(500)).await;
-            }
-        }
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
         let cursor = self.cursor(actor);
         // A reply that ran too long failed: take fewer experiences at a time until it fits.

@@ -175,15 +175,17 @@ pub fn flush_counts(k: &mut Clock) -> bool {
 }
 
 /// Who controls a seeded or newborn character that has no player: the admin's minds, which
-/// deliberate and receive experiences (the default), or, with the seed's `rules.minds` false,
-/// the database itself, so the character lives on its behaviour graph alone and no
-/// experiences or deliberation requests are written for it.
+/// deliberate and receive experiences. Every person has a mind; animals' are cheap (the mind
+/// service's species routes) and asked only near people.
 pub fn mind_controller(ctx: &ReducerContext) -> (spacetimedb::Identity, bool) {
-    if MINDS {
-        (world(ctx).admin, true)
-    } else {
-        (ctx.database_identity(), false)
-    }
+    (world(ctx).admin, true)
+}
+
+/// Lives on its behaviour graph alone, with no mind to read its experiences: only the
+/// benchmark crowds the admin spawns for load (`spawn_battle`, `spawn_skirmish`,
+/// `spawn_crowd` with `minded` false). Seeded and newborn characters always have a mind.
+pub fn instinct_only(ctx: &ReducerContext, c: &Character) -> bool {
+    !c.ai && c.controller == ctx.database_identity()
 }
 
 thread_local! {

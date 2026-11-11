@@ -3,9 +3,6 @@
  "about": "Morning in Brackenford. The subject has set out a storage basket (a storage structure they own) with six berries, keeping two in hand. From minute 3, the first time the subject is within 8 tiles of the basket, a resident steps up beside it and takes four berries without a word (the ordinary take skill), then goes back to their day. If the subject comes within 4 tiles of the thief afterwards, the thief says a scripted line (once). Batch b1 placed the thief by the subject rather than by the basket; that version took from other people's storages and is reported as invalid.",
  "world": {
   "seed": "island",
-  "rules": {
-   "minds": true
-  },
   "start_hour": 9.0
  },
  "minutes": 15,

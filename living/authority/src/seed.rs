@@ -1076,6 +1076,9 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     // The young start from their species' young instinct (a baby cries and follows a parent).
     let graph = if c.stage == 0 { young_instinct(kind) } else { instinct(kind) };
     ctx.db.brain().insert(Brain { id, graph, revision: 1, plan: "instinct".into(), source: "instinct".into(), installed_ms: now });
+    // Its starting graph is not a mind's thought: its first deliberation request is not held
+    // back by `think_min_s` (the reflection and drive timers still count from its birth).
+    let think_gate = common::species(kind).map_or(0, |s| s.cognition.think_min_s * 1000);
     ctx.db.mind_state().insert(MindState {
         id,
         slot: (id % 60) as u8,
@@ -1089,7 +1092,7 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         heard_ms: 0,
         speaker: 0,
         spoke_ms: 0,
-        deliberated_ms: now,
+        deliberated_ms: now.saturating_sub(think_gate),
         seen: Vec::new(),
         alerts: 0,
         fast_until: 0,

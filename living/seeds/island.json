@@ -6,9 +6,6 @@
     "size": 2048
   },
   "setting": "An island about two kilometres across, with a mountain range along it, rivers to the sea and a few lakes. A walled town stands in the lowland, villages lie near water, giants live on a high shelf in the hills and small folk in a forest hollow. A terraced hill town of brick and iron stands above a river, and a harbour town of concrete and neon by the sea. Roads join them. Farms, woodcutters and charcoal burners, a herders' fold, salt pans and a light on the north cape lie between them, and an outlaws' steading hides in the woods by the stone road.",
-  "rules": {
-    "minds": false
-  },
   "towns": [
     {
       "name": "Brackenford",

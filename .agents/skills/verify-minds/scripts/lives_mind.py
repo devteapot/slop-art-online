@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
-"""Woken residents of a seeded island know their own past and people (docs/SEEDED_LIVES.md).
+"""Residents of a seeded island know their own past and people (docs/SEEDED_LIVES.md).
 
-On an island run (`verify.py launch --run RUN --seed island`), a player speaks to each named
-resident in turn. Speech by a player wakes the resident (town life layer 2): the running
-`living-mind` takes it up, installs its authored sheet (no model call) into a scratch Neo4j,
-and thinks and talks for it. The driver reads what each mind was given and what it said.
+On an island run (`verify.py launch --run RUN --seed island`) every resident has a mind from
+the start. The running `living-mind` (LIVING_ONLY naming the residents under test) installs
+each one's world facts and authored sheet (no model call) into a scratch Neo4j at start, and
+thinks and talks for it. A player then speaks to each named resident in turn, and the driver
+reads what each mind was given and what it said.
 
-    lives_wake.py --run RUN --who "Wat Fenner=What do you make of Kettlebridge folk?" \\
+    lives_mind.py --run RUN --who "Wat Fenner=What do you make of Kettlebridge folk?" \\
         --who "Hester Crane=What do people here say about Brackenford?" [--real deepseek-flash]
 
 Free tier (default): a local fake model (`verify-llm/scripts/fake_llm.py`); the checks are on the
 prompts. With `--real PROFILE` (paid: only when authorized), the profile answers every purpose
 and the replies are recorded for reading; the same prompt checks run.
 
-Checks per resident: woken by the player's speech; its `relation` rows existed before waking
-and match its sheet; the people it knows by name are introduced (`acquaintance`) and one it
+Checks per resident: an AI character under the world admin before anyone engages it; its
+`relation` rows match its sheet; the people it knows by name are introduced (`acquaintance`) and one it
 does not (`knows_name: false`) stays "a stranger" in its mind; its persona is its authored
 narrative; its first prompt carries its narrative, people from its sheet and its authored
 memories (`[before all this]`); every seeded situation it is in (`cast/*.json`) shows in that
 prompt through the other people in it it knows by name; its mind marks the sheet `authored`
-and its world facts `world` (and its ring `instinct`, when it took any in); its own secret
+and its world facts `world`; its consolidations see its identity; its own secret
 reaches only its own prompts ("Known only to you"), and no other resident's secret reaches it.
 
-Evidence: `.local/living/verify/RUN/lives-wake/` (prompts, replies, rows, mind log, journal).
+Evidence: `.local/living/verify/RUN/lives-mind/` (prompts, replies, rows, mind log, journal).
 Stops the mind and the fake model and removes the scratch Neo4j container in `finally`.
 """
 
@@ -70,7 +71,7 @@ class Lab:
         self.run = run
         self.st = V.load(run)
         self.db = self.st["db"]
-        self.dir = V.run_dir(run) / "lives-wake"
+        self.dir = V.run_dir(run) / "lives-mind"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.token = V.admin_token()
         self.procs = []
@@ -206,22 +207,28 @@ def main():
         lab.start_neo4j()
         models, extra = lab.models(a.real)
         lab.start_mind(models, extra, ids)
+        admin = lab.sql("SELECT * FROM world")[0]["admin"]
         lab.harness("player", "join", "LivesVisitor")
         me = lab.sql("SELECT id FROM character WHERE name = 'LivesVisitor'")[0]["id"]
         for (name, line), rid in zip(who, ids):
             sheet = authored[name]["sheet"]
             rel_before = lab.sql(f"SELECT * FROM relation WHERE actor = {rid}")
+            char = lab.sql(f"SELECT * FROM character WHERE id = {rid}")[0]
             lab.admin("place_near", me, rid)
             time.sleep(1.5)
             lab.harness("player", "say", line, "--to", str(rid))
-            woke = lab.wait(lambda: lab.sql(f"SELECT * FROM woken WHERE id = {rid}"), f"{name} woken", 30)[0]
-            ex = lab.wait(lambda: [e for e in lab.exchanges(name) if e.get("purpose") in ("think", "talk", "deliberate") and (e.get("reply") or e.get("response"))], f"{name}'s first exchange", a.secs)
+            # A mind already living answers a line in a talk turn, whose prompt shows the
+            # conversation; its whole circle shows when it deliberates. Ask for one (an admin
+            # scene call, as verify_minds.py does).
+            time.sleep(3)
+            lab.admin("set_behavior", rid, json.dumps({"think": "A quiet moment to take stock of how things are going. lives check"}))
+            ex = lab.wait(lambda: [e for e in lab.exchanges(name) if e.get("purpose") in ("think", "deliberate") and (e.get("reply") or e.get("response"))], f"{name}'s first deliberation", a.secs)
             # Let a talk turn or two land.
             time.sleep(20 if a.real else 6)
             ex = lab.exchanges(name)
             prompts = [text_of(e) for e in ex]
-            # The first prompt a person thinks or talks with (a consolidation may come first).
-            first = next((text_of(e) for e in ex if e.get("purpose") in ("think", "talk", "deliberate")), "")
+            # The first prompt a person deliberates with (a talk turn or a consolidation may come first).
+            first = next((text_of(e) for e in ex if e.get("purpose") in ("think", "deliberate")), "")
             heard = [e["text"] for e in lab.sql(f"SELECT * FROM experience WHERE observer = {me}") if e["subject"] == rid]
             persona = lab.sql(f"SELECT * FROM persona WHERE id = {rid}")
             names_in_sheet = [r["name"] for r in sheet["relations"]]
@@ -230,18 +237,18 @@ def main():
             others = {n: s for n, s in secrets_of.items() if n != name}
             leaked = [n for n, s in others.items() if s[:60] in "\n".join(prompts)]
             own = secrets_of.get(name, "")
-            rec = {"name": name, "id": rid, "line": line, "woken": woke, "relations_before_waking": [{k: r[k] for k in ("other", "trust", "affinity", "label")} for r in rel_before],
+            rec = {"name": name, "id": rid, "line": line, "ai_before_engaged": char["ai"], "relations_before_engaged": [{k: r[k] for k in ("other", "trust", "affinity", "label")} for r in rel_before],
                    "persona": persona[0]["narrative"] if persona else None, "sheet_narrative": sheet["narrative"], "people_named_in_first_prompt": named,
                    "authored_memories_in_first_prompt": authored_mems, "heard_by_player": heard, "exchanges": [{"purpose": e.get("purpose"), "reply": e.get("reply") or e.get("response")} for e in ex]}
             (lab.dir / f"{re.sub(r'[^0-9A-Za-z]', '_', name)}-first-prompt.txt").write_text(first)
             out[name] = rec
-            lab.check(f"{name} woken by speech", woke.get("why") == "speech", json.dumps({k: woke.get(k) for k in ("why", "by", "settlement")}))
-            lab.check(f"{name}'s relations were rows before waking", len(rel_before) >= len(names_in_sheet) * 0.8, f"{len(rel_before)} rows, {len(names_in_sheet)} in the sheet")
-            # The identity installed at waking is the sheet's (a later consolidation may revise
+            lab.check(f"{name} is a mind before anyone engages it", char["ai"] and char["controller"] == admin, json.dumps({"ai": char["ai"], "controller_is_admin": char["controller"] == admin}))
+            lab.check(f"{name}'s relations are rows from world creation", len(rel_before) >= len(names_in_sheet) * 0.8, f"{len(rel_before)} rows, {len(names_in_sheet)} in the sheet")
+            # The identity installed at start is the sheet's (a later consolidation may revise
             # the persona row: that is the mind's to do, and is reported, not checked).
             installed = [t for t in lab.sql(f"SELECT * FROM thought WHERE actor = {rid}") if t["summary"] == "Who I am (authored)."]
             narrative = json.loads(installed[0]["detail"]).get("narrative", "") if installed else ""
-            lab.check(f"{name} woke as its authored self", narrative.strip() == sheet["narrative"].strip(), narrative[:120] or "no authored install")
+            lab.check(f"{name} began as its authored self", narrative.strip() == sheet["narrative"].strip(), narrative[:120] or "no authored install")
             rec["persona_now"] = persona[0]["narrative"] if persona else None
             lab.check(f"{name} knows its people", len(named) >= min(3, len(names_in_sheet)), f"{len(named)} of {len(names_in_sheet)} sheet people named in its first prompt: {named[:8]}")
             lab.check(f"{name} knows its past", authored_mems >= 1, f"{authored_mems} authored memories recalled in its first prompt")
@@ -292,7 +299,7 @@ def main():
             if own:
                 lab.check(f"{name}'s own secret only in its own prompt", own[:60] in "\n".join(prompts), own[:80])
             print(f"  {name} heard by the player: {heard[-3:]}", flush=True)
-        (lab.dir / "wake.json").write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
+        (lab.dir / "lives.json").write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
     finally:
         lab.cleanup()
         (lab.dir / "checks.json").write_text(json.dumps(lab.results, indent=1) + "\n")

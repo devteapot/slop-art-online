@@ -368,7 +368,7 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
         let own: Vec<crate::town::SeedPlace> = seeded[si].and_then(|t| t.residents.iter().find(|r| r.name == c.name)).map(|r| r.places.clone()).unwrap_or_default();
         let mine = |name: &str| own.iter().any(|p| p.name == name);
         let put = |name: &str, at: (f32, f32)| {
-            ctx.db.place().insert(Place { id: 0, actor: id, name: name.into(), x: at.0, y: at.1 });
+            ctx.db.place().insert(Place { id: 0, actor: id, name: name.into(), x: at.0, y: at.1, given: true });
         };
         for p in &own {
             if let [a, b] = p.between.as_slice() {
@@ -475,7 +475,7 @@ pub fn host(ctx: &ReducerContext, me: u32, a: &Activity, at: (f32, f32), until_h
             ctx.db.place().id().update(p);
         }
         None => {
-            ctx.db.place().insert(Place { id: 0, actor: guest, name: "lodging".into(), x: house.x, y: house.y });
+            ctx.db.place().insert(Place { id: 0, actor: guest, name: "lodging".into(), x: house.x, y: house.y, given: true });
         }
     }
     let when = format!("{:02}:00", until_hour.floor() as u32);

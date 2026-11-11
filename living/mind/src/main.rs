@@ -119,14 +119,13 @@ async fn main() -> Result<()> {
             let ready = ready.clone();
             let experiences = format!("SELECT * FROM experience WHERE controller = 0x{}", identity.to_hex());
             // With player memory on (the default): the experiences of characters people play
-            // (every other controller's; instinct-only characters have none), and where the
-            // settlements are.
+            // (every other controller's), and where the settlements are.
             let lived = format!("SELECT * FROM experience WHERE controller != 0x{}", identity.to_hex());
             // The needs and health of the characters this service thinks for (private; the owner
-            // reads it). A two-table join on primary keys: a resident's row joins when it is woken
-            // (`ai` turns true) and none of the instinct-only world's vitals are sent. Rows change
-            // only when a body's need rates change, it eats, or it is hurt (needs move linearly
-            // between writes).
+            // reads it). A two-table join on primary keys: a character's row joins while the
+            // minds control it (`ai`), not while its person plays it. Rows change only when a
+            // body's need rates change, it eats, or it is hurt (needs move linearly between
+            // writes).
             let vitals = format!(
                 "SELECT vitals.* FROM vitals JOIN character ON vitals.id = character.id WHERE character.controller = 0x{} AND character.ai = true",
                 identity.to_hex()
@@ -171,8 +170,6 @@ async fn main() -> Result<()> {
                     "SELECT * FROM my_deliberations",
                     // Whether the people who play characters are there (private; the owner reads it).
                     "SELECT * FROM presence",
-                    // Residents woken into minds (private, one row each; docs/TOWN_LIFE.md).
-                    "SELECT * FROM woken",
                     // Who told whom their name (private): prompts name people only when known.
                     "SELECT * FROM acquaintance",
                 ].map(String::from)).collect::<Vec<String>>());
@@ -216,12 +213,6 @@ async fn main() -> Result<()> {
                 let _ = tx.send(mind::Event::Pending(d.clone()));
             }
             let _ = tx.send(mind::Event::Deliberation(d.actor));
-        });
-    }
-    {
-        let tx = tx.clone();
-        conn.db.woken().on_insert(move |_, w| {
-            let _ = tx.send(mind::Event::Woken(w.id));
         });
     }
     if lod {

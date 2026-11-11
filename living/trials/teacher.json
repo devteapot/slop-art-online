@@ -3,9 +3,6 @@
  "about": "Late afternoon (15:30), outside the town walls with no shelter near. A resident greets the subject, warns of the cold, teaches the cloak (the ordinary teach skill; every Elmwick adult already knows fire), gives two hides and a fiber, and goes home. Night falls about 2.3 minutes in and lasts 5 minutes; a person without a fire, shelter or cloak loses health to the cold at night.",
  "world": {
   "seed": "island",
-  "rules": {
-   "minds": true
-  },
   "start_hour": 15.5
  },
  "minutes": 15,

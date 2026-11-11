@@ -12,13 +12,8 @@ const WINDOW: usize = 400;
 
 pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) {
     // Only minds and human players consume percepts. Infants have no mind yet to form
-    // memories. An instinct-only resident keeps a small ring of them for the mind it may get
-    // (`woken`); other instinct-only creatures have no reader.
-    if !observer.alive || observer.stage == 0 {
-        return;
-    }
-    if crate::woken::instinct_only(ctx, observer) {
-        crate::woken::remember(ctx, observer, now, kind, subject, object, at, &text, salience);
+    // memories; a benchmark crowd's bodies (`common::instinct_only`) have no reader.
+    if !observer.alive || observer.stage == 0 || common::instinct_only(ctx, observer) {
         return;
     }
     let row = ctx.db.experience().insert(Experience {
@@ -59,15 +54,13 @@ pub fn people_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64, exclu
         .collect()
 }
 
-/// Minds (people and animals) within `r` of `at`, and, while the rules keep rings,
-/// instinct-only people past infancy, who keep what they perceive for the mind they may get
-/// (`woken`).
+/// Minds (people and animals) and players within `r` of `at`.
 pub fn minds_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64, exclude: &[u32]) -> Vec<(Character, f32)> {
     common::creatures_near(ctx, at, r, now)
         .into_iter()
         .filter(|c| !exclude.contains(&c.id))
         .filter_map(|c| ctx.db.character().id().find(c.id).map(|ch| (ch, c.dist)))
-        .filter(|(ch, _)| !crate::woken::instinct_only(ctx, ch) || (crate::woken::resident(ctx, ch) && crate::woken::rings_kept(ctx)))
+        .filter(|(ch, _)| !common::instinct_only(ctx, ch))
         .collect()
 }
 
@@ -252,8 +245,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     Ok("made a baby crying".into())
 }
 
-/// `decided`: the words were chosen (a player's line, a mind's line), not a graph's `say` leaf.
-pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, decided: bool, now: u64) -> Result<(), String> {
+pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) -> Result<(), String> {
     let text = text.trim();
     if text.is_empty() {
         return Ok(());
@@ -302,13 +294,6 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, decided: b
             crate::perception::introduce(ctx, c.id, speaker, now);
         }
         let addressed = to == c.id || (to == 0 && (close == 1 && d <= 6.0 || mentions(&text, &c.name)));
-        // Spoken to by someone with a mind: an instinct-only resident wakes before it hears it.
-        let c = if addressed {
-            crate::woken::engage(ctx, c.id, speaker, "speech", decided, now);
-            ctx.db.character().id().find(c.id).unwrap_or(c)
-        } else {
-            c
-        };
         let who = common::label_cap(ctx, &c, speaker);
         let heard = if to == c.id {
             format!("{who} said to you: “{}”", text)

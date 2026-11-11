@@ -440,7 +440,7 @@ impl<'a> Ev<'a> {
                     None => 0,
                 };
                 self.set_mark(id);
-                match perceive::speak(self.ctx, self.me.id, &s.text, to, false, self.now) {
+                match perceive::speak(self.ctx, self.me.id, &s.text, to, self.now) {
                     Ok(()) => St::Ok,
                     Err(_) => St::Fail,
                 }

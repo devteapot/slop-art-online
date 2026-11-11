@@ -90,10 +90,10 @@ def instance(root, batch, inst):
     jdir = os.path.join(root, ".local/living/journal", db)
     tok = {"subject": 0, "residents": 0}; calls = {"subject": 0, "residents": 0}; cost = 0.0
     prompt_by_purpose = {}
-    woken = 0
+    thinking = 0
     for f in glob.glob(os.path.join(jdir, "*.jsonl")):
         who = "subject" if os.path.basename(f).startswith(sname) else "residents"
-        if who == "residents": woken += 1
+        if who == "residents": thinking += 1
         for r in jl(f):
             if not r.get("purpose"): continue
             calls[who] += 1; tok[who] += r.get("tokens") or 0
@@ -109,7 +109,7 @@ def instance(root, batch, inst):
             "addressed_lines": addressed, "unaddressed_lines": unaddressed, "reasks_unanswered": reasks, "max_unanswered_streak": maxstreak,
             "answers_to_subject": answers, "reasks_never_answered_in_earshot": never_in_earshot, "asks_out_of_earshot": out_of_earshot, "acts_to_subject": acts_to,
             "failed_at_things": fails, "of_which_in_sight": false_fails, "failed_at_people": people_fails, "gate_notices": gate_notices, "gate_notices_first5min": gate_first5, "said_text": text_speech,
-            "residents_woken": woken, "calls_subject": calls["subject"], "tokens_subject": tok["subject"], "calls_residents": calls["residents"], "tokens_residents": tok["residents"],
+            "residents_thinking": thinking, "calls_subject": calls["subject"], "tokens_subject": tok["subject"], "calls_residents": calls["residents"], "tokens_residents": tok["residents"],
             "cost_usd": round(cost, 3), "prompt_tokens_p50": {k: int(st.median(v)) for k, v in prompt_by_purpose.items()}}
 args = sys.argv[1:]
 rows = []
@@ -118,7 +118,7 @@ for root, batch in zip(args[::2], args[1::2]):
         r = instance(root, batch, inst); r["batch"] = batch; rows.append(r); print(json.dumps(r))
 print()
 keys = ["minutes", "game_hours", "deliberations", "delib_per_game_hour", "addressed_lines", "unaddressed_lines", "reasks_unanswered", "max_unanswered_streak", "reasks_never_answered_in_earshot", "asks_out_of_earshot", "answers_to_subject", "acts_to_subject",
-        "failed_at_things", "of_which_in_sight", "failed_at_people", "gate_notices", "gate_notices_first5min", "said_text", "residents_woken", "calls_subject", "tokens_subject", "calls_residents", "tokens_residents", "cost_usd"]
+        "failed_at_things", "of_which_in_sight", "failed_at_people", "gate_notices", "gate_notices_first5min", "said_text", "residents_thinking", "calls_subject", "tokens_subject", "calls_residents", "tokens_residents", "cost_usd"]
 batches = sorted(set(r["batch"] for r in rows), key=lambda b: [r["batch"] for r in rows].index(b))
 print("| metric | " + " | ".join(batches) + " |"); print("|---|" + "---|" * len(batches))
 for k in keys:

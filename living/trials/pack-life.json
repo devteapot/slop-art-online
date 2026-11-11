@@ -1,13 +1,10 @@
 {
  "kind": "life",
  "title": "A wolf pack with minds",
- "about": "The island's bold road pack of four (adults nearest the arrival point) is the subject: LIVING_ONLY names all four, and the mind routes them by the models file's species map. rules.minds is true so that seeded animals are thought for by the admin's minds; no person has a mind. The authority asks an animal's mind only while a person is within 25 tiles. Variant `instinct` runs the same world with no mind: the instinct-only control.",
+ "about": "The island's bold road pack of four (adults nearest the arrival point) is the subject: LIVING_ONLY names all four, and the mind routes them by the models file's species map. Every seeded character is the admin's minds'; LIVING_ONLY names only the pack, so no person is thought for. The authority asks an animal's mind only while a person is within 25 tiles. Variant `instinct` runs the same world with no mind: the instinct-only control.",
  "gradient": "Hunting, pack cohesion and survival against the instinct-only pack; calls and tokens per wolf-hour.",
  "world": {
-  "seed": "island",
-  "rules": {
-   "minds": true
-  }
+  "seed": "island"
  },
  "minutes": 150,
  "keep_db": true,

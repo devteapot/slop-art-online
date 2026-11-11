@@ -3,9 +3,6 @@
  "about": "The subject is alone outside town in the late afternoon with the newcomer kit (a bow, 30 arrows, 4 berries; fire, fire_bolt, mending). The world starts at 16:00; a world hour is 30 real seconds. At minute 2, nightfall (20:00), a bold pack of four is set down 30 tiles from the subject, on the side away from the settlement. It closes to 9 tiles of where the subject stood, holds there in view for 15 s, then attacks the nearest person it sees (or wanders when it sees none). A wolf hurt fights back; a badly hurt one flees. Until then the pack waits 250 m out from the town (town guards killed a pack held by the gate in batch b1).",
  "world": {
   "seed": "island",
-  "rules": {
-   "minds": true
-  },
   "start_hour": 16.0
  },
  "minutes": 15,

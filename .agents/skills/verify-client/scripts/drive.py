@@ -61,7 +61,7 @@ PRIVATE = ['clock', 'steer', 'walk_route', 'wake', 'familiar', 'deliberation', '
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence',
-           'woken', 'prior', 'prior_head', 'guest', 'judged',
+           'guest', 'judged',
            # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
            'record', 'record_party', 'record_clock',
            # A floor module's staged genesis (floor.rs), private since floors were added.
@@ -445,7 +445,7 @@ class Run:
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
             row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
-            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'woken', 'prior', 'prior_head', 'guest']:
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest']:
                 as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
                 code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
                 okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200
