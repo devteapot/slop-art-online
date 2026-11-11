@@ -4,6 +4,14 @@
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (port 3320). `player-1111-152137`, the speech part of `player-character.md`, passed. An addressed and an unaddressed `human_say` gave the same chronicle lines and listener experiences as before ("A stranger said to you: …", salience 0.9; the unaddressed line was also 0.9, because the listener was the only one close by). No `audience` row was written. `set_paused` and `install_script` were refused to the player ("admin only"), and the player's SQL on `audience` was refused (a private table). The other recipes were not rerun.
 
+## 2026-11-11 rules-senses-outcomes: my_senses, my_act_outcomes (Spark)
+
+Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change: `senses.py` and `outcomes.py` new, `combat.py`'s death scene extended; the feature map gains `senses.md` and `outcomes.md`, and main's duplicated paragraph in SKILL.md is one again.
+
+- `player-sso-214702` (default seed): `senses.py` 8 of 8 (by day; the torch at night passed on `player-senses-204918`'s second run, 6 m to 9 m); `outcomes.py` 7 of 7; `command.py` 4 of 4; `told.py` 11 of 12 on the first run (the player's gift broken off by the receiver moving away wrote no line within the script's window while the AI's did; host load about 37), 12 of 12 on the second.
+- `player-sso-island-215136` (island): `combat.py --scene death` 4 of 4: killed by a wolf, a `death` row with code `killed` and the wolf's id in `other`, its line "You were killed by …".
+- Earlier on the branch: `player-senses-204918` (senses 7 of 7, then 9 of 9 after the death case and a wait after a handback), `player-outcomes-210154` (outcomes 6 of 7, then 7 of 7 after waiting for the `own` line, which can come up to one release after its row).
+
 ## 2026-11-11 speech-2: whisper and call, refusals in the script's words (Spark)
 
 Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.

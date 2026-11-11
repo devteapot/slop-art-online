@@ -3,13 +3,14 @@
 
   drive.py --run RUN --name NAME --plan 'ready;dump:a;click:@menu:Settings;shot:b;quit'
            [--place ID:DX:DY ...] [--sync NAME='REDUCER|ARG|..;...'] [--size 1600x900]
-           [--client PATH] [--expect 'regex' ...]
+           [--client PATH] [--player NAME] [--token FILE] [--expect 'regex' ...]
 
 - RUN is the verify run (`verify.py launch --run RUN --seed island`); the world is
   `verify-RUN`, which must start with `verify-ui-`.
 - The client is the release build from this checkout's CARGO_TARGET_DIR (default
   `.local/target/release/living-game`), or --client. It joins as "Verifier" with its own token
-  under the evidence directory, and its settings file (bindings, Play settings) is a scratch
+  under the evidence directory (`--token FILE` plays another character, e.g. verify.py's player
+  identity: the token string in a file), and its settings file (bindings, Play settings) is a scratch
   file there too (LIVING_GAME_SETTINGS), so a run never touches the owner's.
 - Evidence: `.local/living/verify/RUN/ui/NAME/` holds the photographs and dumps the plan writes
   (`shot:`, `dump:`), `client.log`, `plan.txt` and `scene.json` (the player's id, the admin calls
@@ -55,6 +56,7 @@ def main():
     ap.add_argument("--size", default="1600x900")
     ap.add_argument("--client")
     ap.add_argument("--player", default="Verifier")
+    ap.add_argument("--token", help="another player's token file (default: the run's ui/player.token)")
     ap.add_argument("--expect", action="append", default=[])
     ap.add_argument("--timeout", type=float, default=600)
     a = ap.parse_args()
@@ -75,7 +77,7 @@ def main():
         name, calls = s.split("=", 1)
         syncs[name] = [c.split("|") for c in calls.split(";") if c]
     open(os.path.join(out, "plan.txt"), "w").write(a.plan.replace(";", ";\n") + "\n")
-    token = os.path.join(ROOT, ".local/living/verify", a.run, "ui", "player.token")
+    token = a.token or os.path.join(ROOT, ".local/living/verify", a.run, "ui", "player.token")
     # A worker's own server (`LIVING_STDB_URL`, the verify entry point's "Your own server"), else the shared one.
     env = dict(os.environ, LIVING_SERVER=os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300"), LIVING_DB=db, LIVING_GAME_NAME=a.player, LIVING_GAME_TOKEN=token,
                LIVING_GAME_LIVE=out, LIVING_GAME_LIVE_PLAN=a.plan, LIVING_GAME_SIZE=a.size,

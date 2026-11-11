@@ -1,0 +1,148 @@
+{
+ "schema": 1,
+ "family": "place:cullet-rows",
+ "id": "20261111-67f9e733-bae352",
+ "published": "2026-11-11T21:57:54+01:00",
+ "imported": "2026-11-11T21:57:54+01:00",
+ "track": "layout-2",
+ "maker": "Claude Fable 5.2",
+ "note": "layout pass 2: the graveyard on three terraces over the quarry and the clay pit, the cistern's apron and runnel, the Readers' yard, the dyke; the quarry's raw face, bay, crane and stones; the boatyard, wrack stance, peat stance, creel stand, working quay and kiln road; walls that block and courts as open lots (not visible in stills)",
+ "source": {
+  "commit": "67f9e733057690e16f7f703e83d6771e3bb14817",
+  "branch": "layout-2",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "ba8a3208b6de4ec07d414f3f8336f9b6c321cfd45d56675f5df73ea3dff0d2ee",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-rows/20261111-67f9e733-bae352",
+ "members": [
+  {
+   "name": "low_tally",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "cb478f6a931b2989e756de3d6955b47ca2bfa67632944d5d9d05c2fffce961ab",
+   "shots": [
+    "day-270_28_22",
+    "day-90_10_7_60",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-270_28_22",
+    "dusk-90_10_7_60",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "low_east",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "5eb33ec3d487b7e2e0a8622d7959c9a1a50b7f687e6342093ca974c84e0574b6",
+   "shots": [
+    "day-180_28_22",
+    "day-90_28_22",
+    "day-default",
+    "dusk-180_28_22",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "low_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "486910334ca40c271f43588f1228516707c4977c5b9bc690c65fc2e25de2d132",
+   "shots": [
+    "day-270_10_7_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-270_10_7_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "mid_row",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "8d479c000f1c3c6b212450f3c09ce600dfec42dc64a2a9495de7e2d7e6811fed",
+   "shots": [
+    "day-180_28_22",
+    "day-270_28_22",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-180_28_22",
+    "dusk-270_28_22",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "mid_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "a1b04d017834b8a0c917633af743ea1f2ef352a9ff01bad0974bb12d61994fa4",
+   "shots": [
+    "day-270_10_7_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-270_10_7_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "high_row",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "325fece899c4f984d433961759c8ceed5610ab3e649946cf53604922480c8d36",
+   "shots": [
+    "day-180_30_50",
+    "day-270_28_22",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-180_30_50",
+    "dusk-270_28_22",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "high_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "35ace8d2f91ddabca585be59d8e1afbf045d90b56f9a0815295674cea79f29fd",
+   "shots": [
+    "day-270_10_7_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-270_10_7_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

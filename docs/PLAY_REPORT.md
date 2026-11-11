@@ -68,6 +68,35 @@ Times are unix ms, the authority's `at_ms` base. The module reads only the clien
 
 There is no measurable cost at any of these rates. Frame times with the recorder on are within run-to-run noise of the runs with it off. The frames right after a recorded frame are no slower than the rest: the stall seen after report-1's full-size screenshots is gone. A frame's texels reach the worker about 37 ms (two frames) after the request. Writing the JPEG takes 4 ms on the worker. A frame is 45–65 KB at 960 px with real assets, so at 10 a second the JPEGs come to about 1.6–2.3 GB an hour. Past `LIVING_GAME_RECORD_MAX_MB` (default 4096) of frames, the recorder keeps one every 5 s. The encoded video is far smaller, about 2 MB a minute. 960 px at 10 a second is the default because it costs nothing measurable and shows walking and animation. 5 a second halves the disk.
 
+### The action log (`LIVING_GAME_ACTIONS`)
+
+`living/game/src/actions.rs` writes every reducer call the client sends, with the authority's reply, as one JSON line per call. The Spark's combat arenas use it to replay the owner's exact commands. It is off unless `LIVING_GAME_ACTIONS=<file>` is set. The launcher always sets it to `actions.jsonl` in the session folder, whether or not the session is recorded; `--client-env LIVING_GAME_ACTIONS=` turns it off. `session.json` names the file (`actions`).
+
+It hooks the client where every call goes out: `Net::on_reply`, which each call site passes the reducer's name and arguments, and `Net::report` (net.rs). So a new call site is logged the same way, and the compiler asks for its arguments. A line, its fields in this order:
+
+```json
+{"seq":12,"t_ms":52183.2,"wall_ms":1794431570095,"reducer":"human_act","what":"wave","args":{"node":"{\"do\":\"wave\"}"},"yaw":45.0,"control":"travel","reply":"refused","error":"graph.do: skill `wave` needs a target","reply_ms":17.2,"server_ms":1794431570093}
+```
+
+- `seq` counts calls from 1 in the order sent. Lines are written as replies arrive, so sort by `seq` for the order sent.
+- `t_ms` is when the call went out, in ms since the client started. `wall_ms` is the same moment as unix ms (UTC).
+- `reducer` is the reducer's name: `join`, `human_move`, `human_act`, `human_say`, `use_skill`, `release_skill`, and any added later. `what` is the feature that sent the call: `move`, `say`, `skill`, `release`, `act`, `goto`, `face`, or a gesture's name. Gestures, facing someone and walking to a point are all `human_act`.
+- `args` holds the reducer's arguments under the bindings' names, exactly as sent. A `human_act` node is the JSON string that the authority parses.
+- `yaw` and `control` give the camera and the control scheme at the start of that frame. `yaw` is in degrees, 0 = north up, clockwise. `control` is `cursor` or `travel` (F3).
+- `reply` is one of:
+  - `ok`;
+  - `refused`: the reducer returned an error, and `error` holds its text;
+  - `failed`: the host aborted it;
+  - `not_sent`: the SDK would not queue it;
+  - `none`: no reply came before the connection dropped or the client closed. SDK 2.14.1 drops a pending call's callback along with its connection.
+- `reply_ms` runs from the call to its callback. The callback runs in a later frame's `frame_tick` (`net::pump`), so a long frame adds to it: the first move after loading waited 0.9–2.3 s behind pipeline compiles. `server_ms` is the authority's timestamp of the reducer run, in unix ms.
+
+The log holds no keystrokes, tokens or identities, only commands. Spoken lines are in `human_say`'s arguments, and the Spark's store holds this file back from publishing by default.
+
+**Cost.** Each call costs the main thread its arguments (built only while logging) and one channel send. A writer thread formats, buffers and writes the lines, flushing within half a second and when the client exits (`AppExit`). A killed client loses at most its last half second and any calls still waiting for a reply. At exit the client logs the main thread's total time in the log (`actions: N calls logged; main-thread time …`). In the 2026-11-11 launcher runs (17 calls each, headless, load average 26–35 from other agents' builds), that came to 11.9 µs a call on average (20.9 µs at most) and 27.2 µs (116.5 µs at most): about 0.2–0.5 ms over a minute of play. Frame times with the log on and off differed by more than the run-to-run noise at that load, so an A/B of frame time could not resolve the cost. The per-call time is the measure.
+
+**The report** reads `actions.jsonl` from `--logs` and adds a "Commands sent" table: calls per reducer, the replies by kind, the most common errors, and reply latency (p50 and p95). `report.json` carries the same as `actions`.
+
 ### The authority's rows (`record-start`)
 
 `record-start` starts one detached process. It writes its PID to `<dir>/recorder.pid` and its notes to `<dir>/recorder.json`, and records into `<dir>/authority.jsonl`:
@@ -88,6 +117,7 @@ The SpacetimeDB documentation ([HTTP database API](https://spacetimedb.com/docs/
 - **Timeline:** everything above in order, plus lines heard, gestures, blows and the client's presses, each with the nearest still.
 - **Fights and deaths**, with the player's skill presses and their outcomes (`skill_use`).
 - **Refused commands**, with the authority's reasons: `act` rows ("What you had decided did not work out: …"), `skill_use` refusals ("refused: too tired"), reducer errors from the module log, and the client's `refused` log lines. Repeats within 10 s are counted on one row.
+- **Commands sent:** every reducer call from the action log, per reducer, with replies, errors and reply latency.
 - **Errors** from the client, the mind service, the module and model calls, from a minute before the arrival to a minute after the quit.
 - **Cost** at the prices in `living/tools/trials.py`, by purpose and model, for the session (arrival to quit) and for the whole journal, split into people, animals and the player's own character.
 - **Sources and limits.**

@@ -46,6 +46,8 @@ struct Probe<'a> {
     /// Answers by function and by the values of the fields it reads: a law is a function of
     /// those alone, so a sample that agrees on them is the same call and is not repeated.
     seen: std::collections::HashMap<(String, Vec<u8>), Dynamic>,
+    /// Every call and its answer, when asked for (`validate_traced`, the hashing-seed check).
+    trace: Option<Vec<String>>,
 }
 
 impl Probe<'_> {
@@ -56,6 +58,9 @@ impl Probe<'_> {
         let e = self.report.ops.entry(f.to_string()).or_insert(0);
         *e = (*e).max(n);
         self.report.calls += 1;
+        if let Some(t) = &mut self.trace {
+            t.push(format!("{f} {} -> {:?}", about(), r.as_ref().map_err(|e| e.to_string())));
+        }
         r.map_err(|e| format!("install refused: `{f}` failed {}: {e}", about()))
     }
 
@@ -100,11 +105,17 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
         return Err(format!("install refused: the script has no `{f}` law (the engine asks it; see the shipped script)"));
     }
     // The samples are the script's own items and skills, not the process's world's.
-    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits))
+    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits, None).map(|(r, _)| r))
+}
+
+/// [`validate`], with every call it made and its answer (in no particular order).
+#[cfg(test)]
+pub fn validate_traced(s: &Scripts, limits: super::Limits) -> Result<(Report, Vec<String>), String> {
+    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits, Some(Vec::new())))
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 13] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years"];
+pub const ENGINE_LAWS: [&str; 15] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.
@@ -147,7 +158,7 @@ fn interface(s: &Scripts) -> Result<(), String> {
     Err(format!("install refused: {}{more}", e.iter().take(SHOWN).cloned().collect::<Vec<_>>().join("; ")))
 }
 
-fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
+fn validate_scoped(s: &Scripts, limits: super::Limits, trace: Option<Vec<String>>) -> Result<(Report, Vec<String>), String> {
     // Every law reads only fields the engine provides.
     for f in s.ctx_laws() {
         Plan::of(&f, s.fields.of(&f, 1).and_then(|u| u.first()), true).map_err(|e| format!("install refused: {e}"))?;
@@ -160,7 +171,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
         c2.set(n);
         None
     });
-    let mut p = Probe { s, engine, count, report: Report::default(), seen: Default::default() };
+    let mut p = Probe { s, engine, count, report: Report::default(), seen: Default::default(), trace };
     laws_and_tables(&mut p)?;
     needs(&mut p)?;
     skills(&mut p)?;
@@ -173,13 +184,14 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     daylight(&mut p)?;
     life_years(s)?;
     ways(&mut p)?;
+    body(&mut p)?;
     if s.has("seasons_text") {
         let d = p.raw("seasons_text", (), &|| String::new())?;
         if !d.is_string() {
             return Err("install refused: `seasons_text()` must return a text".into());
         }
     }
-    Ok(p.report)
+    Ok((p.report, p.trace.unwrap_or_default()))
 }
 
 /// A way's refusals are its `<way>_check(a)`: the reducer returns exactly its words, and a
@@ -238,6 +250,25 @@ fn ways(p: &mut Probe) -> Result<(), String> {
         if !d.clone().into_string().unwrap_or_default().is_empty() {
             return Err(format!("install refused: `{f}` refuses a line that breaks nothing the way `{}` requires (to someone {} m away, first of its kind): {}", w.name, ok.target.dist, d));
         }
+    }
+    Ok(())
+}
+
+/// `meters()` rows are well formed, and `status_of` returns statuses for every meter empty,
+/// half and full, by day and at night, hurt and not (on the shipped vitals; the authority
+/// checks the meters' fields against its own row).
+fn body(p: &mut Probe) -> Result<(), String> {
+    let s = p.s;
+    if let Some(e) = s.meter_errors().first() {
+        return Err(format!("install refused: {e}"));
+    }
+    if !s.has("status_of") {
+        return Ok(());
+    }
+    for b in s.sample_bodies(&super::body::SHIPPED_VITALS) {
+        let about = || format!("for a {} {}{} with {}", b.stage, b.kind, if b.night { " at night" } else { "" }, b.fields.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", "));
+        let _ = p.raw("status_of", (b.map_for_check(),), &about)?; // counts its operations for the fuel report
+        s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
     }
     Ok(())
 }
@@ -564,7 +595,7 @@ fn life_years(s: &Scripts) -> Result<(), String> {
     Ok(())
 }
 
-fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx {
+pub(super) fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx {
     let mut c = SkillCtx { actor: a.clone(), target: t.clone(), item: item.into(), skill: skill.into(), season: "summer".into(), hour: 12.0, roll: 0.2, want: "wood".into(), want_qty: 2, ..Default::default() };
     // The actor's records come with it (the first body holds every kind).
     c.records = if a.id == 1 { records() } else { Vec::new() };

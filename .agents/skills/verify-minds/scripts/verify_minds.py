@@ -301,6 +301,12 @@ def run_case(run, case):
         sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
         felt = [m.split('How your body feels: ', 1)[1].split('\n', 1)[0] for e in sent for m in [json.dumps(e, ensure_ascii=False).replace('\\n', '\n')] if 'How your body feels: ' in m]
         assert felt and not any(ch.isdigit() for ch in felt[0]), felt[:2]
+        # The words are the world's `status_of` law's (since rules-senses-outcomes): one word per
+        # meter, the health and energy ones always there (the shipped law's `felt`).
+        health = ('unhurt', 'a little hurt', 'hurt', 'badly wounded', 'barely alive')
+        energy = ('well rested', 'rested', 'a little tired', 'tired', 'exhausted', 'utterly spent')
+        parts = [p.strip() for p in felt[0].split(';')[0].split(',')]
+        assert any(p in health for p in parts) and any(p in energy for p in parts), felt[:2]
         # The world's rules are told from the laws' own descriptions (docs/WORLD_RULES.md, since
         # laws-2): the sections and the numbers the script's laws give, the same in every prompt.
         told = [json.dumps(e, ensure_ascii=False).replace('\\n', '\n') for e in sent]

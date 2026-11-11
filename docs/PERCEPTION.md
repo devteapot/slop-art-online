@@ -2,6 +2,8 @@
 
 Started 2026-11-09. This note records how the living authority limits what a human player's client receives to what the player's character perceives now, plus the character's own state ([game brief](GAME_BRIEF.md#core-work-the-game-needs-engine-independent), core work 1; [island authority](ISLAND_AUTHORITY.md), "Perception-scoped subscriptions" and "A slimmer moving-body stream"). It covers the table audit, the SpacetimeDB documentation and source the design rests on, the design, the measured cost, the per-table decisions, the client change and the verification.
 
+**Status (eighth change, 2026-11-11, branch `rules-senses-outcomes`).** A player reads what its character senses through `my_senses`: the `senses(a)` law with all the character's facts, written only when a value changes, so the client no longer runs the law on the few facts it has ([My senses](#my-senses-eighth-change)). How its acts and its death came out reach it in codes through `my_act_outcomes`, one row per experience line that tells one, so the client does not parse the line's English ([Act outcomes](#act-outcomes-eighth-change)).
+
 **Status (sixth change, 2026-11-11, branch `rules-offers`).** A player reads the trade offers addressed to its character, and its own, through a new view, `my_offers`; `trade_offer` stays private and gains a `to` index and a stored end, `until_ms` ([Offers](#offers-what-a-player-is-offered)).
 
 **Status (seventh change, 2026-11-11, branch `fov-1`).** Sight may depend on facing: a world law, `fov_on` (off as shipped), gives `senses(a)` a field, and one pure function in the rules crate, `living_rules::sight::sees`, decides every look for the authority and the game client alike. What is heard but not seen reaches players (`heard_sounds`) and minds (their scene and a percept) coarsely, with no identity. `set_world_law` changes a law on a running world and records it ([The field of view](#the-field-of-view-seventh-change)).
@@ -85,6 +87,8 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `combat_seen` | own private state, through `my_combat` | private | private | game client (view) |
 | `readiness` | own private state, through `my_readiness` | private | private | game client (view) |
 | `skill_use` | own private state, through `my_skill_uses` | private | private | game client (view) |
+| `character_senses` | own private state, through `my_senses` (eighth change: what the character senses now, the `senses` law's answer) | private | private | game client (view) |
+| `act_outcome` | own private state, through `my_act_outcomes` (eighth change: how an act or the character's death came out, in codes, keyed by its experience line) | private | private | game client (view) |
 | `deliberation` | a mind's own state, through `my_deliberations` | private | private | mind service (view) |
 | `thought` | developer audit truth (model exchanges, raw replies) | private | private | observer (owner) |
 | `persona`, `belief`, `judgment`, `relation` | developer audit truth (minds' projections) | private | private | mind service, observer (owner) |
@@ -160,6 +164,7 @@ Since 2026-11-11 (branch `drop-1`). A drop between two ground levels, a terrace'
 - **Missiles:** they follow the sight rule and fly over a drop (`Map::passable_missile`, which sight already shared). This is not a balance choice but the same physical rule as sight: the drop is open air, and the authority has no height (sight lines ignore height, docs/FLOORS.md "Verticality"), so it cannot tell a shot down a terrace from one up a retaining wall. Stopping missiles at a drop would make a visible target unshootable for no visible reason. If shooting up a wall should be harder, that is a height rule for the step in FLOORS.md where levels become layers, not a terrain class.
 - **Low things** (same day): a lot or blocking prop below eye height (a cart) is `Terrain::Low` (9) on the hosted map, which blocks the foot and not the eye in the same way; what rises above the eye stays `Wall`. How high a thing rises comes from its own definition (its model's `height_m` in `data/buildings.json`); the eye height and per-kind overrides are land data, `LandParams.sight` ([island authority](ISLAND_AUTHORITY.md#sight-over-low-things-2026-11-11)). **Why land data and not a law:** which tiles block is decided when the land is hosted, in the rules crate, without the world's script, and the game client rebuilds the same hosted land for its own sight test (sight-2, `living/game/src/sightfield.rs`). The authority and the client must compute blocking from the same input, and the seed's land data is the input both have. A law could differ from what the client computes, and the client would draw people the authority hides, or hide people it perceives.
 - **Since eye-2 (same day), a thing above the eye hides only where its model is solid at eye height.** The measure is `eye_cells` in the table, from the mesh in 1.2–1.8 m. A tile is `Wall` where a half-metre square of the model blocks at least `LandParams.sight.solid` (0.8) of the view, and `Low` elsewhere. So an open stall, a well under its roof and a fountain's basin are seen through, and a closed building is not ([island authority](ISLAND_AUTHORITY.md#sight-through-what-is-open-at-eye-height-2026-11-11)).
+- **A plan's walls** (layout-2, same day): a hand-authored plan's blocking fixtures (its walls and fences, `plans[].fixtures`) are tiles of the same two classes: `Wall` where the wall rises above the eye and is solid, `Low` where it is seen over or through ([authored plans](AUTHORED_PLANS.md#fixtures-that-block)). On Cullet a Kiln court's 2 m wall hides the court from the back lane, and a Strand court's 1.5 m wall does not.
 - **What a mind is told** (eye-2): a mind's scene lists the nearest drop and the nearest low thing under `terrain_near`, as it lists water, rock, roads and walls, and says what they are, with how they meet the foot and the eye. That comes from the class's own `walkable` and `opaque` (`Terrain::words`, `Terrain::passage`):
   - before: `"drop": "west 1"`, and no low thing at all;
   - now: `"drop": "west 1, a drop to ground at another level (stairs, ramps and roads join the levels): you can see past it but not walk through it"` and `"low": "south 1, something low or open in the way, such as a cart, a low wall or an open stall: you can see past it but not walk through it"`.
@@ -439,6 +444,76 @@ On the dev-box, in a private SpacetimeDB 2.14.1 container (`fov1-stdb`, port 331
 | Minds | `verify_minds.py --case fov` with the fake model (the scene and the prompt: heard in words, no id, facing; the percept; the person instinct's habit turning the body) and `--case sight` | both pass (again after merging main) | `minds-fov1-h-fov/`, `minds-fov1-m-fov/result.json`, `sent-prompt.txt` |
 
 `scenes.py doing` failed twice on one world after the `fov` and `senses` scenes. On that loaded host each admin CLI call took 1 to 14 s, so the walkers had finished their walks (activity `wait`) before the observer's scene was written. It reads activity labels, and no field was on. It failed the same way on `origin/main` (`6288f599`) on the same host.
+
+### My senses (eighth change)
+
+Eighth change, 2026-11-11, branch `rules-senses-outcomes`, on the Spark. The interface design agreed it with the Spark coordinator ([interface, "What was agreed" 8](INTERFACE.md#what-was-agreed)): the game client ran `senses(a)` itself for its sight edge and earshot, with the facts it has (its kind and pack; noon or midnight from the clock), so any law that reads more (a stage, a gene, lamplight, a seed's own law) answered differently on the screen than on the authority.
+
+**The row and the view.** `character_senses` (private, `tables.rs`) holds one row per character a person plays: `id`, `sight` and `hearing` (metres), `field` (whether sight depends on facing, the `fov_on` law) with its five numbers (`focal_deg`, `side_deg`, `side_share`, `near_m`, `margin_deg`; 0 while there is no field), and `at_ms`, when a value last changed. `my_senses` (`perception.rs`, `primary_key = id`) returns the caller's living character's row: `living` and one `find` on the key. It is not a computed view: the law runs in the tick, not in the view.
+
+**When it is written.** At the player's frames (`frame::show_senses`), at most every 250 ms (`SENSES_MS`): the law's answer for the character now (`common::senses_of`, kept per moment and per state, as every look asks it) is compared with the row its frame last wrote, held in the viewer's module memory, and written only when it differs. A fresh module instance reads the row once at the first frame. The row goes when the character dies (`forget_dead`); while the minds hold the character its row is not refreshed and the view returns nothing (as every `my_*` view), and the first frame after the person takes it back compares again.
+
+| Path | Reads | Writes | Index | Recipients | Frequency | Growth |
+| --- | --- | --- | --- | --- | --- | --- |
+| `show_senses` | the `senses` law's answer (per-moment cache), once per fresh instance the row | `character_senses` insert or update on change only | PK | that player (`my_senses`) | per player every 250 ms; a write at nightfall, dawn, a torch picked up or put away, a law change | one row per played character, gone at death |
+
+#### SpacetimeDB documentation consulted (eighth change, 2026-11-11)
+
+Pinned 2.14.1 (`living/Cargo.toml`, `clockworklabs/spacetime:v2.14.1`). The pages' version selector reads 2.0.0 (and 1.12.0). The claims below that the docs leave open were verified for 2.14.1 earlier (this file's first and fourth changes); nothing here depends on a newer feature.
+
+| Page | What it says | What follows here |
+| --- | --- | --- |
+| [Views](https://spacetimedb.com/docs/functions/views/) | views are reevaluated "when SpacetimeDB detects something they read has since changed (the read set)"; `.find()` and `.filter()` on indexed columns give an exact read set, `.iter()` is not allowed; per-user views are computed and tracked per subscriber | `my_senses` reads the `player` row, the character row and one `character_senses` key, so it re-runs only when that row is written. Writing on change keeps it from re-running at every frame. |
+| [Tables](https://spacetimedb.com/docs/tables/), [performance](https://spacetimedb.com/docs/tables/performance/) | private tables are "Visible only to reducers and the database owner"; split tables by access pattern and update frequency; keep internal state private; watch growth | Its own small table rather than columns on `character` (read by `my_characters` and written for unrelated reasons) or `vitals` (re-anchored by needs): the row changes when senses change, not when anything else does. Bounded by the played characters. |
+| [Indexes](https://spacetimedb.com/docs/tables/indexes/) | indexes cost memory and slow writes; avoid redundant ones | The primary key only. |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) | adding tables (and views) is always allowed; columns may be added only at the end with a default; changing or reordering a column is refused | One new table and one view, no column changed: a running world updates in place (shown below). A later field joins at the end with a `#[default]`. |
+| [Subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) | subscribe once per connection, group by lifetime | A client subscribes `SELECT * FROM my_senses` with its other `my_*` views. |
+
+### Act outcomes (eighth change)
+
+Same change ([interface, "What was agreed" 4](INTERFACE.md#what-was-agreed)). The client told a refused act from a done one by matching the start of an `act` line ("What you had decided did not work out: …", `game/src/verbs.rs` `outcome_text`), and read a death from `character.cause`, whose text carries the killer's real name. Columns on `experience` were ruled out: `line_seen` embeds the `Experience` type, so a column added there changes `line_seen`'s column type, which automatic migration refuses.
+
+**The row and the view.** `act_outcome` (private, `tables.rs`) is keyed by the id of the experience line that tells the outcome and written in the same transaction (`outcomes::write`). Its columns: `observer` (btree), `at_ms`, `kind`, `ok`, `skill`, `code`, `what` (the act as described), `why` (the rules' words for a refusal or a failure; empty when done) and `other` (the killer, for a death). `my_act_outcomes` (`perception.rs`, `primary_key = id`) returns the rows of the caller's current character (`current`: living, or the one that died last until they join again, for the death screen), one btree point read. The line itself is unchanged: minds and the log still read it.
+
+**Codes** (`living_rules::outcome`, append-only, test `the_codes_only_grow`):
+
+| `kind` | When | `code` |
+| --- | --- | --- |
+| `act` | a deliberate act ends or never starts (`acts.rs`: a player's `human_act`, a mind's act) | `done`; `unreadable` (the act could not be read), `busy` (too much waiting), `expired` (waited past `QUEUE_MS`), `unseen` (its target not in sight, or not seen), `check` (the skill's `_check` refused it), `timing` (cooldown, recovery, a windup under way), `reach` (out of reach), `refused` (the engine refused it as it would start, for another reason), `failed` (it started and then failed), `broken_off` (a reflex took the body back), `set_aside` (waiting acts dropped by a reflex; no skill) |
+| `own` | a graph's action told to a person playing the character (a one-shot command of a moment skill, `act::tell`): its failures only | the same codes |
+| `death` | the character's own death (`act::die`) | `starved`, `cold` (cold and exposure), `exhausted`, `old_age`, `killed`, `killed_yielding`, `other` (an admin's `kill` with its own words) |
+
+`check`, `timing`, `reach` and `unseen` are set where `begin` (or `perform`) refuses (`act::refuse`) and read once by whoever reports it (`act::refusal`); any other refusal is `refused`. A death's line, new in this change, is told to the one who died when a person plays the character (now, or while the minds hold it): "You were killed by a stranger in orange." with the killer as they knew them (`label_for`), "You starved.", "You died (…)." for an admin's words (`living_rules::outcome::death_words`). Under the minds the line is staged and released for the person's client at once. `character.cause` is unchanged.
+
+**Written only for a played character.** An act's row is written only when a person plays the character now (`combat::human`), the case in which its line is staged for the client (`frame::line`); minds' acts write none. A death's row is written for a played character either way.
+
+**Retention.** A row goes with its line: when `frame::release_lines` drops a line beyond the newest `LINES_SHOWN` (64) from `line_seen`, its row goes too (`outcomes::dropped`), so a character has at most as many rows as lines in `my_experience`. When a person joins with a new character, the rows of the one they played before go (`set_player`, `outcomes::forget`). The table therefore holds at most 64 rows per person, not per character ever played.
+
+| Path | Reads | Writes | Index | Recipients | Frequency | Growth |
+| --- | --- | --- | --- | --- | --- | --- |
+| `outcomes::write` | `HUMANS` cache | one `act_outcome` insert | PK | that player (`my_act_outcomes`) | one per act end, refusal or death of a played character | ≤ 64 per person |
+| `outcomes::dropped` | — | a PK delete per line pruned (a no-op for a line with no row) | PK | that player | at a line release past 64 | — |
+| `outcomes::forget` | `act_outcome.observer` | the old character's rows deleted | btree | that player | at a join with a new character | — |
+
+The row is written with the line, and the line reaches `my_experience` at the character's next release (at most 100 ms later, `LINES_MS`), so a client may see a row before its line and joins them by id.
+
+#### SpacetimeDB documentation consulted (act outcomes)
+
+The pages and versions of [My senses](#spacetimedb-documentation-consulted-eighth-change-2026-11-11) above. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/): "removing or modifying existing columns (type …)" is refused, so no column of `experience` (embedded in `line_seen`) changes; adding a table is always allowed. [Views](https://spacetimedb.com/docs/functions/views/): a btree `.filter()` gives an exact read set, so `my_act_outcomes` re-runs only when that character's rows change. [Event tables](https://spacetimedb.com/docs/tables/event-tables/) were not used: views cannot read them and a reconnecting client (or the death screen) must still find the row. [Performance](https://spacetimedb.com/docs/tables/performance/): "Be mindful of unbounded table growth": rows go with their lines.
+
+#### Verification (eighth change)
+
+On the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), scratch databases only, fake models only; at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`.
+
+| Surface | What was driven | Result | Evidence |
+| --- | --- | --- | --- |
+| Client | `run.py`: the new private tables and views in the inventories, the own-state views over real subscriptions | 39 of 39 | `client-sso-214657/results.md`, `own-*.json`, `visibility.json` |
+| In-place update | origin/main `7c6a92b6` published fresh, a player joined and acted; this branch published `--keep-data` | data kept (265 characters, the player's character), `my_senses` and `my_act_outcomes` written after | `client-migrate-214519/` |
+| Player | `senses.py`, `outcomes.py`, `command.py`, `told.py`; `combat.py --scene death` on an island world | 8/8, 7/7, 4/4, 12/12 on a second run (11/12 on the first: the player's broken-off gift line late under load); death 4/4 with code `killed` | `player-sso-214702/`, `player-sso-island-215136/` |
+| Core | `scenes.py tick alarms refusal food senses death-names` | all pass | `core-sso-214854/` |
+| Minds | `verify_minds.py --case roundtrip --case acts --case rethink` | all pass; the body line and the rethink levels are the law's words | `minds-sso-215130-*` |
+
+Not covered: the game client reading `my_senses`, `my_act_outcomes`, `meters()` and `status_of` (the laptop's change; `verify-ui`); `needs`, `fov` and the island and Cullet core scenes; the act codes `busy`, `expired`, `timing`, `reach`, `broken_off`, `set_aside` and the deaths `starved`, `cold`, `exhausted`, `old_age` live (the same write path; `unreadable`, `check`, `done`, `other` and `killed` ran live). Performance at scale: only the `status_of` cost above, on 264 characters with no players; `my_senses` and `act_outcome` were not load-tested.
 
 ### Compatibility: the `LIVING_PERCEPTION` build switch
 

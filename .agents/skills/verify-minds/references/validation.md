@@ -23,6 +23,13 @@ Branch `exp-greet` (main 90f6fac with `exp-hamlet-births` merged), worktree, the
 - Unit tests (`cargo test -p living-mind talk`): `greet_off_is_the_old_rule` (every combination of a line's facts decides as before under `off`), `greet_modes_draw_in_one_stranger_and_not_the_hostile`, `the_faced_hearer_is_the_one_straight_ahead`, `a_line_gets_its_turn_alongside_only_when_the_deliberation_cannot_answer_it`, `switches_default_off_and_refuse_typos`.
 - Not run here: the rest of the suite (roundtrip, acts, consolidation, prune, reject, only, reconnect, lod, takeover, sight, resident, animals, night, jev, rethink, dealings). This change does not touch their paths: the switches are off by default and only conversation code reads them.
 
+## 2026-11-11 rules-senses-outcomes: body words from the status_of law (Spark)
+
+Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`.
+
+- `minds-sso-215130`: `roundtrip`, `acts` and `rethink` pass. The think prompt's body line is the law's (`How your body feels: not hungry, well rested, unhurt`; `roundtrip` now checks a health and an energy word of the law); the rethink state's `body` is `{"energy": "rested", "health": "unhurt", "hunger": "not hungry"}`.
+- Not run: the other cases (unchanged paths), paid tiers.
+
 ## 2026-11-11 speech-2: whisper and call through minds; privacy for every way (Spark)
 
 Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
