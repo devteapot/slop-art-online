@@ -336,6 +336,121 @@ def death_names(s):
              {"death": deaths[bystander], "remains": remains[bystander]}, fatal=False)
 
 
+def health_seen(s):
+    """Another's health reaches a fighter as the band everyone sees, never as a number, except
+    while the fighter's own appraisal of them holds (docs/PERCEPTION.md, `perception::health_seen`).
+
+    Strangers fight in pairs; the scene plays the mind's part by reading each pending
+    `deliberation` (fight reports, `act::fight_report`, arrive there) and skipping it, so the
+    next report can come. Pair one fights once (band words); then a graph's `health_of` on it
+    reads the band's middle, and B's exact health once A appraises B. Pair two: C appraises D
+    and they fight within the 20 s reveal (exact for C, band for D), then fight again after it
+    ends (band). Each pair fights at most twice so no one dies of the scene."""
+    thought = {"kind": "verify", "summary": "scripted acknowledgement, no model",
+               "detail": "", "latency_ms": 0, "tokens": 0, "model": "none", "reference": "verify-core-health-seen"}
+    a, b, c, d = s.people(4)
+    s.call("place_near", b, a)
+    s.call("place_near", c, a)
+    s.call("place_near", d, c)
+    reports, seen = [], set()
+    exact_re = re.compile(r"they have (\d+) of (\d+) health\.$")
+    words = ("unhurt", "scratched", "hurt", "badly hurt", "barely standing")
+    pair = {a: b, b: a, c: d, d: c}
+
+    def drain(phase):
+        for row in s.rows(f"SELECT * FROM deliberation WHERE actor = {a} OR actor = {b} OR actor = {c} OR actor = {d}"):
+            for line in row["reason"].splitlines():
+                key = (row["actor"], line, row["updated_ms"])
+                if line.startswith("The fight with") and key not in seen:
+                    seen.add(key)
+                    reports.append({"phase": phase, "actor": row["actor"], "text": line, "at_ms": row["updated_ms"],
+                                    "revealed": [r["what"] for r in s.rows(f"SELECT * FROM reveal WHERE observer = {row['actor']}")]})
+            s.call("mind_skip", row["actor"], row["updated_ms"], thought)
+
+    def fight(x, y, phase, want, seconds=40):
+        s.graph(x, {"first": [{"do": {"skill": "attack", "target": {"id": y}}}, {"wait": 1}]})
+        s.graph(y, {"first": [{"do": {"skill": "attack", "target": {"id": x}}}, {"wait": 1}]})
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and not want():
+            drain(phase)
+            time.sleep(0.4)
+        for z in (x, y):
+            s.graph(z, {"wait": 120})
+        time.sleep(1.5)
+        drain(phase)
+
+    def of(phase, actor):
+        return [r for r in reports if r["phase"] == phase and r["actor"] == actor]
+
+    def band_only(r):
+        return any(r["text"].endswith(f"they look {w}.") for w in words) and not exact_re.search(r["text"]) and "%" not in r["text"]
+
+    def alive(*ids):
+        return all(s.rows(f"SELECT alive FROM character WHERE id = {i}")[0]["alive"] for i in ids)
+
+    drain("before")
+    fight(a, b, "band", lambda: of("band", a) and of("band", b))
+    s.expect("fight reports reach both fighters", of("band", a) and of("band", b), reports, fatal=False)
+    s.expect("without an appraisal, fight reports carry the band's words, no number",
+             of("band", a) and all(band_only(r) for r in reports if r["phase"] == "band"), [r["text"] for r in reports], fatal=False)
+
+    s.act(c, {"do": "appraise", "target": {"id": d}})
+    look = s.wait(lambda: s.told(c, "over:", "appraise"), seconds=20)
+    reveal = s.wait(lambda: s.rows(f"SELECT * FROM reveal WHERE observer = {c} AND target = {d}", "reveal"), seconds=10)[0]
+    s.expect("appraise tells exact health and starts a 20 s reveal",
+             re.search(r"over: \d+ of \d+ health\.$", look[-1]["text"]) is not None, look[-1]["text"])
+    max_d = round(s.vitals(d)["max_hp"])
+    fight(c, d, "appraised", lambda: of("appraised", c), seconds=16)
+    inside = [r for r in of("appraised", c) if r["at_ms"] < reveal["until_ms"]]
+    s.expect("while C's appraisal holds, C's fight report gives D's exact health",
+             inside and all(exact_re.search(r["text"]) and int(exact_re.search(r["text"]).group(2)) == max_d for r in inside),
+             {"reports": [r["text"] for r in of("appraised", c)], "until_ms": reveal["until_ms"]}, fatal=False)
+    s.expect("D, who appraised no one, still gets only C's band", all(band_only(r) for r in of("appraised", d)),
+             [r["text"] for r in of("appraised", d)], fatal=False)
+    s.wait(lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"] > reveal["until_ms"] + 1500, seconds=30)
+    s.wait(lambda: not s.rows(f"SELECT * FROM reveal WHERE observer = {c}"), seconds=10)
+    s.expect("C and D alive for the fight after the reveal", alive(c, d))
+    fight(c, d, "after", lambda: of("after", c), seconds=40)
+    s.expect("after the reveal ends, C's reports are back to the band", of("after", c) and all(band_only(r) for r in of("after", c)),
+             [r["text"] for r in of("after", c)], fatal=False)
+    (s.out / f"{s.name}-reports.json").write_text(json.dumps(reports, indent=2) + "\n")
+    print(json.dumps([[r["phase"], r["actor"], r["text"]] for r in reports], indent=2), flush=True)
+
+    # A graph's health_of reads the same perception: a threshold between B's exact share and
+    # its band's middle tells which one the condition saw. A person's non-urgent think is
+    # dropped within its think_min_s (20 s) of the last deliberation unless one is pending:
+    # wait it out once, then leave the request pending so the second ask joins it.
+    time.sleep(21)
+    s.expect("A and B alive for health_of", alive(a, b))
+    v = s.vitals(b)
+    pct = s.needs(b, "health-of-b")["hp"] / v["max_hp"] * 100
+    band = 4 if pct >= 90 else 3 if pct >= 65 else 2 if pct >= 40 else 1 if pct >= 20 else 0
+    middle = {4: 95, 3: 77, 2: 52, 1: 30, 0: 10}[band]
+    if abs(middle - pct) < 4 or min(abs(pct - e) for e in (20, 40, 65, 90)) < 2:
+        s.expect("health_of: B's exact share is clear of its band's edges and middle", False,
+                 {"pct": pct, "middle": middle}, fatal=False, known=True)
+        return
+    thr = (pct + middle) / 2
+    exact_says = "below" if pct < thr else "above"
+    band_says = "below" if middle < thr else "above"
+
+    def asked(label):
+        s.graph(a, {"if": {"cond": {"health_of": {"target": {"id": b}, "below": thr}},
+                           "then": {"think": f"verify health_of {label} below"},
+                           "else": {"think": f"verify health_of {label} above"}}})
+        row = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM deliberation WHERE actor = {a}") if f"verify health_of {label}" in r["reason"]], seconds=30)[0]
+        s.graph(a, {"wait": 120})
+        return "below" if f"verify health_of {label} below" in row["reason"] else "above"
+    plain = asked("plain")
+    s.expect("health_of without an appraisal reads the band's middle", plain == band_says,
+             {"pct": round(pct, 1), "band": band, "middle": middle, "below": round(thr, 1), "said": plain}, fatal=False)
+    s.act(a, {"do": "appraise", "target": {"id": b}})
+    s.wait(lambda: s.rows(f"SELECT * FROM reveal WHERE observer = {a} AND target = {b}"), seconds=20)
+    shown = asked("appraised")
+    s.expect("health_of during an appraisal reads exact health", shown == exact_says,
+             {"pct": round(pct, 1), "below": round(thr, 1), "said": shown}, fatal=False)
+
+
 def lifecycle(s):
     w = s.rows("SELECT * FROM world", "world")[0]
     s.expect("compressed lifecycle seed selected", w["run"] == "s1-acts" and w["life_pace"] < 0.1)
@@ -2169,7 +2284,7 @@ def placement(s):
              {"request": deep, "exit": r.returncode, "error": out[-300:]})
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen}
 
 
 def goods(s):
