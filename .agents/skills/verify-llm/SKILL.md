@@ -31,7 +31,7 @@ The runner checks that the container's `/wasm` bind mount exists and is writable
 
 ## Evidence and cleanup
 
-The command prints each evidence directory under `.local/living/verify/<suite>-<case>/`. The suite directory contains `build.log`, `cargo-tests.log` and `results.json`. Each case keeps the temporary models file, fake scripts and request logs, `mind.log`, `driver.log`, shared `actions.log`, authority snapshots, `result.json` or `failure.txt`, and `cleanup.json`.
+The command prints each evidence directory under `.local/living/verify/<suite>-<case>/`. The suite directory contains `build.log`, `cargo-tests.log` and `results.json`. Each case keeps the temporary models file, fake scripts and request logs, the mind's consolidation outcome lines (`journal/outcomes/consolidations.jsonl`), `mind.log`, `driver.log`, shared `actions.log`, authority snapshots, `result.json` or `failure.txt`, and `cleanup.json`.
 
 Cleanup sends SIGTERM by owned pid and records any SIGKILL escalation. It copies every actor journal into the case's `journal/`, checks byte equality, then removes only `.local/living/journal/verify-llm-<suite>-<case>/`. Shared `verify.py cleanup` deletes the database and confirms HTTP SQL 404 before marking state unpublished. The helper records that verified state in `cleanup.json`. The existing SpacetimeDB container stays running.
 

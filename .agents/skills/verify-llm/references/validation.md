@@ -7,7 +7,15 @@ Branch `fix-consolidation-429`, trial service `slop-trials-stdb` (`LIVING_STDB_U
 
 - `llm-cap-20261111-205903`: `capacity-overflow` (2 primary capacity 429s, each followed by one successful alternate consolidation at the alternate's effort; think and deliberate stayed on the primary; the consolidation thought was accepted; no consolidation failure logged), `overflow` and `basic` pass; 10 fake-contract scenarios pass (new: `capacity`).
 - Cargo: `a_model_out_of_capacity_sends_listed_memory_work_to_the_overflow` (real fake server: listed consolidate goes a → b with no effort sent; unlisted reorganize and a rate-limit 429 keep a → a; a `capacity_overflow` without overflow or with an unknown purpose is refused; the overflow's effort gap is reported). The other 30 `llm::` tests pass.
-- Not covered: the paid live tier, and the other 13 cases (unchanged paths).
+- Not covered in that run: the paid live tier, and the other 13 cases (unchanged paths).
+
+Second pass, same branch, rebased on main 017286a1 after ar1 finished (1,027 of 2,751 GLM consolidations failed on capacity; the runaway guard stopped 7 of 28 instances):
+
+- Each consolidation that calls a model, fails or finds experiences lost writes an outcome line to `<journal>/outcomes/consolidations.jsonl` (route primary/fallback, attempt, failure, `retry_in_s`, trimmed). `llm-cap2-20261111-211323`: `capacity-overflow` (Datha: attempted 1, fallback 1) and the new `capacity-retry` (capacity 429 on the call and its paced retry, `failed (1x)`, integrated on the primary 20 s later: attempted 2, primary 1, retried 1, lost 0, capacity 1), both read through `trials.consolidation_table`.
+- `llm-cap3-full-20261111-211725`: all 18 cases and the 10 fake-contract scenarios pass.
+- verify-minds `minds-cap-20261111-213227-consolidation`: the documented XFAIL (no-store patch loss), with persona, consolidation and cursor passing; its journal holds two `integrated`/`primary` outcome lines.
+- `python3 living/tools/trials_runaway_selftest.py` (10), `store_selftest.py` (20, including the published consolidation table) and `trials_laws_selftest.py` pass; `cargo test -p living-mind` 94 passed. The ar1 journals replayed through the new guard with each trial's own config: 0 of 28 instances stop (7 did), with 4 outages of 33–40 s recorded.
+- Not covered: a `trials.py run --fake` end to end (it would create `verify-trial-*` databases, which this task's rules forbid), and the paid tier.
 
 ## 2026-11-11 the prompt frame (exp-player-frame, DGX Spark)
 

@@ -317,6 +317,9 @@ pub struct Llm {
 /// Where the journal keeps each distinct system prompt once.
 pub const SYSTEM_DIR: &str = "system";
 
+/// Where the journal keeps the outcomes of the mind's work ([`Llm::outcome`]).
+pub const OUTCOMES_DIR: &str = "outcomes";
+
 /// Reachability of a provider (by base URL). When a request cannot connect to it (DNS, no
 /// route, refused), calls to it wait instead of failing at once; one probe at a time goes
 /// out, with a pause that doubles from 2 s to a minute, until the provider answers again. An
@@ -709,6 +712,8 @@ pub struct Reply {
     pub tokens: u32,
     pub latency_ms: u32,
     pub model: String,
+    /// The picked profile failed and its overflow (or the default) answered.
+    pub overflowed: bool,
 }
 
 pub struct Msg {
@@ -883,7 +888,7 @@ impl Llm {
             if let Err(e) = &result {
                 let short = out_of_capacity(e) && self.models.profiles.get(&pick.profile).is_some_and(|p| p.capacity_overflow.iter().any(|c| c == purpose));
                 if let Some(alternate) = self.overflow_pick(&pick, purpose).filter(|_| short) {
-                    result = self.chat_once(&alternate, purpose, actor, messages, lane).await;
+                    result = self.chat_once(&alternate, purpose, actor, messages, lane).await.map(|r| Reply { overflowed: true, ..r });
                 } else if limited {
                     result = self.chat_once(&pick, purpose, actor, messages, lane).await;
                 }
@@ -894,7 +899,7 @@ impl Llm {
         let alternate = self.overflow_pick(&pick, purpose).or_else(|| (default.profile != pick.profile).then_some(default));
         if result.is_err() {
             if let Some(alternate) = alternate {
-                result = self.chat_once(&alternate, purpose, actor, messages, lane).await;
+                result = self.chat_once(&alternate, purpose, actor, messages, lane).await.map(|r| Reply { overflowed: true, ..r });
             } else if limited {
                 // One recovery attempt goes through the learned pacing and cooldown.
                 result = self.chat_once(&pick, purpose, actor, messages, lane).await;
@@ -979,7 +984,7 @@ impl Llm {
         });
         self.journal(actor, &entry).await;
         let (content, tokens, ..) = result?;
-        Ok(Reply { content, tokens, latency_ms, model: p.model.clone() })
+        Ok(Reply { content, tokens, latency_ms, model: p.model.clone(), overflowed: false })
     }
 
     fn gate_leave(&self, host: &str, unreachable: bool) {
@@ -1029,6 +1034,22 @@ impl Llm {
     /// model exchanges.
     pub async fn journal_entry(&self, actor: &str, entry: &Value) {
         self.journal(actor, entry).await
+    }
+
+    /// One line of what the mind's work came to (not a model call), in
+    /// `<journal>/outcomes/<what>.jsonl`, beside the actors' call journals: for example each
+    /// consolidation's route, retries and experiences lost (read by trials.py's report).
+    pub async fn outcome(&self, what: &str, entry: &Value) {
+        let dir = self.journal.join(OUTCOMES_DIR);
+        if tokio::fs::create_dir_all(&dir).await.is_err() {
+            return;
+        }
+        let path = dir.join(format!("{}.jsonl", what.replace(|c: char| !c.is_alphanumeric(), "_")));
+        if let Ok(mut f) = tokio::fs::OpenOptions::new().create(true).append(true).open(&path).await {
+            let mut line = entry.to_string();
+            line.push('\n');
+            let _ = f.write_all(line.as_bytes()).await;
+        }
     }
 
     async fn journal(&self, actor: &str, entry: &Value) {
@@ -1308,7 +1329,7 @@ impl Llm {
                 entry["after_restart"] = json!(true);
             }
             self.journal(&item.actor, &entry).await;
-            out.push((item.id.clone(), item.meta.clone(), result.map(|(content, tokens, ..)| Reply { content, tokens, latency_ms, model: p.model.clone() })));
+            out.push((item.id.clone(), item.meta.clone(), result.map(|(content, tokens, ..)| Reply { content, tokens, latency_ms, model: p.model.clone(), overflowed: false })));
         }
         let _ = std::fs::remove_file(self.pending_path(id));
         log::info!("batch job {id} {} in {:.0} s{}", done["status"], latency_ms as f64 / 1000.0, if after_restart { " (collected after a restart)" } else { "" });
