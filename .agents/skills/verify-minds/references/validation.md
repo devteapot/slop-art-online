@@ -1,5 +1,12 @@
 # Internal mind validation
 
+## 2026-11-11 fix-stale-reasons (Spark)
+
+Branch `fix-stale-reasons` from `bade5c0`, worktree on the DGX Spark, trial container `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only.
+
+- `reasons` (new): on the fix, `minds-reasons-after-20261111-181723` passes: 5 deliberations, the one-off feeling in 1 (the first), the offer sent mid-call in 1 (the fourth), every `carried_before` 0, 3 later deliberations asked for by "I finished my plan.". With `clear_deliberation` temporarily put back to the old rule (same build otherwise), `minds-reasons-before-20261111-182024` fails as it should: the feeling in 5 of 5 (`carried_before` 0–4), the offer in 2, thoughts back to back every 9 s. An earlier form of the case (`minds-reasons-before-20261111-180628`, `minds-reasons-after-20261111-181201`) relied on the mind's plan finishing repeatedly; a plan finishes once (a desire), so the case now reinstalls a sequence root.
+- SUITE_PLACEHOLDER
+
 ## 2026-11-11 fix-death-labels on main (Spark)
 
 Main at `7837320` (the merge of `fix-death-labels`), branch `fix-death-names-minds`, worktree on the DGX Spark, trial container `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, load average 19–29 from other work.
