@@ -18,7 +18,7 @@ A seed may set `day_minutes` (real minutes in one game day, 1 to 1440; none: the
 
 The shipped `rates` is now written per game hour: every number is the old per-minute number halved, since the 12-minute day's game hour is half a real minute. `sleep_duration` divides by the same halved rates and multiplies by `hour_ms()`. Halving and doubling are exact in floating point, so the island's rates in real time are bit for bit what they were (below).
 
-**What is still per real minute** (not converted here, and listed so nobody assumes they are): `spoil_rate` (goods, `goods-1`'s), `pasture_regen` (grass regrowth per growing minute), `regrow` of resources, `trap_every_s`, `remains_s`, and the real-time windows (`bond_window_s`, `trade_window_s`, `join_window_s`, `takeover_s`), which are about people's real time on purpose. On a 48-minute day the first five run four times faster per game day than on the island. `gestation_days` and lifespans were already in game days.
+**What was still per real minute** after rules-1: spoiling, grass regrowth, resource regrowth, traps and remains. Since `rates-2` they are in game time too ([below](#the-other-rates-in-game-time-rates-2)). Still in real time: the windows about people's real time, on purpose (`bond_window_s`, `trade_window_s`, `join_window_s`, `takeover_s`, `repeat_failure_s`, `follow_s`), steering and sensing cadences, `longing_after_min` (a grown person's longing for a child, in real minutes since a birth) and the wild animals' return (`species.json` `every_min`). `gestation_days` and lifespans were already in game days.
 
 ### `person_pace`, reconciled
 
@@ -85,14 +85,17 @@ Values per game hour unless noted; in brackets per real minute on that world's d
 | Name and health band shown | within sight | within 24 m (`known_within`, `perceived_of`) | Decision 6 |
 | Speech | 9 m | 12 m (`hearing_of_people`) | §5 |
 | A shout | none | none (not built) | 30 m |
-| Spoiling, raw fish | 5% a real minute | unchanged (goods) | About a day |
+| Spoiling, raw fish (carried; a storage a third) | 2.5% a game hour (5% a real minute) | 2.5% a game hour (1.25% a real minute; `spoil_per_h`) | Gone in about a day: half in 1.1 game days |
+| Spoiling, smoked fish / roots / greens | 0.1% / none / none | 0.1% / 0.2% / 3% a game hour | Smoked keeps weeks, roots a fortnight, greens a day |
+| A trap's catch | a meat every 8 game hours | none (`trap_every_h` 0: no small game on the Wrack) | The world does not restock |
+| A person's remains lie | 120 game hours (an hour real) | 48 game hours (96 real minutes; `remains_h`) | |
 
 **Where this differs from SMALL_CITY §4's proposed column**, which was written per real minute before `person_pace` existed, and what I chose:
 
 - Hunger: the proposal's +1.0 a real minute is 48 a game day if it never slowed. Here hunger halves in sleep (as on the island), so awake it is 1.2 a real minute and the day still totals 48.
 - Energy and sleep: the proposal's −1.6 awake and +7.5 in bed (a real minute) rest a person in under three game hours of a night it spends in bed, and harm a sleepless person after 31 hours, against "harm starts after two" nights. I chose the drain and the gain so that 16 hours awake and 8 in bed balance (−40, +40), a rough night restores half, a sleepless night slows the walk the next morning (energy below 35 after 26 hours) and harm starts in the second night (40 hours). The slow walk below 35 is Cullet's `move_speed`.
 - Cold: the proposal's −0.75 a real minute on winter nights is kept. On the island and in the proposal, healing (+0.75) cancels it exactly for a fed, rested body, so a winter night would cost nothing; Cullet stops healing while freezing, so a winter night outside costs 15 whoever it is.
-- Spoiling is not set: it is goods (`goods-1`), and `spoil_rate` is still per real minute.
+- Spoiling: set since `rates-2` (`spoil_per_h`), with SMALL_CITY §4's 1.25% a real minute for raw fish, which is 2.5% a game hour, as the island's per game day.
 
 ### The outcomes, computed from the script
 
@@ -117,10 +120,83 @@ Values per game hour unless noted; in brackets per real minute on that world's d
 
 The island's people tire 0.45 a game hour awake, so its sleepless rows are over eight game days (under two real hours).
 
+Goods, in the same test (`cullet_s_goods_meet_their_targets_in_a_game_day`; spoiling as the authority sweeps it, once a real minute, so 12 sweeps an island day and 48 a Cullet day):
+
+| Outcome | Island (12-minute day) | Cullet (48-minute day) | Target | Met |
+| --- | ---: | ---: | --- | --- |
+| Raw fish left after a game day, carried | 0.540 | 0.547 | gone in about a day | yes |
+| Game days until half of raw fish is gone, carried / in a storage | 1.13 / 3.44 | 1.15 / 3.46 | | |
+| Game days until half of smoked fish is gone, carried | 28.9 | 28.9 | keeps weeks | yes |
+| Game days until half of roots / greens are gone, carried | none on the island | 14.4 / 0.96 | a fortnight / a day | yes |
+| Smoked fish / roots left in a storage after 6 game days | 0.953 / – | 0.953 / 0.908 | the six days' store lasts | about 5% and 9% lost if none is eaten |
+| Meat a trap catches in a game day | 3 | 0 | no restocking from nothing | yes |
+| Game days a person's remains lie | 5 | 2 | | |
+| The land's yield, a game day of growing time, against what 74 eat | | 1.32 times (fish 55%, roots 30%, greens 15%) | 1.3 times | yes |
+| Peat cut a game day, against the Cone at full firing and the homes as much | | 101 of 144 (70%) | 70% | yes |
+
 Not met, because not built: the shout (30 m), keen eyes, the spyglass, high ground (the authority does not read height for sight), fog and rain taking sight, kin recognised at 36 m, and a fisher's darkness sight. Each is a line in `senses`, `glow` or `perceived_of` once its fact exists (the shout needs a speech volume on `say` and a hearing law per volume; high ground needs the body's height in the context). Warm places with their own radius (a lit furnace) and needs in minds' prompts only past a threshold are other tasks in SMALL_CITY §4.
+
+## The other rates in game time (rates-2)
+
+Built on branch `rates-2`, 2026-11-11. The rates rules-1 left in real time are written per game hour, and the engine turns them into real time for the world's day, as it does for `rates`:
+
+| What | The law now (game time) | Before (real time) | The engine's real-time value |
+| --- | --- | --- | --- |
+| Spoiling | `spoil_per_h(item)`: share of a stack a game hour | `spoil_rate(item)`, a real minute | `Scripts::spoil_per_min`, read by the spoiling sweep (`tick::spoil`, once a real minute per stack) |
+| Resource regrowth | a kind's `regrow_per_h` in `resources()`, read by `regrow_per_h(kind)`; a plan's or seed node's `regrow_per_h` | `regrow` and `regrow(kind)`, a real minute | `Scripts::regrow_per_min`, kept per real minute in `resource_node.regen` as before |
+| Grass regrowth | `laws().pasture_regen_per_h` per grassy tile a growing game hour | `pasture_regen`, a growing minute | `Laws::pasture_regen`, still per real minute |
+| Traps | `trap_every_h(x)`: game hours between catches | `trap_every_s`, real seconds | `Scripts::trap_every_ms` |
+| Remains | a kind's `remains_h` in `kinds()`, read by `remains_h(kind)` | `remains_s`, real seconds | `Scripts::remains_ms`, the `rot` row's due time |
+
+- **The conversion** multiplies a game-hour rate by 60,000 ms over the real length of a game hour (`Scripts::per_minute`, 2 on the 12-minute day, ½ on Cullet's), and a game-hour duration by that length (`hour_ms`). The shipped numbers are the old ones halved (rates) or the old seconds over 30 (durations): halving, doubling and multiplying whole numbers by 30,000 are exact in floating point.
+- **Older scripts keep their meaning.** A script that defines the real-time law (`spoil_rate`, `regrow`, `trap_every_s`, `remains_s`, or `pasture_regen` in `laws()`) is read in real time as before, whatever its day: a script installed before this change, or an overlay that still writes real time. The name says the unit, so a law is never read in the wrong one.
+- **The words minds read** are unchanged on the island: remains are "gone after about 30 minutes (a person's after 60)", now computed as `remains_h × hour_ms()` in real minutes.
+- **A seed's nodes** (`resource_nodes[]`) take `regrow_per_h`; goods-1's `regrow` (a real minute) is still read when `regrow_per_h` is absent.
+- No table, column, reducer or view changed; `resource_node.regen` stays per real minute, so clients that draw regrowth (the viewer, the game client) are unchanged.
+
+### Cullet's values
+
+In its laws file: raw fish 2.5% a game hour (§4's 1.25% a real minute), cooked fish 0.6%, smoked fish 0.1% (as the island per game day); roots 0.2%, baked roots 1%, greens 3%. No trap catches anything (there is no small game on the Wrack). A person's remains lie two game days. A storage holds up to 1,000 things (`storage_holds`; the shipped 120 is a crate's): the Store's 509 foods and the Cone's 824 peat are placed in storages, and at 120 nobody could store anything in them until they were nearly empty. It applies to every storage in Cullet, a person's own too. A capacity per kind of store would be the better rule; none exists yet. Its resource kinds regrow per game hour as computed from §2 ([placed below](#cullets-goods-placed-rates-2)). The outcomes are in the [goods table above](#the-outcomes-computed-from-the-script).
+
+## Cullet's goods, placed (rates-2)
+
+All through [`living/tools/cullet_plan.py`](../living/tools/cullet_plan.py), which writes `plan.json` and `cullet.json`; amounts and regrowth are computed there from SMALL_CITY §2's sustainability targets, as starting values for the soak (not tuned). The assumptions are written beside them: 64 residents and 10 players eat 48 a game day; the land gives 1.3 times that; fish 55% counted as eaten smoked (24), roots 30% counted baked (30), greens 15% raw (10); the Cone makes about 12 glass a day; nodes hold about two days of regrowth. Every node regrows only in growing time (no regrowth in winter, for every kind).
+
+**Resources** (`plans[].resources`, the laws' kind names):
+
+| Where | Kind | Nodes | Each holds | Regrowth, a game hour | A game day |
+| --- | --- | ---: | ---: | ---: | ---: |
+| The Fish Steps | `fishing_spot`, pool "the Fish Steps" | 2 | one stock of 21.2 | 0.441 (the stock) | 10.6 fish |
+| The quay's edge (the jetties) | `fishing_spot`, pool "the quay" | 4 | one stock of 42.3 | 0.882 | 21.2 fish |
+| The mole | `fishing_spot`, pool "the mole" | 6 | one stock of 63.5 | 1.323 | 31.7 fish |
+| The Weirs | `weir`, pool "the Weirs" | 10 | one stock of 84.7 | 1.764 | 42.3 fish |
+| The Wrack Strand | `kelp_bed` | 12 | 10 | 0.208 | 60 kelp |
+| The Sand Spit | `sand_bank` | 6 | 8 | 0.167 | 24 sand |
+| The Moss | `peat_bank` | 18 | 11.2 | 0.233 | 101 peat |
+| The 18 root plots | `root_plot` | 18 | 6 | 0.107 | 46 roots |
+| The 11 working glasshouses | `greens_bed` | 11 | 12.6 | 0.262 | 69 greens |
+
+The root plots are open lots now, not `garden` lots: a garden is planted with berry bushes (the rule is a Rust constant in `seed::town`), and a root plot grows roots. The seed turns the wild spawn of these kinds off (`resource_scale` 0), so these are all there are. The Hanger's 70 trees and the clay bank are unchanged.
+
+**Fires and lamps** (`plans[].structures`, each lit from creation for its fuel at its kind's rate):
+
+| What | Where | Fuel | Lasts |
+| --- | --- | ---: | --- |
+| The Cone's furnace | the Cone's front mouth | 40 peat (full) | 13 game hours at 3 a game hour |
+| The Cone's peat store | a storage in the Cone yard | 824 peat | with the furnace's, 864: 12 days of full firing (§2) |
+| The Batch's oven | the oven mouth | 8 (full) | 8 game hours |
+| The Marver's hearth | the hearth bench | 12 (full) | a game day |
+| 21 home hearths | the door of every home lived in | 12 each (full) | a game day |
+| 2 smokehouses | their doors | 8 each (full) | 16 game hours |
+| 7 lamps | the top of the Fish Steps, the quay by the net lofts, the quay by the Store, the Counting House yard, the Marver's door, the mole by the lamp house, the Watchglass | 8 oil each (full) | 32 game hours: about three nights |
+
+**Stores.** The Store (its storage at the door, `lots[].contents`) holds 212 smoked fish and 297 roots: three of §2's six days for 64 residents (the fish share smoked, the roots' and greens' share as roots, counted raw at 14, since greens do not keep). The other three days go in the households when the cast lands: the plan's `household_stores` note gives them per household (4 smoked fish and 5 roots a person), with peat for each hearth beyond its first fill. They are not placed now.
+
+**The checks.** `floor::check` refuses a plan that names a resource or structure kind, or a stored item, the world's tables do not have, before anything is written (bible-1 found the plan-2 names `kelp`, `peat`, `roots`, `greens` and `sand` silently left out). verify-generation checks that every planned resource stands where written with its max, regrowth and pool, every planned structure stands at its point, lot door or spot, lit for as long as its fuel lasts at its kind's rate, and every store holds what the plan says.
 
 ## The labs are unchanged
 
+- **Rates in game time, rates-2.** `rates_check::rates_are_bit_identical` (`living/rules/src/rates_check.rs`, ignored: it reads main's script from `LIVING_OLD_SKILLS`) compares `f2d803fa`'s script with this one on the 12-minute day over 12,325 states, computing what the authority computes from each law: a stack's loss in one spoiling sweep for every item, 14 stack sizes, four carrier kinds and every structure kind; a node's amount after 12 growing times from four amounts for every resource kind with both defaults; a pasture of 0 to 256 tiles after each growing time; a trap's catches over 2,000 s; remains due for four kinds at four times; and every law's words for minds. None differs (`rates-bit-identical.txt` in the evidence).
 - **Rates.** A temporary test compared the shipped script at `origin/main` with this branch's over 19,200 need states (3 kinds × 4 stages × 5 activities × 64 combinations of cloak, fire, shelter, night, winter and rain × 5 hunger and energy levels): every rate and every sleep duration is bit-identical on the 12-minute day.
 - **The world text.** The minds' text is unchanged: "One day lasts 12 real minutes; night is 20:00-06:00." and "hunger rises ~1.2/min … energy falls ~0.9/min" (`world_text_is_built_from_the_laws`).
 - **Night, sight, reach.** The shipped `daylight` is the old step, so `night` is the same at every minute (`dusk_and_dawn_take_an_hour_and_night_is_where_it_was` checks both scripts), and the graphs' `night` weight is the same 0 or 1. The shipped script has no `glow`, no `lights` and a `perceived_of` that does not read `p.dist`, so the gather radius, the sight rule, the projection cache and the perception sweep take the old paths (`cullet_s_sight_is_its_law_values` checks the island's 11 / 6 / 9 / 9 m).
@@ -137,7 +213,11 @@ Not met, because not built: the shout (30 m), keen eyes, the spyglass, high grou
 | Perceived sets and graph scenes with a glow | bodies within the widest glow instead of the sight | `perceived` rows as before | `body.chunk` | the player (`seen_*`) | as before | more creatures per scene at night (bounded by the reach) |
 | Projections with a distance law | as before, every sweep | `projected` rows only when changed | PK | the player (`seen_characters`) | each player every 200 ms | — |
 
-No whole-World scan was added. SpacetimeDB documentation consulted (2.0.0 pages; the service is 2.14.1): [views](https://spacetimedb.com/docs/functions/views/) (a view re-runs when a row in its read set changes; so a projection is written only when it changed, never rewritten unchanged), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/), [table performance](https://spacetimedb.com/docs/tables/performance/), and, as read by the coordinator for this task, [tables](https://spacetimedb.com/docs/tables/), [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) and [reducers](https://spacetimedb.com/docs/functions/reducers/). No table, column, reducer, view or subscription was added or changed; bindings are unchanged.
+| Rates in game time (rates-2): spoiling, regrowth, traps, remains | the script's name tables, once per revision (`num_of`), converted by `Scripts::per_minute` / `hour_ms` | the same rows as before (`inventory` by the spoiling sweep, `resource_node.regen` when a node is made, `rot.due_ms` at a death) | as before | as before | as before | none |
+| A plan's resources, structures and stores at creation (rates-2) | the hosted plan; `lot` rows by id for a lot's own structure | 158 `resource_node` rows (Cullet), 35 `structure` rows with `lit_until_ms`, their `inventory` rows (3 stores) | PK | `resource_node`, `structure` and `inventory` subscribers by chunk, once | once, in `init` or the staged creation's last step | none after creation |
+| `floor::check`'s plan kinds (rates-2) | the seed's plans against the compiled script's tables | — | — | — | once, before creation | — |
+
+No whole-World scan was added. SpacetimeDB documentation consulted (2.0.0 pages; the service is 2.14.1): [views](https://spacetimedb.com/docs/functions/views/) (a view re-runs when a row in its read set changes; so a projection is written only when it changed, never rewritten unchanged), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/), [table performance](https://spacetimedb.com/docs/tables/performance/), and, as read by the coordinator for this task, [tables](https://spacetimedb.com/docs/tables/), [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) and [reducers](https://spacetimedb.com/docs/functions/reducers/). No table, column, reducer, view or subscription was added or changed; bindings are unchanged. rates-2 changed none either: its plan structures and resources are ordinary rows inserted in the creating transaction, as plan-2's resources were ([reducer lifecycle](https://spacetimedb.com/docs/functions/reducers/lifecycle/): a failed `init` publishes nothing, so a plan refused in `floor::check` leaves no world); no documentation page needed re-reading for it, and `just living-generate` was not run.
 
 ## Costs
 

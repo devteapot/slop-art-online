@@ -19,9 +19,8 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
 SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "cullet", "floor-megacity-2k", "floor-megacity-4k", "cullet-laws", "cullet-laws-floor")
-# Resource kinds the rules know (`living_rules::catalog::RESOURCES`): a plan's authored resources
-# of these kinds are placed; others wait for their kinds.
-KNOWN_RESOURCES = ("berry_bush", "tree", "boulder", "reeds", "fishing_spot", "clay_bank")
+# An inventory row held by a structure (`tables::STRUCTURE_BIT`).
+STRUCTURE_BIT = 1 << 40
 # Seeds derived from a tracked seed in the run's directory (published through `--seed` with an
 # absolute path): the megacity floor (docs/FLOORS.md) at 2048 m, created inside `init` from a
 # compiled seed, and at 4096 m as a floor: a module built without a seed (`--seed none`) given
@@ -117,6 +116,15 @@ def create_floor(run, d, seed):
     bad["map"].setdefault("params", {})["plans"] = [plan]
     code = harness("call", run, d / "create-floor-bad-plan.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", "rises 3 m")
     checks.append({"check": "create_floor refuses a plan whose stair disagrees with its levels", "pass": code == 0})
+    # A plan naming a resource or structure kind the world's tables lack (here the shipped
+    # script, which has no `kelp` resource and no `furnace`) is refused, not silently left out.
+    plan = json.loads((ROOT / "living/seeds/plan-test.json").read_text())["map"]["params"]["plans"][0]
+    plan["resources"] = plan.get("resources", []) + [{"kind": "kelp", "at": plan["resources"][0]["at"]}]
+    plan["structures"] = [{"kind": "furnace", "at": plan["resources"][0]["at"], "fuel": 4}]
+    bad = json.loads(json.dumps(seed))
+    bad["map"].setdefault("params", {})["plans"] = [plan]
+    code = harness("call", run, d / "create-floor-unknown-kinds.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", "names kinds this world's tables do not have")
+    checks.append({"check": "create_floor refuses a plan naming a resource or structure kind the world does not have", "pass": code == 0})
     code = harness("call", run, d / "resume-none.log", "resume_genesis", "[]", "--as-admin", "--expect-refusal", "no staged creation")
     checks.append({"check": "resume_genesis is refused before any creation", "pass": code == 0})
     started = time.time()
@@ -564,25 +572,87 @@ def check_plans(seed, rows, plans, tile):
             if not ok:
                 wrong.append({"lot": spec["id"], "row": {k: row[k] for k in ("kind", "model", "height_m", "width_m", "depth_m", "floor_m")}})
         present(f"plan {pid}: lots have their kinds, sizes, models, heights and level floors", not wrong, wrong[:10])
-        # Authored resources (`plans[].resources`): every one of a known kind has a node of its
-        # kind at its point (the nearest walkable tile), none of another kind is placed.
+        # Authored resources (`plans[].resources`): every one has a node of its kind at its point
+        # (the nearest walkable tile); a kind the world's tables lack refuses the seed
+        # (`floor::check`, checked in `guards`). Each node holds and regrows what the plan says
+        # (`max`; `regrow_per_h` in game hours, kept per real minute for the world's day), and the
+        # nodes naming one `pool` draw on the first one's stock.
         r = math.radians(plan.get("rotation_deg", 0.0))
         o, e, nv = plan["origin"], (math.cos(r), math.sin(r)), (math.sin(r), -math.cos(r))
+        land_pt = lambda q: (o[0] + e[0] * q[0] + nv[0] * q[1], o[1] + e[1] * q[0] + nv[1] * q[1])
+        hour_ms = rows["world"][0]["day_ms"] / 24.0
         nodes = {}
         for nd in rows["resource_node"]:
-            nodes.setdefault(nd["kind"], []).append((nd["x"], nd["y"]))
-        missing, waiting = [], Counter()
+            nodes.setdefault(nd["kind"], []).append(nd)
+        missing, wrong, pools = [], [], {}
         for rs in plan.get("resources", []):
-            at = (o[0] + e[0] * rs["at"][0] + nv[0] * rs["at"][1], o[1] + e[1] * rs["at"][0] + nv[1] * rs["at"][1])
-            if rs["kind"] not in KNOWN_RESOURCES:
-                waiting[rs["kind"]] += 1
-                continue
-            if not any(math.dist(at, q) < 2.5 for q in nodes.get(rs["kind"], [])):
+            at = land_pt(rs["at"])
+            nd = min(nodes.get(rs["kind"], []), key=lambda n: math.dist(at, (n["x"], n["y"])), default=None)
+            if nd is None or math.dist(at, (nd["x"], nd["y"])) >= 2.5:
                 missing.append({"kind": rs["kind"], "at": [round(at[0], 1), round(at[1], 1)]})
+                continue
+            if rs.get("pool"):
+                pools.setdefault(rs["pool"], []).append(nd)
+            if "max" in rs and abs(nd["max"] - rs["max"]) > 1e-3 or "regrow_per_h" in rs and abs(nd["regen"] - rs["regrow_per_h"] * 60000.0 / hour_ms) > 1e-5:
+                wrong.append({"kind": rs["kind"], "node": {k: nd[k] for k in ("id", "max", "regen")}, "plan": {k: rs.get(k) for k in ("max", "regrow_per_h")}})
         if plan.get("resources"):
-            placed = sum(1 for rs in plan["resources"] if rs["kind"] in KNOWN_RESOURCES)
-            present(f"plan {pid}: its {placed} authored resources of known kinds stand where written", not missing, missing[:10])
-            present(f"plan {pid}: authored resources of unknown kinds are not placed", not any(k in nodes for k in waiting), dict(waiting))
+            kinds = Counter(rs["kind"] for rs in plan["resources"])
+            present(f"plan {pid}: its {len(plan['resources'])} authored resources stand where written ({dict(kinds)})", not missing, missing[:10])
+            present(f"plan {pid}: authored resources hold and regrow what the plan says, per real minute for the day", not wrong, wrong[:10])
+            shared = {k: sorted({n["pool"] for n in v}) for k, v in pools.items()}
+            heads = {k: v[0]["id"] for k, v in pools.items()}
+            present(f"plan {pid}: each of its {len(pools)} pools is one stock its spots share", all(len(v) == 1 and v[0] == heads[k] and v[0] != 0 for k, v in shared.items()), {k: {"spots": len(pools[k]), "pool": v} for k, v in shared.items()})
+        # Authored structures (`plans[].structures`) at their point, lot door or lot spot, lit for
+        # the time their fuel lasts at their kind's burning rate (the seed's laws), with their
+        # contents; and each lot's `contents` in the structure at its door.
+        lot_of = {spec["id"]: row for spec, row in zip(want, rows_of)}
+        spots = {spec["id"]: {sp["name"]: sp["at"] for sp in spec.get("spots", [])} for spec in want}
+
+        def lot_pt(lid, spot=None):
+            row = lot_of[lid]
+            c, d = (row["x"], row["y"]), (row["door_x"], row["door_y"])
+            k = row["depth_m"] * 0.5 + 0.5
+            f = ((d[0] - c[0]) / k, (d[1] - c[1]) / k)
+            if spot is None:
+                return d
+            q = spots[lid][spot]
+            return (c[0] + f[1] * q[0] + f[0] * q[1], c[1] - f[0] * q[0] + f[1] * q[1])
+
+        laws_src = seed.get("laws") or ((ROOT / "living/seeds" / seed["laws_file"]).read_text() if seed.get("laws_file") else "")
+        rate = {m.group(1): float(m.group(2)) for m in re.finditer(r'name:\s*"(\w+)"[^\n]*?burns:\s*#\{[^}]*?rate:\s*([\d.]+)', laws_src)}
+        held = {}
+        for iv in rows["inventory"]:
+            if iv["owner"] & STRUCTURE_BIT:
+                held.setdefault(iv["owner"] & ~STRUCTURE_BIT, {})[iv["item"]] = held.get(iv["owner"] & ~STRUCTURE_BIT, {}).get(iv["item"], 0) + iv["qty"]
+        by_kind = {}
+        for st in rows["structure"]:
+            by_kind.setdefault(st["kind"], []).append(st)
+        absent, unlit, unstocked, taken = [], [], [], set()
+        for st in plan.get("structures", []):
+            at = land_pt(st["at"]) if "at" in st else lot_pt(st["lot"], st.get("spot"))
+            near = [x for x in by_kind.get(st["kind"], []) if x["id"] not in taken and math.dist(at, (x["x"], x["y"])) < 2.5]
+            if not near:
+                absent.append({"kind": st["kind"], "at": [round(at[0], 1), round(at[1], 1)], "lot": st.get("lot")})
+                continue
+            x = min(near, key=lambda x: math.dist(at, (x["x"], x["y"])))
+            taken.add(x["id"])
+            fuel = st.get("fuel", 0.0)
+            want_ms = fuel / rate[st["kind"]] * hour_ms if fuel > 0 and st["kind"] in rate else 0.0
+            if abs((x["lit_until_ms"] - x["built_ms"] if x["lit_until_ms"] else 0) - want_ms) > 2.0:
+                unlit.append({"kind": st["kind"], "lot": st.get("lot"), "fuel": fuel, "lit_ms": x["lit_until_ms"] - x["built_ms"] if x["lit_until_ms"] else 0, "want_ms": want_ms})
+            if held.get(x["id"], {}) != st.get("contents", {}):
+                unstocked.append({"kind": st["kind"], "holds": held.get(x["id"], {}), "plan": st.get("contents", {})})
+        for spec in want:
+            if spec.get("contents"):
+                row = lot_of[spec["id"]]
+                if held.get(row["structure"], {}) != spec["contents"]:
+                    unstocked.append({"lot": spec["id"], "holds": held.get(row["structure"], {}), "plan": spec["contents"]})
+        if plan.get("structures"):
+            kinds = Counter(st["kind"] for st in plan["structures"])
+            present(f"plan {pid}: its {len(plan['structures'])} authored structures stand where written ({dict(kinds)})", not absent, absent[:10])
+            present(f"plan {pid}: authored fires are lit for as long as their fuel lasts at their burning rate", not unlit, unlit[:10])
+        if plan.get("structures") or any(spec.get("contents") for spec in want):
+            present(f"plan {pid}: authored structures and lot stores hold what the plan says", not unstocked, unstocked[:10])
         present(f"plan {pid}: doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in rows_of if l["structure"]), [l["id"] for l in rows_of if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE])
         key = {spec["id"]: row for spec, row in zip(want, rows_of)}
         if not town:

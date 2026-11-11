@@ -39,7 +39,7 @@
         40.5
       ],
       "max": 3,
-      "regrow": 0.0,
+      "regrow_per_h": 0.0,
       "pool": "jetty"
     },
     {
