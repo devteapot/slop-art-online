@@ -1,6 +1,22 @@
 # Validation record (generation)
 
 
+## 2026-11-11 rates-2: plan resources, structures and stores; unknown plan kinds refused (dev-box)
+
+Branch `rates-2` (from `f2d803fa`, origin/main `12fd78ef` merged, with the cast of Cullet), own container `rates2-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. A maintain pass of the plans feature scoped to this change: the map was read against the source it changed (`plan.rs`, `seed.rs` `plan_resources`/`plan_structures`/`put_authored`/`house_at`, `floor.rs` `plan_kinds`), not by a source wave.
+
+- `generation-rates2-20261111-174238` (`--feature worlds --seeds cullet,plan-test,island,floor-megacity-4k`): cullet 305 (64 residents; 158 authored resources where written with their max, regrowth and four pools; 34 authored structures where written, each lit for its fuel at its kind's rate; the Store's and the Cone yard's stores), plan-test 76, island 977, floor-megacity-4k 90 (with `create_floor refuses a plan naming a resource or structure kind the world does not have`); original seeds unchanged.
+- The first run after merging the cast (`generation-rates2-20261111-173512`) failed four Cullet checks, `household fenwick owns the house on lot mid_2` and three like it. main's `house_at` gave a household bound to a lot the first unowned structure at its door, which could be the plan's hearth there. Fixed in the authority: the structure the lot row names comes first. The rerun above passes.
+- Not rerun: valley, realm, authored-test, aske-coast, stage3-village, cullet-laws, cullet-laws-floor, floor-megacity-2k.
+
+## 2026-11-11 lives-3: rhythms at any hour, Cullet's ways, Cullet's life law (dev-box)
+
+Branch `lives-3` (from the coordinator's main `3faa7bfb`, origin/main `12fd78ef` merged, with Cullet's 64 drafted residents), own container `lives3-stdb` (2.14.1, port 3321, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. New checks in every child: `people without a seeded rhythm have a drawn one (no working hours, no second sleep)` and `seeded rhythms are as given (any rising hour, working hours, a second sleep)` (the `rhythm` table is snapshotted now).
+
+- `generation-l3-171418` (before the merge; `--feature worlds --seeds island,aske-coast,cullet`): island 979 and aske-coast 286 checks pass (277 and 68 drawn rhythms, none with working hours or a second sleep). Cullet, then a town with no people but with `town_life`, failed 5 town-life checks that assume residents (places known, workers' workplaces, `lot:` places); and "original seeds unchanged" failed because I regenerated `cullet.json` (the ways' `holds` fix) while the run was going. Neither is a generation defect; the town-life checks still assume people wherever a seed has `town_life`.
+- `generation-l3b-172604` (after the merge and `author_world.py cullet --compile-only`): island 979, aske-coast 286, cullet 313 checks pass; original seeds unchanged. Cullet: 64 seeded rhythms as given, 50 workers with a workplace, 149 authored places, every resident on the seed's own ways.
+- Not run: `authored` and `guards` features, the other seeds.
+
 ## 2026-11-11 kit-1: Cullet's lots name their models (dev-box)
 
 Branch `kit-1` (origin/main `a107fdfa` merged at `cba7d89b` for the runs below; `view-1`, `29cd401f`, merged afterwards at `4e080ecf`: it changes only the game client and docs, so the generation run was not repeated), own container `kit1-stdb` (2.14.1, port 3316, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. Evidence under the worktree's `.local/living/verify/`. The seed changed only in its plan lots' content: 73 lots carry `model` (`cullet/<folder>/<id>.glb`), every lot a `seed`, and three glasshouses a `repair` of 0.9; no shape changed, so no maintain pass.

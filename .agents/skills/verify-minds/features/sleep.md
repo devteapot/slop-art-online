@@ -7,6 +7,7 @@ A mind tidies itself (purpose `reorganize`, `high` effort and the 24,000 cap on 
 - People in a round are marked consolidating, so no integration interleaves; their `since_sleep` resets on success. A failed batch sends its people directly the next night.
 - Animals are due by the same rule and only fade (no reorganization prompt).
 - Log lines: `night N: k of n minds go to sleep (b in a batch, d direct; e due)` per round; `sleep: <name> slept (batch|direct, night Some(N), after i integrations)` per mind; `<name> slept on it (batch|direct): …` when a reply was applied. The thought (kind `reorganize`) has `how` in its detail.
+- With `LIVING_PROJECTS=1`, the reorganization request shows the person's projects and may answer the same `projects` array as consolidation ([projects.md](projects.md)).
 
 Sources: `living/mind/src/mind/sleep.rs`, `living/mind/src/mind.rs` (`check_consolidation`, tick), `living/mind/src/llm.rs` (`Llm::batch`).
 

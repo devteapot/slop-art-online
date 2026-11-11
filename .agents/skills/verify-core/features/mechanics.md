@@ -3,7 +3,7 @@
 ## Sub-features
 
 - Write and give a tablet, read its technique and craft with learned know-how.
-- Trade atomically, teach, plant and tend wounds.
+- Trade atomically, teach, plant and tend wounds. Every know-how in the world's `know_how` table can be taught, not only what experimenting reveals: `scenes.py teach` has a knower teach fire_bolt and wound_tending and checks a thing (leather) is refused with what makes it (since 2026-11-11, branch `rules-offers`; before, `teach_check` refused both as "no technique"). Cargo: `every_know_how_can_be_taught`, and `cullet_s_glassmaking_can_be_taught` for a seed's own know-how.
 - Build roads, walls and gates; close and reopen a gate.
 - Craft and use a net, smoke fish, make bows, arrows and leather, and clear forest.
 - Install runtime laws and enforce their movement-input rate limit.

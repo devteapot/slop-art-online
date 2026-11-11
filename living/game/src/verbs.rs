@@ -46,6 +46,8 @@ const CURSOR_THING_M: f32 = 1.6;
 const NEAR_M: f32 = 3.0;
 /// F reaches no further than this (m): an act walks into reach, but not across the map.
 const FAR_M: f32 = 30.0;
+/// A list shows this many rows before More (toward a thing; toward a person, the likely acts).
+const FOLDED: usize = 4;
 /// A skill with more item options than this gets its own list (interface D: two or more, so
 /// Give › is a list of what I carry, as the design shows).
 const GROUP_OVER: usize = 1;
@@ -360,9 +362,12 @@ fn requests(me: &Me) -> Vec<Choice> {
 pub enum Row {
     Pick(Choice),
     Group { name: String, label: String, count: usize },
-    /// The game UI's own rows toward a person: talk to them, open their window.
+    /// The game UI's own rows toward a person: talk to them, open their window, introduce
+    /// yourself (an editable line to them); and More, for the acts the list keeps folded.
     Talk,
     Window,
+    Introduce,
+    More,
 }
 
 impl Row {
@@ -373,6 +378,8 @@ impl Row {
             Row::Group { label, .. } => label.clone(),
             Row::Talk => "talk".into(),
             Row::Window => "their window".into(),
+            Row::Introduce => "introduce yourself".into(),
+            Row::More => "more…".into(),
         }
     }
 }
@@ -449,6 +456,8 @@ pub struct Menu {
     pub item: Option<String>,
     /// Toward a person: the list starts with Talk and their window.
     pub person: bool,
+    /// Unfolded: every act, not only the likely ones.
+    pub more: bool,
     /// Where the game UI puts it (UI px), if not over its target.
     pub at: Option<Vec2>,
 }
@@ -460,9 +469,29 @@ impl Menu {
             None => self.choices.clone(),
         };
         let mut out = rows(&list, self.group.as_deref());
-        if self.person && self.group.is_none() && self.item.is_none() {
+        if self.group.is_some() || self.item.is_some() {
+            return out;
+        }
+        if self.person {
             out.insert(0, Row::Talk);
             out.insert(1, Row::Window);
+            out.insert(2, Row::Introduce);
+        }
+        // Folded: the acts a player wants in the moment; the rest behind More (play-test 4: the
+        // list ran "Threaten, Conceive, Host…").
+        if !self.more {
+            let likely = |r: &Row| match r {
+                Row::Talk | Row::Window => true,
+                Row::Group { name, .. } => matches!(name.as_str(), "give" | "offer"),
+                Row::Pick(c) => matches!(c.skill.as_str(), "wave" | "appraise"),
+                _ => false,
+            };
+            let keep: Vec<Row> = if self.person { out.iter().filter(|r| likely(r)).cloned().collect() } else { out.iter().take(FOLDED).cloned().collect() };
+            if keep.len() < out.len() {
+                let mut keep = keep;
+                keep.push(Row::More);
+                return keep;
+            }
         }
         out
     }
@@ -522,6 +551,11 @@ pub struct Verbs {
     pub close_panels: bool,
     /// Where the game UI wants the next list opened (UI px), as beside a pack cell.
     pub place_next: Option<Vec2>,
+    /// The list's Introduce yourself (`ui/people.rs` puts the line in their box).
+    pub introduce: Option<u32>,
+    pub want_intro: Option<u32>,
+    /// Open every act toward a person, unfolded, at a place (a person window's More…).
+    pub open_list: Option<(u32, Option<Vec2>)>,
     composing: bool,
     pending: Vec<Pending>,
     last: HashMap<String, Choice>,
@@ -881,7 +915,7 @@ pub fn input(
         };
         let person = is_person(&aim);
         let at = v.place_next.take();
-        v.menu = Some(Menu { aim, title, choices, group: None, item, person, at });
+        v.menu = Some(Menu { aim, title, choices, group: None, item, person, at, more: false });
     };
     let mut pick: Option<usize> = None;
 
@@ -946,6 +980,13 @@ pub fn input(
         let aim = Aim::Creature { id };
         let (_, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
         v.toward = Some((id, choices));
+    }
+    if let Some((id, at)) = v.open_list.take() {
+        v.place_next = at;
+        open(&mut v, Aim::Creature { id }, None);
+        if let Some(m) = v.menu.as_mut() {
+            m.more = true;
+        }
     }
     if let Some((id, group)) = v.open_group.take() {
         open(&mut v, Aim::Creature { id }, None);
@@ -1064,6 +1105,17 @@ pub fn input(
             Some(Row::Talk) => {
                 if let (Aim::Creature { id }, Some(t)) = (&m.aim, talk.as_mut()) {
                     t.open_to = Some(*id);
+                }
+                v.menu = None;
+            }
+            Some(Row::More) => {
+                if let Some(mm) = v.menu.as_mut() {
+                    mm.more = true;
+                }
+            }
+            Some(Row::Introduce) => {
+                if let Aim::Creature { id } = &m.aim {
+                    v.introduce = Some(*id);
                 }
                 v.menu = None;
             }

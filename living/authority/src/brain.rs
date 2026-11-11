@@ -188,7 +188,11 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let hour = common::hour(w, now);
     let sctx = living_rules::script::SkillCtx { actor: facts, night, dark, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
+    // Profiled apart: the law itself, asked only for a state no body has been in since the
+    // script revision (the rest are answers kept per state, finished per body).
+    let _law_timer = if common::profiling() && !sc.need_law_kept(&sctx) { common::span("needs.rates.law") } else { None };
     let law = sc.need_law(&sctx);
+    drop(_law_timer);
     let mut key = key;
     if let Ok(c) = law.as_ref().map(|l| l.cuts().unwrap_or([f32::INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::NEG_INFINITY])) {
         NEED_CUTS.with(|m| m.borrow_mut().insert(me.id, c));
@@ -262,12 +266,13 @@ impl<'a> Ev<'a> {
         let night = common::dark(self.ctx, &self.w, self.now);
         let me = self.me.id;
         let now = self.now;
-        // The body's own day (its rhythm): its bedtime and its evening.
-        let (bedtime, evening) = if ds.iter().any(|d| d.weight.bedtime != 0.0 || d.weight.evening != 0.0) {
-            let (b, e) = common::day_phase(self.ctx, me, common::hour(&self.w, now));
-            (if b { 1.0 } else { 0.0 }, if e { 1.0 } else { 0.0 })
+        // The body's own day (its rhythm): its bedtime, its evening and its working hours.
+        let (bedtime, evening, work_hours) = if ds.iter().any(|d| d.weight.bedtime != 0.0 || d.weight.evening != 0.0 || d.weight.work_hours != 0.0) {
+            let p = common::day_phase(self.ctx, me, common::hour(&self.w, now));
+            let one = |b: bool| if b { 1.0 } else { 0.0 };
+            (one(p.bedtime), one(p.evening), one(p.work))
         } else {
-            (0.0, 0.0)
+            (0.0, 0.0, 0.0)
         };
         // An attack or a threat aimed at me right now.
         let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
@@ -305,7 +310,7 @@ impl<'a> Ev<'a> {
                 let w = &d.weight;
                 let last = self.st.marks.iter().find(|m| m.node == DESIRE_MARK | ids[i]).map(|m| m.at_ms);
                 let longing = last.map_or(1.0, |t| (now.saturating_sub(t) as f32 / 3_600_000.0).min(1.0));
-                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted + w.rain * rain + w.hailed * hailed + w.commotion * commotion + w.bedtime * bedtime + w.evening * evening;
+                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted + w.rain * rain + w.hailed * hailed + w.commotion * commotion + w.bedtime * bedtime + w.evening * evening + w.work_hours * work_hours;
                 for (k, v) in &w.believes {
                     let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
                     s += v * j;
@@ -807,8 +812,9 @@ impl<'a> Ev<'a> {
             Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
             Cond::HeardWithin(s) => self.st.heard_ms != 0 && self.now.saturating_sub(self.st.heard_ms) as f32 <= s * 1000.0,
             Cond::Night(b) => common::night(self.ctx, &self.w, self.now) == *b,
-            Cond::Bedtime(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).0 == *b,
-            Cond::Evening(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).1 == *b,
+            Cond::Bedtime(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).bedtime == *b,
+            Cond::Evening(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).evening == *b,
+            Cond::WorkHours(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).work == *b,
             Cond::Raining(b) => crate::town::raining(self.ctx) == *b,
             Cond::Hailed(s) => self.hailed((s * 1000.0) as u64),
             Cond::Moving(b) => {
@@ -944,7 +950,7 @@ impl<'a> Ev<'a> {
                 let hour = common::hour(&self.w, self.now);
                 let since = (hour - r.rise_h).rem_euclid(24.0);
                 let day = living_rules::day_of(self.now, self.w.epoch_ms, self.w.day_ms) as u32;
-                if since < 3.0 && r.last_day < day && !common::day_phase(self.ctx, self.me.id, hour).0 {
+                if since < 3.0 && r.last_day < day && !common::day_phase(self.ctx, self.me.id, hour).bedtime {
                     r.last_day = day;
                     self.ctx.db.rhythm().id().update(r);
                     let season = common::season(self.ctx, self.now);

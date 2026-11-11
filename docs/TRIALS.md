@@ -34,7 +34,7 @@ Substitutions in steps: `"$<role>"` is that character as a target (`{"id": n}`),
 
 Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of`, `within`), `hour`; with `max`, `per_addressee`, `after_min`.
 
-**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds` and `lod`. In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
+**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds`, `lod`, `projects` (`LIVING_PROJECTS=1`: [projects](LIVING_CORE.md#projects-experiment-2026-11-11); the thought rows' `detail.projects` says which project each plan served) and `player-frame` (`LIVING_FRAME=player`, [below](#the-player-frame-experiment-2026-11-11)). In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
 
 ### How the script reaches the world
 
@@ -100,6 +100,8 @@ export CARGO_TARGET_DIR=$HOME/slop-trials-target OPENSSL_INCLUDE_DIR=$HOME/slop-
 python3 living/tools/trials.py up && python3 living/tools/trials.py build wolves wolves-valley hungry hungry-village teacher theft
 python3 living/tools/trials.py run --batch b3 wolves hungry --variants default,lessons --replicates 3
 ```
+
+**From another checkout** (a git worktree), the trial container still serves the starting checkout's `.local/living/trials/wasm/` as `/wasm`. `trials.py build` then also copies each module there as `<module>-wt<tag>.wasm` (`tag` from the checkout's path) and `run` publishes that file, so a worktree never overwrites or reuses a module another checkout's batches run. The worktree needs its own copy of `.local/living/trials/neo4j.env` (mode 600); it must not run `up` against a running stack.
 
 The verify harness runs there too, against the trial container: `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320` make `verify.py`, `living/tools/stdb`, `verify-llm` and `verify-minds` use it instead of `sao-living_spacetimedb_1` on 3300. Other surface scripts (`verify-client`, `verify-generation`, `verify-knowledge`) still assume 3300.
 
@@ -645,6 +647,38 @@ Candidates not run tonight, for later:
 - **Re-reading loops** (a plan to "read both signs" re-read the nearest sign 57 times): a check refusing to re-read needs the sign's topic in what Rhai sees of a target, an engine change.
 - Several earlier candidates are covered by `feedback-1` (merged to main during the night): structures noticed once, ids resolving only to things in sight, gone things weakening memory, wants following the life lived.
 
+## The player frame (experiment, 2026-11-11)
+
+**Hypothesis** (from the owner's play-test: the characters feel like NPCs, not like players run by AI). A model told it is *playing* this person in an open-ended living world, free to choose what to pursue as a human player would, lives with more initiative, exploration and long-range aims, while what the person says and does stays in character.
+
+**Switch.** `LIVING_FRAME=player` in the mind service (`living/mind/src/prompts.rs`, `Frame`); the default `character` leaves every prompt byte-identical to before (all 26 exported prompt fixtures compared byte for byte before and after the change; test `character_frame_is_the_default_and_unchanged`). A value that is neither stops the service at start. Under `player`, four system prompts of a person replace their opening sentence ("You are the mind of the person described under # Who you are, living in a persistent simulated world.", and the consolidation and talk equivalents) with this frame and a one-line role:
+
+> You are an AI playing the person described under # Who you are, in a persistent world shared with other players, human and AI. For you, as for every player, the person's body, needs and death are real, and the world's rules hold. What you pursue in this life is your own choice. Whatever the person says or writes is in their own words, inside the world: never speak out of character.
+
+| Prompt | Role line after the frame |
+| --- | --- |
+| think (the decision) and deliberate (compiling it into acts and a graph) | Here you are that person's mind. |
+| consolidate | Here you are that person's memory and self-understanding, kept in their own terms. |
+| talk (a conversation turn) | Here you are that person, face to face with the other person described below. |
+
+With `LIVING_PROJECTS=1` as well, each switch does what it does alone: the frame replaces only the opening sentence, and the projects text, the `serves` field and the `# Your projects` section stay as projects has them (test `player_frame_and_projects_compose`). Nothing else changes (test `player_frame_changes_only_the_opening`): the rules, grammar, reply shapes and every user message are the same, and the frame is part of the shared, cacheable prefix. Not framed: animals' prompts, starting identities (`identity_system`, `birth_identity_system`), sleep's reorganization and player memory (`internalize_system`, for characters people play). The frame names no goals or activities, gives no advice and does not rank survival (test `player_frame_is_short_and_prescribes_nothing`).
+
+**Measuring.** Variant `player-frame` (`LIVING_FRAME=player`, otherwise `default`). Every summary now carries:
+
+- `prompt_frame`: per purpose, how many of the subject's journaled requests opened with the player frame (`player 12/12`, or `character 0/12`), read from the journal's stored system prompts;
+- `out_of_character` (`ooc_lines`, `ooc_private` in the report): [`ooc.py`](../living/tools/ooc.py), a word list (player, game, AI, NPC, prompt, simulation, "my character", role-play, respawn, XP, logging in, online, …; hunting "game" is not counted), over the lines the subject spoke or wrote (chronicle `speech` and `write` rows) and, separately, over its replies' private fields (thoughts, intentions, consolidation summaries and gists, identity narrative, goals and values). A word list over-counts and misses paraphrase: read the examples kept with each count (`python3 living/tools/ooc.py .local/living/trials/<batch>`).
+
+Initiative, exploration and long-range aims are read with the existing probes and life timelines (distance ranged, places named, techniques learned, structures built, graph plans, goals in persona revisions), side by side across replicates.
+
+```bash
+python3 living/tools/trials.py run --batch <b> life --variants default,player-frame --replicates 3
+python3 living/tools/ooc.py .local/living/trials/<b>
+```
+
+**Fake-model proof** (`pf1`, 2026-11-11, DGX Spark, from a worktree of `exp-player-frame`; `life` × `default`, `player-frame` × 1, 10 minutes, `--fake`, no model spend). Both arms ran the full 10 minutes (20 and 19 calls). `prompt_frame`: default `think 0/7, deliberate 0/7, consolidate 0/6` framed; player-frame `think 7/7, deliberate 7/7, consolidate 4/5`, the fifth being the starting identity, which is not framed. In the journals each arm has one distinct system prompt per purpose; replacing the player arm's opening (frame and role line) with the old first sentence gives the default arm's prompt exactly, for think, deliberate and consolidate. No talk turn happened in either arm (nobody addressed the newcomer), so talk is proven by `verify_minds.py --case frame`. `ooc_lines` 0/1 and `ooc_private` 0/34 and 0/33: the fake model's canned lines, which say nothing about real models. Evidence: `.local/living/trials/pf1/` (`report.md`, `frame-check.txt`, each instance's `summary.json` and `journal/`); databases and Neo4j minds cleaned.
+
+**Not established:** whether the frame changes what real minds do, or how often they break character. That needs a real batch (paid; the coordinator runs it).
+
 ## What still special-cases trials (to remove later)
 
 No engine code knows about trials. The authority gained one generic admin-only scene reducer, `spawn_newcomer` (a player's `join`, thought for by the minds). Everything else a trial sets up uses existing admin scene reducers, `mind_say`/`mind_act` for admin-controlled characters, behaviour graphs with the existing skills (the ladder's scribe is a graph plus the ordinary `teach` act), the player reducers (the human session) and the real presence path (the takeover). What the runner itself still hard-codes:
@@ -716,6 +750,67 @@ The trial service listens on the LAN: `http://192.168.1.103:3320` (container `sl
 - Get the token: `ssh gooning@192.168.1.103 docker exec slop-trials-stdb spacetime login show --token`. It is printed after "Your auth token"; don't paste it into logs or chat.
 - **Observer (read-only):** natively, `LIVING_TOKEN=<token> LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --manifest-path living/Cargo.toml --release -p living-viewer`. On the web, `just living-web` and then `http://127.0.0.1:8330/?server=http://192.168.1.103:3320&db=<database>#token=<token>`; the browser never sends the fragment to a server. The observer subscribes and calls no reducer.
 - **Game client:** `LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --release --manifest-path living/Cargo.toml -p living-game` connects with its own player identity and always calls `join` when that identity has no living character. That adds a player newcomer to the trial world, whom the main character perceives, so it changes the run. As a player it sees only its own perception, not the main character's. The client has no spectator or owner mode, so it cannot watch a trial without changing it. A watch mode that follows a named character with the owner's token is UI work, not built.
+
+## Resident inspector
+
+`living/tools/inspector.py` answers "why did they do that?" for one run as a single static page: pick a resident and a moment, or a line someone said. It reads evidence only and makes no model calls. The page is one self-contained HTML file with its data embedded (gzip; it needs a browser with `DecompressionStream`). Open it from disk; no server is involved.
+
+```bash
+python3 living/tools/inspector.py .local/living/trials/<batch>/<instance> -o page.html   # a trial, finished or running
+python3 living/tools/inspector.py .local/living/playtest-2 -o page.html                  # a play session's evidence folder
+python3 living/tools/inspector.py RUN --who "Agnes Fenner,Avice Hollis" --since 600 --until 1200 -o page.html   # a large run, narrowed
+```
+
+**What it reads.** It reads everything it finds under the folder.
+- Trials: `state.json` (the start `t0`), `cast.json`, `census.jsonl`, `chronicle.jsonl`, `speech.jsonl`, `experiences.jsonl`, `audience.jsonl`, `samples.jsonl`, `graphs.jsonl`, `mind_rows.jsonl`, `human.jsonl`, `events.jsonl`, `final.json`, `mind.log`, `mind-env.json`, and `journal/`. A running trial has not copied its journal yet, so the page reads the live one (`<LIVING_ROOT>/.local/living/journal/<LIVING_RUN>/`).
+- Play sessions: `journal/` (or `session/journal/`), `mind.log` (or `session/run/mind.log`), and any world-table exports below the folder. These are either the CLI's text tables (`spacetime sql … > chronicle.txt`) or `verify.py sql --save` JSON lists.
+  - Export at least `chronicle`, `character` (or `id, name, alive, died_ms, cause`) and `presence`.
+  - Export `experience` for the player too. Residents' own experience rows are evicted past a 400-row window. What a resident perceived then comes from the experience lines their own requests show.
+  - Tables are recognised by their columns; `--rows` adds files or folders kept elsewhere.
+
+**Residents.** A timeline per character, filtered by lane, for the whole run, a time window ("around hh:mm:ss ± 90 s"), or the last 90 s of their life. Each row shows wall time, time since the start, and game time.
+- *perceive*: experience rows, plus the percept lines of each request. Lines read from requests are marked ≈ and placed at the middle of their game minute (0.5 s in current worlds), on a game clock fitted from the requests' "Now" lines.
+- *recall*: the "What comes to mind" and "Memories this brings back" sections of each request.
+- *decide*: every model exchange, placed when it was queued. Click it for the timings (queued → sent → reply, queue wait, model latency), the "why now" section, the line being answered, the full request section by section, the system prompt and the reply.
+- *graph*: what each deliberation installed (plan, acts, intent graph), and `brain` revisions where recorded.
+- *body*: chronicle rows, census and sample activity, and the position, health and activity from each request's scene. It also shows what others saw the body do ("seen by …"), and the player's reducer calls.
+- *talk*: lines said and heard. *log*: the mind log's lines naming them.
+
+**Sources.** The files read, the fitted game clock, the mind's switches, and per purpose the model exchanges' queue wait (admission) against model time, as p50, p90 and max.
+
+**Lines.** Every line said, merged from the chronicle, the speaker's `said` row, listeners' speech rows and requests, and the mind log. The chronicle keeps one row for a line repeated within 2 minutes; the speaker's `said` rows keep each one.
+- Click a line for each hearer's fate: a talk turn (with its latency), an answer from a deliberation, parked behind a running deliberation (each release and re-park, and the turn that finally followed), a settled pair, or no turn.
+- For "no turn" the page lists the gate's inputs as the evidence shows them (talk.rs `on_speech`): addressed or not (the line's `to`, the hearer's salience, or who stood within the 6 m `address_m` of the speaker), whether the hearer cares (their relation from the nearest request's "People you know"), an active or closed exchange, another exchange, and whether the line asks something.
+- Below the hearers is the exchange around the line, from every side: the participants' lines, their talk turns and deliberations, and the mind log.
+
+- The mind's draws are deterministic (talk.rs `draw(listener, at_ms)`). The page recomputes the remark draw and the overheard draw from the line's exact time and the hearer's sociability, as their requests show it. So "let the remark pass" is shown as a fact, not a guess, although the mind logs it at debug level only.
+- A line said to someone who did not hear it is marked as such. The evidence is the line's audience row, the speaker's "No answer from …" percept, or the mind's "out of earshot" at the line. A player's character is never judged as a mind before the AI takes it over.
+
+**What it cannot show.**
+- Stamina and the off-stage hold are not recomputed. When a turn was due and none came, the page names them as the possible causes.
+- Without `audience` rows or salience, whether a line said to no one was addressed is shown only where distances near the line are known. Otherwise the page says it is unknown.
+- Hearers are those the evidence shows. Without `audience` rows, others in earshot may be missing.
+- The verdicts follow main's gate and log lines, plus the `exp-greet` switches' log lines (drawn in, faced, alongside). The greet modes' own curiosity draw is not recomputed. A changed gate needs the page updated.
+- Scene positions are dated at the request's queue time. A scene can be older than that, so distances from scenes more than 10 s from a line are not used for the address rule.
+
+**How often its verdicts are right** (2026-11-11, after two review rounds' fixes).
+- The sample: 60 turn/no-turn verdicts drawn at random (seeded) from gr1a, gr1b, gr1c and play-test 2. Every line the reviews had looked at was left out. 40 are on the scripted player's lines, 20 on residents' lines.
+- Each verdict was checked against the raw speech and audience rows, the journal's requests and replies, `mind.log`, and a separate recomputation of the draw.
+- Result: 0 of 60 wrong outcomes and 0 of 60 wrong reasons. The 95% Wilson interval is 0–6.0% overall and 0–8.8% for the player's lines (0 of 40).
+- One reason could not be fully verified: "in another exchange", where the remark draw would also have refused.
+- Two reasons were incomplete: a talk turn that came only after the line had been parked did not say so. This is fixed. A fresh sample of 12 such verdicts was all correct; two of them missed a release time, also fixed.
+- The sample checks the page against the evidence. It cannot check what the evidence does not record, such as stamina or the off-stage hold.
+
+### What it showed on the greeting batches `gr1a` and `gr1b` (2026-11-11, 18:15)
+
+Coverage: the instances with evidence at 18:15. gr1a: control ×4, nearest-concurrent ×3 (r4 still running), nearest ×1 (r1–r3 failed). gr1b: curious ×4, facing ×2, park-concurrent ×1. Six instances failed between 16:58 and 17:00 with SQL timeouts against the trial service. `greet_report.py` gives answered shares and latencies; the inspector adds the following.
+
+- **Many counted answers were not answers to the line.** A resident's line to the player within 60 s, which the table counts as an answer, was often caused by something else. Examples are a deliberation that began before the line, a delayed answer to an earlier line, or a resident repeating "your name?" because the scripted player never gives one. For lines to no one, the share not caused by the line was 6 of 8 in control, 4 of 19 in curious and 9 of 19 in facing. In control-r1, the "answer" to "Hello there!" 2.8 s later ("That's the whole of it, friend…") came from Wenna's deliberation about the earlier question on work.
+- **The trial's model queue, not the model, sets the pace.** With `LIVING_CONCURRENCY=4` for 11 minds, the median queue wait was 6–13 s for think and deliberate calls (p90 up to 41 s) and 2–7 s for talk turns (p90 15–25 s, max 78 s). Model time was a median 0.8 s for talk and 5–6 s for deliberation. A deliberation counts as running from its prompt, so lines heard during its queue wait are parked. Play-test 2 ran with 192 and had queue waits under 0.2 s. Latency and parking results from these trials therefore do not carry over to play.
+- **Parked lines are released and parked again at once.** A released line is often parked again in the same second, because the listener's next deliberation has already started. Some waited 74 s and got no turn (control-r1, Oren), and one was re-parked three times (curious-r1, Sefa). Under `LIVING_PARK=concurrent` such lines get their turn alongside instead ("parked alongside" 44 times in nearest-concurrent; addressees answered 19 of 20).
+- **The script's addressed statements meet the remark draw.** "You look like you know this place well." and "That looks like hard work." ask nothing, so a resident who passes the gate can still let them pass. The recomputed draw refused 4 of 22 addressed lines in control.
+- **The script addressed characters who are not minds.** Tobin is not in `LIVING_ONLY`: 2 of 22 addressed lines in control and 5 of 23 in curious went to him and could never be answered.
+- **Hearers do not answer each other's turns.** With curious and nearest, one hearer is drawn in and the others' verdicts read "another took it": a line to no one draws one hearer.
 
 ## Results
 

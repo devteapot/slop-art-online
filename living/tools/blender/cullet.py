@@ -4293,6 +4293,80 @@ def gen_campfire(k, rng, lot):
     return dict(ridge_m=0.68, glow="GlowAmber")
 
 
+def gen_hearth(k, rng, lot):
+    """A household's hearth, for the engine's `hearth` at a home's door: a low basalt fire box
+    with an iron plate and a pot on it, embers in its mouth, the day's peat stacked beside."""
+    put(k, box((-0.4, -0.3, 0.0), (0.4, 0.3, 0.5), bevel=0.02), lambda co, n, c=jit(P.basalt, rng): mix(c, P.tar, 0.5 * max(0.0, 1 - abs(co.x) / 0.3) * (co.z > 0.25)) if n.y < -0.5 else c)
+    eye = [(0.2 * cos(PI * j / 6), 0.14 + 0.2 * sin(PI * j / 6)) for j in range(7)]
+    raw(k, [([Vector((0.2, -0.305, 0.08))] + [Vector((x, -0.305, z)) for x, z in eye] + [Vector((-0.2, -0.305, 0.08))], P.amber)], glow="GlowEmber")
+    put(k, box((-0.44, -0.34, 0.5), (0.44, 0.34, 0.54)), mix(P.iron, P.rust, 0.45))
+    put(k, lathe([(0.14, 0.0), (0.2, 0.08), (0.2, 0.24), (0.16, 0.28)], 8, Matrix.Translation((0.08, 0.0, 0.54))), P.iron)
+    put(k, tube([(-0.1, 0.0, 0.8), (0.08, 0.0, 0.92), (0.26, 0.0, 0.8)], 0.012, 4, caps=False), P.iron, closed=False)
+    for i in range(6):  # turves, stacked to dry by the fire
+        put(k, box((0.47, -0.28 + 0.29 * (i % 2), 0.11 * (i // 2)), (0.64, -0.01 + 0.29 * (i % 2), 0.1 + 0.11 * (i // 2))), jit(P.peat, rng, 0.04))
+    found(k, 0.4)
+    return dict(ridge_m=0.92, glow="GlowEmber")
+
+
+def gen_furnace(k, rng, lot):
+    """The Cone's furnace, for the engine's `furnace` at the front mouth (the mouth itself is the
+    Cone's): the stoker's rake and shovel in their iron stand, a shovel of live coals, and a
+    barrow of peat."""
+    rust = lambda: mix(P.iron, P.rust, rng.uniform(0.3, 0.6))  # noqa: E731
+    for sx in (-1, 1):
+        put(k, beam((-0.5 + sx * 0.25, 0.3, 0.0), (-0.5 + sx * 0.18, 0.3, 1.0), 0.04, 0.04), rust())
+    put(k, beam((-0.75, 0.3, 1.0), (-0.25, 0.3, 1.0), 0.04, 0.04), rust())
+    for i, (x, tool) in enumerate(((-0.62, "rake"), (-0.45, "poker"), (-0.3, "shovel"))):
+        a, b = Vector((x, 0.1, 0.02)), Vector((x + 0.02, 0.33, 1.45 - 0.08 * i))
+        put(k, tube([a, b], 0.014, 4), rust())
+        if tool == "rake":
+            put(k, box((x - 0.14, 0.06, 0.0), (x + 0.14, 0.1, 0.1)), rust())
+        elif tool == "shovel":
+            put(k, box((x - 0.1, -0.12, 0.0), (x + 0.1, 0.12, 0.02)), rust())
+            raw(k, [([Vector((x - 0.08, -0.1, 0.025)), Vector((x + 0.08, -0.1, 0.025)), Vector((x + 0.08, 0.08, 0.025)), Vector((x - 0.08, 0.08, 0.025))], P.amber)], glow="GlowEmber")
+    handcart(k, rng, Matrix.Translation((0.35, -0.02, 0.0)) @ Matrix.Rotation(PI / 2, 4, "Z") @ Matrix.Scale(0.55, 4), load=lambda M: [
+        put(k, moved(box((-0.4 + 0.27 * (i % 3), -0.6 + 0.4 * (i // 3 % 3), 0.56 + 0.12 * (i // 9)), (-0.15 + 0.27 * (i % 3), -0.24 + 0.4 * (i // 3 % 3), 0.67 + 0.12 * (i // 9))), M), jit(P.peat, rng, 0.04)) for i in range(15)])
+    found(k, 0.4)
+    return dict(ridge_m=1.45, glow="GlowEmber")
+
+
+def gen_oven(k, rng, lot):
+    """The Batch's oven, for the engine's `oven` at the oven mouth (the mouth is the Batch's):
+    the cooling trestle with the morning's loaves, and the ember pan raked out beside it."""
+    put(k, box((-0.7, -0.25, 0.72), (0.4, 0.25, 0.77), bevel=0.012), worn(jit(P.drift, rng)))
+    for x in (-0.55, 0.25):
+        for e in (-1, 1):
+            put(k, beam((x, e * 0.3, 0.0), (x, e * 0.08, 0.72), 0.05, 0.06, up=X), jit(P.drift, rng))
+    for i in range(6):
+        c = Vector((-0.55 + 0.32 * (i % 3), -0.1 + 0.2 * (i // 3), 0.83))
+        put(k, sphere(c, 0.12, 1, squash=0.55), jit(on(mix(P.amber, P.sand, 0.45), "earth"), rng, 0.03), soft=c)
+    put(k, lathe([(0.2, 0.0), (0.24, 0.1)], 8, Matrix.Translation((0.6, -0.05, 0.0)), caps=(True, False)), mix(P.iron, P.rust, 0.5), closed=False)
+    raw(k, [([Vector((0.6 + 0.17 * cos(i / 8 * TAU), -0.05 + 0.17 * sin(i / 8 * TAU), 0.06)) for i in range(8)], P.amber)], glow="GlowEmber")
+    put(k, tube([(0.5, 0.25, 0.0), (0.62, 0.3, 0.95)], 0.014, 4), mix(P.iron, P.rust, 0.5))
+    found(k, 0.4)
+    return dict(ridge_m=0.95, glow="GlowEmber")
+
+
+def gen_smoke_fire(k, rng, lot):
+    """A smokehouse's fire, for the engine's `smokehouse` at its door (the house is the lot's):
+    the smoulder pot on its stones, and a rack of split fish waiting to go in."""
+    for i in range(3):
+        a = i / 3 * TAU
+        put(k, moved(box((-0.1, -0.08, 0.0), (0.1, 0.08, 0.12), bevel=0.02), Matrix.Translation((0.5 + 0.2 * cos(a), 0.2 * sin(a), 0.0))), jit(P.basalt, rng, 0.04))
+    put(k, lathe([(0.16, 0.0), (0.24, 0.16), (0.2, 0.3)], 8, Matrix.Translation((0.5, 0.0, 0.12)), caps=(True, False)), mix(P.iron, P.rust, 0.5), closed=False)
+    raw(k, [([Vector((0.5 + 0.18 * cos(i / 8 * TAU), 0.18 * sin(i / 8 * TAU), 0.36)) for i in range(8)], P.amber)], glow="GlowEmber")
+    for i in range(4):  # damp oak chips over the embers
+        put(k, moved(box((-0.09, -0.03, 0.0), (0.09, 0.03, 0.03)), Matrix.Translation((0.5 + 0.07 * cos(i * 1.7), 0.07 * sin(i * 1.7), 0.37)) @ Matrix.Rotation(i * 0.9, 4, "Z")), jit(mix(P.drift, P.tar, 0.5), rng))
+    for x in (-0.7, 0.05):
+        for e in (-1, 1):
+            put(k, beam((x, e * 0.25, 0.0), (x, 0.0, 1.6), 0.045, 0.045, up=X), jit(P.drift, rng))
+    fr = Face((-0.325, 0.0, 0), X, 0.75)
+    fish_rack(k, rng, fr, -0.375, 0.375, 1.58, 0.0, 6)
+    fish_rack(k, rng, fr, -0.34, 0.34, 1.1, 0.02, 5)
+    found(k, 0.4)
+    return dict(ridge_m=1.6, glow="GlowEmber")
+
+
 def gen_lean_to(k, rng, lot):
     """A lean-to against a house's back wall (the plan's `use` says whose, and for what): tarred
     boards under a slope of odd slates, or under an upturned boat's hull where a Strand house
@@ -4482,7 +4556,7 @@ GEN = dict(
     # Pass 2.
     heron=(gen_heron, 9000), heron_jib=(gen_heron_jib, 1500), lamp_house=(gen_cottage, 3500),
     lehr_house=(gen_lehr_house, 8000), pot_house=(gen_pot_house, 6000), ash_house=(gen_ash_house, 5000), store=(gen_store, 6000), readers_house=(gen_readers_house, 6000),
-    smokehouse=(gen_smokehouse, 3500), cistern_house=(gen_cistern_house, 3000), peat_barn=(gen_peat_barn, 6000), batch=(gen_batch, 4000),
+    smoke_shed=(gen_smokehouse, 3500), smokehouse=(gen_smoke_fire, 1500), hearth=(gen_hearth, 1500), lamp=(gen_quay_lamp, 1500), furnace=(gen_furnace, 1500), oven=(gen_oven, 1500), cistern_house=(gen_cistern_house, 3000), peat_barn=(gen_peat_barn, 6000), batch=(gen_batch, 4000),
     wash_house=(gen_wash_house, 4000), cullet_shed=(gen_cullet_shed, 5000), boatshed=(gen_boatshed, 6000), dry_dock=(gen_dry_dock, 6000), cistern=(gen_cistern, 3000),
     thorn=(gen_thorn, 1500), crown_bench=(gen_crown_bench, 600),
     blowpipe_rack=(gen_blowpipe_rack, 1500), crucible_stack=(gen_crucible_stack, 1500), cullet_heap=(gen_cullet_heap, 1500), ash_sacks=(gen_ash_sacks, 1500), handcart=(gen_handcart, 1500),
@@ -4898,6 +4972,14 @@ def main():
         print(f"GEN {slug}: {len(members)} houses joined, tris={joined[slug]['tris']} above={joined[slug]['above_floor_m']}")
     print(f"GEN total {len(report)} models, {sum(r['tris'] for r in report.values())} triangles, {time.time() - t_all:.1f}s; not built (grey boxes): {len(skipped)}")
     if not only:
+        # A full run leaves only what it wrote: a model whose lot or fixture is gone from the plan
+        # must not stay (the client draws every model it finds in a structure's folder).
+        keep = {os.path.normpath(os.path.join(a.out, r["file"])) for r in report.values()}
+        for root_, _, files in os.walk(a.out):
+            for name in files:
+                full = os.path.normpath(os.path.join(root_, name))
+                if (name.endswith(".glb") and full not in keep and os.path.basename(root_) != "terrace") or (name.startswith("gen-") and name.endswith(".json")):
+                    os.remove(full)
         with open(os.path.join(a.out, "fixtures.json"), "w") as f:
             json.dump(placed, f, indent=1)
         # The plan's ground areas in land metres, later ones on top, for the game client's

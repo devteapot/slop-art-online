@@ -953,7 +953,10 @@ class Session:
             k, _, v = kv.partition("=")
             env[k] = s.fill(v, db=db, session=self.dir)
         if self.capture:
+            # The client records its own frames (the session's video), state and presses.
             env["LIVING_GAME_RECORD"] = self.capture / "client"
+            if self.a.no_video:
+                env["LIVING_GAME_RECORD_FPS"] = "0"   # stills every few seconds instead of video
         with critical():
             self.info["build_lock"] = lock_builds(os.getpid(), self.info["build_lock_path"])
             self.locked = True
@@ -1088,11 +1091,8 @@ class Session:
 
     def record_start(self, db):
         """Tool 1's session recorder (living/tools/play_report.py record-start): one detached process
-        keeping the authority's rows and, with Screen Recording permission, the game window."""
-        cmd = [sys.executable, self.info["report_tool"], "record-start", "--db", db, "--capture", str(self.capture),
-               "--game-pid", str(self.client.pid)]
-        if self.a.no_screen:
-            cmd.append("--no-screen")
+        keeping the authority's rows. The video comes from the client itself (LIVING_GAME_RECORD)."""
+        cmd = [sys.executable, self.info["report_tool"], "record-start", "--db", db, "--capture", str(self.capture)]
         self.info.update({"capture": str(self.capture), "recorder": "starting"})   # teardown stops it whatever happens
         self.save()
         with open(self.dir / "recorder.log", "a") as f:
@@ -1451,7 +1451,7 @@ def main(argv=None):
     ap.add_argument("--client-env", action="append", metavar="K=V", help="extra client environment (e.g. a scripted plan)")
     ap.add_argument("--now", action="store_true", help="open the game without waiting for heavy jobs already running")
     ap.add_argument("--no-record", action="store_true", help="do not run tool 1's session recorder")
-    ap.add_argument("--no-screen", action="store_true", help="record the session's rows but not the game window")
+    ap.add_argument("--no-video", action="store_true", help="record stills every few seconds instead of the session's video")
     ap.add_argument("--report-tool", metavar="PATH", help=argparse.SUPPRESS)  # tool 1 from elsewhere (tests)
     ap.add_argument("--status", action="store_true", help="show the scene's world, session and cost")
     ap.add_argument("--stop", action="store_true", help="close an open session (by its recorded PIDs)")

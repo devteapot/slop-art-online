@@ -3,26 +3,29 @@
 //! `LIVING_GAME_RECORD=<dir>` is set; the play launcher sets it for the owner's sessions.
 //!
 //! It writes, into `<dir>`:
-//! - `stills/<unix ms>.jpg`: the frame as drawn, HUD included, every
-//!   `LIVING_GAME_RECORD_EVERY` seconds (default 3) and at each line, reducer call, bubble and
-//!   act note, at most one a second. Captured with Bevy's screenshot, which reads back
-//!   asynchronously; the image is moved (not copied) to one worker thread that scales it to
-//!   `LIVING_GAME_RECORD_WIDTH` pixels (default 960) and writes a JPEG. A full queue drops the
-//!   shot rather than wait.
+//! - `stills/<unix ms>.jpg`: the frame as drawn, HUD included, `LIVING_GAME_RECORD_FPS` times
+//!   a second (default 10), `LIVING_GAME_RECORD_WIDTH` pixels wide (default 960): the session's
+//!   video, which the report encodes. With `LIVING_GAME_RECORD_FPS=0` there are only stills,
+//!   every `LIVING_GAME_RECORD_EVERY` seconds (default 3) and at each line, reducer call,
+//!   bubble and act note. The GPU draws a small copy of the finished frame and only that is read
+//!   back (record_frames.rs); one worker thread writes the JPEGs. A full queue drops a frame
+//!   rather than wait. Past `LIVING_GAME_RECORD_MAX_MB` of frames (default 4096) it keeps one
+//!   every 5 s.
 //! - `state.jsonl`: four times a second, where I am, the camera, the people the HUD knows
 //!   (label, distance, hovered, targeted, talking), the bubbles and chat lines on screen, the
 //!   target, the text box, hp, the frame time and the recorder's own main-thread time.
 //! - `events.jsonl`: presses as the game reads them (a tap or a held press, keys outside the
 //!   text box), each line I send, and every reducer call with the authority's answer (net.rs
 //!   `on_reply`), with its arguments.
-//! - `captures.csv`: per still, when it was asked for, when the image arrived and how long the
+//! - `captures.csv`: per frame, when it was asked for, when the image arrived and how long the
 //!   worker took (`request_unix_us,arrived_unix_us,encode_ms,bytes`), for its cost.
 //!
 //! Times are unix milliseconds, the authority's base (`experience.at_ms`). The module reads
 //! the client's own state only; it changes nothing the player sees or sends.
 
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
+use bevy::render::gpu_readback::{ReadbackComplete, ReadbackOnce};
+use bevy::window::PrimaryWindow;
 use serde_json::{json, Value};
 use std::io::Write;
 use std::path::PathBuf;
@@ -32,6 +35,9 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ui::model::{HudModel, LogKind};
+
+#[path = "record_frames.rs"]
+mod frames;
 
 pub fn dir() -> Option<PathBuf> {
     static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
@@ -51,6 +57,9 @@ static MAIN_NS: AtomicU64 = AtomicU64::new(0);
 fn spent(t0: std::time::Instant) {
     MAIN_NS.fetch_add(t0.elapsed().as_nanos() as u64, Ordering::Relaxed);
 }
+
+/// Bytes of frames written so far (for the size cap).
+static WRITTEN: AtomicU64 = AtomicU64::new(0);
 
 /// Stills dropped because the writer was behind.
 static DROPPED: AtomicU32 = AtomicU32::new(0);
@@ -81,24 +90,39 @@ impl Plugin for RecordPlugin {
         let open = |name: &str| std::fs::OpenOptions::new().create(true).append(true).open(dir.join(name)).map(std::io::BufWriter::new).ok();
         let every = std::env::var("LIVING_GAME_RECORD_EVERY").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(3.0).max(0.2);
         let width = std::env::var("LIVING_GAME_RECORD_WIDTH").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(960).max(160);
-        let (tx, rx) = sync_channel::<(u64, u64, Image)>(2);
+        let fps = std::env::var("LIVING_GAME_RECORD_FPS").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(10.0).clamp(0.0, 30.0);
+        // A long session's frames are capped (about 2.3 GB an hour at 960 px, 10 a second):
+        // past `LIVING_GAME_RECORD_MAX_MB` (default 4096) one frame every 5 s is kept.
+        let max_bytes = std::env::var("LIVING_GAME_RECORD_MAX_MB").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(4096) * 1_000_000;
+        let (tx, rx) = sync_channel::<Frame>(8);
         let stills = dir.join("stills");
         let mut csv = open("captures.csv");
         std::thread::Builder::new()
-            .name("record-stills".into())
+            .name("record-frames".into())
             .spawn(move || {
-                for (want_us, got_us, img) in rx {
+                for f in rx {
                     let t0 = std::time::Instant::now();
-                    let Ok(d) = img.try_into_dynamic() else { continue };
-                    let h = (d.height() as u64 * width as u64 / d.width().max(1) as u64).max(1) as u32;
-                    let small = if d.width() > width { d.resize_exact(width, h, image::imageops::FilterType::Triangle) } else { d };
-                    let path = stills.join(format!("{}.jpg", want_us / 1000));
+                    let (w, h) = (f.size.x as usize, f.size.y as usize);
+                    // Rows are 256-byte aligned in the readback; take each row's texels.
+                    let row = if h > 0 { f.data.len() / h } else { 0 };
+                    if row < w * 4 {
+                        continue;
+                    }
+                    let mut rgb = Vec::with_capacity(w * h * 3);
+                    for y in 0..h {
+                        for px in f.data[y * row..y * row + w * 4].chunks_exact(4) {
+                            rgb.extend_from_slice(&px[..3]);
+                        }
+                    }
+                    let Some(img) = image::RgbImage::from_raw(w as u32, h as u32, rgb) else { continue };
+                    let path = stills.join(format!("{}.jpg", f.want_us / 1000));
                     let mut bytes = Vec::new();
                     let enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 72);
-                    if small.to_rgb8().write_with_encoder(enc).is_ok() && std::fs::write(&path, &bytes).is_ok() {
-                        if let Some(f) = csv.as_mut() {
-                            let _ = writeln!(f, "{want_us},{got_us},{:.1},{}", t0.elapsed().as_secs_f64() * 1000.0, bytes.len());
-                            let _ = f.flush();
+                    if img.write_with_encoder(enc).is_ok() && std::fs::write(&path, &bytes).is_ok() {
+                        WRITTEN.fetch_add(bytes.len() as u64, Ordering::Relaxed);
+                        if let Some(c) = csv.as_mut() {
+                            let _ = writeln!(c, "{},{},{:.1},{}", f.want_us, f.got_us, t0.elapsed().as_secs_f64() * 1000.0, bytes.len());
+                            let _ = c.flush();
                         }
                     }
                 }
@@ -128,10 +152,15 @@ impl Plugin for RecordPlugin {
                 }
             })
             .ok();
-        info!("record: writing stills, state and events to {} (a still every {every} s, {width} px wide)", dir.display());
+        let what = if fps > 0.0 { format!("{fps} frames a second") } else { format!("a still every {every} s") };
+        info!("record: writing frames, state and events to {} ({what}, {width} px wide)", dir.display());
+        app.add_plugins(frames::FramesPlugin);
         app.insert_resource(Rec {
             tx,
-            every,
+            every: if fps > 0.0 { 1.0 / fps } else { every },
+            steady: fps > 0.0,
+            max_bytes,
+            width,
             next_shot: 0.0,
             last_shot: -1.0,
             want: false,
@@ -142,14 +171,27 @@ impl Plugin for RecordPlugin {
             lines,
         })
         .add_systems(Update, (input, drain).chain())
-        .add_systems(Last, (sample, shoot).chain());
+        .add_systems(Last, (mark_camera, sample, shoot).chain());
     }
+}
+
+/// A frame read back: when it was asked for and arrived (unix µs), its size and RGBA texels.
+struct Frame {
+    want_us: u64,
+    got_us: u64,
+    size: UVec2,
+    data: Vec<u8>,
 }
 
 #[derive(Resource)]
 struct Rec {
-    tx: SyncSender<(u64, u64, Image)>,
+    tx: SyncSender<Frame>,
+    /// Seconds between frames (steady capture) or between stills.
     every: f64,
+    /// A steady capture: frames on the clock only (lines and acts are in the timeline anyway).
+    steady: bool,
+    max_bytes: u64,
+    width: u32,
     next_shot: f64,
     last_shot: f64,
     /// Something happened worth a still now.
@@ -294,33 +336,71 @@ fn sample(
     spent(t0);
 }
 
-/// A still on the clock and when something happened; the image goes to the worker thread.
-/// Each still reads the whole frame back (Bevy has no smaller capture): on a loaded laptop the
-/// few frames after one were measured slower (docs/PLAY_REPORT.md), hence the spacing.
-fn shoot(mut commands: Commands, mut rec: ResMut<Rec>, time: Res<Time<Real>>, target: Option<Res<crate::capture::Target>>, net: NonSend<crate::net::Net>) {
+/// The camera the HUD is drawn on is the one recorded.
+fn mark_camera(mut commands: Commands, cams: Query<(Entity, Has<IsDefaultUiCamera>), (With<Camera3d>, Without<frames::Recorded>)>, marked: Query<(), With<frames::Recorded>>) {
+    if !marked.is_empty() {
+        return;
+    }
+    let mut all: Vec<_> = cams.iter().collect();
+    all.sort_by_key(|(_, ui)| !*ui);
+    if let Some((e, _)) = all.first() {
+        commands.entity(*e).insert(frames::Recorded);
+    }
+}
+
+/// A frame on the clock (and, with stills only, when something happened): this frame's small
+/// copy is drawn and read back; the texels go to the worker thread.
+#[allow(clippy::too_many_arguments)]
+fn shoot(
+    mut commands: Commands,
+    mut rec: ResMut<Rec>,
+    mut grab: ResMut<frames::Grab>,
+    mut images: ResMut<Assets<Image>>,
+    time: Res<Time<Real>>,
+    target: Option<Res<crate::capture::Target>>,
+    window: Query<&Window, With<PrimaryWindow>>,
+    net: NonSend<crate::net::Net>,
+) {
+    grab.now = false;
     let now = time.elapsed_secs_f64();
     // Nothing to see before I am in the world.
     if net.my_id.is_none() {
         return;
     }
-    let due = now >= rec.next_shot || (rec.want && now - rec.last_shot >= 1.0);
+    let due = now >= rec.next_shot || (!rec.steady && rec.want && now - rec.last_shot >= 1.0);
     if !due {
         return;
     }
     let t0 = std::time::Instant::now();
     rec.want = false;
     rec.last_shot = now;
-    rec.next_shot = now + rec.every;
-    let shot = match target {
-        Some(t) => Screenshot::image(t.0.clone()),
-        None => Screenshot::primary_window(),
+    // Keep the clock steady: the next frame is due one interval after this one was.
+    let every = if WRITTEN.load(Ordering::Relaxed) > rec.max_bytes { rec.every.max(5.0) } else { rec.every };
+    rec.next_shot = if now - rec.next_shot > every { now + every } else { rec.next_shot + every };
+    let view = match (&target, window.single()) {
+        (Some(t), _) => images.get(&t.0).map(|i| i.size()),
+        (None, Ok(w)) => Some(UVec2::new(w.physical_width(), w.physical_height())),
+        _ => None,
     };
+    let Some(view) = view.filter(|v| v.x > 0 && v.y > 0) else { return };
+    let size = frames::size_for(view, rec.width);
+    if grab.image.is_none() || grab.size != size {
+        if let Some(old) = grab.image.take() {
+            images.remove(&old);
+        }
+        grab.image = Some(frames::target(&mut images, size));
+        grab.size = size;
+        // The new target exists on the GPU from the next frame on.
+        return;
+    }
+    grab.now = true;
     let tx = rec.tx.clone();
     let want = unix_us();
-    commands.spawn(shot).observe(move |mut ev: On<ScreenshotCaptured>| {
+    let handle = grab.image.clone().unwrap();
+    commands.spawn(ReadbackOnce::texture(handle)).observe(move |mut ev: On<ReadbackComplete>| {
         let t0 = std::time::Instant::now();
-        let img = std::mem::take(&mut ev.event_mut().image);
-        match tx.try_send((want, unix_us(), img)) {
+        let data = std::mem::take(&mut ev.event_mut().data);
+        match tx.try_send(Frame { want_us: want, got_us: unix_us(), size, data }) {
             Ok(()) => {}
             Err(TrySendError::Full(_)) => {
                 DROPPED.fetch_add(1, Ordering::Relaxed);
