@@ -554,6 +554,17 @@ pub fn of(file: &str) -> Arc<Gaits> {
 #[derive(Component)]
 pub struct Feet;
 
+/// A connected body whose feet the log records, with its id: mine, and the one
+/// `LIVING_GAME_FEET_ID` names (another player's, to check how others are drawn). Each line
+/// carries `id`, and `sim` and `heading` are that body's.
+#[derive(Component)]
+pub struct Logged(pub u32);
+
+/// The other body `LIVING_GAME_FEET_ID` asks the feet log to follow too.
+pub fn logged_other() -> Option<u32> {
+    std::env::var("LIVING_GAME_FEET_ID").ok().and_then(|v| v.trim().parse().ok())
+}
+
 pub struct GaitPlugin;
 
 impl Plugin for GaitPlugin {
@@ -595,7 +606,7 @@ fn record(
     time: Res<Time>,
     island: Option<Res<crate::island::Island>>,
     envs: Option<Res<crate::envs::Envs>>,
-    who: Query<(Entity, &GlobalTransform, Option<&crate::lookdev::Model>), Or<(With<Feet>, With<crate::envs::Player>)>>,
+    who: Query<(Entity, &GlobalTransform, Option<&crate::lookdev::Model>, Option<&Logged>), Or<(With<Feet>, With<Logged>, With<crate::envs::Player>)>>,
     children: Query<&Children>,
     bones: Query<(&Name, &GlobalTransform)>,
     anims: Query<&crate::anim::Anim>,
@@ -613,7 +624,7 @@ fn record(
         (None, Some(e)) => e.ground.height(x, z),
         _ => 0.0,
     };
-    for (e, root, model) in &who {
+    for (e, root, model, logged) in &who {
         if !feet.contains_key(&e) {
             let find = |name: &str| children.iter_descendants(e).find(|d| bones.get(*d).is_ok_and(|(n, _)| n.as_str() == name));
             if let (Some(l), Some(r), Some(la), Some(ra)) = (find("J_Bip_L_ToeBase"), find("J_Bip_R_ToeBase"), find("J_Bip_L_Foot"), find("J_Bip_R_Foot")) {
@@ -657,7 +668,10 @@ fn record(
         };
         // Where I look and travel (sim radians as degrees, counter-clockwise from east), and the
         // authority's segment speed: connected play only.
-        let mine = net.as_ref().and_then(|n| n.my_id).and_then(|id| scene.as_ref().and_then(|s| s.shown.get(&id).copied()));
+        let my_id = net.as_ref().and_then(|n| n.my_id);
+        let id = logged.map(|l| l.0).or(my_id);
+        let is_me = id.is_some() && id == my_id;
+        let mine = id.and_then(|id| scene.as_ref().and_then(|s| s.shown.get(&id).copied()));
         let look = input.as_ref().and_then(|i| i.scripted_look.or(i.look)).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x).to_degrees());
         let rest = serde_json::json!({
             "t": time.elapsed_secs_f64(),
@@ -675,7 +689,8 @@ fn record(
             "hips_yaw": bone_yaw(at[0]),
             "chest_yaw": bone_yaw(at[1]),
             "head_yaw": bone_yaw(at[2]),
-            "look": look,
+            "id": id,
+            "look": look.filter(|_| is_me),
             "heading": mine.and_then(|(_, h)| h).map(|h| h.to_degrees()),
             "sim": mine.map(|(p, _)| [p.x, p.y]),
             "reverse": motions.get(e).ok().map(|m| m.reverse),

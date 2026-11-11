@@ -211,6 +211,20 @@ const YAW_RATE: f32 = 16.0;
 const STAND_TURN_ON: f32 = 55.0 * PI / 180.0;
 const STAND_TURN_OFF: f32 = 6.0 * PI / 180.0;
 
+/// Where a body faces on the authority (look-2), when that is not its travel: the row's travel
+/// segment turned by its facing offset at `now_ms` (authority ms), as `steer::facing` evaluates
+/// it with `dt = (min(now, next_ms) − t_ms) / 1000`. None when the row holds no offset (the body
+/// faces its travel).
+fn authority_facing(m: &living_bindings::Moving, now_ms: f64) -> Option<f32> {
+    if m.face_off == 0.0 && (m.face_turn == 0.0 || m.face_turn_s <= 0.0) {
+        return None;
+    }
+    let dt = ((now_ms.min(m.next_ms as f64) - m.t_ms as f64) / 1000.0).max(0.0) as f32;
+    let travel = m.heading + if m.turn_s > 0.0 { m.turn * dt.min(m.turn_s) } else { 0.0 };
+    let off = living_rules::steer::face_off(m.face_off, m.face_turn, m.face_turn_s, dt);
+    (off.abs() > 1e-3).then(|| living_rules::steer::facing(travel, m.face_off, m.face_turn, m.face_turn_s, dt))
+}
+
 #[derive(Resource, Default)]
 pub struct Live {
     building: Option<Arc<Mutex<Option<Result<Built, String>>>>>,
@@ -571,7 +585,9 @@ fn bodies(
             // Coming into sight: fade in once the model can be seen (`fade.rs`).
             commands.entity(entity).insert((Motion::default(), crate::fade::Fade::appearing()));
             if mine {
-                commands.entity(entity).insert(crate::gait::Feet);
+                commands.entity(entity).insert((crate::gait::Feet, crate::gait::Logged(id)));
+            } else if crate::gait::logged_other() == Some(id) {
+                commands.entity(entity).insert(crate::gait::Logged(id));
             }
             live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0 });
             live.heights.insert(id, height);
@@ -687,7 +703,11 @@ fn bodies(
         // the chest take the look, and past their limits the legs come round on the look-walk's
         // curve (`twist.rs`). The gait is the file's directional takes for the travel from where
         // the legs face now, so a sudden turn of the travel sidesteps until they have come round.
-        let look_at = aimed.or(look);
+        // Else the authority's facing (look-2: a held look turns head and chest, never the walk),
+        // for every body: mine before my own look reaches the row, and everyone else's. My own
+        // look leads it, drawn ahead of the row (`docs/PERCEPTION.md`, "Drawing it").
+        let faced = row.as_ref().and_then(|m| authority_facing(m, if mine { scene.mine_ms } else { scene.now_ms }));
+        let look_at = aimed.or(look).or(faced);
         let walking = s.person && s.speed > MOVING;
         let takes = |t: f32, legs: f32| gaits.as_ref().is_some_and(|g| g.blend_toward(s.speed / pace.max(0.5), stride, living_rules::steer::wrap(t - legs), |_| 1.0).is_some());
         // The travel from the legs for the directional takes, when they play.

@@ -24,6 +24,8 @@
   the player's character id, `{ident}` its identity (hex), and `{epoch_at:HOUR}` the world
   epoch that makes the world's hour HOUR now, keeping its day count (for a scratch fixture
   `UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0`: the hour by day or night).
+- A `--sync` call `player|REDUCER|ARG|…` is made as verify.py's player identity (`$V player
+  join`), not the admin: a second player's own acts (`player|human_face|0|-1`), beside mine.
 - `--admin-link` gives the client the world admin's token in a private file
   (LIVING_GAME_ADMIN_TOKEN_FILE, `.local/living/verify/RUN/private/`, mode 600, deleted when the
   drive ends), as the play launcher does for a scene with `"law_toggle": true`: the client's
@@ -184,6 +186,21 @@ def run_client(a, db, out, client, env, places, syncs):
                         for m in re.finditer(r"\{epoch_at:([\d.]+)\}", q):
                             q = q.replace(m.group(0), str(epoch_at(a.run, float(m.group(1)))))
                         scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": int(time.time() * 1000), "rows": sql(a.run, q)})
+                        continue
+                    if c[0] == "player":
+                        # As verify.py's player identity (`$V player join`), not the admin: its
+                        # own reducers (human_move, human_face), a second player beside mine.
+                        def val(x):
+                            x = sub(x)
+                            if x in ("true", "false"):
+                                return x == "true"
+                            try:
+                                return float(x)
+                            except ValueError:
+                                return x
+                        args = json.dumps([val(x) for x in c[2:]])
+                        r = subprocess.run([sys.executable, V, "call", "--run", a.run, c[1], args, "--as-player"], capture_output=True, text=True)
+                        scene["calls"].append({"reducer": c[1], "as": "player", "args": args, "code": r.returncode, "out": (r.stdout + r.stderr)[-300:]})
                         continue
                     scene["calls"].append(call(db, c[0], *[sub(x) for x in c[1:]]))
                 time.sleep(0.5)

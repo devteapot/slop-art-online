@@ -384,12 +384,13 @@ pub fn look(net: &Net, dir: Option<Vec2>, st: &mut LookSend, now: f64) {
     net.report("look", r);
 }
 
-/// Whether a look is sent while a direction is held. Off until dev-box's look-2 is on main: on
-/// main a look while walking bends the travel itself up to 30° toward it (`look_walk_deg`), so
-/// the owner walked at 0.87× speed with a sideways drift (play-test 5). look-2 makes the velocity
-/// follow the keys and turns only the facing; then this is the one line to change. Off, a look
-/// is sent standing and released (`human_face(0, 0)`) as soon as a direction is held.
-pub const FACE_WHILE_MOVING: bool = false;
+/// Whether a look is sent while a direction is held. On since look-3: with dev-box's look-2 the
+/// velocity follows the keys at full speed and a look turns only the facing (head and chest, at
+/// most `look_walk_deg` off the travel). Before look-2 a look while walking bent the travel itself
+/// up to 30° toward it, so the owner walked at 0.87× speed with a sideways drift (play-test 5),
+/// and this was off: a look was sent standing and released (`human_face(0, 0)`) while a
+/// direction was held.
+pub const FACE_WHILE_MOVING: bool = true;
 
 /// A look is sent again when it turns this far (degrees; the authority's own slack is 10°)…
 pub const LOOK_DEG: f32 = 4.0;

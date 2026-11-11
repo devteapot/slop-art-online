@@ -9,7 +9,8 @@ In the cursor scheme my character walks where the keys go and looks where the cu
 - `head-first`: the neck and head take the turn up to `head`, then the spine and chest up to `chest` (`Motion::neck`, `Motion::twist`). Holding a look, the head chain loses the clip's own turn about its axis: the diagonal takes turn the head about 30° by themselves.
 - `body-curve`: the legs approach their goal by `1 − exp(−dt / body_s)` a frame, capped at `body_dps` (450°/s for `chest`).
 - `sidestep`: after a sudden turn of the travel with the look held, the crossover takes play until the legs have come round.
-- `speed`: the look changes nothing the authority does with speed. The client sends no look while walking until look-2; then, per dev-box, velocity stays on the keys.
+- `speed`: the look changes nothing the authority does with speed or travel. Since look-3 the client sends its look while walking (`FACE_WHILE_MOVING`), and the authority turns only the facing (look-2).
+- `others`: every body's upper body follows the facing in its row (`live.rs` `authority_facing`); my own draws my look ahead of the row.
 
 ## How to get to it (user POV)
 
@@ -23,6 +24,7 @@ Preconditions: a scratch island world (`--seed island`). The scenario places the
 - **Steady.** For looks 0°, 45°, 90° and 135° off the travel: `look:L;hold:W;wait:4;shot:steadyN;wait:2;stop`, walking east and west in turn.
 - **Sudden 90°.** `look:0;hold:0;wait:3;hold:90`: walking north looking north, then east with the look held.
 - **Sudden 180°.** `look:180;hold:180;wait:3;hold:0`: walking south looking south, then north (backwards) with the look held.
+- **Others.** verify.py's player identity (`$V player join Bender`) is placed 4 m west and 3 m south of me. As that player (drive.py's `player|REDUCER|…` sync calls) it walks east and then looks north (`human_move`, `human_face`). Its row is snapshotted, and my client logs its body too (`LIVING_GAME_FEET_ID`). The checks: its travel east at 1.00× along the keys, its facing 75° north (`look_walk_deg`), and as drawn its twist −75° ± 6 with the legs on the travel. Residents never hold a look (minds have no such act), so a second player is the only way to get one.
 - Scenario: `check.py --run $R look-walk` (every preset; `LOOK_WALK_PRESETS=chest` for one). `LOOK_WALK_RECORD=1` also records each drive (`LIVING_GAME_RECORD=<evidence>/record`). `LOOK_WALK_REUSE=1` checks the last drives' logs again without driving. `LOOK_WALK_TAG=before` with another client's `CARGO_TARGET_DIR` keeps a second set beside them: an older client's feet log lacks `sim`, `heading`, `look` and the bones' yaws, so only its photographs and recording compare.
 
 Checks, per preset (21–22 each):
@@ -31,6 +33,7 @@ Checks, per preset (21–22 each):
 - the head never more than its limit + 15° from the chest;
 - no frame turns the legs more than 15° (frames over 50 ms, headless hitches, left out);
 - each steady look: no crossing, and the legs settled where the preset puts them (±8°);
+- each steady look: ground speed along the keys 1.00× (±1%): the authority's travel heading within 2° of the keys' way, times its speed against straight walking's (look-2 turns only the facing);
 - each steady look: the authority's ground speed (segment speed) as straight (±2%). The drawn speed must equal the authority's over the same 0.5 s windows (±8%). The comparison leaves out windows over a road change and windows within 2.5 s of a display-clock jump. A segment the display clock jumped in skips the comparison, and look_walk.json says so (`drawn_check`);
 - after each sudden turn, any crossing ends within 3 × `body_s` + 0.6 s.
 
@@ -39,7 +42,8 @@ Checks, per preset (21–22 each):
 ## Gotchas
 
 - The feet log's yaws are Bevy's, each bone's +Z on the ground, which is the sim angle + 180°. The checks compare differences, and the legs against `heading` + 180°.
-- `heading` is the authority's segment heading, which is the direction of motion: the legs are drawn on it. Under fov-1's `human_face` (not sent while walking until look-2) the travel itself bends up to `look_walk_deg`; the legs still follow it.
+- `heading` is the authority's segment heading, the direction of motion: the legs are drawn on it. With look-2 it stays on the keys whatever the look; the facing is `face_off` and its turn on the same row.
+- A look stays held on the authority when a client quits, so the next drive's first frames already draw a facing. Each drive therefore sets its preset from the first frame (`LIVING_GAME_LOOK_WALK`).
 - The newcomer walks at 2.43 m/s here (2.6 × the speed gene, × 0.6 at energy under 10 for a fresh `Bender`). The speed check compares like with like within one drive.
 - Brackenford's square is no place for this: separation from residents and roads (× 1.4) swing the heading and the speed.
 - Only frames from the first scripted `look:` count. Before it the body stands wherever the last drive left it, and the first-time tip's click can strike. Since fov-client, `human_face` turns a standing body toward the cursor, so a run after `field` used to fail the leg-jump and chest checks on those setup frames alone.
