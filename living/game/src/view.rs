@@ -482,7 +482,9 @@ pub fn batch(
         if now - state.started > 30.0 {
             warn!("view: {file} did not load");
             state.reports.push(serde_json::json!({ "file": file, "error": "did not load within 30 s" }));
-            state.batch = (i + 1, 0, now);
+            // As after a finished model: the next one starts at its own first step (which
+            // makes its folder).
+            state.batch = (i + 1, 0, 0.0);
             state.started = now;
         }
         return;

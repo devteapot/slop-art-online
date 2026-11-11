@@ -123,8 +123,9 @@ living-game-assets:
 # renderer beside the version the owner accepted, with decisions and history in
 # living/assets/board/ and media in ~/archive/asset-board/. `just living-board publish ...`,
 # `decide`, `status`, `build`, `check`, `pack`.
+[positional-arguments]
 living-board *args:
-    python3 living/tools/board/board.py {{args}}
+    python3 living/tools/board/board.py "$@"
 
 # The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
 # (numpy and Pillow through uv): `--set ground` (the default) the ground's layers for

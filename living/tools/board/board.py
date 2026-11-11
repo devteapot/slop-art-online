@@ -6,17 +6,16 @@ decisions and the full history kept as small records in git. docs/ASSET_BOARD.md
     board.py publish --family building:cone --model cone=out/cone.glb --generator G --seed 1 [...]
     board.py publish --manifest pass.json
     board.py import  --family character:adult-man --member man=page/img/ours-{shot}.jpg [...]
-    board.py decide  FAMILY VERSION|latest accept|reject --words "the owner's words" [--note ...]
-    board.py status  [FAMILY]
-    board.py build
-    board.py pack    [--out FILE.tar.gz]
+    board.py decide  FAMILY VERSION accept|reject --words "the owner's words" [--note ...]
+    board.py status  [FAMILY]          board.py families
+    board.py build                     board.py check [DIR]          board.py pack [--out F]
 
 Records (tracked): <repo>/living/assets/board/<family>/{family.json, versions/<id>.json,
-decisions/<date>-<id>-<verdict>.json}; one file each, so tracks and coordinators never edit the
+decisions/<date>-<id>-<verdict>.json}, one file each, so tracks and coordinators never edit the
 same file. The board's home ($ASSET_BOARD_HOME, default ~/archive/asset-board) mirrors every
 record under records/ and holds the media (media/<family>/<id>/) and the pages (index.html,
 family/<family>.html), all linked by relative paths, so the folder can be packed and opened
-anywhere.
+anywhere. Run it from the root of the repository whose pass it is.
 """
 
 import argparse
@@ -41,10 +40,15 @@ TOOL_REPO = os.path.normpath(os.path.join(TOOL_DIR, "..", "..", ".."))
 RECORDS = os.path.join("living", "assets", "board")
 SCHEMA = 1
 FILE_LIMIT = 64 << 20  # model files kept with a version for re-rendering, up to this size
+IDENTITY = ("generator", "seed", "commit", "branch", "generator_sha256")
+
+
+def warn(msg):
+    print(f"board: {msg}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------------------------
-# Places
+# Places and times
 
 
 def board_home():
@@ -55,21 +59,49 @@ def repo_root(given=None):
     if given:
         return os.path.abspath(given)
     r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
-    return r.stdout.strip() if r.returncode == 0 else TOOL_REPO
+    if r.returncode != 0:
+        sys.exit("board: run it inside the repository whose records it writes (or pass --repo)")
+    return r.stdout.strip()
 
 
 def slug(family):
-    if not re.fullmatch(r"[a-z0-9]+:[a-z0-9][a-z0-9_.-]*", family):
+    if not re.fullmatch(r"[a-z0-9]+:[a-z0-9][a-z0-9_.-]*", family or ""):
         sys.exit(f"board: family names are kind:name in lower case, for example building:cone (got {family!r})")
     return family.replace(":", "-")
 
 
-def now_iso():
-    return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+def now_iso(precise=False):
+    return datetime.datetime.now().astimezone().isoformat(timespec="microseconds" if precise else "seconds")
 
 
 def today():
     return datetime.date.today().isoformat()
+
+
+def instant(s):
+    """An ISO time or date as a UTC timestamp, for ordering (local offsets differ)."""
+    try:
+        t = datetime.datetime.fromisoformat(s)
+        if t.tzinfo is None:
+            t = t.astimezone()
+        return t.timestamp()
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def valid_date(s):
+    try:
+        return datetime.date.fromisoformat(s).isoformat()
+    except (TypeError, ValueError):
+        sys.exit(f"board: {s!r} is not a date (YYYY-MM-DD)")
+
+
+def valid_time(s):
+    try:
+        t = datetime.datetime.fromisoformat(s)
+    except (TypeError, ValueError):
+        sys.exit(f"board: {s!r} is not an ISO date or time")
+    return (t if t.tzinfo else t.astimezone()).isoformat(timespec="seconds")
 
 
 def git(repo, *args):
@@ -77,7 +109,7 @@ def git(repo, *args):
 
 
 # ---------------------------------------------------------------------------------------------
-# Records: repo copy (tracked) and the home's mirror; reads take the union.
+# Records: the repository's copy (tracked) and the home's mirror; reads take the union.
 
 
 def record_dirs(repo):
@@ -85,67 +117,76 @@ def record_dirs(repo):
     return [os.path.abspath(os.environ.get("ASSET_BOARD_RECORDS") or os.path.join(repo, RECORDS)), os.path.join(board_home(), "records")]
 
 
-def write_record(repo, rel, data):
+def write_record(repo, rel, data, only_repo=False):
     text = json.dumps(data, indent=1, ensure_ascii=False) + "\n"
-    for base in record_dirs(repo):
+    for base in record_dirs(repo)[: 1 if only_repo else 2]:
         p = os.path.join(base, rel)
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w") as f:
+        tmp = p + ".tmp"
+        with open(tmp, "w") as f:
             f.write(text)
+        os.replace(tmp, p)
     return os.path.join(record_dirs(repo)[0], rel)
 
 
 def load_all(repo):
     """{family: {"family": {...}, "versions": {id: {...}}, "decisions": [...]}} from both places;
-    where both hold a file, the repo's copy wins."""
+    where both hold a file, the repository's copy wins."""
     out = {}
-    for base in reversed(record_dirs(repo)):  # home first, then the repo overrides
+    for base in reversed(record_dirs(repo)):  # the home first, then the repository overrides
         for p in glob.glob(os.path.join(base, "*", "family.json")) + glob.glob(os.path.join(base, "*", "versions", "*.json")) + glob.glob(os.path.join(base, "*", "decisions", "*.json")):
             try:
                 d = json.load(open(p))
-            except (OSError, json.JSONDecodeError) as e:
-                print(f"board: skipping {p}: {e}", file=sys.stderr)
-                continue
-            fam = d.get("family") or d.get("name")
-            if not fam:
-                continue
-            f = out.setdefault(fam, {"family": {"name": fam}, "versions": {}, "decisions": {}})
-            kind = os.path.basename(os.path.dirname(p))
-            if os.path.basename(p) == "family.json":
-                f["family"] = d
-            elif kind == "versions":
-                f["versions"][d["id"]] = d
-            elif kind == "decisions":
-                f["decisions"][os.path.basename(p)] = d
+                fam = d.get("family") or d.get("name")
+                kind = os.path.basename(os.path.dirname(p))
+                f = out.setdefault(fam, {"family": {"family": fam}, "versions": {}, "decisions": {}})
+                if os.path.basename(p) == "family.json":
+                    f["family"] = d
+                elif kind == "versions":
+                    f["versions"][d["id"]] = d
+                else:
+                    d["_file"] = os.path.basename(p)
+                    if d["verdict"] not in ("accept", "reject") or not d.get("version"):
+                        raise ValueError("not a decision")
+                    f["decisions"][d["_file"]] = d
+            except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+                warn(f"skipping {p}: {e}")
     for f in out.values():
-        f["decisions"] = sorted(f["decisions"].values(), key=lambda d: (d.get("date", ""), d.get("recorded", "")))
+        f["decisions"] = sorted(f["decisions"].values(), key=lambda d: (d.get("date", ""), instant(d.get("recorded")), d["_file"]))
     return out
 
 
+def by_time(versions):
+    return sorted(versions, key=lambda v: (instant(v.get("published")), v["id"]))
+
+
 def standing(fam):
-    """Each version's last verdict, the accepted version (the most recent accept still standing),
-    the one accepted before it, and the latest published version."""
-    last = {}
-    accepts = []
+    """Each version's last decision, the accepted version (the most recent accept still
+    standing), the one accepted before it, and the latest published version."""
+    last, accepts = {}, []
     for d in fam["decisions"]:
         last[d["version"]] = d
         if d["verdict"] == "accept":
-            accepts = [a for a in accepts if a["version"] != d["version"]] + [d]
-    standing_accepts = [a for a in accepts if last[a["version"]]["verdict"] == "accept" and a["version"] in fam["versions"]]
-    accepted = standing_accepts[-1]["version"] if standing_accepts else None
-    before = standing_accepts[-2]["version"] if len(standing_accepts) > 1 else None
-    versions = sorted(fam["versions"].values(), key=lambda v: v.get("published", ""))
+            accepts = [x for x in accepts if x["version"] != d["version"]] + [d]
+    standing_ = [x for x in accepts if last[x["version"]]["verdict"] == "accept" and x["version"] in fam["versions"]]
+    accepted = standing_[-1]["version"] if standing_ else None
+    before = standing_[-2]["version"] if len(standing_) > 1 else None
+    versions = by_time(fam["versions"].values())
     latest = versions[-1]["id"] if versions else None
     return last, accepted, before, latest
 
 
 def baseline_for(fam):
-    """(latest, baseline): the latest version and what it is shown beside: the accepted version,
-    or, when the latest is the accepted one, the version accepted before it."""
+    """(latest, baseline, how): the latest version and what it is shown beside: the accepted
+    version; when the latest is the accepted one, the version accepted before it; with nothing
+    accepted, the version published before it."""
     _, accepted, before, latest = standing(fam)
     if latest and latest == accepted:
-        return latest, before
-    return latest, accepted
+        return latest, before, "accepted before"
+    if accepted:
+        return latest, accepted, "accepted"
+    versions = by_time(fam["versions"].values())
+    return latest, (versions[-2]["id"] if len(versions) > 1 else None), "previous"
 
 
 # ---------------------------------------------------------------------------------------------
@@ -153,8 +194,14 @@ def baseline_for(fam):
 
 
 def source_identity(repo, a, generator):
-    commit = git(repo, "rev-parse", "--verify", "--quiet", f"{a['commit']}^{{commit}}") or a["commit"] if a.get("commit") else git(repo, "rev-parse", "HEAD")
-    branch = a.get("branch") or git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    if a.get("commit"):
+        commit = git(repo, "rev-parse", "--verify", "--quiet", f"{a['commit']}^{{commit}}")
+        if not commit:
+            sys.exit(f"board: --commit {a['commit']} does not name a commit in {repo}")
+        branch = a.get("branch") or git(repo, "name-rev", "--name-only", "--exclude=tags/*", commit) or "?"
+    else:
+        commit = git(repo, "rev-parse", "HEAD")
+        branch = a.get("branch") or git(repo, "rev-parse", "--abbrev-ref", "HEAD")
     src = {"commit": commit, "branch": branch}
     if not a.get("commit"):
         src["dirty"] = bool(git(repo, "status", "--porcelain", "--untracked-files=no"))
@@ -168,21 +215,51 @@ def source_identity(repo, a, generator):
             if r.returncode == 0:
                 src["generator_sha256"] = hashlib.sha256(r.stdout).hexdigest()
                 src["generator_state"] = "committed"
+            elif os.path.exists(path):
+                warn(f"{generator} is not in {commit[:8]}; hashing the working file")
+                src["generator_sha256"] = G.sha256(path)
+                src["generator_state"] = "not in that commit"
+            else:
+                warn(f"{generator} is neither in {commit[:8]} nor here; the version has no generator hash")
         elif os.path.exists(path):
             src["generator_sha256"] = G.sha256(path)
             tracked = subprocess.run(["git", "-C", repo, "ls-files", "--error-unmatch", generator], capture_output=True).returncode == 0
             changed = bool(git(repo, "status", "--porcelain", "--", generator))
             src["generator_state"] = "untracked" if not tracked else ("modified" if changed else "committed")
-    if a.get("seed") is not None:
-        src["seed"] = a["seed"]
+            if src["generator_state"] != "committed":
+                warn(f"{generator} is {src['generator_state']}: commit it first, so the recorded commit holds the generator that made these files")
+        else:
+            warn(f"no generator at {path}; the version has no generator hash")
+    if a.get("seed") not in (None, ""):
+        src["seed"] = str(a["seed"])
     src["params"] = a.get("params") or {}
     return src
 
 
-def version_id(src, members, date=None):
+def identity_hash(src, members):
     h = hashlib.sha256(json.dumps({"g": src.get("generator_sha256"), "s": src.get("seed"), "p": src.get("params"),
-                                   "m": [(m["name"], m.get("sha256"), m.get("token_kind"), json.dumps(m.get("recipe"), sort_keys=True)) for m in members]}, sort_keys=True).encode()).hexdigest()
-    return f"{(date or today()).replace('-', '')}-{src['commit'][:8]}-{h[:4]}"
+                                   "m": sorted((m["name"], m.get("role", "subject"), m.get("sha256"), m.get("token_kind"), json.dumps(m.get("recipe"), sort_keys=True)) for m in members)},
+                                  sort_keys=True).encode()).hexdigest()
+    return h[:6]
+
+
+def version_id(fam, src, members, date=None):
+    """YYYYMMDD-<commit>-<hash>. The same commit and content published on another day is the
+    same version: its first id is kept."""
+    tail = f"{src['commit'][:8]}-{identity_hash(src, members)}"
+    for vid in fam.get("versions", {}):
+        if vid.endswith("-" + tail):
+            return vid
+    return f"{(date or today()).replace('-', '')}-{tail}"
+
+
+def same_content(old, src, members):
+    """Whether an existing record holds the same version (not a hash collision)."""
+    if not old:
+        return True
+    a = sorted((m["name"], m.get("sha256")) for m in old.get("members", []))
+    b = sorted((m["name"], m.get("sha256")) for m in members)
+    return a == b and old.get("source", {}).get("generator_sha256") == src.get("generator_sha256")
 
 
 def parse_params(items):
@@ -205,8 +282,6 @@ def recipe_entry(repo, name):
 
 def recipe_file(repo, entry):
     """The file the game loads for a recipe: the animated copy where there is one."""
-    if not entry:
-        return None
     base = entry["base"]
     anim = os.path.join(repo, "living", "game", "assets", "lookdev", "anim", os.path.basename(base))
     plain = os.path.join(repo, "living", "game", "assets", base)
@@ -227,11 +302,14 @@ def generator_report(path, key):
 # Family files
 
 
-def ensure_family(repo, families, name, kind=None, title=None, description=None, target=None):
+def ensure_family(repo, families, name, kind=None, title=None, description=None, target=None, new=False):
     s = slug(name)
+    known = name in families
+    if not known and not new:
+        sys.exit(f"board: no family {name}. Pass --new-family (or \"new\": true in the manifest) to start one. Families: {', '.join(sorted(families)) or 'none'}")
     fam = families.get(name, {}).get("family") or {}
-    changed = not fam.get("kind")
     fam = {"schema": SCHEMA, "family": name, **{k: v for k, v in fam.items() if k not in ("schema", "family", "name")}}
+    changed = not fam.get("kind")
     for k, v in (("kind", kind or fam.get("kind") or name.split(":")[0]), ("title", title), ("description", description), ("target", target)):
         if v and fam.get(k) != v:
             fam[k] = v
@@ -239,6 +317,9 @@ def ensure_family(repo, families, name, kind=None, title=None, description=None,
     fam.setdefault("title", name)
     if changed:
         write_record(repo, f"{s}/family.json", fam)
+    elif not os.path.exists(os.path.join(record_dirs(repo)[0], s, "family.json")):
+        # Known from the shared home only: the branch needs its own copy to merge.
+        write_record(repo, f"{s}/family.json", fam, only_repo=True)
     families.setdefault(name, {"family": fam, "versions": {}, "decisions": []})["family"] = fam
     return fam
 
@@ -261,19 +342,41 @@ def parse_member(spec, role):
 def manifest_from_args(a):
     if a.manifest:
         m = json.load(open(a.manifest))
-        for k in ("generator", "seed", "note", "track", "maker", "commit", "branch", "generator_sha256"):
+        if a.family or a.model or a.control:
+            sys.exit("board: give families either in the manifest or with --family/--model, not both")
+        for k in ("generator", "seed", "note", "track", "maker", "commit", "branch", "generator_sha256", "report"):
             if getattr(a, k, None) is not None:
                 m[k] = getattr(a, k)
         if a.param:
             m["params"] = {**m.get("params", {}), **parse_params(a.param)}
+        if a.new_family:
+            for f in m["families"]:
+                f.setdefault("new", True)
         return m
     if not a.family or not a.model:
         sys.exit("board: publish needs --family and at least one --model (or --manifest)")
     members = [parse_member(s, "subject") for s in a.model] + [parse_member(s, "control") for s in a.control or []]
     return {"generator": a.generator, "seed": a.seed, "params": parse_params(a.param), "note": a.note, "track": a.track, "maker": a.maker,
             "commit": a.commit, "branch": a.branch, "generator_sha256": a.generator_sha256,
-            "families": [{"family": a.family, "kind": a.kind, "title": a.title, "description": a.description, "target": a.target, "members": members,
+            "families": [{"family": a.family, "kind": a.kind, "title": a.title, "description": a.description, "target": a.target, "members": members, "new": a.new_family,
                           "report": a.report, "report_keys": dict(kv.split("=", 1) for kv in a.report_key or []), "delivered": a.delivered or []}]}
+
+
+def view_copy(scratch, tag, m):
+    """The asset view copies files from outside its folder by name; a name of its own keeps two
+    publishes, or two versions in one run, apart."""
+    t = os.path.join(scratch, "in", f"b{tag}-{os.getpid()}-{m['name']}.glb")
+    os.makedirs(os.path.dirname(t), exist_ok=True)
+    shutil.copy2(m["path"], t)
+    return t
+
+
+def cleanup_view_copies(renderer_repo, tokens):
+    for t in tokens:
+        if not t.startswith("recipe:"):
+            p = os.path.join(renderer_repo, "living", "game", "assets", "view", os.path.basename(t))
+            if os.path.exists(p):
+                os.remove(p)
 
 
 def publish(a):
@@ -281,135 +384,165 @@ def publish(a):
     man = manifest_from_args(a)
     families = load_all(repo)
     home = board_home()
-    published = []
+    warn(f"records: {record_dirs(repo)[0]}; media and pages: {home}")
+    published, control_cache = [], {}
     for fspec in man["families"]:
         name = fspec["family"]
         s = slug(name)
-        fam = ensure_family(repo, families, name, fspec.get("kind"), fspec.get("title"), fspec.get("description"), fspec.get("target"))
+        fam = ensure_family(repo, families, name, fspec.get("kind"), fspec.get("title"), fspec.get("description"), fspec.get("target"), new=fspec.get("new"))
         preset_name = fspec.get("preset") or preset_for(fam["kind"])
         preset = C.PRESETS[preset_name]
-        merged = {**{k: man.get(k) for k in ("generator", "seed", "commit", "branch", "generator_sha256")}, **{k: v for k, v in fspec.items() if k in ("generator", "seed", "commit", "branch", "generator_sha256") and v is not None}}
+        merged = {**{k: man.get(k) for k in IDENTITY}, **{k: v for k, v in fspec.items() if k in IDENTITY and v is not None}}
         merged["params"] = {**(man.get("params") or {}), **(fspec.get("params") or {})}
         src = source_identity(repo, merged, merged.get("generator"))
+        report_path = fspec.get("report") or man.get("report")
         members = []
         for m in fspec["members"]:
             m = dict(m)
             tok = m.pop("token", None) or m.pop("path")
+            m.setdefault("role", "subject")
+            if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", m.get("name", "")):
+                sys.exit(f"board: member names are lower case (got {m.get('name')!r})")
             if tok.startswith("recipe:"):
                 entry = recipe_entry(repo, tok.split(":", 1)[1])
                 if not entry:
                     sys.exit(f"board: no recipe {tok} in {repo}/living/game/assets/characters/recipes.json")
                 path = recipe_file(repo, entry)
+                if not path:
+                    sys.exit(f"board: recipe {tok}: its base {entry['base']} is not built in {repo}")
                 m.update(token_kind="recipe", token=tok, recipe=entry)
             else:
                 path = os.path.abspath(tok)
                 if not os.path.exists(path):
                     sys.exit(f"board: no model file {tok}")
+                if fam["kind"] == "character":
+                    warn(f"{m['name']}: a character given as a file has no recipe (height, colours, face); use recipe:NAME")
                 m.update(token_kind="file", source_path=os.path.relpath(path, repo) if path.startswith(repo + os.sep) else path)
             m["path"] = path
-            if path:
-                m["sha256"] = G.sha256(path)
+            m["sha256"] = G.sha256(path)
             members.append(m)
-        vid = version_id(src, members)
+        prev = by_time(families[name]["versions"].values())
+        if prev and not {m["name"] for m in members if m["role"] == "subject"} & {m["name"] for m in prev[-1].get("members", []) if m.get("role", "subject") == "subject"}:
+            warn(f"{name}: none of these members ({', '.join(m['name'] for m in members)}) is in the previous version; nothing will be compared. Use the same names.")
+        vid = version_id(families[name], src, members)
+        old = families[name]["versions"].get(vid)
+        if old and not same_content(old, src, members):
+            sys.exit(f"board: {vid} names another version of {name} (a hash collision); publish from a new commit")
+        if old and any(d["version"] == vid for d in families[name]["decisions"]) and not a.force:
+            sys.exit(f"board: {name} {vid} has a decision; photographing it again would change what was decided on. Pass --force to do it anyway.")
+        if old:
+            warn(f"{name} {vid} was published before; photographing it again")
         media_rel = f"media/{s}/{vid}"
         media = os.path.join(home, media_rel)
-        if os.path.isdir(media):
-            print(f"board: {name} {vid} was published before; photographing it again", file=sys.stderr)
-            shutil.rmtree(media)
-        os.makedirs(media)
-        scratch = os.path.join(home, ".scratch", vid)
-        shutil.rmtree(scratch, ignore_errors=True)
-        os.makedirs(scratch)
-        # Measure every member from its file, and keep file members for re-rendering.
-        for m in members:
-            if m.get("path"):
-                m["stats"] = G.stats(m["path"])
-                m["glow"] = m["stats"]["glow"]
-            if m["token_kind"] == "file":
-                dst = os.path.join(media, "files", f"{m['name']}.glb")
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                if os.path.getsize(m["path"]) <= FILE_LIMIT:
-                    shutil.copy2(m["path"], dst)
-                    m["file"] = f"files/{m['name']}.glb"
-                # The asset view copies files from outside its folder by name; a name of its own
-                # keeps two publishes (or two versions in one run) apart.
-                view_copy = os.path.join(scratch, "in", f"b{vid[-4:]}{vid[9:13]}-{m['name']}.glb")
-                os.makedirs(os.path.dirname(view_copy), exist_ok=True)
-                shutil.copy2(m["path"], view_copy)
-                m["view_token"] = view_copy
-            else:
-                m["view_token"] = m["token"]
-            key = (fspec.get("report_keys") or {}).get(m["name"]) or os.path.splitext(os.path.basename(m["path"] or m["name"]))[0]
-            rep = generator_report(fspec.get("report") or man.get("report"), key) or generator_report(fspec.get("report") or man.get("report"), m["name"])
-            if rep:
-                m["report"] = rep
-        # The renderer: the board's own game for files (it has the board's shots and night), the
-        # publishing repo's for recipes (its characters and recipe book).
+        work = media + f".new-{os.getpid()}"
+        scratch = os.path.join(home, ".scratch", f"{vid}-{os.getpid()}")
         renderer_repo = os.path.abspath(a.renderer_repo) if a.renderer_repo else (repo if any(m["token_kind"] == "recipe" for m in members) else TOOL_REPO)
-        game = a.game or C.build_game(renderer_repo, jobs=a.jobs)
-        renderer = C.renderer_identity(renderer_repo, preset)
-        renderer["repo"] = renderer_repo
-        print(f"board: photographing {name} {vid} ({len(members)} model(s), renderer {renderer['key']})", file=sys.stderr)
-        tokens = [{"name": m["name"], "token": m["view_token"], "glow": m.get("glow")} for m in members]
-        shots, clips, views = C.capture(game, renderer_repo, tokens, preset_name, media, os.path.join(scratch, "shots"), clips=False if a.no_clips else (a.clips.split(",") if a.clips else True), only_shots=a.shots and a.shots.split(","))
-        for m in members:
-            m["shots"] = shots.get(m["name"], [])
-            m["clips"] = clips.get(m["name"], [])
-            v = views.get(m["name"])
-            if v:
-                m["view"] = {k: v[k] for k in ("size_m", "triangles", "vertices", "meshes", "materials", "glow", "vertex_colours") if k in v}
-        record = {"schema": SCHEMA, "family": name, "id": vid, "published": now_iso(), "track": man.get("track"), "maker": man.get("maker"),
-                  "note": fspec.get("note") or man.get("note"), "source": src, "renderer": renderer, "preset": preset_name, "media": media_rel,
-                  "members": [{k: v for k, v in m.items() if k not in ("path", "view_token", "glow")} for m in members], "delivered": []}
-        keep_delivered(record, media, fspec.get("delivered") or [])
-        # The accepted version, photographed again by this renderer where it differs, so the
-        # comparison shows the models' change and not the renderer's.
-        _, accepted, _, _ = standing(families.get(name, {"decisions": [], "versions": {}}))
-        if accepted and accepted != vid and not a.no_rerender:
-            rerender_baseline(record, families[name]["versions"][accepted], game, renderer_repo, preset_name, renderer, home, scratch, a)
-        write_record(repo, f"{s}/versions/{vid}.json", record)
-        families[name]["versions"][vid] = record
-        shutil.rmtree(scratch, ignore_errors=True)
-        cleanup_view_copies(renderer_repo, members)
-        published.append((name, vid))
+        tokens = []
+        try:
+            shutil.rmtree(work, ignore_errors=True)
+            os.makedirs(work)
+            os.makedirs(scratch, exist_ok=True)
+            accepted = standing(families[name])[1]
+            base = families[name]["versions"].get(accepted) if accepted and accepted != vid else None
+            for m in members:
+                m["stats"] = G.stats(m["path"])
+                # Night shots when it glows now or glowed when accepted: a lost glow shows.
+                bm = next((x for x in (base or {}).get("members", []) if x["name"] == m["name"]), None)
+                m["glow"] = m["stats"]["glow"] or bool(bm and (bm.get("stats") or {}).get("glow"))
+                if m["token_kind"] == "file":
+                    if os.path.getsize(m["path"]) <= FILE_LIMIT:
+                        dst = os.path.join(work, "files", f"{m['name']}.glb")
+                        os.makedirs(os.path.dirname(dst), exist_ok=True)
+                        shutil.copy2(m["path"], dst)
+                        m["file"] = f"files/{m['name']}.glb"
+                    m["view_token"] = view_copy(scratch, vid[-6:], m)
+                else:
+                    m["view_token"] = m["token"]
+                tokens.append(m["view_token"])
+                key = (fspec.get("report_keys") or {}).get(m["name"]) or os.path.splitext(os.path.basename(m["path"]))[0]
+                rep = generator_report(report_path, key) or generator_report(report_path, m["name"])
+                if rep:
+                    if rep.get("sha256") and rep["sha256"] != m["sha256"]:
+                        warn(f"{m['name']}: the report's entry {key} is for another file (sha256 differs); left out. Write the report with the files.")
+                    else:
+                        m["report"] = rep
+            # The renderer: the board's own game for files (its shots and night), the publishing
+            # repository's for recipes (its characters and recipe book).
+            game = a.game or C.build_game(renderer_repo, repo, jobs=a.jobs)
+            renderer = C.renderer_identity(renderer_repo, preset, game if a.game else None)
+            renderer["repo"] = renderer_repo
+            warn(f"photographing {name} {vid} ({len(members)} model(s), renderer {renderer['key']})")
+            want_clips = False if a.no_clips else (a.clips.split(",") if a.clips else True)
+            todo = []
+            for m in members:
+                ck = (m["role"], m["sha256"], json.dumps(m.get("recipe"), sort_keys=True), renderer["key"], str(want_clips), a.shots)
+                if m["role"] == "control" and ck in control_cache:
+                    src_dir, cm = control_cache[ck]
+                    shutil.copytree(src_dir, os.path.join(work, m["name"]), dirs_exist_ok=True)
+                    m.update(shots=list(cm["shots"]), clips=list(cm["clips"]), view=cm.get("view"))
+                else:
+                    todo.append(m)
+            only = a.shots and a.shots.split(",")
+            shots, clips, views, missing = C.capture(game, renderer_repo, [{"name": m["name"], "token": m["view_token"], "glow": m["glow"], "source": m["path"]} for m in todo],
+                                                     preset_name, work, os.path.join(scratch, "shots"), clips=want_clips, only_shots=only)
+            if missing and not a.allow_missing:
+                sys.exit(f"board: not photographed: {json.dumps(missing)}; nothing recorded (--allow-missing records it anyway)")
+            for m in todo:
+                m["shots"] = shots.get(m["name"], [])
+                m["clips"] = clips.get(m["name"], [])
+                v = views.get(m["name"])
+                if v:
+                    m["view"] = {k: v[k] for k in ("size_m", "triangles", "vertices", "meshes", "materials", "glow", "vertex_colours") if k in v}
+                if m["role"] == "control":
+                    control_cache[(m["role"], m["sha256"], json.dumps(m.get("recipe"), sort_keys=True), renderer["key"], str(want_clips), a.shots)] = (os.path.join(media, m["name"]), m)
+            record = {"schema": SCHEMA, "family": name, "id": vid, "published": now_iso(), "track": man.get("track"), "maker": man.get("maker"),
+                      "note": fspec.get("note") or man.get("note"), "source": src, "renderer": renderer, "preset": preset_name, "media": media_rel,
+                      "members": [{k: v for k, v in m.items() if k not in ("path", "view_token", "glow")} for m in members], "delivered": []}
+            if missing:
+                record["missing"] = missing
+            keep_delivered(record, work, fspec.get("delivered") or [])
+            # The accepted version, photographed again by this renderer where it differs, so the
+            # comparison shows the models' change and not the renderer's.
+            if base and not a.no_rerender:
+                tokens += rerender_baseline(record, base, game, renderer_repo, preset_name, renderer, home, work, scratch, a)
+            # Only now replace an earlier photographing of the same version.
+            if os.path.isdir(media):
+                shutil.rmtree(media)
+            os.replace(work, media)
+            write_record(repo, f"{s}/versions/{vid}.json", record)
+            families[name]["versions"][vid] = record
+            published.append((name, vid))
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+            shutil.rmtree(work, ignore_errors=True)
+            cleanup_view_copies(renderer_repo, tokens)
     build(repo)
     for name, vid in published:
         print(f"published {name} {vid}")
         print(f"  page: {os.path.join(home, 'family', slug(name) + '.html')}")
-        print(f"  record: {os.path.join(record_dirs(repo)[0], slug(name), 'versions', vid + '.json')} (commit it with the pass)")
-    print(f"board: {os.path.join(home, 'index.html')}")
+        print(f"  record: {os.path.join(record_dirs(repo)[0], slug(name), 'versions', vid + '.json')}")
+    print(f"board: {os.path.join(home, 'index.html')}\nCommit the new files under {record_dirs(repo)[0]} with the pass.")
 
 
-def cleanup_view_copies(renderer_repo, members):
-    for m in members:
-        t = m.get("view_token", "")
-        if m.get("token_kind") == "file" and t:
-            p = os.path.join(renderer_repo, "living", "game", "assets", "view", os.path.basename(t))
-            if os.path.exists(p):
-                os.remove(p)
-
-
-def rerender_baseline(record, base, game, renderer_repo, preset_name, renderer, home, scratch, a):
+def rerender_baseline(record, base, game, renderer_repo, preset_name, renderer, home, work, scratch, a):
     br = base.get("renderer", {})
     if br.get("key") == renderer["key"] and br.get("preset") == renderer["preset"]:
-        return
-    names = {m["name"] for m in record["members"]}
-    tokens = []
+        return []
+    names = {m["name"]: m for m in record["members"]}
+    todo = []
     for m in base.get("members", []):
         f = m.get("file") and os.path.join(home, base["media"], m["file"])
         if m["name"] in names and f and os.path.exists(f):
-            t = os.path.join(scratch, "base", f"a{base['id'][-4:]}{base['id'][9:13]}-{m['name']}.glb")
-            os.makedirs(os.path.dirname(t), exist_ok=True)
-            shutil.copy2(f, t)
-            tokens.append({"name": m["name"], "token": t, "glow": m.get("stats", {}).get("glow"), "view_token": t, "token_kind": "file"})
-    if not tokens:
-        return
+            t = view_copy(scratch, "a" + base["id"][-6:], {"name": m["name"], "path": f})
+            glow = (m.get("stats") or {}).get("glow") or (names[m["name"]].get("stats") or {}).get("glow")
+            todo.append({"name": m["name"], "token": t, "glow": glow})
+    if not todo:
+        return []
     rel = f"vs/{base['id']}/render"
-    print(f"board: photographing the accepted version {base['id']} again with renderer {renderer['key']} ({len(tokens)} model(s))", file=sys.stderr)
-    shots, _, _ = C.capture(game, renderer_repo, tokens, preset_name, os.path.join(home, record["media"], rel), os.path.join(scratch, "base-shots"), clips=False,
-                            only_shots=a.shots and a.shots.split(","))
-    record["baseline_render"] = {"version": base["id"], "path": rel, "renderer": renderer["key"], "members": {k: v for k, v in shots.items()}}
-    cleanup_view_copies(renderer_repo, tokens)
+    warn(f"photographing the accepted version {base['id']} again with renderer {renderer['key']} ({len(todo)} model(s))")
+    shots, _, _, _ = C.capture(game, renderer_repo, todo, preset_name, os.path.join(work, rel), os.path.join(scratch, "base-shots"), clips=False, only_shots=a.shots and a.shots.split(","))
+    record["baseline_render"] = {"version": base["id"], "path": rel, "renderer": renderer["key"], "members": shots}
+    return [t["token"] for t in todo]
 
 
 def keep_delivered(record, media, items):
@@ -443,7 +576,7 @@ def do_import(a):
     home = board_home()
     name = a.family
     s = slug(name)
-    fam = ensure_family(repo, families, name, a.kind, a.title, a.description, a.target)
+    fam = ensure_family(repo, families, name, a.kind, a.title, a.description, a.target, new=a.new_family)
     src = source_identity(repo, {"commit": a.commit, "branch": a.branch, "generator_sha256": a.generator_sha256, "seed": a.seed, "params": parse_params(a.param)}, a.generator)
     stats = json.load(open(a.stats)) if a.stats else {}
     stats_keys = dict(kv.split("=", 1) for kv in a.stats_key or [])
@@ -460,14 +593,26 @@ def do_import(a):
             shot = rx.match(p).group("shot")
             if p not in claims or len(shot) < len(claims[p][1]):
                 claims[p] = (mname, shot)
-        m = {"name": mname, "role": role or "subject", "token_kind": "import", "pattern": pattern, "found": found}
+        m = {"name": mname, "role": role or "subject", "token_kind": "import", "found": found}
         st = stats.get(stats_keys.get(mname, mname))
         if st:
             m["stats"] = st
-            m["sha256"] = st.get("sha256") or hashlib.sha256(json.dumps(st, sort_keys=True).encode()).hexdigest()
         members.append(m)
-    date = (a.published or today())[:10]
-    vid = version_id(src, members, date)
+    for m in members:
+        mine = sorted((claims[p][1], p) for p in m["found"] if claims[p][0] == m["name"] and (not a.only_shots or claims[p][1] in a.only_shots.split(",")))
+        m["found"] = mine
+        # Identity: the stats file's hash where there is one, and the photographs themselves.
+        h = hashlib.sha256()
+        h.update(json.dumps(m.get("stats"), sort_keys=True).encode())
+        for shot, p in mine:
+            h.update(shot.encode())
+            h.update(G.sha256(p).encode())
+        m["sha256"] = (m.get("stats") or {}).get("sha256") or h.hexdigest()
+    date = (valid_time(a.published) if a.published else today())[:10]
+    vid = version_id(families[name], src, members, date)
+    old = families[name]["versions"].get(vid)
+    if old and any(d["version"] == vid for d in families[name]["decisions"]) and not a.force:
+        sys.exit(f"board: {name} {vid} has a decision; importing it again would change what was decided on. Pass --force to do it anyway.")
     media_rel = f"media/{s}/{vid}"
     media = os.path.join(home, media_rel)
     shutil.rmtree(media, ignore_errors=True)
@@ -476,10 +621,7 @@ def do_import(a):
 
     for m in members:
         m["shots"] = []
-        for p in m.pop("found"):
-            owner, shot = claims[p]
-            if owner != m["name"] or (a.only_shots and shot not in a.only_shots.split(",")):
-                continue
+        for shot, p in m.pop("found"):
             dst = os.path.join(media, m["name"], shot + ".jpg")
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             Image.open(p).convert("RGB").save(dst, quality=92)
@@ -488,7 +630,6 @@ def do_import(a):
                 shutil.copy2(crop, dst[:-4] + "-crop.png")
             m["shots"].append(shot)
         m["clips"] = []
-        m.pop("pattern")
     for spec in a.clip or []:
         left, _, path = spec.partition("=")
         mname, _, cname = left.partition("/")
@@ -499,8 +640,9 @@ def do_import(a):
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(path, dst)
         m["clips"].append({"name": cname or os.path.splitext(os.path.basename(path))[0], "file": f"clips/{os.path.basename(path)}", "layout": a.clip_layout or ""})
-    renderer = {"method": a.method, "commit": a.renderer_commit or "", "key": (a.renderer_commit or "")[:8] or a.method, "preset": C.preset_hash(C.PRESETS[preset_for(fam["kind"])]) if a.same_shots else "", "note": a.renderer_note or ""}
-    record = {"schema": SCHEMA, "family": name, "id": vid, "published": a.published or now_iso(), "imported": now_iso(), "track": a.track, "maker": a.maker,
+    preset = C.PRESETS[preset_for(fam["kind"])]
+    renderer = {"method": a.method, "commit": a.renderer_commit or "", "key": (a.renderer_commit or "")[:8] or a.method, "preset": C.preset_hash(preset) if a.same_shots else "", "note": a.renderer_note or ""}
+    record = {"schema": SCHEMA, "family": name, "id": vid, "published": valid_time(a.published) if a.published else now_iso(), "imported": now_iso(), "track": a.track, "maker": a.maker,
               "note": a.note, "source": src, "renderer": renderer, "preset": preset_for(fam["kind"]) if a.same_shots else "", "media": media_rel, "members": members, "delivered": []}
     keep_delivered(record, media, a.delivered or [])
     write_record(repo, f"{s}/versions/{vid}.json", record)
@@ -519,24 +661,28 @@ def decide(a):
     if a.family not in families:
         sys.exit(f"board: no family {a.family}; families: {', '.join(sorted(families))}")
     fam = families[a.family]
-    vid = a.version
-    if vid == "latest":
-        vid = standing(fam)[3]
-    matches = [v for v in fam["versions"] if v == vid or v.startswith(vid) or v.endswith(vid)]
+    vid = standing(fam)[3] if a.version == "latest" else a.version
+    matches = [v for v in fam["versions"] if v == vid] or [v for v in fam["versions"] if vid and vid in v]
     if len(matches) != 1:
         sys.exit(f"board: {a.version} matches {len(matches)} versions of {a.family}: {', '.join(sorted(fam['versions']))}")
     vid = matches[0]
-    date = a.date or today()
+    v = fam["versions"][vid]
+    date = valid_date(a.date) if a.date else today()
     d = {"schema": SCHEMA, "family": a.family, "version": vid, "verdict": a.verdict, "date": date, "by": a.by, "words": a.words, "note": a.note,
-         "scope": a.scope, "recorded": now_iso(), "recorded_by": a.recorded_by}
-    d = {k: v for k, v in d.items() if v not in (None, "")}
-    p = write_record(repo, f"{slug(a.family)}/decisions/{date}-{vid}-{a.verdict}.json", d)
+         "scope": a.scope, "recorded": now_iso(precise=True), "recorded_by": a.recorded_by}
+    d = {k: x for k, x in d.items() if x not in (None, "")}
+    rel = f"{slug(a.family)}/decisions/{date}-{vid}-{a.verdict}.json"
+    n = 2
+    while any(os.path.exists(os.path.join(b, rel)) for b in record_dirs(repo)):
+        rel = f"{slug(a.family)}/decisions/{date}-{vid}-{a.verdict}-{n}.json"
+        n += 1
+    p = write_record(repo, rel, d)
     build(repo)
-    print(f"recorded: {a.family} {vid} {a.verdict} on {date}\n  {p} (commit it)")
+    print(f"recorded: {a.family} {vid} (published {v.get('published', '?')[:16]}{', by ' + v['maker'] if v.get('maker') else ''}) {a.verdict} on {date}\n  {p} (commit it)")
 
 
 # ---------------------------------------------------------------------------------------------
-# status, build, pack
+# status, families, build, check, pack
 
 
 def status(a):
@@ -550,6 +696,16 @@ def status(a):
         st = last.get(latest, {}).get("verdict", "no decision") if latest else "nothing published"
         acc = f"accepted {accepted} ({last[accepted]['date']})" if accepted else "nothing accepted"
         print(f"{name:28} {len(fam['versions'])} version(s); {acc}; latest {latest or '-'}: {st}")
+
+
+def list_families(a):
+    """Each family with its kind and the member names to keep when publishing."""
+    families = load_all(repo_root(a.repo))
+    for name in sorted(families):
+        fam = families[name]
+        vs = by_time(fam["versions"].values())
+        ms = vs[-1].get("members", []) if vs else []
+        print(f"{name:28} {fam['family'].get('kind', ''):10} " + " ".join(m["name"] + (" (control)" if m.get("role") == "control" else "") for m in ms))
 
 
 def build(repo=None):
@@ -606,13 +762,13 @@ def pack(a):
 
     def keep(ti):
         rel = ti.name.split("/", 1)[1] if "/" in ti.name else ""
-        if rel.startswith(".scratch") or (not a.with_files and "/files/" in "/" + rel):
+        if rel.startswith(".scratch") or ".new-" in rel or (not a.with_files and "/files/" in "/" + rel):
             return None
         return ti
 
     with tarfile.open(out, "w:gz") as t:
         t.add(home, arcname="asset-board", filter=keep)
-    print(f"{out} ({os.path.getsize(out) >> 20} MiB); open asset-board/index.html")
+    print(f"{out} ({os.path.getsize(out) >> 20} MiB); unpack it and open asset-board/index.html")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -620,7 +776,7 @@ def pack(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--repo", help="the repository whose records to read and write (default: the one you are in)")
+    ap.add_argument("--repo", help="the repository whose records to read and write (default: the one you are in); goes before the command")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def identity(p):
@@ -630,7 +786,7 @@ def main():
         p.add_argument("--commit", help="the source commit, when the models came from another branch")
         p.add_argument("--branch")
         p.add_argument("--generator-sha256", dest="generator_sha256")
-        p.add_argument("--note")
+        p.add_argument("--note", help="what this pass changed")
         p.add_argument("--track", help="the track that made it, for example kit-1")
         p.add_argument("--maker", help="who made it, for example 'Claude Fable 5.2'")
         p.add_argument("--kind", choices=["building", "prop", "character"])
@@ -638,21 +794,24 @@ def main():
         p.add_argument("--description")
         p.add_argument("--target", help="the quality target, for example the VRoid control")
         p.add_argument("--delivered", action="append", help="TITLE=PATH or PATH: a page, notes or renders kept with the version")
+        p.add_argument("--new-family", dest="new_family", action="store_true", help="start a family that does not exist yet")
+        p.add_argument("--force", action="store_true", help="photograph or import again a version that has a decision")
 
     p = sub.add_parser("publish", help="photograph a family's models in the game and record the version")
     p.add_argument("--family")
-    p.add_argument("--model", action="append", help="NAME=PATH.glb or NAME=recipe:RECIPE, repeatable")
-    p.add_argument("--control", action="append", help="NAME=...: a control shown beside it (the quality target), repeatable")
+    p.add_argument("--model", action="append", help="NAME=PATH.glb or NAME=recipe:RECIPE, repeatable; keep the accepted version's NAMEs")
+    p.add_argument("--control", action="append", help="NAME=...: a reference photographed beside it (the quality target), repeatable")
     p.add_argument("--manifest", help="a JSON pass with several families (docs/ASSET_BOARD.md)")
     p.add_argument("--report", help="the generator's own report.json")
     p.add_argument("--report-key", action="append", help="MODEL=KEY in that report, when not the file's stem")
-    p.add_argument("--game", help="a built living-game binary (default: build it)")
+    p.add_argument("--game", help="a built living-game binary (default: build it; pair with --renderer-repo)")
     p.add_argument("--renderer-repo", help="the repository whose game takes the photographs")
     p.add_argument("--jobs", type=int, default=12)
     p.add_argument("--no-clips", action="store_true")
     p.add_argument("--clips", help="only these clips, e.g. walk-tq,run-side (characters)")
     p.add_argument("--no-rerender", action="store_true", help="do not photograph the accepted version again")
     p.add_argument("--shots", help="only these shots (comma-separated), for a quick look")
+    p.add_argument("--allow-missing", action="store_true", help="record the version even if some shots were not taken")
     identity(p)
     p.set_defaults(fn=publish)
 
@@ -675,12 +834,12 @@ def main():
 
     p = sub.add_parser("decide", help="record the owner's accept or reject")
     p.add_argument("family")
-    p.add_argument("version", help="a version id (or a unique part of one), or latest")
+    p.add_argument("version", help="a version id, or a unique part of one (latest takes the newest: check it is the one shown)")
     p.add_argument("verdict", choices=["accept", "reject"])
     p.add_argument("--words", help="the owner's words")
     p.add_argument("--note", help="context: what was compared, what it means")
     p.add_argument("--scope", help="what the accept means, e.g. base (start from it) or bar (good enough)")
-    p.add_argument("--date", help="the day of the decision (default today)")
+    p.add_argument("--date", help="the day of the decision, YYYY-MM-DD (default today)")
     p.add_argument("--by", default="owner")
     p.add_argument("--recorded-by", dest="recorded_by", default=os.environ.get("ASSET_BOARD_RECORDER", ""))
     p.set_defaults(fn=decide)
@@ -688,6 +847,8 @@ def main():
     p = sub.add_parser("status", help="each family's accepted and latest versions")
     p.add_argument("family", nargs="?")
     p.set_defaults(fn=status)
+    p = sub.add_parser("families", help="each family's kind and member names")
+    p.set_defaults(fn=list_families)
     p = sub.add_parser("build", help="write the pages again")
     p.set_defaults(fn=cmd_build)
     p = sub.add_parser("check", help="every link and image on the pages resolves")
