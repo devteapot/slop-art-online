@@ -10,15 +10,19 @@ of the player, who faces east (the `face` act).
    into view (`seen_bodies`).
 2. A look within the `look_slack_deg` law (10 degrees) of the one held writes nothing (`my_body`
    unchanged); a release while standing keeps the facing.
-3. Walking: `human_move(1, 0)` (east) with a look 45, 90, 135 and 180 degrees north of the
-   way: the travel stays east at full speed (velocity along the keys = the cruise speed, no
-   sideways drift) and only the facing turns, to the look or at most the `look_walk_deg` law
-   (75 degrees) off the way. Released (`human_face(0, 0)`), the facing returns to the way.
-   Facing sight follows the facing, not the travel: a second resident Q behind and north of the
-   walker (beyond side vision of the travel) comes into view when it looks north. Looking north
-   again and stopping (`human_move(0, 0)`), the body finishes the turn north once it stands.
+3. Walking: `human_move(1, 0)` (east) on open ground off the road, each look its own walk from
+   the same spot, with a look 45, 90, 135 and 180 degrees north of the way: the travel, measured
+   from successive position anchors (`my_body` rows' x, y at t_ms), stays east at the cruise
+   speed with no sideways part; the facing turns at the turn rate (`face_turn` = 6 rad/s for
+   span / 6 s) and, sampled only after that turn has settled, is 45, 75, 75 degrees north and,
+   for 180 from a facing on the travel, 75 south (wrap(pi) = +pi); after a look north first, a
+   180 look keeps the north shoulder. Released (`human_face(0, 0)`), the facing returns to the
+   way at the turn rate. Facing sight follows the facing, not the travel: a second resident Q
+   behind and north of the walker (beyond side vision of the travel) is in view while it walks
+   east looking north, out of view when it lets the look go. Looking north again and stopping
+   (`human_move(0, 0)`), the body finishes the turn north once it stands.
 4. The input bucket (`input_hz`/`input_burst`, shared with `human_move`), narrowed by the admin's
-   `set_world_law` to one every five seconds and three in a burst: of eight looks 90 degrees
+   `set_world_law` to one a second (the laws' least) and three in a burst: of eight looks 90 degrees
    apart, three (or four, with a refill meanwhile) are taken and the rest refused ("too many movement inputs"), and a `human_move` right
    after is refused too. The laws are put back to 30 and 15.
 5. Anonymous: refused ("you have no living character").
@@ -122,10 +126,11 @@ def facing_at(b, t):
     return math.remainder(h + off, math.tau)
 
 
-def walk_look(p, me, at, deg, release=False):
+def walk_look(p, me, at, deg, release=False, pre=None):
     """Walk east from `at` with the look `deg` north of the way (or, `release`, with it then let
-    go). Returns the travel measured over at least 4 s of position anchors after the facing's
-    turn settled, the facing segment the look started, and the facing sampled after it."""
+    go; or, `pre`, after a look `pre` degrees north has turned the facing first). Returns the
+    travel measured over at least 4 s of position anchors after the facing's turn settled, the
+    facing segment the look started, and the facing sampled after it."""
     p.call("human_face", [0.0, 0.0])
     p.call("human_move", [0.0, 0.0, False])
     p.call("place_at", [me, at[0], at[1]], "admin")
@@ -133,8 +138,9 @@ def walk_look(p, me, at, deg, release=False):
     p.call("human_move", [1.0, 0.0, False])
     time.sleep(0.6)
     ang = -math.radians(deg)
-    if release:
-        p.call("human_face", [math.cos(ang), math.sin(ang)])
+    if release or pre is not None:
+        first_ang = ang if release else -math.radians(pre)
+        p.call("human_face", [math.cos(first_ang), math.sin(first_ang)])
         time.sleep(0.6)
     t_look = now_ms()
     code, out = p.call("human_face", [0.0, 0.0] if release else [math.cos(ang), math.sin(ang)])
@@ -152,8 +158,9 @@ def walk_look(p, me, at, deg, release=False):
     off0 = first["face_off"]
     want = 0.0 if release else (math.copysign(1, math.remainder(ang, math.tau) or 1.0) * min(math.radians(deg), math.radians(75)))
     if not release and deg == 180:
-        # Straight behind from a facing on the travel: wrap(pi) is +pi, so the south side.
-        want = math.radians(75)
+        # Straight behind: from a facing on the travel, wrap(pi) is +pi, so the south side; from
+        # a facing already turned to one side, that side (`steer::BEHIND_BAND`).
+        want = math.copysign(math.radians(75), off0) if off0 != 0 else math.radians(75)
     span = abs(want - off0)
     turn_ok = abs(abs(first["face_turn"]) - RATE) < 1e-3 and math.copysign(1, first["face_turn"]) == math.copysign(1, want - off0) and abs(first["face_turn_s"] - span / RATE) < 1e-3 if span > 1e-3 else first["face_turn"] == 0.0
     settled_at = first["t_ms"] + first["face_turn_s"] * 1000.0 + 300.0
@@ -271,6 +278,10 @@ def main():
             A.check(p, f"walking, look {deg} off: settled, the facing is min(look, 75) off the travel", row["settled_samples"] >= 3 and row["facing_err_deg"] <= FACE_TOL_DEG, f"{row['settled_samples']} samples, facing {row['facing_deg']} deg (want {row['want_deg']}), worst error {row['facing_err_deg']} deg")
         EVIDENCE["walking_looks"] = table
         # Released while walking: the facing comes back to the travel at the turn rate.
+        # Straight behind with the facing already 75 degrees north: it keeps the north shoulder.
+        back = walk_look(p, me, (px, py), 180, pre=90)
+        EVIDENCE["walking_back_after_north"] = back
+        A.check(p, "walking, look 180 off with the facing already north: it stays on the north shoulder", back["turn_ok"] and back["settled_samples"] >= 3 and back["facing_err_deg"] <= FACE_TOL_DEG and back["want_deg"] == -75.0, f"from {back['off0_deg']} deg: face_turn {back['face_turn']}, facing {back['facing_deg']} deg (want -75)")
         rel = walk_look(p, me, (px, py), 90, release=True)
         EVIDENCE["walking_release"] = rel
         A.check(p, "released while walking: the facing returns to the travel at the turn rate", rel["turn_ok"] and rel["settled_samples"] >= 3 and rel["facing_err_deg"] <= FACE_TOL_DEG and abs(rel["travel_deg"]) <= TRAVEL_TOL_DEG, f"face_turn {rel['face_turn']} for {rel['face_turn_s']} s, facing {rel['facing_deg']} deg, travel {rel['travel_deg']} deg")
@@ -324,11 +335,11 @@ def main():
         face(0.0, 0.0, 0.3)
 
         # 4. The input bucket, narrowed for the check by the laws (`set_world_law`): one input a
-        #    every five seconds, three in a burst. HTTP calls are slower than the shipped refill
-        #    of 30 a second.
-        p.call("set_world_law", ["input_hz", "0.2"], "admin")
+        #    second (the least the laws take: `input_hz` is clamped to 1..120), three in a burst.
+        #    HTTP calls are slower than the shipped refill of 30 a second.
+        p.call("set_world_law", ["input_hz", "1"], "admin")
         p.call("set_world_law", ["input_burst", "3"], "admin")
-        time.sleep(16.0)  # the bucket fills to its burst of 3
+        time.sleep(4.0)  # the bucket fills to its burst of 3
         codes = []
         for k in range(8):
             ang = k * math.pi / 2

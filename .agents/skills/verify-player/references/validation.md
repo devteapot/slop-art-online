@@ -1,5 +1,16 @@
 # Validation record (player)
 
+## 2026-11-11 look-2: a held look turns the facing, not the travel (dev-box)
+
+Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d609819d`) on the dev-box, own container `look2-stdb` (2.14.1, port 3330, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Evidence under the worktree's `.local/living/verify/`.
+
+- `face.py` rewritten for the decoupled look: travel from successive position anchors, the facing's turn checked against the turn rate and sampled only after it settles (tolerances 0.5° travel and facing, 1% speed), open ground off the road. The pre-`look-2` walking check was flaky on the laptop (−1.02 and −0.02 rad against −0.52): both are steering's slide plan (±0.5 rad) round something ahead of a walker placed in town, not the clamp or the turn rate.
+- Merged build, final script: `player-look2-n` `face.py` 28 of 28 three times in a row (`face-run1..3.json`), the same numbers each run: travel 0.000°, speed 1.0000× cruise, sideways 0.0000; `face_turn` ∓6 rad/s for 0.1309 s (45°) and 0.2182 s (75°); settled facing −45, −75, −75, +75° for looks 45, 90, 135, 180° north (the 180° look from a facing on the travel takes the +π side), −75° for 180° after a look north (no turn: the north shoulder kept), back to 0° on release at +6 rad/s; three of eight looks taken in the narrowed bucket each run.
+- Merged build, the script before the source-wave fixes: `player-look2-m` `face.py` 27 of 27 three times; `fov.py` 18 of 18.
+- Before the merge: `player-look2-b` `face.py` 27 of 27 three times, the same numbers. Earlier attempts on `player-look2-a`: 13 of 21 (the walk ran into an obstacle and slid: heading −1.0 rad), 21 of 22 (a road sped the walk; the 180° look crossed the front before `BEHIND_BAND`), 21 of 22 (`place_at` put a wall between player and resident), 21 of 22 (Q out of range by the time the look was sent): each fixed in the script or, for the 180° crossing, in `steer::walk_face`.
+- `maintain-verification-skill` on the look feature (source wave, one reader): fixed the 180° side, the clamped `input_hz` (0.2 is taken as 1; the script now sets 1 and waits 4 s), the slack rule's conditions, and listed what is not driven live.
+- Not run on this change: the other player scripts.
+
 ## 2026-11-11 speech-2: whisper and call, refusals in the script's words (Spark)
 
 Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.

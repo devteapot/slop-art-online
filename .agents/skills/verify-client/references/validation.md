@@ -1,5 +1,12 @@
 # Client protocol validation
 
+## 2026-11-11 look-2 (dev-box)
+
+Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d609819d`) on the dev-box, own container `look2-stdb` (2.14.1, port 3330, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Evidence under the worktree's `.local/living/verify/`.
+
+- `seen_bodies` and `my_body` return `Moving` (the facing fields added) and `motion_seen` gains three columns; bindings regenerated. `run.py` `client-look2-m` (merged build, `scoped`): 39 of 39. `LIVING_PERCEPTION=open` `client-look2-open`: 39 of 39.
+- Migration: `origin/main`'s module published on a scratch world with a player joined, then this module over it without deleting data: accepted in place, rows kept; the server reported that all clients are disconnected (the views' row type changed).
+
 ## 2026-11-11 speech-2 (Spark)
 
 Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.

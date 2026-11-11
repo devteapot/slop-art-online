@@ -1,5 +1,13 @@
 # Core validation record
 
+## 2026-11-11 look-2: facing separate from travel (dev-box)
+
+Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d609819d`) on the dev-box, own container `look2-stdb` (2.14.1, port 3330, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Evidence under the worktree's `.local/living/verify/`.
+
+- Before the merge (`core-look2-a`): `cargo_checks.py` rules 225, authority 20, mind 93, viewer-sync 5; `sight` 6, `senses` 7, `fov` 18, `moves` 5, `doing` 7; `skirmish` 8 on an island world; steering 5 of 5; mechanics 21 of 23 (a net and the chained smoking failed: "your pack is full", 33 wood in the walker's pack).
+- After merging origin/main (`core-look2-m`): `sight` 6, `fov` 18, `moves` 5, `doing` 7; mechanics 23, 22 ("tending wounds") and 23 of 23 on three fresh worlds; steering 4 (the follower ended 3.55 m behind against 3.5, slow walkers at 1.04 m/s), 5 and 5 of 5. Bodies with no held look keep a zero facing offset, so their sight and steering read what they read before.
+- `just living-check` passes before the merge commit and after it.
+
 ## 2026-11-11 rules-3: store capacity by kind, regrowth by season (dev-box)
 
 Branch `rules-3` (from `93019a37`, origin/main `1d71e6c2` merged), own container `rules3-stdb` (2.14.1, port 3325), one private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to this change (goods, decay and the new winter feature), read against `script.rs`, `skills.rhai`, Cullet's laws, `common::amount_now` and `brain.rs`'s selector, not a source wave over every feature.
