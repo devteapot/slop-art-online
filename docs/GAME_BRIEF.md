@@ -823,6 +823,24 @@ Branch `feel-3`. Evidence and before/after stills are in `.local/living/feel-3/`
   - A plate sits behind the bars and the skill bar, and the health bar shows its value.
   - The pack lists each item's name, its worth as food (muted) and its count (gold), with a carry bar.
 
+## Feel pass 4: the first minutes (2026-11-11)
+
+Branch `feel-4`. Evidence is in `.local/living/feel-4/` (git-ignored). Client only.
+
+- **Arrival:**
+  - The first load names its stage under "Arriving…": reaching the world, shaping the land, finding your way in.
+  - Low buildings (market stalls) fade when they hide you; a newcomer arrives among the stalls.
+  - F with nothing in reach says so, instead of opening the list of acts on oneself.
+- **Crowds:**
+  - Speech bubbles stack without landing on one another. A lifted bubble rose 1 px past an obstacle, inside the overlap test's 3 px margin, so the stacking passes ran out.
+  - A speaker under the cursor no longer gets a nameplate repeating the name in their bubble.
+  - The authority's labels ("a stranger") are capitalised on plates, bubbles and in the log.
+  - Look-dev's sample HUD has a `crowd` state.
+- **Jump:** the legs hold their stride in the air instead of cycling, and foot IK eases out and in over the first and last fifth of the flight.
+  - Air, median foot motion: 8.8 → 1.0 cm a frame.
+  - Landing peak: 46 → 24 cm.
+  - Take-off peak: 48 → 32 cm.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**
