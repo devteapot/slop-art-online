@@ -5,6 +5,18 @@
 
 **2026-11-11, branch `verify-ui-items` (two gives, one counted).** The items check read the receiver's berries before the drive, while the resident was still free, and read 2 → 3 for two gives. Through the player reducers on `verify-ui-give-1111-2049` (`601d1f68`), the items scene's placement and timing: both gives landed about 1 s after each was sent (receiver 2 → 3 → 4), each with the outcome "gave 1 berries to a stranger" and a `gift` experience. 43 free residents changed their berries within 45 s. The check now proves the gives by the player's act outcomes and the receiver's `gift` experiences since the drive began. `check.py items` on `verify-ui-items-1111-2059` (`25c1fb92` plus this change): **10 passed, 0 failed**, twice. Not rerun: the other scenarios (only the items check changed).
 
+**2026-11-11, `fov-client` after merging main `787acc8f` (look-walk).**
+- **Setup:** world `verify-ui-fov3-1111-221657`. The conflicts were resolved as look-walk's `76f5f931`.
+- **Found: the worktree had no game assets.** The git-ignored `lookdev`, `textures` and `view` links and the generated `envs` files were missing, so every earlier client run of this branch drew placeholder boxes. Its dumps and authority checks hold; its photographs don't show the real scene. The assets are now linked to the main checkout, as the other worktrees do. Look for them before a run: `ls living/game/assets`.
+- **With the assets:**
+  - field **27/27**;
+  - look-walk **66/66** (`checks-lookwalk-reuse.json`, the new build's feet logs re-checked);
+  - turns **14/14** and pick **7/7** (`checks-turns-pick.json`).
+- **Found and fixed on the way:**
+  - The client's look release went after the frame's move, so it reached the authority mid-walk and snapped the heading: a 43° leg jump in one frame. It now goes before the move.
+  - look-walk's checks counted the setup frames before its first look. There the body stood as `field` left it and turned to the cursor through `human_face`. They now start at the first scripted look.
+  - The field case runs at noon (`{epoch_at:12}`), so side vision is compared.
+
 **2026-11-11, branch `fov-client` (facing sight in the client; sight-look's looks merged, memory the default).**
 - **Setup:** world `verify-ui-fov2-1111-203842` (`$V launch --seed island`, `doctor` all ok), from fov-client merged with main `abfe577f`. Release client from the branch, private `CARGO_TARGET_DIR`, through `build-slot`. Clear theme.
 - **The new `field` scenario:**

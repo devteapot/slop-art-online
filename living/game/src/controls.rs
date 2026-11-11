@@ -284,6 +284,23 @@ pub fn movement(
     input.dir = dir;
     let (qx, qy) = quantize(dir);
     let intent = (qx, qy, run && (qx, qy) != (0, 0));
+    // My look, to the authority (`human_face`): facing the cursor, its direction, standing and
+    // walking; facing where I walk, the cursor's only while a move is aimed (a skill key held,
+    // a guard up), then released (the body faces its travel again).
+    let aims = combat.as_deref().is_some_and(|c| c.aims);
+    let dir = match input.control {
+        Control::Cursor => input.look,
+        Control::Travel if aims => input.look,
+        Control::Travel => None,
+    };
+    // While moving, the look is released unless [`FACE_WHILE_MOVING`] (see there). It goes
+    // before this frame's move, so a walk that starts reaches the authority after the release,
+    // while the body still stands: a release then keeps the facing and the walk turns on its
+    // eased curve, where a release mid-walk snaps the heading to the travel (a leg jump).
+    let dir = dir.filter(|_| FACE_WHILE_MOVING || !input.moving);
+    let mut looks = std::mem::take(&mut input.looks);
+    look(&net, dir, &mut looks, now);
+    input.looks = looks;
     // Release of all keys sends one stop; idle frames send nothing.
     let changed = input.sent != Some(intent) && !(input.sent.is_none() && intent.0 == 0 && intent.1 == 0);
     if changed && input.retry_at.is_none() {
@@ -299,20 +316,6 @@ pub fn movement(
         net.report("move", r);
         input.moved_at = Some(std::time::Instant::now());
     }
-    // My look, to the authority (`human_face`): facing the cursor, its direction, standing and
-    // walking; facing where I walk, the cursor's only while a move is aimed (a skill key held,
-    // a guard up), then released (the body faces its travel again).
-    let aims = combat.as_deref().is_some_and(|c| c.aims);
-    let dir = match input.control {
-        Control::Cursor => input.look,
-        Control::Travel if aims => input.look,
-        Control::Travel => None,
-    };
-    // While moving, the look is released unless [`FACE_WHILE_MOVING`] (see there).
-    let dir = dir.filter(|_| FACE_WHILE_MOVING || !input.moving);
-    let mut looks = std::mem::take(&mut input.looks);
-    look(&net, dir, &mut looks, now);
-    input.looks = looks;
     // A move the authority held back while I was rooted is re-sent by the authority itself
     // (`combat::resume_move`); RMB is the bow shot (combat.rs), so there is no click-to-move.
     let _ = (&mouse, &ui, &time);
