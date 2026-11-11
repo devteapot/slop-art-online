@@ -182,6 +182,8 @@ struct Shown {
 /// seat while the clip plays, then catches up at up to [`CATCH_UP`] m/s faster than the body.
 const STAND_UP: (&str, f32, f64) = ("stand_up_ground", 1.6, 2467.0 / 1.6);
 const CATCH_UP: f32 = 1.2;
+/// A turn take turns the legs at most this fast (radians a second): its own curve stays under it.
+const TURN_MAX: f32 = 720.0 * PI / 180.0;
 /// Legs within this of the travel (radians) walk along it: a stop take may play.
 const ALONG: f32 = 15.0 * PI / 180.0;
 /// A body this far (m) from where it is drawn is drawn there at once: a teleport (an admin
@@ -685,7 +687,10 @@ fn bodies(
                 s.turn = None;
             } else {
                 let (by, done) = crate::takes::turned(g, &tp, scene.now_ms);
-                s.yaw = living_rules::steer::wrap(tp.yaw0 + by);
+                // Along the take's curve, but never faster than [`TURN_MAX`]: a jump of the display
+                // clock ended a take in one frame and turned the legs 77° at once.
+                let d = living_rules::steer::wrap(tp.yaw0 + by - s.yaw);
+                s.yaw = living_rules::steer::wrap(s.yaw + d.clamp(-TURN_MAX * dt, TURN_MAX * dt));
                 let len = g.info(tp.clip).map_or(0.0, |i| i.seconds);
                 if done {
                     s.turn = None;
@@ -732,6 +737,9 @@ fn bodies(
             }
             // Standing and looking, with no move under way (a move turns the whole body to its
             // aim, as a dodge's roll must): the legs stay until the look is well away, then turn.
+            // While a stop take plays the legs hold (the upper body takes the look): no turn take
+            // can start then, and they swivelled at the yaw rate, 40° a frame.
+            (false, Some(_), _) if s.person && action.is_none() && s.stop.is_some() => Some(s.yaw),
             (false, Some(l), _) if s.person && action.is_none() => {
                 let off = living_rules::steer::wrap(l - s.yaw).abs();
                 s.turning = if s.turning { off > STAND_TURN_OFF } else { off > STAND_TURN_ON.min(lw.upper()) };

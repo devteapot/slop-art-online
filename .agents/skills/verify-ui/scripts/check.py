@@ -492,9 +492,13 @@ def look_walk_one(run, c, preset):
     hn = max((abs(wrapd(r["head_yaw"] - r["chest_yaw"])) for r in walking if r.get("head_yaw") is not None), default=0)
     c.check(s, f"drawn: the head never more than {head} + 15° from the chest", hn <= head + 15, f"max {hn:.1f}°")
     # Frames over 50 ms (a headless hitch) are left out: a take turns at its own rate over them.
-    jumps = [abs(wrapd(rows[i]["yaw"] - rows[i - 1]["yaw"])) for i in range(1, len(rows)) if rows[i]["dt"] <= 0.05]
+    # A frame may turn the legs more than 15° only within 720°/s (`live.rs` TURN_MAX; the body's
+    # own cap is lower) over a long frame.
+    jumps = [(abs(wrapd(rows[i]["yaw"] - rows[i - 1]["yaw"])), rows[i]["dt"]) for i in range(1, len(rows)) if 0 < rows[i]["dt"] <= 0.05]
+    bad = [(d, dt) for d, dt in jumps if d > max(15.0, 720.0 * dt + 1.0)]
     hitches = sum(1 for r in rows if r["dt"] > 0.05)
-    c.check(s, "the legs come round eased: no frame turns them more than 15°", jumps and max(jumps) <= 15.0, f"max {max(jumps or [0]):.1f}° a frame ({hitches} frames over 50 ms left out)")
+    worst = max(jumps or [(0, 0)])
+    c.check(s, "the legs come round eased: no frame turns them more than 15° (or 720°/s over a long frame)", jumps and not bad, f"max {worst[0]:.1f}° in {worst[1] * 1000:.0f} ms; {len(bad)} over; {hitches} frames over 50 ms left out")
     for off, walk, look in steady:
         seg = max((g for g in segs if g and abs(abs(off_of(g[0])) - off) < 6), key=len, default=None)
         if not seg or seg[-1]["t"] - seg[0]["t"] < 3.5:
@@ -542,7 +546,18 @@ def look_walk_one(run, c, preset):
             continue
         i0 = cand[0]
         t_s = rows[i0]["t"]
-        after = [r for r in rows[i0:] if r["t"] - t_s < 3.5 and r["v"] > 0.5]
+        # Until the travel changes again (a resident in the way, the stop).
+        new_h = None
+        after = []
+        for r in rows[i0:]:
+            if r["t"] - t_s >= 3.5 or r.get("heading") is None:
+                break
+            if r["t"] - t_s > 0.8:
+                new_h = r["heading"] if new_h is None else new_h
+                if abs(wrapd(r["heading"] - new_h)) > 20:
+                    break
+            if r["v"] > 0.5:
+                after.append(r)
         crossed = [r for r in after if r["crossed"]]
         last = (crossed[-1]["t"] - t_s) if crossed else 0.0
         result[f"sudden{turn}"] = {"crossed_frames": len(crossed), "last_cross_s": round(last, 2), "limit_s": round(limit, 2), "cross_weight_max": round(max([r["cross_w"] for r in after] or [0]), 2)}
