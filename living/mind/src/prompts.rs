@@ -298,6 +298,20 @@ pub fn world_rules() -> Arc<str> {
     full
 }
 
+/// What a graph's `relation: "stranger"` matches under the world's rules in force (the
+/// `stranger_by_name` law, docs/STRANGERS.md), in the words the graph grammar gives it.
+fn stranger_words() -> &'static str {
+    stranger_words_for(compiled().is_some_and(|s| s.laws().stranger_by_name))
+}
+
+fn stranger_words_for(by_name: bool) -> &'static str {
+    if by_name {
+        "(someone whose name you do not know)"
+    } else {
+        "(someone you have no feelings about yet, or call a stranger)"
+    }
+}
+
 pub fn grammar() -> String {
     grammar_with(&skills_help(), true)
 }
@@ -322,6 +336,7 @@ Deliberate one-off interactions (starting a family, trading, giving, teaching, w
     };
     // Only people's graphs read judgments for now (the first one is a person's fight).
     let judged = if speaks { judged_line() } else { String::new() };
+    let stranger = stranger_words();
     let g = format!(
         "\
 BEHAVIOR GRAPH (JSON) — it runs continuously (~1 check per second, instantly on events) while you think slowly, so encode how to react, not just one action.
@@ -340,7 +355,7 @@ Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}
   {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
-Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
+Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner)
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
   People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
@@ -1373,6 +1388,16 @@ mod tests {
         out.push(Stability::Shared, "rules");
         out.push(Stability::Character, "places");
         assert_eq!(out.render(), "rulespersonaplacesclock");
+    }
+
+    #[test]
+    fn the_grammar_says_what_stranger_means_under_the_law_in_force() {
+        // The shipped rules (the law off): no feelings yet; the law on says names, and the two differ.
+        let (system, _) = fixture("deliberate", "Aria", "person");
+        assert!(system.contains(&format!("stranger {}", stranger_words_for(false))), "{system}");
+        assert!(!system.contains(stranger_words_for(true)));
+        let on = living_rules::script::with_world_laws(include_str!("../../scripts/skills.rhai"), &[("stranger_by_name".into(), serde_json::json!(true))]);
+        assert!(living_rules::script::Scripts::new(&on).unwrap().laws().stranger_by_name);
     }
 
     #[test]

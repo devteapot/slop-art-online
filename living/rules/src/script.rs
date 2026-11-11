@@ -447,6 +447,10 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
+    /// relation row (or one labelled "stranger"); on, someone whose name one does not know
+    /// (`perception::knows_name`, the rule scenes and percepts name people by).
+    pub stranger_by_name: bool,
     /// A sound heard but not seen is near within this, close within the next (metres), and
     /// lingers this long after it was last heard (seconds).
     pub heard_near_m: f32,
@@ -509,6 +513,7 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            stranger_by_name: false,
             heard_near_m: 5.0,
             heard_close_m: 15.0,
             heard_linger_s: 2.0,
@@ -2326,6 +2331,7 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
             heard_near_m: g("heard_near_m", l.heard_near_m).clamp(0.0, 256.0),
             heard_close_m: g("heard_close_m", l.heard_close_m).clamp(0.0, 256.0),
             heard_linger_s: g("heard_linger_s", l.heard_linger_s).clamp(0.0, 60.0),
@@ -3204,6 +3210,13 @@ mod tests {
         assert!(over("cry_prompts_carers", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
         // Who heard a line is kept by default (the minds' `LIVING_GREET=nearest` reads it); a world may turn it off.
         assert!(sc.laws().speech_audience && !over("speech_audience", serde_json::json!(false)).unwrap().speech_audience);
+        // What a graph's "stranger" means is off (no relation row) unless the world turns it on
+        // (someone whose name one does not know), and the words say which (docs/STRANGERS.md).
+        assert!(!sc.laws().stranger_by_name && over("stranger_by_name", serde_json::json!(true)).unwrap().stranger_by_name);
+        let shipped = include_str!("../../scripts/skills.rhai");
+        let about = |src: &str| Scripts::new(src).unwrap().laws_about().into_iter().find(|(k, _)| k == "stranger_by_name").map(|(_, t)| t).unwrap_or_default();
+        let on = with_world_laws(shipped, &[("stranger_by_name".into(), serde_json::json!(true))]);
+        assert_eq!((about(shipped).as_str(), about(&on).as_str()), ("in a routine, a stranger is someone one has no feelings about yet", "in a routine, a stranger is someone whose name one does not know"));
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));

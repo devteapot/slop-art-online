@@ -1,0 +1,9 @@
+     Running unittests src/lib.rs (/home/gooning/slop-strangers-target/debug/deps/living_authority-a7f0e32e3ad733ec)
+
+running 2 tests
+test brain::tests::first_sights_of_one_look_share_one_line ... ok
+test brain::tests::a_row_of_gate_tiles_is_one_gate ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+error: no library targets found in package `living-mind`
