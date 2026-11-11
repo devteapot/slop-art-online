@@ -256,8 +256,9 @@ fn know_how() {
     ]
 }
 
+// Cullet's workplaces, after the shipped recipes (crafting, and cooking and smoking at any fire).
 fn recipes() {
-    [
+    base_recipes() + [
         #{ name: "ash", at: "fire", lit: true, takes: #{ kelp: 4 }, ms: 6000 },
         #{ name: "glass", at: "furnace", lit: true, takes: #{ alkali: 1, sand: 2 }, fuel: 1.0, knows: "glassmaking", ms: 15000 },
         #{ name: "smoking", turns: "smokes_to", at: "smokehouse", lit: true, fuel: 0.5, knows: "smoking", ms: 10000 },

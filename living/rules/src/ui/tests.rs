@@ -215,7 +215,8 @@ fn the_three_looks_by_name_are_declared_not_coded() {
         assert_eq!(UiSpec { look: d.look.clone(), declared: false, ..u.clone() }, d, "{skill}: only `look` is declared");
     }
     let declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
-    assert_eq!(declared, ["strike", "throw", "shoot"], "the shipped script declares only these (step 2 adds the bar's)");
+    // and the recipe grids of the ways of making (recipes-1).
+    assert_eq!(declared, ["cook", "smoke", "craft", "make", "strike", "throw", "shoot"], "the shipped script declares only these (step 2 adds the bar's)");
 }
 
 #[test]
@@ -696,8 +697,7 @@ fn declarations_place_and_present() {
         "fn firebolt_ui() { #{ label: \"Fire bolt\", place: \"skill\", order: 2, marker: \"circle\", look: #{ icon: \"fire\", clip: \"cast\", effect: \"bolt\" }, running: #{ show: \"windup\" }, refused: \"grey\" } }\n\
          fn block_ui() { #{ place: \"skill\", order: 0 } }\n\
          fn heal_ui() { #{ place: \"skill\", order: 1 } }\n\
-         fn give_ui() { #{ label: \"Give\", on: [\"person\", \"item\"], picks: [\"target\", \"item\", \"qty\"], drag: \"person\", pin: true, order: 0, look: #{ icon: \"give\", clip: \"hand\" }, refused: \"note\" } }\n\
-         fn make_ui() { #{ on: \"thing\", picks: [\"item\"], choose: \"grid\", detail: \"made_how\", running: #{ show: \"progress\", text: \"Making {item}\" }, look: #{ icon: \"hammer\", clip: \"work\" } } }",
+         fn give_ui() { #{ label: \"Give\", on: [\"person\", \"item\"], picks: [\"target\", \"item\", \"qty\"], drag: \"person\", pin: true, order: 0, look: #{ icon: \"give\", clip: \"hand\" }, refused: \"note\" } }",
     );
     assert!(s.ui_errors().is_empty(), "{:?}", s.ui_errors());
     s.validate().unwrap();
@@ -707,8 +707,12 @@ fn declarations_place_and_present() {
     assert_eq!((f.label.as_str(), f.marker, f.unready, f.refused_at(On::Bar)), ("Fire bolt", Marker::Circle, Unready::Grey, Refused::Grey));
     let g = s.ui("give").unwrap();
     assert_eq!((g.on.clone(), g.drag, g.pin, g.picks.clone()), (vec![On::Person, On::Item], Some(On::Person), true, vec![Pick::Target, Pick::Item, Pick::Qty]));
+    // The recipe grids are the shipped script's own (recipes-1): craft's cells are what it makes.
+    let m = s.ui("craft").unwrap();
+    assert_eq!((m.choose, m.source, m.detail.as_deref(), m.running.show, m.running.text.as_str()), (Choose::Grid, Some(ItemSource::Products), Some("made_how"), RunShow::Progress, "Making {item}"));
+    // The island makes nothing at workplaces: make's grid declares no cells, and keeps its default.
     let m = s.ui("make").unwrap();
-    assert_eq!((m.choose, m.detail.as_deref(), m.running.show, m.running.text.as_str()), (Choose::Grid, Some("made_how"), RunShow::Progress, "Making {item}"));
+    assert_eq!((m.choose, m.source, m.detail.as_deref()), (Choose::Grid, s.ui_default("make").unwrap().source, None));
 }
 
 #[test]
@@ -938,7 +942,6 @@ fn the_rules_are_the_same_without_any_declaration() {
          fn firebolt_ui() {{ #{{ label: \"Fire bolt\", place: \"skill\", order: 0, input: \"aim_point\", refused: \"note\", look: #{{ icon: \"fire\", clip: \"cast\", effect: \"bolt\" }} }} }}\n\
          fn block_ui() {{ #{{ place: \"primary\" }} }}\n\
          fn give_ui() {{ #{{ on: [\"person\", \"item\"], picks: [\"target\", \"item\", \"qty\"], drag: \"person\", pin: true }} }}\n\
-         fn make_ui() {{ #{{ on: \"thing\", choose: \"grid\", detail: \"made_how\" }} }}\n\
          fn graze_ui() {{ #{{ on: \"self\", label: \"Graze\" }} }}\n\
          fn rest_ui() {{ #{{ on: [\"self\"] }} }}\n"
     );
