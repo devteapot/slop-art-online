@@ -1,6 +1,6 @@
 ---
 name: verify-ui
-description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), what you stand on never fading (stairs, terraces, the quay's edge, on a Cullet world), the cursor while the view turns or zooms (a two-finger pan, a pinch, a left drag), and later the skill bar with sheathe and draw, and Settings. Use when changing living/game/src/ui/*, the camera's fade (envs.rs cutaway), camera.rs, keys.rs, looks.rs, heard.rs, talk.rs, verbs.rs, pointer.rs or the live script, or when the screen shows something other than what the client received.
+description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), what you stand on never fading (stairs, terraces, the quay's edge, on a Cullet world), the cursor while the view turns or zooms (a two-finger pan, a pinch, a left drag), facing sight (the field of view drawn from the world's fov_on law, its readout, the F5 and Settings switch through a play scene's admin link, the look sent through human_face, heard marks), and later the skill bar with sheathe and draw, and Settings. Use when changing living/game/src/ui/*, the camera's fade (envs.rs cutaway), camera.rs, keys.rs, looks.rs, heard.rs, sightedge.rs, sightfield.rs, facing.rs, heardmark.rs, controls.rs's look, talk.rs, verbs.rs, pointer.rs or the live script, or when the screen shows something other than what the client received.
 ---
 
 # Verify the game interface
@@ -29,7 +29,7 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 
 ```bash
 S=.agents/skills/verify-ui/scripts
-$S/check.py --run $R                       # all scenarios: windows talk items themes pick turns (PASS/FAIL per check)
+$S/check.py --run $R                       # all scenarios: field windows talk items themes pick turns (PASS/FAIL per check)
 LIVING_GAME_THEME=night $S/check.py --run $R windows talk items   # the same in a theme; evidence in <scenario>-night/
 $S/check.py --run $R windows               # one
 $S/check.py --run $R support               # on a Cullet world (`--seed cullet`): what you stand on never fades
@@ -56,7 +56,9 @@ Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:
 - the log: `log:tab:0|1|2` (Heard, People, Events), `log:person:<I>`;
 - the list of acts: `acts:0:<skill>:<I>` (`talk`, `window`, `introduce`, `give`, `more`, …), its sub-list `acts:1:<item>:<I>`;
 - the pack: `pack:<item>:<I>`; know-how: `skill:<I>`; the tip: `tip:ok`, `tip:all`;
-- Settings: `settings:page:play|controls`, `settings:theme:clear|night|linen|walnut`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
+- Settings: `settings:page:play|controls`, `settings:theme:clear|night|linen|walnut`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:look:memory|grey|wash|lantern|shadows|hatch`, `settings:facing_sight` (the switch; shown only with the admin link), `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
+
+Facing sight (`check.py field`, [features/field.md](features/field.md)): drive.py's `--admin-link` gives the client the world admin's token in a mode-600 file it deletes after the drive, as `play.py` does for a scene with `"law_toggle": true`; a `--sync NAME='sql|QUERY;…'` call snapshots the authority (owner SQL, `{me}`, `{ident}`) into `scene.json`'s `snaps`.
 
 Scenes: `--place ID:DX:DY` puts a resident beside the player and holds them still when the plan reaches `sync:scene`; `--sync NAME='reducer|arg;…'` makes other admin calls at `sync:NAME`. Both are scene setup through admin reducers, never player acts; name them in a report.
 

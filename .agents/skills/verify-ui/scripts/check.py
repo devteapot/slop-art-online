@@ -460,7 +460,7 @@ def field(run, c):
     # Off at the start: the law as shipped (a re-run starts from it again).
     subprocess.run([sys.executable, V, "call", "--run", run, "--as-admin", "set_world_law", '["fov_on", "false"]'], capture_output=True, text=True)
     changes0 = sql(run, "SELECT id FROM law_change")
-    snap = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms FROM body;sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}}"
+    snap = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms FROM body;sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};sql|SELECT key, target, bearing, band FROM heard WHERE listener = {{me}}"
     body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy FROM body WHERE id = {{me}}"
     plan = "ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on"
     for deg in FOV_LOOKS:
@@ -521,6 +521,23 @@ def field(run, c):
         unseen_n = sum(1 for x in r["same"] if not x["authority"])
         c.check(s, f"look {deg}°: the authority's perceived set matches the client's field", not r["differ"] and seen_n >= 2 and unseen_n >= 2, f"differ {r['differ']}; {seen_n} seen and {unseen_n} unseen agree; {len(r['margin'])} at a margin")
     json.dump(results, open(os.path.join(out, "fov_compare.json"), "w"), indent=1)
+    # Heard, not seen: the authority's heard rows at each look against the client's marks then.
+    heard_ok, heard_n, stray = 0, 0, []
+    for deg in FOV_LOOKS:
+        rows = {r["query"].split(" FROM ")[1].split()[0]: r for r in snaps.get(f"h{deg}") or []}
+        if "heard" not in rows:
+            continue
+        seen_ids = {p["body"] for p in rows["perceived"]["rows"]}
+        marks = {int(m["key"], 16): m for m in (((d[f"h{deg}"] or {}).get("extra") or {}).get("heard") or []) if m.get("live")}
+        for h in rows["heard"]["rows"]:
+            heard_n += 1
+            m = marks.get(int(h["key"]))
+            heard_ok += bool(m and m["bearing"] == h["bearing"] and m["band"] == h["band"])
+            if h["target"] in seen_ids:
+                stray.append(h)
+    c.check(s, "heard, not seen: a mark per heard row, by its key, its way and band", heard_n >= 3 and heard_ok >= 0.8 * heard_n, f"{heard_ok} of {heard_n} matched")
+    c.check(s, "…and none of them is someone in sight", not stray, str(stray[:3]))
+    c.check(s, "…marks fade after their rows go", re.search(r"heard: mark [0-9a-f]{16} \(\w+\) faded", L) is not None)
     def b(n):
         rows = (snaps.get(n) or [{}])[0].get("rows") or []
         return rows[0] if rows else None
