@@ -78,7 +78,12 @@ P = NS(**{name: tagged(c, s) for name, (c, s) in dict(
 # Strengths are judged in the game at 21:30 and at 13:00 (its emission is material x exposure x
 # the hour's glow, three times stronger at night): these read as lit windows at night and leave
 # a pane its own glass colour by day. buildings.py's 2.6 does not show at all on daytime glass.
-LIGHT = {"Glow": ((1.0, 0.74, 0.40), 220.0), "GlowAmber": ((1.0, 0.45, 0.12), 300.0), "GlowCyan": ((0.80, 0.95, 1.0), 240.0)}
+LIGHT = {"Glow": ((1.0, 0.74, 0.40), 220.0), "GlowDim": ((1.0, 0.74, 0.40), 80.0), "GlowAmber": ((1.0, 0.45, 0.12), 300.0), "GlowCyan": ((0.80, 0.95, 1.0), 240.0)}
+# How far a glasshouse's one lantern lights its panes (`--lantern-core`, `--lantern-reach`, metres
+# from the lantern strip on the warm wall): within the core every pane is lit; from there to the
+# reach fewer and fewer catch a dimmer light; beyond it a pane keeps its glass colour. Glow is
+# sparse and true to what is lit (SMALL_CITY §1): a lamp lights the panes near it, not the house.
+LANTERN = dict(core_m=1.0, reach_m=2.4)
 DOORS = []  # every door made for the current model: (centre, width, height), for the report
 
 
@@ -907,7 +912,7 @@ def gen_glasshouse(k, rng, lot):
         p_.state = "board"
     for p_ in rng.sample(order[n_board:], n_odd):
         p_.state = "odd"
-    lit, plain = [], []
+    lit, dim, plain = [], [], []
     for p_ in panes:
         if p_.state == "gone":
             continue
@@ -916,14 +921,18 @@ def gen_glasshouse(k, rng, lot):
             c = jit(P.tar if rng.random() < 0.25 else P.drift, rng)  # hull planks, some still tarred
         elif p_.state == "odd":
             c = jit(rng.choice([P.green, P.amber, P.smoke]), rng, 0.03)
-        # A worked house is lit at dusk: the panes round its lanterns (two in a house kept whole,
-        # one in a patched one, none in a broken one) glow, so the Ladder lights up like lanterns.
+        # A worked house's one lantern (the strip on the warm wall, below) lights the panes near it:
+        # all of them within LANTERN's core, fewer and dimmer out to its reach, none beyond. A
+        # broken house is not worked and has no light.
         pc = sum((Vector(v) for v in p_.q), Vector()) / 4
-        pools = {"sound": (2.5, -3.5), "patched": (2.5,), "broken": ()}[state]
-        near_lamp = any(math.hypot(pc.x - lx_, (pc.z - 1.6) * 0.6) < 2.6 for lx_ in pools)
-        (lit if near_lamp and p_.state in ("glass", "odd") else plain).append((p_.q if p_.where != "roof" else oriented(p_.q, N), c))
+        d = (pc - Vector((min(3.1, max(1.9, pc.x)), YW, 2.6))).length
+        core, reach = LANTERN["core_m"], LANTERN["reach_m"]
+        catch = 0.0 if state == "broken" or p_.state not in ("glass", "odd") or d >= reach else 1.0 if d <= core else (reach - d) / max(reach - core, 1e-6)
+        took = catch >= 1.0 or (catch > 0.0 and 0.5 + 0.5 * nz(pc.x * 2.3, pc.y * 2.3 + pc.z * 2.3, lot["seed"] * 0.01) < catch)
+        (lit if took and d <= core else dim if took else plain).append((p_.q if p_.where != "roof" else oriented(p_.q, N), c))
     raw(k, plain, two=True)
     raw(k, lit, glow="Glow", two=True)
+    raw(k, dim, glow="GlowDim", two=True)
 
     # The frame. Roof: a rafter on each bay line, a lighter bar between, purlin bars across.
     for i in range(25):
@@ -1047,7 +1056,7 @@ def gen_glasshouse(k, rng, lot):
     found(k, 1.8)
     count = {s: sum(1 for p_ in panes if p_.state == s) for s in ("glass", "board", "odd", "gone")}
     count["glass"] += 8  # the vents' panes
-    return dict(state=state, ridge_m=3.2, body_m=[12.0, round(2.25 - YFR, 2)], strip_m=round(YFR - YS, 2), bays=12, panes=T, boarded=count["board"], odd_glass=count["odd"], missing=count["gone"], holes=len(holes),
+    return dict(state=state, lantern_core_m=LANTERN["core_m"], lantern_reach_m=LANTERN["reach_m"], lit_panes=len(lit), dim_panes=len(dim), ridge_m=3.2, body_m=[12.0, round(2.25 - YFR, 2)], strip_m=round(YFR - YS, 2), bays=12, panes=T, boarded=count["board"], odd_glass=count["odd"], missing=count["gone"], holes=len(holes),
                 not_original_share=round((count["board"] + count["odd"] + count["gone"]) / T, 3), odd_share=round(count["odd"] / T, 3))
 
 
@@ -2725,11 +2734,14 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--plan", default=PLAN)
     ap.add_argument("--only", help="comma-separated ids or folders (default: everything the kit can build)")
+    ap.add_argument("--lantern-core", type=float, default=LANTERN["core_m"], help="metres from a glasshouse's lantern within which every pane is lit")
+    ap.add_argument("--lantern-reach", type=float, default=LANTERN["reach_m"], help="metres from the lantern beyond which no pane catches its light")
     ap.add_argument("--join", action="append", default=[], help="also write a terrace of the plan (`terraces`: \"Low Row east\") as one model, <out>/terrace/<name>.glb, "
                     "for the asset board; the game uses the houses' own models, never this one")
     ap.add_argument("--figure", action="store_true", help="stand a 1.75 m figure by each model: for contact sheets only, never for the kit's own folder")
     a = ap.parse_args(argv)
     plan = json.load(open(a.plan))
+    LANTERN.update(core_m=a.lantern_core, reach_m=a.lantern_reach)
     os.makedirs(a.out, exist_ok=True)
     only = set(a.only.split(",")) if a.only else None
     near = neighbours(plan)
