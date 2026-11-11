@@ -185,6 +185,7 @@ pub mod relation_type;
 pub mod release_skill_reducer;
 pub mod resource_node_table;
 pub mod resource_node_type;
+pub mod resume_genesis_reducer;
 pub mod reveal_table;
 pub mod reveal_type;
 pub mod routine_in_type;
@@ -224,6 +225,7 @@ pub mod stats_table;
 pub mod stats_type;
 pub mod steer_table;
 pub mod steer_type;
+pub mod stop_genesis_reducer;
 pub mod structure_table;
 pub mod structure_type;
 pub mod target_ref_type;
@@ -242,6 +244,8 @@ pub mod vitals_table;
 pub mod vitals_type;
 pub mod wake_table;
 pub mod wake_type;
+pub mod walk_route_table;
+pub mod walk_route_type;
 pub mod waypoint_type;
 pub mod weather_table;
 pub mod weather_type;
@@ -429,6 +433,7 @@ pub use relation_type::Relation;
 pub use release_skill_reducer::release_skill;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
+pub use resume_genesis_reducer::resume_genesis;
 pub use reveal_table::*;
 pub use reveal_type::Reveal;
 pub use routine_in_type::RoutineIn;
@@ -468,6 +473,7 @@ pub use stats_table::*;
 pub use stats_type::Stats;
 pub use steer_table::*;
 pub use steer_type::Steer;
+pub use stop_genesis_reducer::stop_genesis;
 pub use structure_table::*;
 pub use structure_type::Structure;
 pub use target_ref_type::TargetRef;
@@ -486,6 +492,8 @@ pub use vitals_table::*;
 pub use vitals_type::Vitals;
 pub use wake_table::*;
 pub use wake_type::Wake;
+pub use walk_route_table::*;
+pub use walk_route_type::WalkRoute;
 pub use waypoint_type::Waypoint;
 pub use weather_table::*;
 pub use weather_type::Weather;
@@ -605,6 +613,7 @@ pub enum Reducer {
     ReleaseSkill {
         skill: String,
     },
+    ResumeGenesis,
     SeedCommunities,
     SetBackground {
         id: u32,
@@ -638,6 +647,7 @@ pub enum Reducer {
         n: u32,
         spacing: f32,
     },
+    StopGenesis,
     Tick {
         t: TickTimer,
     },
@@ -684,6 +694,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::PurgeDead => "purge_dead",
             Reducer::ReleaseSkill { .. } => "release_skill",
+            Reducer::ResumeGenesis => "resume_genesis",
             Reducer::SeedCommunities => "seed_communities",
             Reducer::SetBackground { .. } => "set_background",
             Reducer::SetBehavior { .. } => "set_behavior",
@@ -694,6 +705,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
             Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
             Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
+            Reducer::StopGenesis => "stop_genesis",
             Reducer::Tick { .. } => "tick",
             Reducer::UseSkill { .. } => "use_skill",
             _ => unreachable!(),
@@ -861,6 +873,9 @@ impl __sdk::Reducer for Reducer {
                     skill: skill.clone(),
                 })
             }
+            Reducer::ResumeGenesis => {
+                __sats::bsatn::to_vec(&resume_genesis_reducer::ResumeGenesisArgs {})
+            }
             Reducer::SeedCommunities => {
                 __sats::bsatn::to_vec(&seed_communities_reducer::SeedCommunitiesArgs {})
             }
@@ -909,6 +924,9 @@ impl __sdk::Reducer for Reducer {
                     n: n.clone(),
                     spacing: spacing.clone(),
                 })
+            }
+            Reducer::StopGenesis => {
+                __sats::bsatn::to_vec(&stop_genesis_reducer::StopGenesisArgs {})
             }
             Reducer::Tick { t } => __sats::bsatn::to_vec(&tick_reducer::TickArgs { t: t.clone() }),
             Reducer::UseSkill {
@@ -1028,6 +1046,7 @@ pub struct DbUpdate {
     trade_offer: __sdk::TableUpdate<TradeOffer>,
     vitals: __sdk::TableUpdate<Vitals>,
     wake: __sdk::TableUpdate<Wake>,
+    walk_route: __sdk::TableUpdate<WalkRoute>,
     weather: __sdk::TableUpdate<Weather>,
     woken: __sdk::TableUpdate<Woken>,
     world: __sdk::TableUpdate<World>,
@@ -1330,6 +1349,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "wake" => db_update
                     .wake
                     .append(wake_table::parse_table_update(table_update)?),
+                "walk_route" => db_update
+                    .walk_route
+                    .append(walk_route_table::parse_table_update(table_update)?),
                 "weather" => db_update
                     .weather
                     .append(weather_table::parse_table_update(table_update)?),
@@ -1601,6 +1623,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.wake = cache
             .apply_diff_to_table::<Wake>("wake", &self.wake)
+            .with_updates_by_pk(|row| &row.id);
+        diff.walk_route = cache
+            .apply_diff_to_table::<WalkRoute>("walk_route", &self.walk_route)
             .with_updates_by_pk(|row| &row.id);
         diff.weather = cache
             .apply_diff_to_table::<Weather>("weather", &self.weather)
@@ -1956,6 +1981,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "wake" => db_update
                     .wake
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "walk_route" => db_update
+                    .walk_route
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "weather" => db_update
                     .weather
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2269,6 +2297,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "wake" => db_update
                     .wake
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "walk_route" => db_update
+                    .walk_route
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "weather" => db_update
                     .weather
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2390,6 +2421,7 @@ pub struct AppliedDiff<'r> {
     trade_offer: __sdk::TableAppliedDiff<'r, TradeOffer>,
     vitals: __sdk::TableAppliedDiff<'r, Vitals>,
     wake: __sdk::TableAppliedDiff<'r, Wake>,
+    walk_route: __sdk::TableAppliedDiff<'r, WalkRoute>,
     weather: __sdk::TableAppliedDiff<'r, Weather>,
     woken: __sdk::TableAppliedDiff<'r, Woken>,
     world: __sdk::TableAppliedDiff<'r, World>,
@@ -2575,6 +2607,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<TradeOffer>("trade_offer", &self.trade_offer, event);
         callbacks.invoke_table_row_callbacks::<Vitals>("vitals", &self.vitals, event);
         callbacks.invoke_table_row_callbacks::<Wake>("wake", &self.wake, event);
+        callbacks.invoke_table_row_callbacks::<WalkRoute>("walk_route", &self.walk_route, event);
         callbacks.invoke_table_row_callbacks::<Weather>("weather", &self.weather, event);
         callbacks.invoke_table_row_callbacks::<Woken>("woken", &self.woken, event);
         callbacks.invoke_table_row_callbacks::<World>("world", &self.world, event);
@@ -3335,6 +3368,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         trade_offer_table::register_table(client_cache);
         vitals_table::register_table(client_cache);
         wake_table::register_table(client_cache);
+        walk_route_table::register_table(client_cache);
         weather_table::register_table(client_cache);
         woken_table::register_table(client_cache);
         world_table::register_table(client_cache);
@@ -3437,6 +3471,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "trade_offer",
         "vitals",
         "wake",
+        "walk_route",
         "weather",
         "woken",
         "world",
