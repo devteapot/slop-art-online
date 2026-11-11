@@ -819,6 +819,7 @@ class Cards(unittest.TestCase):
         with open(card, encoding="utf-8") as f:
             head = f.read().split("---")[1]
         declared, conf = {}, None
+        configs = re.findall(r"- config_name: (\w+)\n  data_files", head)
         for line in head.splitlines():
             m = re.match(r"- config_name: (\w+)", line)
             if m:
@@ -835,6 +836,10 @@ class Cards(unittest.TestCase):
                 with gzip.open(os.path.join(out, f"{conf}.jsonl.gz"), "rt") as f:
                     cols = set(json.loads(f.readline()))
                 self.assertEqual(set(declared.get(conf, [])), cols, conf)
+                if "session_" + conf in configs:
+                    self.assertEqual(set(declared.get("session_" + conf, [])), cols, "session_" + conf)
+        # every table the card configures has declared types
+        self.assertEqual(set(configs), set(declared))
         self.assertNotIn("DRAFT", head)
 
 

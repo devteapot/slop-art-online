@@ -81,6 +81,42 @@ dataset_info:
     dtype: string
   - name: text
     dtype: string
+- config_name: session_calls
+  features:
+  - name: batch
+    dtype: string
+  - name: instance
+    dtype: string
+  - name: file
+    dtype: string
+  - name: seq
+    dtype: int64
+  - name: actor
+    dtype: string
+  - name: at_ms
+    dtype: int64
+  - name: purpose
+    dtype: string
+  - name: model
+    dtype: string
+  - name: tokens
+    dtype: int64
+  - name: latency_ms
+    dtype: int64
+  - name: error
+    dtype: string
+  - name: entry
+    dtype: string
+- config_name: session_prompts
+  features:
+  - name: batch
+    dtype: string
+  - name: instance
+    dtype: string
+  - name: ref
+    dtype: string
+  - name: text
+    dtype: string
 configs:
 - config_name: instances
   data_files: "batches/*/*/instances.jsonl.gz"
@@ -90,6 +126,10 @@ configs:
   data_files: "batches/*/*/rows.jsonl.gz"
 - config_name: prompts
   data_files: "batches/*/*/prompts.jsonl.gz"
+- config_name: session_calls
+  data_files: "sessions/*/*/calls.jsonl.gz"
+- config_name: session_prompts
+  data_files: "sessions/*/*/prompts.jsonl.gz"
 ---
 
 # Slop Art Online runs
