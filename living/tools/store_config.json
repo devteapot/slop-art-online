@@ -1,0 +1,31 @@
+{
+  "_doc": [
+    "Repository defaults for living/tools/store.py (docs/STORE.md).",
+    "Machine-local settings live in ~/.config/slop-store/config.json (or $STORE_CONFIG) and override these.",
+    "publish_enabled is read ONLY from the machine-local file; a value here is refused, so no commit can switch publishing on.",
+    "Owner identity (name, email, logins, hostnames) is never written here: the scrubber reads it at run time."
+  ],
+  "never_touch": {
+    "spark": ["~/dev/slop-art-online", "~/slop-lab", "~/ComfyUI", "~/.local/share/docker", "/var/lib/docker"],
+    "laptop": [],
+    "dev-box": []
+  },
+  "never_touch_names": ["sao-living"],
+  "read_only": ["~/kimodo-test"],
+  "decisions": {
+    "_doc": "Categories the owner decides. Values: include, exclude (or redact where the category says so), undecided (held back until decided).",
+    "model_exchanges": "undecided",
+    "owner_lines": "exclude",
+    "owner_first_name": "redact",
+    "owner_notes": "undecided",
+    "session_media": "undecided"
+  },
+  "repos": {
+    "runs": "slop-art-online-runs",
+    "assets": "slop-art-online-assets"
+  },
+  "backends": {
+    "local": {"root": "~/store-local"},
+    "hf": {"namespace": null, "private": false, "repo_type": "dataset"}
+  }
+}
