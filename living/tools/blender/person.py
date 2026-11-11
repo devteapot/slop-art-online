@@ -1703,14 +1703,16 @@ def secondary(nodes, springs):
         j = JOINTS[bone]
         return {"offset": {"x": at[0] - j[0], "y": at[2] - j[2], "z": -(at[1] - j[1])}, "radius": r}
 
+    # Smaller than the head, neck and shoulders themselves: the hair at rest lies on those, and
+    # a sphere that reached it would push it off them.
     hc = HEAD + Vector((0, -0.010, 0.012)) * HEAD_SCALE
     colliders = [
-        {"node": nodes["J_Bip_C_Head"], "colliders": [sphere("J_Bip_C_Head", hc, 0.092 * HEAD_SCALE), sphere("J_Bip_C_Head", hc + Vector((0, 0.012, -0.075)) * HEAD_SCALE, 0.062 * HEAD_SCALE)]},
-        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, -0.018, 1.52), 0.062)]},
-        {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.36), 0.135 * GIRTH), sphere("J_Bip_C_UpperChest", (-0.13, -0.012, 1.405), 0.085),
-                                                             sphere("J_Bip_C_UpperChest", (0.13, -0.012, 1.405), 0.085)]},
+        {"node": nodes["J_Bip_C_Head"], "colliders": [sphere("J_Bip_C_Head", hc, 0.074 * HEAD_SCALE), sphere("J_Bip_C_Head", hc + Vector((0, 0.014, -0.070)) * HEAD_SCALE, 0.046 * HEAD_SCALE)]},
+        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, -0.018, 1.52), 0.040)]},
+        {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.32), 0.105 * GIRTH), sphere("J_Bip_C_UpperChest", (-0.12, -0.012, 1.385), 0.055),
+                                                             sphere("J_Bip_C_UpperChest", (0.12, -0.012, 1.385), 0.055)]},
     ]
-    groups = [{"comment": "Hair", "stiffiness": 0.55, "gravityPower": 0.12, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": 0.4, "center": -1, "hitRadius": 0.022,
+    groups = [{"comment": "Hair", "stiffiness": 0.8, "gravityPower": 0.10, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": 0.45, "center": -1, "hitRadius": 0.010,
                "bones": [nodes[chain[0]] for chain in springs], "colliderGroups": [0, 1, 2]}]
     return {"boneGroups": groups, "colliderGroups": colliders}
 

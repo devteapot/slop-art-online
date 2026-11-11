@@ -85,7 +85,8 @@ class Head:
         self.eye_lo = self.eye_w * lerp(lerp(0.36, 0.31, m), 0.40, c) * (1 + 0.10 * g("eye_open")) * (1 + 0.30 * k * (1 - 0.45 * c))
         self.eye_tilt = 0.10 * g("eye_tilt") + 0.03 * (1 - m) - 0.05 * e  # the outer corner's rise, as a slope
         self.eye_peak = 0.10 * g("eye_shape") - 0.05 * m  # where the upper lid peaks: + outward
-        self.iris_r = min(0.60 * (self.eye_up + self.eye_lo), 0.64 * self.eye_w) * (1 + 0.07 * g("iris_size"))
+        # The iris fills the opening's height (the lid crosses its top), as a drawn eye's does.
+        self.iris_r = min(0.57 * (self.eye_up + self.eye_lo), lerp(0.64, 0.72, min(k, 1.0)) * self.eye_w) * (1 + 0.07 * g("iris_size"))
         # ---- brows
         self.brow_w = lerp(lerp(0.0042, 0.0072, m), 0.0042, c) * (1 + 0.30 * g("brow_thickness")) * (1 + 0.25 * e * m) * (1 - 0.20 * k)
         self.brow_up = 0.0085 + 0.0030 * g("brow_height") + 0.0015 * (1 - m) + 0.002 * c + 0.0020 * k

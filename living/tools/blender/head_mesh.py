@@ -106,7 +106,7 @@ def eye_uv(hf, side, x, z):
 
 
 SWATCH_UV = ((IRIS_COL0 + IRIS_PX + ATLAS) / 2 / ATLAS, 1 - EYE_ROWS / 2 / ATLAS)  # plain skin (ears)
-IRIS_WIDE = 0.93  # the iris is a little taller than wide, as drawn eyes are
+IRIS_WIDE = 0.88  # the iris is taller than wide, as drawn eyes are
 
 
 def iris_centre(hf, side):
