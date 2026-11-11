@@ -46,6 +46,8 @@ struct Probe<'a> {
     /// Answers by function and by the values of the fields it reads: a law is a function of
     /// those alone, so a sample that agrees on them is the same call and is not repeated.
     seen: std::collections::HashMap<(String, Vec<u8>), Dynamic>,
+    /// Every call and its answer, when asked for (`validate_traced`, the hashing-seed check).
+    trace: Option<Vec<String>>,
 }
 
 impl Probe<'_> {
@@ -56,6 +58,9 @@ impl Probe<'_> {
         let e = self.report.ops.entry(f.to_string()).or_insert(0);
         *e = (*e).max(n);
         self.report.calls += 1;
+        if let Some(t) = &mut self.trace {
+            t.push(format!("{f} {} -> {:?}", about(), r.as_ref().map_err(|e| e.to_string())));
+        }
         r.map_err(|e| format!("install refused: `{f}` failed {}: {e}", about()))
     }
 
@@ -100,11 +105,17 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
         return Err(format!("install refused: the script has no `{f}` law (the engine asks it; see the shipped script)"));
     }
     // The samples are the script's own items and skills, not the process's world's.
-    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits))
+    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits, None).map(|(r, _)| r))
+}
+
+/// [`validate`], with every call it made and its answer (in no particular order).
+#[cfg(test)]
+pub fn validate_traced(s: &Scripts, limits: super::Limits) -> Result<(Report, Vec<String>), String> {
+    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits, Some(Vec::new())))
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 13] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years"];
+pub const ENGINE_LAWS: [&str; 15] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.
@@ -147,7 +158,7 @@ fn interface(s: &Scripts) -> Result<(), String> {
     Err(format!("install refused: {}{more}", e.iter().take(SHOWN).cloned().collect::<Vec<_>>().join("; ")))
 }
 
-fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
+fn validate_scoped(s: &Scripts, limits: super::Limits, trace: Option<Vec<String>>) -> Result<(Report, Vec<String>), String> {
     // Every law reads only fields the engine provides.
     for f in s.ctx_laws() {
         Plan::of(&f, s.fields.of(&f, 1).and_then(|u| u.first()), true).map_err(|e| format!("install refused: {e}"))?;
@@ -160,7 +171,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
         c2.set(n);
         None
     });
-    let mut p = Probe { s, engine, count, report: Report::default(), seen: Default::default() };
+    let mut p = Probe { s, engine, count, report: Report::default(), seen: Default::default(), trace };
     laws_and_tables(&mut p)?;
     needs(&mut p)?;
     skills(&mut p)?;
@@ -172,12 +183,99 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     regard(&mut p)?;
     daylight(&mut p)?;
     life_years(s)?;
-    Ok(p.report)
+    ways(&mut p)?;
+    body(&mut p)?;
+    if s.has("seasons_text") {
+        let d = p.raw("seasons_text", (), &|| String::new())?;
+        if !d.is_string() {
+            return Err("install refused: `seasons_text()` must return a text".into());
+        }
+    }
+    Ok((p.report, p.trace.unwrap_or_default()))
+}
+
+/// A way's refusals are its `<way>_check(a)`: the reducer returns exactly its words, and a
+/// client runs the same check before it sends. So a way whose spec requires something (an
+/// addressee, a reach, a technique, a gap) must have a check that refuses a line breaking it,
+/// in its own words; the install tries each on a sample.
+fn ways(p: &mut Probe) -> Result<(), String> {
+    let s = p.s;
+    let speaker = actors().into_iter().find(|a| a.kind == "person" && a.stage == "adult").unwrap_or_default();
+    for w in s.ways().to_vec() {
+        let f = format!("{}_check", w.name);
+        // Only what `speech::check_way` gives (a client must be able to give the same).
+        if s.has(&f) {
+            let plan = s.plan(&f);
+            if let Some(k) = super::context::TOP.iter().enumerate().find(|(i, k)| plan.top & (1 << i) != 0 && !super::speech::CHECK_FIELDS.contains(k)).map(|(_, k)| k) {
+                return Err(format!("install refused: `{f}` reads `a.{k}`; a way's check reads only {} (what a client can give it too)", super::speech::CHECK_FIELDS.iter().map(|k| format!("`a.{k}`")).collect::<Vec<_>>().join(", ")));
+            }
+        }
+        let gap_ms = (w.gap_s * 1000.0) as u64;
+        let needs_check = w.to == super::speech::To::Required || w.reach > 0.0 || !w.needs.is_empty() || gap_ms > 2_000;
+        if !s.has(&f) {
+            if needs_check {
+                return Err(format!("install refused: the way `{}` requires something (an addressee, a reach, a technique or a gap) but has no `{f}(a)`; its refusals are the check's words", w.name));
+            }
+            continue;
+        }
+        let near = TargetFacts { class: "creature".into(), id: 9, kind: "person".into(), alive: true, dist: if w.reach > 0.0 { w.reach * 0.5 } else { 1.0 }, ..Default::default() };
+        let mut tries: Vec<(String, SkillCtx)> = Vec::new();
+        let knows = |a: &ActorFacts| { let mut a = a.clone(); if !w.needs.is_empty() && !a.knows.contains(&w.needs) { a.knows.push(w.needs.clone()); } a };
+        if w.to == super::speech::To::Required {
+            tries.push(("a line to no one".into(), super::speech::check_ctx(&w.name, knows(&speaker), None, "hello", None)));
+        }
+        if w.reach > 0.0 {
+            let far = TargetFacts { dist: w.reach + 0.5, ..near.clone() };
+            tries.push((format!("a line to someone {} m away (reach {})", w.reach + 0.5, w.reach), super::speech::check_ctx(&w.name, knows(&speaker), Some(far), "hello", None)));
+            tries.push(("a line to someone absent or dead".into(), super::speech::check_ctx(&w.name, knows(&speaker), Some(TargetFacts { alive: false, ..near.clone() }), "hello", None)));
+        }
+        if !w.needs.is_empty() {
+            let mut a = speaker.clone();
+            a.knows.retain(|k| *k != w.needs);
+            tries.push((format!("a speaker who does not know `{}`", w.needs), super::speech::check_ctx(&w.name, a, Some(near.clone()), "hello", None)));
+        }
+        if gap_ms > 2_000 {
+            tries.push((format!("a second line {} ms after the first (gap {} s)", gap_ms - 1_000, w.gap_s), super::speech::check_ctx(&w.name, knows(&speaker), Some(near.clone()), "hello", Some(gap_ms - 1_000))));
+        }
+        for (what, c) in tries {
+            let d = p.ctx(&f, &c)?;
+            let words = d.clone().into_string().map_err(|_| format!("install refused: `{f}` must return a string (its refusal, or \"\")"))?;
+            if words.trim().is_empty() {
+                return Err(format!("install refused: `{f}` accepts {what}, which the way `{}` forbids; refuse it in the world's words", w.name));
+            }
+        }
+        // A line that breaks nothing is accepted.
+        let ok = super::speech::check_ctx(&w.name, knows(&speaker), if w.to == super::speech::To::Required || w.reach > 0.0 { Some(near.clone()) } else { None }, "hello", None);
+        let d = p.ctx(&f, &ok)?;
+        if !d.clone().into_string().unwrap_or_default().is_empty() {
+            return Err(format!("install refused: `{f}` refuses a line that breaks nothing the way `{}` requires (to someone {} m away, first of its kind): {}", w.name, ok.target.dist, d));
+        }
+    }
+    Ok(())
+}
+
+/// `meters()` rows are well formed, and `status_of` returns statuses for every meter empty,
+/// half and full, by day and at night, hurt and not (on the shipped vitals; the authority
+/// checks the meters' fields against its own row).
+fn body(p: &mut Probe) -> Result<(), String> {
+    let s = p.s;
+    if let Some(e) = s.meter_errors().first() {
+        return Err(format!("install refused: {e}"));
+    }
+    if !s.has("status_of") {
+        return Ok(());
+    }
+    for b in s.sample_bodies(&super::body::SHIPPED_VITALS) {
+        let about = || format!("for a {} {}{} with {}", b.stage, b.kind, if b.night { " at night" } else { "" }, b.fields.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", "));
+        let _ = p.raw("status_of", (b.map_for_check(),), &about)?; // counts its operations for the fuel report
+        s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
+    }
+    Ok(())
 }
 
 fn laws_and_tables(p: &mut Probe) -> Result<(), String> {
     let s = p.s;
-    for f in s.fns.iter().filter(|f| f.as_str() == "laws" || f.as_str() == "skill_bar" || f.ends_with("_combat") || f.ends_with("_shows")) {
+    for f in s.fns.iter().filter(|f| f.as_str() == "laws" || f.as_str() == "skill_bar" || f.ends_with("_combat") || f.ends_with("_shows") || f.ends_with("_ui")) {
         let d = p.raw(f, (), &|| String::new())?;
         if f == "laws" && !d.is_map() {
             return Err("install refused: `laws` must return a map".into());
@@ -304,6 +402,15 @@ fn skills(p: &mut Probe) -> Result<(), String> {
             for item in &items {
                 for t in &item_targets {
                     samples.push(sample(skill, &actors[0], t, item));
+                }
+            }
+        }
+        // An answer (accept, decline) to an offer or a proposal it names, or to what stands.
+        let answers = s.skills.get(skill).is_some_and(|k| k.args.iter().any(|a| a == "offer" || a == "record"));
+        if answers {
+            for a in &actors[..2] {
+                for t in &targets {
+                    samples.extend(answer_samples(sample(skill, a, t, "")));
                 }
             }
         }
@@ -453,6 +560,31 @@ fn daylight(p: &mut Probe) -> Result<(), String> {
     Ok(())
 }
 
+/// What an answer can find at hand: the target's trade offer (standing, run out, addressed to
+/// someone else), the one named, gone or replaced, and records named (the sample proposal to the
+/// actor, its own, one gone), each with and without a name.
+fn answer_samples(c: SkillCtx) -> Vec<SkillCtx> {
+    let them = c.target.id as u32;
+    let offer = |id: u64, to: u32, open: bool| Some(super::OfferFacts { id, from: them, to, give: "fish".into(), give_qty: 2, want: "hide".into(), want_qty: 1, open, left_s: if open { 90.0 } else { 0.0 } });
+    let me = c.actor.id;
+    let mut out = Vec::new();
+    for (offer_id, record_id, at_hand) in [
+        (0, 0, offer(41, me, true)),
+        (41, 0, offer(41, me, true)),
+        (41, 0, offer(41, me, false)),
+        (41, 0, offer(41, me + 1, true)),
+        (41, 0, offer(42, me, true)),
+        (41, 0, None),
+        (0, 1, None),
+        (0, 2, None),
+        (0, 99, offer(41, me, true)),
+        (41, 1, offer(41, me, true)),
+    ] {
+        out.push(SkillCtx { offer_id, record_id, offer: at_hand, ..c.clone() });
+    }
+    out
+}
+
 /// A world's life table: the `life_years` law over a person's table (the shipped one's
 /// numbers; the engine gives it each species' own) gives ages in order within the lifespan.
 fn life_years(s: &Scripts) -> Result<(), String> {
@@ -463,7 +595,7 @@ fn life_years(s: &Scripts) -> Result<(), String> {
     Ok(())
 }
 
-fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx {
+pub(super) fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx {
     let mut c = SkillCtx { actor: a.clone(), target: t.clone(), item: item.into(), skill: skill.into(), season: "summer".into(), hour: 12.0, roll: 0.2, want: "wood".into(), want_qty: 2, ..Default::default() };
     // The actor's records come with it (the first body holds every kind).
     c.records = if a.id == 1 { records() } else { Vec::new() };

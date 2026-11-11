@@ -274,8 +274,10 @@ pub fn movement(
     if changed && input.retry_at.is_none() {
         input.sent = Some(intent);
         input.sends += 1;
-        let (seq, refused, report) = (input.sends, input.refused.clone(), net.on_reply("move"));
-        let r = conn.reducers.human_move_then(qx as f32 / 1000.0, qy as f32 / 1000.0, intent.2, move |ctx, r| {
+        let (dx, dy) = (qx as f32 / 1000.0, qy as f32 / 1000.0);
+        let args = || serde_json::json!({"dx": dx, "dy": dy, "run": intent.2});
+        let (seq, refused, report) = (input.sends, input.refused.clone(), net.on_reply("move", "human_move", args));
+        let r = conn.reducers.human_move_then(dx, dy, intent.2, move |ctx, r| {
             if matches!(r, Ok(Err(_))) {
                 refused.fetch_max(seq, std::sync::atomic::Ordering::Relaxed);
             }
@@ -327,7 +329,7 @@ pub fn say(net: &Net, text: &str, to: u32) -> bool {
     let text = text.trim();
     let Some(conn) = net.conn.as_ref().filter(|_| !text.is_empty()) else { return false };
     info!("say: \"{text}\" to {}", if to == 0 { "no one in particular".to_string() } else { format!("#{to}") });
-    let r = conn.reducers.human_say_then(text.to_string(), to, net.on_reply("say"));
+    let r = conn.reducers.human_say_then(text.to_string(), to, net.on_reply("say", "human_say", || serde_json::json!({"text": text, "to": to})));
     let ok = r.is_ok();
     net.report("say", r);
     ok

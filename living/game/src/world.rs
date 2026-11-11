@@ -541,8 +541,35 @@ fn rock_inside(map: &Map, x: i32, y: i32) -> bool {
     (-1..=1).all(|j| (-1..=1).all(|i| map.get(x + i, y + j) == Terrain::Rock))
 }
 
+/// What a structure is drawn as: its own kind when the client has a shape for it, else the kind
+/// it is `like` in the world's rules (`structures()`: a world's own store `like: "storage"` is
+/// drawn as a storage), else its own (the generic marker). None while the rules are not compiled
+/// here and the kind has no shape of its own: it waits for them, so it is not drawn (and kept)
+/// as the marker. Resources pass `None` for the rules and are drawn as themselves.
+fn drawn_as(kind: &str, rules: Option<Option<&living_rules::script::Scripts>>) -> Option<String> {
+    if thing_mesh(kind).is_some() {
+        return Some(kind.to_string());
+    }
+    match rules {
+        None => Some(kind.to_string()),
+        Some(None) => None,
+        Some(Some(sc)) => {
+            let like = &sc.structure(kind).like;
+            Some(if !like.is_empty() && thing_mesh(like).is_some() { like.clone() } else { kind.to_string() })
+        }
+    }
+}
+
+/// The generic marker for a kind the client has no shape for.
+fn marker_mesh() -> (Mesh, Option<(Mesh, [u8; 3])>) {
+    let mut m = MeshBuf::default();
+    m.boulder(Vec3::Y * 0.25, 0.25, 1.0, 1, rgb(200, 200, 200));
+    (m.build(), None)
+}
+
 /// A resource or structure model, at real size (metres), vertex-coloured; glowing parts apart.
-fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
+/// None for a kind without a shape of its own ([`drawn_as`] picks another, or [`marker_mesh`]).
+fn thing_mesh(kind: &str) -> Option<(Mesh, Option<(Mesh, [u8; 3])>)> {
     let mut m = MeshBuf::default();
     let mut glow = None;
     match kind {
@@ -600,9 +627,9 @@ fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
             m.roof(Vec3::new(-0.9, 1.6, -0.9), Vec3::new(0.9, 1.6, 0.9), 0.2, 0.7, rgb(100, 80, 54));
         }
         "gate" => m.block(Vec3::new(-0.5, -0.2, -0.15), Vec3::new(0.5, 2.4, 0.15), rgb(110, 80, 50), rgb(96, 70, 44)),
-        _ => m.boulder(Vec3::Y * 0.25, 0.25, 1.0, 1, rgb(200, 200, 200)),
+        _ => return None,
     }
-    (m.build(), glow)
+    Some((m.build(), glow))
 }
 
 /// Whether a structure burns at `now` (authority ms): one whose kind `burns` fuel while its
@@ -667,11 +694,15 @@ pub fn things(
         if !ready || scene.things.contains_key(&key) {
             continue;
         }
+        // A structure kind the client has no shape or model for takes those of the kind it is
+        // `like` in the world's rules (a world's own stores are drawn as storage).
+        let Some(shape) = drawn_as(&kind, (key.0 == 1).then_some(sc)) else { continue };
+        let like = (key.0 == 1).then(|| sc.map(|sc| sc.structure(&kind).like.clone())).flatten().unwrap_or_default();
         let (mesh, glow) = palette
             .things
-            .entry(kind.clone())
+            .entry(shape.clone())
             .or_insert_with(|| {
-                let (mut m, g) = thing_mesh(&kind);
+                let (mut m, g) = thing_mesh(&shape).unwrap_or_else(marker_mesh);
                 let _ = m.generate_outline_normals(&Default::default());
                 (meshes.add(m), g.map(|(g, c)| (meshes.add(g), c)))
             })
@@ -682,7 +713,8 @@ pub fn things(
         // materials are damped by daylight as a lot's lit panes are (`lookdev::NightGlow`); one
         // that is out has none (`lookdev::Unlit`). A model without glow keeps the drawn flame
         // while it burns.
-        if let Some((file, yaw)) = island.as_ref().filter(|_| key.0 == 1).and_then(|i| crate::island::structure_model(&i.land, &kind, Vec2::new(x, y))) {
+        let model = |k: &str| island.as_ref().filter(|_| key.0 == 1 && !k.is_empty()).and_then(|i| crate::island::structure_model(&i.land, k, Vec2::new(x, y)));
+        if let Some((file, yaw)) = model(&kind).or_else(|| model(&like)) {
             let model = crate::lookdev::Model { vrm: false, file: file.clone(), height: 0.0, ground_y: at.y, glow: None };
             let root = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
             let e = commands.spawn((Thing(Vec2::new(x, y)), model, bevy::world_serialization::WorldAssetRoot(root), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)), Visibility::Hidden)).id();
@@ -787,5 +819,43 @@ mod fire_tests {
         assert!(burning(Some(false), 0, 1_000));
         // Before the rules are known: never lit, or lit till later, burns; run out does not.
         assert!(burning(None, 0, 1_000) && burning(None, 2_000, 1_000) && !burning(None, 500, 1_000));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use living_rules::script::Scripts;
+
+    fn with(overlay: &str) -> Scripts {
+        let src = living_rules::floors::compose(include_str!("../../scripts/skills.rhai"), overlay).unwrap();
+        Scripts::new(&src).unwrap()
+    }
+
+    /// A structure kind the client has no shape for is drawn as the kind it is `like` in the
+    /// world's rules (rules-3: Cullet's four stores are `like: "storage"`), read from the compiled
+    /// script, never from a list of names here.
+    #[test]
+    fn a_kind_without_a_shape_is_drawn_as_the_kind_it_is_like() {
+        let w = with(r#"fn structures() { base_structures() + [#{ name: "crib", like: "storage", holds: 40 }, #{ name: "plinth" }] }"#);
+        assert!(thing_mesh("crib").is_none() && thing_mesh("storage").is_some());
+        assert_eq!(drawn_as("crib", Some(Some(&w))).as_deref(), Some("storage"));
+        // Its own shape first; no `like` and no shape: the marker, as before.
+        assert_eq!(drawn_as("storage", Some(Some(&w))).as_deref(), Some("storage"));
+        assert_eq!(drawn_as("campfire", Some(Some(&w))).as_deref(), Some("campfire"));
+        assert_eq!(drawn_as("plinth", Some(Some(&w))).as_deref(), Some("plinth"));
+        // Before the world's rules are compiled here, it waits instead of being kept as the marker.
+        assert_eq!(drawn_as("crib", Some(None)), None);
+        assert_eq!(drawn_as("storage", Some(None)).as_deref(), Some("storage"));
+        // Resources are drawn as themselves.
+        assert_eq!(drawn_as("berry_bush", None).as_deref(), Some("berry_bush"));
+        // Cullet's stores, from its laws.
+        let cullet = with(include_str!("../../seeds/worlds/cullet/laws.rhai"));
+        for k in ["store", "peat_barn", "yard_store", "house_store"] {
+            assert_eq!(cullet.structure(k).like, "storage", "{k}");
+            let shape = drawn_as(k, Some(Some(&cullet))).unwrap();
+            assert!(shape == "storage" || thing_mesh(k).is_some(), "{k} is drawn as {shape}");
+        }
+        assert_eq!(drawn_as("house_store", Some(Some(&cullet))).as_deref(), Some("storage"));
     }
 }

@@ -195,26 +195,36 @@ def journal_file(name):
     return "".join(c if c.isalnum() else "_" for c in name) + ".jsonl"
 
 
-DEF = re.compile(r"^(\s*)(private\s+)?fn\s+([A-Za-z0-9_]+)(\s*\()", re.M)
+# A seed's laws (`laws`/`laws_file`) composed over the shipped script as the authority composes
+# them at creation (`living_rules::floors::compose`): one Python copy, in install_script.py.
+from install_script import OVERLAY_MARK, compose_laws, same_script, seed_laws, without_world_laws  # noqa: E402
+
+DEFAULT_DAY_MS = 12 * 60 * 1000  # living_rules::DEFAULT_DAY_MS: a seed without `day_minutes`
 
 
-def compose_laws(base, overlay):
-    """`living_rules::floors::compose` in Python: each function the overlay defines replaces the
-    base's (`fn NAME(` at the start of a base line becomes `fn base_NAME(`), and the overlay is
-    appended. The authority composes a seed's `laws`/`laws_file` when the world is created; the
-    runner installs the skills file after publishing, so it composes the same overlay first."""
-    names = {m.group(3) for m in DEF.finditer(overlay)}
-    renamed = DEF.sub(lambda m: f"{m.group(1)}{m.group(2) or ''}fn base_{m.group(3)}{m.group(4)}" if m.group(3) in names else m.group(0), base)
-    return renamed + ("" if renamed.endswith("\n") else "\n") + "\n// ---- floor overlay ----\n" + overlay
+def laws_problems(seed, overlay, built, creation, sent, readback, day_ms):
+    """Why an instance must not start with the script its world runs; [] when it may.
 
-
-def seed_laws(seed):
-    """A seed's laws overlay: `laws`, or the file `laws_file` names under living/seeds."""
-    if str(seed.get("laws") or "").strip():
-        return seed["laws"]
-    if seed.get("laws_file"):
-        return (ROOT / "living/seeds" / seed["laws_file"]).read_text()
-    return ""
+    `seed` is the parsed world seed and `overlay` its laws ("" without). `built` is the runner's
+    composition of the script the world was created with (its laws over the tree's skills.rhai;
+    None for a module built elsewhere, a variant's `wasm_tag`, whose overlay is then looked for
+    at the row's end). `creation` is the `script` row before any install, `sent` the source
+    installed (None for a variant that keeps the world's own laws), `readback` the row after,
+    and `day_ms` the world's day."""
+    bad = []
+    if sent is not None and not same_script(readback, sent):
+        bad.append("the `script` row read back after install_script is not the source the runner sent")
+    if sent is None and built is not None and not same_script(readback, built):
+        bad.append("the world keeps its own laws (no install), but its `script` row is not the seed's laws composed over skills.rhai")
+    if overlay:
+        if built is not None and not same_script(creation, built):
+            bad.append("the world's creation-time composition of the seed's laws differs from the runner's")
+        if built is None and not without_world_laws(creation or "").rstrip("\n").endswith(OVERLAY_MARK + overlay.rstrip("\n")):
+            bad.append("the world's creation-time script does not end with the seed's laws")
+        want = round(float(seed["day_minutes"]) * 60000) if seed.get("day_minutes") is not None else DEFAULT_DAY_MS
+        if day_ms != want:
+            bad.append(f"world.day_ms is {day_ms}, not the seed's day_minutes ({want})")
+    return bad
 
 
 def patch_skills(text, trial, variant):
@@ -510,6 +520,83 @@ class Mind:
             pass
 
 
+def out_of_capacity(error):
+    """A provider's 429 that says it has no capacity for the model (Mistral: "Not enough
+    capacity available", `backend_out_of_capacity`, code 3505). The mind sends listed memory
+    work to the overflow and retries a failed consolidation later (llm.rs `capacity_overflow`,
+    mind.rs `retry_after`)."""
+    return bool(error) and "429" in error and ("Not enough capacity" in error or "out_of_capacity" in error)
+
+
+def failure_kind(error):
+    """What a journaled call's error says about who failed: None (it succeeded), a provider
+    kind (`capacity_429`, `rate_429`, `http_5xx`, `connection`: the provider out of capacity,
+    limiting the rate, failing or unreachable; the mind falls back, retries or holds its calls)
+    or `mind` (anything else: a request the provider refused, a missing key, a reply that was
+    not JSON; the same act failing again and again is a runaway)."""
+    if not error:
+        return None
+    if out_of_capacity(error):
+        return "capacity_429"
+    if error.startswith("HTTP 429"):
+        return "rate_429"
+    if re.match(r"HTTP 5\d\d", error):
+        return "http_5xx"
+    # llm.rs `chat_once`: the request could not be sent or answered (connect, timeout), or
+    # its body was cut off or was not the provider's JSON envelope.
+    if error.startswith(("request", "body", "response json")):
+        return "connection"
+    return "mind"
+
+
+CONSOLIDATION_COLUMNS = ("attempted", "primary", "fallback", "retried", "lost", "trimmed", "capacity_429")
+
+
+def consolidation_table(jdir):
+    """What each character's consolidations came to, from the mind's outcome lines
+    (`<journal>/outcomes/consolidations.jsonl`, one per consolidation that called a model,
+    failed or found experiences lost): attempted; integrated on the primary model or on the
+    fallback (its overflow); failed and retried later; failed with no later attempt (lost: its
+    experiences were never integrated before the run stopped); experiences of failed ones that
+    left the inbox before they were integrated (trimmed: the authority keeps a character's last
+    400); failures that were a capacity 429. None when the mind wrote no outcomes (before
+    2026-11-11)."""
+    path = Path(jdir) / "outcomes" / "consolidations.jsonl"
+    if not path.exists():
+        return None
+    lines = []
+    for line in path.read_text().splitlines():
+        try:
+            lines.append(json.loads(line))
+        except ValueError:
+            pass
+    by = {}
+    for name in dict.fromkeys(r.get("actor") for r in lines):
+        mine = sorted((r for r in lines if r.get("actor") == name), key=lambda r: r.get("at_ms") or 0)
+        tried = [r for r in mine if r.get("model_call") or r.get("outcome") == "failed"]
+        row = dict.fromkeys(CONSOLIDATION_COLUMNS, 0)
+        row["attempted"] = len(tried)
+        for i, r in enumerate(tried):
+            if r.get("outcome") == "integrated":
+                row["fallback" if r.get("route") == "fallback" else "primary"] += 1
+            else:
+                row["retried" if i + 1 < len(tried) else "lost"] += 1
+                row["capacity_429"] += 1 if out_of_capacity(r.get("failure")) else 0
+        row["trimmed"] = sum(r.get("trimmed") or 0 for r in mine)
+        by[name] = row
+    total = {k: sum(r[k] for r in by.values()) for k in CONSOLIDATION_COLUMNS}
+    return {"total": total, "by_character": by}
+
+
+# A provider is down for every route when no call has succeeded for this long while calls are
+# still failing on it (the last within OUTAGE_LIVE_S): only then does an outage stop a run.
+OUTAGE_STOP_S = 600
+OUTAGE_LIVE_S = 180
+# Provider failures with no success on any route for this long are recorded as an outage; a
+# shorter gap (a capacity 429 the fallback answers a second later) is counted, not recorded.
+OUTAGE_RECORD_S = 30
+
+
 class Instance:
     def __init__(self, batch, trial, variant, rep, opts, shared):
         self.trial, self.variant, self.rep, self.opts, self.shared = trial, variant, rep, opts, shared
@@ -537,6 +624,10 @@ class Instance:
         self.died = None
         self.snapshots = 0
         self.runaway_seen = []
+        self.provider_fails = []
+        self.last_ok = None
+        self.outage_since = None
+        self.outages = []
         self.published = False
 
     # -- plumbing
@@ -586,29 +677,50 @@ class Instance:
         sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
         self.published = True
         self.save()
+        variant = self.shared["variants"][self.variant]
         # A variant may name another skills file (a rules change under test); the default is the tree's.
-        skills = ROOT / self.shared["variants"][self.variant].get("skills", "living/scripts/skills.rhai")
+        skills = ROOT / variant.get("skills", "living/scripts/skills.rhai")
         # The trial's and then the variant's `skills_patch` change law values in that file
         # (name -> [old text, new text]; each old text must occur exactly once).
         # A seed's own laws (`laws`/`laws_file`, docs/CULLET_RULES.md) are composed over it first, as
         # the authority did at creation: installing the bare file would drop them.
-        overlay = seed_laws(world_seed(worlds_of(self.trial)[world_key(self.trial, self.rep)])[2])
+        seed = world_seed(worlds_of(self.trial)[world_key(self.trial, self.rep)])[2]
+        overlay = seed_laws(seed)
         base = compose_laws(skills.read_text(), overlay) if overlay else skills.read_text()
-        if overlay and not self.shared["variants"][self.variant].get("skills"):
-            # The world's own composition, from its creation, is the check on this one.
-            made = next(iter(self.rows("SELECT * FROM script WHERE name = 'skills'")), {}).get("source")
-            self.log(f"seed laws composed as the world composed them: {made == base}")
-            if made != base:
-                self.emit("events", {"t": self.t(), "error": "the runner's composition of the seed's laws differs from the world's"})
-        source, patched = patch_skills(base, self.trial, self.shared["variants"][self.variant])
-        if overlay:
-            patched = ["seed laws"] + patched
-        code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
-        if code != 200:
-            raise RuntimeError(f"install_script {code}: {body[:300]}")
-        (self.dir / "skills.sha256").write_text(hashlib.sha256(source.encode()).hexdigest() + "\n")
-        self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)}"
-                 f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(source.encode()).hexdigest()[:12]})")
+        # What the world was created with: its laws over the tree's skills.rhai, which the module
+        # compiled in. A module built on another branch (`wasm_tag`) compiled that branch's.
+        tree = (ROOT / "living/scripts/skills.rhai").read_text()
+        built = None if tag else (compose_laws(tree, overlay) if overlay else tree)
+        script_row = lambda: next(iter(self.rows("SELECT * FROM script WHERE name = 'skills'")), {}).get("source")
+        creation = script_row()
+        if variant.get("keep_laws"):
+            # The world keeps the script it was created with (its seed's laws), uninstalled.
+            if variant.get("skills") or variant.get("skills_patch") or self.trial.get("skills_patch"):
+                raise RuntimeError("a keep_laws variant installs nothing, so it takes no `skills` or `skills_patch`")
+            source, patched, readback = None, [], creation
+        else:
+            source, patched = patch_skills(base, self.trial, variant)
+            if overlay:
+                patched = ["seed laws"] + patched
+            code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
+            if code != 200:
+                raise RuntimeError(f"install_script {code}: {body[:300]}")
+            readback = script_row()
+        day_ms = (next(iter(self.rows("SELECT day_ms FROM world")), {}) or {}).get("day_ms")
+        problems = laws_problems(seed, overlay, built, creation, source, readback, day_ms)
+        # The instance does not start (no mind, no timeline) on a world whose laws are not its seed's.
+        for why in problems:
+            self.log(f"laws guard: {why}")
+            self.emit("events", {"t": self.t(), "error": f"laws guard: {why}"})
+        if problems:
+            raise RuntimeError("laws guard: " + "; ".join(problems))
+        ran = source if source is not None else readback
+        (self.dir / "skills.sha256").write_text(hashlib.sha256(ran.encode()).hexdigest() + "\n")
+        self.log(f"laws guard passed: the `script` row read back is the {'source sent' if source is not None else 'creation-time script, kept'}"
+                 f"{'; the seed laws are composed as the world composed them' + (' (overlay found; module from ' + tag + ')' if built is None else '') + f'; day_ms {day_ms}' if overlay else ''}")
+        how = "kept the world's own laws (keep_laws, no install)" if source is None else f"skills installed from {skills.relative_to(ROOT)}"
+        self.log(f"published {self.db} from {wasm}.wasm; {how}"
+                 f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(ran.encode()).hexdigest()[:12]})")
         end = time.time() + 60
         while time.time() < end:
             st = self.rows("SELECT * FROM stats")
@@ -830,7 +942,7 @@ class Instance:
                     self.call("grant_know_how", actor, t)
             elif kind == "say":
                 to = self.ids(s.get("to"))[0] if s.get("to") else 0
-                self.call("mind_say", actor, s["text"], to, 0, {"kind": "trial", "summary": f"scripted line (trial fixture): {s['text'][:200]}",
+                self.call("mind_say", actor, s["text"], to, s.get("way", ""), 0, {"kind": "trial", "summary": f"scripted line (trial fixture): {s['text'][:200]}",
                           "detail": "", "latency_ms": 0, "tokens": 0, "model": "", "reference": f"trial:{self.trial['name']}"})
             elif kind == "act":
                 acts = s["acts"] if "acts" in s else [s["act"]]
@@ -948,7 +1060,7 @@ class Instance:
             # `fake-<model>`, so the journal shows which profile each call was routed to.
             port = self.shared["fake_port"]
             m["profiles"] = {name: {"base_url": f"http://127.0.0.1:{port}/v1", "model": f"fake-{p['model']}", "key_env": "LIVING_VERIFY_FAKE_KEY",
-                                    "max_tokens": 512, "requests_per_minute": 6000, **({"overflow": p["overflow"]} if p.get("overflow") else {})}
+                                    "max_tokens": 512, "requests_per_minute": 6000, **{k: p[k] for k in ("overflow", "capacity_overflow") if p.get(k)}}
                              for name, p in m["profiles"].items()}
         return m
 
@@ -1056,7 +1168,7 @@ class Instance:
 
     # -- state kept for `resume`
     STATE = ("status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
-             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "census_at")
+             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "census_at", "outages")
 
     def save(self):
         st = {k: getattr(self, k, None) for k in self.STATE}
@@ -1107,8 +1219,7 @@ class Instance:
                         continue
                     tok = r.get("tokens") or 0
                     key = (r.get("purpose"), r.get("model"))
-                    # The call's own time: a resumed runner re-reads the whole journal.
-                    self.recent.append(((r.get("at_ms") or 0) / 1000, r.get("purpose"), (r.get("error") or "")[:100]))
+                    self.note_call(r)
                     self.tokens[key] += tok
                     self.calls[key] += 1
                     if r.get("latency_ms"):
@@ -1116,6 +1227,17 @@ class Instance:
                     if not self.opts.fake:
                         with _lock:
                             self.shared["spent"] += tok
+
+    def note_call(self, r):
+        """One journaled call for the runaway and outage guards, at the call's own time (a
+        resumed runner re-reads the whole journal)."""
+        at = (r.get("at_ms") or 0) / 1000
+        kind = failure_kind(r.get("error"))
+        self.recent.append((at, r.get("purpose"), (r.get("error") or "")[:100], kind))
+        if kind is None:
+            self.last_ok = at if self.last_ok is None else max(self.last_ok, at)
+        elif kind != "mind":
+            self.provider_fails.append((at, kind))
 
     # -- sampling
     def sample(self):
@@ -1217,7 +1339,12 @@ class Instance:
         cause is fixed rather than hidden behind a cap."""
         now = time.time()
         self.recent = [r for r in self.recent if now - r[0] <= 300]
-        errors = [r for r in self.recent if r[2]]
+        # A provider outage is not a loop: its failures (capacity or rate 429s, 5xx, no
+        # connection) count toward no failure limit (ar1: 7 of 28 instances stopped over
+        # consolidation's capacity 429s while the mind retried them, most within a minute).
+        # They still count as calls, so a mind that storms a failing provider trips the call
+        # rate; the outage itself stops a run only when no route answers (`outage`).
+        errors = [r for r in self.recent if r[3] == "mind"]
         same = Counter((r[1], r[2]) for r in errors).most_common(1)
         last_min = sum(1 for r in self.recent if now - r[0] <= 60)
         why = None
@@ -1238,6 +1365,7 @@ class Instance:
         # `budget.runaway_calls_per_min` limits it; failures and restarts above still apply.
         elif last_min > self.rate_limit():
             why = f"{last_min} model calls in one minute"
+        why = why or self.outage(now)
         recent_starts = [t for t in self.starts if now - t <= 1800]
         if len(recent_starts) > 5:
             why = f"the mind was restarted {len(recent_starts)} times in 30 minutes"
@@ -1245,6 +1373,37 @@ class Instance:
             self.emit("events", {"t": self.t(), "runaway": why})
             self.runaway_seen.append([self.t(), why])
         return why
+
+    def outage(self, now):
+        """Provider failures since the last call that succeeded on any route: recorded as an
+        outage (an `outage` event when it starts, one in `outages` and the events when a call
+        succeeds again), and the run's stop only when nothing has answered for OUTAGE_STOP_S
+        while calls still fail (the last within OUTAGE_LIVE_S)."""
+        if self.last_ok is not None:
+            self.provider_fails = [f for f in self.provider_fails if f[0] > self.last_ok]
+        rel = lambda at: None if self.t0 is None else round(at - self.t0, 1)
+        if self.outage_since is not None and self.last_ok is not None and self.last_ok > self.outage_since:
+            ended = {"since_t": rel(self.outage_since), "until_t": rel(self.last_ok), "seconds": round(self.last_ok - self.outage_since, 1),
+                     "failed": self.outage_failed, "kinds": dict(self.outage_kinds)}
+            if not any(o.get("since_t") == ended["since_t"] for o in self.outages):
+                self.outages.append(ended)
+                self.emit("events", {"t": self.t(), "outage_ended": ended})
+            self.outage_since = None
+        if not self.provider_fails:
+            return None
+        since = min(f[0] for f in self.provider_fails)
+        if now - since < OUTAGE_RECORD_S:
+            return None
+        if self.outage_since is None:
+            self.emit("events", {"t": self.t(), "outage": {"since_t": rel(since), "kind": self.provider_fails[0][1]}})
+        self.outage_since = since
+        self.outage_failed = len(self.provider_fails)
+        self.outage_kinds = Counter(k for _, k in self.provider_fails)
+        last = max(f[0] for f in self.provider_fails)
+        if now - since >= OUTAGE_STOP_S and now - last <= OUTAGE_LIVE_S:
+            kinds = ", ".join(f"{k} {n}" for k, n in self.outage_kinds.most_common())
+            return f"provider outage: no route answered for {(now - since) / 60:.0f} minutes ({self.outage_failed} failed calls: {kinds})"
+        return None
 
     # -- hourly snapshots (life runs)
     def snapshot(self, row):
@@ -1377,7 +1536,7 @@ class Instance:
             elif cap and sum(self.tokens.values()) >= cap:
                 self.stopped_by = "trial token cap"
             elif why:
-                self.stopped_by = f"runaway: {why}"
+                self.stopped_by = why if why.startswith("provider outage") else f"runaway: {why}"
             elif self.died is not None and self.t() - self.died >= 20 and self.trial.get("life", {}).get("stop_on_death", True):
                 self.stopped_by = "subject died"
             elif mind_down:
@@ -1416,10 +1575,13 @@ class Instance:
             self.log(f"FAILED: {e!r}")
             self.stop_mind()
         finally:
+            if self.outage_since is not None and not any(o.get("since_t") == round(self.outage_since - (self.t0 or 0), 1) for o in self.outages):
+                self.outages.append({"since_t": round(self.outage_since - (self.t0 or 0), 1), "until_t": None, "failed": self.outage_failed,
+                                     "kinds": dict(self.outage_kinds)})
             self.save()
             summary = summarize(self.dir, self.trial, extra={"db": self.db, "variant": self.variant, "replicate": self.rep,
                                 "stopped_by": self.stopped_by, "fake": bool(self.opts.fake), "minutes_planned": self.opts.minutes or self.trial.get("minutes", 15),
-                                "runaways": self.runaway_seen, "mind_starts": len(self.starts),
+                                "runaways": self.runaway_seen, "mind_starts": len(self.starts), "outages": self.outages,
                                 "day_ms": (getattr(self, "world", None) or {}).get("day_ms")})
             (self.dir / "summary.json").write_text(json.dumps(summary, indent=1))
             keep = self.opts.keep_db or self.trial.get("keep_db")
@@ -1550,6 +1712,7 @@ def summarize(d, trial, extra):
     # reopen), else the instance's copy.
     live = ROOT / ".local/living/journal" / f"{PREFIX}{d.parent.name}-{d.name}"
     jdir = live if live.exists() else d / "journal"
+    s["consolidations"] = consolidation_table(jdir)
     for f in sorted(jdir.glob("*.jsonl")) if jdir.exists() else []:
         for n, line in enumerate(f.read_text().splitlines(), 1):
             try:
@@ -1559,6 +1722,8 @@ def summarize(d, trial, extra):
             except ValueError:
                 pass
     j.sort(key=lambda r: r.get("at_ms", 0))
+    # Failed calls by who failed (`failure_kind`): the provider's kinds, and `mind`.
+    s["call_failures"] = dict(Counter(k for k in (failure_kind(r.get("error")) for r in j) if k))
     by_purpose = defaultdict(lambda: {"calls": 0, "tokens": 0, "errors": 0, "latency_ms": []})
     by_model = defaultdict(lambda: {"calls": 0, "tokens": 0, "prompt": 0, "completion": 0, "cached": 0})
     remembered = 0
@@ -1567,6 +1732,7 @@ def summarize(d, trial, extra):
         p["calls"] += 1
         p["tokens"] += r.get("tokens") or 0
         p["errors"] += 1 if r.get("error") else 0
+        p["capacity_429"] = p.get("capacity_429", 0) + (1 if out_of_capacity(r.get("error")) else 0)
         if r.get("latency_ms"):
             p["latency_ms"].append(r["latency_ms"])
         m = by_model[r.get("model")]
@@ -1796,7 +1962,9 @@ def shared_for(trials, a, bdir):
         s.bind(("127.0.0.1", 0))
         shared["fake_port"] = s.getsockname()[1]
         s.close()
-        shared["fake"] = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl")],
+        # `--fake-script`: the fake server's script (fake-llm.md), e.g. capacity 429s on consolidation.
+        script = ["--script", str(Path(a.fake_script).resolve())] if getattr(a, "fake_script", None) else []
+        shared["fake"] = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl"), *script],
                                           stdout=open(bdir / "fake.log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
         time.sleep(1)
     return shared
@@ -2081,6 +2249,40 @@ ROWS = ["subject", "stopped_by", "minutes_run", "game_days", "tokens_per_game_da
         "refusals", "learned", "built", "relations_end", "judgments_end", "memories_remembered", "prompt_frame", "ooc_lines", "ooc_private", "calls", "tokens"]
 
 
+def consolidation_report(sums):
+    """report.md's consolidation tables: per instance, then per character (summary.json
+    `consolidations`, from the mind's outcome lines; see `consolidation_table`)."""
+    have = [s for s in sums if s.get("consolidations")]
+    if not have:
+        return []
+    head = " | ".join(c.replace("_", " ") for c in CONSOLIDATION_COLUMNS)
+    rule = " ---: |" * len(CONSOLIDATION_COLUMNS)
+    name = lambda s: f"{s.get('trial')}/{s.get('variant')}/r{s.get('replicate')}"
+    out = ["## Consolidations\n",
+           "Per character: attempted; integrated on the primary model or on the fallback; failed and retried later; failed with no later attempt "
+           "(lost: never integrated before the stop); experiences of failed ones that left the inbox unintegrated (trimmed); failures that were capacity 429s.\n",
+           f"| Instance | {head} |\n| --- |{rule}"]
+    for s in have:
+        t = s["consolidations"]["total"]
+        out.append(f"| {name(s)} | " + " | ".join(str(t[c]) for c in CONSOLIDATION_COLUMNS) + " |")
+    out += ["", f"| Instance | Character | {head} |\n| --- | --- |{rule}"]
+    for s in have:
+        for who, r in sorted(s["consolidations"]["by_character"].items(), key=lambda kv: str(kv[0])):
+            out.append(f"| {name(s)} | {str(who).replace('|', '/')} | " + " | ".join(str(r[c]) for c in CONSOLIDATION_COLUMNS) + " |")
+    missing = [name(s) for s in sums if not s.get("consolidations")]
+    if missing:
+        out.append(f"\nNo consolidation outcomes (a mind before 2026-11-11, or none ran): {', '.join(missing)}.")
+    out.append("")
+    if any(s.get("outages") for s in sums):
+        out.append("## Provider outages\n\n| Instance | From (s) | Until (s) | Failed calls | Kinds |\n| --- | ---: | ---: | ---: | --- |")
+        for s in sums:
+            for o in s.get("outages") or []:
+                kinds = ", ".join(f"{k} {n}" for k, n in (o.get("kinds") or {}).items())
+                out.append(f"| {name(s)} | {o.get('since_t')} | {o.get('until_t') if o.get('until_t') is not None else 'still down at the stop'} | {o.get('failed')} | {kinds} |")
+        out.append("")
+    return out
+
+
 def report(a):
     bdir = OUT / a.batch
     sums = [json.loads(p.read_text()) for p in sorted(bdir.glob("*/summary.json"))]
@@ -2119,6 +2321,7 @@ def report(a):
             l50 = sorted(x for x, _ in lats[k])
             out.append(f"| {k} | {v['calls']} | {v['tokens']:,} | {l50[len(l50) // 2] if l50 else '–'} | {max((y for _, y in lats[k]), default='–')} | {v['errors']} | {v['empty']} | {v['repaired']} | {v['invalid']} |")
         out.append("")
+    out += consolidation_report(sums)
     for (trial, variant), ss in sorted(groups.items()):
         ss.sort(key=lambda s: s["replicate"])
         out.append(f"## {trial} / {variant}\n")
@@ -2177,7 +2380,7 @@ def reclaim(a):
 def resummarize(a):
     """Recompute every instance's summary from its kept evidence (after a probe changes)."""
     bdir = OUT / a.batch
-    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms")
+    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms", "outages")
     for p in sorted(bdir.glob("*/summary.json")):
         old = json.loads(p.read_text())
         extra = {k: old.get(k) for k in keep}
@@ -2227,6 +2430,7 @@ def main():
     p.add_argument("--replicates", type=int, default=3)
     p.add_argument("--minutes", type=float)
     p.add_argument("--fake", action="store_true", help="answer every model call from the local fake server (no provider keys)")
+    p.add_argument("--fake-script", help="with --fake: the fake server's script (fake-llm.md), e.g. capacity 429s")
     p.add_argument("--parallel", type=int, default=18)
     p.add_argument("--keep-db", action="store_true")
     p.add_argument("--stagger", type=float, default=2, help="seconds between instance starts")

@@ -320,6 +320,21 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
     f
 }
 
+/// What a way of speaking's check is given about the speaker (the fields its plan reads) and
+/// the addressee (0: the room), for `living_rules::script::speech::check_way`, the check a client
+/// runs too.
+pub fn way_facts(ctx: &ReducerContext, id: u32, way: &str, to: u32, now: u64) -> (living_rules::script::ActorFacts, Option<living_rules::script::TargetFacts>) {
+    let w = common::world(ctx);
+    let plan = common::scripts(ctx).law_plan(&format!("{way}_check"));
+    let mut actor = law_ctx(ctx, id, &w, now, &plan).actor;
+    actor.id = id;
+    let addressee = (to != 0).then(|| {
+        let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+        target_facts(ctx, &TargetRef { class: 3, id: to as u64, x: 0.0, y: 0.0 }, from, now)
+    });
+    (actor, addressee)
+}
+
 fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx {
     let w = common::world(ctx);
     let mut actor = facts(ctx, id, now);
@@ -414,7 +429,51 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         routine,
         raining: crate::town::raining(ctx),
         record: None,
+        offer_id: a.offer,
+        record_id: a.record,
+        offer: if sc.skill_reads(&a.skill, "offer", a.phase == 1) { offer_at_hand(ctx, id, &a.target, a.offer, now) } else { None },
     }
+}
+
+/// The trade offer an act has at hand (`a.offer`): the one it names, or, when that one is gone
+/// or none is named, the target person's standing offer to the actor. A point read by id, or by
+/// the `from` index (a maker holds one offer at a time).
+fn offer_at_hand(ctx: &ReducerContext, me: u32, target: &TargetRef, named: u64, now: u64) -> Option<living_rules::script::OfferFacts> {
+    let window_s = common::laws(ctx).trade_window_s;
+    let facts = |o: TradeOffer| {
+        let ends = o.ends_ms(window_s);
+        living_rules::script::OfferFacts { id: o.id, from: o.from, to: o.to, give: o.give_item, give_qty: o.give_qty, want: o.want_item, want_qty: o.want_qty, open: now <= ends, left_s: ends.saturating_sub(now) as f32 / 1000.0 }
+    };
+    if named != 0 {
+        if let Some(o) = ctx.db.trade_offer().id().find(named) {
+            return Some(facts(o));
+        }
+    }
+    if target.class != 3 {
+        return None;
+    }
+    let from = target.id as u32;
+    let mut theirs: Vec<TradeOffer> = ctx.db.trade_offer().from().filter(from).filter(|o| o.to == me).collect();
+    theirs.sort_by_key(|o| (now <= o.ends_ms(window_s), o.id));
+    theirs.pop().map(facts)
+}
+
+/// The trade offer an answer (accept, decline) is to: `named` (0: the standing one) from `from`
+/// to `me`, while it can be accepted. Whatever a script names, only the addressee answers an
+/// offer, and only its maker's.
+fn answered_offer(ctx: &ReducerContext, me: u32, from: u32, named: u64, now: u64) -> Result<TradeOffer, String> {
+    let window_s = common::laws(ctx).trade_window_s;
+    if named == 0 {
+        return ctx.db.trade_offer().from().filter(from).find(|o| o.to == me && now <= o.ends_ms(window_s)).ok_or_else(|| "they have no standing offer for you".to_string());
+    }
+    let o = ctx.db.trade_offer().id().find(named).ok_or("that offer is gone")?;
+    if o.to != me || o.from != from {
+        return Err("that offer is not addressed to you".into());
+    }
+    if now > o.ends_ms(window_s) {
+        return Err("that offer has expired".into());
+    }
+    Ok(o)
 }
 
 fn label(skill: &str, item: &str, t: &Resolved) -> String {
@@ -494,11 +553,31 @@ pub fn can(ctx: &ReducerContext, id: u32, skill: &str, target: Resolved, item: &
         victim: 0,
         want: String::new(),
         want_qty: 0,
+        offer: 0,
+        record: 0,
     };
     common::scripts(ctx).check(skill, &skill_ctx(ctx, id, &act, now)).is_ok()
 }
 
-pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), now: u64) -> Result<(), String> {
+thread_local! {
+    /// At which point the last `begin` (or `perform`) refused, for the outcome row
+    /// (`living_rules::outcome::act`); `refused` when no finer code was set.
+    static REFUSAL: std::cell::Cell<&'static str> = const { std::cell::Cell::new(living_rules::outcome::act::REFUSED) };
+}
+
+fn refuse(code: &'static str) {
+    REFUSAL.with(|r| r.set(code));
+}
+
+/// The code of the refusal `begin` just returned, read once (then `refused` again).
+pub fn refusal() -> &'static str {
+    REFUSAL.with(|r| r.replace(living_rules::outcome::act::REFUSED))
+}
+
+/// `answers` is what an answer (accept, decline) names: a trade offer's id and a record's id
+/// (0: none).
+pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), now: u64) -> Result<(), String> {
+    refuse(living_rules::outcome::act::REFUSED);
     let sc = common::scripts(ctx);
     let shape = shape_of(&sc, skill);
     let aim = shape.map_or(Aim::None, |s| s.aim);
@@ -519,7 +598,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         }
     }
     // Combat timing (cooldowns, recovery, one windup at a time) holds for every controller.
-    crate::combat::gate(ctx, id, skill, cur.as_ref(), now)?;
+    crate::combat::gate(ctx, id, skill, cur.as_ref(), now).inspect_err(|_| refuse(living_rules::outcome::act::TIMING))?;
     // Work out whether the new action can start at all before abandoning the current one:
     // a higher-priority option that cannot start (e.g. taking food from an empty store) must
     // not cancel the lower-priority work that is actually happening.
@@ -672,6 +751,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         // A player's move does not walk into reach: a blow carries its lunge, no further.
         let lunge = if melee { sc.num_of("lunge", &ctx.db.character().id().find(id).map(|c| c.kind).unwrap_or_default(), 0.6) as f32 } else { 0.0 };
         if dist(here, target.at) > r + lunge {
+            refuse(living_rules::outcome::act::REACH);
             return Err("out of reach".into());
         }
         needs_approach = false;
@@ -682,6 +762,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         // Already in the player's sight (its perceived set): the keep margins hold, as on its screen.
         let kept = ctx.db.perceived().viewer().filter(ctx.sender()).any(|p| p.body == target.id as u32);
         if !crate::perception::in_sight(ctx, &common::map(ctx), id, here, heading, target.id as u32, target.at, dist(here, target.at), &w, now, kept) {
+            refuse(living_rules::outcome::act::UNSEEN);
             return Err("you cannot see them".into());
         }
     }
@@ -702,6 +783,8 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         topic: topic.to_string(),
         want: want.0.to_string(),
         want_qty: want.1,
+        offer: answers.0,
+        record: answers.1,
         victim: if shape.is_some_and(|s| s.hostile) && target.class == 3 && target.id as u32 != id { target.id as u32 } else { 0 },
     };
     // A threat is made once: menacing the same person again within 30 s is refused (a
@@ -728,6 +811,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             None => act.clone(),
         };
         if let Err(why) = sc.check(&act.skill, &skill_ctx(ctx, id, &probe, now)) {
+            refuse(living_rules::outcome::act::CHECK);
             if melee {
                 balked(ctx, id, &target, &why, now);
             }
@@ -816,7 +900,7 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
     let sc = common::scripts(ctx);
     act.phase = 1;
     let sctx = skill_ctx(ctx, act.id, &act, now);
-    sc.check(&act.skill, &sctx)?;
+    sc.check(&act.skill, &sctx).inspect_err(|_| refuse(living_rules::outcome::act::CHECK))?;
     let dur = sc.duration_ms(&act.skill, &sctx)?;
     if rooted(&act.skill) {
         motion::stop(ctx, act.id, now);
@@ -899,11 +983,12 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
         refresh_rates(ctx, id);
     }
     if let Some(why) = why {
-        report(ctx, &a, false, why, now);
+        report(ctx, &a, false, why, now, living_rules::outcome::act::BROKEN_OFF);
     }
 }
 
-fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
+/// `code`: at which point the outcome was decided (`living_rules::outcome::act`).
+fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64, code: &'static str) {
     if let Some(mut st) = ctx.db.mind_state().id().find(a.id) {
         if a.node != ORPHAN && !held(a.node) {
             st.last = Some(LeafResult { node: a.node, revision: a.revision, ok, why: why.into() });
@@ -919,7 +1004,7 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
     }
     // A deliberate act always reports back how it went, and the next one waiting starts.
     if a.node == ACT {
-        crate::acts::outcome(ctx, a, ok, why, now);
+        crate::acts::outcome(ctx, a, ok, why, now, code);
         common::wake(ctx, a.id);
         crate::acts::next(ctx, a.id, now);
         return;
@@ -927,7 +1012,7 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
     // Routine successes (gathering a berry, arriving somewhere) are not experiences worth
     // recording; failures and meaningful acts are.
     if !repeat && (!ok || catalog::skill(&a.skill).is_some_and(|k| k.notable)) {
-        tell(ctx, a.id, ok, &a.label, why, now);
+        tell(ctx, a.id, ok, &a.skill, &a.label, why, now, code);
     }
     common::wake(ctx, a.id);
 }
@@ -935,14 +1020,17 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
 /// Tell a character how its graph's action went, as an experience in its own log. A mind is
 /// told; so is a person playing the character when it failed (their command, refused or
 /// broken off), in the same words. Instinct-only creatures are not.
-fn tell(ctx: &ReducerContext, id: u32, ok: bool, what: &str, why: &str, now: u64) {
+fn tell(ctx: &ReducerContext, id: u32, ok: bool, skill: &str, what: &str, why: &str, now: u64, code: &'static str) {
     let Some(c) = ctx.db.character().id().find(id) else { return };
     if !c.ai && (ok || !crate::presence::played(ctx, id)) {
         return;
     }
     let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let text = if ok { format!("You finished: {what}. {why}") } else { format!("You failed to {what}: {why}") };
-    percept(ctx, &c, now, "own", id, 0, at, text.trim().to_string(), if ok { 0.08 } else { 0.35 });
+    if let Some(line) = percept(ctx, &c, now, "own", id, 0, at, text.trim().to_string(), if ok { 0.08 } else { 0.35 }) {
+        let told = crate::outcomes::Told { kind: living_rules::outcome::kind::OWN, ok, skill, code, what, why: if ok { "" } else { why }, other: 0 };
+        crate::outcomes::write(ctx, id, line, now, &told, false);
+    }
 }
 
 /// A failure is news unless an identical one (`what` and `why`) came in the last
@@ -967,12 +1055,13 @@ fn news(ctx: &ReducerContext, id: u32, what: &str, why: &str, now: u64) -> bool 
 /// `repeat_failure_s` for the same action and reason, as failures are told (`tell`). A guard's first
 /// choice refused on every look while a fallback runs counts once a window, not every look.
 /// Returns whether it was news (the evaluator then counts it in `fails`).
-pub fn refused(ctx: &ReducerContext, id: u32, node: u16, revision: u32, what: &str, why: &str, now: u64) -> bool {
+pub fn refused(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, what: &str, why: &str, now: u64) -> bool {
     if !news(ctx, id, what, why, now) {
         return false;
     }
     routine_outcome(ctx, id, revision, node, false, why, now);
-    tell(ctx, id, false, what, why, now);
+    let code = refusal();
+    tell(ctx, id, false, skill, what, why, now, code);
     true
 }
 
@@ -1005,6 +1094,11 @@ fn routine_outcome(ctx: &ReducerContext, id: u32, revision: u32, node: u16, ok: 
 }
 
 fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
+    finish_as(ctx, a, ok, why, now, if ok { living_rules::outcome::act::DONE } else { living_rules::outcome::act::FAILED })
+}
+
+/// `finish`, with the outcome's code (`living_rules::outcome::act`).
+fn finish_as(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64, code: &'static str) {
     let sc = common::scripts(ctx);
     crate::town::unshown(ctx, &sc, a.id, &a.skill);
     let timed = sc.shapes().timed(&a.skill);
@@ -1033,7 +1127,7 @@ fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
         refresh_rates(ctx, a.id);
     }
     common::count(|k| k.completions += 1);
-    report(ctx, &a, ok, why, now);
+    report(ctx, &a, ok, why, now, code);
 }
 
 /// Advance an activity whose timer is due.
@@ -1142,7 +1236,7 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
                     let act = Activity { phase: 1, ..a.clone() };
                     if let Err(why) = perform(ctx, act, now) {
                         motion::stop(ctx, id, now);
-                        finish(ctx, a, false, &why, now);
+                        finish_as(ctx, a, false, &why, now, refusal());
                     }
                 } else if a.target.class != 3 {
                     finish(ctx, a, false, "could not get there", now);
@@ -1341,10 +1435,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 // What the look shows, as the observer now perceives it (the same projection
                 // its scene and a player's view carry).
                 if let (Some(c), Some(t)) = (ctx.db.character().id().find(me), ctx.db.character().id().find(target)) {
-                    let p = crate::perception::project(ctx, &c, &t, now);
-                    let seen = if p.hp >= 0.0 { format!("{:.0} of {:.0} health", p.hp, p.max_hp) } else { living_rules::combat::band_words(p.band).to_string() };
-                    percept(ctx, &c, now, "appraise", target, 0, at, format!("You look {} over: {seen}.", p.label), 0.3);
-                    notes.push(format!("{} has {seen}", p.label));
+                    let label = crate::perception::label(ctx, &c, target, now);
+                    let seen = crate::perception::health_seen(ctx, &c, &t, now).map_or_else(|| "you cannot tell".to_string(), |h| h.words());
+                    percept(ctx, &c, now, "appraise", target, 0, at, format!("You look {label} over: {seen}."), 0.3);
+                    notes.push(format!("{label} has {seen}"));
                 }
             }
             Effect::Launch => {
@@ -1440,20 +1534,19 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     ctx.db.trade_offer().id().delete(o);
                 }
                 let until_ms = now + (common::laws(ctx).trade_window_s * 1000.0) as u64;
-                ctx.db.trade_offer().insert(TradeOffer { id: 0, from: me, to, give_item: a.item.clone(), give_qty, want_item: a.want.clone(), want_qty: a.want_qty.max(1), at_ms: now, until_ms });
+                let made = ctx.db.trade_offer().insert(TradeOffer { id: 0, from: me, to, give_item: a.item.clone(), give_qty, want_item: a.want.clone(), want_qty: a.want_qty.max(1), at_ms: now, until_ms });
                 if let Some(c) = ctx.db.character().id().find(to) {
                     let text = format!("{} offers you {give_qty} {} for {} {}.", common::label_cap(ctx, &c, me), a.item, a.want_qty.max(1), a.want);
                     percept(ctx, &c, now, "offer", me, to, at, text.clone(), 0.85);
                     if c.ai {
-                        perceive::request_deliberation(ctx, to, &format!("{text} You may accept or not."), now);
+                        perceive::request_deliberation(ctx, to, &format!("{text} You may accept or decline it (offer {}), or let it pass.", made.id), now);
                     }
                 }
                 notes.push(format!("offered {give_qty} {} for {} {}", a.item, a.want_qty.max(1), a.want));
             }
-            Effect::Accept => {
+            Effect::Accept { offer } => {
                 let from = a.target.id as u32;
-                let window_s = common::laws(ctx).trade_window_s;
-                let offer = ctx.db.trade_offer().from().filter(from).find(|o| o.to == me && now <= o.ends_ms(window_s)).ok_or("they have no standing offer for you")?;
+                let offer = answered_offer(ctx, me, from, offer, now)?;
                 if common::inv_count(ctx, from as u64, &offer.give_item) < offer.give_qty {
                     return Err(format!("they no longer have {} {}", offer.give_qty, offer.give_item));
                 }
@@ -1475,6 +1568,12 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 }
                 witnessed(ctx, now, at, "trade", from, me, &format!("{{a}} and {{b}} traded {deal}"), 0.4, &[me, from]);
                 notes.push(format!("traded with {}: {deal}", seen_as(from)));
+            }
+            Effect::Decline { offer } => {
+                // This only ends it: the rules word the outcome and tell its maker and onlookers
+                // (`tell`, `witness`).
+                let o = answered_offer(ctx, me, a.target.id as u32, offer, now)?;
+                ctx.db.trade_offer().id().delete(o.id);
             }
             Effect::Found => {
                 if ctx.db.membership().member().find(me).is_some() {
@@ -1874,15 +1973,15 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
         return;
     }
     let label = common::label_for(ctx, &c, other);
-    let their_hp = ctx.db.vitals().id().find(other).map(|o| (common::needs(&o, now).hp / o.max_hp * 100.0).round()).unwrap_or(0.0);
+    // Their health as this fighter perceives it: the band everyone sees, exact only while an
+    // appraisal of them is in force (never their `vitals`).
+    let theirs = ctx.db.character().id().find(other).and_then(|o| crate::perception::health_seen(ctx, &c, &o, now));
     let change = if what.is_empty() {
         format!("since then you were hit {hit}×, defended {my_defense}×, and {their_defense} of your blows came to nothing")
     } else {
         what.join("; ")
     };
-    let text = format!(
-        "The fight with {label}: {change}. Your health {hp:.0}; theirs looks about {their_hp:.0}%."
-    );
+    let text = format!("The fight with {label}: {change}. {}", living_rules::combat::fight_health(hp, theirs));
     st.marks.retain(|m| m.node != REPORT_MARK && !(BAND_MARK..BAND_MARK + 5).contains(&m.node));
     st.marks.push(Mark { node: REPORT_MARK, at_ms: now });
     st.marks.push(Mark { node: BAND_MARK + band, at_ms: now });
@@ -1915,7 +2014,9 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
 /// (bounded per character) for the record; the mind's graph in Neo4j keeps its history.
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
+    ctx.db.character_senses().id().delete(id);
     ctx.db.experience().observer().delete(id);
+    ctx.db.line_heard().speaker().delete(id);
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
     ctx.db.judged().actor().delete(id);
@@ -2060,7 +2161,8 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         // The death record names the killer as the victim knew them (`perceived_of`): "killed
         // by a stranger" unless the name was known. The chronicle above keeps the real names.
         let by = common::label_for(ctx, &vc, attacker);
-        die(ctx, victim, &if yielded { format!("killed by {by}, after yielding") } else { format!("killed by {by}") }, now, attacker);
+        let code = if yielded { living_rules::outcome::death::KILLED_YIELDING } else { living_rules::outcome::death::KILLED };
+        die(ctx, victim, &if yielded { format!("killed by {by}, after yielding") } else { format!("killed by {by}") }, now, attacker, code);
         return format!("killed {vn} ({amount:.0})");
     }
     if defense == Aim::Facing {
@@ -2119,6 +2221,8 @@ pub fn missile_effects(ctx: &ReducerContext, owner: u32, skill: &str, victim: u3
         victim,
         want: String::new(),
         want_qty: 0,
+        offer: 0,
+        record: 0,
     };
     let sctx = if ctx.db.character().id().find(owner).is_some_and(|c| c.alive) {
         skill_ctx(ctx, owner, &a, now)
@@ -2175,7 +2279,9 @@ fn give_in(ctx: &ReducerContext, me: u32, a: &Activity, at: (f32, f32), now: u64
     format!("you yielded to {to_seen}; for {secs:.0} seconds you do not strike back")
 }
 
-pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
+/// A character dies of `cause` (the record's words), `code` saying how
+/// (`living_rules::outcome::death`), killed by `killer` (0: no one).
+pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, code: &'static str) {
     let Some(mut c) = ctx.db.character().id().find(id) else { return };
     if !c.alive {
         return;
@@ -2183,6 +2289,24 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((c.home_x, c.home_y));
     // What the rules make of it, while the dead's records and things are still there.
     crate::records::on_death(ctx, id, now);
+    // A person who plays the character (now, or while the minds hold it) is told how it died,
+    // with the killer as they knew them, and its outcome row says so in codes.
+    let human = crate::combat::human(ctx, id).is_some();
+    if human || crate::presence::played(ctx, id) {
+        let by = if killer != 0 { common::label_for(ctx, &c, killer) } else { String::new() };
+        if let Some(line) = percept(ctx, &c, now, "death", id, killer, at, living_rules::outcome::death_words(code, &by, cause), 1.0) {
+            let told = crate::outcomes::Told { kind: living_rules::outcome::kind::DEATH, ok: false, skill: "", code, what: "", why: "", other: killer };
+            crate::outcomes::write(ctx, id, line, now, &told, true);
+            // Under the minds its line was not staged for the person's client; it is now, and
+            // released with the rest of its lines below.
+            if !human {
+                if let Some(row) = ctx.db.experience().id().find(line) {
+                    crate::frame::line(ctx, &row);
+                }
+                crate::frame::forget(ctx, id);
+            }
+        }
+    }
     c.alive = false;
     c.died_ms = now;
     c.cause = cause.into();

@@ -40,9 +40,318 @@
    74
   ],
   "radius": 0,
-  "relief": 0
+  "relief": 0,
+  "street:setts": {
+   "layer": "slate_setts",
+   "colour": [
+    92,
+    94,
+    99
+   ]
+  },
+  "street:quay_flags": {
+   "layer": "quay_flags",
+   "colour": [
+    83,
+    85,
+    91
+   ],
+   "tint": [
+    61,
+    64,
+    71
+   ]
+  },
+  "street:flags": {
+   "layer": "quay_flags",
+   "colour": [
+    87,
+    90,
+    95
+   ],
+   "tint": [
+    61,
+    64,
+    71
+   ]
+  },
+  "street:cinders": {
+   "layer": "cinders",
+   "colour": [
+    51,
+    50,
+    51
+   ],
+   "tint": [
+    84,
+    51,
+    43
+   ]
+  },
+  "street:earth": {
+   "layer": "dirt",
+   "colour": [
+    92,
+    83,
+    73
+   ],
+   "tint": [
+    133,
+    128,
+    71
+   ]
+  },
+  "street:sand": {
+   "layer": "wet_sand",
+   "colour": [
+    171,
+    165,
+    148
+   ],
+   "tint": [
+    219,
+    209,
+    178
+   ]
+  },
+  "area:quay_flags": {
+   "layer": "quay_flags",
+   "colour": [
+    83,
+    85,
+    91
+   ],
+   "tint": [
+    61,
+    64,
+    71
+   ]
+  },
+  "area:setts": {
+   "layer": "slate_setts",
+   "colour": [
+    92,
+    94,
+    99
+   ]
+  },
+  "area:cinders": {
+   "layer": "cinders",
+   "colour": [
+    51,
+    50,
+    51
+   ],
+   "tint": [
+    84,
+    51,
+    43
+   ]
+  },
+  "area:earth": {
+   "layer": "dirt",
+   "colour": [
+    92,
+    83,
+    73
+   ],
+   "tint": [
+    133,
+    128,
+    71
+   ]
+  },
+  "area:worked_soil": {
+   "layer": "worked_soil",
+   "colour": [
+    74,
+    63,
+    53
+   ],
+   "tint": [
+    76,
+    71,
+    31
+   ]
+  },
+  "area:peat": {
+   "layer": "peat",
+   "colour": [
+    59,
+    47,
+    37
+   ]
+  },
+  "area:kelp_shingle": {
+   "layer": "kelp_shingle",
+   "colour": [
+    81,
+    78,
+    51
+   ],
+   "tint": [
+    76,
+    71,
+    31
+   ]
+  },
+  "area:white_sand": {
+   "layer": "sand",
+   "colour": [
+    219,
+    209,
+    178
+   ]
+  },
+  "stamp:sand": {
+   "layer": "wet_sand",
+   "colour": [
+    171,
+    165,
+    148
+   ],
+   "tint": [
+    148,
+    140,
+    105
+   ]
+  },
+  "class:Road": {
+   "layer": "quay_flags",
+   "colour": [
+    83,
+    85,
+    91
+   ],
+   "tint": [
+    61,
+    64,
+    71
+   ]
+  },
+  "class:Sand": {
+   "layer": "wet_sand",
+   "colour": [
+    171,
+    165,
+    148
+   ],
+   "tint": [
+    219,
+    209,
+    178
+   ]
+  },
+  "class:Dirt": {
+   "layer": "peat",
+   "colour": [
+    62,
+    51,
+    41
+   ]
+  },
+  "class:Rock": {
+   "layer": "rock",
+   "colour": [
+    70,
+    73,
+    80
+   ]
+  },
+  "class:Drop": {
+   "layer": "rock",
+   "colour": [
+    61,
+    64,
+    71
+   ]
+  },
+  "class:Wall": {
+   "layer": "rock",
+   "colour": [
+    61,
+    64,
+    71
+   ]
+  },
+  "class:Low": {
+   "layer": "rock",
+   "colour": [
+    61,
+    64,
+    71
+   ]
+  },
+  "class:Forest": {
+   "layer": "forest_floor",
+   "colour": [
+    88,
+    78,
+    48
+   ],
+   "tint": [
+    51,
+    38,
+    28
+   ]
+  },
+  "region:meadow": {
+   "layer": "thin_turf",
+   "colour": [
+    97,
+    96,
+    71
+   ],
+   "tint": [
+    61,
+    64,
+    71
+   ]
+  },
+  "region:highland": {
+   "layer": "heather",
+   "colour": [
+    100,
+    92,
+    54
+   ],
+   "tint": [
+    128,
+    87,
+    122
+   ]
+  },
+  "region:beach": {
+   "layer": "kelp_shingle",
+   "colour": [
+    83,
+    81,
+    60
+   ],
+   "tint": [
+    76,
+    71,
+    31
+   ]
+  },
+  "region:forest": {
+   "layer": "thin_turf",
+   "colour": [
+    104,
+    96,
+    56
+   ],
+   "tint": [
+    51,
+    38,
+    28
+   ]
+  }
  },
  "slots": [],
+ "resources": {
+  "tree": "hanger_tree"
+ },
  "world": {
   "seed": 83,
   "size": 1024

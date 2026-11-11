@@ -7,6 +7,7 @@
 - A failed nondefault profile falls back once to default, without blind retries.
 - A default profile without an alternate permits one same-profile 429 recovery through its learned pacing and cooldown.
 - Background calls (`consolidate`, `reorganize`, `internalize`, `identity`) never go to an overflow or default profile (2026-11-10): they fail back to their caller, which retries later with a backoff on the model it chose. A 429 still gets its one paced retry on the same profile.
+- Exception (2026-11-11): a 429 that says the provider is out of capacity for the model (Mistral's `backend_out_of_capacity`, code 3505) sends the background purposes the profile lists in `capacity_overflow` straight to its keyed overflow, at the overflow's own effort, with no paced retry on the short model. The project file lists only `consolidate` on `glm-flash` (DeepSeek Flash, thinking off, judged 8/8 for person consolidation); `reorganize` stays on GLM. A rate-limit 429 and an unlisted purpose keep the paced same-profile retry. `ModelsFile::check` refuses a `capacity_overflow` with an unknown purpose or without an overflow profile.
 
 ## How to get to it (user POV)
 
@@ -17,6 +18,8 @@ Configure a profile overflow or assign a secondary model. A provider rate limit 
 ```bash
 .agents/skills/verify-llm/scripts/verify_llm.py --run llm-$(date +%Y%m%d-%H%M%S) --case overflow --case retry-fallback --case error-overflow
 ```
+
+Capacity: `--case capacity-overflow` (the primary's fake answers every consolidation with the capacity 429; the case waits for an accepted consolidation and checks each primary capacity failure is followed by one successful alternate consolidation at the alternate's effort, think and deliberate stay on the primary, no consolidation failure is logged, and the mind's outcome lines and `trials.consolidation_table` say fallback, none retried or lost). `--case capacity-retry` (no `capacity_overflow`: the first experience consolidation's call and its paced retry get the capacity 429, `mind.log` has `failed (1x)`, the retry 20 s later is integrated on the primary; outcome lines `failed` attempt 1 with `retry_in_s` 20, then `integrated`/`primary` attempt 2; table retried 1, lost 0). `cargo test ... a_model_out_of_capacity_sends_listed_memory_work_to_the_overflow` covers the unlisted purpose, the rate-limit 429 and the config refusals against the real fake server.
 
 Background lanes: `cargo test --manifest-path living/Cargo.toml -p living-mind background_calls_do_not_overflow` (two unreachable base URLs: consolidate and reorganize journal only the first profile, think both).
 

@@ -1,5 +1,26 @@
 # Client protocol validation
 
+## 2026-11-11 rules-senses-outcomes: my_senses, my_act_outcomes (Spark)
+
+Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change (perception and visibility; the inventories and own-state check), without the per-feature reader fan-out.
+
+- `run.py` `client-sso-214657`: every check passes (39). `my_senses` gives each player one row, its own (sight 11, hearing 9), anonymous none; `my_act_outcomes` only the caller's character's rows (the reducer matrix's `human_act` calls left `act`/`unreadable` rows); `character_senses` and `act_outcome` refused to subscribers (`visibility.json`).
+- In-place update (`client-migrate-214519`): origin/main `7c6a92b6`'s module published fresh, a player joined and acted, then this branch's module published with `--keep-data`: 265 characters kept, the player's character kept and ticking, `my_senses` and `my_act_outcomes` rows written after it (`before-*.json`, `after-*.json`).
+
+## 2026-11-11 speech-2 (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `run.py` `client-speech4`: every check passes (33), with three `speech_card` rows. `client-speech2` ran on a module rebuilt in the middle of the refusal refactor and is superseded.
+- After merging origin/main (`93019a3`): `client-speech6`, every check passes (34, `my_offers` and `my_heard` both in the own-state views).
+- After merging origin/main (`48cd022`, fov-1): `client-speech9`, every check passes (39); `heard` (fov-1's) and `line_heard` (who heard a line) both private, `heard_sounds` and `my_heard` both scoped.
+
+## 2026-11-11 speech-1: heard, my_heard, speech_card (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `run.py` (`client-speech1`): every check passes, including the new "speech_card is public (the ways of speaking)" and "my_heard holds each player's own lines, and none for an anonymous client" (each identity 2 lines). The reducer matrix had 221 calls, 0 mismatches: `human_speak` is accepted for a joined identity, refused for an unknown way, and refused for an anonymous one. Private table visibility covers 71 tables, `heard` among them. The probe's target dir was linked to the worker's own (`.local/living/verify/target-client` → `$CARGO_TARGET_DIR/client`).
+
 ## 2026-11-11 fov-1: the field of view (dev-box)
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).

@@ -157,6 +157,15 @@ fn plan_offers(s: &Scripts, skill: &str, aimed: Aimed) -> bool {
     if !checked && (aimed == Aimed::Thing || (wants_target && aimed != Aimed::OwnKind)) {
         return false;
     }
+    // Since rules-senses-outcomes a spec may say what its target is (`target_class`): today's
+    // client offered such a skill everywhere and had the rules refuse it.
+    if wants_target && !spec.target_class.is_empty() {
+        let creature = spec.target_class.iter().any(|c| c == "creature");
+        let thing = spec.target_class.iter().any(|c| c != "creature");
+        if (aimed == Aimed::Thing && !thing) || (aimed != Aimed::Thing && !creature) {
+            return false;
+        }
+    }
     !spec.args.iter().any(|a| a == "graph")
 }
 
@@ -216,7 +225,12 @@ fn the_three_looks_by_name_are_declared_not_coded() {
     }
     let declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
     // and the recipe grids of the ways of making (recipes-1).
-    assert_eq!(declared, ["cook", "smoke", "craft", "make", "strike", "throw", "shoot"], "the shipped script declares only these (step 2 adds the bar's)");
+    assert_eq!(declared, ["cook", "smoke", "craft", "make", "strike", "throw", "shoot", "decline"], "the shipped script declares only these (step 2 adds the bar's)");
+    // decline (rules-offers-2) declares only its look: the trade icon, the client's list of
+    // icons by name being what the declarations replace.
+    let (u, d) = (s.ui("decline").unwrap(), s.ui_default("decline").unwrap());
+    assert_eq!(u.look.icon, Some("trade"));
+    assert_eq!(UiSpec { look: d.look.clone(), declared: false, ..u.clone() }, d, "decline: only `look` is declared");
 }
 
 #[test]
@@ -717,12 +731,14 @@ fn declarations_place_and_present() {
 
 #[test]
 fn a_way_of_speaking_is_presented_in_the_box() {
-    let s = with("fn whisper_speech() { #{ label: \"Whisper\" } }\nfn whisper_ui() { #{ on: \"box\", alias: \"/w\", to_label: \"Whisper to {b}\", bubble: \"hushed\", rows: #{ whisper: \"line\", whispered: \"dots\" } } }");
+    // The shipped script has the ways (`whisper_speech()`, docs/COMMUNICATION.md); a declaration
+    // presents one.
+    let s = with("fn whisper_ui() { #{ on: \"box\", alias: \"/w\", to_label: \"Whisper to {b}\", bubble: \"hushed\", rows: #{ whisper: \"line\", whispered: \"dots\" } } }");
     assert!(s.ui_errors().is_empty(), "{:?}", s.ui_errors());
     let w = s.ui("whisper").unwrap();
     let way = w.way.as_ref().unwrap();
     assert_eq!((w.on.clone(), way.alias.as_deref(), way.bubble, way.rows.get("whispered").copied()), (vec![On::Box], Some("/w"), Some(Bubble::Hushed), Some(Row::Dots)));
-    let s = with("fn whisper_speech() { #{} }\nfn whisper_ui() { #{ label: \"W\", on: \"bar\" } }");
+    let s = with("fn whisper_ui() { #{ label: \"W\", on: \"bar\" } }");
     assert!(s.ui_errors().iter().any(|e| e.contains("a way's `label` is set by `whisper_speech()`")));
     assert!(s.ui_errors().iter().any(|e| e.contains("text box")));
 }
@@ -802,7 +818,9 @@ fn without_vocabulary(src: &str) -> String {
 /// And the species' signals: a body offered `signal` must have signals to make
 /// (`Species::signals`), a rule moved unchanged from `species::skills_help_of` so minds' references
 /// stay byte for byte.
-const GRAMMAR: &[&str] = &["goto", "signal"];
+/// And `offer`: the field an answer (accept, decline) names the trade offer it answers with
+/// (`{"do": "accept", "target": {"id": 4}, "offer": 9}`, rules-offers-2), spelt like the skill.
+const GRAMMAR: &[&str] = &["goto", "signal", "offer"];
 
 #[test]
 fn no_skill_is_named_in_the_rules_interface_code() {
@@ -989,6 +1007,36 @@ fn a_bar_press_is_the_leaf_use_skill_resolves() {
 }
 
 #[test]
+fn appraise_is_offered_toward_creatures_not_things() {
+    // The laptop's finding: `appraise_check` refused every thing ("no one there") while the
+    // client offered "Look over" on things. Its spec now says its target is a creature.
+    let sp = species();
+    for (world, s) in worlds() {
+        let names = |class: &str| offered_toward(s.skills(), sp.get("person"), class).into_iter().map(|k| k.name.clone()).collect::<Vec<_>>();
+        assert!(names("creature").contains(&"appraise".to_string()), "{world}");
+        for class in ["resource", "structure", "place"] {
+            assert!(!names(class).contains(&"appraise".to_string()), "{world}: {class}");
+        }
+        let u = s.ui("appraise").unwrap();
+        assert!(u.is_on(On::Person) && !u.is_on(On::Thing), "{world}: {:?}", u.on);
+        // A skill that names no class is still offered toward both (give is checked).
+        assert!(names("creature").contains(&"give".to_string()) && names("structure").contains(&"give".to_string()), "{world}");
+        // Its own check still refuses anything that reaches it.
+        assert!(s.has("appraise_check"));
+    }
+}
+
+#[test]
+fn a_target_class_must_be_a_class_and_needs_a_target() {
+    let src = include_str!("../../../scripts/skills.rhai");
+    let bad = src.replace(r#"fn appraise_spec() { #{ target: true, target_class: "creature","#, r#"fn appraise_spec() { #{ target: true, target_class: "ghost","#);
+    assert_ne!(bad, src);
+    assert!(Scripts::new(&bad).err().unwrap().contains("'ghost' is not a target class"));
+    let bad = src.replace(r#"fn appraise_spec() { #{ target: true, target_class: "creature","#, r#"fn appraise_spec() { #{ target_class: "creature","#);
+    assert!(Scripts::new(&bad).err().unwrap().contains("needs `target: true`"));
+}
+
+#[test]
 fn offered_for_no_species_is_a_persons() {
     // Coverage 3: a body the species list does not describe is offered what a person is.
     let sp = species();
@@ -1154,7 +1202,15 @@ fn a_floor_overlay_restyles_a_base_declaration() {
 #[test]
 fn seventy_declarations_cost_little_to_compile() {
     // Coverage 11: the shipped script against the same with a declaration for every one of its
-    // skills (best of a few compiles each; a debug build, so the bound is loose).
+    // skills, measured in deterministic units, not wall time: under a loaded machine two timings
+    // in a parallel suite say nothing (dev-box measured +173% at load 66 on 32 cores, +12–15%
+    // alone).
+    // - The compile itself is linear in the source (Rhai's parse, the field analysis): the
+    //   declarations' share of the source bounds what they add to it.
+    // - Reading them: one script call per declaration (and per missile, per `detail` item), and
+    //   one scan of the source per declaration. The +49% of the first build was a sort that
+    //   scanned the whole source on every comparison; this bound is what would catch it.
+    // - Each declaration's own Rhai operations, as the install counts them.
     let shipped = include_str!("../../../scripts/skills.rhai");
     let bare = without_ui(shipped);
     let s = Scripts::new(&bare).unwrap();
@@ -1163,17 +1219,37 @@ fn seventy_declarations_cost_little_to_compile() {
     let n = s.ui_specs().count();
     // Every skill the island has (62 on 2026-11-11), the design's "about 70".
     assert!(n >= 60, "{n} declarations");
-    let best = |src: &str| (0..3).map(|_| { let t = std::time::Instant::now(); Scripts::new(src).unwrap(); t.elapsed() }).min().unwrap();
-    let (a, b) = (best(&bare), best(&declared));
-    println!("compile: {n} declarations {b:?}, none {a:?} (+{:.0}%)", (b.as_secs_f64() / a.as_secs_f64() - 1.0) * 100.0);
-    assert!(b.as_secs_f64() < a.as_secs_f64() * 1.6 + 0.05, "{n} declarations: {b:?} against {a:?}");
+    let grown = decls.len() as f64 / bare.len() as f64;
+    assert!(grown < 0.15, "{n} declarations are {:.0}% of the source", grown * 100.0);
+    let d = Scripts::new(&declared).unwrap();
+    let (w0, w) = (s.ui_work(), d.ui_work());
+    let missiles = s.shapes().iter().filter(|(_, sh)| sh.missile).count();
+    assert_eq!(w0, crate::script::UiWork { calls: missiles, scans: 0 }, "with no declaration, reading costs only the missiles");
+    assert_eq!(w, crate::script::UiWork { calls: missiles + n, scans: n }, "one call and one source scan per declaration");
+    let report = d.validate().unwrap();
+    let ops: Vec<(&String, &u64)> = report.ops.iter().filter(|(f, _)| f.ends_with("_ui")).collect();
+    assert_eq!(ops.len(), n, "the install runs every declaration");
+    let (most, total) = (ops.iter().map(|(_, o)| **o).max().unwrap_or(0), ops.iter().map(|(_, o)| **o).sum::<u64>());
+    assert!(most <= 40, "a declaration is a map literal; the heaviest took {most} operations");
+    // Wall time, printed only.
+    let time = |src: &str| {
+        let t = std::time::Instant::now();
+        Scripts::new(src).unwrap();
+        t.elapsed()
+    };
+    println!("compile: {n} declarations, {:.1}% more source, {} calls and {} scans to read, {total} operations in all (most {most}); wall {:?} against {:?}", grown * 100.0, w.calls, w.scans, time(&declared), time(&bare));
 }
 
 #[test]
-fn the_grammar_has_no_offer_reference_yet() {
-    // Finding 7: an act toward an incoming offer names its sender; the offer's own id joins the
-    // act when the grammar carries a reference (rules-offers-2). This fails when it does, so that
-    // `act_node` starts sending it.
-    assert!(serde_json::from_value::<graph::Action>(json!({"skill": "accept", "offer": 1})).is_err(), "the grammar carries `offer` now: send `ActTarget::Offer`'s id in `act_node`");
-    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}}));
+fn an_act_toward_an_offer_names_it() {
+    // Finding 7: an act toward an incoming offer names its sender and the offer it answers
+    // (rules-offers-2), and the grammar carries the reference; an offer of 0 names none.
+    let a: graph::Action = serde_json::from_value(json!({"skill": "accept", "offer": 1})).expect("the grammar carries `offer`");
+    assert_eq!(a.offer, Some(1));
+    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}, "offer": 9}));
+    assert_eq!(act_node("decline", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "decline", "target": {"id": 4}, "offer": 9}));
+    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 0 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}}));
+    // What it sends parses as the act it names.
+    let parsed = crate::acts::parse(act_node("decline", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), None, &Default::default()).unwrap();
+    assert_eq!((parsed.skill.as_str(), parsed.offer), ("decline", Some(9)));
 }

@@ -39,7 +39,7 @@ The fixture `scripts/goods.json` is a valley with Cullet's laws (`laws_file`), t
 ## Gotchas
 
 - `{"id": N}` targets resolve creatures before things, and node and creature ids are separate sequences: aim at `{"nearest": kind}`.
-- A placed structure stands 0.8 m east of the character; `place_near` puts a character 1 m east of another.
+- A placed structure stands 0.8 m east of the character; `place_near` puts a character 1 m east of another, or on the nearest free walkable tile within 6 m when that tile is blocked or taken ([steering.md](steering.md#admin-placement)).
 - Needs re-read warmth when the body is next looked at: allow tens of seconds for `rate_key` to follow a fire lit or gone out.
 - The script is past 128 KiB: `install_script` goes over HTTP (`Scene.call` does it for large arguments; `living/tools/install_script.py` elsewhere). A world made with a seed's laws must not get the plain script installed over them.
 

@@ -400,23 +400,14 @@ pub fn ago(ms: u64) -> String {
     }
 }
 
-fn level(v: &Value, key: &str) -> Option<&'static str> {
-    let x = v[key].as_f64()?;
-    Some(match key {
-        "health" if x >= 80.0 => "unhurt",
-        "health" if x >= 50.0 => "hurt",
-        "health" if x >= 25.0 => "badly hurt",
-        "health" => "near death",
-        "hunger" if x < 50.0 => "not hungry",
-        "hunger" if x < 80.0 => "hungry",
-        "hunger" if x < 97.0 => "very hungry",
-        "hunger" => "starving",
-        "energy" if x > 50.0 => "rested",
-        "energy" if x > 25.0 => "tired",
-        "energy" if x > 12.0 => "very tired",
-        "energy" => "exhausted",
-        _ => return None,
-    })
+/// The body in words by meter (`{"health": "unhurt", "hunger": "very hungry", …}`): the
+/// `felt` words of the world's `status_of` law, from the scene's numbers (`health` of
+/// `max_health`, 100 when not given; `hunger`, `energy`).
+fn levels(v: &Value) -> serde_json::Map<String, Value> {
+    let n = |k: &str| v[k].as_f64().map(|x| x as f32);
+    let (Some(hp), Some(hunger), Some(energy)) = (n("health"), n("hunger"), n("energy")) else { return Default::default() };
+    let b = crate::prompts::Body { hp, max_hp: n("max_health").unwrap_or(100.0), hunger, energy, ..Default::default() };
+    crate::prompts::felt_by_meter(&b).into_iter().map(|(k, w)| (k, json!(w))).collect()
 }
 
 fn failed(e: &Exp) -> bool {
@@ -470,7 +461,7 @@ pub fn state(i: &Inputs, lim: &Limits) -> Value {
     }
     let unanswered: Vec<String> = asks
         .iter()
-        .filter(|(to, (_, first, _, _))| !window.iter().any(|e| e.subject == **to && e.at_ms >= *first && matches!(e.kind.as_str(), "speech" | "gesture" | "heard")))
+        .filter(|(to, (_, first, _, _))| !window.iter().any(|e| e.subject == **to && e.at_ms >= *first && matches!(e.kind.as_str(), "speech" | "whisper" | "gesture" | "heard")))
         .filter(|(_, (lines, _, _, _))| *lines > 0)
         .map(|(_, (lines, first, last, silences))| {
             let mut s = format!("{last} — {lines} line{} to them since {}, no answer", if *lines == 1 { "" } else { "s" }, ago(i.now_ms.saturating_sub(*first)));
@@ -482,12 +473,7 @@ pub fn state(i: &Inputs, lim: &Limits) -> Value {
         .collect();
     let repeats = new.iter().filter(|e| e.kind == "repeat").count();
     let recent: Vec<Value> = i.thoughts.iter().rev().take(lim.recent_thoughts).rev().map(|(at, plan)| json!({"when": ago(i.now_ms.saturating_sub(*at)), "plan": cut(plan, 240)})).collect();
-    let mut body = serde_json::Map::new();
-    for k in ["health", "hunger", "energy"] {
-        if let Some(l) = level(i.body, k) {
-            body.insert(k.into(), json!(l));
-        }
-    }
+    let body = levels(i.body);
     json!({
         "character": {"name": i.name, "goals": i.goals},
         "current_plan": if i.plan.is_empty() { "(none)".to_string() } else { cut(i.plan, 300) },
@@ -835,7 +821,7 @@ mod tests {
         let asks = st["spoke_to_without_answer"].as_array().unwrap();
         assert_eq!(asks.len(), 1, "Ivo answered; Lyma did not: {asks:?}");
         assert!(asks[0].as_str().unwrap().contains("2 lines to them"), "{asks:?}");
-        assert_eq!(st["body"], json!({"health": "unhurt", "hunger": "very hungry", "energy": "very tired"}));
+        assert_eq!(st["body"], json!({"health": "unhurt", "hunger": "very hungry", "energy": "tired"}));
         assert_eq!(st["last_thought"], "about 2 minutes ago");
         assert!(s["perceived"].as_array().unwrap().iter().any(|l| l.as_str().unwrap().contains("Ivo")));
     }

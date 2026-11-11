@@ -164,7 +164,8 @@ fn address(
         }
         if !input.moving {
             let node = serde_json::json!({"do": "face", "target": {"id": id}});
-            let r = conn.reducers.human_act_then(node.to_string(), net.on_reply("face"));
+            let node = node.to_string();
+            let r = conn.reducers.human_act_then(node.clone(), net.on_reply("face", "human_act", || serde_json::json!({"node": node})));
             net.report("face", r);
         }
     }

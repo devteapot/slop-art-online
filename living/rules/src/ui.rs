@@ -62,8 +62,8 @@ vocab! {
         Item = "item",
         /// The ways chips in the text box (ways of speaking only).
         Box = "box",
-        /// An incoming offer or proposal: toward its sender (`target: {"id": sender}`), the offer
-        /// it answers as the act's reference once the grammar carries one (rules-offers-2).
+        /// An incoming offer or proposal: toward its sender (`target: {"id": sender}`), naming the
+        /// offer it answers (`"offer": id`).
         Offer = "offer",
     }
 }
@@ -448,8 +448,11 @@ pub fn on_by_spec(src: &Source) -> Vec<On> {
         return on;
     }
     if spec.needs_target {
-        on.push(On::Person);
-        if src.checked {
+        // A spec's `target_class` says what it may be aimed at.
+        if spec.takes_class("creature") {
+            on.push(On::Person);
+        }
+        if src.checked && spec.takes_things() {
             on.push(On::Thing);
         }
     } else {
@@ -725,6 +728,13 @@ pub fn offered<'a>(skills: &'a Skills, body: Option<&crate::species::Species>) -
         .collect()
 }
 
+/// What is offered toward a target of `class` (one of `catalog::TARGET_CLASSES`): the skills
+/// `offered` gives the body that take a target of that class (a spec's `target_class`, any when
+/// it names none). The same filter for players' lists and any reader that knows what it aims at.
+pub fn offered_toward<'a>(skills: &'a Skills, body: Option<&crate::species::Species>, class: &str) -> Vec<&'a SkillSpec> {
+    offered(skills, body).into_iter().filter(|s| s.takes_class(class)).collect()
+}
+
 /// Whether a skill is ongoing or real-time behaviour (it belongs in a graph or on the bar, not
 /// in a one-off act), for players and minds alike: [`Shapes::real_time_in`].
 pub fn real_time(skills: &Skills, shapes: &Shapes, skill: &str) -> bool {
@@ -744,8 +754,8 @@ pub enum ActTarget {
     Thing { kind: String, at: Option<[f32; 2]> },
     /// A point on the ground.
     At([f32; 2]),
-    /// An incoming offer: toward its sender. The offer's id goes with the act once the grammar
-    /// carries a reference (rules-offers-2); until then the act names the sender only.
+    /// An incoming offer: toward its sender, naming the offer it answers (`"offer": id`; 0
+    /// names none, and the rules take what stands from the sender).
     Offer { from: u32, offer: u64 },
 }
 
@@ -769,7 +779,14 @@ pub fn act_node(skill: &str, target: &ActTarget, picked: &Picked) -> serde_json:
     let mut leaf = json!({"do": skill});
     match target {
         ActTarget::Me => {}
-        ActTarget::Creature(id) | ActTarget::Offer { from: id, .. } => leaf["target"] = json!({"id": id}),
+        ActTarget::Creature(id) => leaf["target"] = json!({"id": id}),
+        // The offer it answers goes with it (`"offer": id`); 0 names none.
+        ActTarget::Offer { from, offer } => {
+            leaf["target"] = json!({"id": from});
+            if *offer != 0 {
+                leaf["offer"] = json!(offer);
+            }
+        }
         ActTarget::Thing { kind, .. } => leaf["target"] = json!({"nearest": kind}),
         ActTarget::At(p) => leaf["target"] = json!({"at": p}),
     }

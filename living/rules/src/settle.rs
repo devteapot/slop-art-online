@@ -39,7 +39,7 @@ mod plan;
 mod terrace;
 
 pub use metro::{District, MetroParams};
-pub use plan::{stranded_doors, validate as validate_plan, validate_all as validate_plans, Facing, Laid, LaidLot, LaidResource, LaidStructure, LevelSpec, LotSpec, PlanSpec, ResourceSpec, SpotSpec, StructureSpec, SquareSpec, StairSpec, StreetSpec};
+pub use plan::{stranded_doors, validate as validate_plan, validate_all as validate_plans, Facing, FixtureSpec, Laid, LaidFixture, LaidLot, LaidResource, LaidStructure, LevelSpec, LotSpec, PlanSpec, ResourceSpec, SpotSpec, StructureSpec, SquareSpec, StairSpec, StreetSpec};
 pub(crate) use plan::{covers as plan_covers, resolve as resolve_plan, site as plan_site, stamp_macro as stamp_plans, Resolved as PlanResolved};
 
 pub(crate) use terrace::Terrace;
