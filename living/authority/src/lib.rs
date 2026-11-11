@@ -124,7 +124,7 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     // The world's own law values (`world_law`: a seed's `rules`, `set_world_law`) are written
     // at the end of the installed source, so every client that compiles the `script` row reads
     // the laws in force (`living_rules::script::with_world_laws`).
-    let source = living_rules::script::with_world_laws(living_rules::script::without_world_laws(&source), &world_law_values(ctx));
+    let source = installed_source(&source, &world_law_values(ctx));
     let mut sc = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
         living_rules::script::Scripts::with_day(&source, common::world(ctx).day_ms)?
@@ -151,6 +151,13 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
     Ok(())
+}
+
+/// The text a script is kept as in the `script` row: `source` with the world's own law values
+/// written at its end, replacing any it carried. `install_source` and a seed's `rules`
+/// (`floor::world_laws`) write the row through it.
+pub(crate) fn installed_source(source: &str, values: &[(String, serde_json::Value)]) -> String {
+    living_rules::script::with_world_laws(living_rules::script::without_world_laws(source), values)
 }
 
 /// The world's own law values (`world_law` rows), by name.

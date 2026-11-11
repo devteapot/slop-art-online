@@ -84,6 +84,10 @@ STEPS = [
      "cmd": ["cargo", "build", "--manifest-path", "living/viewer/Cargo.toml", "--target", "wasm32-unknown-unknown", "--profile", "wasm-dev", "--bin", "living-viewer"]},
     {"name": "rules-tests", "lane": "debug", "packages": ["living-rules"], "dirs": ["debug"],
      "cmd": ["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-rules"]},
+    # A seed's own laws are in force after `init` (the authority's path, natively): what a
+    # harness installing another script over them would take away (fix-laws).
+    {"name": "seed-laws", "lane": "debug", "packages": ["living-authority"], "dirs": ["debug"],
+     "cmd": ["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--lib", "seed::tests::a_seeds_laws_are_in_force_after_init"]},
     # The fuel budget gate (docs/LIVING_CORE.md, "Fuel budgets"): the Rhai bench module and
     # sb-host, then gate.py over budgets.json. Its packages' closure is the bench and its
     # fixtures (bench), the module, sb-host with wasmtime's configuration (host/src/main.rs)

@@ -204,7 +204,7 @@ fn world_laws(ctx: &ReducerContext, s: &Seed) {
     // already run them (`check`).
     let mut k = common::clock(ctx);
     if let Some(mut row) = ctx.db.script().name().find("skills".to_string()) {
-        row.source = living_rules::script::with_world_laws(living_rules::script::without_world_laws(&row.source), &crate::world_law_values(ctx));
+        row.source = crate::installed_source(&row.source, &crate::world_law_values(ctx));
         row.revision = row.revision.max(k.scripts_rev) + 1;
         k.scripts_rev = row.revision;
         ctx.db.script().name().update(row);
