@@ -12,7 +12,7 @@
 
 use super::model::*;
 use super::theme::{self, Fonts};
-use super::{set_bg, set_color, set_text, show, HudRoot};
+use super::{label, set_bg, set_color, set_text, show, HudRoot};
 use crate::net::Net;
 use crate::verbs::{Row, Rules, Verbs};
 use bevy::picking::events::{PointerClick, PointerOver};
@@ -69,7 +69,8 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>) {
         .with_children(|root| {
             root.spawn((MenuRoot, Node { min_width: Val::Px(240.0), max_width: Val::Px(380.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(7.0), Val::Px(8.0)), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(12.0)), display: Display::None, ..default() }, theme::panel(12.0)))
                 .with_children(|m| {
-                    m.spawn((MenuTitle, Text::new(""), f.body(13.0, 800), TextColor(theme::GOLD), Node { margin: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(0.0), Val::Px(3.0)), ..default() }, Pickable::IGNORE));
+                    m.spawn((MenuTitle, Text::new(""), f.title(17.0), TextColor(theme::GOLD), Node { margin: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(1.0), Val::Px(4.0)), ..default() }, Pickable::IGNORE));
+                    m.spawn((Node { height: Val::Px(1.0), margin: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(0.0), Val::Px(4.0)), ..default() }, BackgroundColor(theme::GOLD_DIM), Pickable::IGNORE));
                     for i in 0..MENU_ROWS {
                         m.spawn((MenuRow(i), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(9.0), padding: UiRect::axes(Val::Px(6.0), Val::Px(3.0)), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, BackgroundColor(Color::NONE)))
                             .with_children(|r| {
@@ -150,21 +151,21 @@ pub fn fill(mut model: ResMut<HudModel>, v: Res<Verbs>, rules: NonSend<Rules>, n
     model.verbs.toasts = v.toasts.iter().rev().map(|t| (t.text.clone(), t.ok, (now - t.at) as f32)).collect();
     model.verbs.menu = v.menu.as_ref().map(|m| {
         let rows = m.rows().into_iter().take(MENU_ROWS).map(|r| match r {
-            Row::Pick(c) => c.label,
-            Row::Group { label, .. } => label,
+            Row::Pick(c) => label(&c.label),
+            Row::Group { label: l, .. } => label(&l),
         });
         let title = match (&m.group, &m.item) {
-            (Some(g), _) => format!("{} · {}", m.title, g.replace('_', " ")),
-            (None, Some(i)) => format!("{} · {}", m.title, i.replace('_', " ")),
-            _ => m.title.clone(),
+            (Some(g), _) => format!("{} · {}", label(&m.title), label(g)),
+            (None, Some(i)) => format!("{} · {}", label(&m.title), label(i)),
+            _ => label(&m.title),
         };
         MenuView { title, rows: rows.collect() }
     });
     if model.death.is_none() && v.menu.is_none() && v.compose.is_none() {
         if let Some(c) = &v.likely {
-            model.hint = Some(Hint { key: "F".into(), label: c.label.clone() });
+            model.hint = Some(Hint { key: "F".into(), label: label(&c.label) });
         } else if v.aim.is_some() && v.has_options {
-            model.hint = Some(Hint { key: "F".into(), label: format!("{} ▸", v.aim_name) });
+            model.hint = Some(Hint { key: "F".into(), label: format!("{} ▸", label(&v.aim_name)) });
         }
     }
     let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else {
@@ -201,10 +202,10 @@ pub fn fill(mut model: ResMut<HudModel>, v: Res<Verbs>, rules: NonSend<Rules>, n
         let n = all.len();
         let selected = v.selected.min(n.saturating_sub(1));
         let start = window_start(selected, n);
-        let skills = all.iter().skip(start).take(SKILL_ROWS).map(|s| s.name.replace('_', " ")).collect();
+        let skills = all.iter().skip(start).take(SKILL_ROWS).map(|s| label(&s.name)).collect();
         let detail = all.get(selected).map_or_else(SkillDetail::default, |spec| {
             let (takes, gives) = sc.and_then(|s| s.skill_io(&spec.name)).unwrap_or_default();
-            SkillDetail { name: spec.name.replace('_', " "), help: spec.help.clone(), takes, gives }
+            SkillDetail { name: label(&spec.name), help: spec.help.clone(), takes, gives }
         });
         KnowHowView { techniques, skills, selected, start, detail }
     });
@@ -288,8 +289,8 @@ pub fn panels(
         }
         for (r, mut t) in &mut texts.p1() {
             let s = match inv.rows.get(r.0) {
-                Some((item, n, note)) if note.is_empty() => format!("{}  ×{n}", item.replace('_', " ")),
-                Some((item, n, note)) => format!("{}  ×{n}   {note}", item.replace('_', " ")),
+                Some((item, n, note)) if note.is_empty() => format!("{}  ×{n}", label(item)),
+                Some((item, n, note)) => format!("{}  ×{n}   {note}", label(item)),
                 None if r.0 == 0 => "Nothing".to_string(),
                 None => String::new(),
             };
@@ -307,7 +308,8 @@ pub fn panels(
         set_bg(&mut bg, if start + r.0 == k.selected { theme::with_alpha(theme::GOLD, 0.18) } else { Color::NONE });
     }
     for mut t in &mut texts.p2() {
-        let s = if k.techniques.is_empty() { "You know no techniques yet.".to_string() } else { k.techniques.iter().map(|(t, src)| if src.is_empty() || src == "seed" { t.replace('_', " ") } else { format!("{} ({src})", t.replace('_', " ")) }).collect::<Vec<_>>().join(" · ") };
+        // How a newcomer's own techniques came is no news; a technique learnt says from whom.
+        let s = if k.techniques.is_empty() { "You know no techniques yet.".to_string() } else { format!("You know  {}", k.techniques.iter().map(|(t, src)| if src.is_empty() || src == "seed" || src.contains("newcomer") { label(t) } else { format!("{} ({src})", label(t)) }).collect::<Vec<_>>().join(" · ")) };
         set_text(&mut t, &s);
     }
     for (r, mut t) in &mut texts.p3() {
