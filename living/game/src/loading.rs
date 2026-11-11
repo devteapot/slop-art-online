@@ -58,6 +58,10 @@ impl Loading {
 #[derive(Component)]
 struct Cover;
 
+/// The cover's second line: why the world can't be reached, and when it is tried again.
+#[derive(Component)]
+struct CoverDetail;
+
 pub struct LoadingPlugin;
 
 impl Plugin for LoadingPlugin {
@@ -67,6 +71,7 @@ impl Plugin for LoadingPlugin {
             .insert_resource(Loading { fading: None, pipelines: (0, 0.0), done: false, prewarm: None })
             .add_systems(Startup, spawn)
             .add_systems(Update, prewarm)
+            .add_systems(Update, status)
             .add_systems(Last, lift);
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             render.insert_resource(count).add_systems(bevy::render::Render, counted.after(bevy::render::RenderSystems::Render));
@@ -88,8 +93,36 @@ fn spawn(mut commands: Commands, assets: Res<AssetServer>) {
             GlobalZIndex(i32::MAX),
         ))
         .with_children(|c| {
-            c.spawn((Text::new("Arriving…"), font, TextColor(Color::srgba(1.0, 1.0, 1.0, 0.85))));
+            c.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: px(8), ..default() }).with_children(|col| {
+                col.spawn((Text::new("Arriving…"), font.clone(), TextColor(Color::srgba(1.0, 1.0, 1.0, 0.95)), TextShadow::default()));
+                col.spawn((CoverDetail, Text::new(""), TextFont { font_size: bevy::text::FontSize::Px(15.0), ..font }, TextColor(Color::srgba(1.0, 1.0, 1.0, 0.9)), TextShadow::default(), TextLayout::justify(Justify::Center)));
+            });
         });
+}
+
+/// What the cover says while connected play has never got through: the server and why, and when
+/// it is tried again (play-test 1: "Arriving…" stayed up forever with nothing said).
+fn status(net: Option<NonSend<crate::net::Net>>, time: Res<Time>, covers: Query<Entity, With<Cover>>, children: Query<&Children>, mut texts: Query<(&mut Text, Has<CoverDetail>)>) {
+    let Some(net) = net.filter(|_| !crate::lookdev::enabled()) else { return };
+    let (title, detail) = if net.ever_live || net.attempts == 0 {
+        ("Arriving…".to_string(), String::new())
+    } else if net.status == crate::net::Status::Offline {
+        let why = if net.detail.contains("refused") || net.detail.contains("Connect") { "the server isn't answering".to_string() } else { net.detail.chars().take(90).collect() };
+        let wait = (net.retry_at - time.elapsed_secs_f64()).max(0.0).ceil() as u32;
+        ("Can't reach the world".to_string(), format!("{} · {}\n{why} · trying again {}", net.server, net.db, if wait > 0 { format!("in {wait} s (attempt {})", net.attempts) } else { "now".into() }))
+    } else {
+        ("Arriving…".to_string(), if net.attempts > 1 { format!("Connecting to {} · {} (attempt {})", net.server, net.db, net.attempts) } else { String::new() })
+    };
+    for cover in &covers {
+        for c in children.iter_descendants(cover) {
+            if let Ok((mut t, is_detail)) = texts.get_mut(c) {
+                let want = if is_detail { &detail } else { &title };
+                if &t.0 != want {
+                    t.0 = want.clone();
+                }
+            }
+        }
+    }
 }
 
 /// Spawn the prewarm characters once the island is there, packed round its arrival point (in the
@@ -125,8 +158,10 @@ fn lift(
     me: Query<(), (With<crate::lookdev::Fitted>, Or<(With<crate::envs::Player>, With<crate::gait::Feet>)>)>,
     fitted: Query<(), (With<crate::lookdev::Fitted>, With<crate::characters::outfit::Dressed>)>,
     cams: Query<Entity, With<Camera3d>>,
-    mut covers: Query<(Entity, &mut BackgroundColor, Option<&Children>, Has<UiTargetCamera>), With<Cover>>,
+    mut covers: Query<(Entity, &mut BackgroundColor, Has<UiTargetCamera>), With<Cover>>,
     mut texts: Query<&mut TextColor>,
+    children: Query<&Children>,
+    net: Option<NonSend<crate::net::Net>>,
 ) {
     if loading.done {
         return;
@@ -138,7 +173,7 @@ fn lift(
     }
     // Headless captures render the camera into an image: the cover targets that camera.
     if let Some(cam) = cams.iter().next() {
-        for (e, _, _, targeted) in &covers {
+        for (e, _, targeted) in &covers {
             if !targeted {
                 commands.entity(e).insert(UiTargetCamera(cam));
             }
@@ -146,7 +181,9 @@ fn lift(
     }
     let warmed = loading.prewarm.as_ref().is_none_or(|es| es.iter().all(|e| fitted.contains(*e)));
     let ready = island.as_ref().is_some_and(|i| i.settled()) && !me.is_empty() && warmed && now - loading.pipelines.1 > QUIET_S;
-    if loading.fading.is_none() && (ready || now > MAX_S) {
+    // Connected play that never got through keeps its cover: it says why (`status`).
+    let stranded = net.as_ref().is_some_and(|n| !crate::lookdev::enabled() && !n.ever_live);
+    if loading.fading.is_none() && (ready || (now > MAX_S && !stranded)) {
         info!("loading: the first view is in after {now:.1} s ({n} pipelines)");
         loading.fading = Some(now);
         for e in loading.prewarm.take().unwrap_or_default() {
@@ -156,14 +193,14 @@ fn lift(
     }
     let Some(t0) = loading.fading else { return };
     let a = 1.0 - ((now - t0) / FADE_S).clamp(0.0, 1.0);
-    for (e, mut bg, children, _) in &mut covers {
+    for (e, mut bg, _) in &mut covers {
         if a <= 0.0 {
             commands.entity(e).despawn();
             continue;
         }
         bg.0 = bg.0.with_alpha(a);
-        for c in children.into_iter().flatten() {
-            if let Ok(mut t) = texts.get_mut(*c) {
+        for c in children.iter_descendants(e) {
+            if let Ok(mut t) = texts.get_mut(c) {
                 t.0 = t.0.with_alpha(0.85 * a);
             }
         }

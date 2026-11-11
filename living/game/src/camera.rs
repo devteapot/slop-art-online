@@ -128,12 +128,19 @@ pub struct Cam {
     /// The ground point the cursor stays on while the view is turned by hand, so where I face
     /// doesn't change with the view.
     turn_lock: Option<Vec3>,
+    /// How far out the eye is (a share of the view's distance) while a building would hold it.
+    pull: f32,
 }
 
 /// The eye stays this far above the ground under it (m); it is lifted there smoothly, and
 /// never closer than [`CLEARANCE_MIN`].
 const CLEARANCE: f32 = 1.0;
 const CLEARANCE_MIN: f32 = 0.3;
+/// The eye keeps this far outside a building (m), comes in no closer than this share of its
+/// distance, and goes back out at this rate (1/s).
+const EYE_CLEAR: f32 = 0.6;
+const PULL_MIN: f32 = 0.2;
+const PULL_OUT: f32 = 3.0;
 /// How fast the lift rises over a hill behind and settles again once past it (1/s).
 const LIFT_UP: f32 = 10.0;
 const LIFT_DOWN: f32 = 2.5;
@@ -244,8 +251,7 @@ fn greet_partner(net: &Net, scene: &Scene, town: Option<&crate::town::Town>) -> 
     town.answered.iter().chain(town.greeted_by.iter()).map(|(id, at)| (*id, *at)).chain(town.greeting).filter(|(id, _)| near(*id)).max_by(|a, b| a.1.total_cmp(&b.1)).map(|(id, _)| id)
 }
 
-/// Who I am talking with: the latest speaker I heard in the last 8 s within 8 m, else (while
-/// typing) the nearest person within 6 m.
+/// Who I am talking with: the latest speaker I heard in the last 8 s within 8 m.
 fn talk_partner(net: &Net, scene: &Scene, input: &Input) -> Option<u32> {
     let (conn, me) = (net.conn.as_ref()?, net.my_id?);
     let (mine, _) = scene.shown.get(&me)?;
@@ -258,19 +264,10 @@ fn talk_partner(net: &Net, scene: &Scene, input: &Input) -> Option<u32> {
         .filter(|e| e.observer == me && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < 8_000.0 && near(e.subject, 8.0))
         .max_by_key(|e| e.at_ms)
         .map(|e| e.subject);
-    let typing = (input.chat_open || input.said.last().is_some_and(|(t, _)| scene.now_ms - (*t as f64) < 6_000.0))
-        .then(|| {
-            conn.db
-                .seen_characters()
-                .iter()
-                .filter(|b| b.id != me && b.kind == "person")
-                .filter_map(|b| scene.shown.get(&b.id).map(|(p, _)| (b.id, p.distance(*mine))))
-                .filter(|(_, d)| *d < 6.0)
-                .min_by(|a, b| a.1.total_cmp(&b.1))
-                .map(|(id, _)| id)
-        })
-        .flatten();
-    heard.or(typing)
+    // Opening the text box (or having just spoken) no longer frames the nearest person: the view
+    // jumped in to 8 m whenever a player started typing (play-test 1). An answer does.
+    let _ = input;
+    heard
 }
 
 fn diff(want: f32, from: f32) -> f32 {
@@ -294,7 +291,7 @@ pub fn follow(
     mut q: Query<(&mut Transform, &mut Projection, &Camera, &GlobalTransform, &mut DistanceFog), With<Camera3d>>,
     windows: Query<&Window>,
     ui: Res<crate::hud::UiWants>,
-    (town, combat, island, mut pointer): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>, Option<Res<crate::island::Island>>, ResMut<crate::pointer::Pointer>),
+    (town, combat, island, mut pointer, solids): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>, Option<Res<crate::island::Island>>, ResMut<crate::pointer::Pointer>, Query<(&Transform, &crate::lookdev::Fitted), (With<crate::envs::Solid>, Without<Camera3d>)>),
     time: Res<Time>,
 ) {
     let Ok((mut tf, mut proj, camera, gtf, mut fog)) = q.single_mut() else { return };
@@ -504,6 +501,26 @@ pub fn follow(
     let (up, _) = axes(cam.shown_yaw);
     let back = Vec3::new(-up.x, 0.0, -up.y) * pitch.cos() * dist;
     let mut eye = cam.focus + back + Vec3::Y * pitch.sin() * dist;
+    // Never inside a building: where the eye would be within one, it comes in along its line to
+    // the focus until it is clear of it (at once), and goes back out eased. A building merely in
+    // the way fades instead (`envs::cutaway`), so the distance doesn't change for it.
+    let mut pull = 1.0f32;
+    let reach = (eye - cam.focus).length().max(0.1);
+    for (t, f) in &solids {
+        if f.size.x <= 0.0 || t.translation.xz().distance(eye.xz()) > reach + 40.0 {
+            continue;
+        }
+        let (centre, half, rot) = crate::envs::fitted_box(t, f);
+        let inv = rot.inverse();
+        let pad = Vec3::splat(EYE_CLEAR);
+        if let Some((enter, exit)) = crate::envs::segment_box(inv * (cam.focus - centre), inv * (eye - centre), half + pad) {
+            if enter > 0.05 && enter < 1.0 && exit >= 1.0 {
+                pull = pull.min((enter - 0.02).max(PULL_MIN));
+            }
+        }
+    }
+    cam.pull = if pull < cam.pull || cam.pull == 0.0 { pull } else { cam.pull + (pull - cam.pull) * ease(PULL_OUT) };
+    eye = cam.focus + (eye - cam.focus) * cam.pull;
     // Above the ground behind: the island's on a land world, else the tiles'. Rising ground lifts
     // the eye smoothly and the view re-aims at the focus, rather than the eye popping up a hill
     // after it was aimed (and the view tilting off me).

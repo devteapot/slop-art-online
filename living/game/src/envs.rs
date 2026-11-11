@@ -48,6 +48,37 @@ pub struct Occluder {
     pub height: f32,
 }
 
+/// A building the camera may not enter (`camera::follow` pulls the eye in front of it).
+#[derive(Component)]
+pub struct Solid;
+
+/// A fitted thing's box: its centre, half extents and rotation (world).
+pub fn fitted_box(t: &Transform, f: &Fitted) -> (Vec3, Vec3, Quat) {
+    (t.translation + t.rotation * f.center, f.size * 0.5, t.rotation)
+}
+
+/// Where the segment from `a` to `b` (box space) enters and leaves the box of half extents `h`
+/// round the origin, as fractions of the segment; None when it misses.
+pub fn segment_box(a: Vec3, b: Vec3, h: Vec3) -> Option<(f32, f32)> {
+    let d = b - a;
+    let (mut t0, mut t1) = (f32::NEG_INFINITY, f32::INFINITY);
+    for i in 0..3 {
+        if d[i].abs() < 1e-6 {
+            if a[i].abs() > h[i] {
+                return None;
+            }
+            continue;
+        }
+        let (mut lo, mut hi) = ((-h[i] - a[i]) / d[i], (h[i] - a[i]) / d[i]);
+        if lo > hi {
+            std::mem::swap(&mut lo, &mut hi);
+        }
+        t0 = t0.max(lo);
+        t1 = t1.min(hi);
+    }
+    (t0 <= t1).then_some((t0, t1))
+}
+
 /// The character you walk around with.
 #[derive(Component, Clone, Copy)]
 pub enum Player {

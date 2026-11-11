@@ -143,6 +143,9 @@ struct Sets(HashMap<String, Arc<Set>>);
 struct Once {
     clip: &'static str,
     rate: f32,
+    /// Where in the clip it starts (s), and where its fade out begins (s).
+    from: f32,
+    cut: Option<f32>,
     /// When it started (the caller's ms), and the latest start asked for it (a confirmed
     /// prediction carries on under the authority's start).
     start_ms: f64,
@@ -513,7 +516,7 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
             o.key = x.start_ms;
         } else if x.start_ms <= m.now_ms && a.spent != Some((x.clip, x.start_ms)) {
             let upper = set.upper.contains_key(x.clip);
-            a.onces.push(Once { clip: x.clip, rate: x.rate, start_ms: x.start_ms, key: x.start_ms, hold: x.hold, w: 0.0, t: 0.0, upper });
+            a.onces.push(Once { clip: x.clip, rate: x.rate, from: x.from, cut: x.cut, start_ms: x.start_ms, key: x.start_ms, hold: x.hold, w: 0.0, t: x.from, upper });
             if a.onces.len() > 2 {
                 a.onces.remove(0);
             }
@@ -522,19 +525,21 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
     let last = a.onces.len().saturating_sub(1);
     for (i, o) in a.onces.iter_mut().enumerate() {
         let len = set.len(o.clip);
+        let end = o.cut.map_or(len, |c| c.min(len) + FADE_OUT * o.rate).min(len);
         let requested = i == last && want.is_some_and(|x| x.clip == o.clip && x.start_ms == o.key);
-        o.t = (((m.now_ms - o.start_ms) / 1000.0) as f32 * o.rate).max(0.0);
+        o.t = o.from + (((m.now_ms - o.start_ms) / 1000.0) as f32 * o.rate).max(0.0);
         if let Some(h) = o.hold {
             o.t = o.t.min(h * len);
         }
-        o.t = o.t.min(len);
-        let ending = o.hold.is_none() && (len - o.t) / o.rate.max(0.01) < FADE_OUT;
+        o.t = o.t.min(end);
+        let ending = o.hold.is_none() && (end - o.t) / o.rate.max(0.01) < FADE_OUT;
         let target = if requested && !ending { 1.0 } else { 0.0 };
         o.w = approach(o.w, target, dt / FADE_IN, dt / FADE_OUT);
     }
     let mut spent = a.spent;
     a.onces.retain(|o| {
-        let keep = o.w > 0.0 || want.is_some_and(|x| x.clip == o.clip && x.start_ms == o.key && o.t < set.len(o.clip));
+        let end = o.cut.map_or(set.len(o.clip), |c| (c + FADE_OUT * o.rate).min(set.len(o.clip)));
+        let keep = o.w > 0.0 || want.is_some_and(|x| x.clip == o.clip && x.start_ms == o.key && o.t < end);
         if !keep {
             spent = Some((o.clip, o.key));
         }
@@ -712,7 +717,7 @@ mod tests {
     fn a_new_move_replays_and_a_confirmed_one_carries_on() {
         let s = Arc::new(set());
         let mut a = anim(&s);
-        let act = |start: f64| Action { clip: "wave", rate: 1.0, start_ms: start, hold: None, face: None };
+        let act = |start: f64| Action { clip: "wave", rate: 1.0, start_ms: start, hold: None, face: None, ..Default::default() };
         step(&mut a, &s, &Motion { action: Some(act(0.0)), now_ms: 100.0, ..default() }, 0.1);
         assert_eq!(a.onces.len(), 1);
         assert!((a.onces[0].t - 0.1).abs() < 1e-4, "joins part-way when seen late");

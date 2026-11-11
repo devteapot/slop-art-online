@@ -90,6 +90,17 @@ fn scale(mut ui: ResMut<UiScale>, cams: Query<&Camera, With<Camera3d>>) {
 
 // ---- small helpers shared by the widgets --------------------------------------------------
 
+/// A rules name as the UI shows it: words, the first capitalised ("berry_bush" → "Berry bush").
+/// The rules' own names read as code in a list (play-test 1).
+pub(crate) fn label(s: &str) -> String {
+    let s = s.replace('_', " ");
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => s,
+    }
+}
+
 pub(crate) fn set_text(t: &mut Text, s: &str) {
     if t.0 != s {
         t.0 = s.to_string();
