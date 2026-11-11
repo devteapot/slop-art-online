@@ -41,6 +41,16 @@ pub struct Edges {
     pub bank_color: Vec4,
     /// Rain: x amount (0 = none), y slant, z brightness, w drift along z (fog banks).
     pub rain: Vec4,
+    /// The edge of my sight (`sightedge.rs`): xy where I stand (world x, z), z the radius (m),
+    /// w the mode (0 fade only, 1 not seen now, 2 limited view).
+    pub sight: Vec4,
+    /// Not seen now: x, y the soft band inside and beyond the radius (m), z dimming,
+    /// w desaturation.
+    pub sight_look: Vec4,
+    /// rgb: the fog's colour (linear), a: how far not seen now is flattened toward it.
+    pub sight_fog: Vec4,
+    /// x: where limited view is fully fogged, times the radius.
+    pub sight_far: Vec4,
 }
 
 /// Feed the finishing pass from the style profile, the sun and the camera.
