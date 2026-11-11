@@ -159,9 +159,10 @@ fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<f32> {
             None => inv.push((r.item, r.qty)),
         }
     }
-    let night = living_rules::is_night(hour);
+    // Night and how dark it is are the world's `daylight` law.
+    let (night, dark) = (sc.is_night(hour), sc.dark(hour));
     let actor = ActorFacts { id: me, kind: c.kind.clone(), inv, ..Default::default() };
-    let ctx = SkillCtx { actor, night, hour, ..Default::default() };
+    let ctx = SkillCtx { actor, night, dark, hour, ..Default::default() };
     match sc.senses(&ctx) {
         Ok(s) => Some(s.sight),
         Err(e) => {
@@ -295,7 +296,7 @@ mod tests {
         let ask = |night: bool, torch: bool| {
             let inv = if torch { vec![("torch".to_string(), 1)] } else { vec![] };
             let actor = ActorFacts { id: 1, kind: "person".into(), inv, ..Default::default() };
-            sc.senses(&SkillCtx { actor, night, hour: if night { 23.0 } else { 12.0 }, ..Default::default() }).unwrap().sight
+            sc.senses(&SkillCtx { actor, night, dark: if night { 1.0 } else { 0.0 }, hour: if night { 23.0 } else { 12.0 }, ..Default::default() }).unwrap().sight
         };
         let (day, night, torch) = (ask(false, false), ask(true, false), ask(true, true));
         assert!(day > torch && torch > night, "day {day}, torch {torch}, night {night}");

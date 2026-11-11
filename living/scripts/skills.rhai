@@ -269,7 +269,7 @@ fn wet(a) { a.raining && a.actor.kind == "person" && !a.actor.near_shelter }
 fn freezing(a) { a.season == "winter" || wet(a) }
 
 // Survival is secondary (docs/SEEDED_LIVES.md, "Survival made secondary"): a person feels
-// hungry from 50, about 42 real minutes (3.5 game days) before starving at 100.
+// hungry from 50, about 42 real minutes (3.5 game days on the 12-minute day) before starving at 100.
 fn body_state(a) {
     let fraction = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
     #{ cold: cold(a), hungry: a.actor.hunger > 50.0, starving: a.actor.hunger >= 100.0,
@@ -277,9 +277,11 @@ fn body_state(a) {
               else if fraction < 0.6 || a.actor.hurt_ago < 5000 { "hurt" } else { "" } }
 }
 
-// Need rates per minute for a body's state. The engine asks this when the state changes and
-// keeps the answer for every body in the same state; it then finishes the rates for each body's
-// own hunger, energy and genes with the numbers given here (rules/src/script.rs `NeedLaw`):
+// Need rates per game hour for a body's state (`per: "hour"`): the engine turns them into real
+// time for the world's day length (rules/src/script.rs `NeedLaw`), so a world with a longer day
+// keeps the same balance per game day. The engine asks this when the state changes and keeps the
+// answer for every body in the same state; it then finishes the rates for each body's own
+// hunger, energy and genes with the numbers given here:
 //   hunger, energy            the state's rates (energy before the tiring gene)
 //   starving_at, starving_hp  at or above this hunger, health changes by starving_hp
 //   fed_below, rested_above   otherwise, below this hunger and above this energy, health
@@ -289,28 +291,32 @@ fn body_state(a) {
 //   healing_gene              a rising health rate is multiplied by this gene
 //   wet_energy, cold_hp       exposure, added last
 //
-// Targets in real time, for people (a game day is 12 real minutes; the owner and the minds' calls
-// live in real minutes; docs/TRIALS.md "Fast iterations" 11): every person rate below is scaled by
-// `person_pace`, so a person's hunger rises 1.2 a minute awake (14.4 a game day): a meal brought
-// down to about 5 is wanted again at about 25 every 16–17 real minutes; it feels hungry at 50 and
-// starves at 100 about 42 minutes later; starving takes about 83 minutes (seven game days) to
-// kill a healthy body. Energy, rest, sleep, healing and exposure are scaled alike, so a person
-// spends the same share of its time sleeping. An ordinary night outside is uncomfortable
-// (tiring), not harmful; only winter nights and nights in the rain hurt without a fire, shelter
-// or a warm cloak. Animals keep their own rates (the ecology is tuned on them).
+// Targets for people on the 12-minute day (the island and the labs; docs/TRIALS.md "Fast
+// iterations" 11): every person rate below is scaled by `person_pace`, so a person's hunger rises
+// 0.6 a game hour awake (14.4 a game day; 1.2 a real minute there): a meal brought down to about
+// 5 is wanted again at about 25 every 33 game hours (16–17 real minutes); it feels hungry at 50
+// and starves at 100 about 83 game hours (42 minutes) later; starving takes about 167 game hours
+// (seven game days) to kill a healthy body. Energy, rest, sleep, healing and exposure are scaled
+// alike, so a person spends the same share of its time sleeping. An ordinary night outside is
+// uncomfortable (tiring), not harmful; only winter nights and nights in the rain hurt without a
+// fire, shelter or a warm cloak. Animals keep their own rates (the ecology is tuned on them).
+// These numbers are the per-real-minute ones the 12-minute day had, halved (its game hour is half
+// a real minute), so the island's rates in real time are what they were. `person_pace` was set
+// to pace people's needs to real time on that day; it is now a share of the game-time rates, so
+// a world with another day length sets its people's rates for its own day (a floor overlay).
 fn person_pace(x) { 0.3 }
 fn rates(a) {
-    // A predator feeds big and rarely: a wolf lasts about an hour on a deer.
-    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 4.0 };
-    let energy = -3.0;
+    // A predator feeds big and rarely: a wolf lasts about two game hours on a deer.
+    let hunger = switch a.actor.kind { "deer" => 3.0, "wolf" => 0.75, _ => 2.0 };
+    let energy = -1.5;
     let act = a.actor.activity;
     if act == "sleep" {
-        energy = if a.actor.near_shelter { 26.0 } else { 16.0 };
+        energy = if a.actor.near_shelter { 13.0 } else { 8.0 };
         hunger *= 0.5;
     } else if act == "rest" {
-        energy = 6.0;
+        energy = 3.0;
     } else if act == "block" {
-        energy = -12.0;
+        energy = -6.0;
     }
     // Elders heal slower and tire sooner; infants get hungry more slowly. (Death of old age
     // comes at each creature's own point late in its lifespan.)
@@ -322,20 +328,21 @@ fn rates(a) {
     // A suckling animal lives mostly on its mother's milk (not modelled on the mother).
     if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
     let r = #{
+        per: "hour",
         hunger: hunger, energy: energy,
         // Starving hurts; fed and rested, a body heals; with no energy left, it suffers.
-        starving_at: 100.0, starving_hp: -4.0,
-        fed_below: 70.0, rested_above: 15.0, healing_hp: 3.0, healing: healing,
-        spent_at: 0.0, spent_hp: -2.0,
+        starving_at: 100.0, starving_hp: -2.0,
+        fed_below: 70.0, rested_above: 15.0, healing_hp: 1.5, healing: healing,
+        spent_at: 0.0, spent_hp: -1.0,
         // Inborn endurance slows tiring; vitality speeds healing; a big appetite makes one
         // hungry sooner; hardiness divides what cold and wet weather take.
         tiring_gene: "endurance", healing_gene: "vitality", appetite_gene: "appetite", hardiness_gene: "hardiness",
         // Exposure tires: rain soaks people out from under a roof (a cloak keeps some of it
         // off), and a cold night without a fire, shelter or warm cloak is uncomfortable.
-        wet_energy: (if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 })
-            + (if cold(a) { -1.5 } else { 0.0 }),
+        wet_energy: (if wet(a) { if inv(a, "cloak") > 0 { -0.5 } else { -1.25 } } else { 0.0 })
+            + (if cold(a) { -0.75 } else { 0.0 }),
         // A cold night hurts only in winter or in the rain (a storm night).
-        cold_hp: if cold(a) && freezing(a) { if a.season == "winter" { -3.0 } else { -1.5 } } else { 0.0 },
+        cold_hp: if cold(a) && freezing(a) { if a.season == "winter" { -1.5 } else { -0.75 } } else { 0.0 },
     };
     if a.actor.kind == "person" {
         let k = person_pace(0);
@@ -457,10 +464,13 @@ fn graze_done(a) { [#{ op: "vitals", hunger: -14.0 }, #{ op: "graze" }] }
 
 // ---- rest ---------------------------------------------------------------
 
+// How long one sleep lasts: until rested at a sleeper's unpaced rate a game hour (13 beside a
+// shelter, 8 without), at least 5 s and at most 150 s of real time; a sleeper not yet rested
+// sleeps again.
 fn sleep_duration(a) {
-    let rate = if a.actor.near_shelter { 26.0 } else { 16.0 };
+    let rate = if a.actor.near_shelter { 13.0 } else { 8.0 };
     let need = 100.0 - a.actor.energy;
-    let ms = need / rate * 60000.0;
+    let ms = need / rate * hour_ms();
     if ms < 5000.0 { 5000 } else if ms > 150000.0 { 150000 } else { ms.to_int() }
 }
 fn rest_duration(a) { 8000 }
@@ -1691,7 +1701,30 @@ fn world_topics() {
 // A person in a state, as the needs law reads one (for descriptions).
 fn person_now(act, night) { #{ actor: #{ kind: "person", stage: "adult", activity: act, near_fire: false, near_shelter: false, inv: #{} }, night: night, season: "summer", raining: false } }
 
-fn calendar_law() { #{ cadence: "hot", topic: "time", about: "One day lasts 12 real minutes; night is 20:00-06:00." } }
+// When night falls and ends (hours of the day) and how long dusk and dawn take (game hours;
+// 0: the light turns at once). The shipped day turns at once at 06:00 and 20:00.
+fn night_hours() { #{ dusk: 20.0, dawn: 6.0, twilight: 0.0 } }
+// 0 to 1 along a smooth step.
+fn ease(x) { let t = if x < 0.0 { 0.0 } else if x > 1.0 { 1.0 } else { x }; t * t * (3.0 - 2.0 * t) }
+// How light it is at an hour of the day (0..24): 0 is night, 1 full day; night is less than half
+// light. With a twilight the light eases over it, half at dusk and at dawn. The engine reads it
+// once per game minute of the day and keeps it (rules/src/script.rs `Scripts::daylight`), so it
+// costs nothing per tick. Cold (`a.night`), sight (`light_of`; a floor may read `a.daylight`) and
+// sleepiness (the graphs' `night` weight, the darkness) follow it.
+fn daylight(hour) {
+    let n = night_hours();
+    if n.twilight <= 0.0 { return if hour >= n.dawn && hour < n.dusk { 1.0 } else { 0.0 }; }
+    let half = n.twilight / 2.0;
+    if hour < (n.dawn + n.dusk) / 2.0 { ease((hour - n.dawn + half) / n.twilight) } else { 1.0 - ease((hour - n.dusk + half) / n.twilight) }
+}
+
+// An hour of the day as "06:00".
+fn clock_text(h) { let m = (h * 60.0).round().to_int(); let hh = m / 60; let mm = m % 60; (if hh < 10 { "0" } else { "" }) + `${hh}:` + (if mm < 10 { "0" } else { "" }) + `${mm}` }
+fn calendar_law() {
+    let n = night_hours();
+    let dusk = if n.twilight > 0.0 { ` Dusk and dawn each take about ${short(n.twilight)} hour${if n.twilight == 1.0 { "" } else { "s" }}: the light goes and comes slowly.` } else { "" };
+    #{ cadence: "hot", topic: "time", covers: ["daylight", "night_hours"], about: `One day lasts ${short(day_minutes())} real minutes; night is ${clock_text(n.dusk)}-${clock_text(n.dawn)}.${dusk}` }
+}
 
 // The need rates of a grown person awake by day (for descriptions); () when the rates law
 // cannot say (a world's own rates, or rates given finished).
@@ -1700,10 +1733,13 @@ fn rates_awake() {
     ()
 }
 
+// A rate of the rates law in real minutes, as the engine turns it (`per`: a game hour or a minute).
+fn per_real_minute(r, x) { if r.per == "hour" { x * 60000.0 / hour_ms() } else { x } }
+
 fn needs_law() {
     let awake = rates_awake();
     let l = laws();
-    let rise = if awake == () { "hunger rises over time (100 = starving, which drains health); energy falls" } else { `hunger rises ~${short(awake.hunger)}/min (${short(awake.starving_at)} = starving, which drains health); energy falls ~${short(-awake.energy)}/min` };
+    let rise = if awake == () { "hunger rises over time (100 = starving, which drains health); energy falls" } else { `hunger rises ~${short(per_real_minute(awake, awake.hunger))}/min (${short(awake.starving_at)} = starving, which drains health); energy falls ~${short(-per_real_minute(awake, awake.energy))}/min` };
     #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing"],
        about: `${rise} awake and recovers while sleeping (faster within ${short(l.shelter_warmth)} m of a shelter or house). At night, people farther than ${short(l.fire_warmth)} m from a campfire and ${short(l.shelter_warmth)} m from a shelter or house, and without a warm cloak, are cold: it tires them, and on winter nights or in the rain it also costs health. Health recovers slowly when fed and rested. Death is permanent.` }
 }
