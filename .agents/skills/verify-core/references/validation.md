@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-11 plan-1 (dev-box)
+
+Branch `plan-1` (hand-authored plans, docs/AUTHORED_PLANS.md; it adds `lot:<id>` place kinds in `town::seat` and seed `homes`, unused by the island), own container `plan1-stdb` (2.14.1, port 3311), private `CARGO_TARGET_DIR`. `town.py` `core-plan1-town-20261111-135920` on the island: 22 of 23; the failure is the recorded flake "a resident faces someone who comes up behind them" (Cuth Marrow, player stopped 1.6 tiles away). Not run: the baseline scenes, skirmish, dealings, lives, infant, lifecycle, wildlife.
+
 
 ## 2026-11-11 lives-2 after merging laws-2 (dev-box)
 

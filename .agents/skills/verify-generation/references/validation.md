@@ -1,5 +1,11 @@
 # Validation record (generation)
 
+## 2026-11-11 plan-1: hand-authored plans (dev-box)
+
+Branch `plan-1` (from `6593f725`), own container `plan1-stdb` (2.14.1, port 3311, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. A maintain pass of this skill ran with it (new [plans](../features/plans.md) feature; drift fixed in seeded-world, floors, seed-guards, authored-worlds, repeatability and SKILL.md).
+- `generation-plan1b-20261111-135743` (`--feature worlds --seeds island,plan-test,floor-megacity-2k,floor-megacity-4k`): island 975, plan-test 67, floor-megacity-2k 73 and floor-megacity-4k 87 checks pass; `land` digests equal `floor_preview`'s on all four; original seeds unchanged. plan-test's `check_plans`: one `cullet` settlement, 9 lots in plan order with their kinds, sizes, models, heights and level floors, walkable doors, households `hollis` and `wren` owning and living at `house_a` and `house_d`, the Tally Hall's sign at lot `hall`, the `hall` and `inn` places at their lots. The 4 km floor: `create_floor refuses a plan whose stair disagrees with its levels` ("rises 3 m"); staged creation 142 steps in 43.1 s with other runs on the server.
+- `generation-plan1w-20261111-140418` (the other worlds and a second `realm`): realm 26, valley 38, authored-test 40, aske-coast 282, stage3-village 22, realm 26; repeatability passes. `generation-plan1a-20261111-140418`: authored aske-coast and island compile offline. `generation-plan1g-20261111-140418`: the six `seed::tests`, the malformed seed refused.
+- An earlier attempt (`generation-plan1-20261111-134705`) failed plan-test's generic town-life checks ("workers have a workplace", "residents start on the seed's own ways") because the seed had no `town_life.work` or `ways`; the seed gained both. "Original seeds unchanged" failed there because `living/seeds/cullet.json` was written during the run.
 
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
