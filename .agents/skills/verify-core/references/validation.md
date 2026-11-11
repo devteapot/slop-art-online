@@ -19,6 +19,7 @@ Branch `goods-1` (origin/main `4df9a895` merged), own container `goods1-stdb` (2
 - Mechanics 23 of 23 (`core-g1-11111404-mechanics`), steering 5 of 5 (`-steering`), `skirmish` and `dealings` on island worlds pass.
 - New: `goods` 20 of 20 and `stock` 4 of 4 on the goods fixture (`core-g1-11111404-goods`). An earlier attempt (`core-goods-135558`) passed the 20 fire and recipe checks and failed the shared-stock check because the valley also grows wild fishing spots; the stock check moved to its own scene, which selects pooled nodes.
 - Harness: `install_script` goes over HTTP (the script passed 128 KiB, past one command-line argument): `verify.py launch` and `call @FILE`, `Scene.call` for large arguments, `codes.py`.
+- **After merging origin/main `6a905c31` (rules-1, plan-1)**, on the merged build: `cargo_checks.py` (`core-g3-11111501`) rules 149, authority 12, mind 82, viewer sync 5; tick 6, needs 7, food 4, refusal 4, seize 6, sight 6, senses 7, moves 5, `codes.py` 14, all pass; mechanics 23, steering 5, skirmish 8, dealings 16 pass; `goods` 22 (the fixture now names Cullet's laws: the seeded hearth lit for its fuel's burn and a seeded kelp bed, then the same chain) and `stock` 4 pass; rules-1's `laws` on `cullet-laws` (`core-g3-laws-11111501`, its lamp now burning seeded oil) 15 pass. `set -o pipefail; just living-check` exits 0.
 - Not run: `town.py`, `lives.py`, `infant`, lifecycle, wildlife, remains, flee (long scenes; the rules they read did not change except warmth, which the goods scene and `needs` cover).
 
 

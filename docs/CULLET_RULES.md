@@ -48,7 +48,7 @@ So in Cullet light, sight and sleepiness change over the hour around dusk and da
 
 Two new facts, as general primitives:
 
-- **Lamplight.** A structure kind may give light: the `lights` trait in `structure_traits()` (metres). `a.actor.lit` is true within that radius of such a structure (`common::lit_at`, one look round the body; it returns at once when no kind gives light, which is the shipped script). `lamp` is a new structure kind (in `catalog::STRUCTURES`), for a seed or an authored plan to place; the shipped script gives it no traits and the clients draw nothing particular for it yet.
+- **Lamplight.** A structure kind may give light: the `lights` trait (metres; in `structure_traits()` here, a trait of `structures()` since `goods-1`). `a.actor.lit` is true within that radius of such a structure (`common::lit_at`, one look round the body; it returns at once when no kind gives light, which is the shipped script). `lamp` is a structure kind for a seed or an authored plan to place; the shipped script gives it no traits and the clients draw nothing particular for it yet. **Since `goods-1`** a kind that `burns` gives its light only while lit, and Cullet's lamp burns oil (0.25 a game hour, holds 8): a lamp out of oil is dark. `cullet-laws.json` seeds its lamp with 8 units, 32 game hours ([goods](WORLD_RULES.md#goods-recipes-and-fuel)).
 - **Glow.** `glow(a)` is a hot law like `senses`: how far a creature is seen from because of a light on it (0: only by an onlooker's own sight). An onlooker sees a creature within the wider of its own sight and the creature's glow, with a clear sight line. `senses_law()`'s `reach.glow` bounds it, and onlookers are gathered within it. The shipped script has no `glow`, and then nothing changes: the reach is 0, no glow is asked, the gather radius is the sight.
 - **Where it applies.** The sight rule everywhere the authority uses it: players' perceived sets (`perception::sweep_one`), graph scenes and minds' percepts (`perception::visible`), witnesses (`perceive::witnessed`), the combat feed and witnesses of a death (`combat.rs`), a player's act on someone (`act.rs`), and what a predator senses.
 
@@ -81,7 +81,7 @@ Values per game hour unless noted; in brackets per real minute on that world's d
 | Sight in the dark / carrying a torch | 6 / 9 m | 14 / 20 m, easing with the light at dusk and dawn | Decision 6 |
 | Seen at night, standing in lamplight | 6 m | 28 m (`lamplight_seen`, `glow`) | Decision 6 |
 | Seen at night, carrying a light | 6 m | 48 m (`carried_light_seen`) | §5 |
-| What gives light | nothing | campfire, hall and inn 6 m; lamp 8 m (`structure_traits`) | |
+| What gives light | nothing | campfire, hall and inn 6 m; lamp 8 m while it has oil (`structures`) | |
 | Name and health band shown | within sight | within 24 m (`known_within`, `perceived_of`) | Decision 6 |
 | Speech | 9 m | 12 m (`hearing_of_people`) | §5 |
 | A shout | none | none (not built) | 30 m |

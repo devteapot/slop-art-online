@@ -483,7 +483,8 @@ They are the goods section of Cullet's laws, [`living/seeds/worlds/cullet/laws.r
 
 | Path | Reads | Writes | Recipients | Frequency | Growth |
 | --- | --- | --- | --- | --- | --- |
-| Warmth (`act::warmth`, in `facts` and the needs' look) | structures in the chunks within the farthest warmth, shelter or light radius (the cached chunk lists, as before; the radius is 6 m for Cullet's furnace instead of 3.5) | — | — | as before | — |
+| Warmth (`act::warmth`, in `facts` and the needs' look) | structures in the chunks within the farthest warmth or shelter radius (the cached chunk lists, as before; the radius is 6 m for Cullet's furnace instead of 3.5) | — | — | as before | — |
+| Lamplight (`common::lit_at`) | as rules-1 left it, plus each lit fire's `lit_until_ms` on the rows it already reads | — | — | as before | — |
 | `feed` | the structure row, the items table entry | 1 `structure` row (`lit_until_ms`), the pack's inventory row | `structure` subscribers | per feeding | — |
 | `make` with heat | the structure row | pack inventory rows; 1 `structure` row | as above | per recipe made | — |
 | A fire burning down | — | — | — | — | — |
@@ -494,7 +495,7 @@ No whole-World scan was added. A fire costs nothing while it burns: no per-tick 
 ### Costs (measured)
 
 - **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
-- **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here.
+- **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here. After merging rules-1 and plan-1 (main `6a905c31`): rates 8,566, rates-law 212,202 (still the only law over budget), strike 274,209, cooldown 1,704, perceived 70,038, hook 450,841, senses 3,143, senses-law 41,866, moves 1,956.
 - **Not measured:** tick time and subscription volume at population. A fire changes one public row per feeding or recipe made; at Cullet's 64 residents that is a few rows a game hour.
 
 ## Day length, game-hour rates, a seed's laws, light (rules-1)

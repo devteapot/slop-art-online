@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-11 goods-1 (dev-box)
+
+Own container `goods1-stdb` (port 3313), merged build (rules-1, plan-1). `player-g3-11111531`: `new_skill.py` 6 of 6 (it installs the script, now over HTTP through the harness) and `told.py` 12 of 12 pass. The player path did not change; `feed` and `make` are skills from the script like `whittle`, and are not offered in the shipped world (no fires that burn fuel, no recipes).
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
