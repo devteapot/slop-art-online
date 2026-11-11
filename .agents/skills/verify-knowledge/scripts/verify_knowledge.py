@@ -21,7 +21,8 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[4]
 SHARED = ROOT / '.agents/skills/verify/scripts/verify.py'
 FAKE = ROOT / '.agents/skills/verify-llm/scripts/fake_llm.py'
-BUILD = ROOT / '.local/living/verify/build-knowledge'
+# A worker's one build tree (CARGO_TARGET_DIR) when set; else the runner's own.
+BUILD = Path(os.environ['CARGO_TARGET_DIR']) if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/verify/build-knowledge'
 TESTS = ('minds_revise_merge_and_fade', 'recall_by_cues_and_forgetting',
          'formative_past_outlasts_ordinary_beliefs', 'authored_memories_are_recalled',
          'grounds_link_stories_and_lessons', 'hearsay_fades_faster_until_corroborated',
@@ -643,7 +644,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['run', 'world-know-how', 'cleanup'])
     parser.add_argument('--run', required=True)
-    parser.add_argument('--target-dir', help='world-know-how: build the module here (the shared harness\'s --target-dir)')
+    parser.add_argument('--target-dir', help='build the module here (the shared harness\'s --target-dir; default CARGO_TARGET_DIR when set)')
     args = parser.parse_args()
     run = Run(args.run, existing=args.action == 'cleanup')
     if args.action == 'cleanup':
@@ -653,7 +654,7 @@ def main():
     if args.action == 'world-know-how':
         # Authority only (no Neo4j, no mind): a world made with Cullet's laws.
         try:
-            run.harness('launch', '--seed', 'cullet-laws', *(['--target-dir', args.target_dir] if args.target_dir else []))
+            run.harness('launch', '--seed', 'cullet-laws', *(['--target-dir', args.target_dir or os.environ['CARGO_TARGET_DIR']] if args.target_dir or os.environ.get('CARGO_TARGET_DIR') else []))
             run.harness('doctor')
             run.world_know_how()
         except BaseException as caught:
@@ -666,7 +667,7 @@ def main():
         print(f'World know-how proof passed. Evidence retained at {run.directory}', flush=True)
         return
     try:
-        run.harness('launch', '--seed', 'authored-test')
+        run.harness('launch', '--seed', 'authored-test', *(['--target-dir', args.target_dir or os.environ['CARGO_TARGET_DIR']] if args.target_dir or os.environ.get('CARGO_TARGET_DIR') else []))
         run.harness('doctor')
         run.start_neo4j()
         run.graph_tests()

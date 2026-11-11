@@ -1,5 +1,21 @@
 # Internal mind validation
 
+## 2026-11-12 fix-dealings: `dealings` passes again on main (dev-box)
+
+Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14.1, port 3332, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 4–72 from other work.
+
+- **Reproduced on main** (`minds-fixdeal-r1`, and by hand on scratch worlds): the demander's `demand` was refused with "no #1 in sight", so no record was made.
+- **Breaking merge: fix-place-free (`e3f0527f0`).** `place_near` now takes the nearest free walkable tile. Beside the default world's first adult, a guard standing in the north gate (404,338) with walls east and west of it, that tile is the diagonal (405,337), across the wall's end.
+  - `Map::sight_walk` broke an exact corner tie toward y, so the demander's line entered the wall tile (405,338) while the guard's line back went through open ground. The guard saw the demander and not the reverse.
+  - Before fix-place-free, `place_near` put the demander inside the wall tile east of the gate, and an end tile never blocks. Probes (no mind) at 3c73d835, e3f0527f0, 28c8e7b0 and e417c08e, with the guard in the north gate, show where it lands. At the east gate (420,354) the tile east of her is open ground and the demand is made, at fix-place-free's parent and at fix-place-free alike.
+  - The candidate merges after 46fa9db3 (exp-greet, look-2, hearth-1, fix-store-scrub-5, fix-look-label) do not take part.
+- **Second cause, in the driver:** neither adult was held before placing, so the guard walked to her post and the demander to the berry bushes while the mind service started (`r1`: the demander last saw the guard 10 m away).
+- **Fix:** the corner rule in the rules crate (verify-core record of the same date). The case now holds both adults before `place_near`, as `answers` does, and keeps recipes-1's ask/met race fix (`f08665f2f`).
+- **Results:**
+  - `dealings`: 3/3 (`minds-fixdeal-d1`–`d3`). In 20 more runs (`n01`–`n20`) the case passed 19 times. n18 failed before the case, in the runner's unit tests: `llm::tests::unreachable_provider_holds_calls` measured the gate's 2 s pause from the first call's return, a few ms after the failure that starts it (1.9966 s under load). Its clock now starts before the first call. The n18 slot rerun (`n18b`) passes, unit tests included: 20 of 20 case runs pass.
+  - `sight` and `fov` pass (`minds-fixdeal-m1`).
+  - `takeover` failed once in `m1`: its "in flight" think came within `think_min_s` of the second takeover's own deliberation (22:57:08 against 22:57:06–:14), so the authority asked nothing. That is the cadence race recipes-1 fixed in `dealings`, not sight. It passed alone (`minds-fixdeal-t2`). Not fixed here.
+
 ## 2026-11-11 greeting switches on by default (exp-greet after main 990ab80, Spark)
 
 Branch `exp-greet` with origin/main and `greet-result` merged. The defaults are now `LIVING_GREET=nearest`, `LIVING_PARK=concurrent` and the law `speech_audience` on. Trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, host load 24–32 from other batches.
@@ -22,6 +38,16 @@ Branch `exp-greet` (main 90f6fac with `exp-hamlet-births` merged), worktree, the
 - Earlier attempts and what they taught (evidence kept). In `minds-greet-20261111-145055` and `minds-greet2-…`, `greet` failed on its own test. A restarted service replays speech under 30 s old, so the next arm answered the previous arm's line, and the chronicle query had no order. The residents also drifted out of the facing cone before the line (0.73 rad). The case now lets each line age out, sorts by id, re-places everyone before the facing line, and checks the answers against the rule's own reading of the `audience` row. `alongside` failed twice on setup: think prompts do not carry the request marker, and the warm-up think used up a delayed rule. It passed in `minds-greet4-…`.
 - Unit tests (`cargo test -p living-mind talk`): `greet_off_is_the_old_rule` (every combination of a line's facts decides as before under `off`), `greet_modes_draw_in_one_stranger_and_not_the_hostile`, `the_faced_hearer_is_the_one_straight_ahead`, `a_line_gets_its_turn_alongside_only_when_the_deliberation_cannot_answer_it`, `switches_default_off_and_refuse_typos`.
 - Not run here: the rest of the suite (roundtrip, acts, consolidation, prune, reject, only, reconnect, lod, takeover, sight, resident, animals, night, jev, rethink, dealings). This change does not touch their paths: the switches are off by default and only conversation code reads them.
+
+## 2026-11-11 recipes-1: crafting, cooking and smoking as recipes (dev-box)
+
+Branch `recipes-1` (from main `3c73d835`), own container `recipes1-stdb` (2.14.1, port 3327, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR` (the island cases now build there too), `scoped`, fake model only. The host ran other workers and, during the suite, this branch's eight-minute release comparison.
+
+- Full suite `minds-recipes1-214923`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, drop, night, rethink, rethink-llm, parked, death-names, frame and reasons pass; consolidation its known XFAIL; `animals` its known gap (timed out waiting for a request answered by instinct); `fov`, `resident` (a lesson taught through `mind_act`), `jev` and `dealings` timed out.
+- Alone (`minds-recipes1b-223738`): `fov`, `resident` and `jev` pass. `dealings` failed again the same way: the mind had already deliberated with the demand and paid the stone ("You did what you had decided: give stone → person"), but the case, finding no pending deliberation, asked again and waited 65 s for a row that had come and gone. Harness race, fixed in the case: it asks again only while the demand is open, and takes the pending request or the demand met. Then `dealings` passes (`minds-recipes1c-224221`).
+- `paid_safety.py` passes (inert children, no model calls).
+- After merging main `46fa9db3` (`minds-recipes1m-231946`): `roundtrip`, `acts` and `resident` pass. `dealings` fails, and failed four more times alone: the demander's `demand` through admin `mind_act` is refused "no #1 in sight" (`demander-experiences.json`), so no record is made; placing it again once held did not help. **The same failure on main itself**: an export of `origin/main` `28c8e7b0` with its own skill, built apart, failed it twice the same way (`minds-mainctl1-233120`, `minds-mainctl2-233433`, evidence moved under this worktree's `.local/living/verify/`). So it is main's, not this branch's; its cause (what the demander perceives right after `place_near` since fix-place-free and look-2) is not established here. One attempt also failed the mind's own test `llm::tests::unreachable_provider_holds_calls` (a timing test; it passed in the other runs).
+- What recipes-1 changes for minds: nothing they are told (the skill reference and the world text are bit-identical, `making_check::making_is_bit_identical`); `acts` and `resident` drive deliberate acts and teaching through the same skills.
 
 ## 2026-11-11 fix-health-leak: a fighting mind's prompts carry its opponent's band (Spark)
 

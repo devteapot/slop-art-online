@@ -47,6 +47,7 @@ DATA = os.path.join(HERE, "types.json")
 Z = [0.04, 0.12, 0.20, 0.28, 0.40, 0.52, 0.64, 0.76, 0.88]  # the heights sections are kept at, in H above the chin
 BANDS = [("child", 0, 12), ("youth", 12, 18), ("adult", 18, 60), ("elder", 60, 200)]
 LINES = dict(a="round", b="even", c="long")
+HEAD_IN_FILE = 0.2564  # a head's height in a character file, m (cage_head.H_FILE): the rest figure of 1.795 m is 7 heads
 
 
 def smooth(x):
@@ -62,9 +63,9 @@ def lerp(a, b, t):
 # The rig: which bones carry identity.
 
 # (bone, parent, part, where its pivot sits, [(value, what it does, axis, least, most, unit, note)])
-# Axes are the bone's own at rest, which are the head's unless a note says the bone is turned:
-# x across (for a paired bone, away from the midline on both sides), y forward, z up. In a
-# character file that is X, -Z and Y. `move` is in thousandths of the head's height H, so a
+# Axes are the head's (every identity bone's rest rotation is none): x across (for a paired bone,
+# away from the midline on both sides), y forward, z up; `o` is out of the cheek, 0.55 x + 0.83 y.
+# In a character file x, y, z are X, -Z and Y. `move` is in thousandths of the head's height H, so a
 # value keeps its meaning on any head; `scale` is a factor; `turn` is degrees (for a paired
 # bone the same sense on both sides: outer ends up, or outward). Least and most need not mirror
 # each other: each direction has its own designed reach. A value named as one of pass 2's 34
@@ -79,46 +80,46 @@ RIG = [
     ("J_Id_Glabella", "J_Id_Cranium", "brows", "between the brows", [
         ("brow_ridge", "move", "y", -4, 12, "‰H", "pass 2's `brow_ridge`")]),
     ("J_Id_Face", "J_Bip_C_Head", "outline", "the bridge of the nose", [
-        ("face_length", "scale", "z", 0.92, 1.10, "×", "pass 2's `face_length`: everything below the eyes"),
+        ("face_length", "scale", "z", 0.92, 1.095, "×", "pass 2's `face_length`: everything below the eyes"),
         ("face_width", "scale", "x", 0.94, 1.07, "×", "pass 2's `face_width`")]),
     ("J_Id_Corner_L", "J_Id_Face", "outline", "the cheek corner beside the eye", [
-        ("front_breadth", "move", "x", -16, 16, "‰H", "new: how broad the front planes are")]),
+        ("front_breadth", "move", "x", -16, 12, "‰H", "new: how broad the front planes are")]),
     ("J_Id_Zygoma_L", "J_Id_Face", "outline", "the cheekbone's point", [
         ("cheekbones", "move", "x", -12, 16, "‰H", "pass 2's `cheekbones`"),
         ("cheekbone_height", "move", "z", -12, 12, "‰H", "new")]),
     ("J_Id_Cheek_L", "J_Id_Face", "outline", "the cheek's fullest point", [
-        ("cheeks", "move", "y", -12, 20, "‰H", "pass 2's `cheeks`: hollow to full; this bone is turned at rest to face out of the cheek, so its forward is the surface's normal")]),
+        ("cheeks", "move", "o", -9, 20, "‰H", "pass 2's `cheeks`: hollow to full, out of the cheek (0.55 away from the midline and 0.83 forward)")]),
     ("J_Id_Jaw", "J_Id_Face", "outline", "the jaw's hinge, under the ear", [
         ("jaw_width", "scale", "x", 0.88, 1.14, "×", "pass 2's `jaw_width`"),
-        ("jaw_angle", "turn", "x", -4.0, 5.0, "°", "new: a steeper or flatter jaw line")]),
+        ("jaw_angle", "turn", "x", -2.0, 2.5, "°", "new: a flatter or steeper jaw line (the chin up or down about the jaw's hinge)")]),
     ("J_Id_Gonion_L", "J_Id_Jaw", "outline", "the angle of the jaw", [
         ("jaw_square", "move", "x", -10, 14, "‰H", "pass 2's `jaw_square`: tapered to square")]),
     ("J_Id_Chin", "J_Id_Jaw", "outline", "the chin's point", [
-        ("chin_length", "move", "z", -28, 20, "‰H", "pass 2's `chin_length` (down is longer)"),
+        ("chin_length", "move", "z", 20, -28, "‰H", "pass 2's `chin_length`: short (the chin's point up) to long (down)"),
         ("chin_width", "scale", "x", 0.70, 1.40, "×", "pass 2's `chin_width`: pointed to broad"),
         ("chin_forward", "move", "y", -16, 20, "‰H", "pass 2's `chin_forward`")]),
     ("J_Id_Orbit_L", "J_Id_Face", "eyes", "the eye's middle, on the skin", [
         ("eye_spacing", "move", "x", -12, 14, "‰H", "pass 2's `eye_spacing`"),
-        ("eye_height", "move", "z", -14, 14, "‰H", "pass 2's `eye_height`"),
+        ("eye_height", "move", "z", -14, 10, "‰H", "pass 2's `eye_height`"),
         ("socket_depth", "move", "y", -10, 8, "‰H", "new: the eye set deeper or shallower"),
-        ("eye_size", "scale", "xyz", 0.88, 1.13, "×", "pass 2's `eye_size`"),
-        ("eye_open", "scale", "z", 0.82, 1.18, "×", "pass 2's `eye_open`"),
+        ("eye_size", "scale", "xyz", 0.88, 1.105, "×", "pass 2's `eye_size`"),
+        ("eye_open", "scale", "z", 0.82, 1.125, "×", "pass 2's `eye_open`"),
         ("eye_tilt", "turn", "y", -6.0, 7.0, "°", "pass 2's `eye_tilt`: outer corners down to up")]),
     ("J_Adj_L_FaceEye", "J_Id_Orbit_L", "eyes", "behind the eye (the bone the look turns; it exists today)", [
         ("iris_size", "scale", "xyz", 0.90, 1.10, "×", "pass 2's `iris_size`")]),
     ("J_Id_Brow_L", "J_Id_Face", "brows", "the brow's middle", [
-        ("brow_height", "move", "z", -12, 16, "‰H", "pass 2's `brow_height`"),
+        ("brow_height", "move", "z", -9.5, 16, "‰H", "pass 2's `brow_height`"),
         ("brow_tilt", "turn", "y", -8.0, 8.0, "°", "pass 2's `brow_tilt`"),
         ("brow_thickness", "scale", "z", 0.70, 1.40, "×", "pass 2's `brow_thickness`"),
         ("brow_length", "scale", "x", 0.90, 1.12, "×", "pass 2's `brow_length`")]),
     ("J_Id_Nose", "J_Id_Face", "nose", "the bridge, between the eyes", [
-        ("nose_length", "scale", "z", 0.85, 1.20, "×", "pass 2's `nose_length`"),
+        ("nose_length", "scale", "z", 0.85, 1.13, "×", "pass 2's `nose_length`"),
         ("nose_width", "scale", "x", 0.80, 1.25, "×", "pass 2's `nose_width`"),
         ("nose_bridge", "scale", "y", 0.80, 1.25, "×", "pass 2's `nose_bridge`: how far the nose stands out")]),
     ("J_Id_NoseTip", "J_Id_Nose", "nose", "the nose's tip", [
         ("nose_tip", "move", "z", -10, 12, "‰H", "pass 2's `nose_tip`: turned down to turned up")]),
     ("J_Id_Mouth", "J_Id_Face", "mouth", "the mouth's middle", [
-        ("mouth_height", "move", "z", -12, 12, "‰H", "pass 2's `mouth_height` (down is lower)"),
+        ("mouth_height", "move", "z", 9, -12, "‰H", "pass 2's `mouth_height`: close under the nose (up) to low (down)"),
         ("mouth_width", "scale", "x", 0.85, 1.18, "×", "pass 2's `mouth_width`"),
         ("lip_fullness", "scale", "z", 0.70, 1.35, "×", "pass 2's `lip_fullness`")]),
     ("J_Id_MouthCorner_L", "J_Id_Mouth", "mouth", "the mouth's corner", [
@@ -155,7 +156,8 @@ def rig_json():
                           values=[dict(id=v, does=what, axis=axis, least=lo, most=hi, unit=unit, note=note) for v, what, axis, lo, hi, unit, note in values]))
     return dict(
         about="Identity bones. A person's value v in -1..1 gives the bone's change from its rest: least at -1, none at 0, most at 1 (a scale's rest is 1, a move's and a turn's 0). `move` is in thousandths of the head's height.",
-        axes=dict(x="across: file X; for a paired bone, away from the midline on both sides", y="forward: file -Z", z="up: file Y", note="a bone's own axes at rest; a bone turned at rest (the cheeks) moves along its turned axes"),
+        axes=dict(x="across: file X; for a paired bone, away from the midline on both sides", y="forward: file -Z", z="up: file Y", o="out of the cheek: 0.55 x + 0.83 y",
+                  turns="for a paired bone the same sense on both sides: about y, the outer end up; about z, outward; about x (the jaw), the chin down", note="every identity bone's rest rotation is none, so these are the head's axes"),
         bones=bones, fixed_by_type=FIXED_BY_TYPE, directions=DIRECTIONS, draw=DRAW)
 
 
@@ -309,6 +311,14 @@ def compose(measured):
                     for i in (1, 2):
                         t["w15"][i] -= 0.012
                         t["w30"][i] -= 0.012
+                # Depths are from the type's own bridge: the front of the midline at the height of its eyes.
+                zs = [z for z, v in zip(Z, t["p00"]) if v is not None]
+                vs = [v for v in t["p00"] if v is not None]
+                ez = t["eye_z"]
+                bridge = next((lerp(a, b, (ez - za) / (zb - za)) for (za, a), (zb, b) in zip(zip(zs, vs), zip(zs[1:], vs[1:])) if za <= ez <= zb), vs[0])
+                for key in ("p00", "p08", "p30"):
+                    t[key] = [None if v is None else v - bridge for v in t[key]]
+                t["nose_tip_y"] -= bridge
                 # A width within a shallower depth never passes one within a deeper.
                 for i in range(len(Z)):
                     if t["w15"][i] is not None and t["w30"][i] is not None:
@@ -448,6 +458,10 @@ def apply(t, values):
         for k in ("w30", "wide"):
             if s[k][i] is not None:
                 s[k][i] += 2 * (g("cheekbones") * cheek + g("cheeks") * 0.6 * full + g("jaw_square") * square)
+        deep = (g("cranium_depth") - 1) * p["skull"]["depth"] / 2 * up  # the cranium grows about its middle: the forehead forward, the back back
+        for k in ("p00", "p08"):
+            if s[k][i] is not None:
+                s[k][i] += deep
         if s["p00"][i] is not None:
             s["p00"][i] += g("forehead") * smooth((z - 0.58) / 0.10) + g("brow_ridge") * math.exp(-(((z - brow) / 0.05) ** 2)) + g("chin_forward") * (1 - smooth((z - 0.02) / 0.10))
         if s["p08"][i] is not None:
@@ -460,7 +474,8 @@ def apply(t, values):
                 s[k][i] *= g("chin_width")
     # Heights: the face below the bridge stretches with face_length, the chin drops with
     # chin_length, the cranium above the brows with cranium_height. The chin stays at 0.
-    fl, ch, cl = g("face_length"), g("cranium_height"), -g("chin_length")
+    lever = p["jaw"]["angle_back"] + 0.04 + at(s, "p00", 0.04)  # from the jaw's hinge forward to the chin
+    fl, ch, cl = g("face_length"), g("cranium_height"), -g("chin_length") + math.tan(math.radians(g("jaw_angle"))) * lever
 
     def zmap(z):
         if z < nasion:
@@ -471,8 +486,10 @@ def apply(t, values):
 
     drop = (nasion - nasion * fl) - cl  # where the chin went
     shift = lambda z: zmap(z) - drop if z > 0.02 else 0.0
+    p["head"]["chin_drop"] = round(drop, 5)  # where the chin went, in the type's own heights (the person's are from their own chin)
     s["z"] = [round(shift(z), 4) for z in s["z"]]
     p["skull"]["crown"] = round(shift(1.0), 4)
+    p["skull"]["depth"] = round(p["skull"]["depth"] * g("cranium_depth"), 4)
     e, b, no, m = p["eye"], p["brow"], p["nose"], p["mouth"]
     fw = g("face_width")
     e["z"] = shift(e["z"]) + g("eye_height")
@@ -881,7 +898,7 @@ def main():
     elif a.cmd == "build":
         data = load()
         data = dict(about="Face types, the identity rig and the anchors they were set from (living/tools/characters/face_types.py; docs/CHARACTERS.md). Lengths are in units of the head's height H, chin to crown, unless a name says otherwise.",
-                    version=1, bands=[dict(band=b, ages=[lo, min(hi, 99)]) for b, lo, hi in BANDS], lines=LINES, rig=rig_json(), measured=data["measured"], types=compose(data["measured"]))
+                    version=1, file=dict(head_height_m=HEAD_IN_FILE, chin_m=1.535, about="a character file's own size: every head is this high in the file, the chin at this height; the recipe's height and head multiplier size the person"), bands=[dict(band=b, ages=[lo, min(hi, 99)]) for b, lo, hi in BANDS], lines=LINES, rig=rig_json(), measured=data["measured"], types=compose(data["measured"]))
         json.dump(data, open(DATA, "w"), indent=1)
         values = rig_values()
         print(f"built {len(data['types'])} types; the rig has {len(RIG)} bones ({len(RIG) + len(PAIRED)} with the mirrored ones), {len(values)} values a person")

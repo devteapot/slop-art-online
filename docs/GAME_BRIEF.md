@@ -1202,8 +1202,17 @@ Branch `ui-1`: the owner's choice of interface (design D: B's amount on screen i
 
 Built in steps; steps 1–4 are on main (step 4 is docs/INTERFACE.md's step 2), 5 follows, and step 6 (the character window, the skills and know-how window, the fight target plate, a look pass) waits for the owner's go-ahead.
 
-**The look is a theme** (`ui/wood.rs`; play-test 4, 2026-11-11: the owner liked the windows' behaviour but not their look or density, "I'd prefer a much cleaner interface"). Every visual value of the D widgets comes from one `Theme`: colours by role (text, edge, surface, accent, field, line), edge width, corner radius, ornament (a frame's inner line, a second body edge), title face and size, shadows, and density (key chips beside titles and buttons, the title bar's grip, help lines shown always or once). Four themes:
-- **Clear** (the default): light neutral, flat panels with a 1 px edge and a soft shadow, Nunito only at two weights, no ornament.
+**The look is a theme** (`ui/wood.rs`; play-test 4, 2026-11-11: the owner liked the windows' behaviour but not their look or density, "I'd prefer a much cleaner interface"). Every visual value of the D widgets comes from one `Theme`: colours by role (text, edge, surface, accent, field, line), edge width, corner radius, ornament (a frame's inner line, a second body edge), title face and size, shadows, and density (key chips beside titles and buttons, the title bar's grip, help lines shown always or once). Five themes:
+- **Glass** (the default since play-test 5, `glass-1`; the owner: the panels "hide too much information… a more subtle glass-like gradient thing"):
+  - **The glass.** Light translucent panels, alpha 0.35 at the top to 0.55 at the bottom, so about half the world shows through. There is no blur of what is behind: Bevy 0.20's UI has no backdrop filter.
+  - **Contrast, where the words are.** Loose light text on the glass gets a rounded dark band under its own box (`wood::shade_text`, applied to every light text the UI spawns). Buttons, rows and cells keep denser bands of their own. Windows have a darker title strip, every light letter has a 1 px dark drop, and the panel has a 1 px light edge. The accent is deep enough for white words on it.
+  - **Reading windows and the world.** Wide windows (Skills, Settings) are mostly reading and sit on a denser panel. Head bubbles in the world are dark glass with light words.
+  - **What floats over the world** (tip pills, notes, a slot's tooltip) takes the theme's `float` ground. Hints wait while a wide window is open.
+  - **A smaller footprint.** `Theme::density` 0.72: narrow windows are 368 px instead of 426, wide ones 925 instead of 1076, with tighter paddings and gaps. A person's window stops at 42% of the screen's height and its conversation scrolls.
+  - **Measured** straight off the stills on the island's square (glyphs against the ring round them). By day over the brightest paving, text holds 4.7:1 or more at the 5th percentile and muted text 3.6:1. A unit test holds text to WCAG AA over a bright wall. In the day view, windows cover 14% of the screen against Clear's 31%.
+  - Evidence: `.local/living/glass-1/`.
+- In every theme, the same words said again in a row are one bubble with "×N". The pack's count turns rose with "over" past the rules' carry limit, and is shown whole or to one decimal.
+- **Clear:** light neutral, flat panels with a 1 px edge and a soft shadow, Nunito only at two weights, no ornament.
 - **Night:** the same, dark and translucent.
 - **Linen:** warm and flat, a hint of the game's palette.
 - **Walnut:** design D as first built (walnut, brass, parchment, Marcellus titles, key chips).

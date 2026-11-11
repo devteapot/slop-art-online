@@ -25,16 +25,16 @@ Preconditions: a scratch island world (`--seed island`). The scenario places the
 - **Sudden 180°.** `look:180;hold:180;wait:3;hold:0`: walking south looking south, then north (backwards) with the look held.
 - Scenario: `check.py --run $R look-walk` (every preset; `LOOK_WALK_PRESETS=chest` for one). `LOOK_WALK_RECORD=1` also records each drive (`LIVING_GAME_RECORD=<evidence>/record`). `LOOK_WALK_REUSE=1` checks the last drives' logs again without driving. `LOOK_WALK_TAG=before` with another client's `CARGO_TARGET_DIR` keeps a second set beside them: an older client's feet log lacks `sim`, `heading`, `look` and the bones' yaws, so only its photographs and recording compare.
 
-Checks, per preset (21 each):
+Checks, per preset (21–22 each):
 - what was asked of the neck and chest is within the limits, exactly;
 - as drawn, the head from the chest and the chest from the legs, median within 8° of what was asked;
 - the head never more than its limit + 15° from the chest;
 - no frame turns the legs more than 15° (frames over 50 ms, headless hitches, left out);
 - each steady look: no crossing, and the legs settled where the preset puts them (±8°);
-- each steady look: the authority's ground speed (segment speed) as straight (±2%), and the drawn speed as straight (±8%);
+- each steady look: the authority's ground speed (segment speed) as straight (±2%). The drawn speed must equal the authority's over the same 0.5 s windows (±8%). The comparison leaves out windows over a road change and windows within 2.5 s of a display-clock jump. A segment the display clock jumped in skips the comparison, and look_walk.json says so (`drawn_check`);
 - after each sudden turn, any crossing ends within 3 × `body_s` + 0.6 s.
 
-"Crossing" is either of two things. The crossover takes (`strafe_walk_cross_*`) weigh over 0.25. Or, while a forward or back gait dominates, the ankles cross by more than 3 cm in the legs' own frame. The diagonals' feet trace across the legs' frame by design (accepted in the clip lab), so they count only through the first test.
+"Crossing" is either of two things. The crossover takes (`strafe_walk_cross_*`) weigh over 0.25. Or, while a forward or back gait dominates *and the legs are turned more than 15° off the travel or its reverse*, the ankles cross by more than 3 cm in the legs' own frame. Square on the travel, a forward gait is the clip's own stride: a run puts its feet near one line, and its ankles overlap 4–9 cm with the look straight ahead too. Those frames are counted apart, as `own_overlap_frames` in look_walk.json. A character with a speed gene near the 2.8 m/s walk/run boundary, or one that steps onto road, runs through the scenario and shows them (look-walk-2). The diagonals' feet trace across the legs' frame by design (accepted in the clip lab), so they count only through the first test.
 
 ## Gotchas
 

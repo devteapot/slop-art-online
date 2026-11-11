@@ -1,0 +1,54 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261111-26c98cc2-875a5f",
+ "published": "2026-11-11T23:42:35+01:00",
+ "imported": "2026-11-11T23:42:35+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 3: Cullet's cast on the face types' cage heads, each person the type's mesh with its identity bones moved (no baked heads). Seeds now draw a type and bone values, so the faces differ from step 1's. Every person keeps an atlas of their own in this version (no shared pages).",
+ "source": {
+  "commit": "26c98cc2580223d51f02c39bfcb673b343c6f5e9",
+  "branch": "char-4",
+  "dirty": true,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "dec17ef49933845b06e0f19f99f33a1daa265994098649a1b8a8be45102e695a",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view; lineup from the front at 28 degrees down at one scale; faces close (the take with the eyes open); game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261111-26c98cc2-875a5f",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "ec78c1938c946ff42e4f50d9b7ac396cae837adda928106627fd657c04cc75d4",
+   "shots": [
+    "faces",
+    "faces-24",
+    "game",
+    "lineup"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/index.html",
+   "from": ".local/town3/index.html"
+  }
+ ]
+}

@@ -393,15 +393,19 @@ fn turned(was: &Option<Facing>, now: Option<Facing>) -> bool {
     }
 }
 
-/// My body's heading now (`body.heading`, eased through its turn by `steer::pose`, as the
-/// authority's `heading_at`), from my own motion row, at `now_ms` on the display clock.
+/// Which way my body faces now: its travel heading (`body.heading`, eased through its turn by
+/// `steer::pose`) plus its facing offset (`steer::facing`), as the authority's `facing_at`, from
+/// my own motion row, at `now_ms` on the display clock.
 pub fn my_heading(net: &Net, now_ms: f64) -> Option<f32> {
     let (conn, me) = (net.conn.as_ref()?, net.my_id?);
     let m = conn.db.my_body().id().find(&me)?;
     let end = (m.next_ms as f64).max(m.t_ms as f64);
     let dt = ((now_ms.min(end) - m.t_ms as f64) / 1000.0).max(0.0) as f32;
     let (_, _, h) = living_rules::steer::pose(m.x, m.y, m.heading, m.vx.hypot(m.vy), m.turn, m.turn_s, dt);
-    Some(living_rules::steer::wrap(h))
+    // Since look-2 a held look turns only the facing, an offset from the travel (`face_off`,
+    // eased by `face_turn` over `face_turn_s`): the one facing the authority's sight reads
+    // (`common::facing_at`).
+    Some(living_rules::steer::facing(h, m.face_off, m.face_turn, m.face_turn_s, dt))
 }
 
 /// My facing now, while my senses have a field; none without one (sight the same all round).

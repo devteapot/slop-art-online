@@ -56,34 +56,39 @@ pub struct TipText(usize);
 pub fn spawn(mut commands: Commands, fonts: Res<Fonts>) {
     let f = fonts.clone();
     commands
-        .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), top: Val::Px(88.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(4.0), ..default() }, Pickable::IGNORE))
+        // Over the windows: a wide window covers this row, and a translucent one (Glass) showed
+        // the hints' words through its own.
+        .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), top: Val::Px(88.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(4.0), ..default() }, bevy::ui::GlobalZIndex(super::win::Z_MENU - 1), Pickable::IGNORE))
         .with_children(|root| {
             for i in 0..ROWS {
-                root.spawn((TipRow(i), Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(5.0)), border: super::wood::b(1.0), border_radius: BorderRadius::all(Val::Px(999.0)), display: Display::None, ..default() }, BackgroundColor(super::wood::surface()), BorderColor::all(super::wood::edge()), super::wood::shadow(3.0, 1.0), Pickable::IGNORE))
+                root.spawn((TipRow(i), Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(5.0)), border: super::wood::b(1.0), border_radius: BorderRadius::all(Val::Px(999.0)), display: Display::None, ..default() }, BackgroundColor(super::wood::float_or(super::wood::surface())), BorderColor::all(super::wood::edge()), super::wood::shadow(3.0, 1.0), Pickable::IGNORE))
                     .with_child((TipText(i), Text::new(""), f.body(14.0, 600), TextColor(super::wood::text()), Pickable::IGNORE));
             }
         });
 }
 
-/// Hints fade out after [`SHOW_S`]; none while the text box is open or on the death screen.
+/// Hints fade out after [`SHOW_S`]; none while the text box or a wide window is open, or on the
+/// death screen.
 #[allow(clippy::type_complexity)]
 pub fn update(
     mut tips: ResMut<Tips>,
     time: Res<Time>,
     input: Res<crate::controls::Input>,
     model: Res<super::model::HudModel>,
+    ws: Option<Res<super::win::Windows>>,
     mut rows: Query<(&TipRow, &mut Node, &mut BackgroundColor, &mut BorderColor)>,
     mut texts: Query<(&TipText, &mut Text, &mut TextColor)>,
 ) {
     let now = time.elapsed_secs_f64();
     tips.lines.retain(|(_, at)| now - at < SHOW_S);
-    let hidden = input.chat_open || model.death.is_some();
+    // A wide window (Settings, Skills) sits where the hints show: they wait under it.
+    let hidden = input.chat_open || model.death.is_some() || ws.is_some_and(|w| w.open.iter().any(|o| o.win.wide()));
     let alpha = |at: f64| ((SHOW_S - (now - at)) / FADE_S).clamp(0.0, 1.0) as f32;
     for (r, mut n, mut bg, mut border) in &mut rows {
         let line = tips.lines.get(r.0).filter(|_| !hidden);
         show(&mut n, line.is_some());
         if let Some((_, at)) = line {
-            set_bg(&mut bg, super::wood::alpha(super::wood::surface(), alpha(*at)));
+            set_bg(&mut bg, super::wood::alpha(super::wood::float_or(super::wood::surface()), alpha(*at)));
             let c = super::wood::alpha(super::wood::edge(), alpha(*at));
             if border.top != c {
                 *border = BorderColor::all(c);

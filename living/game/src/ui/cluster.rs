@@ -85,7 +85,7 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
     commands
         .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), bottom: Val::Px(14.0), justify_content: JustifyContent::Center, ..default() }, Pickable::IGNORE))
         .with_children(|root| {
-            root.spawn((Cluster, super::hit::Block, Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(if th.serif_titles { 8.0 } else { 10.0 }), padding: UiRect::new(Val::Px(14.0), Val::Px(14.0), Val::Px(10.0), Val::Px(18.0)), border: wood::b(3.0), border_radius: wood::r(12.0), ..default() }, wood::wood(), GlobalZIndex(20)))
+            root.spawn((Cluster, super::hit::Block, Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(if th.serif_titles { 8.0 } else { wood::d(10.0) }), padding: UiRect::new(Val::Px(wood::d(14.0)), Val::Px(wood::d(14.0)), Val::Px(wood::d(10.0)), Val::Px(wood::d(18.0))), border: wood::b(3.0), border_radius: wood::r(12.0), ..default() }, wood::wood(), GlobalZIndex(20)))
                 .with_children(|c| {
                     c.spawn(wood::rim(9.0));
                     // Status (hunger, tiredness, a fight), over the meters' left end.
