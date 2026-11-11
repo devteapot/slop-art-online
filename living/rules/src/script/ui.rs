@@ -410,7 +410,8 @@ impl Scripts {
             let why = match (src, spec) {
                 (_, None) => Some(format!("`{name}` has no spec")),
                 (_, Some(k)) if !k.needs_item => Some(format!("`{name}_spec()` takes no item")),
-                (S::SpecItems | S::Products, Some(k)) if k.items.is_empty() => Some(format!("`{name}_spec()` lists no `items`")),
+                (S::SpecItems, Some(k)) if k.items.is_empty() => Some(format!("`{name}_spec()` lists no `items`")),
+                (S::Products, Some(_)) if self.products_of(name).is_empty() => Some(format!("`{name}` makes nothing here (no `{name}_making()`, or no recipe of it in `recipes()`)")),
                 (S::TargetHolds, Some(k)) if !k.needs_target => Some(format!("`{name}_spec()` takes no target")),
                 _ => None,
             };
@@ -436,7 +437,7 @@ impl Scripts {
             }
         }
         if let Some(d) = field!("detail", |v| text(f, "detail", v)) {
-            match self.detail_errors(f, &d, spec) {
+            match self.detail_errors(f, &d, name, u.source, spec) {
                 Some(e) => err(e),
                 None => u.detail = Some(d),
             }
@@ -581,11 +582,13 @@ impl Scripts {
     }
 
     /// `detail` is a function of one name, called on each of the spec's items, that returns words.
-    fn detail_errors(&self, f: &str, d: &str, spec: Option<&crate::catalog::SkillSpec>) -> Option<String> {
+    /// For a recipe grid (`source: "products"`), it is called on each product.
+    fn detail_errors(&self, f: &str, d: &str, name: &str, source: Option<ui::ItemSource>, spec: Option<&crate::catalog::SkillSpec>) -> Option<String> {
         if !self.unary.contains(d) {
             return Some(format!("{f}: `detail` names a function of one name in the script (`fn {d}(name)`), and there is none"));
         }
-        for item in spec.map(|k| k.items.as_slice()).unwrap_or_default() {
+        let choices: Vec<String> = if source == Some(ui::ItemSource::Products) { self.products_of(name).into_iter().map(String::from).collect() } else { spec.map(|k| k.items.clone()).unwrap_or_default() };
+        for item in &choices {
             match self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, d, (item.clone(),)) {
                 Ok(v) if v.is_string() => {}
                 Ok(v) => return Some(format!("{f}: `detail`: `{d}(\"{item}\")` must return words, got {}", v.type_name())),

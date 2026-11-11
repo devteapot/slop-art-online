@@ -94,14 +94,17 @@ impl Plugin for UiPlugin {
         let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
         let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update, wheel::update);
         if lookdev {
-            app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
+            app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(sample::fill).before(UiSystems::Prepare));
         } else {
             // Connected play: the game UI's input, its windows and the live source.
             app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
                 .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
-                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare));
+                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare))
+                // Light text gets the theme's drop the frame it is spawned (Glass).
+                .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(kit::paint).after(UiWork).before(UiSystems::Prepare));
             if perf_on() {
                 app.init_resource::<UiPerf>()
                     .add_systems(Update, (perf_begin::<0>.before(UiInput).in_set(crate::phase::Phase::Input), perf_end::<0>.after(UiInput).in_set(crate::phase::Phase::Input)))
@@ -390,6 +393,7 @@ impl DumpExtra<'_, '_> {
         // it, and the heard marks (`facing.rs`, `heardmark.rs`).
         let fov = self.fov.as_ref().map(|f| {
             serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last,
+                "sight": self.edge.as_ref().and_then(|e| e.senses.map(|s| s.sight)), "source": self.edge.as_ref().and_then(|e| e.source.map(|s| format!("{s:?}"))),
                 "field": f.field.map(|v| serde_json::json!({"focal_deg": v.focal_deg, "side_deg": v.side_deg, "side_share": v.side_share, "near_m": v.near_m, "margin_deg": v.margin_deg}))})
         });
         serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),

@@ -16,6 +16,15 @@
 #                       same clips; `both` one file with the two on one skeleton, the far model's
 #                       meshes named Far* (for a client that switches them by distance; today's
 #                       client would draw both), as lookdev/lod/own-<name>.glb and lookdev/lod/anim/…
+#   CLIPS=none          bake no clips into the files: a person's clips then come from the one
+#                       shared file (lookdev/anim/own-clips.glb, share.py clips), as the client
+#                       reads them since crowd-1. The default still bakes the library into each
+#                       file, for a client or a tool that reads a file's own clips
+#   MORPHS=client       keep only the expressions the game drives (the blink and the open mouth);
+#                       the default keeps all fifteen
+#   IDENTITY=bake       build a person's identity values into the vertices (person.py --bake).
+#                       The default leaves the type's mesh as it is and moves the identity bones
+#                       in the file (compose.py), which is what the client does to a type's file
 #   ANIMATE=<file>      the animate.py that bakes the clips (default: this folder's), to bake a
 #                       set with an earlier one for a comparison (docs/CHARACTERS.md, "Motions on
 #                       generated people")
@@ -58,20 +67,32 @@ for p in "${people[@]}"; do
     case "$lod" in near) dir=$src ;; far) dir=$src/far ;; both) dir=$src/lod ;; *) echo "gen_person: LOD: $lod is not near, far or both" >&2; exit 1 ;; esac
     mkdir -p "$dir/anim"
     # shellcheck disable=SC2086
-    if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} --lod "$lod" --out "$dir/$name.glb" > "$log" 2>&1; then
+    if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} --lod "$lod" --morphs "${MORPHS:-all}" $([ "${IDENTITY:-bones}" = bake ] && echo --bake) --out "$dir/$name.glb" > "$log" 2>&1; then
       grep -v OpenColorIO "$log" | tail -30; rm -f "$log"; exit 1
     fi
     grep -E '^PERSON' "$log" || true
-    if ! "$blender" -b --python-exit-code 1 -P "$animate" -- --in "$dir/$name.glb" --out "$dir/anim/$name.glb" \
-      --library living/tools/blender/clips.json --summary "$dir/anim/$name.clips.json" --kimodo-dir "$kimodo" ${only:+--only "$only"} > "$log" 2>&1; then
-      grep -v "OpenColorIO\|^ANIM" "$log" | tail -30; rm -f "$log"; exit 1
+    if [ "${CLIPS:-library}" = none ]; then
+      cp "$dir/$name.glb" "$dir/anim/$name.glb"
+      rm -f "$dir/anim/$name.clips.json"
+    else
+      if ! "$blender" -b --python-exit-code 1 -P "$animate" -- --in "$dir/$name.glb" --out "$dir/anim/$name.glb" \
+        --library living/tools/blender/clips.json --summary "$dir/anim/$name.clips.json" --kimodo-dir "$kimodo" ${only:+--only "$only"} > "$log" 2>&1; then
+        grep -v "OpenColorIO\|^ANIM" "$log" | tail -30; rm -f "$log"; exit 1
+      fi
+      grep -E '^(SKELETON|GRAFT|SUMMARY)' "$log" | cut -c1-220 || true
     fi
-    grep -E '^(SKELETON|GRAFT|SUMMARY)' "$log" | cut -c1-220 || true
     python3 living/tools/merge_primitives.py "$dir/anim/$name.glb" "$dir/anim/$name.glb.tmp" && mv "$dir/anim/$name.glb.tmp" "$dir/anim/$name.glb"
     python3 living/tools/face_normals.py "$dir/anim/$name.glb" "$dir/anim/$name.glb.tmp" --png "$dir/anim/$name.face.png" && mv "$dir/anim/$name.glb.tmp" "$dir/anim/$name.glb"
     # The strand texture is the same for everyone: every file names the one copy (share.py).
     [ -f "$src/strands.png" ] || cp "$dir/strands.png" "$src/strands.png"
     python3 living/tools/characters/share.py strands --shared "$src/strands.png" "$dir/anim/$name.glb" > /dev/null
+    # One smoothed direction a point for the outline, written once here (outline_normals.py).
+    python3 living/tools/characters/outline_normals.py "$dir/anim/$name.glb" > /dev/null
+    # A person of a face type: the type's mesh with its identity bones moved, as the client
+    # composes one (compose.py). Last, so the designed normals are the type's own.
+    if [ "${IDENTITY:-bones}" != bake ] && grep -q '"identity"' "$dir/$name.params.json"; then
+      python3 living/tools/characters/compose.py "$dir/anim/$name.glb" "$dir/anim/$name.glb" --params "$dir/$name.params.json"
+    fi
   done
   rm -f "$log"
 done

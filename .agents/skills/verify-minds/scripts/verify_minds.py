@@ -138,7 +138,7 @@ def drop_case(run):
     """A mind is told of a drop and of a low thing in words that say what they are and that
     one sees past them but cannot walk through them (`terrain_near`), and sees the creature on
     the other side, on the island (terraced towns' drops, carts and other low things)."""
-    target = ROOT / '.local/living/target-resident-island'
+    target = (Path(os.environ['CARGO_TARGET_DIR']) if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-resident-island')
     run.harness('launch', '--seed', 'island', '--target-dir', str(target))
     run.harness('doctor')
     world = run.sql('SELECT * FROM world', 'world')[0]
@@ -587,8 +587,13 @@ def dealings_case(run):
     # The rules' `ask` goes through the authority's thinking cadence (`think_min_s`): a mind that
     # thought moments ago is not asked again. Its next thought sees the demand among its dealings.
     asked = bool(run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'asked'))
-    if not asked:
-        run.request(actor, 'dealing')
+    met_now = lambda label: [r for r in run.private('SELECT * FROM record', label) if r['id'] == demand['id'] and r['status'] == 'met']
+    if not asked and not met_now('records-before-request'):
+        # The rules' ask may already have been answered between the two reads (its deliberation
+        # row is gone once the mind replies): ask again only if the demand is still open, and
+        # take either the pending request or the demand met as the answer (recipes-1).
+        run.admin('set_behavior', actor, json.dumps({'think': 'I finished my plan. verify dealing'}))
+        run.wait(lambda: run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'pending-dealing') or met_now('records-while-asking'), 'authority deliberation or the demand met', 65)
     met = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-met') if r['id'] == demand['id'] and r['status'] == 'met'], 'demand met', 90)
     sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
     shown = [e for e in sent if "Your dealings and your people's standing" in json.dumps(e) and 'demanded 1 stone' in json.dumps(e)]
@@ -1111,7 +1116,7 @@ def resident_case(run):
     admin controls): this service thinks for it, it answers a player through `mind_say`,
     trades and teaches through its own acts, and a replacing projection keeps its given places
     (work, inn, square, evening: world facts its starting ways walk to)."""
-    target = ROOT / '.local/living/target-resident-island'
+    target = (Path(os.environ['CARGO_TARGET_DIR']) if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-resident-island')
     run.harness('launch', '--seed', 'island', '--target-dir', str(target))
     run.harness('doctor')
     world = run.sql('SELECT * FROM world', 'world')[0]

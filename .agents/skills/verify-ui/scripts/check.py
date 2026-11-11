@@ -226,21 +226,34 @@ def items(run, c):
     c.check(s, "and both reached them (their gift experiences)", len(gifts) == 2, f"{len(gifts)} gifts")
 
 
+THEMES = ["glass", "clear", "night", "linen", "walnut"]  # F4's order (`ui::wood::Name::ALL`)
+
+
 def themes(run, c):
     s = "themes"
-    plan = ("ready;wait:2;key:KeyL:tap;wait:0.3;key:KeyI:tap;wait:0.5;dump:01;shot:01_first;key:F4:tap;wait:0.8;shot:02_next;dump:02;key:F4:tap;wait:0.8;shot:03_next;dump:03;key:F4:tap;wait:0.8;shot:04_next;dump:04;"
-            "click:@menu;wait:0.3;click:@menu:Settings;wait:0.6;click:@settings:theme:linen;wait:0.8;shot:05_linen;dump:05;quit")
+    n = len(THEMES)
+    # A fresh settings file and no LIVING_GAME_THEME: the client starts in the default, Glass.
+    if not THEME:
+        out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", "themes-default")
+        st0 = os.path.join(out0, "settings.json")
+        if os.path.exists(st0):
+            os.remove(st0)
+        out0, code0, text0 = drive(run, "themes-default", "ready;wait:2;key:KeyI:tap;wait:0.5;dump:01;shot:01_default;quit")
+        c.check(s, "a fresh settings file starts in Glass", ((dump(out0, "01") or {}).get("extra") or {}).get("theme") == "glass", str(((dump(out0, "01") or {}).get("extra") or {}).get("theme")))
+    keys = [f"{i + 1:02d}" for i in range(n)]
+    steps = ";".join(f"key:F4:tap;wait:0.8;shot:{k}_next;dump:{k}" for k in keys[1:])
+    plan = (f"ready;wait:2;key:KeyL:tap;wait:0.3;key:KeyI:tap;wait:0.5;dump:01;shot:01_first;{steps};"
+            f"click:@menu;wait:0.3;click:@menu:Settings;wait:0.6;click:@settings:theme:linen;wait:0.8;shot:{n + 1:02d}_linen;dump:{n + 1:02d};quit")
     out, code, text = drive(run, s, plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05"]}
-    names = [((d[k] or {}).get("extra") or {}).get("theme") for k in ["01", "02", "03", "04"]]
-    order = ["clear", "night", "linen", "walnut"]
+    d = {k: dump(out, k) for k in keys + [f"{n + 1:02d}"]}
+    names = [((d[k] or {}).get("extra") or {}).get("theme") for k in keys]
     first = names[0]
-    want = [order[(order.index(first) + i) % 4] for i in range(4)] if first in order else []
-    c.check(s, "F4 cycles the themes in order", names == want, str(names))
-    c.check(s, "each change is named on screen", len(re.findall(r"ui: Theme: \w+  ·  F4 changes it", log(out))) >= 3)
-    c.check(s, "windows stay where they were through a change", all(sorted(wins(d[k])) == [("Log", "Left"), ("Pack", "Right")] for k in ["01", "02", "03", "04"]), str([wins(d[k]) for k in ["01", "02", "03", "04"]]))
-    c.check(s, "Settings › Play › Look sets it", ((d["05"] or {}).get("extra") or {}).get("theme") == "linen")
+    want = [THEMES[(THEMES.index(first) + i) % n] for i in range(n)] if first in THEMES else []
+    c.check(s, "F4 cycles every theme in order", names == want, str(names))
+    c.check(s, "each change is named on screen", len(re.findall(r"ui: Theme: \w+  ·  F4 changes it", log(out))) >= n - 1)
+    c.check(s, "windows stay where they were through a change", all(sorted(wins(d[k])) == [("Log", "Left"), ("Pack", "Right")] for k in keys), str([wins(d[k]) for k in keys]))
+    c.check(s, "Settings › Play › Look sets it", ((d[f"{n + 1:02d}"] or {}).get("extra") or {}).get("theme") == "linen")
     st = os.path.join(out, "settings.json")
     saved = json.load(open(st)).get("theme") if os.path.exists(st) else None
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
@@ -602,9 +615,14 @@ def compare_fov(snap, dumps, me):
     sight, f = fc["sight"], fc
     h_auth = heading_at(mine, at)
     eye = (mine["x"], mine["y"])
-    out = {"heading_client": math.degrees(fc["heading"]), "heading_authority": math.degrees(h_auth), "dump": meta["n"], "same": [], "differ": [], "margin": []}
+    out = {"heading_client": math.degrees(fc["heading"]), "heading_authority": math.degrees(h_auth), "dump": meta["n"], "same": [], "differ": [], "margin": [], "moving": []}
     for bid, b in bodies.items():
         if bid == me:
+            continue
+        # A body under way: its row is where its segment began, not where it is now, and the
+        # authority's sweep saw it somewhere between. Standing bodies only are compared.
+        if b.get("next_ms", 0) < (1 << 63):
+            out["moving"].append(bid)
             continue
         d = math.hypot(b["x"] - eye[0], b["y"] - eye[1])
         if d > 15.0:
@@ -644,14 +662,14 @@ def field(run, c):
     body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy FROM body WHERE id = {{me}}"
     # By day (`{epoch_at:12}`, a scratch fixture): at night side vision is left out of the
     # comparison for the lights the client can't know, and a day lasts 12 minutes.
-    plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on"
+    plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on;sync:senses"
     for deg in FOV_LOOKS:
         plan += f";look:{deg};wait:2.5;sync:h{deg};dump:h{deg};shot:h{deg}"
     # Walking north with the look east (90° off): held at look_walk_deg; F3 (to "where you walk")
     # releases it while walking, then standing.
     plan += (";look:90;hold:0;wait:2;sync:walk;key:F3:tap;wait:1.5;sync:released;stop;wait:1.5;key:F3:tap;look:270;wait:2;sync:looked;key:F3:tap;wait:1.5;sync:stood;"
              "click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;shot:03_settings_on;dump:03;click:@settings:facing_sight;wait:2.5;shot:04_settings_off;dump:04;quit")
-    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", "senses=sql|SELECT * FROM character_senses WHERE id = {me}"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
     places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, FOV_PLACES)]
     env = {"LIVING_GAME_CONTROL": "cursor", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::controls=debug"}
     old = {k: os.environ.get(k) for k in list(env) + ["LIVING_SIGHT_FIELD_DUMP"]}
@@ -688,6 +706,11 @@ def field(run, c):
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     snaps = sc.get("snaps") or {}
+    # The client's senses are the authority's own (`my_senses`, owner SQL on `character_senses`).
+    row = ((snaps.get("senses") or [{}])[0].get("rows") or [None])[0]
+    keys = ["focal_deg", "side_deg", "side_share", "near_m", "margin_deg"]
+    same = row is not None and row.get("field") is True and on.get("source") == "Authority" and abs((on.get("sight") or -1) - row["sight"]) < 1e-3 and all(abs(fv.get(k, -1) - row[k]) < 1e-3 for k in keys)
+    c.check(s, "after F5 the client's sight and five values are my_senses' (the authority's row)", same, f"client {json.dumps(on)}; my_senses {json.dumps(row)}")
     results = {}
     for deg in FOV_LOOKS:
         r = compare_fov(snaps.get(f"h{deg}") or [], dumps, me) if snaps.get(f"h{deg}") else None
@@ -748,7 +771,7 @@ def field(run, c):
         h2 = math.degrees(heading_at(stood, snaps["stood"][0]["wall_ms"]))
         c.check(s, "standing, a look west turns the body there and a release leaves it there", abs(abs(h1) - 180.0) < 4.0 and abs(math.degrees(wrap(math.radians(h2 - h1)))) < 2.0, f"looked {h1:.1f}°, after the release {h2:.1f}°")
     sends = len(re.findall(r"look: human_face\(", L))
-    refusals = re.findall(r"face refused: ([^\n]+)", L)
+    refusals = re.findall(r"(?:look|face) refused: ([^\n]+)", L)
     c.check(s, "looks went through human_face, none refused for anything but the input bucket", sends >= 6 and all("too many movement inputs" in x for x in refusals), f"{sends} sends; refusals {refusals[:3]}")
     c.check(s, "Settings › Play shows facing sight on, its switch and the values", fs("03").get("on") and "settings:facing_sight" in ((d["03"] or {}).get("tags") or {}))
     c.check(s, "the Settings switch turns it off; the field goes", fs("04").get("on") is False and dumps and dumps[-1][0].get("facing") is None, json.dumps(fs("04")))

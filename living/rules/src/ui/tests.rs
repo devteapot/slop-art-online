@@ -235,7 +235,8 @@ fn the_three_looks_by_name_are_declared_not_coded() {
     // decline (rules-offers-2) are also answers on an offer's card, with the trade icon.
     let mut declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
     declared.sort();
-    assert_eq!(declared, ["accept", "appraise", "block", "bowshot", "decline", "dodge", "face", "feed", "firebolt", "give", "heal", "jump", "make", "nod", "offer", "shoot", "strike", "teach", "throw", "wave"], "the shipped script declares these");
+    // and the recipe grids of the ways of making (recipes-1): craft, cook, smoke, make.
+    assert_eq!(declared, ["accept", "appraise", "block", "bowshot", "cook", "craft", "decline", "dodge", "face", "feed", "firebolt", "give", "heal", "jump", "make", "nod", "offer", "shoot", "smoke", "strike", "teach", "throw", "wave"], "the shipped script declares these");
     // Face is in no list of a player's (play-test 5): a player faces where it looks, as the tip says.
     let face = s.ui("face").unwrap();
     assert!(face.on.is_empty() && face.tip.is_some() && !s.ui_default("face").unwrap().on.is_empty(), "{face:?}");
@@ -734,8 +735,7 @@ fn declarations_place_and_present() {
         "fn firebolt_ui() { #{ label: \"Fire bolt\", place: \"skill\", order: 2, marker: \"circle\", look: #{ icon: \"fire\", clip: \"cast\", effect: \"bolt\" }, running: #{ show: \"windup\" }, refused: \"grey\" } }\n\
          fn block_ui() { #{ place: \"skill\", order: 0 } }\n\
          fn heal_ui() { #{ place: \"skill\", order: 1 } }\n\
-         fn give_ui() { #{ label: \"Give\", on: [\"person\", \"item\"], picks: [\"target\", \"item\", \"qty\"], drag: \"person\", pin: true, order: 0, look: #{ icon: \"give\", clip: \"hand\" }, refused: \"note\" } }\n\
-         fn make_ui() { #{ on: \"thing\", picks: [\"item\"], choose: \"grid\", detail: \"made_how\", running: #{ show: \"progress\", text: \"Making {item}\" }, look: #{ icon: \"hammer\", clip: \"work\" } } }",
+         fn give_ui() { #{ label: \"Give\", on: [\"person\", \"item\"], picks: [\"target\", \"item\", \"qty\"], drag: \"person\", pin: true, order: 0, look: #{ icon: \"give\", clip: \"hand\" }, refused: \"note\" } }",
     );
     assert!(s.ui_errors().is_empty(), "{:?}", s.ui_errors());
     s.validate().unwrap();
@@ -745,8 +745,12 @@ fn declarations_place_and_present() {
     assert_eq!((f.label.as_str(), f.marker, f.unready, f.refused_at(On::Bar)), ("Fire bolt", Marker::Circle, Unready::Grey, Refused::Grey));
     let g = s.ui("give").unwrap();
     assert_eq!((g.on.clone(), g.drag, g.pin, g.picks.clone()), (vec![On::Person, On::Item], Some(On::Person), true, vec![Pick::Target, Pick::Item, Pick::Qty]));
+    // The recipe grids are the shipped script's own (recipes-1): craft's cells are what it makes.
+    let m = s.ui("craft").unwrap();
+    assert_eq!((m.choose, m.source, m.detail.as_deref(), m.running.show, m.running.text.as_str()), (Choose::Grid, Some(ItemSource::Products), Some("made_how"), RunShow::Progress, "Making {item}"));
+    // The island makes nothing at workplaces: make's grid declares no cells, and keeps its default.
     let m = s.ui("make").unwrap();
-    assert_eq!((m.choose, m.detail.as_deref(), m.running.show, m.running.text.as_str()), (Choose::Grid, Some("made_how"), RunShow::Progress, "Making {item}"));
+    assert_eq!((m.choose, m.source, m.detail.as_deref()), (Choose::Grid, s.ui_default("make").unwrap().source, None));
 }
 
 #[test]
@@ -982,7 +986,6 @@ fn the_rules_are_the_same_without_any_declaration() {
          fn strike_ui() {{ #{{ label: \"Strike\" }} }}\n\
          fn block_ui() {{ #{{ place: \"primary\" }} }}\n\
          fn give_ui() {{ #{{ on: [\"person\", \"item\"], picks: [\"target\", \"item\", \"qty\"], drag: \"person\", pin: true }} }}\n\
-         fn make_ui() {{ #{{ on: \"thing\", choose: \"grid\", detail: \"made_how\" }} }}\n\
          fn graze_ui() {{ #{{ on: \"self\", label: \"Graze\" }} }}\n\
          fn rest_ui() {{ #{{ on: [\"self\"] }} }}\n"
     ));
