@@ -1286,5 +1286,100 @@ class CredentialFiles(unittest.TestCase):
             self.assertEqual(totals.counts.get("hf-token"), None)     # nothing was read to redact
 
 
+class ResidentHeldNames(unittest.TestCase):
+    """Play-test 4's shape: the player typed `i'm called ""Zorbin""` (a stand-in word); residents
+    hold "Zorbin" for the player's character in graphs (plain, escaped and doubly escaped JSON),
+    tags, labels and logs; Maud holds an epithet the player never typed. The name comes from what
+    residents hold, checked against what the player typed."""
+
+    def build(self, t, typed):
+        write(t, "session/run/client.log", "2026-11-11T15:15:35.0Z INFO playing character #26\n"
+                                           "2026-11-11T15:19:20.0Z INFO quit\n")
+        talk = f"# You and a stranger (#26)\n\n# What you are answering\na stranger: “{typed}”"
+        graph = {"nodes": [{"key": "person:26", "name": "Zorbin", "props": {"known_name": "Zorbin"}}],
+                 "relations": [{"id": 26, "known_as": "Zorbin", "note": "calls himself «Zorbin»"}]}
+        escaped = {"thought": "Zorbin, is it? An odd one.",
+                   "graph": json.dumps({"nodes": [{"key": "person:26", "known_name": "Zorbin"}]})}
+        doubly = {"memo": json.dumps({"graph": json.dumps({"key": "person:26", "known_name": "Zorbin"})})}
+        write(t, "session/journal/Mercy.jsonl", "\n".join([
+            journal_entry("Mercy", "talk", talk, '{"say": "Welcome."}'),
+            journal_entry("Mercy", "consolidate", "notes", json.dumps(graph)),
+            journal_entry("Mercy", "think", "the square", json.dumps(escaped)),
+            journal_entry("Mercy", "consolidate", "notes", json.dumps(doubly)),
+            journal_entry("Mercy", "think", "the well", '{"thought": "Grimtooth is near the well."}'),
+        ]) + "\n")
+        write(t, "session/journal/Aldith.jsonl", journal_entry(
+            "Aldith", "think", "- [1201] day 1 09:20 The stranger called himself «Zorbin» {Zorbin=#26}\n"
+                               "- Zorbin (#26) [Person]",
+            '{"thought": "the self-styled \'Zorbin\' frightens me"}') + "\n")
+        write(t, "session/journal/Maud.jsonl", journal_entry("Maud", "consolidate", "notes", json.dumps(
+            {"nodes": [{"key": "person:26", "props": {"known_name": "Grimtooth"}}]})) + "\n")
+        write(t, "session/run/mind.log", 'INFO Mercy: «Zorbin», is it?\n'
+                                         'DEBUG graph {\\"key\\": \\"person:26\\", \\"known_name\\": \\"Zorbin\\"}\n')
+
+    def run_scrub(self, t):
+        s = scrubber({"model_exchanges": "include"}, kind="play-session")
+        rows, totals, data = store.scrub_source(t, s, keep_data=True)
+        return s, data
+
+    def test_play_test_4_shape(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.build(t, 'i\'m called ""Zorbin""')
+            s, data = self.run_scrub(t)
+            self.assertEqual(s.self_names, {"Zorbin"})
+            blob = "".join(v.decode() for v in data.values())
+            self.assertIsNone(re.search(r"(?i)zorbin", blob), re.findall(r".{40}(?i:zorbin).{20}", blob)[:4])
+            self.assertIn("Grimtooth is near the well", blob)                  # the epithet stays
+            self.assertIn("Grimtooth", data["session/journal/Maud.jsonl"].decode())
+            table = {e["name"]: e for e in s.name_table}
+            z, g = table["[6 chars]"], table["[9 chars]"]
+            self.assertTrue(z["typed_by_player"])
+            self.assertTrue(z["action"].startswith("replaced"))
+            self.assertTrue({"Mercy", "Aldith", "mind.log"} <= set(z["held_by"]), z["held_by"])
+            self.assertFalse(g["typed_by_player"])
+            self.assertTrue(g["action"].startswith("kept"))
+            self.assertEqual(g["held_by"], ["Maud"])
+
+    def test_resident_path_needs_no_phrase(self):
+        """The typed line follows no introduction pattern; the name is still learned, because
+        residents hold it and the player typed it."""
+        with tempfile.TemporaryDirectory() as t:
+            self.build(t, "Zorbin, at your service, friends")
+            s, data = self.run_scrub(t)
+            self.assertEqual(s.self_names, {"Zorbin"})
+            self.assertIsNone(re.search(r"(?i)zorbin", "".join(v.decode() for v in data.values())))
+
+    def test_backstop_table_in_review(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.build(t, 'i\'m called ""Zorbin""')
+            old = store.Identity.from_runtime
+            store.Identity.from_runtime = classmethod(lambda cls, *a, **k: ident())
+            try:
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(store.main(["scrub", "--write", os.path.join(t, "w"), t, "--kind", "play-session",
+                                                 "--decide", "model_exchanges=include"]), 0)
+            finally:
+                store.Identity.from_runtime = old
+            with open(os.path.join(t, "w", "names.md")) as f:
+                md = f.read()
+            self.assertIn("| [6 chars] |", md)
+            self.assertIn("| [9 chars] | Maud |", md)
+            self.assertIn("kept: the player never typed it", md)
+            self.assertNotIn("orbin", md.lower())
+            self.assertNotIn("rimtooth", md.lower())
+            for root, _, names in os.walk(os.path.join(t, "w")):
+                for n in names:
+                    with open(os.path.join(root, n), encoding="utf-8", errors="replace") as f:
+                        self.assertNotIn("zorbin", f.read().lower(), n)
+
+    def test_no_player_id_is_reported(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/journal/Mercy.jsonl", journal_entry("Mercy", "think", "{Zorbin=#26}", "{}") + "\n")
+            self.assertIn("was not found", store.names_markdown([], set()))
+            s = scrubber(kind="play-session")
+            store.scrub_source(t, s)
+            self.assertEqual(s.name_candidates, {})
+
+
 if __name__ == "__main__":
     unittest.main()
