@@ -172,7 +172,7 @@ pub fn update(
     icons: Res<Icons>,
     ui: Res<UiPointer>,
     carrying: Res<Carrying>,
-    looks: Res<crate::looks::Looks>,
+    (looks, rules): (Res<crate::looks::Looks>, NonSend<crate::verbs::Rules>),
     mut cells: Query<(Entity, &Cell, &mut BackgroundColor, &mut BorderColor, &mut bevy::ui::Outline, &mut Tag), (Without<Ghost>, Without<Lit>)>,
     mut cell_icons: Query<(&CellIcon, &mut Node, &mut ImageNode), (Without<Ghost>, Without<GhostIcon>)>,
     mut texts: ParamSet<(Query<(&CellCount, &mut Text)>, Query<&mut Text, With<Carry>>, Query<&mut Text, With<GhostLabel>>, Query<&mut Text, With<KnowTech>>, Query<(&KnowRowText, &mut Text)>, Query<(&KnowDetail, &mut Text)>)>,
@@ -216,7 +216,8 @@ pub fn update(
             let item = inv.rows.get(c.0).map(|r| r.0.as_str());
             show(&mut n, item.is_some());
             if let Some(it) = item {
-                let h = icons.get(Glyph::Item(item_mark(it)));
+                // The item's icon id from the rules (goods-2), drawn by this client's marks.
+                let h = icons.get(Glyph::Item(item_mark(&rules.item_look(it).0)));
                 if img.image != h {
                     img.image = h;
                 }
@@ -243,7 +244,7 @@ pub fn update(
     }
     if let Some(item) = &carrying.item {
         for mut img in &mut ghost_icon {
-            let h = icons.get(Glyph::Item(item_mark(item)));
+            let h = icons.get(Glyph::Item(item_mark(&rules.item_look(item).0)));
             if img.image != h {
                 img.image = h;
             }
@@ -253,7 +254,7 @@ pub fn update(
         }
         if let Some(id) = carrying.onto {
             for mut t in &mut texts.p2() {
-                set_text(&mut t, &format!("Give {} to {}", item.replace('_', " "), looks.of(id).unwrap_or("them")));
+                set_text(&mut t, &format!("Give {} to {}", rules.item_look(item).1, looks.of(id).unwrap_or("them")));
             }
         }
     }
