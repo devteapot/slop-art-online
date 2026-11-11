@@ -379,6 +379,8 @@ fn ground_color(t: Terrain) -> [f32; 4] {
         Terrain::Dirt => rgb(150, 118, 82),
         Terrain::Road => rgb(176, 156, 120),
         Terrain::Wall => rgb(140, 120, 90),
+        // A drop between levels: a bank, open to the eye (no block is raised on it).
+        Terrain::Drop => rgb(132, 112, 84),
     }
 }
 

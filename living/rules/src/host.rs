@@ -65,7 +65,8 @@ pub fn door(lot: &Lot) -> (f32, f32) {
 /// What [`hosted_map`] changed.
 #[derive(Clone, Debug, Default)]
 pub struct Hosted {
-    /// Tiles turned into `Wall` under building footprints and the props that block.
+    /// Tiles turned into `Wall` under building footprints and the props that block (walkable
+    /// ground, or a drop's edge).
     pub blocked_tiles: u32,
     /// Walkable tiles that buildings cut off from the main walkable area (enclosed yards); they
     /// stay as they are, but nothing is placed there.
@@ -79,7 +80,8 @@ pub struct Hosted {
 /// stands in a paved plaza by design: wells, market stalls and a landmark (a clock tower). Props that stand in the way
 /// ([`crate::settle::PropKind::blocks`]: fountains, market crosses, carts, kiosks, food stalls)
 /// block every walkable tile under them; the planner keeps them off streets and door paths.
-/// (Terrace drops and stair tiles are already in the land's own tiles.) Also marks the main
+/// (Terrace drops, as `Drop`, and stair tiles are already in the land's own tiles; a drop
+/// under a footprint or a blocking prop becomes `Wall`, since what stands there hides.) Also marks the main
 /// walkable area, found from the first settlement's plaza.
 pub fn hosted_map(land: &Land, p: &LandParams) -> (Map, Hosted) {
     let mut map = land.map.clone();
@@ -88,7 +90,8 @@ pub fn hosted_map(land: &Land, p: &LandParams) -> (Map, Hosted) {
         let on_plaza = matches!(lot.kind, LotKind::Well | LotKind::MarketStall) || land.settlements.get(lot.settlement as usize).is_some_and(|s| s.in_plaza(lot.centre));
         for (x, y) in footprint_tiles(lot, margin_of(land, p, lot)) {
             let t = map.get(x, y);
-            if t.walkable() && (t != Terrain::Road || on_plaza) {
+            // A building standing over a drop's edge is solid there too: it hides what is behind.
+            if (t.walkable() && (t != Terrain::Road || on_plaza)) || t == Terrain::Drop {
                 map.set(x, y, Terrain::Wall);
                 h.blocked_tiles += 1;
             }
@@ -96,7 +99,7 @@ pub fn hosted_map(land: &Land, p: &LandParams) -> (Map, Hosted) {
     }
     for prop in land.props.iter().filter(|p| p.kind.blocks()) {
         for (x, y) in prop_tiles(prop) {
-            if map.get(x, y).walkable() {
+            if map.get(x, y).walkable() || map.get(x, y) == Terrain::Drop {
                 map.set(x, y, Terrain::Wall);
                 h.blocked_tiles += 1;
             }
@@ -412,7 +415,7 @@ mod tests {
         let mega: serde_json::Value = serde_json::from_str(include_str!("../../seeds/floor-megacity.json")).unwrap();
         let params = |v: &serde_json::Value| -> LandParams { if v["map"]["params"].is_null() { LandParams::default() } else { serde_json::from_value(v["map"]["params"].clone()).unwrap() } };
         let cases = [
-            ("island", island["seed"].as_u64().unwrap(), island["map"]["size"].as_u64().unwrap() as u32, params(&island), (0x9b403da95bba9407u64, 0x0d2f77752781845c, 0x8ff57472b004a13f)),
+            ("island", island["seed"].as_u64().unwrap(), island["map"]["size"].as_u64().unwrap() as u32, params(&island), (0x8529800013728f1fu64, 0x0d2f77752781845c, 0x8ff57472b004a13f)),
             ("floor-megacity-2k", mega["seed"].as_u64().unwrap(), 2048, params(&mega), (0xdb59549c884bf8b8, 0xc06f16f3dcac1290, 0x0c6b3f2c51f13129)),
         ];
         let mut bad = Vec::new();

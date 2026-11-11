@@ -35,6 +35,7 @@ fn main() {
                 Terrain::Dirt => [150.0, 120.0, 84.0],
                 Terrain::Road => [196.0, 176.0, 130.0],
                 Terrain::Wall => [80.0, 70.0, 60.0],
+                Terrain::Drop => [120.0, 104.0, 86.0],
             };
             let grid = x % 100 == 0 || y % 100 == 0;
             let i = ((y * size + x) * 3) as usize;

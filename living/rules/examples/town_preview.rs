@@ -134,6 +134,7 @@ fn ground(t: Terrain) -> [f32; 3] {
         Terrain::Dirt => [156.0, 132.0, 96.0],
         Terrain::Road => [178.0, 164.0, 130.0],
         Terrain::Wall => [70.0, 62.0, 56.0],
+        Terrain::Drop => [118.0, 102.0, 86.0],
     }
 }
 

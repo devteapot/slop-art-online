@@ -40,6 +40,7 @@ fn profile(t: Terrain) -> (f32, f32) {
         Terrain::Forest => (0.5, 0.5),
         Terrain::Rock => (1.2, 1.0),
         Terrain::Wall => (0.35, 0.1),
+        Terrain::Drop => (0.3, 0.3),
     }
 }
 

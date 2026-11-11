@@ -2399,6 +2399,8 @@ fn place_spec(c: &SiteCtx, slope: &dyn Fn(usize) -> f32, sp: &SiteSpec, placed: 
 fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_hold: bool) -> (u32, u32) {
     let n = tiles.len();
     let walk = |t: u8| Terrain::from_u8(t).walkable();
+    // Walls and drops (`walls_hold`) are never cut through: they are built, or the ground's own.
+    let holds = |t: u8| walls_hold && (t == Terrain::Wall as u8 || t == Terrain::Drop as u8);
     let nb4 = |k: usize| {
         let (x, y) = (k % w, k / w);
         [(x > 0).then(|| k - 1), (x + 1 < w).then(|| k + 1), (y > 0).then(|| k - w), (y + 1 < w).then(|| k + w)]
@@ -2463,7 +2465,7 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_ho
         let d = dist[k];
         for (dir, q) in nb4(k).into_iter().enumerate() {
             let Some(q) = q else { continue };
-            if walls_hold && tiles[q] == Terrain::Wall as u8 {
+            if holds(tiles[q]) {
                 continue;
             }
             let cost = (!walk(tiles[q])) as u16;
@@ -2509,7 +2511,7 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_ho
                             continue;
                         }
                         let b = by as usize * w + bx as usize;
-                        if !walk(tiles[b]) && !(walls_hold && tiles[b] == Terrain::Wall as u8) {
+                        if !walk(tiles[b]) && !holds(tiles[b]) {
                             tiles[b] = if tiles[b] == Terrain::Water as u8 { Terrain::Sand as u8 } else { Terrain::Dirt as u8 };
                             opened += 1;
                         }
@@ -2521,7 +2523,7 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_ho
     (opened, closed)
 }
 
-/// Link pockets that walls cut off, through water or rock but never through a wall.
+/// Link pockets that walls cut off, through water or rock but never through a wall or a drop.
 pub(crate) fn connect_walled(tiles: &mut [u8], w: usize) -> (u32, u32) {
     connect(tiles, w, 0, &[], true)
 }

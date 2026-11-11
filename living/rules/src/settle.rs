@@ -3506,7 +3506,7 @@ impl<'a> Plan<'a> {
             }
             let q = add(p, mul(d, o.step));
             let t = land.map.at(q.0, q.1);
-            if !t.walkable() || t == Terrain::Wall || land.sd_at(q.0, q.1) < 2.0 + o.hw {
+            if !t.walkable() || land.sd_at(q.0, q.1) < 2.0 + o.hw {
                 break;
             }
             if o.drop > 0.0 && (land.height(q.0, q.1) - land.height(p.0, p.1)).abs() > o.drop {
@@ -3900,7 +3900,7 @@ impl<'a> Plan<'a> {
             return false;
         }
         for p in r.corners().iter().chain([foot, head].iter()) {
-            if !land.map.at(p.0, p.1).walkable() || land.map.at(p.0, p.1) == Terrain::Wall || land.sd_at(p.0, p.1) < 3.0 || poly_outside(&set.plaza.points, *p) < 1.5 * k {
+            if !land.map.at(p.0, p.1).walkable() || land.sd_at(p.0, p.1) < 3.0 || poly_outside(&set.plaza.points, *p) < 1.5 * k {
                 return false;
             }
         }
@@ -4140,7 +4140,7 @@ impl<'a> Plan<'a> {
                 return None;
             }
             // Nor is a garden or field laid across a terrace's step: the step's edge becomes a
-            // wall (`terrace::paint_drops`), which would cut through it.
+            // drop (`terrace::paint_drops`), which would cut through it.
             let terraced = land.mods.terr.iter().any(|z| dist(z.c, lot.centre) < z.r_out + 4.0);
             if terraced && matches!(lot.kind, LotKind::Garden | LotKind::Field) && hmax - hmin > terrace::CLIMB_M {
                 return None;
@@ -4925,7 +4925,7 @@ fn paint_roads(land: &mut Land, roads: &[Road], pass: u8) -> Vec<((i32, i32), (i
                                 bb.1 = (bb.1 .0.max(x), bb.1 .1.max(y));
                             }
                         }
-                        Terrain::Wall => {}
+                        Terrain::Wall | Terrain::Drop => {}
                         // Before streets are laid out only river crossings are painted, since
                         // main streets may still bend away from the routed line.
                         _ if pass == 0 => {}
@@ -4962,7 +4962,7 @@ fn paint_rest(land: &mut Land, settlements: &[Settlement], lots: &[Lot]) {
                 if poly_contains(p, (x as f32 + 0.5, y as f32 + 0.5)) {
                     let paved = s.plaza.paved;
                     set(land, x, y, &|t| match t {
-                        Terrain::Water | Terrain::Wall => None,
+                        Terrain::Water | Terrain::Wall | Terrain::Drop => None,
                         _ if paved => Some(Terrain::Road),
                         Terrain::Forest | Terrain::Dirt | Terrain::Rock | Terrain::Road => Some(Terrain::Grass),
                         _ => None,
@@ -5217,7 +5217,7 @@ mod tests {
                     // Towers stand on their wall; lamps at a road's edge; plaza lots on paving.
                     // On terraces, gardens and fields step over a drop's wall, and a building's
                     // edge (which blocks where the land is hosted) or a lamp post may stand by one.
-                    Terrain::Wall => lot.frontage == Frontage::Wall(lot.settlement) || (l.settlements[lot.settlement as usize].terrace_m > 0.0 && (matches!(lot.kind, LotKind::Garden | LotKind::Field | LotKind::Lamp) || crate::host::blocks(lot.kind))),
+                    Terrain::Wall | Terrain::Drop => lot.frontage == Frontage::Wall(lot.settlement) || (l.settlements[lot.settlement as usize].terrace_m > 0.0 && (matches!(lot.kind, LotKind::Garden | LotKind::Field | LotKind::Lamp) || crate::host::blocks(lot.kind))),
                     Terrain::Road => lot.kind == LotKind::Lamp || in_plaza(l, lot),
                     _ => true,
                 };

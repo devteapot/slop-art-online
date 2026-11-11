@@ -209,6 +209,7 @@ fn main() {
                 }
                 Terrain::Sand => [205.0, 185.0, 140.0],
                 Terrain::Rock => [120.0, 110.0, 100.0],
+                Terrain::Drop => [95.0, 85.0, 75.0],
                 Terrain::Dirt => [170.0, 140.0, 105.0],
                 Terrain::Forest => [95.0, 115.0, 70.0],
                 Terrain::Grass => [160.0, 158.0, 110.0],
