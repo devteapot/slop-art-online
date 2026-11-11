@@ -1712,7 +1712,9 @@ def secondary(nodes, springs):
         {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.32), 0.105 * GIRTH), sphere("J_Bip_C_UpperChest", (-0.12, -0.012, 1.385), 0.055),
                                                              sphere("J_Bip_C_UpperChest", (0.12, -0.012, 1.385), 0.055)]},
     ]
-    groups = [{"comment": "Hair", "stiffiness": 0.8, "gravityPower": 0.10, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": 0.45, "center": -1, "hitRadius": 0.010,
+    # Stiff enough to settle within half a second of a jump in pose (the asset view photographs
+    # 0.6 s after posing), loose enough to swing in a walk.
+    groups = [{"comment": "Hair", "stiffiness": 2.0, "gravityPower": 0.10, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": 0.5, "center": -1, "hitRadius": 0.010,
                "bones": [nodes[chain[0]] for chain in springs], "colliderGroups": [0, 1, 2]}]
     return {"boneGroups": groups, "colliderGroups": colliders}
 

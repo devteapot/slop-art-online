@@ -239,13 +239,18 @@ The figures are the woman preset's with every face value at 0, computed from `he
 
 A braid is short fat locks crossing from side to side along a hanging path; a bun is locks wound round a ball.
 
-| Style | Locks | Hair triangles (with the cap, about 2,700) | Spring chains |
-|---|---|---|---|
-| `crop`, `balding` | 39 to 46 | 5,100 to 5,400 | none |
-| `short`, `tousled`, `swept` | 38 to 51 | 6,500 to 7,600 | none |
-| `tail`, `bun`, `braid`, `braids` | 32 to 38 | 5,900 to 8,000 | 1 (a tail, a braid) or 2 |
-| `shag`, `bob`, `bob_parted` | 39 to 40 | 10,500 to 10,900 | none |
-| `long` | 44 | 11,600 | 5, of 5 joints each |
+Counted on the woman preset at each style's usual length:
+
+| Style | Locks | Triangles in the locks | With the cap (2,500 to 2,800) | Spring chains |
+|---|---|---|---|---|
+| `kerchief`, `sides` (under headwear) | 10 to 26 | 600 to 1,000 | 3,200 to 3,700 | none |
+| `crop`, `balding` | 39 to 46 | 1,400 to 1,700 | 4,000 to 4,400 | none |
+| `short`, `tousled`, `swept` | 38 to 51 | 1,900 to 2,500 | 4,500 to 5,200 | none |
+| `shag`, `bob`, `bob_parted` | 39 to 40 | 3,000 to 4,100 | 5,600 to 6,800 | none |
+| `tail`, `bun`, `braid`, `braids` | 32 to 38 | 3,200 to 4,300 | 5,800 to 7,000 | 1 (a tail, a braid) or 2 (braids), none for a bun |
+| `long` | 44 | 8,500 to 8,800 | 11,100 to 11,600 | 5, of 4 or 5 joints each |
+
+The reference's hair is 16,400 triangles.
 
 ## Motions on generated people
 
@@ -261,7 +266,12 @@ The eight motions added to the library on 2026-11-11 were baked and judged on bo
 | `sit_ground_down`, `stand_up_ground` | Fix in retargeting | Good motions. The supporting hand goes 8 to 9 cm into the floor on our man, and the crossed feet sit 7 cm under at the ankle (14 cm at the boot). |
 | `sit_ground` | Needs new takes, and the same fix | One held pose: everything ranges 3 cm over 6 s. The feet are under the floor for the whole loop. |
 
-The fix proposed for `animate.py`, not made in pass 1: a floor guard after the legs are solved, per character. Hold each ankle and wrist at or above a clearance over the floor (about 5 cm and 3 cm), by raising the leg's target, a two-bone solve for the arm, and lifting the hips where a limb cannot reach. The same guard on the ball of the foot stops the toe dips.
+What happened since (2026-11-11):
+
+- **The floor guard is in `animate.py`** (`floor_guard`, from the laptop's `floor-guard` branch). It runs on every Kimodo and overlay clip, so there is nothing to turn on: a foot whose heel, ball or toe tip is more than 1 cm under the floor is lifted, and a clip that never goes under bakes exactly as before. It guards feet. A hand under the floor is not lifted; the new takes below were picked so hands stay above it.
+- **`work`, `play` and the three ground motions were taken again** (the clip lab; `clips.json` names the new takes), and 32 locomotion clips were added.
+- **Pass 2's people were baked with that `animate.py`,** and so was the control. On the dev-box the library held the takes of 30 of the 67 entries; the re-made motions and the new locomotion clips were not there to bake, so they are not judged on pass 2's people yet (`ONLY=present`).
+- **Hair on spring bones** changes nothing for `animate.py`: the chains hang under the head and the clips do not key them.
 
 ## What was learnt from VRoid
 
@@ -270,23 +280,54 @@ The controls `lookdev/vroid-Sendagaya_Shino.glb` and `vroid-Vivi.glb` were taken
 | VRoid (Shino) | What it does | Ours |
 |---|---|---|
 | The face is a mask of 1,342 triangles; the skin texture is nearly flat colour with a blush, a nose shadow and a lip tint | Detail is painted, not modelled | The same idea: a smooth form and a painted atlas |
-| Real eye openings; the white is a bowl 3 to 25 mm behind the lids, the iris a disc in front of it, the highlight a third layer | The lids pass in front of the eye, so it reads as set in the head from any side | Real openings with a rim; one bowl carries white, iris and highlights as paint. Not separate layers yet, so the eyes cannot look round. |
-| Iris texture: a tall ellipse, dark rim, dark upper half, a bright warm crescent below, a blue rim light above | The eye looks lit and deep | Round iris, dark rim, shaded top, lit crescent, rays, pupil, two highlights |
-| Lash line, lashes and brows are separate cards with alpha-blended textures, standing off the skin | Soft drawn edges; they move with expressions | Vector shapes with vertex colours: crisp at any distance, no blending or sorting, less texture in them |
+| Real eye openings; the white is a bowl 3 to 25 mm behind the lids, the iris a disc in front of it, the highlight a third layer; each eye turns on a bone (`J_Adj_L_FaceEye`, `J_Adj_R_FaceEye`), about 10° for a look fully aside | The lids pass in front of the eye, so it reads as set in the head from any side, and it can look round | Since pass 2 the same three layers on a ball of 8 cm radius, the iris and highlights on the same two bones; 6° is a look fully aside |
+| Iris texture: a tall ellipse, dark rim, dark upper half, a bright warm crescent below, a blue rim light above | The eye looks lit and deep | Since pass 2 a tall ellipse with a dark rim, a shaded top, rays, a pale ring, a warm crescent below, a cool arc above and a soft pupil; one picture for both eyes |
+| Lash line, lashes and brows are separate cards with alpha-blended textures, standing off the skin | Soft drawn edges; they move with expressions | The lash line is a drawn shape with vertex colours. Since pass 2 lashes and brow hairs are strands (small tapering cards), each with its own tone: crisp at any distance, no blending or sorting. |
+| Hair: 46 locks, each one primitive of a front and a back surface 3 vertices across and 15 to 88 along (16,400 triangles), all mapped root to tip onto one 512×1024 grey strand texture that is darker at the root and the tip; the scalp carries a second texture of the same strands with a jagged alpha edge at the hairline | Each lock shows strands and shades as one piece; no skin shows between locks | Since pass 2 the same construction, computed: 32 to 51 locks five vertices across over a cap with the strand texture ([how hair is built](#how-hair-is-built)); colour per vertex, so one strand texture serves everyone |
+| The highlight is a separate emissive texture: a band a third of the way down each lock, broken into vertical teeth | The glossy band of drawn hair | Not built: the game's own hair shading draws a ring round the head from the normals, with teeth from the hair's UVs. Ours takes that ring; it is thinner and more even than the reference's band |
+| 15 chains of spring bones on the long locks, with colliders on the head and body | Hair swings and settles | Since pass 2 up to 5 chains of 5 joints on `long`, `tail`, `braid` and `braids`, in the same VRM block, so the game's spring bones swing them |
 | Mouth: a real slit with teeth and tongue inside | Speech shapes show an inside | The same |
 | 41 morph targets `Fcl_ALL_*`, `Fcl_BRW_*`, `Fcl_EYE_*`, `Fcl_MTH_*` | Expressions and visemes | 15, built from five controls (each lid, a joyful close, jaw, mouth width, corners, brow ends) |
 | Face normals come sculpted; the game flattens them and shades from a map (`face_normals.py`) | A clean shadow edge that sweeps the face | Unchanged; our UVs wrap the whole head, so faces across the seam at the back have their own vertices |
 | 30 textures, 10.7 MiB a character | | 1 texture, 0.1 to 0.3 MiB |
 
-## What is weak, and what later passes need
+## What still separates ours from the reference
 
-- **Hair** is the spike's cap and clumps. It is the weakest part of every picture now, and it hides the head's outline. It also casts hard shadows on the cheeks.
-- **Eyes cannot move.** The iris is painted on the bowl. Separate iris and highlight layers (as VRoid) would allow look-at.
-- **Lashes and brows are flat shapes.** No strands inside them. Brows are one colour.
+Judged on the pass-2 page and the asset board, where every close-up has the reference beside it. Ordered by how much it shows.
+
+| | After pass 1 | After pass 2 |
+|---|---|---|
+| 1 | **Hair:** clumps on a cap, the scalp showing, no strands, no highlight | **How the hair is finished.** The construction is now the reference's, and the gap is in the surface. The reference's locks are fewer and cleaner, with crisp cut ends, and its highlight is a broad band broken into teeth. Ours shows more lock edges, its ends are ragged, the game's ring on it is a thin even stripe, and long hair lies on the shoulders in slabs. Men's short styles have no counterpart in the reference and are the roughest. |
+| 2 | **Eyes:** half the reference's height, high on the head, a small iris | **The face's paint.** The reference's skin is almost flat colour with a soft blush, a dot of a nose and a tiny mouth. Ours still paints a nose shadow, nostrils and a full mouth, and the lower lid's line is harder. Its eyes are still lower on a wider head than ours at any style number. |
+| 3 | **Proportions:** a long lower face, a narrow head, a modelled nose | **Clothes and silhouette.** The reference wears fitted, folded cloth with a skirt and a bow that swing. Ours wears tubes: smooth coats, smocks and boots with painted shade. Untouched since the spike. |
+| 4 | **Brows and lashes:** flat shapes of one colour | **Depth in the eye.** Close up the reference's iris has two colours, a sparkle and blended lash clumps. Ours has the same parts drawn crisper and plainer, and its lashes are separate hairs. |
+| 5 | **Clothes and silhouette** | **Hands**, and how cloth, hair and body meet: hair passes through a raised collar, and the neck and face shade differently under the jaw. |
+
+What pass 2 did not change, from pass 1's list:
+
 - **The nose from the front** is a shade and two nostril marks. Large noses read only in profile.
 - **Ears** are simple rings.
-- **Plain clean-shaven men are the closest to each other.** With the same hair they need a second look; beards, age and skin carry much of the men's variety.
+- **Plain clean-shaven men are the closest to each other,** though less so than in pass 1 now that six short styles, a parting and a fringe vary; beards, age and skin still carry much of the men's variety.
 - **Children wear adult garments** scaled by the recipe, and build is a light touch (girth, a belly, a chest).
 - **Neck and face shade differently**, so a line shows under the jaw, as on VRoid files.
-- **Cost is not measured.** A person is about 34,000 triangles (the head 9,700), one 1024² texture, 11 materials, 5.9 MiB with the library's 34 clips. Each person's face and eye materials are their own, so 64 people add 128 materials. Level of detail and crowd frame cost are later passes.
-- **Notes for later passes.** Outfit pieces should become slots chosen by parameter, as hair styles are. Children wear adult garments scaled by the recipe. `head_form.py`'s beard coverage could drive a beard of real strands. The atlas has room: the eyes' strip is 448×192 a eye and could hold separate iris layers.
+
+New weak points of pass 2:
+
+- **Short hair from behind and at the temples.** The nape ends in a ragged line of points, and skin can show in front of the ear.
+- **Long hair on the shoulders** lies in broad flat slabs with visible cut ends, and passes through a coat's raised collar.
+- **The highlight ring** is the game's, drawn from the normals. On our smooth mass of hair it is a thin even stripe across the fringe; the reference's band is broader and more broken.
+- **A wide lock can cross a cheek** in the three-quarter view on some seeds (the side locks of `long` and `bob`).
+- **The eyes' corners.** The white lies on a ball, so at the outer corner it sits a few millimetres behind the lid; from a low side angle a dark gap can show.
+- **The look is not driven by the game yet.** The bones, weights and the file's look-at block are there, and `--look` shows it; the client has to turn the two bones.
+- **Grey goes lock by lock,** which can read as patches at middle values on fair hair.
+- **Greying brows, beards and hair** are still three separate colours.
+
+## What later passes need
+
+- **Pass 3, in order:**
+  1. Finish the hair's surface: fewer, cleaner locks at the fringe with cut ends drawn as edges; the highlight band as the reference has it (per-lock teeth, in the shading or painted into the strand texture's column); a neat nape; long hair that parts round the shoulders and collar.
+  2. The face's paint toward the reference: nose and mouth as marks, a softer blush, the lower lid's line; and the skull's form (a wider, rounder cranium, the eyes lower still), which a style number cannot reach.
+  3. Level of detail and shared materials for crowds ([crowd cost](#crowd-cost)), before 64 of them walk Cullet.
+  4. The game turning the eyes (two bones, a few degrees) and looking at whoever speaks.
+- **After that:** clothes as slots chosen by parameter, with cloth that swings; women's silhouettes; children's own garments; hands.
+- `head_form.py`'s beard coverage could drive a beard of strands, as the brows now are.

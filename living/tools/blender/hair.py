@@ -259,17 +259,17 @@ class Hair:
 
     # The layers styles are made of. ---------------------------------------------------------
 
-    def under(self, z_end, n=13, width=0.078, back_drop=0.0, g=42.0, blunt=0.3, chain=None, span=(56, 304), el=34.0, taper=2.6):
+    def under(self, z_end, n=13, width=0.078, back_drop=0.0, g=42.0, blunt=0.3, chain=None, span=(56, 304), el=34.0, taper=2.6, ragged=0.0):
         """The sides and back, hanging from mid-height: az from the temple round the back."""
         for i in range(n):
             az = span[0] + (span[1] - span[0]) * i / (n - 1)
             a = az if az <= 180 else az - 360
             back = smooth((abs(a) - 95) / 60)
             ch = -1 if chain is None else chain(a)
-            self.lock(a + self.u(-3, 3), el + self.u(-4, 4), "down", z_end=z_end - back_drop * back + self.u(-0.008, 0.008), length=0.9, width=width + self.u(-0.005, 0.006), lift=0.004, g=g,
+            self.lock(a + self.u(-3, 3), el + self.u(-4, 4), "down", z_end=z_end - back_drop * back + self.u(-0.008, 0.008) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width + self.u(-0.005, 0.006), lift=0.004, g=g,
                       blunt=blunt, layer=0, chain=ch, shade=-0.05, taper=taper)
 
-    def over(self, z_end, n=7, width=0.074, back_drop=0.0, g=30.0, blunt=0.3, chain=None, front=80.0, taper=2.6, lift=0.009):
+    def over(self, z_end, n=7, width=0.074, back_drop=0.0, g=30.0, blunt=0.3, chain=None, front=80.0, taper=2.6, lift=0.009, ragged=0.0):
         """From the parting across the top and down over the under layer, on each side, then
         fanning round the crown."""
         px = self.part_x()
@@ -289,10 +289,10 @@ class Hair:
                 back = smooth((t - 0.55) / 0.45)
                 a_end = 90 + 45 * back
                 ch = -1 if chain is None else chain(-side * a_end)
-                self.lock(az, el, comb, z_end=z_end - back_drop * back + self.u(-0.010, 0.006), length=0.9, width=width + self.u(-0.006, 0.006), lift=lift, g=g, blunt=blunt, layer=1, chain=ch,
+                self.lock(az, el, comb, z_end=z_end - back_drop * back + self.u(-0.010, 0.006) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width + self.u(-0.006, 0.006), lift=lift, g=g, blunt=blunt, layer=1, chain=ch,
                           shade=0.03, taper=taper)
 
-    def crown(self, z_end, n=7, width=0.070, back_drop=0.0, chain=None, blunt=0.3, taper=2.6, g=30.0):
+    def crown(self, z_end, n=7, width=0.070, back_drop=0.0, chain=None, blunt=0.3, taper=2.6, g=30.0, ragged=0.0):
         """Round the crown: locks from the whorl fanning down the back, over the others."""
         w = self.whorl
         for i in range(n):
@@ -301,7 +301,7 @@ class Hair:
             root = self.comb.surface(180.0 + math.degrees(a) * 0.45, 62.0 - 6 * abs(math.sin(a)))[0]
             az_end = 180 - math.degrees(a) * 0.9
             az_end = az_end if az_end <= 180 else az_end - 360
-            self.lock(0, 0, comb, root=root, z_end=z_end - back_drop + self.u(-0.010, 0.006), length=0.9, width=width + self.u(-0.006, 0.006), lift=0.009, g=g, blunt=blunt, layer=2,
+            self.lock(0, 0, comb, root=root, z_end=z_end - back_drop + self.u(-0.010, 0.006) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width + self.u(-0.006, 0.006), lift=0.009, g=g, blunt=blunt, layer=2,
                       chain=-1 if chain is None else chain(az_end), shade=0.04, taper=taper, bulge=0.003)
 
     def bangs(self, mode="straight", n=7, reach=1.0, width=0.048, blunt=0.55, span=50.0, g=38.0):
@@ -450,9 +450,10 @@ class Hair:
         z = self.side_line()
         chain = self._chains([("BackL", 95, 150), ("Back", 150, 181), ("Back", -181, -150), ("BackR", -150, -95), ("SideL", 40, 95), ("SideR", -95, -40)])
         drop = 0.03
-        self.under(z, n=13, blunt=0.0, back_drop=drop, chain=chain, taper=3.5)
-        self.over(z + 0.02, n=8, blunt=0.0, back_drop=drop, chain=chain, taper=3.5)
-        self.crown(z + 0.01, blunt=0.0, back_drop=drop, chain=chain, taper=3.5)
+        # Ends at uneven lengths that thin over their last third, as long hair's do.
+        self.under(z, n=13, blunt=0.0, back_drop=drop, chain=chain, taper=1.9, ragged=0.035)
+        self.over(z + 0.02, n=8, blunt=0.0, back_drop=drop, chain=chain, taper=1.9, ragged=0.035)
+        self.crown(z + 0.01, blunt=0.0, back_drop=drop, chain=chain, taper=1.9, ragged=0.035)
         mode = "curtain" if abs(self.parting) < 0.3 else "swept"
         self.bangs(mode, n=8)
         self.temples(min(z + 0.10, -0.10), n=2)
