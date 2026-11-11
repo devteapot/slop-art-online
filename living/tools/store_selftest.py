@@ -14,6 +14,7 @@ import os
 import random
 import string
 import sys
+import tarfile
 import tempfile
 import types
 import unittest
@@ -350,6 +351,37 @@ class Batches(unittest.TestCase):
                                      [json.loads(x) for x in body.splitlines()], rel)
                 else:
                     self.assertEqual(got, body, rel)
+
+    def test_consolidation_accounting_is_published(self):
+        """trials.py's per-character consolidation table and provider outages (summary.json
+        `consolidations`, `outages`, `call_failures`; report.md's tables) are published with the
+        batch while the journals, the mind's outcome lines among them, are held."""
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "ar2")
+            fake_batch(src)
+            table = {"total": {"attempted": 3, "primary": 1, "fallback": 1, "retried": 1, "lost": 0, "trimmed": 0, "capacity_429": 1},
+                     "by_character": {"Mara Vane": {"attempted": 3, "primary": 1, "fallback": 1, "retried": 1, "lost": 0, "trimmed": 0, "capacity_429": 1}}}
+            summary = {"db": "verify-trial-x-life-iter11-r1", "consolidations": table, "call_failures": {"capacity_429": 2},
+                       "outages": [{"since_t": 10.0, "until_t": 50.0, "seconds": 40.0, "failed": 9, "kinds": {"capacity_429": 9}}]}
+            write(src, "life-iter11-r1/summary.json", json.dumps(summary))
+            write(src, "life-iter11-r1/journal/outcomes/consolidations.jsonl",
+                  json.dumps({"actor": "Mara Vane", "outcome": "integrated", "route": "fallback", "model_call": True}) + "\n")
+            row = "| life/iter11/r1 | Mara Vane | 3 | 1 | 1 | 1 | 0 | 0 | 1 |"
+            write(src, "report.md", "# Batch\n\n## Consolidations\n\n" + row + "\n")
+            out = os.path.join(t, "packed")
+            s = scrubber()
+            man = store.pack_batch(src, out, s, machine="test")
+            with gzip.open(os.path.join(out, "instances.jsonl.gz"), "rt") as f:
+                inst = {r["instance"]: r for r in map(json.loads, f)}
+            got = json.loads(inst["life-iter11-r1"]["summary"])
+            self.assertEqual((got["consolidations"], got["outages"], got["call_failures"]), (table, summary["outages"], summary["call_failures"]))
+            with tarfile.open(os.path.join(out, "files.tar.gz")) as tf:
+                names = tf.getnames()
+                report = tf.extractfile("report.md").read().decode()
+            self.assertIn(row, report)
+            self.assertFalse(any("outcomes" in n for n in names), "the journal's outcome lines are held with it")
+            held = [f for f in man["files"] if "outcomes" in f["path"]]
+            self.assertEqual([f["status"] for f in held], ["held"])
 
     def test_fetch_missing(self):
         with tempfile.TemporaryDirectory() as t:
