@@ -543,7 +543,9 @@ streets = [
 # Net Wynd each Row goes on into the Ladder as a 3 m walk under a rank of glass (so every Row's
 # view west ends on glass), and the Ladder's own terraces have a walk each. Behind each Row a
 # 2.5 m back lane runs between the courts' walls and the plots under the wall of the row above.
-ROW_END = {"low": 77.5, "mid": STORE_WYND_X, "high": STORE_WYND_X}
+# (Mid Row stops half a metre short of the wynd's middle: a street's end is round, and the
+# Marver's terrace begins 2 m past the wynd.)
+ROW_END = {"low": 77.5, "mid": STORE_WYND_X - 0.5, "high": STORE_WYND_X}
 BACK_LANE_Y = {row: r2(ROW_Y[row] + FRONT_GAP + HOUSE_DEPTH + COURT_D[row] + BACK_LANE_W / 2) for row in ("low", "mid", "high")}
 for row in ("low", "mid", "high"):
     streets.append({"id": ROW_NAME[row], "points": [[NET_WYND_X, ROW_Y[row]], [ROW_END[row], ROW_Y[row]]], "width_m": 5.0, "class": "street", "surface": "setts", "level": row})
@@ -552,12 +554,12 @@ for row in ("low", "mid", "high"):
 for _k, _name in (("lad_1", "the Ladder's second walk"), ("lad_2", "the Ladder's fourth walk"), ("lad_3", "the Ladder's sixth walk")):
     streets.append({"id": _name, "points": [[LADDER_W + 2, BAND[_k][1] - LADDER_LANE], [LADDER_E - 2.0, BAND[_k][1] - LADDER_LANE]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": _k})
 streets.append({"id": "the upper walk", "points": [[LADDER_W + 2, UPPER_WALK_Y], [50, UPPER_WALK_Y]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": "upper"})
-# The Crown's paths are the ones feet make: from the head of the Tally Wynd west to the bench, the
-# thorn and the graveyard, and north-east to the Readers' House (the children, every morning) past
+# The Crown's paths are the ones feet make: from the head of the Tally Wynd west to the bench
+# beside the thorn, and north-east to the Readers' House (the children, every morning) past
 # the cistern (everyone's water), then on to the peat barn and the Moss road (the peat comes down
 # this way).
-streets.append({"id": "the Crown path", "points": [[-30, 139.0], [TALLY_X[4], 139.0], [14, 150.0], [24, 160.3]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": "crown"})
-streets.append({"id": "the peat road", "points": [[24, 160.3], [35, 176.0], [37.5, 192.5], [50, 192.5]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": "crown"})
+streets.append({"id": "the Crown path", "points": [[-19, 139.0], [TALLY_X[4], 139.0], [14, 150.0], [24, 160.3]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": "crown"})
+streets.append({"id": "the peat road", "points": [[24, 160.3], [32.5, 160.3], [35, 176.0], [37.5, 192.5], [50, 192.5]], "width_m": 3.0, "class": "lane", "surface": "earth", "level": "crown"})
 # Low Row's end: the lane to the head of the Cinder Steps.
 streets.append({"id": "the Cinder Steps' head", "points": [[ROW_END["low"], ROW_Y["low"]], [ROW_END["low"], 50.0]], "width_m": 3.0, "class": "lane", "surface": "setts", "level": "low"})
 stairs = []
@@ -902,7 +904,7 @@ for l in [l for l in lots if l["id"] in WALKED_ON]:
 # side of the Crown path (south).
 for l in [l for l in lots if l["id"].startswith("root_plot_")]:
     n = int(l["id"].rsplit("_", 1)[1])
-    fixture(f"plot_wall_{n}", "plot_wall", l["at"], l["size"], "south", H["crown"], 1.0, f"dry stone round root plot {n}, its back to the terrace wall; the gate faces the walk",
+    fixture(f"plot_wall_{n}", "plot_wall", l["at"], l["size"], "south", H[l["level"]], 1.0, f"dry stone round root plot {n}, its back to the terrace wall; the gate faces the walk",
             age=0.7, repair=0.6 - 0.02 * ((n - 1) % 6), gate_at=r2(-2.4 + 1.2 * ((n - 1) % 3)), plot=l["id"])
 
 # The Strand's dressing (SMALL_CITY §6): each thing where its use puts it.
