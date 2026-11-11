@@ -25,15 +25,33 @@ const CHUNKS_PER_FRAME: usize = 3;
 /// Ground samples per metre.
 const RES: u32 = 2;
 
-/// How far (metres) terrain is drawn.
+/// How far (metres) terrain is drawn on a tile world, and the current environment's fog.
 #[derive(Resource)]
 pub struct Draw {
     pub radius: f32,
+    /// The current environment's mood fog (start, end), metres for an ordinary adult: the camera
+    /// fogs by it (`camera::follow`), and landmarks and the ground under them are drawn out to its
+    /// end ([`Draw::landmark_reach`]). None (tile worlds, the character line-up): the camera's own
+    /// fog round its draw radius.
+    pub fog: Option<(f32, f32)>,
 }
 
 impl Default for Draw {
     fn default() -> Self {
-        Self { radius: 110.0 }
+        Self { radius: 110.0, fog: None }
+    }
+}
+
+impl Draw {
+    /// Take an environment's mood: its fog distances.
+    pub fn mood(&mut self, md: &crate::envs::Mood) {
+        self.fog = Some((md.fog_start.max(0.0), md.fog_end.max(md.fog_start + 1.0)));
+    }
+
+    /// How far landmarks, and the coarse ground and sea under them, are drawn (m): where the
+    /// mood's fog is complete, so nothing appears at that distance. 0 without a mood.
+    pub fn landmark_reach(&self) -> f32 {
+        self.fog.map_or(0.0, |f| f.1)
     }
 }
 

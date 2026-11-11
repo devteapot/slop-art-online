@@ -1,26 +1,27 @@
-//! Whom the text box speaks to (play-test 2: every chat line went to no one, and in a crowd an
-//! unaddressed line from a stranger draws no conversation turn from the minds).
+//! Whom the text box speaks to (play-test 2: every chat line went to no one; the owner's rule,
+//! 2026-11-11: "if your cursor is not on someone and you press enter, you go into general chat.
+//! If you are hovering someone and press enter, you enter chat with that person specifically.
+//! But that conversation should still be kind of public, unless you whisper").
 //!
-//! - **Earshot is the rules'.** The world's installed script answers `senses(a)`, the law the
-//!   authority's `perceive::speak` asks for each listener; its `hearing` is how far speech
-//!   carries. The client asks it for each person it perceives (their kind and stage; night and
-//!   dark from the displayed clock by the `daylight` law), four times a second while the box is
-//!   open.
-//! - **Whom.** When the box opens it addresses the person under the cursor (combat's pick) if
-//!   they are within earshot, else the nearest person within earshot. Tab goes to the next one
-//!   within earshot, nearest first. A left tap on a peaceful person opens the box to them
-//!   (`combat.rs`), and a tap on someone else while it is open addresses them instead.
-//! - **Shown as I know them.** The box reads "Say to <label>", the projection's `label` from
-//!   `seen_characters`: a name only where the rules give it, else "a stranger", "a child". The
-//!   one addressed is the HUD's target while the box is open, so their plate shows which
-//!   stranger it is.
-//! - **Sent with `to`.** `human_say(text, to)`. With nobody in earshot the box says so and the
-//!   line goes to no one (`to = 0`), as before.
-//! - **What the authority accepts.** Any `to`. The line is heard by everyone within their own
-//!   hearing; the one addressed hears it as said to them (a conversation turn for their mind),
-//!   whatever the 6 m rule for unaddressed speech (`address_m`). An addressee out of earshot
-//!   hears nothing, and I get "No answer from …" (a `silence` experience row), shown as a
-//!   refused note. A line within 2 s of the last is refused ("speaking too fast").
+//! - **Enter, nobody under the cursor:** to the room (`to = 0`); the box is in Log and people.
+//! - **Enter while hovering someone:** to them (`to = id`); their window opens with the box. The
+//!   line is still heard by everyone in earshot (the rules' `perceive::speak`).
+//! - **Tab** goes to the next person within earshot (nearest first), then back to the room.
+//! - A tap on a peaceful person, F on them, or a click in their window's box addresses them.
+//! - **The box says whom:** "To the room", "To a child in red" (labels by looks, `looks.rs`).
+//! - **Modes come from a table** ([`MODES`]): today the room and a person. Whispering (close, or
+//!   through skills) and skill channels are the Spark coordinator's `docs/COMMUNICATION.md`;
+//!   the table keeps a place for whisper, shown greyed, with no rules behind it yet.
+//! - **Earshot is the rules'.** The world's `senses(a)` law (`hearing`), asked per person
+//!   perceived (their kind and stage; night and dark from the displayed clock).
+//! - **When the room does not answer, the client says so.** Minds give no turn to a line to the
+//!   room yet (until the Spark's greeting experiments are on). About 10 s after a line to the
+//!   room with nobody taking it up, a note says how many heard it and how to speak to someone.
+//!   Who heard it: the people perceived within earshot when it was said (until the authority's
+//!   `heard_by` lands, `heard.rs`).
+//! - **What the authority accepts:** any `to`. An addressee out of earshot hears nothing, and I
+//!   get "No answer from …" (a `silence` row). A line within 2 s of the last is refused
+//!   ("speaking too fast").
 
 use crate::net::Net;
 use crate::world::Scene;
@@ -29,6 +30,21 @@ use living_bindings::*;
 use living_rules::script::{ActorFacts, SkillCtx};
 use spacetimedb_sdk::Table;
 use std::collections::HashSet;
+
+/// A way of speaking the box offers: its key, whether it names a person, and whether the
+/// world's rules allow it yet (whisper and skill channels come with `docs/COMMUNICATION.md`).
+pub struct ModeSpec {
+    pub key: &'static str,
+    pub person: bool,
+    pub available: bool,
+}
+
+/// The box's ways of speaking, in Tab's order: a person in earshot, then the room. Whisper is
+/// listed, unavailable, so the box shows where it will go.
+pub const MODES: [ModeSpec; 3] = [ModeSpec { key: "person", person: true, available: true }, ModeSpec { key: "room", person: false, available: true }, ModeSpec { key: "whisper", person: true, available: false }];
+
+/// How long the room has to take a line up before the note says nobody did (s).
+const ROOM_WAIT_S: f64 = 10.0;
 
 /// While the box is open, who is within earshot is asked this often (s).
 const ASK_S: f32 = 0.25;
@@ -45,8 +61,21 @@ pub struct Talk {
     pub earshot: Vec<u32>,
     /// A left tap on a peaceful person (`combat.rs`): open the box to them, or, open, address them.
     pub open_to: Option<u32>,
-    /// Tab in the box (`ui/chat.rs`).
+    /// Tab in the box (`ui/say.rs`).
     pub cycle: bool,
+    /// Type to this one (a click in their window's box; `Some(None)`: the room), without
+    /// turning to them.
+    pub want: Option<Option<u32>>,
+    /// The person under the cursor when Enter opened the box (`ui/say.rs`): addressed.
+    pub prefer: Option<u32>,
+    /// A line to the room awaiting someone to take it up: when it was said (authority ms), and
+    /// who heard it as far as I know (perceived in earshot then).
+    room: Option<(u64, Vec<u32>)>,
+    /// Whom the open box addresses has been worked out this opening (the window can follow).
+    pub resolved: bool,
+    /// Addressed on purpose from their window (its box, Introduce yourself): kept even when
+    /// out of sight, so the line goes to them and the authority says whether they heard.
+    pinned: bool,
     was_open: bool,
     next_ask: f32,
     seen: HashSet<u64>,
@@ -107,7 +136,7 @@ fn address(
     (combat, town): (Res<crate::combat::Combat>, Res<crate::town::Town>),
     mut input: ResMut<crate::controls::Input>,
     mut talk: ResMut<Talk>,
-    time: Res<Time>,
+    (time, looks): (Res<Time>, Res<crate::looks::Looks>),
 ) {
     let (Some(conn), Some(me), Some(me3)) = (net.conn.as_ref(), net.my_id, target.0) else {
         talk.open_to = None;
@@ -117,6 +146,15 @@ fn address(
     let now = time.elapsed_secs();
     // A tap on a peaceful person: the box opens to them, and I turn to them where I stand.
     let tapped = talk.open_to.take();
+    let wanted = talk.want.take();
+    if wanted.is_some() && !input.chat_open {
+        input.chat_open = true;
+        if !std::mem::take(&mut input.keep_words) {
+            input.chat.clear();
+        }
+        input.compose = None;
+        talk.was_open = false;
+    }
     if let Some(id) = tapped {
         if !input.chat_open {
             input.chat_open = true;
@@ -134,6 +172,10 @@ fn address(
         talk.was_open = false;
         talk.to = None;
         talk.cycle = false;
+        talk.resolved = false;
+        talk.pinned = false;
+        talk.prefer = None;
+        input.keep_words = false;
         return;
     }
     let fresh = !talk.was_open;
@@ -143,28 +185,38 @@ fn address(
         talk.earshot = earshot(conn, &scene, &rules, me, at, clock.hour(), &town, &combat);
     }
     let perceived = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind == "person");
+    let prefer = talk.prefer.take();
     if let Some(id) = tapped.filter(|id| perceived(*id)) {
         talk.to = Some(id);
+    } else if let Some(w) = wanted {
+        talk.to = w;
+        talk.pinned = w.is_some();
     } else if fresh {
-        talk.to = combat.target.filter(|id| talk.earshot.contains(id)).or(talk.earshot.first().copied());
+        // Hovering someone: them; else the room (the owner's rule: no nearest-person fallback).
+        talk.to = prefer.filter(|id| perceived(*id));
     }
+    // Tab: the next one within earshot, nearest first, then the room, then round again.
     if std::mem::take(&mut talk.cycle) && !talk.earshot.is_empty() {
-        let next = talk.to.and_then(|t| talk.earshot.iter().position(|e| *e == t)).map_or(0, |i| (i + 1) % talk.earshot.len());
-        talk.to = Some(talk.earshot[next]);
+        talk.pinned = false;
+        talk.to = match talk.to.and_then(|t| talk.earshot.iter().position(|e| *e == t)) {
+            Some(i) if i + 1 < talk.earshot.len() => Some(talk.earshot[i + 1]),
+            Some(_) => None,
+            None if talk.to.is_some() => talk.earshot.first().copied(),
+            None => talk.earshot.first().copied(),
+        };
     }
-    // Someone I no longer perceive: the nearest within earshot instead.
-    if talk.to.is_some_and(|id| !perceived(id)) {
-        talk.to = talk.earshot.first().copied();
+    // Someone I no longer perceive: back to the room.
+    if !talk.pinned && talk.to.is_some_and(|id| !perceived(id)) {
+        talk.to = None;
     }
+    talk.resolved = true;
     let label = match talk.to {
         Some(id) => {
-            let who = conn.db.seen_characters().id().find(&id).map_or_else(|| "someone".to_string(), |c| c.label);
+            let who = looks.of(id).map(String::from).unwrap_or_else(|| conn.db.seen_characters().id().find(&id).map_or_else(|| "someone".to_string(), |c| c.label));
             let far = if talk.earshot.contains(&id) { "" } else { " (out of earshot)" };
-            let more = if talk.earshot.len() > 1 { "  ·  Tab: someone else" } else { "" };
-            format!("Say to {who}{far}{more}")
+            format!("To {who}{far}")
         }
-        None if rules.scripts.is_some() => "Say — nobody in earshot".to_string(),
-        None => "Say".to_string(),
+        None => "To the room".to_string(),
     };
     if talk.label != label {
         talk.label = label;
@@ -192,11 +244,24 @@ fn told(
             t.once(crate::ui::tips::TALK, now);
         }
     }
-    for e in conn.db.my_experience().iter().filter(|e| e.observer == me && (e.kind == "silence" || e.kind == "speech")) {
+    let mut rows: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && matches!(e.kind.as_str(), "silence" | "speech" | "said")).collect();
+    rows.sort_by_key(|e| e.id);
+    for e in rows {
         if !talk.seen.insert(e.id) {
             continue;
         }
         let fresh = e.at_ms as f64 + FRESH_MS >= scene.now_ms;
+        // A line of mine to the room: who heard it, as far as I know (perceived in earshot as I
+        // spoke; the authority's `heard_by` will replace this, `heard.rs`).
+        if e.kind == "said" && e.object == 0 && fresh {
+            let heard = crate::heard::heard_by(&e).unwrap_or_else(|| talk.earshot.clone());
+            talk.room = Some((e.at_ms, heard));
+            continue;
+        }
+        // Someone who heard it said something since: the room took it up.
+        if e.kind == "speech" && talk.room.as_ref().is_some_and(|(at, who)| e.at_ms >= *at && (who.contains(&e.subject) || e.object == me)) {
+            talk.room = None;
+        }
         if e.kind == "silence" && fresh {
             verbs.toasts.push(crate::verbs::Toast { text: e.text.clone(), ok: Some(false), at: now });
         } else if e.kind == "speech" && fresh && !talk.heard_to_me && e.text.contains(" said to you:") {
@@ -204,6 +269,15 @@ fn told(
             if let Some(t) = tips.as_mut() {
                 t.show(crate::ui::tips::TALK, now);
             }
+        }
+    }
+    // Nobody took it up: say so, plainly (minds give a line to the room no turn yet).
+    if let Some((at, who)) = talk.room.clone() {
+        if scene.now_ms - at as f64 > ROOM_WAIT_S * 1000.0 {
+            talk.room = None;
+            let text = if who.is_empty() { "No one in earshot heard you. Point at someone and press Enter to speak to them.".to_string() } else { format!("Heard by {} — no one took it up. Point at someone and press Enter to speak to them.", who.len()) };
+            info!("talk: room note \"{text}\"");
+            verbs.toasts.push(crate::verbs::Toast { text, ok: None, at: now });
         }
     }
     if talk.seen.len() > 1024 {

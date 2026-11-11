@@ -60,6 +60,15 @@ impl Mode {
         }
     }
 
+    /// Its name in the settings file and `LIVING_SIGHT_EDGE`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Mode::Fade => "fade",
+            Mode::Unseen => "unseen",
+            Mode::Limited => "limited",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Mode::Fade => "Edge of sight: fade",
@@ -184,10 +193,14 @@ pub fn update(
     loading: Option<Res<crate::loading::Loading>>,
     mut verbs: Option<ResMut<crate::verbs::Verbs>>,
     mut tips: Option<ResMut<crate::ui::tips::Tips>>,
-    time: Res<Time>,
+    (time, mut prefs): (Res<Time>, Option<ResMut<crate::keys::Prefs>>),
 ) {
     if keys.just_pressed(KeyCode::F2) {
         edge.mode = edge.mode.next();
+        if let Some(p) = prefs.as_deref_mut() {
+            p.sight_edge = Some(edge.mode.name().into());
+            p.dirty = true;
+        }
         info!("sight edge: {:?} (radius {:.1} m)", edge.mode, edge.radius);
         if let Some(v) = verbs.as_deref_mut() {
             v.toasts.retain(|t| !t.text.starts_with("Edge of sight:"));
@@ -236,13 +249,16 @@ pub fn update(
 }
 
 /// Limited view stops drawing just past the fully fogged radius; the other modes keep the far
-/// plane they had.
-fn far(mut edge: ResMut<SightEdge>, target: Res<crate::controls::Target>, mut cams: Query<(&GlobalTransform, &mut Projection), With<Camera3d>>) {
+/// plane they had, at least past the landmarks' reach (`world::Draw::landmark_reach`: Cullet's
+/// 600 m; the default 1000 m already is). The projection is Bevy's infinite reverse-Z with a
+/// 32-bit float depth, so the far plane only culls: depth steps at 600 m are about 0.04 mm.
+fn far(mut edge: ResMut<SightEdge>, target: Res<crate::controls::Target>, draw: Res<crate::world::Draw>, mut cams: Query<(&GlobalTransform, &mut Projection), With<Camera3d>>) {
     let Ok((gtf, mut proj)) = cams.single_mut() else { return };
     let Projection::Perspective(p) = &mut *proj else { return };
+    let need = draw.landmark_reach() * 1.1 + 50.0;
     match (edge.mode, target.0) {
         (Mode::Limited, Some(me)) if edge.want.is_some() => {
-            let base = *edge.far.get_or_insert(p.far);
+            let base = edge.far.get_or_insert(p.far).max(need);
             let want = (gtf.translation().distance(me) + edge.radius * LIMIT + FAR_MARGIN).min(base);
             if (p.far - want).abs() > 0.05 {
                 p.far = want;
@@ -251,6 +267,9 @@ fn far(mut edge: ResMut<SightEdge>, target: Res<crate::controls::Target>, mut ca
         _ => {
             if let Some(base) = edge.far.take() {
                 p.far = base;
+            }
+            if p.far < need {
+                p.far = need;
             }
         }
     }

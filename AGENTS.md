@@ -92,8 +92,9 @@ The living core is verified surface by surface, so a failure can be traced to th
 - `verify-minds`: the mind service.
 - `verify-llm`: model integration.
 - `verify-knowledge`: know-how and memory.
+- `verify-ui`: the game client's interface (interface D), clicked through headless.
 
-The browser observer has no skill; it is a simple developer client that the proper game UI will replace. When that UI is integrated, add a UI skill that clicks through it. When the external-agent connector is implemented, add `verify-agent-external` with a scripted tier and a real-agent tier.
+The browser observer has no skill; it is a simple developer client that the game UI replaces. When the external-agent connector is implemented, add `verify-agent-external` with a scripted tier and a real-agent tier.
 
 - Before reporting a living-core change as working, run the skill of every surface it touches. Report what was driven, the evidence paths and what was not covered.
 - To locate a failure, step down the layers: screen → client → player, or minds → llm and knowledge → core and generation. Name the lowest layer that reproduces it.

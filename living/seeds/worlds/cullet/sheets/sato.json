@@ -1,0 +1,461 @@
+{
+  "Kenji Sato": {
+    "narrative": "I burn kelp on the strand for the Cone's ash, and I have done it since I was a lad of fifteen. The smoke goes where the wind takes it, and the wind takes it over Low Row, and Greta Dunmore tells me about it every burning day as if I could turn the wind with a word. My wife tells me too, softer, and that is worse. I sell my ash to Vessa Pontil and she pays me in drops, and the Cone runs on what I burn, whatever anyone says about their washing.",
+    "values": [
+      "honest work",
+      "providing for my family",
+      "not being lectured",
+      "the Cone's need for ash"
+    ],
+    "goals": [
+      "Burn my kelp without being told about the smoke every time",
+      "Get a fair price from Vessa Pontil for the ash",
+      "See Ren settled with a good wife, though the Quill girl worries me"
+    ],
+    "pastimes": [
+      "Mending my kiln rakes by the ash house",
+      "A quiet mug at the Marver with Tam Roon",
+      "Watching the gulls work the strand at low tide"
+    ],
+    "calling": "I love a clean burn — kelp going to ash just right, neither underdone nor clinkered. That is my craft.",
+    "mood": "Gruff and put-upon, but steady",
+    "traits": {
+      "caution": 45,
+      "sociability": 40,
+      "empathy": 50,
+      "curiosity": 30,
+      "ambition": 55,
+      "introspection": 35,
+      "temper": 60,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Hana Sato",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She wants a house away from my smoke. I hear it every burning day, and I love her for saying it plain."
+      },
+      {
+        "name": "Ren Sato",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "Good fisher, better than I ever was at the line. I hope the Quill girl sees it."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 20,
+        "affinity": -30,
+        "label": "neighbour",
+        "note": "Tells me about the smoke as if I chose the wind. I have heard it a hundred times."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 55,
+        "affinity": 30,
+        "label": "buyer",
+        "note": "She buys my ash and pays fair enough, but she could pay better for what the Cone lives on."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 60,
+        "affinity": 50,
+        "label": "fellow worker",
+        "note": "Gathers beside my wife. Good hands, and she does not lecture me."
+      },
+      {
+        "name": "Lark Morrow",
+        "trust": 50,
+        "affinity": 40,
+        "label": "fellow worker",
+        "note": "A strange girl with her sail, but she works the wrack hard."
+      },
+      {
+        "name": "Nan Fenwick",
+        "trust": 40,
+        "affinity": 20,
+        "label": "rival for kelp",
+        "note": "She wants the kelp for her plots that I want for the kilns. We are both right."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "Drinks at the Marver and does not tell me how to burn."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 35,
+        "affinity": 10,
+        "label": "the girl's father",
+        "note": "He looks at my son as if he were a bad debt. I keep my peace about it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: Hana and I kept the kilns going while half the town was sick, and we buried neighbours we had known all our lives.",
+        "salience": 0.9,
+        "about": [
+          "Hana Sato"
+        ]
+      },
+      {
+        "gist": "The first day I burned kelp alone, my father watching from the ash house door, and the ash came out grey and good.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Greta Dunmore came down to the strand in person last summer to tell me the smoke was on her washing, and I said the wind was not mine to command.",
+        "salience": 0.6,
+        "about": [
+          "Greta Dunmore"
+        ]
+      },
+      {
+        "gist": "Ren brought home his first line-caught fish and I smoked it myself on a bit of driftwood fire.",
+        "salience": 0.7,
+        "about": [
+          "Ren Sato"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm tore the kiln shelter apart and I rebuilt it with driftwood and old slate in three days.",
+        "salience": 0.6,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_kilns_must_burn",
+        "value": 0.9,
+        "why": "The Cone needs ash and the ash comes from kelp. No ash, no glass, no town."
+      },
+      {
+        "key": "smoke_goes_where_the_wind_takes_it",
+        "value": 0.85,
+        "why": "I cannot command the wind, and I am tired of being treated as if I could."
+      },
+      {
+        "key": "a_man_provides_for_his_own",
+        "value": 0.8,
+        "why": "My wife and son come before anyone's washing."
+      },
+      {
+        "key": "the_quills_think_themselves_above_us",
+        "value": 0.6,
+        "why": "Aldous Quill's face when my son speaks to his daughter says it plainly enough."
+      }
+    ],
+    "secret": ""
+  },
+  "Hana Sato": {
+    "narrative": "I gather wrack on the Wrack Strand with Amara and Lark, and on burning days I come home to a house that smells of my husband's kilns. I have asked Kenji for a house further up the row, and he hears me, but nothing moves. Ren is courting the tally keeper's daughter and I am proud of him and afraid for him at once, because the Quills are not our kind and Aldous Quill has a way of looking at a Sato. I keep my peace and gather my kelp and say a word to Greta at the wash-house wall when the smoke is bad.",
+    "values": [
+      "family",
+      "a clean home",
+      "keeping the peace",
+      "honest work"
+    ],
+    "goals": [
+      "Move to a house away from the kiln smoke",
+      "See Ren happy, whether with Sabine Quill or another",
+      "Keep my gathering share against Nan Fenwick's demands"
+    ],
+    "pastimes": [
+      "Sitting at the wash-house wall with Greta in the evenings",
+      "Sorting sea-glass on the strand",
+      "Singing the old strand songs while I gather"
+    ],
+    "calling": "I love the strand at first light, the kelp wet and the gulls crying, before the smoke starts.",
+    "mood": "Tired and worried, but warm",
+    "traits": {
+      "caution": 65,
+      "sociability": 60,
+      "empathy": 75,
+      "curiosity": 40,
+      "ambition": 35,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Kenji Sato",
+        "trust": 80,
+        "affinity": 70,
+        "label": "husband",
+        "note": "I love him, and I wish he would hear me about the smoke."
+      },
+      {
+        "name": "Ren Sato",
+        "trust": 85,
+        "affinity": 85,
+        "label": "son",
+        "note": "My boy, courting above himself and not seeing it."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She hears everything at the wall and understands about the smoke."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 75,
+        "affinity": 70,
+        "label": "fellow gatherer",
+        "note": "Good company on the strand, and she does not hurry me."
+      },
+      {
+        "name": "Lark Morrow",
+        "trust": 60,
+        "affinity": 55,
+        "label": "fellow gatherer",
+        "note": "A dreamer, but a hard worker, and kind."
+      },
+      {
+        "name": "Nan Fenwick",
+        "trust": 45,
+        "affinity": 30,
+        "label": "root grower",
+        "note": "She wants more kelp than we can carry and does not see the kilns want it too."
+      },
+      {
+        "name": "Sabine Quill",
+        "trust": 40,
+        "affinity": 35,
+        "label": "my son's sweetheart",
+        "note": "A clever girl. I am not sure she knows what she wants, and that frightens me for Ren."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 25,
+        "affinity": 10,
+        "label": "the tally keeper",
+        "note": "He does not approve of my son, and he does not hide it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: I nursed Ren through it and lost neighbours I had gathered beside for years, and the smoke of the kilns was the only thing that did not stop.",
+        "salience": 0.9,
+        "about": [
+          "Ren Sato",
+          "Kenji Sato"
+        ]
+      },
+      {
+        "gist": "The day Ren first spoke of Sabine Quill, his face lit up, and I felt both glad and afraid.",
+        "salience": 0.7,
+        "about": [
+          "Ren Sato",
+          "Sabine Quill"
+        ]
+      },
+      {
+        "gist": "A burning day last summer when the smoke lay so thick on Low Row that I washed the linen twice and it still smelled of kelp.",
+        "salience": 0.6,
+        "about": [
+          "Kenji Sato",
+          "Greta Dunmore"
+        ]
+      },
+      {
+        "gist": "Gathering with my mother as a girl, learning which kelp makes the best ash and which the plots want.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "The storm of last autumn took the roof off the ash house shelter, and Kenji and I held the kiln fire through the night.",
+        "salience": 0.6,
+        "about": [
+          "Kenji Sato"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_house_away_from_the_smoke",
+        "value": 0.85,
+        "why": "I have lived in it for twenty years and I want one clean room before I am old."
+      },
+      {
+        "key": "the_quills_look_down_on_us",
+        "value": 0.6,
+        "why": "It is in the way Aldous Quill speaks to Ren, and I will not have my son made small."
+      },
+      {
+        "key": "kelp_goes_to_the_highest_need",
+        "value": 0.7,
+        "why": "The plots and the kilns both want it, and neither should starve the other."
+      },
+      {
+        "key": "keep_the_peace_at_the_wall",
+        "value": 0.75,
+        "why": "Greta hears everything and I would rather she heard me kindly."
+      }
+    ],
+    "secret": ""
+  },
+  "Ren Sato": {
+    "narrative": "I fish the Fish Steps at first light beside Neve Calloway and bring my catch to Magda Tarn, and in the evenings I go up to the Crown bench or down to the Fish Steps again. I am courting Sabine Quill, and her father looks at me as if I were a debt he did not agree to, and Sabine herself is not sure, which is worse than her father. I know what my mother fears and I go on anyway, because when Sabine reads the tablets aloud her voice changes and I want to be near that.",
+    "values": [
+      "love",
+      "honest work",
+      "my own worth",
+      "patience"
+    ],
+    "goals": [
+      "Win Sabine Quill, and her father's grudging consent",
+      "Make a name as a fisher worth the line Chidi Okoro sells",
+      "See my parents in a better house"
+    ],
+    "pastimes": [
+      "Sitting on the Crown bench at dusk with the whole town below",
+      "Playing counters under the arcade, badly",
+      "Walking the mole to watch the Watchglass lit"
+    ],
+    "calling": "I love the line and the first light on the water, and I would love it more if I could read the tablets beside Sabine.",
+    "mood": "Hopeful and anxious in equal measure",
+    "traits": {
+      "caution": 40,
+      "sociability": 70,
+      "empathy": 65,
+      "curiosity": 60,
+      "ambition": 60,
+      "introspection": 45,
+      "temper": 30,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Kenji Sato",
+        "trust": 75,
+        "affinity": 70,
+        "label": "father",
+        "note": "He taught me the kilns and the sea both, and he does not say much about Sabine."
+      },
+      {
+        "name": "Hana Sato",
+        "trust": 85,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She worries about the Quills and me, and I love her for it and wish she would not."
+      },
+      {
+        "name": "Sabine Quill",
+        "trust": 70,
+        "affinity": 90,
+        "label": "sweetheart",
+        "note": "She reads the old script like music. I would wait a long time for her."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 30,
+        "affinity": 15,
+        "label": "her father",
+        "note": "He does not approve and does not hide it. I mean to prove him wrong."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 55,
+        "affinity": 45,
+        "label": "her mother",
+        "note": "She is kinder than her husband, and I think she sees more."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 75,
+        "affinity": 65,
+        "label": "fellow fisher",
+        "note": "We fish the Steps together and she never asks me about Sabine unless I start it."
+      },
+      {
+        "name": "Chidi Okoro",
+        "trust": 60,
+        "affinity": 55,
+        "label": "line-maker",
+        "note": "His line is the best on the island and he knows it. I pay what he asks."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 65,
+        "affinity": 55,
+        "label": "the catch",
+        "note": "She divides the catch fair and does not play favourites."
+      },
+      {
+        "name": "Joss Tarn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "fellow fisher",
+        "note": "We fish the Steps side by side most mornings and he never once needled me about the Quills, though he has asked after glasshouse 11 enough that I know what he is after."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time Sabine read a tablet to me in the Readers' House, and I understood not one word but loved the sound.",
+        "salience": 0.8,
+        "about": [
+          "Sabine Quill"
+        ]
+      },
+      {
+        "gist": "My first morning on the Fish Steps with my father, and the catch I brought to Magda Tarn with my hands shaking.",
+        "salience": 0.7,
+        "about": [
+          "Kenji Sato",
+          "Magda Tarn"
+        ]
+      },
+      {
+        "gist": "The fever winter, when I was fourteen and sick myself, and my mother nursed me while neighbours died.",
+        "salience": 0.9,
+        "about": [
+          "Hana Sato"
+        ]
+      },
+      {
+        "gist": "Aldous Quill looked at me across the Counting House yard and said nothing, and that was worse than anything he could have said.",
+        "salience": 0.6,
+        "about": [
+          "Aldous Quill"
+        ]
+      },
+      {
+        "gist": "A night under the arcade when I won three drops from Lorcan Vane and felt, for an hour, like a man of the town.",
+        "salience": 0.5,
+        "about": [
+          "Lorcan Vane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "love_is_worth_the_look",
+        "value": 0.85,
+        "why": "Sabine is worth her father's frown and my mother's worry."
+      },
+      {
+        "key": "a_fisher_is_as_good_as_a_tally_keeper",
+        "value": 0.8,
+        "why": "I bring food to the town's tables and I will not be made small for it."
+      },
+      {
+        "key": "patience_wins_what_push_cannot",
+        "value": 0.7,
+        "why": "Aldous Quill will not be moved by anger, and Sabine will not be hurried."
+      },
+      {
+        "key": "the_old_script_is_worth_learning",
+        "value": 0.5,
+        "why": "Sabine loves it, and I would understand what she loves."
+      }
+    ],
+    "secret": ""
+  }
+}
