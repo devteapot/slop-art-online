@@ -2,7 +2,7 @@
 
 | Feature | Cases | File |
 | --- | --- | --- |
-| Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt) | `roundtrip`, `acts` | [deliberation.md](deliberation.md) |
+| Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt); the timing of the fighting moves one's character knows, and of none it does not (`LIVING_SKILL_TIMINGS`) | `roundtrip`, `acts`, `timings` | [deliberation.md](deliberation.md) |
 | A deliberation consumes the reasons its prompt contained: plan-finished churn during model calls keeps no older reason pending, a reason arriving mid-call waits for the next deliberation only; each thought's `detail.reasons` with `carried_before` | `reasons` | [deliberation.md](deliberation.md) |
 | Answer speech and close an exchange | `conversation` | [conversations.md](conversations.md) |
 | Speech through a mind: a talk reply's `way` reaches `mind_say` (one the world lacks is said aloud), an `introduced` row reaches consolidation tagged with the person, the mind's own line reads as heard by those it saw (`heard`) | `speech` | [conversations.md](conversations.md#ways-and-who-heard) |

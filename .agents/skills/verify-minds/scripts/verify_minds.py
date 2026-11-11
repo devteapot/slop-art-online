@@ -21,7 +21,7 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
-         'death-names', 'frame', 'reasons', 'speech', 'health-seen')
+         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'timings')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -178,6 +178,18 @@ def drop_case(run):
     return {'status': 'pass', 'told': told}
 
 
+def timings_told(run, actor, sent, fire_bolt):
+    """A mind is told the timing of the fighting moves its character knows, in its own prompt,
+    and never of one it does not know (LIVING_SKILL_TIMINGS; docs/COMBAT_MIND.md §3.7): bowshot
+    needs no technique, fire bolt needs fire_bolt. The shared system prompt states no timings."""
+    knows = {k['technique'] for k in run.private(f'SELECT * FROM know_how WHERE actor = {actor}', 'know-how')}
+    assert ('fire_bolt' in knows) == fire_bolt, knows
+    users = ['\n'.join(m.get('content', '') for m in e['body'].get('messages', []) if m.get('role') == 'user') for e in sent]
+    assert users and all('- bowshot: winds up 300 ms' in u and '- strike: winds up 350 ms' in u for u in users), users[0][-3000:]
+    assert all(('- firebolt: winds up 450 ms' in u) == fire_bolt for u in users), [u.count('firebolt') for u in users]
+    assert not any('winds up' in system_text(e['body']) for e in sent), 'timings in the shared system prompt'
+
+
 def run_case(run, case):
     if case in ('animals', 'night', 'jev'):
         return {'animals': animals_case, 'night': night_case, 'jev': jev_case}[case](run)
@@ -215,6 +227,9 @@ def run_case(run, case):
                                    'say': None}, 'deliberate': basic_reply()}}
     if case == 'roundtrip':
         script['replies']['think']['say'] = 'verify minds round trip speech'
+    if case == 'timings':
+        # The positive control for roundtrip's timing check: this mind knows fire_bolt.
+        run.admin('grant_know_how', actor, 'fire_bolt')
     if case == 'acts':
         run.harness('player', 'join', 'MindsReceiver')
         other = run.sql("SELECT id FROM character WHERE name = 'MindsReceiver'", 'receiver')[0]['id']
@@ -311,6 +326,10 @@ def run_case(run, case):
         for part in ('SENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m',
                      'MOVING: How creatures move', 'FOOD: berries 12, fish 16', 'SETTLEMENTS: walls block the way'):
             assert all(part in m for m in told), part
+        timings_told(run, actor, sent, fire_bolt=False)
+    elif case == 'timings':
+        sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+        timings_told(run, actor, sent, fire_bolt=True)
     elif case == 'acts':
         run.wait(lambda: any(i['item'] == 'stone' and i['qty'] == 1 for i in run.sql(
             f'SELECT * FROM inventory WHERE owner = {other}', 'receiver-inventory-after')), 'give effect')

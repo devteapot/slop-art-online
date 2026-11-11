@@ -1562,6 +1562,13 @@ impl Minds {
 
     // ---- shared context -----------------------------------------------------------
 
+    /// The timing of the fighting moves this person knows (`prompts::own_timings`), from the
+    /// techniques it knows: what a player of this character sees cards for, never another's.
+    fn own_timings(&self, actor: u32) -> String {
+        let knows: std::collections::HashSet<String> = self.conn.db.know_how().iter().filter(|k| k.actor == actor).map(|k| k.technique).collect();
+        prompts::own_timings(None, |t| knows.contains(t))
+    }
+
     fn persona_text(&self, actor: u32) -> String {
         match self.conn.db.persona().id().find(&actor) {
             Some(p) => {
@@ -1725,7 +1732,7 @@ impl Minds {
             name: &c.name,
             clock: fmt(llm::now_ms()),
             body: self.body_text(actor),
-            persona: self.persona_text(actor),
+            persona: format!("{}{}", self.persona_text(actor), self.own_timings(actor)),
             relations: self.relations(actor),
             mind,
             memories,

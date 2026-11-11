@@ -250,38 +250,35 @@ pub fn timings_on() -> bool {
     !matches!(std::env::var("LIVING_SKILL_TIMINGS").unwrap_or_default().trim().to_ascii_lowercase().as_str(), "0" | "off" | "false")
 }
 
-/// Skill lines with each combat skill's timing under it (`timing: winds up 350 ms …`).
-fn help_lines(offered: Vec<&living_rules::catalog::SkillSpec>, with_timing: bool) -> String {
-    let t = timings();
-    offered
+/// The timing of the fighting moves a character knows, for its own prompt ("# Who you are"):
+/// the timed combat skills its body is offered (`ui::offered`) whose techniques it knows
+/// (`<skill>_combat()`'s `knows`: the rule a player's bar shows "Unknown" by), each with its
+/// timing (docs/COMBAT_MIND.md §3.7). Never another's: what an opponent's moves take is for a
+/// character to learn by watching. Empty when it knows none, or with `LIVING_SKILL_TIMINGS` off.
+pub fn own_timings(body: Option<&living_rules::species::Species>, knows: impl Fn(&str) -> bool) -> String {
+    if !timings_on() {
+        return String::new();
+    }
+    let (t, shapes, skills) = (timings(), shapes(), living_rules::catalog::skills());
+    let lines: Vec<String> = living_rules::ui::offered(&skills, body)
         .into_iter()
-        .map(|s| {
-            let line = living_rules::catalog::skill_line(s);
-            match t.get(&s.name).filter(|_| with_timing) {
-                Some(w) => format!("{line}\n    timing: {w}"),
-                None => line,
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+        .filter(|s| shapes.get(&s.name).is_some_and(|sh| sh.knows.iter().all(|k| knows(k))))
+        .filter_map(|s| t.get(&s.name).map(|w| format!("- {}: {w}", s.name)))
+        .collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!("\nHow long the fighting moves you know take:\n{}", lines.join("\n"))
 }
 
-/// A person's skill reference: each skill under the world's rules, with what it takes and gives
-/// and, for a combat skill, its timing.
+/// A person's skill reference: each skill under the world's rules, with what it takes and gives.
 pub fn skills_help() -> String {
-    if !timings_on() {
-        return living_rules::catalog::skills_help();
-    }
-    help_lines(living_rules::ui::offered(&living_rules::catalog::skills(), None), true)
+    living_rules::catalog::skills_help()
 }
 
-/// A species' skill reference, with what each skill takes and gives and, for a combat skill,
-/// its timing.
+/// A species' skill reference, with what each skill takes and gives.
 pub fn species_skills_help(sp: &living_rules::species::Species) -> String {
-    if !timings_on() {
-        return living_rules::species::skills_help(sp);
-    }
-    help_lines(living_rules::ui::offered(&living_rules::catalog::skills(), Some(sp)), true)
+    living_rules::species::skills_help(sp)
 }
 static SIZE: std::sync::OnceLock<(u32, u32)> = std::sync::OnceLock::new();
 
@@ -1107,12 +1104,13 @@ mod tests {
         assert!(t["bowshot"].contains("flies 30 m/s") && t["firebolt"].contains("ready again 4 s"), "{} / {}", t["bowshot"], t["firebolt"]);
         assert!(!t.contains_key("yield") && !t.contains_key("tend") && !t.contains_key("threaten"), "only timed skills: {:?}", t.keys().collect::<Vec<_>>());
         assert!(t.values().all(|w| !w.contains("then 0 ms")), "{t:?}");
-        let skills = living_rules::catalog::skills();
-        let offered = || living_rules::ui::offered(&skills, None);
-        assert_eq!(help_lines(offered(), false), living_rules::catalog::skills_help(), "off: the reference as before");
-        let on = help_lines(offered(), true);
-        assert!(on.contains("timing: winds up 350 ms"), "{on}");
-        assert!(on.lines().filter(|l| l.trim_start().starts_with("timing:")).count() >= 4, "{on}");
+        // A character's own moves only, by the techniques it knows; the shared reference has none.
+        let archer = own_timings(None, |t| t != "fire_bolt");
+        assert!(archer.contains("- bowshot: winds up 300 ms") && archer.contains("- strike: winds up 350 ms"), "{archer}");
+        assert!(!archer.contains("- firebolt:"), "fire bolt's timing for one who does not know it: {archer}");
+        let caster = own_timings(None, |_| true);
+        assert!(caster.contains("- firebolt: winds up 450 ms"), "{caster}");
+        assert!(!skills_help().contains("timing") && !skills_help().contains("winds up 350"), "the shared reference states no timings");
     }
 
     #[test]

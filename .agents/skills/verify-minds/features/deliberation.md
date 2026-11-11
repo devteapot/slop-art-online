@@ -2,17 +2,17 @@
 
 ## Sub-features
 
-- `mind-request`: an AI adult controlled by `world.admin` receives a real `deliberation` row through `perceive::request_deliberation`, `living/authority/src/perceive.rs:214`.
-- `mind-think`: the think reply supplies intention and speech; the compiler receives the decision, `living/mind/src/mind.rs:1254`.
-- `mind-install`: `mind_install` installs a graph with source `mind`, increases revision, logs a thought, clears the request and speaks, `living/authority/src/mind.rs:331`.
-- `mind-routines`: the reply's intent becomes the `current plan` routine through `mind_routines`, `living/mind/src/mind.rs:326`.
+- `mind-request`: an AI adult controlled by `world.admin` receives a real `deliberation` row through `perceive::request_deliberation`, `living/authority/src/perceive.rs:270`.
+- `mind-think`: the think reply supplies intention and speech; the compiler receives the decision, `living/mind/src/mind.rs:1286`.
+- `mind-install`: `mind_install` installs a graph with source `mind`, increases revision, logs a thought, clears the request and speaks, `living/authority/src/mind.rs:360`.
+- `mind-routines`: the reply's intent becomes the `current plan` routine through `mind_routines`, `living/mind/src/mind.rs:1812`.
 - `mind-activity`: the authority starts a wait from the installed plan.
-- `mind-act`: one reply queues give, offer and an impossible give through `mind_act`, `living/authority/src/mind.rs:380`. Recipient inventory, `trade_offer`, and failure experience prove the outcomes.
+- `mind-act`: one reply queues give, offer and an impossible give through `mind_act`, `living/authority/src/mind.rs:409`. Recipient inventory, `trade_offer`, and failure experience prove the outcomes.
 - `mind-body`: the service subscribes, as the owner, to the `vitals` of the characters it thinks for (a join on `character.controller` and `ai`, `living/mind/src/main.rs`), and think, compile and talk prompts carry "How your body feels: …" in words (`prompts::felt_body`, `living/mind/src/prompts.rs`). Since 2026-11-11 (`rules-senses-outcomes`) the words are the world's `status_of` law's `felt` words over every column of the `vitals` row (docs/WORLD_RULES.md "The body: meters and statuses"); `roundtrip` checks the line has a health word and an energy word of the law. The rethink gate's `body` levels are the same law's words by meter ([rethink.md](rethink.md)).
 - `consumed-reasons`: `clear_deliberation` (`living/authority/src/mind.rs`) removes the lines the prompt contained, by their arrival times in `deliberation.arrived` (`living_rules::reasons::{add, consume}`, unit tests in `living/rules/src/reasons.rs`); lines that arrived after `seen_ms` stay, without the old plan's reasons when a new plan is installed. Each deliberate thought's `detail.reasons` records `{text, arrived_ms, carried_before}` (`carry` in `living/mind/src/mind.rs`; the count is per service process).
 - `id-target`: an act aimed at `{"id": n}` resolves a structure or resource in sight as well as a creature (`brain.rs` `visible_thing`), so a thing the scene listed by id is not reported "no #n in sight".
 - `missed-things`: a failure at a thing named by id ("no #n in sight", "depleted") weakens what the mind remembers of `#n` before its next deliberation (`Minds::weaken_missed`, `Store::weaken`) and the reason says so. Proved against Neo4j in `verify-knowledge`, not here (this suite runs with `LIVING_NEO4J=off`).
-- `skill-timings` (`LIVING_SKILL_TIMINGS`, on unless `0`/`off`): the think and compile requests' skill reference carries a `timing:` line under each combat skill (`prompts::skills_help`, numbers from `living_rules::script::Scripts::timing`, the same as `skill_card`); with the switch off the reference is as before. Unit test `the_skill_reference_states_combat_timings` (`living/mind/src/prompts.rs`); live, `grep -c 'timing: winds up 350 ms' fake-requests.jsonl` after `roundtrip`.
+- `skill-timings` (`LIVING_SKILL_TIMINGS`, on unless `0`/`off`): a person's think and compile requests carry, in "# Who you are", the timing of the fighting moves its character knows (`Mind::own_timings`, `living/mind/src/mind.rs:1567` → `prompts::own_timings`, `living/mind/src/prompts.rs:258`: timed combat skills whose `<skill>_combat()` `knows` techniques it has; numbers from `living_rules::script::Scripts::timing`, the same as `skill_card`), and none of a move it does not know; the shared system prompt states no timings. `roundtrip` (a mind without `fire_bolt`: bowshot's and strike's lines, not fire bolt's) and `timings` (the same mind granted `fire_bolt`: fire bolt's line too) check it in `fake-requests.jsonl` (`timings_told`). Unit test `the_skill_reference_states_combat_timings` (`living/mind/src/prompts.rs`). With the switch off, no timing lines.
 - `projects` (`LIVING_PROJECTS=1`, off by default): the think step's `# Your projects` section and `serves` field, recorded in the thought's `detail.projects`. Needs a store, so it is driven by a fake trial batch, not these cases: [projects.md](projects.md).
 
 ## How to get to it (user POV)
@@ -23,10 +23,10 @@ A running mind handles a character's pending reasons for reconsidering. It choos
 
 ```bash
 R=minds-deliberation-$(date +%Y%m%d-%H%M%S)
-.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case roundtrip --case acts
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case roundtrip --case acts --case timings
 ```
 
-`roundtrip` saves the pending request before starting the mind. Compare `brain-before.json` with `brain-after.json`, then inspect `routines-after.json`, `activity-after.json`, `thoughts.json`, `pending-after.json` and `speech-after.json`. The fake think speech must survive compilation. The thought records the reply, model, tokens and reference. The think and compile requests in `fake-requests.jsonl` carry the body line, in words without numbers.
+`timings` (`--case timings`) is `roundtrip`'s setup with the actor granted `fire_bolt` (admin `grant_know_how`, a scene call): its think and compile requests carry fire bolt's timing line as well. `roundtrip` saves the pending request before starting the mind. Compare `brain-before.json` with `brain-after.json`, then inspect `routines-after.json`, `activity-after.json`, `thoughts.json`, `pending-after.json` and `speech-after.json`. The fake think speech must survive compilation. The thought records the reply, model, tokens and reference. The think and compile requests in `fake-requests.jsonl` carry the body line, in words without numbers.
 
 `acts` joins a player through the shared harness, places the AI beside it and grants three stones as setup. The fake submits its act list once. `receiver-inventory-before.json` and `receiver-inventory-after.json` prove one stone arrived. `offers-after.json` proves the offer, and `act-experiences.json` records the failed give. The first act gathers at the nearest resource by its id (`resources-near.json`, `actor-body.json`); `id-target-experiences.json` must hold its outcome and no "no #n in sight". Check the exact reply in `fake-requests.jsonl` and `journal/`.
 
@@ -36,7 +36,7 @@ R=minds-deliberation-$(date +%Y%m%d-%H%M%S)
 
 - `reasons`: a person asks again at most every 20 s (`think_min_s`) when no request is pending, so the fixed run takes about two and a half minutes; the old rule ran thoughts back to back, because the next plan's own "I finished" merged into the request that survived.
 
-- A think node waits 45 seconds after the last deliberation, `living/authority/src/brain.rs:424`. The driver waits the real interval.
+- A think node waits 45 seconds after the last deliberation, `living/authority/src/brain.rs:517`. The driver waits the real interval.
 - A decision may run again if a pending request changes during bootstrap. The act reply applies only once in the fake script.
 - Needs remain in the graph. The fixture weights its waiting intent at 1.5, above ordinary needs in this scene.
 - `mind_act` acceptance alone does not prove a completed interaction. Check the effect or its failure experience.
