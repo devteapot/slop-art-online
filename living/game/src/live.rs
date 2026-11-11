@@ -737,6 +737,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `key:NAME:down|up|tap` and `mouse:left|right|middle:down|up`: a key or button as the
 ///   window would report it (`KeyE`, `KeyQ`, `Enter`, `ShiftLeft`, …), read by every input
 ///   system this frame; `chat:open|close` opens or closes the text box, as Enter and Esc do;
+///   `tap` is a left tap as the pointer reports one (a strike, or talk to a peaceful person);
 ///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
 ///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
@@ -867,6 +868,12 @@ fn script(
         }
         "cursor" => {
             pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
+            true
+        }
+        "tap" => {
+            // A left tap, as the pointer reports one (`pointer.rs`): a strike, or on a peaceful
+            // person the text box to them (`combat.rs`).
+            pointer.scripted_tap = true;
             true
         }
         "pan" | "drag" => {

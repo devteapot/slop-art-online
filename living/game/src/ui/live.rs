@@ -148,8 +148,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         let name = mine.get(&id).map_or(net.name.clone(), |c| c.name.clone());
         Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, statuses, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
     });
-    let hostile_id = vit.as_ref().filter(|v| v.hurt_by != 0 && (now_ms - v.hurt_ms as f64) < 15_000.0).map(|v| v.hurt_by);
-    let hostile = |id: u32| hostile_id == Some(id) || me.is_some_and(|m| crate::combat::hostile(conn, id, m));
+    let hostile = |id: u32| me.is_some_and(|m| crate::combat::hostile_to_me(conn, id, m, now_ms));
     // Others' health as anyone sees it: the band of their `fighter` row, if they have fought.
     // Exact where I perceive it exactly (my look at them, an appraisal), else the band.
     let band = |id: u32| match chars.get(&id).filter(|c| c.hp >= 0.0 && c.max_hp > 0.0) {
