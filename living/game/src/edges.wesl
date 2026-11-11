@@ -129,8 +129,8 @@ const SHADE_DAY: f32 = 0.30;
 const SHADE_NIGHT: f32 = 0.22;
 const SHADE_NIGHT_COOL: f32 = 0.5;
 // By night, how much brighter it is round me, and out to where (m).
-const NIGHT_LIFT: f32 = 0.8;
-const NIGHT_LIFT_M: f32 = 2.6;
+const NIGHT_LIFT: f32 = 1.6;
+const NIGHT_LIFT_M: f32 = 3.0;
 
 // Shade (the default since play-test 5: "more similar to the shadows than this grey overlay"):
 // what I don't see lies in shadow, in the scene's own shadow tone (the toon shader's hue shift,
