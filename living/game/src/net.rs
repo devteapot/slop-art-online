@@ -182,7 +182,11 @@ pub struct Net {
     pub window_moves: u32,
     inbox: Arc<Mutex<Vec<Signal>>>,
     connecting: bool,
-    retry_at: f64,
+    /// When the next attempt goes (elapsed s), how many have gone, and whether one ever got
+    /// through (the first load's cover says what is wrong until then: `loading.rs`).
+    pub retry_at: f64,
+    pub attempts: u32,
+    pub ever_live: bool,
     join_sent: bool,
     base: Option<SubscriptionHandle>,
     near: Window,
@@ -210,6 +214,8 @@ impl Default for Net {
             inbox: Arc::default(),
             connecting: false,
             retry_at: 0.0,
+            attempts: 0,
+            ever_live: false,
             join_sent: false,
             base: None,
             near: Window::default(),
@@ -308,6 +314,7 @@ impl Net {
 
     fn connect(&mut self) {
         self.connecting = true;
+        self.attempts += 1;
         self.status = Status::Connecting;
         let path = token_path(&self.db);
         let token = std::fs::read_to_string(&path).ok().map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
@@ -553,6 +560,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
             Signal::Base => {
                 info!("world subscribed after {now:.1} s");
                 net.status = Status::Live;
+                net.ever_live = true;
             }
             Signal::Error(e) => {
                 warn!("{e}");
