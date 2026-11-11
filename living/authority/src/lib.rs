@@ -136,6 +136,10 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
         sc.validate()?
     };
     log::info!("install_script: {}", checked.summary());
+    // The body's meters name fields of this world's vitals row.
+    if let Some(e) = sc.meters_unknown(&Vitals::FIELDS).first() {
+        return Err(format!("install refused: {e}"));
+    }
     rename_techniques(ctx);
     codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);

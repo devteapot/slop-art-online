@@ -359,6 +359,19 @@ pub struct Vitals {
     pub hurt_by: u32,
 }
 
+impl Vitals {
+    /// The row's columns (a world's `meters()` may name any of them). A column added to this
+    /// table is added here and in [`Vitals::fields`], and nowhere else: the rules read the body
+    /// by field name (`living_rules::script::BodyFacts`).
+    pub const FIELDS: [&'static str; 12] = ["id", "hp", "max_hp", "hunger", "energy", "at_ms", "hp_rate", "hunger_rate", "energy_rate", "rate_key", "hurt_ms", "hurt_by"];
+
+    /// The row's numeric fields by name, in [`Vitals::FIELDS`]'s order.
+    pub fn fields(&self) -> Vec<(String, f64)> {
+        let v = [self.id as f64, self.hp as f64, self.max_hp as f64, self.hunger as f64, self.energy as f64, self.at_ms as f64, self.hp_rate as f64, self.hunger_rate as f64, self.energy_rate as f64, self.rate_key as f64, self.hurt_ms as f64, self.hurt_by as f64];
+        Self::FIELDS.iter().zip(v).map(|(k, v)| (k.to_string(), v)).collect()
+    }
+}
+
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
 pub struct TargetRef {
     /// 0 none, 1 resource, 2 structure, 3 creature, 4 point.

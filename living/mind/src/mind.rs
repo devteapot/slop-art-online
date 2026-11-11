@@ -442,19 +442,29 @@ impl Minds {
     /// writes, at the row's rates, as `common::needs` in the authority computes them).
     pub(crate) fn body_now(&self, actor: u32) -> Option<prompts::Body> {
         let v = self.conn.db.vitals().id().find(&actor)?;
-        let m = llm::now_ms().saturating_sub(v.at_ms) as f32 / 60_000.0;
+        let now = llm::now_ms();
+        let m = now.saturating_sub(v.at_ms) as f32 / 60_000.0;
+        // Every column of the row by name, for the `status_of` law (a vital a world adds included).
+        let row = spacetimedb_sdk::__codegen::__sats::ser::serde::serialize_to(&v, serde_json::value::Serializer).map(|j| living_rules::script::body::fields_of_json(&j)).unwrap_or_default();
+        let c = self.conn.db.character().id().find(&actor);
+        let night = self.conn.db.world().id().find(&0).is_some_and(|w| prompts::is_night(living_rules::hour_of(now, w.epoch_ms, w.day_ms)));
         Some(prompts::Body {
             hp: (v.hp + v.hp_rate * m).clamp(0.0, v.max_hp),
             max_hp: v.max_hp,
             hunger: (v.hunger + v.hunger_rate * m).clamp(0.0, 100.0),
             energy: (v.energy + v.energy_rate * m).clamp(0.0, 100.0),
             hp_rate: v.hp_rate,
+            row,
+            now_ms: now,
+            kind: c.as_ref().map(|c| c.kind.clone()).unwrap_or_default(),
+            stage: c.map(|c| match c.stage { 0 => "infant", 1 => "child", 3 => "elder", _ => "adult" }.to_string()).unwrap_or_default(),
+            night,
         })
     }
 
     /// How the character's body feels now, in words; empty when its vitals are not known.
     pub(crate) fn body_text(&self, actor: u32) -> String {
-        self.body_now(actor).map(prompts::felt_body).unwrap_or_default()
+        self.body_now(actor).map(|b| prompts::felt_body(&b)).unwrap_or_default()
     }
 
     /// The character's routines as the mind sees them: how each has gone, and its graph.

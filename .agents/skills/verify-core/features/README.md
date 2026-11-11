@@ -6,6 +6,7 @@
 | Graph parsing, normalization, evaluation and routines; a refused start counted and told; `say` to an id in every form, waiting out the speaking limit, told when it cannot be said | Cargo, mechanics, steering, `scenes.py refusal` and `scenes.py say` | [graphs.md](graphs.md) |
 | Rhai skills, laws, crafting and exchanges | Cargo and 23 mechanics checks | [mechanics.md](mechanics.md) |
 | Hunger, energy, eating, infant appearance and cry routing | `scenes.py needs` and `scenes.py infant` | [needs.md](needs.md) |
+| The body's statuses and alarms from the `status_of` law (with `meters()`): a law's alarm told to a mind-held person once while it lasts and again after it ends, the mind asked to think in its words; a meter naming a field the vitals row lacks refused at install | `scenes.py alarms` (any seed), and Cargo (`script::body`) | [needs.md](needs.md#meters-and-statuses) |
 | "food" as anything with nutrition: eat and give of `food`, the most nourishing first | `scenes.py food` | [needs.md](needs.md) |
 | Birth, infancy, aging and death cleanup; the laws of starting a family (`conceive_roof`, `conceive_food`) and of the longing for a child (`longing_after_min`, `longing_food`) | `scenes.py lifecycle`, `scenes.py family_laws` and mechanics | [lifecycle.md](lifecycle.md) |
 | Species restrictions, grazing (shown as a `doing` row) and migration floor | `scenes.py wildlife` and Cargo | [wildlife.md](wildlife.md) |

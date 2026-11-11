@@ -730,7 +730,7 @@ Answers of 2026-11-11, collected in `.local/living/ui-designs/INTERFACE-answers.
    - Instead, a private `act_outcome` table keyed by experience id (ok or refused, skill, reason code), written in the same transaction and read through `my_act_outcomes`.
    - The death cause takes the same approach. The Spark builds both.
    - Built on branch `rules-senses-outcomes`: `act_outcome`, read through `my_act_outcomes`, with act codes and death codes (`living_rules::outcome`) ([perception, "Act outcomes"](PERCEPTION.md#act-outcomes-eighth-change)).
-5. **`meters()` and `status_of`.** One script law with one set of thresholds, feeding the minds' body words and alarms as well as the client. The Spark builds it.
+5. **`meters()` and `status_of`.** One script law with one set of thresholds, feeding the minds' body words and alarms as well as the client. The Spark builds it. Built on branch `rules-senses-outcomes` ([world rules, "The body: meters and statuses"](WORLD_RULES.md#the-body-meters-and-statuses)): the alarms, the mind's body words and the rethink gate's levels read it; meters rows name `my_vitals` fields, so a world adds a vital with a column and a row.
 6. **Whisper.** speech-1 builds `whisper_speech()` and `whisper_check` in the script.
    - The refusal wording stays in the script, not in Rust.
    - The client runs `whisper_check` before sending.
