@@ -1,5 +1,18 @@
 # Internal mind validation
 
+## 2026-11-11 every person a mind (lives-2, dev-box)
+
+On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
+
+- `resident` (new, replaces `wake`): `minds-l2res-014448` and in the full suite `minds-l2c-030713` pass. The first try (`minds-l2res-014127`) failed: a seeded resident's starting graph counted as its last thought, so for 20 s its deliberation requests were dropped; fixed in the authority (a new character's first request is not held back by `think_min_s`).
+- `lives_mind.py` (replaces `lives_wake.py`): 32 of 32 (`minds-l2lives-014653`, again `minds-l2clives-030713`). Its first form checked people in the first prompt, which for a mind already living is a talk turn; it now asks for a deliberation with an admin `set_behavior` think node after the player's line.
+- Full suite `minds-l2c-030713` on the fixed build: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, rethink and rethink-llm pass; consolidation is its known XFAIL; `jev` and `dealings` timed out under load and pass alone (`minds-l2c-jev-033522`, `minds-l2c-deal2-*`). An earlier suite (`minds-l2b-022738`) on the build before 45d4ac6 failed consolidation, prune, only, reconnect and lod: every person felt "A new day begins" on every evaluation for three game hours (a mark the brain did not write back), so a pending request was always there; fixed in 45d4ac6.
+- `animals`: **known gap.** The case's last step (the lead asked again with nothing new lives by instinct, no call) relied on the dawn broadcast's urgency to pass the deer's 240 s `think_min_s`. Without it, only urgent reasons pass the throttle and every urgent reason is news to the salience check; waiting the throttle out (`minds-l2c-animals2-033522`) the deer grew hungrier, also news, so it chose with a call. The first two steps (one `choose` call; the pack reusing it) pass. Proving the salient path needs a fixture with a shorter deer `think_min_s` or a needs scene reducer.
+
+## 2026-11-11 laws-2 (dev-box)
+
+Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. `verify_minds.py` with the fake model (`minds-l6c`): roundtrip (with the new check that every think and deliberate prompt carries the SENSES, MOVING, FOOD and SETTLEMENTS sections built from the laws), acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night, rethink, rethink-llm and dealings pass; consolidation its known XFAIL; `jev` timed out waiting for a judgment in that run and passed alone (`minds-j1`). The first run (`minds-l6`) died when the disk filled.
+
 ## 2026-11-10 rules2-r2 fixes (dev-box)
 
 On the dev-box worktree `~/dev/slop-mind-small`, branch `fix-mind-small`, own container `mind-small-stdb` (2.14.1, port 3427, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only.

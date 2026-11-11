@@ -9,7 +9,9 @@
     "goals": [
       "Get the light on the north cape taken out of Edda's hands",
       "Pay off my share of the net to Osric",
-      "Keep my boat sound through the next storm season"
+      "Keep my boat sound through the next storm season",
+      "Learn the deep-water marks off the far side of the cape so he needn't rely on another's light",
+      "Own his own net outright, free of Osric's share"
     ],
     "mood": "watchful and weather-wise, with a hard knot of anger about the light",
     "traits": {
@@ -139,7 +141,13 @@
         "why": "Minnow and Tern come before any quarrel; the catch goes to Rona and the marks come home."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending and tarring his nets by the smoke shed at dusk",
+      "sitting on the shingle watching the sky come in over the cape",
+      "a mug and a quiet game of dice with Cuthbert Stave at the inn"
+    ],
+    "calling": "I fish the deep water off the cape, and I read the weather better than any glass."
   },
   "Tern Gannet": {
     "narrative": "I carry smoked fish down the fish road to Brackenford and bring grain back, and I pay the gate-due on every load. That due galls me more than the debt does. I carry Marra Brine's salt and barley and keep her marks in a jar for her, and I've not asked her why she wants it secret. I like the Brines, and I wish Rook Tarn had sent his word about the net by someone else.",
@@ -151,7 +159,9 @@
     "goals": [
       "Carry the debt down to Brackenford and see it counted right",
       "Keep Marra's secret and her trade",
-      "Not be the one who brings Rook's demand to the Brines"
+      "Not be the one who brings Rook's demand to the Brines",
+      "Save enough marks of her own to buy a handcart so she needn't borrow",
+      "See the inside of Brackenford's chapel on a market day, just once"
     ],
     "mood": "tired from the road, warm to her friends, and quietly angry at the gate",
     "traits": {
@@ -302,7 +312,13 @@
         "why": "Minnow and Sedge are what I carry the fish for."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "singing the old fishing songs while she packs the smoke shed",
+      "walking the shore road at dusk to see what the tide has left",
+      "sitting with Marra Brine over tea and barley bread"
+    ],
+    "calling": "I carry the fish road and I know every stone of it, and I'd have it no other way."
   },
   "Minnow Gannet": {
     "narrative": "I play on the shingle and help Mam pack the fish in the smoke shed. The stones are warm and the gulls are loud. I like Wren Stave and we play at the water's edge. I don't like the dark coming early.",
@@ -313,7 +329,9 @@
     ],
     "goals": [
       "Play with Wren Stave",
-      "Help Mam pack the fish"
+      "Help Mam pack the fish",
+      "Play with Wren Stave every day",
+      "Help Mam pack the fish all by herself"
     ],
     "mood": "sunny and busy",
     "traits": {
@@ -366,6 +384,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "hunting warm stones on the shingle",
+      "playing at the water's edge with Wren Stave",
+      "chasing gulls along the shore"
+    ],
+    "calling": "I help Mam pack the fish, and I'm going to be a fisher like Da."
   }
 }

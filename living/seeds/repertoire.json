@@ -3312,8 +3312,8 @@
         "weight": {
           "base": -0.7,
           "tired": 1.3,
-          "night": 0.6,
-          "exhausted": 1.0
+          "exhausted": 1.0,
+          "bedtime": 1.2
         },
         "do": {
           "routine": "sleep"
@@ -3323,8 +3323,8 @@
         "want": "warmth",
         "weight": {
           "base": -0.1,
-          "night": 0.5,
-          "winter": 0.3
+          "winter": 0.3,
+          "bedtime": 0.6
         },
         "do": {
           "routine": "keep warm"
@@ -3333,8 +3333,9 @@
       {
         "want": "work",
         "weight": {
-          "base": 0.2,
-          "day": 0.5
+          "base": 0.7,
+          "bedtime": -0.9,
+          "evening": -0.4
         },
         "do": {
           "routine": "WORK"

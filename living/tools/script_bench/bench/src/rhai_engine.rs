@@ -36,6 +36,14 @@ impl Engine for RhaiEmbed {
     fn hook(&mut self, c: &SkillCtx) -> StrikeOut {
         self.s.hook("give", c)
     }
+    fn senses(&mut self, c: &SkillCtx, shared: bool) -> (f32, f32) {
+        let s = if shared { self.s.senses(c) } else { self.s.senses_unshared(c) }.expect("senses");
+        (s.sight, s.hearing)
+    }
+    fn moves(&mut self, c: &SkillCtx) -> (f32, f32) {
+        let m = self.s.moves(c).expect("motion");
+        (m.run, m.turn_rate)
+    }
 }
 
 /// Diagnostic: the context map alone. `Scripts::call` builds `to_map(ctx, knack)` for every

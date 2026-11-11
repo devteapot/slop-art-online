@@ -133,8 +133,27 @@ pub fn give_repertoire(ctx: &ReducerContext, id: u32, occupation: &str, now: u64
     let _ = crate::mind::set_routines(ctx, id, &routines, &format!("habit ({occupation})"), now);
     let top = seed.ways.top.as_ref().unwrap_or(&r["top"]).to_string().replace("\"WORK\"", &serde_json::to_string(&work).unwrap_or_default());
     if let Ok(g) = living_rules::graph::parse(&top) {
-        let _ = crate::mind::set_graph(ctx, id, &g.to_json(), &format!("my way of life ({occupation})"), "habit", now);
+        // Each person weighs their desires a little differently (as a child's ways vary from
+        // its parent's), drawn from the person alone: no two people turn from work to home,
+        // from home to food, at the same pitch.
+        let mine = living_rules::genes::vary_ways(&g.root, &mut common::hashed_draws(id, 3)).and_then(|n| serde_json::to_string(&n).ok()).unwrap_or_else(|| g.to_json());
+        let _ = crate::mind::set_graph(ctx, id, &mine, &format!("my way of life ({occupation})"), "habit", now);
     }
+}
+
+/// A person's daily rhythm when the seed gives none: rising about 06:00 (±0.8 h), up about
+/// 16 hours (±1 h), an evening of 1.5–4.5 hours before bed. Drawn from the person alone.
+/// `day`: the world day it is born into (its new day has begun).
+pub fn drawn_rhythm(id: u32, day: u32) -> Rhythm {
+    let mut u = common::hashed_draws(id, 2);
+    let mut normal = || {
+        let (a, b) = (u().max(1e-6), u());
+        (-2.0 * a.ln()).sqrt() * (std::f32::consts::TAU * b).cos()
+    };
+    let rise_h = (6.0 + 0.8 * normal()).clamp(4.0, 9.0);
+    let bed_h = (rise_h + 16.0 + normal()).clamp(19.5, 26.5);
+    let evening_h = 1.5 + 3.0 * common::hashed_draws(id, 4)();
+    Rhythm { id, rise_h, bed_h, evening_h, last_day: day }
 }
 
 /// A newborn's inheritance of ways: its parents' routines (each from one parent or the other)
@@ -293,6 +312,21 @@ pub struct SeedResident {
     /// them by name (`work`): see [`crate::town::SeedPlace`].
     #[serde(default)]
     pub places: Vec<crate::town::SeedPlace>,
+    /// Their daily rhythm (docs/SEEDED_LIVES.md); whatever it leaves out is drawn.
+    #[serde(default)]
+    pub rhythm: Option<SeedRhythm>,
+}
+
+/// When a person rises and goes to bed (hours of the day; past 24 for after midnight) and how
+/// many hours before bed are their evening.
+#[derive(Deserialize, Default, Clone)]
+pub struct SeedRhythm {
+    #[serde(default)]
+    pub rises: Option<f32>,
+    #[serde(default)]
+    pub sleeps: Option<f32>,
+    #[serde(default)]
+    pub evening_hours: Option<f32>,
 }
 
 fn thirty() -> f32 {
@@ -496,6 +530,9 @@ pub struct Seed {
     /// Records the world starts with (a community's regard for another; docs/WORLD_RULES.md).
     #[serde(default)]
     pub records: Vec<crate::records::SeedRecord>,
+    /// The world's own values of laws (`laws()` in the script), by name: `{"minds": false}`.
+    #[serde(default)]
+    pub rules: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1054,17 +1091,24 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
             // A skill that borrows another's knack (the rules' `<skill>_combat()`) draws none.
             let sc = common::scripts(ctx);
             let skills: Vec<String> = skills.into_iter().filter(|s| sc.shapes().knack(s) == s.as_str()).collect();
-            living_rules::genes::founder(&temperament, &skills, &mut u)
+            let mut g = living_rules::genes::founder(&temperament, &skills, &mut u);
+            // Drawn from the character alone, so the world's random stream is unchanged.
+            g.extend(living_rules::genes::constitution(&mut common::hashed_draws(id, 1)));
+            g
         }
     };
+    if kind == "person" {
+        let w = common::world(ctx);
+        ctx.db.rhythm().insert(drawn_rhythm(id, living_rules::day_of(now, w.epoch_ms, w.day_ms) as u32));
+    }
     ctx.db.genome().insert(Genome { id, genes: serde_json::to_string(&genes).unwrap_or_default(), ways: String::new() });
     let max_hp = common::scripts(ctx).num_of("max_hp", kind, 100.0) as f32 * living_rules::genes::gene(&genes, "vitality");
     ctx.db.vitals().insert(Vitals {
         id,
         hp: max_hp,
         max_hp,
-        hunger: 25.0,
-        energy: 85.0,
+        hunger: common::laws(ctx).spawn_hunger,
+        energy: common::laws(ctx).spawn_energy,
         at_ms: now,
         hp_rate: 0.0,
         hunger_rate: 0.0,
@@ -1076,6 +1120,9 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     // The young start from their species' young instinct (a baby cries and follows a parent).
     let graph = if c.stage == 0 { young_instinct(kind) } else { instinct(kind) };
     ctx.db.brain().insert(Brain { id, graph, revision: 1, plan: "instinct".into(), source: "instinct".into(), installed_ms: now });
+    // Its starting graph is not a mind's thought: its first deliberation request is not held
+    // back by `think_min_s` (the reflection and drive timers still count from its birth).
+    let think_gate = common::species(kind).map_or(0, |s| s.cognition.think_min_s * 1000);
     ctx.db.mind_state().insert(MindState {
         id,
         slot: (id % 60) as u8,
@@ -1089,7 +1136,7 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         heard_ms: 0,
         speaker: 0,
         spoke_ms: 0,
-        deliberated_ms: now,
+        deliberated_ms: now.saturating_sub(think_gate),
         seen: Vec::new(),
         alerts: 0,
         fast_until: 0,
@@ -1300,22 +1347,10 @@ fn fresh_name(ctx: &ReducerContext) -> String {
     }
 }
 
-/// Know-how that goes with a history in an occupation (plus fire for everyone in a town).
-fn occupation_know_how(occ: &str) -> &'static [&'static str] {
-    match occ {
-        "fisher" => &["spear", "cooking", "fishing"],
-        "farmer" => &["planting", "storage"],
-        "builder" => &["shelter", "storage", "carpentry", "masonry"],
-        "mason" => &["masonry", "toolmaking"],
-        "carpenter" => &["shelter", "carpentry", "toolmaking"],
-        "guard" => &["spear", "torch"],
-        "hunter" => &["spear", "cloak", "torch", "trapping"],
-        "cook" => &["cooking", "storage"],
-        "scribe" => &["writing"],
-        "healer" => &["cooking", "planting", "medicine"],
-        "trader" => &["writing", "storage", "basketry"],
-        _ => &[],
-    }
+/// Know-how that goes with a history in an occupation (plus fire for everyone in a town): the
+/// script's `occupation_knows` law.
+fn occupation_know_how(ctx: &ReducerContext, occ: &str) -> Vec<String> {
+    common::scripts(ctx).words_of("occupation_knows", occ)
 }
 
 /// A place a family would choose to live: grass with the most berry bushes within 10
@@ -1447,8 +1482,8 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
             x: p.0,
             y: p.1,
             chunk: chunk_of(p.0, p.1),
-            amount: 5.0,
-            max: 5.0,
+            amount: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
+            max: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
             regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
             at_ms: now,
         });
@@ -1499,8 +1534,8 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
             let id = spawn_with(ctx, &names[k], "person", admin, minded, walkable_near(map, at), now, life.age_at(f, pace), (0, 0));
             common::inv_add(ctx, id as u64, "berries", 4);
             common::learn(ctx, id, "fire", "seed", now);
-            for tech in occupation_know_how(occ) {
-                common::learn(ctx, id, tech, "seed", now);
+            for tech in occupation_know_how(ctx, occ) {
+                common::learn(ctx, id, &tech, "seed", now);
             }
             give_repertoire(ctx, id, occ, now);
             if let Some(mut ch) = ctx.db.character().id().find(id) {
@@ -1604,8 +1639,8 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
             }
         } else if stage >= 2 {
             common::learn(ctx, id, "fire", "seed", now);
-            for tech in occupation_know_how(&occ) {
-                common::learn(ctx, id, tech, "seed", now);
+            for tech in occupation_know_how(ctx, &occ) {
+                common::learn(ctx, id, &tech, "seed", now);
             }
         }
         if stage >= 1 {
@@ -1699,6 +1734,20 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
                     }
                     author_temperament(ctx, id, &r.sheet);
                 }
+            }
+        }
+        if let Some(given) = &r.rhythm {
+            let mut row = ctx.db.rhythm().id().find(id).unwrap_or_else(|| {
+                let w = common::world(ctx);
+                drawn_rhythm(id, living_rules::day_of(now, w.epoch_ms, w.day_ms) as u32)
+            });
+            row.rise_h = given.rises.unwrap_or(row.rise_h).clamp(0.0, 12.0);
+            row.bed_h = given.sleeps.map(|b| if b < 12.0 { b + 24.0 } else { b }).unwrap_or(row.bed_h).clamp(row.rise_h + 8.0, row.rise_h + 22.0);
+            row.evening_h = given.evening_hours.unwrap_or(row.evening_h).clamp(0.0, 8.0);
+            if ctx.db.rhythm().id().find(id).is_some() {
+                ctx.db.rhythm().id().update(row);
+            } else {
+                ctx.db.rhythm().insert(row);
             }
         }
         if r.sheet.is_null() {

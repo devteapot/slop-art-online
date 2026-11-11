@@ -71,8 +71,8 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 }
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
-const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, raining, moving, believes, judged, chance, all, any, not";
+const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion", "bedtime", "evening"];
+const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, raining, moving, believes, judged, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -407,7 +407,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && spec.needs_item) {
         let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some() || spec.items.iter().any(|w| w == i);
         if !known {
-            return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::ITEMS.iter().map(|x| x.name).collect::<Vec<_>>().join(", ")));
+            return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::item_names().join(", ")));
         }
     }
     Ok(json!({"do": out}))
@@ -655,7 +655,10 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                         (other, _) => other,
                     };
                     let num = |k: &str| o.get(k).and_then(|x| x.as_u64());
-                    let mut c = json!({"of": of, "within": o.get("within").and_then(|w| w.as_f64()).unwrap_or(crate::SIGHT as f64)});
+                    let mut c = json!({"of": of});
+                    if let Some(w) = o.get("within").and_then(|w| w.as_f64()) {
+                        c["within"] = json!(w);
+                    }
                     if let Some(a) = num("at_least").or_else(|| num("min")) {
                         c["at_least"] = json!(a);
                     }
@@ -677,6 +680,8 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     json!({"health_of": c})
                 }
                 "night" => json!({"night": v.as_bool().unwrap_or(true)}),
+                "bedtime" => json!({"bedtime": v.as_bool().unwrap_or(true)}),
+                "evening" => json!({"evening": v.as_bool().unwrap_or(true)}),
                 "raining" => json!({"raining": v.as_bool().unwrap_or(true)}),
                 "moving" | "walking" => json!({"moving": v.as_bool().unwrap_or(true)}),
                 "standing" | "still" => json!({"moving": !v.as_bool().unwrap_or(true)}),

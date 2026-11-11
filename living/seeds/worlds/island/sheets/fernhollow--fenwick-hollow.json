@@ -11,7 +11,9 @@
       "protect my weirs from Osier's traps",
       "see the Works Council answer for the smoke",
       "see Reed settled with a boat and a future",
-      "keep the smoke shed and the catch steady"
+      "keep the smoke shed and the catch steady",
+      "learn to read the smoke drift and tell which works chimney it comes from",
+      "see Reed settled with a boat and a future of his own"
     ],
     "mood": "angry and worried",
     "traits": {
@@ -169,7 +171,13 @@
         "why": "Thistle carries my fish to Reedmoor and pays fair; the hollow needs that trade."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking her weirs at dawn to check each pool and weir by eye",
+      "smoking the catch in the shed and trading gossip with Thistle Mossfoot when the packs come",
+      "sitting by the stream in the evening with a line in the water, no traps, just the sound of it"
+    ],
+    "calling": "I fish and smoke for the hollow's table, and I know every pool and weir in this forest better than anyone alive."
   },
   "Reed Fenwick": {
     "narrative": "I am sixteen and I fish the forest streams with my mother, learning the weirs and the pools. I have seen Osier Willow's traps set in the upper pool where the breeding fish run, and I want the Eldest to set a boundary. I want to see the sea at Lanternquay one day, but for now I mend nets and smoke the catch and keep my mother company.",
@@ -183,7 +191,9 @@
       "see the Eldest set a boundary on the streams",
       "learn to fish the deeper pools",
       "see the sea at Lanternquay",
-      "keep the smoke shed going with Rush"
+      "keep the smoke shed going with Rush",
+      "learn to fish the deeper pools before he turns seventeen",
+      "go to Lanternquay and see the sea and the tide lanterns for himself"
     ],
     "mood": "restless and hopeful",
     "traits": {
@@ -320,7 +330,13 @@
         "why": "I know the streams well enough, but the deeper pools are where the big fish are."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending nets on the bank while his mother works the weirs",
+      "swimming in the deeper pools he has not yet learned to fish",
+      "listening to traders' tales of Lanternquay at the hollow's gatherings"
+    ],
+    "calling": "I fish the forest streams with my mother, and one day I'll know the deeper pools as well as she knows the shallows."
   },
   "Rush Fenwick": {
     "narrative": "I am twelve and I help my mother and brother in the smoke shed, mending nets and keeping things tidy. I play with Tansy Mossfoot and listen to the talk of the smoke and the traps. I am afraid of the wolves that come down the track in winter, but I like the smell of the smoke shed and the taste of smoked fish.",
@@ -334,7 +350,9 @@
       "keep the smoke shed tidy",
       "mend the nets well",
       "play with Tansy Mossfoot",
-      "stay safe from the wolves"
+      "stay safe from the wolves",
+      "mend a whole net by herself without a knot slipping",
+      "keep the smoke shed tidy enough that Mother says so aloud"
     ],
     "mood": "content and a little fearful",
     "traits": {
@@ -436,6 +454,12 @@
         "why": "Mother says a tidy shed keeps the fish sweet, and I like it tidy."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "playing hide-and-find among the gardens with Tansy Mossfoot",
+      "helping tidy the smoke shed and stack the split wood just so",
+      "mending nets beside her mother, proud of a neat knot"
+    ],
+    "calling": "I help in the smoke shed and mend nets, and I want to be as good at it as Mother and Reed."
   }
 }

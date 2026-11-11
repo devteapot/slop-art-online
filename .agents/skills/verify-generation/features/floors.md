@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- A floor module: built without a seed (`LIVING_SEED=none`, its `rules` switches from `LIVING_RULES`), published, its world empty until the admin calls `create_floor(seed_json)`.
+- A floor module: built without a seed (`LIVING_SEED=none`), published, its world empty until the admin calls `create_floor(seed_json)`.
 - `create_floor` keeps the seed (private `floor_seed`), refuses a second call ("this floor already has its seed"), a module built with a seed, or a seed whose `rules` differ from the module's.
 - A land over 2048 m is created by the scheduled `genesis_step`, one bounded step per call: `land::Gen`'s steps, hosting, terrain chunks, lots and resources in batches, then people and animals. The public `genesis` row shows `step`, `steps`, `label`, `restarts` and `done`; the world ticks once it is done.
 - `create_floor` refuses a land whose side is not a multiple of 16 from 256 to 8192 m ("a land's side is a multiple of 16 …").
@@ -21,7 +21,7 @@
 .agents/skills/verify-generation/scripts/generation.py --run generation-floors-$(date +%Y%m%d-%H%M%S) --feature worlds --seeds floor-megacity-4k
 ```
 
-The child `floor-megacity-4k` derives the megacity seed at 4096 m into the run's directory, launches with `--seed none` and `LIVING_RULES` from the seed, calls `create_floor` as the admin, polls `genesis` every 3 s (up to 900 s) and then runs doctor, the snapshots, the seeded-world checks and the native digests. Its `checks.json` adds: `create_floor refuses a 5000 m land` (not a multiple of 16), `a 9216 m land` (above 8192) and `a 128 m land` (below 256), `resume_genesis is refused before any creation`, `create_floor accepted the seed`; at step 3 or later `resume_genesis is refused while a step is scheduled`, then `stop_genesis` and `a chain stopped midway stalls` (no `genesis_timer` row and the step count holding for 8 s; `genesis-stalled.json`), `stop_genesis is refused when no step is scheduled`, `resume_genesis carries the stopped creation on`; then `the staged creation finished` (with steps and seconds), `resume_genesis is refused once the world is made`, `no generation restarts`, `a second create_floor is refused`. Owner SQL cannot stand in for `stop_genesis`: 2.14.1 refuses "SQL writes to scheduled tables". `genesis-final.json` keeps the last `genesis` row. On the dev-box: 18 s and 138 steps.
+The child `floor-megacity-4k` derives the megacity seed at 4096 m into the run's directory, launches with `--seed none`, calls `create_floor` as the admin, polls `genesis` every 3 s (up to 900 s) and then runs doctor, the snapshots, the seeded-world checks and the native digests. Its `checks.json` adds: `create_floor refuses a 5000 m land` (not a multiple of 16), `a 9216 m land` (above 8192) and `a 128 m land` (below 256), `resume_genesis is refused before any creation`, `create_floor accepted the seed`; at step 3 or later `resume_genesis is refused while a step is scheduled`, then `stop_genesis` and `a chain stopped midway stalls` (no `genesis_timer` row and the step count holding for 8 s; `genesis-stalled.json`), `stop_genesis is refused when no step is scheduled`, `resume_genesis carries the stopped creation on`; then `the staged creation finished` (with steps and seconds), `resume_genesis is refused once the world is made`, `no generation restarts`, `a second create_floor is refused`. Owner SQL cannot stand in for `stop_genesis`: 2.14.1 refuses "SQL writes to scheduled tables". `genesis-final.json` keeps the last `genesis` row. On the dev-box: 18 s and 138 steps.
 
 ## Gotchas
 

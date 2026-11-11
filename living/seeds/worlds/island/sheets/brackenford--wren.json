@@ -10,7 +10,9 @@
     "goals": [
       "keep the poor of Brackenford alive through the winter",
       "be left alone to keep my books and my garden",
-      "see the gate-due lifted so the roads are open again"
+      "see the gate-due lifted so the roads are open again",
+      "to teach Pernel Pip enough of the herbs that the knowledge will not die with me",
+      "to walk the woods by the stone road once more before the cold, and come home with my basket full"
     ],
     "mood": "dry, watchful, quietly content",
     "traits": {
@@ -144,6 +146,12 @@
         "why": "Elspeth has never once betrayed a confidence of mine"
       }
     ],
-    "secret": "I keep a book of old charms and heathen words my mother left me, hidden under the floor by the hearth; the chapel would call it wicked if they knew."
+    "secret": "I keep a book of old charms and heathen words my mother left me, hidden under the floor by the hearth; the chapel would call it wicked if they knew.",
+    "pastimes": [
+      "tending the herb garden along the chapel wall",
+      "reading and annotating the old books of roots and remedies",
+      "sitting by the common fire in the evening, listening to the town's talk"
+    ],
+    "calling": "I gather and know the roots that heal, and I give them freely to those who cannot pay."
   }
 }

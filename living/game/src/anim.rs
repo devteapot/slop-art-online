@@ -96,11 +96,24 @@ pub struct Motion {
     pub action: Option<Action>,
     /// The clock `action.start_ms` is on (ms).
     pub now_ms: f64,
+    /// Walking backwards: the gaits play in reverse (the planted foot then moves forward under
+    /// the hips, as the body backs away), so legs facing away from the travel keep still feet.
+    pub reverse: bool,
+    /// How far the upper body turns from the legs toward where the body looks (radians, sim
+    /// sense: counter-clockwise seen from above is positive), spread over the spine (`twist.rs`).
+    pub twist: f32,
+    /// How much faster than its own pace the ground makes the body go (the rules' road speed on
+    /// a road; 1 elsewhere). The gait is chosen at `speed / pace`, so a walk on a road stays a
+    /// walk, and steps at the body's real speed, so its feet stay planted.
+    pub pace: f32,
+    /// The gait holds its stride where it is (in a jump's flight: legs that kept cycling ran in
+    /// the air).
+    pub freeze: bool,
 }
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0 }
+        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, pace: 1.0, freeze: false }
     }
 }
 
@@ -133,6 +146,9 @@ struct Sets(HashMap<String, Arc<Set>>);
 struct Once {
     clip: &'static str,
     rate: f32,
+    /// Where in the clip it starts (s), and where its fade out begins (s).
+    from: f32,
+    cut: Option<f32>,
     /// When it started (the caller's ms), and the latest start asked for it (a confirmed
     /// prediction carries on under the authority's start).
     start_ms: f64,
@@ -149,8 +165,11 @@ struct Once {
 pub struct Anim {
     player: Entity,
     set: Arc<Set>,
-    /// The shared gait phase (0–1).
+    /// The shared gait phase (0–1). Walking backwards the clips are sampled at `1 − phase`
+    /// ([`Anim::clip_phase`]).
     pub phase: f32,
+    /// The gaits play in reverse now (see [`Motion::reverse`]).
+    pub reverse: bool,
     /// Phase per second while moving.
     rate: f32,
     /// How much the body is in its gait rather than standing (0–1).
@@ -177,6 +196,20 @@ pub struct Anim {
 }
 
 impl Anim {
+    /// Stopping: the gait runs on to its next double support before standing.
+    pub fn settling(&self) -> bool {
+        self.settle.is_some()
+    }
+
+    /// Where in their cycle the gaits are sampled (0–1).
+    pub fn clip_phase(&self) -> f32 {
+        if self.reverse {
+            (1.0 - self.phase).rem_euclid(1.0)
+        } else {
+            self.phase
+        }
+    }
+
     /// The clip that shows most (for recordings).
     pub fn showing(&self) -> &'static str {
         self.showing
@@ -327,6 +360,7 @@ fn build(
             player: p,
             set,
             phase: 0.0,
+            reverse: false,
             rate: 0.0,
             moving: 0.0,
             starting: false,
@@ -391,11 +425,12 @@ fn play(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &Motion, 
         let full_once: f32 = a.onces.iter().map(|o| o.w * if o.upper { 1.0 - a.moving } else { 1.0 }).sum();
         let base = (1.0 - full_once).max(0.0);
         let mut legs: Vec<(&'static str, f32, f32, bool)> = Vec::with_capacity(6);
+        let clip_phase = a.clip_phase();
         for &(i, w) in a.blend.parts() {
             let w = base * a.moving * w;
             if let (Some((node, len)), true) = (set.gait_nodes.get(i).copied().flatten(), w > 0.0) {
-                want.push((node, w, Play::At(a.phase * len)));
-                legs.push((set.gaits.gaits()[i].clip, w, a.phase, true));
+                want.push((node, w, Play::At(clip_phase * len)));
+                legs.push((set.gaits.gaits()[i].clip, w, clip_phase, true));
             }
         }
         let stand_sum: f32 = a.stands.iter().map(|s| s.1).sum::<f32>().max(1e-6);
@@ -484,7 +519,7 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
             o.key = x.start_ms;
         } else if x.start_ms <= m.now_ms && a.spent != Some((x.clip, x.start_ms)) {
             let upper = set.upper.contains_key(x.clip);
-            a.onces.push(Once { clip: x.clip, rate: x.rate, start_ms: x.start_ms, key: x.start_ms, hold: x.hold, w: 0.0, t: 0.0, upper });
+            a.onces.push(Once { clip: x.clip, rate: x.rate, from: x.from, cut: x.cut, start_ms: x.start_ms, key: x.start_ms, hold: x.hold, w: 0.0, t: x.from, upper });
             if a.onces.len() > 2 {
                 a.onces.remove(0);
             }
@@ -493,48 +528,69 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
     let last = a.onces.len().saturating_sub(1);
     for (i, o) in a.onces.iter_mut().enumerate() {
         let len = set.len(o.clip);
+        let end = o.cut.map_or(len, |c| c.min(len) + FADE_OUT * o.rate).min(len);
         let requested = i == last && want.is_some_and(|x| x.clip == o.clip && x.start_ms == o.key);
-        o.t = (((m.now_ms - o.start_ms) / 1000.0) as f32 * o.rate).max(0.0);
+        o.t = o.from + (((m.now_ms - o.start_ms) / 1000.0) as f32 * o.rate).max(0.0);
         if let Some(h) = o.hold {
             o.t = o.t.min(h * len);
         }
-        o.t = o.t.min(len);
-        let ending = o.hold.is_none() && (len - o.t) / o.rate.max(0.01) < FADE_OUT;
+        o.t = o.t.min(end);
+        let ending = o.hold.is_none() && (end - o.t) / o.rate.max(0.01) < FADE_OUT;
         let target = if requested && !ending { 1.0 } else { 0.0 };
         o.w = approach(o.w, target, dt / FADE_IN, dt / FADE_OUT);
     }
     let mut spent = a.spent;
     a.onces.retain(|o| {
-        let keep = o.w > 0.0 || want.is_some_and(|x| x.clip == o.clip && x.start_ms == o.key && o.t < set.len(o.clip));
+        let end = o.cut.map_or(set.len(o.clip), |c| (c + FADE_OUT * o.rate).min(set.len(o.clip)));
+        let keep = o.w > 0.0 || want.is_some_and(|x| x.clip == o.clip && x.start_ms == o.key && o.t < end);
         if !keep {
             spent = Some((o.clip, o.key));
         }
         keep
     });
     a.spent = spent;
-    // Locomotion at one shared phase.
-    let stepping = if a.moving > 0.0 && a.settle.is_none() { m.speed > STEP_OFF } else { m.speed > STEP_ON };
+    // Locomotion at one shared phase. Turning from forward to backward walking keeps the clip
+    // time where it is (the pose doesn't jump): the phase becomes its mirror.
+    if m.reverse != a.reverse {
+        if a.moving > 0.0 {
+            a.phase = (1.0 - a.phase).rem_euclid(1.0);
+            a.settle = None;
+        }
+        a.reverse = m.reverse;
+    }
+    // A whole-body one-shot asked for (a dodge's dash, a death) covers the legs: no gait starts
+    // under it, so its first frames don't show a sprint while it fades in.
+    // My own body is drawn ahead of the display clock that times one-shots, so its dash can
+    // move before its clip starts: asked for is enough.
+    let covered = want.is_some_and(|x| !set.upper.contains_key(x.clip));
+    let stepping = !covered && if a.moving > 0.0 && a.settle.is_none() { m.speed > STEP_OFF } else { m.speed > STEP_ON };
     let moving = if stepping {
-        let b = set.gaits.blend(m.speed, m.stride, |i| set.gait_len(i));
+        let b = set.gaits.blend(m.speed / m.pace.max(0.5), m.stride, |i| set.gait_len(i));
         if a.moving <= 0.0 {
             // From standing: the leading gait's right mid-stance (its pose nearest standing: the
             // planted foot under the hips, the other one stepping off).
             let lead = b.parts().iter().max_by(|x, y| x.1.total_cmp(&y.1)).map(|&(i, _)| i);
-            a.phase = lead.and_then(|i| set.gaits.info(set.gaits.gaits()[i].clip)).map_or(0.0, |i| i.contacts.mid_stance(1));
+            let mid = lead.and_then(|i| set.gaits.info(set.gaits.gaits()[i].clip)).map_or(0.0, |i| i.contacts.mid_stance(1));
+            a.phase = if a.reverse { (1.0 - mid).rem_euclid(1.0) } else { mid };
             a.starting = true;
         }
         a.settle = None;
         a.blend = b;
         a.rate = m.speed / (m.stride.max(0.05) * b.cycle_m.max(0.05));
-        a.phase += a.rate * dt;
+        if !m.freeze {
+            a.phase += a.rate * dt;
+        }
         1.0
     } else if a.moving > 0.0 {
         // Stopping: run on to the leading gait's next double support, then stand.
         let lead = a.blend.parts().iter().max_by(|x, y| x.1.total_cmp(&y.1)).map(|&(i, _)| i);
         let contacts = lead.and_then(|i| set.gaits.info(set.gaits.gaits()[i].clip)).map(|i| &i.contacts);
         let phase = a.phase;
+        let reverse = a.reverse;
         let (goal, least) = *a.settle.get_or_insert_with(|| {
-            let goal = contacts.filter(|c| !c.is_empty()).map_or(phase, |c| c.next_settle(phase));
+            // Walking backwards it stands from where it is (the next double support lies behind
+            // the clip time, and a short stop from a back step slides little).
+            let goal = contacts.filter(|c| !c.is_empty() && !reverse).map_or(phase, |c| c.next_settle(phase));
             let goal = if goal - phase <= SETTLE_MAX { goal } else { phase };
             (goal, (goal - phase) / SETTLE_S)
         });
@@ -588,6 +644,7 @@ mod tests {
             player: Entity::PLACEHOLDER,
             set: set.clone(),
             phase: 0.0,
+            reverse: false,
             rate: 0.0,
             moving: 0.0,
             starting: false,
@@ -622,6 +679,24 @@ mod tests {
     }
 
     #[test]
+    fn walking_backwards_reverses_the_phase_without_a_jump() {
+        let s = Arc::new(set());
+        let mut a = anim(&s);
+        let fwd = Motion { speed: 1.4, ..default() };
+        for _ in 0..30 {
+            step(&mut a, &s, &fwd, 1.0 / 60.0);
+        }
+        let before = a.clip_phase();
+        let back = Motion { speed: 1.4, reverse: true, ..default() };
+        step(&mut a, &s, &back, 0.0);
+        assert!((a.clip_phase() - before).abs() < 1e-5, "the pose holds at the turn: {before} -> {}", a.clip_phase());
+        // Walking on backwards, the clip time runs down at the same rate.
+        step(&mut a, &s, &back, 0.05);
+        let d = (before - a.clip_phase()).rem_euclid(1.0);
+        assert!((d - 0.05 * 1.4 / a.blend.cycle_m).abs() < 1e-4, "clip time runs backwards: {d}");
+    }
+
+    #[test]
     fn stopping_settles_at_double_support_before_standing() {
         let s = Arc::new(set());
         let mut a = anim(&s);
@@ -647,7 +722,7 @@ mod tests {
     fn a_new_move_replays_and_a_confirmed_one_carries_on() {
         let s = Arc::new(set());
         let mut a = anim(&s);
-        let act = |start: f64| Action { clip: "wave", rate: 1.0, start_ms: start, hold: None, face: None };
+        let act = |start: f64| Action { clip: "wave", rate: 1.0, start_ms: start, hold: None, face: None, ..Default::default() };
         step(&mut a, &s, &Motion { action: Some(act(0.0)), now_ms: 100.0, ..default() }, 0.1);
         assert_eq!(a.onces.len(), 1);
         assert!((a.onces[0].t - 0.1).abs() < 1e-4, "joins part-way when seen late");

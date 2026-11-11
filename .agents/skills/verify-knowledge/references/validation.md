@@ -1,5 +1,13 @@
 # Knowledge validation
 
+## 2026-11-11 every person a mind (lives-2, dev-box)
+
+On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
+
+- `facts_mind.py` (new, replaces `woken_mind.py`): all proofs pass (`knowledge-facts-015503`, again `knowledge-facts-l2c-030713`): identity from facts at the service's start, before the first deliberation, marks `world`, the given `work` place in the mind, talk on the `people` mix's talk model, food, a lesson and lodging, a stranger stays a stranger. Two driver fixes on the way: the line to a living mind is a talk turn, so the driver asks for a deliberation (`set_behavior` think node, through the CLI, since `admin()`'s revision check races the mind's own install).
+- Full suite `knowledge-l2c-030713`: all proofs pass. `knowledge-l2b-022738` failed one timing bound under load (`recall_by_cues_and_forgetting`: 670 ms against 500).
+- `residents_real.py` (paid, replaces `woken_real.py`) was not run.
+
 ## 2026-11-10 rules2-r2 fixes (dev-box)
 
 On the dev-box worktree `~/dev/slop-mind-small`, branch `fix-mind-small`, own container `mind-small-stdb` (2.14.1, port 3427, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only, scratch Neo4j on 7691 per run.

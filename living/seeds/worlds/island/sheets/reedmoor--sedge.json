@@ -11,7 +11,9 @@
       "bring in the Coombes' grain rent and fill the common store for winter",
       "hold the Lakemead against Elmwick's claims",
       "settle Eadric's debt to the pedlar without shame to the house",
-      "see Wyn matched to Godric once the boy has a boat of his own"
+      "see Wyn matched to Godric once the boy has a boat of his own",
+      "learn to read the tide tables well enough to set the reed-cutters' days herself",
+      "make a new ledger book of her own, stitched and ruled, to last the years"
     ],
     "mood": "watchful and determined",
     "traits": {
@@ -242,7 +244,13 @@
         "why": "Odelia sold Elmwick the timber for that fence; I want an apology or a promise, and I am ready to hold back our fish trade to get it."
       }
     ],
-    "secret": "I have quietly set aside a small measure of the common grain against a hard spring, and I have not told Hilda or the village."
+    "secret": "I have quietly set aside a small measure of the common grain against a hard spring, and I have not told Hilda or the village.",
+    "pastimes": [
+      "walking the reed margins at first light to read the water and the wind",
+      "keeping the village tally by the fire, checking and rechecking the sums",
+      "sitting with Hilda over a cup of herb tea, trading news of the houses"
+    ],
+    "calling": "I keep Reedmoor's tally and its store, and I mean to keep them honest and full."
   },
   "Eadric Sedge": {
     "narrative": "I fish the reed beds and the shallows from my flat boat, and I smoke what I catch for Brannock Sedge's cart. My sister Nell keeps the tally and the headwoman's word, and I keep my head down and my nets mended. The cough is through the reeds this winter and the store is thin, and I owe the pedlar for a packet of hooks I have not the marks to pay.",
@@ -256,7 +264,9 @@
       "pay Thistle Mossfoot for the hooks, in smoked fish if he will take it",
       "keep the catch coming in while the cough is in the village",
       "see the Coombes' grain rent brought home to Nell's store",
-      "teach Wyn the boat and the reed channels properly"
+      "teach Wyn the boat and the reed channels properly",
+      "make a new flat boat of his own, plank by plank, over the winter",
+      "learn to read the weather off the reed tips better than any almanac"
     ],
     "mood": "tired and a little worried",
     "traits": {
@@ -417,7 +427,13 @@
         "why": "I tell Merewyn the wolves keep to the far reeds, though I am not always sure of it."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending nets by the boat at dusk",
+      "smoking fish in the little smokehouse behind the house",
+      "telling Merewyn the names of the birds on the reeds"
+    ],
+    "calling": "I fish the shallows and the reed beds, and a clean catch and a dry boat are enough for me."
   },
   "Hilda Sedge": {
     "narrative": "I keep the cook-fire and the common bake at Reedmoor, and I count the grain in the common store every morning. The cough has gone through the reeds and I have cut the common bake to make the store last, and still I fear it will not see us to spring. I trade bread with Tansy Sedge of Fernhollow and herbs with Mavis Tarn, and I keep my worries to myself as best I can.",
@@ -431,7 +447,9 @@
       "make the winter store last to spring",
       "nurse the cough through the village without losing anyone",
       "settle the common bake so no one goes hungry",
-      "keep the tally straight for Nell"
+      "keep the tally straight for Nell",
+      "learn a cough syrup from Mavis Tarn that will keep through the winter",
+      "make a proper herb garden by the kitchen door, sheltered from the salt wind"
     ],
     "mood": "weary but steady",
     "traits": {
@@ -571,7 +589,13 @@
         "why": "Nell and I count the grain every morning; a wrong tally is how a village starves without knowing it."
       }
     ],
-    "secret": "I have been giving a little of the common grain to the Coombes' children on the quiet, and I have not told Nell."
+    "secret": "I have been giving a little of the common grain to the Coombes' children on the quiet, and I have not told Nell.",
+    "pastimes": [
+      "baking the common bread and trading a loaf with Tansy Sedge when she can",
+      "walking the shingle with Mavis Tarn, gathering herbs and talk",
+      "keeping the cook-fire and the kitchen tidy of an evening"
+    ],
+    "calling": "I keep the common pot and the common bake, and I will not see a house in Reedmoor go hungry."
   },
   "Wyn Sedge": {
     "narrative": "I am Nell Sedge's son, and I cut reeds and learn the boat and the tally from my uncle Eadric. I want to see the Lakemead that my mother let to the Coombes, and I want a boat and a net of my own. Godric Wade has been courting me since the spring, and I am fond of him, but my mother has not given her word and I will not go against it.",
@@ -585,7 +609,9 @@
       "learn the boat and the tally well enough to keep them myself",
       "see the Lakemead with my own eyes",
       "win my mother's word for the match with Godric",
-      "earn a boat and a net of my own"
+      "earn a boat and a net of my own",
+      "earn enough marks and trade for a boat and a net of her own",
+      "learn the reed channels so well she could pole them blindfolded"
     ],
     "mood": "eager and a little restless",
     "traits": {
@@ -712,7 +738,13 @@
         "why": "Hreod Toller is my friend, and the quarrel over the meadow is between the headwomen and the elders, not the children."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "poling the flat boat through the reed channels with Eadric",
+      "cutting reeds with the village crews and racing to stack them",
+      "walking the shingle with Godric Wade when the boats come in"
+    ],
+    "calling": "I cut reeds and learn the boat and the tally, and one day I will keep them myself."
   },
   "Merewyn Sedge": {
     "narrative": "I gather reeds with my mother and help her at the common bake, and I know the names of the birds on the reeds. I am afraid of the wolves that come down to the reeds in winter, and I keep close to the fire. When Wren Stave comes down from Thornby we play by the shingle, and when the cough is bad my mother gives me a packet of herbs to hold.",
@@ -726,7 +758,9 @@
       "help my mother at the bake without spilling the flour",
       "see Wren Stave when the Thornby folk come",
       "learn the birds' names from my father",
-      "be brave about the wolves"
+      "be brave about the wolves",
+      "learn all the birds' names from her father",
+      "be brave enough to walk to the shingle alone when the wolves are not about"
     ],
     "mood": "bright, then fearful",
     "traits": {
@@ -799,6 +833,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "playing by the shingle with Wren Stave when the Thornby folk come down",
+      "helping her mother at the bake, carrying flour and watching the loaves",
+      "watching the birds on the reeds and trying to name them before her father does"
+    ],
+    "calling": "I help my mother at the bake, and one day I will bake the loaves myself."
   }
 }

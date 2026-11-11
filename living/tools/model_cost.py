@@ -1008,7 +1008,7 @@ def cmd_nights(a):
     """Sleep-aligned reorganization, simulated on real consolidation timelines: each game night
     (20:00–06:00; 12 real minutes a day), a person whose integrations since their last
     reorganization meet the rule reorganizes once. The clock is calibrated from the first think
-    that lists "Dawn of day N" (06:00 of day N). `--lod` thins integrations to one per 15 real
+    that lists "Dawn of day N" (06:00 of day N; since 2026-11-11 "A new day begins for you: day N", at the person's own rising). `--lod` thins integrations to one per 15 real
     minutes, like LIVING_LOD off stage (LIVING_LOD_CONSOLIDATE_S 900 s)."""
     import re
     rows = []
@@ -1018,7 +1018,7 @@ def cmd_nights(a):
         first = {}
         for e in es:
             if classify(e) == "person_think":
-                m = re.search(r"Dawn of day (\d+)", why_section(e["request"]["messages"][1]["content"]))
+                m = re.search(r"(?:Dawn of day|A new day begins for you: day) (\d+)", why_section(e["request"]["messages"][1]["content"]))
                 if m:
                     first.setdefault(int(m.group(1)), e["at_ms"])
         off = max(n * 1440 + 360 - 120 * (ms - t0) / 60000 for n, ms in first.items())

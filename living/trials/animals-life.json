@@ -1,13 +1,10 @@
 {
  "kind": "life",
  "title": "The island's animals with minds",
- "about": "Every animal on the island (wolves and deer) is a subject (LIVING_ONLY names them all) in a minds:true island; no person has a mind. The authority asks an animal's mind only while a person is within 25 tiles. Variant `animal-switches` turns on LIVING_ANIMAL_MINDS=pack,salient,choose; the default leaves them off.",
+ "about": "Every animal on the island (wolves and deer) is a subject (LIVING_ONLY names them all) on the island; LIVING_ONLY names only them, so no person is thought for. The authority asks an animal's mind only while a person is within 25 tiles. Variant `animal-switches` turns on LIVING_ANIMAL_MINDS=pack,salient,choose; the default leaves them off.",
  "gradient": "Realism of hunting and herding, survival by kind, and calls and tokens per animal-hour, switches on against off.",
  "world": {
-  "seed": "island",
-  "rules": {
-   "minds": true
-  }
+  "seed": "island"
  },
  "minutes": 360,
  "keep_db": true,

@@ -40,40 +40,13 @@ fn shared(text: impl AsRef<str>) -> String {
     out.render()
 }
 
-const RULES: &str = "\
-One day lasts 12 real minutes; night is 20:00-06:00 and cuts sight to 6 tiles (11 by day).
-SEASONS_LINE
-BODY: hunger rises ~5/min (100 = starving, which drains health); energy falls ~3/min awake and recovers while sleeping (faster within 2 tiles of a shelter). \
-At night, people farther than 3 tiles from a campfire and 2 from a shelter or house, and without a warm cloak, lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.
-KNOW-HOW: you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), \
-torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs), \
-masonry (walls), carpentry (houses and gates; needs shelter), toolmaking (axe, pick). Others may know what you don't: \
-ask them to teach you (teach takes time beside each other), read what someone wrote, or experiment with materials to work something out yourself. \
-What only one person knows dies with them unless they teach it or write it down.
-FOOD: berries 12, raw fish 16, raw meat 20, cooked fish 34, cooked meat 42 (hunger points). Cook raw fish/meat at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it three times longer. A pack holds about 40 things. \
-Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (3 meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).
-MAKING: campfire = 3 wood, shelter = 6 wood + 3 fiber, storage = 4 wood (anyone can take from a storage), spear = 2 wood + 1 stone (hits much harder, faster fishing), \
-cloak = 2 hide + 1 fiber, torch = 1 wood + 1 fiber, tablet or sign = 1 wood (write), \
-house = 6 wood + 4 clay + 2 stone (a home: warm like a shelter and a fire), gate = 4 wood, wall = 2 stone per tile, road = 1 stone per tile (pave where you stand; walking on road is faster), \
-axe = 2 wood + 1 stone (cut wood twice as fast), pick = 2 wood + 2 stone (break stone twice as fast).
-SETTLEMENTS: walls block the way; a gate lets people through while open, and only the members of the community that keeps it may open or shut it. \
-Who is let in, when gates are shut and who keeps watch is for each community to decide.
-LIFE_LINE
-COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming \
-({\"threatened\": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard \
-(hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear up to 7 tiles (you lose it). \
-A blow lands only if you are still within reach (about 2 tiles; a wolf's leap about 3) when its windup ends: stepping back or running as it winds up makes it miss, \
-but whoever swings stands still meanwhile. People run 2.6 tiles/s, wolves 3.4, grown deer 3.7 (a wolf catches the young, old, tired or surprised): you can outrun a person who keeps stopping to swing, not a wolf. \
-While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.
-FORCE: every blow, shot or bolt does its full damage, and whoever reaches 0 health dies; a blow cannot be held back. \
-threaten = menace someone within a few tiles with harm for 2 s (no harm yet; they see it coming, as {\"threatened\": true}, and so does anyone watching). It is a threat of violence: to ask, wake, urge or call someone, speak (say) instead. seize = take items from a person's pack against their will, only from someone who has yielded to force or is badly hurt (to get goods by force you need not kill). \
-yield = give in, guard down and hands up: for 20 s you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in. \
-Everyone nearby sees which force was used.
-COMMUNITIES: people can found a community (the act {\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
-TIME: beyond staying alive, how you spend your days is yours to decide, from who you are and what you want.
-OTHERS: people hear speech within ~9 tiles. You cannot read minds; what others say may be false. You only know what you perceived or were told.";
+/// The world's own sections of the rules text, from its seed: the WORLD line, its seasons and its
+/// people's life table. The rest is the world's rule script's (`Scripts::world_text`, built
+/// from each law's description), so what minds are told follows the rules.
+static WORLD_PARTS: std::sync::OnceLock<(String, String, String)> = std::sync::OnceLock::new();
+/// The rules text for the rules revision it was built from.
+static RULES_TEXT: std::sync::RwLock<Option<(u32, Arc<str>)>> = std::sync::RwLock::new(None);
 
-static SETTING: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 /// The judgments a graph may read (`judged`), when they are refreshed (mind/judge.rs).
 static JUDGED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
@@ -129,22 +102,6 @@ pub fn talk_acts() -> String {
 /// are real-time behavior rather than acts.
 static SHAPES: std::sync::RwLock<Option<Arc<living_rules::combat::Shapes>>> = std::sync::RwLock::new(None);
 
-/// The world's laws for residents woken into minds (docs/TOWN_LIFE.md, "Layer 2"), read
-/// from the rule script with the rest: `woken_stage("cap")`, how many woken residents of one
-/// settlement may be on stage at once (0: no cap), and `woken_stage("wait_s")`, how long a
-/// woken resident's first thought waits for its mind to be made.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct WokenLaws {
-    pub stage_cap: u32,
-    pub wait_s: f64,
-}
-
-static WOKEN: std::sync::RwLock<WokenLaws> = std::sync::RwLock::new(WokenLaws { stage_cap: 0, wait_s: 0.0 });
-
-pub fn woken_laws() -> WokenLaws {
-    *WOKEN.read().unwrap()
-}
-
 /// Read the world's skills (what each is, takes and gives) and what each combat skill is from
 /// the world's rule script (once per revision).
 pub fn set_rules(revision: u32, source: &str) {
@@ -158,11 +115,6 @@ pub fn set_rules(revision: u32, source: &str) {
             *RULES_REV.write().unwrap() = Some(revision);
             *RULES_SOURCE.write().unwrap() = Some((revision, Arc::new(source.to_string())));
             *SHAPES.write().unwrap() = Some(Arc::new(s.shapes().clone()));
-            let w = WokenLaws { stage_cap: s.num_of("woken_stage", "cap", 0.0).max(0.0) as u32, wait_s: s.num_of("woken_stage", "wait_s", 0.0).max(0.0) };
-            if w != woken_laws() {
-                log::info!("woken residents: {w:?}");
-            }
-            *WOKEN.write().unwrap() = w;
         }
         Err(e) => log::warn!("rules revision {revision} unreadable: {e}"),
     }
@@ -199,14 +151,14 @@ pub fn set_world(setting: &str, w: u32, h: u32, year_days: f32, pace: f32, life:
     let _ = SIZE.set((w, h));
     let season_days = year_days / 4.0;
     let seasons = format!(
-        "SEASONS: a year is {} days — spring, summer, autumn, winter ({} each). In winter nothing regrows and nights are colder: store food before it.",
+        "a year is {} days — spring, summer, autumn, winter ({} each). In winter nothing regrows and nights are colder: store food before it.",
         year_days.round(),
         living_rules::describe_days(season_days)
     );
     let years = |f: f32| (f * life.years).round();
     let t = living_rules::life::Pace { year_days, pace };
     let life_line = format!(
-        "LIFE: a person lives about {} years (a year is {} days): a baby until about {}, a child until about {}, old from about {}. \
+        "a person lives about {} years (a year is {} days): a baby until about {}, a child until about {}, old from about {}. \
 Babies cannot walk far or feed themselves; they cry when hungry, cold or alone. Children are slow, cannot build, craft or fight, and depend on others. \
 Old people tire sooner and heal slower. Two adults who both choose to start a family (the act `conceive` toward each other) within two minutes, while fed, have a child about {} later.",
         life.years.round(),
@@ -216,13 +168,25 @@ Old people tire sooner and heal slower. Two adults who both choose to start a fa
         years(life.elder),
         living_rules::describe_days(life.gestation_days(t))
     );
-    let rules = RULES.replace("SEASONS_LINE", &seasons).replace("LIFE_LINE", &life_line);
-    let _ = SETTING.set(format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}); walking covers about 3 tiles a second.\n{rules}"));
+    let world = format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}; a tile is a metre).");
+    let _ = WORLD_PARTS.set((world, seasons, life_line));
 }
 
-/// The world's rules as every mind is told them.
-pub fn world_rules() -> &'static str {
-    SETTING.get().map(|s| s.as_str()).unwrap_or(RULES)
+/// The world's rules as every mind is told them: the world's line, then the rule script's
+/// world text with the world's seasons and life table. Built once per rules revision, so the
+/// static prefix of every prompt that holds it changes only when the rules do.
+pub fn world_rules() -> Arc<str> {
+    let rev = RULES_SOURCE.read().unwrap().as_ref().map_or(0, |(r, _)| *r);
+    if let Some((r, t)) = RULES_TEXT.read().unwrap().as_ref() {
+        if *r == rev {
+            return t.clone();
+        }
+    }
+    let (world, seasons, life) = WORLD_PARTS.get().cloned().unwrap_or_default();
+    let text = compiled().map(|s| s.world_text(&[("seasons", seasons), ("life", life)])).unwrap_or_default();
+    let full: Arc<str> = if world.is_empty() { text.into() } else { format!("{world}\n{text}").into() };
+    *RULES_TEXT.write().unwrap() = Some((rev, full.clone()));
+    full
 }
 
 pub fn grammar() -> String {
@@ -264,7 +228,7 @@ Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"a
 Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100)
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
   {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight is (% of full)
-  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
+  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
 Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
@@ -275,9 +239,9 @@ Skills:
 {}
 - {{\"routine\": \"name\"}} runs one of your routines (named graphs you keep and can rewrite; see below).
 - {{\"desires\": [{{\"want\": \"what it is for\", \"weight\": W, \"do\": N}}, ...]}} every check, the strongest desire that can act now wins (a desire whose node fails lets the next one act). \
-W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\", \"courted\", \"starving\", \"exhausted\", \"rain\", \"hailed\", \"commotion\": factor, \"believes\": {{\"stance_key\": factor}}}}: \
+W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\", \"courted\", \"starving\", \"exhausted\", \"rain\", \"hailed\", \"commotion\", \"bedtime\", \"evening\": factor, \"believes\": {{\"stance_key\": factor}}}}: \
 strength = base + Σ factor × signal, each signal 0..1 (hunger 0 fed..1 starving; tired 0 rested..1 exhausted; hurt; night/day; threatened = an attack or a threat is coming at you; \
-alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour; courted = someone in sight just offered to start a family with you; starving = hunger 90+; exhausted = energy 10 or less; rain = it is raining; hailed = someone just greeted you with a gesture; commotion = a fight or a death in sight; believes = your stance's value). A desire at or below 0 does not act.
+alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour; courted = someone in sight just offered to start a family with you; starving = hunger 90+; exhausted = energy 10 or less; rain = it is raining; hailed = someone just greeted you with a gesture; commotion = a fight or a death in sight; bedtime = your own hours for sleep (when you go to bed until you rise); evening = your own evening, the hours before your bedtime; believes = your stance's value). A desire at or below 0 does not act.
 Limits: each graph (your top level, or one routine) at most 64 nodes, depth 10, 12 children per composite. The root restarts whenever it finishes, so a root \"first\" loops forever.
 REPERTOIRE: your behavior is a repertoire you build over your life: routines (named graphs) for the things you do, called from a top level, usually desires weighed by what you want. \
 Routines are built from skills, and each skill takes something and gives something (see takes/gives above): a routine works only if its earlier steps get what its later steps take, \
@@ -320,7 +284,8 @@ pub fn identity_system() -> String {
 The person has lived before this moment: use their background, but give them an individual temperament, private hopes, worries, \
 likes and grudges of their own (not a job description; what they did so far is history, not destiny). Write the narrative in the first person, \
 2-4 sentences. Relations: how they feel about each person named in the background (trust and affinity -100..100, a label such as \
-family, partner, friend, rival, stranger, and a short note in their words). Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \
+family, partner, friend, rival, stranger, and a short note in their words). Pastimes: two or three things they enjoy doing for their own sake; calling: the work they love, \
+or the one they long for instead. Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \
 \"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100, \"nurture\": 0-100}}, \"mood\": \"...\", \
 \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"...\", \"note\": \"...\"}}]}}",
             world_rules()
@@ -469,7 +434,7 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
  \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\", \"because\": [experience ids]}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
- \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
+ \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
         if lessons() { LESSON } else { "" },
         world_rules()
     ))
@@ -480,32 +445,6 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
 /// The person's choices are the player's: their acts and words are recorded as acts and
 /// words, never with reasons nobody perceived. The identity (narrative, values, traits, mood)
 /// is inferred from that conduct (decided 2026-11-09), and only when it says something new.
-/// The memory of a resident who has just been woken into a mind: what it perceived before
-/// (its ring), with nothing it did not perceive and nothing about who it is (that comes from
-/// the world's facts).
-pub fn ring_system() -> String {
-    shared(format!(
-        "You are the memory of the person described under # Who you are, in a persistent simulated world. \
-Until now they lived by habit: the lines below are what they perceived around their daily life before this moment (what they saw and \
-heard, who came into view, what happened near them, and where). Record what they now know or can expect from it (who they saw, what \
-was said, what happened, where things are) and keep as memories only the few things they would still remember (at most 4, often \
-fewer), each with a gist in their own words that says what happened, not why. Never invent motives, feelings, plans or thoughts. \
-What others said stays what others claimed (person:4 -CLAIMED-> idea:wolves_at_ford). Someone they only saw is known by how they \
-looked to them, not by name. Keep the mind as a graph you shape freely and connect to existing concepts. IDENTITY: always null here.\n\n{}\n\n\
-KEYS: anchors connect the mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \
-\"kind:<wolf|deer|berry_bush|tree|...>\", \"know:<technique>\". Any other key is yours to invent. Reuse existing keys shown in the mind.\n\n\
-Reply with ONE JSON object, compact (at most 12 nodes and 20 edges):\n\
-{{\"summary\": \"what they perceived (1-2 sentences, no motives)\",\n\
- \"remember\": [{{\"exp\": experience id, \"gist\": \"...\"}}],\n\
- \"nodes\": [{{\"key\": \"person:4\", \"labels\": [\"Person\"], \"name\": \"Bram\", \"props\": {{...}}}}],\n\
- \"edges\": [{{\"from\": \"self\", \"rel\": \"SAW\", \"to\": \"person:4\", \"confidence\": 0.0-1.0, \"because\": [experience ids], \"props\": {{...}}}}],\n\
- \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"stranger|acquaintance|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
- \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
- \"identity\": null}}",
-        world_rules()
-    ))
-}
-
 pub fn internalize_system() -> String {
     shared(format!(
         "You are the memory of the person described under # Who you are, in a persistent simulated world. \

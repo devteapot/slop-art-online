@@ -11,7 +11,9 @@
       "keep steady work enough to feed Ife and the children",
       "save a little against a bad winter",
       "see the seawall built at Lanternquay one day",
-      "stay on good terms with Mara Quell and the quay folk"
+      "stay on good terms with Mara Quell and the quay folk",
+      "learn to cut and set stone the Kettlebridge way, so the works builders can't call him a salvage-man",
+      "put by enough to send a little back to the quay folk at Lanternquay"
     ],
     "mood": "steady, tired, quietly proud",
     "traits": {
@@ -155,7 +157,13 @@
         "why": "Salvage won't hold another surge. The wall must be stone, whatever Crane charges for it."
       }
     ],
-    "secret": "He sometimes wonders whether coming to Kettlebridge was a mistake, and whether the quay would take him back if the wall were ever built."
+    "secret": "He sometimes wonders whether coming to Kettlebridge was a mistake, and whether the quay would take him back if the wall were ever built.",
+    "pastimes": [
+      "mending and re-mending his tools on the terrace step after a shift",
+      "walking down to the poor terrace wall at dusk to watch the smoke and count the bells",
+      "sharing a cup and harbour talk with Ostrander Vane when he passes through"
+    ],
+    "calling": "I build and I repair, and I'd sooner raise a seawall at Lanternquay than another works chimney, but a builder builds where the work is."
   },
   "Ife Oyelaran": {
     "narrative": "I keep the cook-stall on the poor terrace and feed the terrace's children for a mark a bowl, because somebody must. The works' kitchen pays less than it might and the builders' wives look at me as if I brought the flood with me. I charge the yard boys now, and I don't apologise for it.",
@@ -169,7 +177,9 @@
       "keep the stall turning enough to feed the family",
       "see Bisi learn the foundry books and rise above the terrace",
       "get Tayo past his fear of the bells and the smoke",
-      "see Dele treated as a builder, not a beggar"
+      "see Dele treated as a builder, not a beggar",
+      "save for a second pot and a bigger stall so she can feed more of the terrace's children",
+      "see that Bisi gets the foundry books in her hands, whatever the Cranes think of the terrace"
     ],
     "mood": "sharp, tired, protective",
     "traits": {
@@ -318,7 +328,13 @@
         "why": "They pay the terrace cheap and then complain we take their work. I won't forget it."
       }
     ],
-    "secret": "She has started putting by a few marks in a jar behind the flour, in case Dele's work dries up and they must go back to the quay."
+    "secret": "She has started putting by a few marks in a jar behind the flour, in case Dele's work dries up and they must go back to the quay.",
+    "pastimes": [
+      "trading recipes and gossip with Mabel Fenwick over the fence",
+      "humming the old quay songs while she scrubs the pots at night",
+      "walking the terrace with Mara Quell when she visits, remembering the harbour"
+    ],
+    "calling": "I feed people, and I'd keep a proper cook-house on the terrace one day, with benches and a fire that never goes out."
   },
   "Bisi Oyelaran": {
     "narrative": "I mind Mama's stall when she's out and I'm quicker with the tally than anyone on the terrace. I want to learn the foundry books from Hester Crane, and I will, if I can get the chance. Tayo follows me everywhere and I don't mind.",
@@ -332,7 +348,9 @@
       "learn the foundry books from Hester Crane",
       "keep Mama's stall tally straight",
       "look after Tayo",
-      "see the quay at Lanternquay one day"
+      "see the quay at Lanternquay one day",
+      "get Hester Crane to teach her the foundry ledgers",
+      "keep a little tally-book of her own, hidden from Mama, of everything the stall takes"
     ],
     "mood": "bright, restless, determined",
     "traits": {
@@ -442,7 +460,13 @@
         "why": "The works folk think we're beggars. We're not. I won't let them say it in front of me."
       }
     ],
-    "secret": "She has been practising her letters in secret on the back of the stall's tally sheets, so she can read the foundry books before she asks Hester Crane."
+    "secret": "She has been practising her letters in secret on the back of the stall's tally sheets, so she can read the foundry books before she asks Hester Crane.",
+    "pastimes": [
+      "practising sums on the back of stall wrappings with a charcoal stub",
+      "playing counting games with Lottie Fenwick and the terrace children",
+      "minding Tayo and telling him stories of the harbour and the boats"
+    ],
+    "calling": "I want to keep books, real books, the foundry's books, and make the numbers come out right."
   },
   "Tayo Oyelaran": {
     "narrative": "The smoke is loud and the bells are loud and I don't like them. I stay close to Bisi and Mama's stall, and I watch the yard boys carry things. The terrace is big and the sky is grey.",
@@ -452,7 +476,9 @@
     ],
     "goals": [
       "stay near Bisi",
-      "not be frightened by the bells"
+      "not be frightened by the bells",
+      "stay close to Bisi",
+      "find a quiet corner of the terrace where the bells and smoke can't reach"
     ],
     "mood": "timid, clinging",
     "traits": {
@@ -506,6 +532,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "watching the yard boys carry and stack from behind Mama's stall",
+      "playing at boats with pebbles and a bowl of water",
+      "following Bisi wherever she goes"
+    ],
+    "calling": "When I'm big I'll carry things like the yard boys, but not near the bells."
   }
 }

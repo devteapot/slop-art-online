@@ -10,7 +10,9 @@
     "goals": [
       "keep the building work coming in through the Guild",
       "see Osbert settled in a trade with a future",
-      "get good stone at a fair price one day"
+      "get good stone at a fair price one day",
+      "master a tricky roof truss he's only seen drawn, not raised",
+      "take Osbert and Stephen out to a site of his own choosing and teach them the whole of it"
     ],
     "mood": "steady, a little sour about stone",
     "traits": {
@@ -147,7 +149,13 @@
         "why": "My father taught me that, and a crooked wall falls and takes a name with it."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the frame of a half-built barn at dusk, checking it with his hand",
+      "a pot and a game of dice with Reginald Hobson at the inn",
+      "telling the young lads on a site how a good joint is cut"
+    ],
+    "calling": "I put up timber square and true, and a house that stands is a house I've built."
   },
   "Hilda Smith": {
     "narrative": "I set bones and clean wounds, and the gate guards come to my door when they have been at the outlaws or each other. I learned what I know from my mother and from the chapel sisters, and Sister Alys still sends for me when a hurt is beyond her salves. Wilfred builds and I mend, and the house is quiet enough. I worry about Osbert going among the Kettlebridge masons, but a mother keeps her worries to herself.",
@@ -160,7 +168,9 @@
     "goals": [
       "keep the guards and the town in one piece",
       "see Osbert safe and settled",
-      "keep peace between the chapel and the old healers"
+      "keep peace between the chapel and the old healers",
+      "learn the chapel sisters' salve for fever that her mother never taught her",
+      "have a proper store of splints and clean linen kept ready against a bad winter"
     ],
     "mood": "calm, watchful",
     "traits": {
@@ -297,7 +307,13 @@
         "why": "Alwin Wren's charms and my mother's herbs have mended what the sisters' salves could not."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "gathering herbs and roots along the field edges in the early morning",
+      "sitting with Sister Alys over a cup of something warm, trading news of hurts",
+      "mending and folding cloth by the fire of an evening"
+    ],
+    "calling": "I set bones and close wounds, and I'd have no one go untended who comes to my door."
   },
   "Osbert Smith": {
     "narrative": "I have built with my father since I was a boy, and I am a good hand with timber, but timber is not what I want to build with. Stone lasts, and the Kettlebridge masons know how to cut and lay it, and I would learn from them if I could get among them. Stephen Hobson feels the same, and we talk about it over a pot. My father says stone is dear; I say a man should learn the trade that lasts.",
@@ -310,7 +326,9 @@
     "goals": [
       "learn stonework from the Kettlebridge masons",
       "build something grander than a barn",
-      "earn enough to keep a household of his own"
+      "earn enough to keep a household of his own",
+      "get himself taken on, even for a season, among the Kettlebridge masons",
+      "raise a building of stone with his own hands and his own name on the work"
     ],
     "mood": "restless, eager",
     "traits": {
@@ -439,6 +457,12 @@
         "why": "My father's temper is short on the stone question, and I have to live under his roof."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sketching stone courses and arches in charcoal on offcuts of board",
+      "a walk out along the stone road to watch the Kettlebridge carts come in",
+      "a pot and long talk with Stephen Hobson about the trade they'd learn"
+    ],
+    "calling": "Timber's well enough, but stone lasts — I want to cut and lay it, and be known for it."
   }
 }

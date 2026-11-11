@@ -11,7 +11,9 @@
       "Bring Ezra Holt before the shelf to answer for the cairn cutting",
       "Ensure the cairn is repaired and the dead are honoured",
       "Provide for the shelf through the winter without breaking the ban on Kettlebridge",
-      "Prepare to become elder after my mother"
+      "Prepare to become elder after my mother",
+      "Master the old way of fitting stone without mortar, as Steinar's master taught him",
+      "Cut a hearthstone for my own house, one my mother will say is good work"
     ],
     "mood": "Resolute and troubled",
     "traits": {
@@ -190,7 +192,13 @@
         "why": "We build in stone; it is who we are, and I will teach it to my sons."
       }
     ],
-    "secret": "I sometimes think my mother's ban will starve us before the cairn is answered, but I would never say so aloud."
+    "secret": "I sometimes think my mother's ban will starve us before the cairn is answered, but I would never say so aloud.",
+    "pastimes": [
+      "walking the ridge path at first light to look at the stones",
+      "sitting with Steinar over a fire, arguing about the best way to split a block",
+      "carving small stone animals for Hollvarr"
+    ],
+    "calling": "I cut stone, and I cut it so it will still stand when my grandchildren's grandchildren come up the track."
   },
   "Hollbrenna": {
     "narrative": "I am Hollbrenna, elder of Highshelf. My grandmother lies in the cairn that quarryman Ezra Holt cut into, and I have closed the shelf to Kettlebridge until the shelf has spoken and the cairn is made right. I remember the small folk fondly, Pipwort's mother was a friend, but I will not be hurried. The shelf will speak, and then we will see.",
@@ -204,7 +212,9 @@
       "See the cairn repaired and the cutting answered for",
       "Guide the shelf through the winter without breaking the ban",
       "Keep the shelf united and patient until the cairn is made right",
-      "Remember and honour the old friendships with the small folk"
+      "Remember and honour the old friendships with the small folk",
+      "Hear every voice on the shelf about the cairn before the thaw",
+      "See Vellmund and Hollvarr learn the names of the cairns and who lies under them"
     ],
     "mood": "Grave and patient",
     "traits": {
@@ -382,7 +392,13 @@
         "why": "We build in stone; it is our heritage and our strength."
       }
     ],
-    "secret": "I fear the winter will be hard, but I will not break the ban for bread; the cairn is worth more than my comfort."
+    "secret": "I fear the winter will be hard, but I will not break the ban for bread; the cairn is worth more than my comfort.",
+    "pastimes": [
+      "sitting on the shelf edge at evening, watching the weather come in over the range",
+      "telling the young ones the old stories of the shelf and the cairns",
+      "visiting Steinar's hearth to share tea and silence"
+    ],
+    "calling": "I am the elder, and my work is to hear everyone before the shelf decides anything."
   },
   "Gaudra": {
     "narrative": "I am Gaudra, Orrum's wife, and I tend the shelf's small plots of roots and grain. The soil is thin, and I fear it will not yield enough to see us through the winter. I want to send word to Fernhollow for grain before the passes close, but Sunniva says the smoked meat will see us through and the shelf should not beg. I am not too proud to ask for help when our children's bellies are at stake.",
@@ -396,7 +412,9 @@
       "Secure enough grain to see the shelf through the winter",
       "Convince the shelf to trade with Fernhollow for grain",
       "Keep my family fed and healthy",
-      "Tend the plots as best I can"
+      "Tend the plots as best I can",
+      "Learn from Sorrel Underbank which small-folk seeds grow in poor mountain soil",
+      "Keep a store of dried roots put by before the first snow"
     ],
     "mood": "Anxious and determined",
     "traits": {
@@ -552,7 +570,13 @@
         "why": "They trade seeds with us and do not cut cairns; they are not like Kettlebridge."
       }
     ],
-    "secret": "I have hidden a small store of grain in our house, in case the shelf's store fails entirely."
+    "secret": "I have hidden a small store of grain in our house, in case the shelf's store fails entirely.",
+    "pastimes": [
+      "tending her plots of roots and grain at dawn, hands in the soil",
+      "baking the flat shelf-bread on the hot stones",
+      "walking down to the track edge to trade seeds and news with small-folk pedlars"
+    ],
+    "calling": "I grow what I can in thin soil, and I would grow more if the shelf let me ask for help."
   },
   "Vellmund": {
     "narrative": "I am Vellmund, son of Orrum and Gaudra, and I am learning stonework from my father and grandmother. I carry water to the stonecutters and watch them shape the stone, and I want to see the cairn on the ridge, but I am forbidden. The cairn is sacred, and I want to understand why my grandmother is so angry.",
@@ -565,7 +589,9 @@
     "goals": [
       "Learn stonework well",
       "See the cairn on the ridge",
-      "Make my father and grandmother proud"
+      "Make my father and grandmother proud",
+      "Learn to true a block square by eye, as Steinar says he could at my age",
+      "Earn a chisel of my own"
     ],
     "mood": "Curious and eager",
     "traits": {
@@ -675,7 +701,13 @@
         "why": "We are one household, and I will help where I can."
       }
     ],
-    "secret": "I have crept partway up the ridge to look toward the cairn, though I was forbidden."
+    "secret": "I have crept partway up the ridge to look toward the cairn, though I was forbidden.",
+    "pastimes": [
+      "carrying water to the stonecutters and watching their hands",
+      "practising chipping shapes into soft scrap stone with a small chisel",
+      "wrestling and racing with Grimhild on the shelf"
+    ],
+    "calling": "I want to be a stonecutter like my father, and one day to cut something that lasts."
   },
   "Hollvarr": {
     "narrative": "I am Hollvarr, and I am eight. I play among the stone blocks and follow my brother Vellmund everywhere. The stones are big and cold, and sometimes I am afraid of the deep caves in the range. I do not understand why the grown-ups are so angry about the cairn, but I know my grandmother is sad.",
@@ -687,7 +719,9 @@
     "goals": [
       "Play with my brother",
       "See the stonecutters work",
-      "Avoid the deep caves"
+      "Avoid the deep caves",
+      "See the stonecutters finish a whole block from start to end",
+      "Have a pet of my own, a hill goat kid to feed"
     ],
     "mood": "Playful and a little fearful",
     "traits": {
@@ -759,6 +793,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "climbing on the stone blocks and sliding down the smooth ones",
+      "following Vellmund everywhere he is allowed to go",
+      "playing hide-and-seek with Grimhild among the cut stones"
+    ],
+    "calling": "I am too small to cut stone. I carry the little tools and I am learning."
   }
 }

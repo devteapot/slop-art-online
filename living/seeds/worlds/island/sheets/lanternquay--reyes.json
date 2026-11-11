@@ -10,7 +10,9 @@
     "goals": [
       "see the seawall built before winter",
       "get the stone price honoured",
-      "keep the fish road open"
+      "keep the fish road open",
+      "learn the tallyman's reckoning properly so no one can short me again",
+      "take a proper rest day with Tamsin and the family, away from the road"
     ],
     "mood": "weary but determined",
     "traits": {
@@ -188,7 +190,13 @@
         "why": "The stone road is a fool's road now, and I told Silas so."
       }
     ],
-    "secret": "I know Kai Ostrander is alive and with the Coldwell outlaws, and I have said nothing."
+    "secret": "I know Kai Ostrander is alive and with the Coldwell outlaws, and I have said nothing.",
+    "pastimes": [
+      "mending harness and strapping by the fire of an evening",
+      "playing dice at the harbour stalls when a run pays out",
+      "walking the quay wall at dusk to watch the tide lanterns lit"
+    ],
+    "calling": "I carry on the fish road, and I mean to carry stone back up it until the seawall stands."
   },
   "Tamsin Vane": {
     "narrative": "I fish the dawn tide and smoke what I catch for Ilse's stall. The harbour mouth is our living, and I've seen both Wick and Ostrander cut nets over it. I want a quiet life and a full smoker, and I'll not take sides in a feud that costs us the catch.",
@@ -201,7 +209,9 @@
     "goals": [
       "keep the smoker full",
       "see the harbour mouth feud settled",
-      "support Ostrander's building work"
+      "support Ostrander's building work",
+      "save enough marks for a second smoker of her own",
+      "teach a young one on the quay to read the tide and handle a net"
     ],
     "mood": "tired but watchful",
     "traits": {
@@ -339,7 +349,13 @@
         "why": "The tally is real, and no stone comes without marks."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "singing the old tide songs at Ilse's stall when the catch is in",
+      "tending a row of pots of herbs and shore greens on her sill",
+      "sitting with Maren Vane in the evening to hear her stories of the old quay"
+    ],
+    "calling": "I fish the dawn tide and smoke the catch, and I'd have a smoker so full the whole quay smells of it."
   },
   "Ostrander Vane": {
     "narrative": "I build and patch on the quay because the lower quay is my living and my home. Mara Quell says wait for the seawall, but the town is rotting while she argues about stone. I've patched with salvage and I'll build in stone when I can get it, and I'll not be laughed at by Sootwood or cheated by Kettlebridge.",
@@ -352,7 +368,9 @@
     "goals": [
       "rebuild the lower quay in stone",
       "get proper stone at a fair price",
-      "see the seawall started"
+      "see the seawall started",
+      "master the cutting and setting of stone, not just salvage patching",
+      "build a proper workshop and yard on the quay for his trade"
     ],
     "mood": "frustrated and stubborn",
     "traits": {
@@ -518,6 +536,12 @@
         "why": "He's a good builder and Kettlebridge cheated him; I'll not see him shamed."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "carving little models of boats and quay walls from salvage wood",
+      "walking the lower quay at low tide to study how the old stone was laid",
+      "sharing a drink with Dele Oyelaran at the stalls after a day's work"
+    ],
+    "calling": "I build and patch, and I'll see the lower quay raised in stone before I'm done, whatever the warden says."
   }
 }

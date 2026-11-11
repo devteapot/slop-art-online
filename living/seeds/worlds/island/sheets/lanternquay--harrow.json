@@ -11,7 +11,9 @@
       "keep the stall solvent through the winter",
       "clear the debt to Bramwell Tallow for the tar",
       "keep Tam out of the water and out of trouble",
-      "find cheap stone where the Warden does not look"
+      "find cheap stone where the Warden does not look",
+      "own a second stall or a share of one, so the winter cannot take her trade in a single bad month",
+      "see Tam properly placed with a crew before she is too old to work the market herself"
     ],
     "mood": "wary, brisk, tired behind the eyes",
     "traits": {
@@ -141,7 +143,13 @@
         "why": "The sea took his father and I will not give it the son as well."
       }
     ],
-    "secret": "She buys stone from a Sootwood woodcutter who lifts it off the Kettlebridge road and sells it on the quay as salvage; she fears the Warden finding out more than she fears the woodcutter."
+    "secret": "She buys stone from a Sootwood woodcutter who lifts it off the Kettlebridge road and sells it on the quay as salvage; she fears the Warden finding out more than she fears the woodcutter.",
+    "pastimes": [
+      "counting over the day's takings by lamplight at the stall, twice, before she trusts the sum",
+      "mending wicks and trimming lamp-cotton in the quiet hours before the night market opens",
+      "walking the upper quay at dusk to watch the tide come in and the lanterns lit"
+    ],
+    "calling": "I keep the oil and wicks the night crews live by — small goods, honestly counted, and no one goes dark on my account."
   },
   "Tam Harrow": {
     "narrative": "I carry loads for the stalls and for Bramwell Tallow, and I listen to the night crews talk about the harbour mouth and the stone price. My father drowned in the Surge before I was old enough to crew with him, so I am the man of the stall now. Sella Tallow is the only one who talks to me like I am not a child. I want a boat of my own one day, or at least a share in a catch.",
@@ -154,7 +162,9 @@
     "goals": [
       "earn enough carrying to buy a good knife",
       "learn the harbour mouth from the crews",
-      "keep his mother from worrying about the Warden"
+      "keep his mother from worrying about the Warden",
+      "buy a good knife with his own carrying marks",
+      "learn the harbour mouth and the tides well enough that a skipper will take him on"
     ],
     "mood": "restless, watchful, a little proud",
     "traits": {
@@ -251,6 +261,12 @@
         "why": "My mother says it, and the crews say it, and the lower quay is still broken."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "loitering at the quay steps listening to the night crews talk of the harbour mouth",
+      "throwing a weighted line at the mooring posts to practise his aim",
+      "walking Sella Tallow home along the lit quay after the stalls close"
+    ],
+    "calling": "I want to be on the water — a share in a catch, a boat of my own, not carrying other people's loads forever."
   }
 }

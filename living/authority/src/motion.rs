@@ -150,6 +150,7 @@ fn put(ctx: &ReducerContext, b: Body, chunk_before: u32) {
     if b.chunk != chunk_before {
         common::invalidate_bodies();
     }
+    crate::frame::moved(b.id);
     ctx.db.body().id().update(b);
 }
 
@@ -157,9 +158,9 @@ fn put(ctx: &ReducerContext, b: Body, chunk_before: u32) {
 const RESUME_MS: u64 = 40;
 
 thread_local! {
-    /// Segments this transaction began before its `now` (`resume_at`): the transaction's
-    /// `now` and, per body, the segment's start.
-    static RESUMED: std::cell::RefCell<(u64, std::collections::HashMap<u32, u64>)> = Default::default();
+    /// Segments this transaction began before its `now` (`resume_at`): the transaction
+    /// (`common::tx_seq`) and its `now`, and, per body, the segment's start.
+    static RESUMED: std::cell::RefCell<((u64, u64), std::collections::HashMap<u32, u64>)> = Default::default();
 }
 
 /// When the next segment of a moving body begins: where its last one ended (`next_ms`),
@@ -178,7 +179,7 @@ fn resume_at(b: &Body, now: u64) -> u64 {
     }
     if b.t_ms < now && RESUMED.with(|r| {
         let r = r.borrow();
-        r.0 == now && r.1.get(&b.id) == Some(&b.t_ms)
+        r.0 == (common::tx_seq(), now) && r.1.get(&b.id) == Some(&b.t_ms)
     }) {
         return b.t_ms;
     }
@@ -192,8 +193,9 @@ fn resumed(id: u32, t0: u64, now: u64) {
     }
     RESUMED.with(|r| {
         let mut r = r.borrow_mut();
-        if r.0 != now {
-            r.0 = now;
+        let key = (common::tx_seq(), now);
+        if r.0 != key {
+            r.0 = key;
             r.1.clear();
         }
         r.1.insert(id, t0);
@@ -268,9 +270,9 @@ fn advance_corners(map: &Map, p: (f32, f32), path: &mut Vec<Waypoint>, corner: f
 
 /// Bend `dir` away from bodies close ahead. Returns the new direction and whether anyone
 /// was close enough to matter.
-fn separate(ctx: &ReducerContext, id: u32, p: (f32, f32), dir: f32, exclude: u32, laws: &living_rules::script::Laws, now: u64) -> (f32, bool) {
-    let r = laws.separation;
-    if r <= 0.0 || laws.separation_weight <= 0.0 {
+fn separate(ctx: &ReducerContext, id: u32, p: (f32, f32), dir: f32, exclude: u32, moves: &living_rules::script::Moves, now: u64) -> (f32, bool) {
+    let r = moves.separation;
+    if r <= 0.0 || moves.separation_weight <= 0.0 {
         return (dir, false);
     }
     let (ux, uy) = (dir.cos(), dir.sin());
@@ -293,7 +295,7 @@ fn separate(ctx: &ReducerContext, id: u32, p: (f32, f32), dir: f32, exclude: u32
     if n == 0 {
         return (dir, false);
     }
-    let w = laws.separation_weight;
+    let w = moves.separation_weight;
     ((uy + w * sy).atan2(ux + w * sx), true)
 }
 
@@ -306,7 +308,8 @@ fn angle(from: (f32, f32), to: (f32, f32)) -> f32 {
 /// Returns an event for the driving activity and whether `st` changed.
 fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Option<Event>, bool) {
     let laws = common::laws(ctx);
-    let tune = laws.tuning();
+    let moves = common::moves_of(ctx, b.id, now);
+    let tune = moves.tuning(laws.road_speed);
     let map = common::map(ctx);
     let v_cur = speed_of(b);
     let t0 = resume_at(b, now);
@@ -395,7 +398,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                     };
                     max_dt = max_dt.min(look.max(0.05));
                     if dg > 2.0 && !agile {
-                        let (d, crowded) = separate(ctx, b.id, p, dir, 0, &laws, now);
+                        let (d, crowded) = separate(ctx, b.id, p, dir, 0, &moves, now);
                         dir = d;
                         if crowded {
                             max_dt = max_dt.min(1.0 / laws.crowd_hz);
@@ -425,7 +428,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                     let mut max_dt = if target_moving { look } else { laws.steer_s };
                     // A creature one smells is followed by its scent as far as that reaches.
                     let scent = common::scent_of(&b.kind).filter(|s| s.reaches(&tb.kind, d)).map_or(0.0, |s| s.radius);
-                    if d > (common::sight(ctx, &w, now) * 1.4).max(scent) {
+                    if d > (common::sight_for(ctx, b.id, &w, now) * laws.chase_lost_share).max(scent) {
                         ev = Some(Event::Lost("lost sight of them".into()));
                     } else if d <= st.keep + 0.3 && st.flags & FLAG_EARLY != 0 {
                         ev = Some(Event::Arrived);
@@ -474,7 +477,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                             }
                             if !matches!(ev, Some(Event::Lost(_))) {
                                 max_dt = max_dt.min(((d - st.keep) / v).max(0.05));
-                                let (dir, _) = separate(ctx, b.id, p, angle(p, w), st.target, &laws, now);
+                                let (dir, _) = separate(ctx, b.id, p, angle(p, w), st.target, &moves, now);
                                 want = Some(Want { dir, speed: v, agile, max_dt });
                             }
                         }
@@ -483,7 +486,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
             }
         }
         GOAL_DIRECTION => {
-            let (dir, crowded) = separate(ctx, b.id, p, st.gy.atan2(st.gx), 0, &laws, now);
+            let (dir, crowded) = separate(ctx, b.id, p, st.gy.atan2(st.gx), 0, &moves, now);
             let max_dt = if crowded { laws.steer_s.min(1.0 / laws.crowd_hz) } else { laws.steer_s };
             want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt });
         }
@@ -503,7 +506,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                 return (ev, dirty);
             }
             let away = if d < 0.01 { b.heading } else { angle(threat, p) };
-            let (dir, _) = separate(ctx, b.id, p, away, st.target, &laws, now);
+            let (dir, _) = separate(ctx, b.id, p, away, st.target, &moves, now);
             want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt });
         }
         _ => {
@@ -694,7 +697,7 @@ pub fn face(ctx: &ReducerContext, id: u32, toward: (f32, f32), now: u64) {
     if d.abs() < 0.05 || (toward.0 - b.x).hypot(toward.1 - b.y) < 0.05 {
         return;
     }
-    let rate = common::laws(ctx).turn_rate.max(0.5);
+    let rate = common::moves_of(ctx, id, now).turn_rate.max(0.5);
     let h = b.heading;
     set_motion(&mut b, h, 0.0, rate * d.signum(), d.abs() / rate);
     b.next_ms = IDLE;
@@ -771,7 +774,7 @@ pub fn intent(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, run: bool,
         Some(u) => {
             let speed = match ctx.db.body().id().find(id) {
                 Some(b) if keep_speed => b.speed,
-                _ => walk_speed() * if run { laws.run_speed } else { 1.0 },
+                _ => walk_speed() * if run { common::moves_of(ctx, id, now).run } else { 1.0 },
             };
             start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: u, keep: 0.0, speed, flags: run_flag }, now).map(|_| ())
         }
@@ -804,6 +807,7 @@ pub fn resteer_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) {
                 anchor(&mut b, t0);
                 resumed(b.id, t0, now);
                 b.next_ms = now;
+                crate::frame::moved(b.id);
                 ctx.db.body().id().update(b);
             }
         }
@@ -825,6 +829,7 @@ pub fn place(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Result<
     b.path.clear();
     b.next_ms = IDLE;
     b.chunk = chunk_of(at.0, at.1);
+    crate::frame::moved(b.id);
     ctx.db.body().id().update(b);
     common::invalidate_bodies();
     Ok(())

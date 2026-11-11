@@ -11,7 +11,9 @@
       "carry Alder Rush his charcoal share before he has to ask twice",
       "keep the Ferncross timber trade with both Elmwick and Reedmoor",
       "see my daughter Corliss learn the axe and the pits without hurting herself",
-      "get back the tools the Coldwell men took"
+      "get back the tools the Coldwell men took",
+      "make a hafted axe myself, from felling to finished, that Corliss can swing true",
+      "take Nesta down the stone road to Kettlebridge on a carters' day, just to see the clock tower"
     ],
     "mood": "steady, a little pressed, keeping his worries behind his teeth",
     "traits": {
@@ -162,7 +164,13 @@
         "why": "They took my tools on the wood road and I have not seen them since."
       }
     ],
-    "secret": "The Elmwick order came first because it paid marks in hand, and I told Alder Rush the pits burned slow. I would not say that to his face."
+    "secret": "The Elmwick order came first because it paid marks in hand, and I told Alder Rush the pits burned slow. I would not say that to his face.",
+    "pastimes": [
+      "sitting by the charcoal pit through the night with a flask and a story",
+      "walking the crossing at first light to read which way the wind will take the burn",
+      "a cup at the Sootwood with Orvin Hollis when a load takes him that way"
+    ],
+    "calling": "Give me oak and ash and a clean-burning pit, and I'll feed my house and half the crossing besides."
   },
   "Nesta Ashdown": {
     "narrative": "I keep the Ferncross kitchen and the common pot, and there are more woodcutters at my table this winter than the plot can carry. Roderick Harrow's barley came in light and I am feeding his men as well as my own, so I am watching the store and the weather both. I trade bread and broth for fish and fibre, and I would rather owe a neighbour a kindness than see a man go hungry at my fire. The crossing holds together because somebody keeps the pot on.",
@@ -176,7 +184,9 @@
       "get Roderick Harrow to sell me barley on credit before the store runs out",
       "keep the woodcutters fed through the winter",
       "trade bread for fish with Tansy Sedge and Thistle Mossfoot when their packs come",
-      "see Corliss safe and warm through the cold"
+      "see Corliss safe and warm through the cold",
+      "have a proper larder of my own again, salted and full by first frost",
+      "see Corliss keep a kitchen of her own one day, and teach her the pot before she goes"
     ],
     "mood": "worried and busy, with a calm face for the table",
     "traits": {
@@ -318,7 +328,13 @@
         "why": "Reedmoor and Elmwick can quarrel over a meadow; I will not have it at my table when both bring fish."
       }
     ],
-    "secret": "I have been putting a little less in each bowl so the store lasts longer, and I have not told Bramwell how thin it truly is."
+    "secret": "I have been putting a little less in each bowl so the store lasts longer, and I have not told Bramwell how thin it truly is.",
+    "pastimes": [
+      "baking a week's bread on the crossing's one good oven day",
+      "swapping news and recipes with Maren Hollis over a mending basket",
+      "walking the wood edge at dusk to see what the small folk's packs have brought"
+    ],
+    "calling": "Anyone who sits at my table eats; that is the whole of my work and I am proud of it."
   },
   "Corliss Ashdown": {
     "narrative": "I stack the kindling and learn the axe and the charcoal burn beside my father, and I am quicker at the stacks than he thinks. When the Fernhollow folk come up the path I play with Fennel Underbank, and I want more than anything to see the quay at Lanternquay and the boats. The wolves come down the wood road in winter and I do not like the sound of them at night.",
@@ -330,7 +346,9 @@
     "goals": [
       "learn to stack a pit that does not smoke",
       "see the quay at Lanternquay one day",
-      "keep the wolves away from the kindling stacks"
+      "keep the wolves away from the kindling stacks",
+      "learn to sharpen the axe without nicking the blade",
+      "get a look at a real boat, even a little one, before the year is out"
     ],
     "mood": "curious and restless, brave by day and fearful at night",
     "traits": {
@@ -418,6 +436,12 @@
         "why": "The wolves come down the wood road and I have heard them."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "stacking kindling into little towers and knocking them down",
+      "playing hide-and-seek in the undergrowth with Fennel Underbank",
+      "watching the charcoal pit glow and feeding it a stick at a time"
+    ],
+    "calling": "I want to be a woodcutter like Father, but quicker, and maybe with a boat as well."
   }
 }

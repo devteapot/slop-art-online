@@ -11,7 +11,9 @@
       "Get a stone wall built around the yard",
       "Keep the Hales off the fields",
       "Make the farm pay enough to keep the lease",
-      "See my children safe and settled"
+      "See my children safe and settled",
+      "Teach Tib to plough a straight furrow and read the weather",
+      "Get a stone wall built around the yard, one load at a time"
     ],
     "mood": "anxious and stubborn",
     "traits": {
@@ -154,6 +156,12 @@
         "why": "I pay rent to the Guild; they should keep me safe."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking his field boundaries at first light, checking the furrows and the hedges",
+      "mending harness and tools by the barn door in the evening",
+      "sitting with Marta and the children at the hearth after supper, listening to Tib's day"
+    ],
+    "calling": "I farm the old Coldwell fields on the Guild's lease, and I've earned every furrow of them."
   }
 }

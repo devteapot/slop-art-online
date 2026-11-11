@@ -133,7 +133,7 @@ pub fn housekeeping(ctx: &ReducerContext, now: u64) {
 fn take_over(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     p.takeover_ms = NEVER;
     let Some(mut c) = ctx.db.character().id().find(p.id).filter(|c| c.alive) else { return };
-    // The world's mind service, whatever the seed's `rules.minds` says of its residents: a
+    // The world's mind service, as for every resident: a
     // person's character lives on under a mind, with its past (with no mind service running
     // it lives on its behaviour graph, a deliberation pending).
     c.controller = common::world(ctx).admin;
@@ -143,7 +143,7 @@ fn take_over(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     p.control_ms = now;
     crate::combat::invalidate_humans();
     // Its person sees nothing while away; a fresh set is made on return.
-    crate::perception::forget(ctx, p.player);
+    crate::perception::forget(ctx, p.id, p.player);
     // Asked first: reinstalling a mind's graph counts as having just thought (`think_min_s`).
     crate::perceive::request_deliberation(ctx, p.id, "A quiet moment to take stock of how things are going.", now);
     // The behaviour its minds installed before is its own again.
@@ -167,6 +167,7 @@ fn hand_back(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     c.controller = p.player;
     c.ai = false;
     ctx.db.character().id().update(c);
+    crate::perception::set_player(ctx, p.player, p.id);
     // What the minds had going stops: a pending thought, decided acts, the activity under way.
     ctx.db.deliberation().actor().delete(p.id);
     ctx.db.act_queue().actor().delete(p.id);

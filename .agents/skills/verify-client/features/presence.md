@@ -10,6 +10,8 @@ Since 2026-11-09 (docs/PLAYER_MEMORY.md, "Presence and the offline character"). 
 - A new connection: `presence.ai` false, the character's `controller` the player's identity again, and `my_characters` returns it on that very connection (step "returned").
 - Presence is private: refused to the player and to an anonymous client (`presence-player.json`, `presence-anonymous.json`); `connection`, `reveal` and `acquaintance` are in the private-table refusals (`visibility.json`).
 
+- While the world's minds hold the character (after the takeover, before the person's next connection), `my_characters` and the other `my_*` views return nothing to the person: the character's `controller` is the admin (`perception::current`).
+
 ## How to get to it (user POV)
 
 A player opens the game (one connection) or two (a second tab). Presence follows each. Closing the game leaves the character standing; half a minute later it lives on by itself; opening the game again puts the player back in control at once.

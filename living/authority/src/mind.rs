@@ -24,6 +24,9 @@ pub struct PersonaIn {
     pub goals: Vec<String>,
     pub traits: String,
     pub mood: String,
+    /// Empty (no pastimes and no calling): the ones it had are kept.
+    pub pastimes: Vec<String>,
+    pub calling: String,
 }
 
 #[derive(SpacetimeType, Clone, Debug)]
@@ -368,7 +371,7 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
     }
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        let _ = perceive::speak(ctx, actor, &say, say_to, true, now);
+        let _ = perceive::speak(ctx, actor, &say, say_to, now);
     }
     Ok(())
 }
@@ -393,7 +396,7 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
     }
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        perceive::speak(ctx, actor, &say, say_to, true, now)?;
+        perceive::speak(ctx, actor, &say, say_to, now)?;
     }
     Ok(())
 }
@@ -501,16 +504,21 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
         for j in ctx.db.judgment().actor().filter(actor).filter(|j| !keep.contains(&j.key.to_lowercase())).map(|j| j.id).collect::<Vec<_>>() {
             ctx.db.judgment().id().delete(j);
         }
-        // A woken resident's places from before its mind (its work, square, evening spot) are
-        // world facts its starting ways walk to: kept unless the mind names them itself.
-        let mut keep: Vec<String> = update.places.iter().map(|p| p.name.trim().to_lowercase()).collect();
-        keep.extend(crate::woken::kept_places(ctx, actor));
-        for p in ctx.db.place().actor().filter(actor).filter(|p| !keep.contains(&p.name.to_lowercase())).map(|p| p.id).collect::<Vec<_>>() {
+        // Given places (world facts its starting ways walk to: work, square, a known way's
+        // stages) stay whether or not the mind names them.
+        let keep: Vec<String> = update.places.iter().map(|p| p.name.trim().to_lowercase()).collect();
+        for p in ctx.db.place().actor().filter(actor).filter(|p| !p.given && !keep.contains(&p.name.to_lowercase())).map(|p| p.id).collect::<Vec<_>>() {
             ctx.db.place().id().delete(p);
         }
     }
     if let Some(p) = update.persona {
-        let version = ctx.db.persona().id().find(actor).map(|p| p.version + 1).unwrap_or(1);
+        let old = ctx.db.persona().id().find(actor);
+        let version = old.as_ref().map(|p| p.version + 1).unwrap_or(1);
+        let keep = p.pastimes.is_empty() && p.calling.trim().is_empty();
+        let (pastimes, calling) = match (&old, keep) {
+            (Some(o), true) => (o.pastimes.clone(), o.calling.clone()),
+            _ => (p.pastimes.iter().take(6).map(|v| clip(v, 120)).collect(), clip(&p.calling, 200)),
+        };
         let row = Persona {
             id: actor,
             narrative: clip(&p.narrative, 2_000),
@@ -520,6 +528,8 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
             mood: clip(&p.mood, 120),
             version,
             updated_ms: now,
+            pastimes,
+            calling,
         };
         common::invalidate_traits(ctx, actor);
         if ctx.db.persona().id().find(actor).is_some() {
@@ -577,15 +587,16 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
             continue;
         }
         let existing = ctx.db.place().actor().filter(actor).find(|x| x.name.eq_ignore_ascii_case(&name));
-        let row = Place { id: existing.as_ref().map(|e| e.id).unwrap_or(0), actor, name, x: p.x, y: p.y };
+        let row = Place { id: existing.as_ref().map(|e| e.id).unwrap_or(0), actor, name, x: p.x, y: p.y, given: existing.as_ref().is_some_and(|e| e.given) };
         if existing.is_some() {
             ctx.db.place().id().update(row);
         } else {
             ctx.db.place().insert(row);
         }
     }
-    if ctx.db.place().actor().filter(actor).count() > 24 {
-        let mut ids: Vec<u64> = ctx.db.place().actor().filter(actor).map(|p| p.id).collect();
+    // A mind keeps at most 24 places of its own, beside the given ones.
+    if ctx.db.place().actor().filter(actor).filter(|p| !p.given).count() > 24 {
+        let mut ids: Vec<u64> = ctx.db.place().actor().filter(actor).filter(|p| !p.given).map(|p| p.id).collect();
         ids.sort_unstable();
         for id in &ids[..ids.len() - 24] {
             ctx.db.place().id().delete(*id);

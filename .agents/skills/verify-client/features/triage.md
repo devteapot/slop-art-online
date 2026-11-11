@@ -40,7 +40,7 @@ After joining, check what the player received, with the player's identity and a 
   --as-player --seconds 0 --save speech-player
 ```
 
-The initial identity must equal the harness player's identity in `state.json`. The speech the player's character heard is in `initial.tables.my_experience` (kind `speech`). The same query on `chronicle` with `--as-player` is refused: the chronicle is private.
+The initial identity must equal the harness player's identity in `state.json`. What the player's character said or heard is in `initial.tables.my_experience`: its own line as kind `said` (`You said: …`), another's as kind `speech`. A line reaches `my_experience` at the character's next frame (within 100 ms), so query with `--seconds 1` or more right after speaking. The same query on `chronicle` with `--as-player` is refused: the chronicle is private.
 
 To observe update callbacks on a small table:
 

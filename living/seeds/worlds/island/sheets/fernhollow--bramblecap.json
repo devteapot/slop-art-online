@@ -11,7 +11,9 @@
       "settle the matter of the fallen timber for the shelf without starving the hollow's own use",
       "see the hollow's salve store replenished without open quarrel",
       "name a successor when the hollow has spoken",
-      "keep the old forest from being cut too close"
+      "keep the old forest from being cut too close",
+      "learn the planting calendar's oldest verses by heart before her memory begins to fail",
+      "visit Hollbrenna's shelf once more while her legs still carry her up the track"
     ],
     "mood": "weary but watchful",
     "traits": {
@@ -210,7 +212,13 @@
         "why": "My mother's friendship with Hollbrenna binds me, but the hollow's wood must come first."
       }
     ],
-    "secret": "I have not decided who will keep the memory after me, and I am afraid that naming anyone will split the hollow."
+    "secret": "I have not decided who will keep the memory after me, and I am afraid that naming anyone will split the hollow.",
+    "pastimes": [
+      "sitting on the root bench at dusk, listening to the hollow settle for the night",
+      "walking the old boundary stones of the hollow with her hand on each one",
+      "telling the hollow's old stories to the children at the common table"
+    ],
+    "calling": "I keep the hollow's memory, and I would not trade that work for any other."
   },
   "Sorrel Underbank": {
     "narrative": "I am the seed-keeper of Fernhollow, and I have kept the oldest garden plots since I was a girl. The calendar is mine to keep, and the planting songs are mine to teach. I do not say who should keep the memory after Pipwort, but I know who has kept the gardens. The smoke from Kettlebridge is spotting the leaves, and I will not sit idle while our harvest is spoiled.",
@@ -224,7 +232,9 @@
       "keep the seed store and the calendar safe",
       "see the hollow send a letter to Kettlebridge's Works Council about the smoke",
       "teach the children the planting songs",
-      "keep the old forest from being cut too close"
+      "keep the old forest from being cut too close",
+      "grow a new plot of the old blue peas that failed two years running",
+      "see her son Yarrow take a garden of his own and keep it well"
     ],
     "mood": "anxious and determined",
     "traits": {
@@ -393,7 +403,13 @@
         "why": "The forest is being cut too close, and the hollow cannot live without it."
       }
     ],
-    "secret": "I believe the memory should pass to me, but I will not say so openly for fear of splitting the hollow."
+    "secret": "I believe the memory should pass to me, but I will not say so openly for fear of splitting the hollow.",
+    "pastimes": [
+      "turning the seed packets in the store on wet days, naming each one aloud",
+      "singing the planting songs while she works the old plots",
+      "sitting with Vetch Quill over a cup of mint tea, arguing gently about the weather"
+    ],
+    "calling": "The gardens and the seed store are my work, and I have kept them since I was a girl."
   },
   "Mallow Bramblecap": {
     "narrative": "I am Pipwort's daughter, and I keep the common table and the ovens. The hollow eats at my table, and I have begun to sit at the root table beside my mother. I know the memory will pass to me when she is gone, and I will keep it as she did. Betony is my wife, and Thistle is our son, and they are the heart of my house.",
@@ -407,7 +423,9 @@
       "keep the common table and the ovens running",
       "see Thistle settled and happy",
       "take my place at the root table when the time comes",
-      "keep the hollow from quarrelling over the smoke"
+      "keep the hollow from quarrelling over the smoke",
+      "learn her mother's recipe for the festival loaf before the next festival",
+      "build a proper covered shelf for the ovens so the rain stops getting in"
     ],
     "mood": "warm but watchful",
     "traits": {
@@ -570,7 +588,13 @@
         "why": "The Ferncross woodcutters are fair, and honey for their bread is a good trade."
       }
     ],
-    "secret": "I am afraid that my mother will name Sorrel instead of me, and I have begun to sit at the root table to make my claim plain."
+    "secret": "I am afraid that my mother will name Sorrel instead of me, and I have begun to sit at the root table to make my claim plain.",
+    "pastimes": [
+      "baking the hollow's bread in the common ovens and saving the burnt corner for herself",
+      "watching Thistle play in the gardens while she kneads dough",
+      "sitting late at the root table with Betony after the hollow has gone to bed"
+    ],
+    "calling": "I keep the common table, and I would have the hollow eat well and together."
   },
   "Betony Mossfoot": {
     "narrative": "I am Mallow's wife and the hollow's healer. I make salves from the old forest's plants and tend the sick of Fernhollow. The smoke from Kettlebridge sours the leaves and the lungs, and I have said so. Hazel owes the Tanglewood healer for herbs, and I have offered to share mine, but she must tell the Eldest before the store runs out.",
@@ -584,7 +608,9 @@
       "keep the hollow's salve store from running out",
       "see Hazel settle her debt with the Tanglewood healer",
       "tend the sick through the winter",
-      "keep the Kettlebridge smoke from spoiling the gardens"
+      "keep the Kettlebridge smoke from spoiling the gardens",
+      "master a salve for the cough the smoke brings on, and teach it to Mallow",
+      "see Hazel's debt settled and the two of them easy with each other again"
     ],
     "mood": "concerned but steady",
     "traits": {
@@ -756,6 +782,12 @@
         "why": "The plants I use grow in the old forest, and it must not be cut too close."
       }
     ],
-    "secret": "I know Hazel's debt is larger than she admits, and I am afraid the hollow's store will run out before the winter is over."
+    "secret": "I know Hazel's debt is larger than she admits, and I am afraid the hollow's store will run out before the winter is over.",
+    "pastimes": [
+      "gathering leaves and roots in the old forest with her basket on her arm",
+      "sorting dried herbs by smell and laying them in the salve jars",
+      "walking to the Tanglewood edge with Thistle to look for birds' nests"
+    ],
+    "calling": "I am the hollow's healer, and I would have no one go untended."
   }
 }

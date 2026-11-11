@@ -9,6 +9,7 @@ mod brain;
 mod codes;
 mod combat;
 mod floor;
+mod frame;
 mod island;
 mod mind;
 mod motion;
@@ -20,7 +21,6 @@ mod seed;
 mod tables;
 mod tick;
 mod town;
-mod woken;
 mod common;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
@@ -79,6 +79,8 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     // one call); a floor module waits for `create_floor` (floor.rs).
     if !seed::VALLEY.is_empty() {
         let s: seed::Seed = serde_json::from_str(seed::VALLEY).map_err(|e| format!("seed: {e}"))?;
+        let over: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        sc.laws_with(&over).map_err(|e| format!("seed rules: {e}"))?;
         floor::begin(ctx, &s, now);
     }
     Ok(())
@@ -129,7 +131,8 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
     let now = common::now_ms(ctx);
-    let rev = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision + 1).unwrap_or(1);
+    // Past the clock's too: writing a world's own laws moves it without a new script.
+    let rev = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision).unwrap_or(0).max(common::clock(ctx).scripts_rev) + 1;
     ctx.db.script().name().delete("skills".to_string());
     ctx.db.script().insert(Script { name: "skills".into(), source, revision: rev, updated_ms: now });
     let mut k = common::clock(ctx);
@@ -459,7 +462,7 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     if name.is_empty() || name.len() > 24 {
         return Err("name must be 1..=24 bytes".into());
     }
-    if ctx.db.character().controller().filter(ctx.sender()).any(|c| c.alive && !c.ai) || ctx.db.presence().player().filter(ctx.sender()).next().is_some() {
+    if perception::player_character(ctx).is_some() || ctx.db.presence().player().filter(ctx.sender()).next().is_some() {
         return Err("you already have a living character".into());
     }
     let now = common::now_ms(ctx);
@@ -467,6 +470,7 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     let arrive = island::arrival(ctx);
     let at = map.nearest_walkable(arrive.0, arrive.1).ok_or("no room")?;
     let id = seed::spawn_creature(ctx, &name, "person", ctx.sender(), false, at, now);
+    perception::set_player(ctx, ctx.sender(), id);
     mind::set_graph(ctx, id, WAITING_GRAPH, WAITING, "human", now)?;
     // What the world gives every newcomer (the seed's `newcomer`): nothing of anyone before.
     seed::newcomer_kit(ctx, id, now);
@@ -479,8 +483,8 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
 
 /// Test support (trials, docs/TRIALS.md): a newcomer as `join` makes one — the same arrival
 /// point and the seed's newcomer kit, the species' instinct graph — but thought for by the
-/// admin's minds (`ai`), so one mind-backed character can live among residents that have no
-/// minds (`rules.minds = false`). It has no background; a caller that wants the mind to write
+/// admin's minds (`ai`), as every resident is; a trial's mind service thinks only for the
+/// characters `LIVING_ONLY` names. It has no background; a caller that wants the mind to write
 /// it an identity sets one (`set_background`), as the trial runner does.
 #[spacetimedb::reducer]
 pub fn spawn_newcomer(ctx: &ReducerContext, name: String) -> Result<(), String> {
@@ -500,7 +504,7 @@ pub fn spawn_newcomer(ctx: &ReducerContext, name: String) -> Result<(), String> 
 }
 
 fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
-    ctx.db.character().controller().filter(ctx.sender()).find(|c| c.alive && !c.ai).ok_or_else(|| "you have no living character".into())
+    perception::player_character(ctx).ok_or_else(|| "you have no living character".into())
 }
 
 /// Perform one action (behavior graph node JSON, e.g. `{"do":{"skill":"gather","target":{"nearest":"tree"}}}`).
@@ -587,5 +591,5 @@ pub(crate) fn player_controls(ctx: &ReducerContext, id: u32, now: u64) -> Result
 #[spacetimedb::reducer]
 pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), String> {
     let me = my_character(ctx)?;
-    perceive::speak(ctx, me.id, &text, to, true, common::now_ms(ctx))
+    perceive::speak(ctx, me.id, &text, to, common::now_ms(ctx))
 }

@@ -12,6 +12,7 @@ pub struct Place {
     pub name: String,
     pub x: f32,
     pub y: f32,
+    pub given: bool,
 }
 
 impl __sdk::InModule for Place {
@@ -27,6 +28,7 @@ pub struct PlaceCols {
     pub name: __sdk::__query_builder::Col<Place, String>,
     pub x: __sdk::__query_builder::Col<Place, f32>,
     pub y: __sdk::__query_builder::Col<Place, f32>,
+    pub given: __sdk::__query_builder::Col<Place, bool>,
 }
 
 impl __sdk::__query_builder::HasCols for Place {
@@ -38,6 +40,7 @@ impl __sdk::__query_builder::HasCols for Place {
             name: __sdk::__query_builder::Col::new(table_name, "name"),
             x: __sdk::__query_builder::Col::new(table_name, "x"),
             y: __sdk::__query_builder::Col::new(table_name, "y"),
+            given: __sdk::__query_builder::Col::new(table_name, "given"),
         }
     }
 }

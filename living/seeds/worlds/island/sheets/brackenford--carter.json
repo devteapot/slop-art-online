@@ -140,7 +140,13 @@
         "why": "The fields and the cart are for the children, not the other way round."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sharing a plough-team and a flask with Godric Rowan at the field edge",
+      "oiling and mending the cart of an evening",
+      "a mug at the inn after a market day"
+    ],
+    "calling": "I'm a farmer first and a carter second, and I'd not have it said I dodged the due."
   },
   "Cecily Carter": {
     "narrative": "I keep the hens and the vegetable plot, and I sell eggs at the Guild stall in the square most market days. Herbert's cart takes him up and down the road, and I mind the house and the children while he's gone. I've no patience for town quarrels; eggs are eggs and folk must eat.",
@@ -269,7 +275,13 @@
         "why": "Everything I put by is for Alfred and Edith."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the hens and the vegetable plot at first light",
+      "keeping her stall neat and gossiping with Juliana Cooper at the square",
+      "a quiet sit with Mildgyth Grey over a cup"
+    ],
+    "calling": "Eggs are eggs and folk must eat; I sell mine at the Guild stall and I like the work."
   },
   "Alfred Carter": {
     "narrative": "I drive the cart for my father and I want to be a carter on the stone road, like Silas Pike, with my own cart and my own loads. I've watched him come through the south gate with stone from Kettlebridge and I know the road's a hard one, but it's the life I want. For now I help with the ploughing and take the eggs to the square when Mother can't.",
@@ -282,7 +294,8 @@
     "goals": [
       "save enough marks for a cart of my own",
       "learn the stone road as far as Kettlebridge",
-      "prove to Father I can handle a load alone"
+      "prove to Father I can handle a load alone",
+      "save enough marks for a cart of his own"
     ],
     "mood": "restless and eager",
     "traits": {
@@ -391,7 +404,13 @@
         "why": "Their carters know stone and loads better than anyone here."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "watching the carts come through the south gate",
+      "walking the stone road a little way with Bram Fenner",
+      "driving the cart on the field tracks when Father lets him"
+    ],
+    "calling": "I want to be a carter on the stone road, like Silas Pike, with my own cart and my own loads."
   },
   "Edith Carter": {
     "narrative": "I help Mother with the hens and carry the eggs to the square in a basket. I like the hens best, even when they peck. When Alfred drives the cart I run after it to the gate until Mother calls me back.",
@@ -402,7 +421,8 @@
     ],
     "goals": [
       "get the brown hen to let me stroke her",
-      "ride on the cart all the way to the gate"
+      "ride on the cart all the way to the gate",
+      "get the brown hen to let her stroke her"
     ],
     "mood": "merry",
     "traits": {
@@ -452,6 +472,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "helping with the hens and trying to stroke the brown one",
+      "running after the cart to the gate until Mother calls her back",
+      "playing with the other children by the wall"
+    ],
+    "calling": "I like the hens best, even when they peck."
   }
 }

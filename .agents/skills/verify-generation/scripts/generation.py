@@ -27,7 +27,7 @@ DERIVED = {"floor-megacity-2k": ("floor-megacity", {"size": 2048}), "floor-megac
 FLOORS = ("floor-megacity-4k",)
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
-          "place", "routine", "relation", "acquaintance")
+          "place", "routine", "relation", "acquaintance", "world_law")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
@@ -421,6 +421,9 @@ def check_land(seed, rows, side, tiles):
         present("the land's other settlements stand outside the city", outside and all(((s["x"] - core["x"]) ** 2 + (s["y"] - core["y"]) ** 2) ** 0.5 > reach * 0.9 for s in outside), [(s["style"], s["x"], s["y"]) for s in outside])
         gates = rows.get("gate", [])
         present("the city wall has gate tiles on its arterials", len(gates) >= arterials * 4, len(gates))
+    # A seed's `rules` are the world's own law values, kept when it is made (docs/WORLD_RULES.md).
+    kept = {r["name"]: json.loads(r["value"]) for r in rows.get("world_law", [])}
+    present("the seed's rules are kept as the world's laws", kept == seed.get("rules", {}), {"kept": kept, "seed": seed.get("rules", {})})
     if seed.get("rules", {}).get("minds") is False:
         world = rows["world"][0]
         minded = [c["id"] for c in rows["character"] if c["ai"] or c["controller"] == world["admin"]]
@@ -571,9 +574,8 @@ def suite(args):
             write(d / "seed.json", json.loads(seed_path.read_text()))
             database = "verify-" + active_run
             seed_arg = "none" if seed_name in FLOORS else str(seed_path.with_suffix("")) if seed_name == "malformed" or seed_name in DERIVED else seed_name
-            # A floor module compiles its seed's `rules` switches in (LIVING_RULES).
-            rules = json.loads(seed_path.read_text()).get("rules", {})
-            launch_env = dict(os.environ, LIVING_RULES=",".join(f"{k}={str(v).lower()}" for k, v in rules.items())) if seed_name in FLOORS else None
+            # A seed's `rules` are world laws kept at creation (`world_law`), not compiled in.
+            launch_env = None
             container = subprocess.run(["docker", "ps", "--filter", f"name=^{CONTAINER}$", "--format", "{{.Status}}"], capture_output=True, text=True, check=True, timeout=30)
             if not container.stdout.strip().startswith("Up"):
                 raise RuntimeError("existing SpacetimeDB container is down; start it before running this skill")

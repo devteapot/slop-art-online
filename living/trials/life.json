@@ -1,13 +1,10 @@
 {
  "kind": "life",
  "title": "A newcomer's life: the island as it ships",
- "about": "Open-ended. One mind-backed newcomer arrives at the island's arrival point (the road outside Brackenford's first gate) with the seed's newcomer kit (a bow, 30 arrows, 4 berries; fire, fire_bolt, wound_tending), made by the admin-only spawn_newcomer reducer: what a player's join makes, but thought for by the mind service. Every other character is an instinct-only resident (rules.minds false, the island as shipped, with town life layer 1: daily rhythm, gestures, weather, the wolves of the town road). No timeline, no script. The background says only that this person is a newcomer, so the mind writes their identity as it does for any resident with a background.",
+ "about": "Open-ended. One mind-backed newcomer arrives at the island's arrival point (the road outside Brackenford's first gate) with the seed's newcomer kit (a bow, 30 arrows, 4 berries; fire, fire_bolt, wound_tending), made by the admin-only spawn_newcomer reducer: what a player's join makes, but thought for by the mind service. Every other character has a mind, but this trial's mind service thinks only for the subject (LIVING_ONLY), so the residents live on their starting ways (the island as shipped, with town life layer 1: daily rhythm, gestures, weather, the wolves of the town road). No timeline, no script. The background says only that this person is a newcomer, so the mind writes their identity as it does for any resident with a background.",
  "gradient": "Control: the progression is whatever the shipped island offers a newcomer (food in gardens and the wild, a walled town with unowned houses, bold wolves on the road, nights that are cold without fire or shelter, seasons).",
  "world": {
-  "seed": "island",
-  "rules": {
-   "minds": false
-  }
+  "seed": "island"
  },
  "minutes": 150,
  "keep_db": true,

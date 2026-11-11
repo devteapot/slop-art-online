@@ -25,3 +25,7 @@ Run the fresh wildlife recipe in [SKILL.md](../SKILL.md). Hold initial character
 - The chronicle kind is `arrival`, not `migration`.
 - Count parentless founders separately from later offspring. Births can increase the herd during a delayed arrival probe without violating migration's cooldown.
 - This bounded scene does not prove ecological equilibrium. Wolf arrivals at 30 minutes, update recovery of cooldowns and seasonal pasture remain unverified.
+
+## Since `laws-2` (2026-11-11)
+
+Who grazes is the kind's `grazes` trait in `kinds()` (refusal "only grazing animals graze", was "only deer graze"); `a.actor.pasture` is worked out for any skill whose rules read it, and the grass is eaten by the `graze` effect `graze_done` returns (it was a special case for the skill named `graze` in `act.rs`). Per-kind numbers (`max_hp`, `lunge`, carcasses, dodges, a bare attack's `blow`) are traits of `kinds()`, read by the same functions; the values are unchanged (`rules_read_traits_not_lists`).

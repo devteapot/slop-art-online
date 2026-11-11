@@ -1,6 +1,6 @@
 # Combat skills (the skill bar)
 
-A player's character uses the skills on the bar (the script's `skill_bar()`, `skill_card.slot`; the six starter skills, docs/COMBAT.md) through `use_skill(skill, target, x, y)` and lets go of a held guard with `release_skill(skill)`. Every attempt is recorded in `skill_use` (read through the player's `my_skill_uses` view); a refusal returns `Ok` and is told back as a `REFUSED` row in `my_combat`, so the record of the failed attempt survives.
+A player's character uses the skills on the bar (the script's `skill_bar()`, `skill_card.slot`; the six starter skills and the jump, docs/COMBAT.md) through `use_skill(skill, target, x, y)` and lets go of a held guard with `release_skill(skill)`. Every attempt is recorded in `skill_use` (read through the player's `my_skill_uses` view); a refusal returns `Ok` and is told back as a `REFUSED` row in `my_combat`, so the record of the failed attempt survives.
 
 ## Sub-features
 
@@ -12,6 +12,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - A fire bolt burns the creature it meets.
 - A guard facing the blow blocks it (`BLOCKED`, reduced); facing away, the blow lands in full; letting go ends it.
 - A dodge dashes about 2.6 m and the blow winding up misses or is dodged.
+- A jump (the bar's seventh place, Space in the game) hops about 1.6 m like a dash but does not evade (`jump_combat()`'s `evades: false`): a blow winding up as you jump toward its striker lands or misses by reach, never `DODGED` (scene `jump`).
 - Heal mends yourself.
 - The seed's bold pack attacks a healthy adult player.
 - The character dies through the vitals and death rules ("killed by …"), the dead player is told of the death and who saw it, and `join` makes a new character with only the newcomer's kit.
@@ -37,7 +38,7 @@ $V cleanup --run $R
 - Energy is a real requirement: a character worn out by earlier scenes is refused "too tired". Use `--fresh`.
 - Place a dummy before setting its graph: a teleport drops an approach its graph already started.
 - A missile strikes the first body on its line, which may be an earlier scene's dummy or a resident at its post: the arrival spot is inside a town, with a building and residents in fixed lines (the diagonal fire bolt struck a wall on 2026-11-10). The bow and bolt scenes place their dummy in the first direction whose line is clear of wall, rock and other bodies (terrain from the public `terrain_chunk` rows), aim at where it actually stands, and check the health of the body the impact names (a bystander who walked in counts; one the shot killed counts as burned).
-- `my_combat` rows expire after 4 s; filter by `at_ms` per scene.
+- `my_combat` rows stay 4 s for the two involved and for a refusal (an onlooker's 300 ms; the dead one's death and witnesses until it joins again); filter by `at_ms` per scene and read soon after the act.
 - SQL returns `Ready` rows positionally: `[skill, from_ms, at_ms]`.
 - Presentation codes are `skill_card.code`, kept stable across script installs by the authority's private `skill_code` table; they are the world's codes, so read them from `skill_card`, never hard-code a number.
 - How `use_skill` aims a skill comes from its script shape (`aim`: creature, self_or_ally, point, facing, dash), not its name; the refusal text "no one there to <skill>" names the skill.

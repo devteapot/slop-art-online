@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -19,7 +20,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'wake', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings')
+         'takeover', 'sight', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 
@@ -111,8 +112,8 @@ def run_case(run, case):
         return dealings_case(run)
     if case == 'sight':
         return sight_case(run)
-    if case == 'wake':
-        return wake_case(run)
+    if case == 'resident':
+        return resident_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -201,6 +202,12 @@ def run_case(run, case):
         sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
         felt = [m.split('How your body feels: ', 1)[1].split('\n', 1)[0] for e in sent for m in [json.dumps(e, ensure_ascii=False).replace('\\n', '\n')] if 'How your body feels: ' in m]
         assert felt and not any(ch.isdigit() for ch in felt[0]), felt[:2]
+        # The world's rules are told from the laws' own descriptions (docs/WORLD_RULES.md, since
+        # laws-2): the sections and the numbers the script's laws give, the same in every prompt.
+        told = [json.dumps(e, ensure_ascii=False).replace('\\n', '\n') for e in sent]
+        for part in ('SENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m',
+                     'MOVING: How creatures move', 'FOOD: berries 12, fish 16', 'SETTLEMENTS: walls block the way'):
+            assert all(part in m for m in told), part
     elif case == 'acts':
         run.wait(lambda: any(i['item'] == 'stone' and i['qty'] == 1 for i in run.sql(
             f'SELECT * FROM inventory WHERE owner = {other}', 'receiver-inventory-after')), 'give effect')
@@ -545,10 +552,10 @@ def animals_case(run):
     models = model(run, {})
     run.start(models, deer, extra_env={'LIVING_ANIMAL_MINDS': 'salient,choose,pack', 'LIVING_ANIMAL_PACK_S': '120'})
     detail = lambda t: json.loads(t['detail']) if t['detail'] else {}
-    # Installing a graph counts as having just thought, and within its species' think_min_s
-    # (240 s) the authority asks an animal only for urgent reasons; dawn is one, and it is not
-    # news to the animal's salience check.
-    ask = lambda d, marker: run.admin('set_behavior', d, json.dumps({'think': f'Dawn of day 2. verify {marker}'}))
+    # A mind's install counts as having just thought: within its species' think_min_s (240 s)
+    # the authority asks an animal only for urgent reasons, and every urgent reason is news to
+    # its salience check. A fresh deer has not thought, so the first asks go through.
+    ask = lambda d, marker: run.admin('set_behavior', d, json.dumps({'think': f'A quiet moment. verify {marker}'}))
     lead, *rest = deer
     ask(lead, 'animal-lead')
     first = run.wait(lambda: [t for t in run.thoughts(lead, 'lead-thoughts') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'choose'], 'a chosen option', 60)[0]
@@ -563,6 +570,15 @@ def animals_case(run):
     chosen = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']
     compiled = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
     assert len(chosen) == 1 and not compiled, (len(chosen), len(compiled))
+    # The lead asked again with nothing new, once its thinking throttle (240 s after its chosen
+    # option) has passed (since 2026-11-11 no dawn broadcast skips it). Wolves that would come
+    # into view meanwhile are news; the scene removes those that range near the herd.
+    wolves = [w['id'] for w in run.sql("SELECT * FROM character WHERE kind = 'wolf'", 'wolves') if w['alive']]
+    for w in wolves:
+        b = run.sql(f'SELECT x, y FROM body WHERE id = {w}', f'wolf-{w}')
+        if b and math.hypot(b[0]['x'] - at['x'], b[0]['y'] - at['y']) < 120:
+            run.admin('kill', w, 'verify: kept away from the herd')
+    time.sleep(max(0.0, (first['at_ms'] + 245_000) / 1000 - time.time()))
     ask(lead, 'animal-again')
     run.wait(lambda: any(t['kind'] == 'instinct' for t in run.thoughts(lead, 'lead-again')), 'a request answered by instinct', 60)
     assert len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']) == 1, 'nothing new: no call'
@@ -719,12 +735,12 @@ def rethink_case(run, arm):
     return {'status': 'pass', 'arm': arm, 'verdicts': verdicts, 'stats': stats[-1], **out}
 
 
-def wake_case(run):
-    """On the island (`rules.minds = false`) a resident lives on its behaviour graph until a
-    player engages it: an offer and speech wake it, this service takes it up like any AI
-    character, it answers through `mind_say`, trades and teaches through its own acts, and its
-    consolidation keeps the places it knew before. It stays a mind afterwards."""
-    target = ROOT / '.local/living/target-wake-island'
+def resident_case(run):
+    """On the island every resident has a mind from the start (an AI character the world
+    admin controls): this service thinks for it, it answers a player through `mind_say`,
+    trades and teaches through its own acts, and a replacing projection keeps its given places
+    (work, inn, square, evening: world facts its starting ways walk to)."""
+    target = ROOT / '.local/living/target-resident-island'
     run.harness('launch', '--seed', 'island', '--target-dir', str(target))
     run.harness('doctor')
     world = run.sql('SELECT * FROM world', 'world')[0]
@@ -735,7 +751,7 @@ def wake_case(run):
     def pick():
         keeping = {a['id'] for a in run.sql("SELECT id, skill FROM activity", 'activities') if a['skill'] == 'keep'}
         for c in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'):
-            if c['id'] in keeping and c['alive'] and c['stage'] == 2 and not c['ai']:
+            if c['id'] in keeping and c['alive'] and c['stage'] == 2 and c['ai'] and c['controller'] == world['admin']:
                 knows = {k['technique'] for k in run.sql(f"SELECT technique FROM know_how WHERE actor = {c['id']}", 'resident-know-how')}
                 lesson = sorted(knows - mine)
                 if lesson:
@@ -743,8 +759,9 @@ def wake_case(run):
         return None
     resident, lesson = run.wait(pick, 'a resident at its post who knows something the newcomer does not', 60)
     rid = resident['id']
-    assert resident['controller'] != world['admin'] and not run.private(f'SELECT * FROM woken WHERE id = {rid}', 'woken-before')
-    places_before = {p['name'] for p in run.sql(f'SELECT * FROM place WHERE actor = {rid}', 'places-before')}
+    given = run.sql(f'SELECT * FROM place WHERE actor = {rid}', 'places-before')
+    places_before = {p['name'] for p in given if p['given']}
+    assert places_before, ('a seeded resident has given places', given)
     run.admin('place_near', me, rid)
     run.admin('grant_items', rid, 'wood', 2)
     acts = [{'do': 'accept', 'target': {'id': me}},
@@ -762,9 +779,8 @@ def wake_case(run):
     run.start(models, [rid], seed='island')
     # The newcomer offers a trade, then speaks to the resident.
     run.harness('player', 'act', json.dumps({'do': 'offer', 'target': {'id': rid}, 'item': 'berries', 'qty': 1, 'want': 'wood', 'want_qty': 1}))
-    woke = run.wait(lambda: run.private(f'SELECT * FROM woken WHERE id = {rid}', 'woken-after'), 'resident woken', 20)[0]
-    char = run.sql(f'SELECT * FROM character WHERE id = {rid}', 'resident-woken')[0]
-    assert woke['why'] == 'offer' and woke['by'] == me and char['ai'] and char['controller'] == world['admin'], (woke, char)
+    run.wait(lambda: any('offers you' in d['reason'] for d in run.private(f'SELECT * FROM deliberation WHERE actor = {rid}', 'offer-asks-its-mind')) or
+             any(t['kind'] == 'deliberate' for t in run.thoughts(rid, 'thoughts-offer')), 'the offer asks the resident\'s mind', 20)
     run.harness('player', 'say', 'verify minds: is there food and a bed here?', '--to', str(rid))
     heard = lambda text, save: any(text in e['text'] and e['subject'] == rid for e in run.private(f'SELECT * FROM experience WHERE observer = {me}', save))
     run.wait(lambda: heard('verify minds welcome', 'newcomer-heard'), 'the resident answers the newcomer (its deliberation says it)', 60)
@@ -782,7 +798,7 @@ def wake_case(run):
     run.wait(lambda: any(t['kind'] == 'consolidate' for t in run.thoughts(rid, 'thoughts-consolidated')), 'consolidation', 90)
     # Without Neo4j the service projects without `replace`; with a store it sends the mind's
     # complete set (`replace: true`). Send that update as the service would: the places the
-    # resident knew before waking must survive a set that does not name them.
+    # resident was given at world creation must survive a set that does not name them.
     run.admin('mind_update', rid, {'persona': {'none': []}, 'relations': [], 'beliefs': {'none': []}, 'judgments': [],
                                    'places': [{'name': 'verify after', 'x': 41.0, 'y': 61.0}], 'thought': {'none': []}, 'replace': True})
     places = {p['name'] for p in run.sql(f'SELECT * FROM place WHERE actor = {rid}', 'places-after')}
@@ -790,7 +806,7 @@ def wake_case(run):
     final = run.sql(f'SELECT * FROM character WHERE id = {rid}', 'resident-final')[0]
     assert final['ai'] and final['controller'] == world['admin']
     talks = [e for e in run.exchanges() if e['purpose'] == 'talk']
-    return {'status': 'pass', 'resident': rid, 'woken': woke, 'lesson': lesson, 'talk_turns': len(talks),
+    return {'status': 'pass', 'resident': rid, 'lesson': lesson, 'talk_turns': len(talks),
             'places_kept': sorted(places_before), 'places_after': sorted(places)}
 
 

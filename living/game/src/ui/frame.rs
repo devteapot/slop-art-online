@@ -17,6 +17,9 @@ const STATUS_SLOTS: usize = 6;
 
 #[derive(Component)]
 pub struct HpFill;
+/// Health as a number on its bar ("87 / 100").
+#[derive(Component)]
+pub struct HpText;
 #[derive(Component)]
 pub struct HpGhost;
 #[derive(Component)]
@@ -97,6 +100,14 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
                         .with_child((HintKey, Text::new("F"), f.body(14.0, 800), TextColor(theme::GOLD)));
                     h.spawn((HintLabel, Text::new(""), f.body(15.0, 650), TextColor(theme::TEXT)));
                 });
+            // A plate behind the bars and the skill bar, so they read as one cluster rather than
+            // lines over the world (play-test 1). Absolute and first, so it sits behind them.
+            root.spawn((
+                Node { position_type: PositionType::Absolute, bottom: Val::Px(-10.0), left: Val::Percent(50.0), margin: UiRect::left(Val::Px(-(WIDTH + 36.0) / 2.0)), width: Val::Px(WIDTH + 36.0), height: Val::Px(SLOT + 52.0), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(16.0)), ..default() },
+                BackgroundColor(theme::with_alpha(theme::INK, 0.55)),
+                BorderColor::all(theme::EDGE),
+                Pickable::IGNORE,
+            ));
             // Status pills, left-aligned over the bars.
             root.spawn(Node { width: Val::Px(WIDTH), flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), margin: UiRect::bottom(Val::Px(6.0)), ..default() }).with_children(|row| {
                 for i in 0..STATUS_SLOTS {
@@ -120,6 +131,8 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
                 b.spawn((HpGhost, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgba(1.0, 0.86, 0.72, 0.55))));
                 b.spawn((HpFill, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), ..default() }, bar_gradient(theme::HP_LO, theme::HP_HI)));
                 b.spawn((HpFlash, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), ..default() }, BackgroundColor(Color::NONE)));
+                b.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), top: Val::Px(-2.0), bottom: Val::Px(0.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, Pickable::IGNORE))
+                    .with_child((HpText, Text::new(""), f.body(11.0, 800), TextColor(theme::TEXT), theme::text_shadow(), Pickable::IGNORE));
             });
             // Energy (the rules' `energy` need).
             root.spawn((
@@ -208,6 +221,7 @@ pub fn vitals(
     mut ghost: Local<f32>,
     mut nodes: ParamSet<(Query<&mut Node, With<HpFill>>, Query<&mut Node, With<HpGhost>>, Query<&mut Node, With<EnFill>>)>,
     mut flash: Query<&mut BackgroundColor, With<HpFlash>>,
+    mut hp_text: Query<&mut Text, With<HpText>>,
 ) {
     let Some(me) = &model.me else { return };
     let f = (me.hp / me.max_hp.max(1.0)).clamp(0.0, 1.0);
@@ -228,6 +242,10 @@ pub fn vitals(
     }
     for mut b in &mut flash {
         set_bg(&mut b, Color::srgba(1.0, 0.95, 0.9, me.hurt * 0.35));
+    }
+    let n = format!("{:.0} / {:.0}", me.hp.max(0.0).ceil(), me.max_hp);
+    for mut t in &mut hp_text {
+        set_text(&mut t, &n);
     }
 }
 

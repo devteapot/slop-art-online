@@ -11,9 +11,9 @@
 
 ## How to get to it (user POV)
 
-A client invokes reducers with its own identity. `require_admin` at `living/authority/src/lib.rs:66` compares the sender with the world's admin. `authorize` at `living/authority/src/mind.rs:75` compares the sender with the actor's controller.
+A client invokes reducers with its own identity. `require_admin` (`living/authority/src/lib.rs`) compares the sender with the world's admin (`create_floor` checks it inline, `floor.rs`). `authorize` (`living/authority/src/mind.rs`) compares the sender with the actor's controller; `mind_update` uses `authorize_projection`, which also accepts the admin for a character a person plays.
 
-The `join` and `human_*` reducers at `lib.rs:312` onward are public. Human commands require the sender's living non-AI character. `tick.rs:13` and `tick.rs:299` allow only the database identity, and this version does not expose those scheduled reducers through the external call endpoint.
+`join`, the `human_*` reducers (`lib.rs`) and `use_skill`/`release_skill` (`combat.rs`) are public. They require the sender's living non-AI character, found through the private `player` row (`perception::player_character`; a person with no row yet is found by its controller and the row is written). `tick` and `housekeeping` (`tick.rs`) and `genesis_step` (`floor.rs`) allow only the database identity, and this version does not expose scheduled reducers through the external call endpoint (HTTP 404).
 
 ## Driving it with drive.py
 
@@ -30,12 +30,14 @@ The `join` and `human_*` reducers at `lib.rs:312` onward are public. Human comma
 | `mind_*` on the caller's own joined actor | HTTP 200 |
 | External `tick` or `housekeeping` | HTTP 404, `No such procedure` |
 | First `join` for a persistent identity | HTTP 200 |
-| Duplicate `join` while that character lives | HTTP 530, `you already have a living character` |
+| Duplicate `join` while that character lives (or while the person has a `presence` row) | HTTP 530, `you already have a living character` |
+| `use_skill` / `release_skill` as a joined player | HTTP 200 (a refusal is told through `my_combat`) |
+| `use_skill` / `release_skill` without a living character | HTTP 530, `you have no living character` |
 | Joined identity's `human_move`, `human_act`, `human_say` | HTTP 200 |
 | Tokenless HTTP `human_*` without a character | HTTP 530, `you have no living character` |
 | Tokenless HTTP `join` | HTTP 200 for that request's new identity |
 
-Own-character `mind_routines`, `mind_install`, `mind_say`, `mind_act`, `mind_skip`, `mind_consolidated`, and `mind_update` are currently allowed for non-AI players. Authorization does not require `ai = true`. The fixtures install a routine and plan, project a persona, append scripted thoughts, submit a signal act, and set an integration cursor. This is current controller authority, not an inference about intended product policy.
+Own-character `mind_routines`, `mind_install`, `mind_say`, `mind_act`, `mind_skip`, `mind_consolidated`, `mind_update` and `mind_judged` are currently allowed for non-AI players. Authorization does not require `ai = true`. The fixtures install a routine and plan, project a persona, append scripted thoughts, submit a signal act, and set an integration cursor. This is current controller authority, not an inference about intended product policy.
 
 `reducer-effects.json` must contain each actor's routine, scripted thought references, the later `your command` plan, and speech chronicle line. A HTTP 200 proves acceptance; the subscription rows prove these effects.
 

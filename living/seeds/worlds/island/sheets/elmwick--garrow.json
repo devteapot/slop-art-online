@@ -11,7 +11,9 @@
       "press Elmwick's claim to the Lakemead",
       "settle the quarrel between Oswin Wray and Pike Tarn",
       "see the village through the winter",
-      "keep the Garrow strips in the family"
+      "keep the Garrow strips in the family",
+      "learn to read the market tallies well enough to argue the Lakemead case himself",
+      "see his grandson Cerdic grow into a farmer who knows every furrow of the Garrow strips"
     ],
     "mood": "stubborn and worried",
     "traits": {
@@ -195,7 +197,13 @@
         "why": "Nell Sedge took what was not hers."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the field boundaries at first light, checking the hedges and ditches",
+      "sitting by the common fire of an evening, listening to the village talk",
+      "sharing a cup of small beer with Oswin Wray when the quarrel is set aside for an hour"
+    ],
+    "calling": "I am a farmer, and I would have it no other way: the strips, the seed, the harvest, and the keeping of them."
   },
   "Annot Garrow": {
     "narrative": "I am Annot Garrow, Hob's daughter, and I work the north strips with my father. My husband was a fisher, lost in the Surge, and I raise our son Cerdic alone. I keep the house and trade eggs with Tern Gannet when she comes through. I miss my husband, but the fields do not wait.",
@@ -209,7 +217,9 @@
       "raise Cerdic well",
       "see the Garrow strips prosper",
       "keep the house in order",
-      "trade eggs for what we need"
+      "trade eggs for what we need",
+      "make the house truly her own again, mended and warm, without her husband in it",
+      "see Cerdic learn a trade he loves, whether farming or otherwise"
     ],
     "mood": "quietly grieving but steady",
     "traits": {
@@ -338,7 +348,13 @@
         "why": "It is my father's fight; I have enough to do."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking out to the lake shore at dusk when the day's work is done",
+      "trading eggs and news with Tern Gannet when she comes through",
+      "teaching Cerdic the old field songs while they work"
+    ],
+    "calling": "The fields do not wait, and I am glad of it; I would work the north strips beside my father as long as I am able."
   },
   "Cerdic Garrow": {
     "narrative": "I am Cerdic. I help my mother with the goats and the harvest, and I play with Fennel Underbank when the small folk come. I miss my father, but I do not remember him well. I like the goats and the fields.",
@@ -350,7 +366,9 @@
     "goals": [
       "help with the goats",
       "play with Fennel",
-      "learn to be a farmer"
+      "learn to be a farmer",
+      "learn to milk a goat all by himself",
+      "see Fennel Underbank more often"
     ],
     "mood": "cheerful",
     "traits": {
@@ -422,7 +440,13 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "chasing the goats across the meadow",
+      "playing hiding games in the hedgerows with Fennel Underbank",
+      "helping his grandmother at the common bake"
+    ],
+    "calling": "I want to be a farmer like Grandfather, and know all the goats by name."
   },
   "Leofgifu Garrow": {
     "narrative": "I am Leofgifu Garrow, Hob's wife, and I keep the village cook-fire and the common bake. I cook for the common table and trade bread with Tansy Sedge. I worry about the winter store, and I keep an eye on Thea Wray's cough. My daughter Annot works the strips with my husband, and my grandson Cerdic is a joy.",
@@ -436,7 +460,9 @@
       "keep the winter store full",
       "see Thea Wray recover",
       "bake for the common table",
-      "trade bread for what we need"
+      "trade bread for what we need",
+      "learn a new bread that keeps longer through the winter",
+      "see the common store laid by well before the cold comes"
     ],
     "mood": "busy and concerned",
     "traits": {
@@ -577,6 +603,12 @@
         "why": "Hob, Annot and Cerdic are my world."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the common bake and the cook-fire through the morning",
+      "visiting Thea Wray with a loaf and a word",
+      "trading bread and gossip with Tansy Sedge"
+    ],
+    "calling": "I keep the village fed, and there is no work I would sooner do than the common bake and the cook-fire."
   }
 }

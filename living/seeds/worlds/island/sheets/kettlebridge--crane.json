@@ -11,7 +11,9 @@
       "Meet the Lanternquay stone order without breaking the works",
       "Settle Lanternquay's debt before another load goes down",
       "Reopen northern trade with Brackenford through Mercy Abbot",
-      "Keep the foundry books straight and her own counsel"
+      "Keep the foundry books straight and her own counsel",
+      "Learn to read a contract as well as she reads a ledger",
+      "See the Lanternquay debt settled and the foundry's name clean"
     ],
     "mood": "composed, watchful, quietly resentful",
     "traits": {
@@ -235,7 +237,13 @@
         "why": "Tobin shamed me before both towns; I will not forget, even if I was glad."
       }
     ],
-    "secret": "I was relieved when Tobin broke the match; I did not want to leave the works."
+    "secret": "I was relieved when Tobin broke the match; I did not want to leave the works.",
+    "pastimes": [
+      "Walking the kiln yard at dusk to check the fires before the night shift",
+      "Reading old ledgers and contracts for the pleasure of catching a bad figure",
+      "Sitting by the clock tower with a cup of tea, listening to it strike"
+    ],
+    "calling": "I keep the foundry's books, and I would keep them better than any clerk in Kettlebridge if my father would only let me near the contracts as well as the columns."
   },
   "Josiah Crane": {
     "narrative": "I am foundry master and chair of the Works Council, and I built this works with my hands and my word. Aldric Marrow's son insulted my house when he broke his promise to Hester, and Kettlebridge remembers: stone goes south now as much as north. The cairn cutting closed the ridge, and I will not beg a giant's pardon, but the Lanternquay order must be met.",
@@ -249,7 +257,9 @@
       "Meet the Lanternquay seawall order and keep the works' name",
       "Reopen the ridge quarry without begging the giants",
       "Get Pell back and make an example of him",
-      "Keep the gate-due fought at every turn"
+      "Keep the gate-due fought at every turn",
+      "Master a new casting for the seawall blocks that no other works on the island can match",
+      "See the ridge quarry open again and the cairn business put behind Kettlebridge"
     ],
     "mood": "proud, pressed, stubborn",
     "traits": {
@@ -473,7 +483,13 @@
         "why": "Aldric's son insulted my house, and Kettlebridge remembers."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "Walking the foundry floor at first light, feeling the heat off the iron",
+      "Playing cards at the works' back table with masters and carters",
+      "Climbing to the ridge to look down at the works and the town he built"
+    ],
+    "calling": "I built this works with my hands and my word, and every load that leaves my gate carries my name on it."
   },
   "Prudence Crane": {
     "narrative": "I keep the foundry house and its table, and the Council's masters eat here after every sitting. I hear what they say and I keep it. The Marrows owe my house an apology, and I have not had it; until I do, they will not sit at my table.",
@@ -486,7 +502,9 @@
     "goals": [
       "Keep the foundry house and its table as it should be",
       "See the Marrows apologise for the broken match",
-      "Keep the Council's masters fed and their talk in the house"
+      "Keep the Council's masters fed and their talk in the house",
+      "See the foundry house pass to Hester in good order, with a table she is proud of",
+      "Hear the Marrows' apology spoken aloud, in her own house, before she dies"
     ],
     "mood": "warm to her own, cold to the Marrows",
     "traits": {
@@ -635,7 +653,13 @@
         "why": "Hester and Josiah are my house, and I will not see them shamed again."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "Tending the foundry house garden and its herbs for the table",
+      "Baking the bread and pies for Council sittings, and hearing every word over them",
+      "Visiting the poor terrace with a basket, and knowing every family there by name"
+    ],
+    "calling": "I keep the foundry house and its table, and a house kept well is a work as good as any iron that leaves the yard."
   },
   "Ambrose Vell": {
     "narrative": "I am old master of the brickworks and second voice on the Works Council. I speak slowly and forgive more slowly. Josiah is my chair and my friend, but I think the tithe should be forgiven this winter, though I will not fight him over a farmer. The gate-due at Brackenford is a robbery, and I have said so.",
@@ -648,7 +672,9 @@
     "goals": [
       "Keep the brickworks and the kiln yard in good order",
       "See the gate-due at Brackenford dropped",
-      "Hold the Council together behind Josiah"
+      "Hold the Council together behind Josiah",
+      "Fire a batch of bricks as true as any he made in his prime, one more time",
+      "See the gate-due at Brackenford dropped in his lifetime"
     ],
     "mood": "slow, steady, quietly stubborn",
     "traits": {
@@ -802,6 +828,12 @@
         "why": "The brickworks and the kiln yard are my life's work."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "Sitting on the kiln-yard wall at evening, watching the bricks cool",
+      "Fishing the river below the terraces with a long rod and no hurry",
+      "Telling the young apprentices how the brickworks was when he was a lad"
+    ],
+    "calling": "The brickworks is my life's work, and a good brick laid true will outlast every quarrel on this island."
   }
 }

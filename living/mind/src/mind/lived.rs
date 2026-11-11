@@ -109,24 +109,6 @@ pub struct Lived {
     players: HashMap<u32, Player>,
 }
 
-/// What an integration takes in: what a person lived through their character, or a woken
-/// resident's ring of perceptions from before it had a mind (docs/TOWN_LIFE.md, "Layer 2").
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) enum Source {
-    Lived,
-    Ring,
-}
-
-impl Source {
-    /// The mark on everything the integration writes (`lived_under`).
-    fn lived_under(self) -> &'static str {
-        match self {
-            Source::Lived => "human",
-            Source::Ring => "instinct",
-        }
-    }
-}
-
 /// One character's integration, ready to be sent.
 pub(super) struct Prepared {
     actor: u32,
@@ -136,7 +118,6 @@ pub(super) struct Prepared {
     known: Vec<u64>,
     pub(super) msgs: Vec<Msg>,
     reason: &'static str,
-    source: Source,
 }
 
 /// Why a character's waiting experiences are due for integration, if they are: it died, its
@@ -329,23 +310,22 @@ impl Minds {
             return Ok(None);
         }
         let _ = store;
-        self.integration(&c, batch, upto, reason, Source::Lived).await.map(Some)
+        self.integration(&c, batch, upto, reason).await.map(Some)
     }
 
     /// An integration of `batch` into the character's mind, ready to be sent: its meaningful
     /// lines (salience 0.2 and above) with where they happened, what its mind recalls for them,
     /// and who it is.
-    pub(super) async fn integration(&self, c: &Character, batch: Vec<Experience>, upto: u64, reason: &'static str, source: Source) -> Result<Prepared> {
+    async fn integration(&self, c: &Character, batch: Vec<Experience>, upto: u64, reason: &'static str) -> Result<Prepared> {
         let Some(store) = &self.store else { return Err(anyhow::anyhow!("no memory store")) };
         let actor = c.id;
         let meaningful: Vec<&Experience> = batch.iter().filter(|e| e.salience >= 0.2).collect();
         store.ensure_self(actor, &c.name).await?;
         let fmt = self.fmt_time();
         let recalled = self.recall_for(actor, &self.experience_cues(actor, &meaningful), 32, 6, "consolidate").await;
-        let persona = match (self.conn.db.persona().id().find(&actor), source) {
-            (Some(_), _) => self.persona_text(actor),
-            (None, Source::Lived) => "(played by a person: who they are shows only in what they do)".into(),
-            (None, Source::Ring) => "(a resident of this place; who they are comes from the world's facts)".into(),
+        let persona = match self.conn.db.persona().id().find(&actor) {
+            Some(_) => self.persona_text(actor),
+            None => "(played by a person: who they are shows only in what they do)".into(),
         };
         let ctx = prompts::Ctx {
             name: &c.name,
@@ -360,13 +340,9 @@ impl Minds {
             experiences: meaningful.iter().map(|e| format!("{}{}", self.exp_line(e, &fmt, true), self.lived_where(e))).collect(),
             dealings: self.dealings(actor),
         };
-        let system = match source {
-            Source::Lived => prompts::internalize_system(),
-            Source::Ring => prompts::ring_system(),
-        };
-        let msgs = vec![Msg { role: "system", content: system }, Msg { role: "user", content: prompts::consolidate_user(&ctx) }];
+        let msgs = vec![Msg { role: "system", content: prompts::internalize_system() }, Msg { role: "user", content: prompts::consolidate_user(&ctx) }];
         let known = meaningful.iter().map(|e| e.id).collect();
-        Ok(Prepared { actor, name: c.name.clone(), upto, batch, known, msgs, reason, source })
+        Ok(Prepared { actor, name: c.name.clone(), upto, batch, known, msgs, reason })
     }
 
     async fn lived_advance(&self, actor: u32, upto: u64) -> Result<()> {
@@ -381,7 +357,7 @@ impl Minds {
         Ok(())
     }
 
-    pub(super) async fn lived_finish(&self, prep: Prepared, reply: llm::Reply, mode: &str) -> Result<()> {
+    async fn lived_finish(&self, prep: Prepared, reply: llm::Reply, mode: &str) -> Result<()> {
         let Some(store) = &self.store else { return Ok(()) };
         let v = llm::parse_json(&reply.content)?;
         let now = llm::now_ms();
@@ -397,32 +373,24 @@ impl Minds {
         let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
         self.name_people(actor, &mut patch);
-        patch.lived_under = Some(prep.source.lived_under().into());
+        patch.lived_under = Some("human".into());
         store.apply(actor, &patch, &thought_ref, now).await?;
         // Who the person shows themselves to be, read from their conduct (docs/PLAYER_MEMORY.md):
-        // only a real change becomes a new version of the identity. A woken resident's identity
-        // comes from the world's facts (woken.rs), not from its ring.
+        // only a real change becomes a new version of the identity.
         let identity = match &v["identity"] {
-            Value::Object(p) if prep.source == Source::Lived && p.get("narrative").and_then(|n| n.as_str()).is_some_and(|n| !n.is_empty()) && self.persona_changed(actor, p) => Some(p.clone()),
+            Value::Object(p) if p.get("narrative").and_then(|n| n.as_str()).is_some_and(|n| !n.is_empty()) && self.persona_changed(actor, p) => Some(p.clone()),
             _ => None,
         };
         if let Some(p) = &identity {
             let version = self.conn.db.persona().id().find(&actor).map(|x| x.version + 1).unwrap_or(1);
             store.set_identity(actor, version, &Value::Object(p.clone()), p.get("why").and_then(|w| w.as_str()).unwrap_or_default(), &thought_ref, now).await?;
         }
-        match prep.source {
-            Source::Lived => self.lived_advance(actor, prep.upto).await?,
-            Source::Ring => store.set_woken_upto(actor, prep.upto, now).await?,
-        }
+        self.lived_advance(actor, prep.upto).await?;
         let summary = v["summary"].as_str().unwrap_or_default().to_string();
         log::info!(
-            "{} internalized {} {} ({}, {mode}; +{} edges, -{} retracted, {} memories): {summary}",
+            "{} internalized {} lived experiences ({}, {mode}; +{} edges, -{} retracted, {} memories): {summary}",
             prep.name,
             prep.known.len(),
-            match prep.source {
-                Source::Lived => "lived experiences",
-                Source::Ring => "perceptions from before it woke",
-            },
             prep.reason,
             patch.edges.len(),
             patch.retract.len(),
@@ -431,7 +399,7 @@ impl Minds {
         let thought = ThoughtIn {
             kind: "internalize".into(),
             summary,
-            detail: json!({"lived_under": prep.source.lived_under(), "reason": prep.reason, "mode": mode, "experiences": prep.known, "upto": prep.upto, "reply": v, "patch": patch, "notes": notes}).to_string(),
+            detail: json!({"lived_under": "human", "reason": prep.reason, "mode": mode, "experiences": prep.known, "upto": prep.upto, "reply": v, "patch": patch, "notes": notes}).to_string(),
             latency_ms: reply.latency_ms,
             tokens: reply.tokens,
             model: reply.model,
@@ -446,6 +414,9 @@ impl Minds {
                 goals: cur.as_ref().map(|c| c.goals.clone()).unwrap_or_default(),
                 traits: p.get("traits").map(|t| t.to_string()).unwrap_or_else(|| "{}".into()),
                 mood: p.get("mood").and_then(|x| x.as_str()).unwrap_or_default().into(),
+                // What a person enjoys is theirs to show; kept as it was.
+                pastimes: Vec::new(),
+                calling: String::new(),
             }
         });
         // The graph is the memory; the projection is what the body and the observer read. An

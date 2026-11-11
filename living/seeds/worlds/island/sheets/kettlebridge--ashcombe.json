@@ -10,7 +10,9 @@
     "goals": [
       "get the grain tithe counted in greens and roots",
       "see the winter through with the seed store intact",
-      "keep Rosalind from rushing into a quarryman's marriage"
+      "keep Rosalind from rushing into a quarryman's marriage",
+      "master a green manure that will hold the topsoil on the steepest strip",
+      "build a proper cold frame from scrap timber to start his seedlings earlier"
     ],
     "mood": "sour and stubborn, but worried underneath",
     "traits": {
@@ -153,7 +155,13 @@
         "why": "Ruth Pike pays on time and the town must eat what we grow"
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking his strips at first light to read the soil",
+      "a mug and a game of dice at the works' ordinary of an evening",
+      "telling the old terrace stories to whoever will sit still"
+    ],
+    "calling": "I grow greens and roots on thin ground, and I grow them well; the land is poor but it is mine to read."
   },
   "Verity Ashcombe": {
     "narrative": "I keep the terrace hens and the seed store, and I can tell you which strip will fail by the look of the soil in spring. Hedley frets at the tithe and the clerk's hard ledger, and I let him fret; I would trade eggs and roots against it tomorrow if the clerk would write them down. Rosalind is set on her new crop and her quarryman, and I say let the girl try — the poor ground will teach her what I cannot. Ottilie talks of nothing but the harbour, and I have not the heart to tell her I have never seen it either.",
@@ -166,7 +174,9 @@
     "goals": [
       "trade eggs and roots against the grain tithe",
       "keep the seed store through the winter",
-      "see Rosalind settled without a family quarrel"
+      "see Rosalind settled without a family quarrel",
+      "learn to write her own egg-and-root accounts so the clerk cannot talk over her",
+      "see the harbour at Lanternquay at least once before she is too old to walk it"
     ],
     "mood": "steady and watchful, tired of the tithe talk",
     "traits": {
@@ -309,7 +319,13 @@
         "why": "Mabel hears everything and her stall takes our eggs without a word"
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the hens and sorting eggs by the window",
+      "trading gossip with Mabel Fenwick at her stall",
+      "sitting in the sun on the terrace wall with her seed ledger open on her knee"
+    ],
+    "calling": "I keep the hens and the seed store, and I know by the look of the soil in spring which strip will fail."
   },
   "Rosalind Ashcombe": {
     "narrative": "I work the terrace strips with my father, and I have a mind to try a new crop on the poor ground — clover and roots to hold the soil, whatever the old men say. I am courting Corwin Vance, and both our fathers have opinions they were not asked for; mine says wait a year, and Corwin's says a farmer's daughter is beneath a foreman's son. I am tired of the grumbling on both sides. The ground is the only thing here that tells the truth.",
@@ -322,7 +338,9 @@
     "goals": [
       "prove a new crop on the poor strip",
       "marry Corwin Vance without the fathers' quarrel",
-      "win a strip of her own to farm"
+      "win a strip of her own to farm",
+      "master the clover-and-roots rotation well enough to show it on a whole strip",
+      "save enough marks of her own to rent a strip in her name"
     ],
     "mood": "restless and determined",
     "traits": {
@@ -471,7 +489,13 @@
         "why": "the soil says what will grow, and no clerk or foreman can argue with it"
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the terrace strips at dusk to check the new clover",
+      "meeting Corwin Vance on the road below the clock tower",
+      "sitting with Lottie Fenwick and arguing about crops and suitors"
+    ],
+    "calling": "I work the poor ground and I mean to prove what it can do when someone tries something the old men won't."
   },
   "Ottilie Ashcombe": {
     "narrative": "I drive the hens off the seed rows and help Mother with the eggs, and when the work is done I climb the clock tower steps and look south as far as I can see. They say Lanternquay is all neon and boats and tide lanterns lit for the drowned, and I have never been past the square. Rosalind says she will take me one day. I keep a gull's feather in my pocket for luck.",
@@ -483,7 +507,9 @@
     "goals": [
       "see Lanternquay and the tide lanterns",
       "keep the hens out of the seed rows",
-      "grow tall enough to climb the clock tower alone"
+      "grow tall enough to climb the clock tower alone",
+      "see Lanternquay and the tide lanterns with her own eyes",
+      "keep a gull's feather and collect one from every kind of bird on the island"
     ],
     "mood": "bright and daydreaming",
     "traits": {
@@ -573,6 +599,12 @@
         "why": "the hens and eggs are my work and Mother trusts me with them"
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "climbing the clock tower steps to look south as far as she can see",
+      "chasing the hens off the seed rows (and sometimes not chasing them)",
+      "playing gull-and-harbour with Lottie and Perry Fenwick"
+    ],
+    "calling": "I help with the hens and the eggs, but what I want is to see the harbour and the tide lanterns."
   }
 }

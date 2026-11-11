@@ -70,6 +70,9 @@ pub struct Shape {
     pub hostile: bool,
     /// Takes the body back from a deliberate act.
     pub reflex: bool,
+    /// A dash during which blows and missiles miss (the dodge). On for a dash unless its
+    /// `<skill>_combat()` says `evades: false` (a jump carries the body without dodging).
+    pub evades: bool,
     /// Behavior of the moment: it belongs in a graph, not in a one-off act.
     pub real_time: bool,
     /// A blow in reach, carrying the rules' `lunge(kind)`: out of reach by more when it
@@ -98,10 +101,6 @@ pub struct Shape {
     pub needs: Vec<String>,
     pub knows: Vec<String>,
 }
-
-/// Skills that are not combat skills but are behavior of the moment (walking, resting): they
-/// belong in a graph, not in an act. Combat skills say so themselves (`Shape::real_time`).
-pub const MOVES: &[&str] = &["wander", "flee", "follow", "wait", "sleep", "rest", "graze"];
 
 /// The combat skills a script declares, by name, and its skill bar. Codes start in name order;
 /// the authority replaces them with the stable codes it keeps (`with_codes`), so a skill keeps
@@ -180,13 +179,13 @@ impl Shapes {
 
     /// Ongoing or real-time behavior: it belongs in a graph, not in a one-off act.
     pub fn real_time(&self, skill: &str) -> bool {
-        MOVES.contains(&skill) || self.get(skill).is_some_and(|s| s.real_time)
+        crate::catalog::skill(skill).is_some_and(|k| k.moment) || self.get(skill).is_some_and(|s| s.real_time)
     }
 
     /// A reflex in a graph takes the body back from a deliberate act (fleeing, or a combat
     /// skill that says so).
     pub fn reflex(&self, skill: &str) -> bool {
-        skill == "flee" || self.get(skill).is_some_and(|s| s.reflex)
+        crate::catalog::skill(skill).is_some_and(|k| k.reflex) || self.get(skill).is_some_and(|s| s.reflex)
     }
 
     /// The skill whose knack gene serves this one.

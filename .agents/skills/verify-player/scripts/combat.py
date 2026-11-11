@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|heal|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|jump|heal|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -399,6 +399,7 @@ def scene_block(st):
 
 
 def scene_dodge(st):
+    t0 = int(time.time() * 1000)
     cid = me(st)
     p = body(st, cid)
     a = attacker(st, cid, p, 1.1)
@@ -416,9 +417,37 @@ def scene_dodge(st):
     call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
     time.sleep(1.0)
     p2 = body(st, cid)
-    ev = [e for e in seen(st) if e["target"] == cid and e["actor"] == a and e["kind"] in (2, 3, 5)]
+    ev = [e for e in seen(st) if e["target"] == cid and e["actor"] == a and e["kind"] in (2, 3, 5) and e["at_ms"] >= t0]
     moved = p2 and math.dist(p, p2)
     check(st, "a dodge dashes (moves ~2.6 m) and the blow misses or is dodged", started and moved and moved > 1.5 and ev and ev[-1]["kind"] in (3, 5), f"moved {moved and round(moved, 2)} m, events {[e['kind'] for e in ev]}")
+    call(st, "set_behavior", [a, '{"wait":60}'], "admin")
+
+
+def scene_jump(st):
+    """A jump (2026-11-11) carries the body like a dash but does not evade: jumping toward a
+    resident whose strike is winding up, the blow is not dodged (it lands, or misses by reach)."""
+    t0 = int(time.time() * 1000)  # the attacker is the earlier scenes' resident: their rows stay 4 s
+    cid = me(st)
+    p = body(st, cid)
+    a = attacker(st, cid, p, 1.1)
+    strike = code_of(st, "strike")
+    t = time.time() + 3
+    started = False
+    while time.time() < t:
+        f = sql(st, f"SELECT act, release_ms FROM fighter WHERE id = {a}")
+        if f and f[0]["act"] == strike and f[0]["release_ms"] > time.time() * 1000:
+            started = True
+            break
+        time.sleep(0.03)
+    q = body(st, a) or (p[0] + 1.1, p[1])
+    ready(st, "jump")
+    call(st, "use_skill", ["jump", 0, q[0], q[1]])
+    time.sleep(1.0)
+    p2 = body(st, cid)
+    ev = [e for e in seen(st) if e["target"] == cid and e["actor"] == a and e["kind"] in (2, 3, 5) and e["at_ms"] >= t0]
+    moved = p2 and math.dist(p, p2)
+    u = last_use(st, "jump")
+    check(st, "a jump hops about 1.6 m and the blow is not dodged (HIT or MISS, never DODGED)", started and moved and 0.8 < moved < 2.2 and ev and all(e["kind"] != 5 for e in ev) and u and u["outcome"] == "made way", f"moved {moved and round(moved, 2)} m, events {[e['kind'] for e in ev]}, outcome {u and u['outcome']}")
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
 
 
@@ -480,7 +509,7 @@ def scene_death(st):
     check(st, "rejoining makes a new identity with only the newcomer's kit", code == 200 and new and new != cid and {r["item"] for r in inv} <= {"bow", "arrow", "berries"}, f"{cid} -> {new}; {inv}; {[k['technique'] for k in know]}")
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
 
 
 def main():

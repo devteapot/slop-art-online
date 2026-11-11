@@ -57,10 +57,9 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         }
     }
     drop(phase);
-    // Missiles in flight are swept along their paths; what players saw expires.
+    // Missiles in flight are swept along their paths.
     let phase = common::span("tick.missiles");
     crate::combat::missiles(ctx, now);
-    crate::combat::expire(ctx, now);
     drop(phase);
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
@@ -91,6 +90,10 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // What each player's character perceives (docs/PERCEPTION.md), each every 200 ms.
     let phase = common::span("tick.perception");
     crate::perception::sweep(ctx, now);
+    drop(phase);
+    // What each player is shown of the others in its scene, at its frame (frame.rs).
+    let phase = common::span("tick.frames");
+    crate::frame::deliver(ctx, now);
     drop(phase);
     let phase = common::span("tick.slots");
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
@@ -185,6 +188,7 @@ fn spoil(ctx: &ReducerContext, now: u64) {
     // A carrier's share of the rate by kind (an animal keeps its kill by it), looked up once
     // per owner with something perishable (an owner's stacks come together).
     let mut shares: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+    let mut kept: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
     let mut carrier: (u64, f32) = (u64::MAX, 1.0);
     for mut r in rows.into_iter().filter(|r| r.qty > 0) {
         let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.num_of("spoil_rate", &r.item, 0.0) as f32);
@@ -192,7 +196,9 @@ fn spoil(ctx: &ReducerContext, now: u64) {
             continue;
         }
         let rate = if r.owner & STRUCTURE_BIT != 0 {
-            rate / 3.0
+            // Kept in a structure: the `kept_spoil` law's share for its kind.
+            let kind = ctx.db.structure().id().find(r.owner & !STRUCTURE_BIT).map(|s| s.kind).unwrap_or_default();
+            rate * *kept.entry(kind.clone()).or_insert_with(|| sc.num_of("kept_spoil", &kind, 1.0 / 3.0) as f32)
         } else {
             if carrier.0 != r.owner {
                 let share = ctx.db.character().id().find(r.owner as u32).map_or(1.0, |c| *shares.entry(c.kind.clone()).or_insert_with(|| sc.num_of("carried_spoil", &c.kind, 1.0) as f32));
@@ -333,6 +339,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     crate::presence::housekeeping(ctx, now);
     crate::town::guests_leave(ctx, now);
     crate::perception::expire(ctx, now);
+    crate::combat::expire(ctx, now);
     crate::records::housekeeping(ctx, now);
     let hour = common::hour(&w, now) as u8;
     if hour != k.last_hour {
@@ -341,12 +348,8 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             common::chronicle(ctx, now, "time", 0, 0, (0.0, 0.0), format!("Night falls on day {day}."));
         } else if hour == 6 {
             common::chronicle(ctx, now, "time", 0, 0, (0.0, 0.0), format!("Dawn of day {day}."));
-            // Each person plans the day ahead (work, meals, learning, time with others).
-            let season = common::season(ctx, now);
-            let planners: Vec<u32> = ctx.db.character().kind().filter("person").filter(|c| c.alive && c.ai).map(|c| c.id).collect();
-            for id in planners {
-                crate::perceive::request_deliberation(ctx, id, &format!("Dawn of day {day} ({season}). A new day."), now);
-            }
+            // No one is asked to think at dawn: each person's new day begins at its own rising
+            // (brain.rs, `rhythm.last_day`).
         }
         k.last_hour = hour;
     }
@@ -411,10 +414,13 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             }
         }
     }
-    for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > 180_000).map(|o| o.id).collect::<Vec<_>>() {
+    // Offers are dropped a minute after they can no longer be taken up (the laws' windows).
+    let laws = common::laws(ctx);
+    let (bond_ms, trade_ms) = ((laws.bond_window_s * 1000.0) as u64 + 60_000, (laws.trade_window_s * 1000.0) as u64 + 60_000);
+    for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > bond_ms).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.bond_offer().id().delete(o);
     }
-    for o in ctx.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > 240_000).map(|o| o.id).collect::<Vec<_>>() {
+    for o in ctx.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > trade_ms).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.trade_offer().id().delete(o);
     }
 

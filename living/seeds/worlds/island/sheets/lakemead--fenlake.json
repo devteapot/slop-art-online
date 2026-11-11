@@ -11,7 +11,9 @@
       "keep the boathouse's standing with Nell Sedge paid up",
       "get a new net made before the autumn run",
       "see the Coombes through their thin rent without going short myself",
-      "keep Gristle off the deep water at the lake's middle"
+      "keep Gristle off the deep water at the lake's middle",
+      "make a new net herself, knot by knot, before the autumn run",
+      "take Gristle out to the far reeds on a calm morning and teach him the shallows"
     ],
     "mood": "sore and stubborn, with a morning's work still to do",
     "traits": {
@@ -151,7 +153,13 @@
         "why": "They are behind on their rent and I trade fish for cheese with them anyway; a neighbour who goes under is no good to anyone."
       }
     ],
-    "secret": "I have been holding back a little of Nell's share of the catch these last weeks, telling myself it is against a thin season, and I have not told her or anyone."
+    "secret": "I have been holding back a little of Nell's share of the catch these last weeks, telling myself it is against a thin season, and I have not told her or anyone.",
+    "pastimes": [
+      "punting out on the lake at first light, before anyone else is up",
+      "smoking the morning's catch in the shed behind the boathouse",
+      "sitting on the boathouse step at dusk with Gristle, watching the mist come down"
+    ],
+    "calling": "I take what the lake gives and I smoke it clean; that's the work I know and I'll not have another."
   },
   "Gristle Fenlake": {
     "narrative": "I live in the boathouse with Mam and help her with the punt and the smoke shed. I know where the shallow pools are and where the bottom drops away, and I do not go near the middle of the lake where it is deep and dark. I play with Osric Coombe when the goats bring him down to the meadow edge, and I can mend a net as well as anyone.",
@@ -163,7 +171,9 @@
     "goals": [
       "learn to pole the punt all the way to the far reeds",
       "catch a fish bigger than my arm",
-      "not think about the deep water"
+      "not think about the deep water",
+      "learn to pole the punt all the way to the far reeds without Mam's hand on the rope",
+      "catch a fish bigger than his arm"
     ],
     "mood": "busy and a little wary",
     "traits": {
@@ -235,6 +245,12 @@
         "why": "She works before light and I am the only one to help her."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending nets on the boathouse boards",
+      "playing by the meadow edge with Osric Coombe when the goats come down",
+      "poking about the shallow pools for minnows and shells"
+    ],
+    "calling": "I want to pole the punt proper one day, like Mam, and bring in a catch of my own."
   }
 }

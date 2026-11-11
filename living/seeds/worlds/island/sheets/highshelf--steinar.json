@@ -12,7 +12,9 @@
       "keep the cairns on the ridges in repair",
       "raise the shelf's walls and houses sound",
       "see Liv's storehouse built when the time is right",
-      "keep the shelf from trading with Kettlebridge until the cairn is answered for"
+      "keep the shelf from trading with Kettlebridge until the cairn is answered for",
+      "teach Steinarr to dress a stone true before he is grown",
+      "see the cairn on the north ridge whole again in his lifetime"
     ],
     "mood": "steady, grave, a little tired",
     "traits": {
@@ -152,7 +154,13 @@
         "why": "The shelf feeds us and shelters us; its store and its walls come before any one house."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the ridge cairns at first light, checking each stone by hand",
+      "sitting on a finished wall at dusk with a cup of goat's milk",
+      "telling Steinarr the old stories of the shelf's first walls"
+    ],
+    "calling": "I raise stone that will stand after me, and I keep the cairns of the dead as my father kept them."
   },
   "Yrsa": {
     "narrative": "I keep the goats and the wool store, and I spin and mend for the whole shelf. Steinar is out at the cairns or the walls from first light, and I keep the house and the store in order. Liv wants her storehouse, and I would see it too, but not before the shelf's own store is full for winter. I trade wool with the Fernhollow small folk when they come, and I do not ask my husband's leave for it.",
@@ -167,7 +175,9 @@
       "fill the wool store and the root cellar before winter",
       "see Liv's storehouse built when the shelf can spare the stone",
       "keep trade with Fernhollow for fibre",
-      "keep the goats healthy"
+      "keep the goats healthy",
+      "learn a Fernhollow salve-recipe for the goats' winter cough",
+      "see Steinarr through his first winter of real chores without a complaint"
     ],
     "mood": "busy, warm, a little worried about the winter store",
     "traits": {
@@ -302,7 +312,13 @@
         "why": "I would rather trade with Kettlebridge for timber than see Liv's storehouse wait another year, though I would not say so to Hollbrenna."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "spinning wool by the hearth through the evening",
+      "tending the goats on the shelf meadow and naming each new kid",
+      "trading wool and gossip with Pipwort when the small folk come up"
+    ],
+    "calling": "I keep the shelf warm and fed: the wool, the store, the house, and all of it in order before the frost."
   },
   "Liv": {
     "narrative": "I cut and dress stone beside my father, and I have drawn a storehouse in my head that would keep the shelf's grain dry through any winter. Father says the cairns must come first, and Eirik says we should trade with Kettlebridge for timber before we build. I say the cairns can wait a season and the storehouse cannot. I will raise it before the frost if I have to quarry the stone myself.",
@@ -317,7 +333,9 @@
       "build a new stone storehouse before winter",
       "persuade Steinar to spare stone and hands",
       "get Eirik to speak for timber from Kettlebridge",
-      "cut and dress the stone for the storehouse herself"
+      "cut and dress the stone for the storehouse herself",
+      "master the corner-joint her father uses without needing his eye on it",
+      "see the shelf's grain store full and dry one winter, whatever it takes"
     ],
     "mood": "determined, impatient, hopeful",
     "traits": {
@@ -460,7 +478,13 @@
         "why": "A well-cut stone needs no argument."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sketching storehouse plans with charcoal on a flat slate",
+      "quarrying and dressing stone with her own hands when the day's work is done",
+      "walking the shelf edge at evening to look down at Kettlebridge's smoke"
+    ],
+    "calling": "I cut and dress stone, and I mean to leave the shelf a storehouse that keeps its grain dry through any winter."
   },
   "Eirik": {
     "narrative": "I raise roofs and haul stone from the range with the sledge, and I work for Steinar. Liv wants her storehouse before the frost, and I think she is right that it is needed, but we cannot build it without timber, and the only timber worth having is Kettlebridge's. Hollbrenna has forbidden trade with Kettlebridge, and I have not said to her face that the ban must bend. I will say it when the time comes.",
@@ -475,7 +499,9 @@
       "see the storehouse built with timber from Kettlebridge",
       "persuade Hollbrenna to bend the ban for timber",
       "keep working for Steinar and earning his keep",
-      "raise the shelf's roofs sound"
+      "raise the shelf's roofs sound",
+      "learn to read a timber's grain well enough to choose it himself",
+      "take Steinarr up the track to see the high pasture when he is older"
     ],
     "mood": "thoughtful, a little uneasy, determined",
     "traits": {
@@ -620,7 +646,13 @@
         "why": "A roof that does not leak is worth more than a hundred words."
       }
     ],
-    "secret": "He has not told Hollbrenna that he thinks the ban on Kettlebridge trade must bend for timber."
+    "secret": "He has not told Hollbrenna that he thinks the ban on Kettlebridge trade must bend for timber.",
+    "pastimes": [
+      "riding the empty sledge down from the range with Steinarr aboard",
+      "mending tools and harness by the fire",
+      "sharing a cup with Tavvik when the hunter comes down the track"
+    ],
+    "calling": "I raise roofs and haul stone, and I would build the shelf's houses sound and warm."
   },
   "Steinarr": {
     "narrative": "The stone chips are warm from the sun and I stack them into walls. Grandfather Steinar lifts me up to see the goats on the shelf, and Father lets me ride the sledge when it is empty. I play with Grimhild and we hide among the stone blocks. I am not allowed to go near the deep caves.",
@@ -633,7 +665,9 @@
     "goals": [
       "build a wall as high as Grandfather's",
       "play with Grimhild",
-      "ride the sledge with Father"
+      "ride the sledge with Father",
+      "build a wall taller than his own knees",
+      "see the goats come down from the high pasture with Grandfather"
     ],
     "mood": "curious, happy, a little shy",
     "traits": {
@@ -700,6 +734,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "stacking stone chips into little walls",
+      "hiding among the stone blocks with Grimhild",
+      "riding the empty sledge with Father"
+    ],
+    "calling": "When I am big I will build walls as high as Grandfather's."
   }
 }

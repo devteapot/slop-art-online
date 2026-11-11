@@ -3,7 +3,7 @@
  "title": "A newcomer's life: lean berries and a house with signs",
  "about": "As `life`, with berry bushes at 40% of the island's density (the seed's resource_scale). Before the newcomer's mind starts, a Brackenford resident is given writing, fishing and smoking and three wood, walks into the unowned house nearest the arrival point, puts up two signs there (the ordinary write skill: signs are structures that hold their text and topic), and goes home. Reading a sign needs writing, which no newcomer has; experimenting with wood can reveal it.",
  "gradient": "Forage in a lean land -> explore -> find the empty house and its signs -> learn writing (experiment with wood) -> read the signs: fishing, smoking -> fish, smoke fish over a fire (fire is known) -> food that keeps through winter; the empty house is also a shelter.",
- "world": {"seed": "island", "rules": {"minds": false}, "overrides": {"resource_scale": {"berry_bush": 0.4}}},
+ "world": {"seed": "island", "overrides": {"resource_scale": {"berry_bush": 0.4}}},
  "cast": {
   "scribe": {"pick": {"kind": "person", "stage": 2, "bg": {"town": "Brackenford"}, "mindable": false}}
  },

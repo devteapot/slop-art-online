@@ -16,6 +16,7 @@
 //! - **F** acts on what is under the cursor, else the nearest thing or creature within reach:
 //!   a tap does the most likely act (the one I last chose for that kind, else the first the
 //!   rules allow on a thing); holding F, or a tap with nothing likely (a person), opens the list.
+//!   With nothing within reach, F says so (C opens the list of acts on myself).
 //! - **C** opens the list of acts on myself (eat, sleep, craft, write, ...), with what I carry.
 //! - **I** and **K** toggle the inventory and the know-how panels (`ui/verbs.rs`).
 //! - In a list: 1–9 and 0 or a click picks, Esc or the same key closes. A skill with many items opens
@@ -276,7 +277,7 @@ fn plan(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, spec: &S
             items.extend(me.actor.inv.iter().map(|(i, _)| i.clone()));
             items.extend(me.actor.knows.iter().cloned());
             if !matches!(aim, Aim::Me) {
-                items.extend(catalog::ITEMS.iter().map(|i| i.name.to_string()));
+                items.extend(catalog::item_names());
             }
         }
         items.extend(spec.items.iter().cloned());
@@ -301,7 +302,7 @@ fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill,
         }
         // A skill that asks something in return is checked with something to ask for (each
         // thing there is becomes its own choice below).
-        let want = if spec.args.iter().any(|a| a == "want") { catalog::ITEMS.iter().map(|i| i.name).find(|w| *w != item).unwrap_or_default() } else { "" };
+        let want = if spec.args.iter().any(|a| a == "want") { catalog::item_names().into_iter().find(|w| w != item).unwrap_or_default() } else { String::new() };
         SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, want: want.to_string(), want_qty: (!want.is_empty()) as u32, night: me.night, hour: me.hour, season: "summer".into(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
     };
     let allowed = |item: &str, text: &str| sc.check(skill, &ctx(item, text, (!item.is_empty()).then_some(item))).is_ok();
@@ -327,7 +328,7 @@ fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill,
     let c = Choice { item: Some(item.to_string()), words, ..Choice::new(skill, label) };
     // A trade or terms name what I ask in return: one choice per thing to ask for.
     if plan.asks {
-        for w in catalog::ITEMS.iter().map(|i| i.name.to_string()).chain(spec.items.iter().cloned()).filter(|w| w != item) {
+        for w in catalog::item_names().into_iter().chain(spec.items.iter().cloned()).filter(|w| w != item) {
             out.push(Choice { want: Some(w.clone()), label: format!("{} {} for {}", pretty(skill), pretty(item), pretty(&w)), ..c.clone() });
         }
     } else {
@@ -391,7 +392,9 @@ pub fn rows(choices: &[Choice], group: Option<&str>) -> Vec<Row> {
 }
 
 /// The act a tap does: the one I last chose for this kind of target, else, on a thing, the
-/// first the rules allow that needs no further choice and is no use of force.
+/// first the rules allow that needs no further choice, is no use of force and is not a gesture
+/// toward it (a skill whose `_shows()` faces its target: waving, nodding, looking over, turning
+/// to face; play-test 1 found F offering "face" on a berry bush).
 pub fn likely<'a>(sc: &Scripts, aim: &Aim, choices: &'a [Choice], last: Option<&Choice>) -> Option<&'a Choice> {
     if let Some(l) = last {
         if let Some(c) = choices.iter().find(|c| c.skill == l.skill && c.item == l.item && c.want == l.want && c.say == l.say) {
@@ -403,7 +406,8 @@ pub fn likely<'a>(sc: &Scripts, aim: &Aim, choices: &'a [Choice], last: Option<&
     }
     let force = |s: &str| sc.shapes().get(s).is_some_and(|s| s.hostile || s.force || s.menace);
     let per_skill = |s: &str| choices.iter().filter(|c| c.skill == s).count();
-    choices.iter().find(|c| !c.words && c.want.is_none() && c.say.is_none() && !force(&c.skill) && per_skill(&c.skill) == 1)
+    let gesture = |s: &str| sc.shows().faces(s);
+    choices.iter().find(|c| !c.words && c.want.is_none() && c.say.is_none() && !force(&c.skill) && !gesture(&c.skill) && per_skill(&c.skill) == 1)
 }
 
 // ---- state --------------------------------------------------------------------------------
@@ -850,7 +854,9 @@ pub fn input(
                     }
                 }
             } else {
-                open(&mut v, Aim::Me, None);
+                // Nothing within reach: say so, briefly. Opening my own list here (as before) met a
+                // newcomer's first F with fourteen abstract acts (play-test 1); C opens it.
+                v.toasts.push(Toast { text: "Nothing within reach — C for your own acts".into(), ok: None, at: now });
             }
         }
     } else if v.menu.as_ref().is_some_and(|m| m.aim != Aim::Me) && pressed(INTERACT) {

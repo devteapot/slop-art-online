@@ -10,7 +10,9 @@
     "goals": [
       "keep the north gate's accounts clean enough that no one looks twice",
       "put by enough marks that Mildgyth need never ask where they came from",
-      "see Aelfric into a trade better than standing in the cold"
+      "see Aelfric into a trade better than standing in the cold",
+      "learn to read a carter's tally faster than he can argue with it",
+      "take Aelfric fishing off Thornby's shore one summer day when the gate can spare me"
     ],
     "mood": "watchful, a little tired",
     "traits": {
@@ -143,7 +145,13 @@
         "why": "What is said at the gate at night is not said again by me."
       }
     ],
-    "secret": "I let a Kettlebridge carter through the north gate without paying the due, for a bribe of marks I keep in a tin under the floor."
+    "secret": "I let a Kettlebridge carter through the north gate without paying the due, for a bribe of marks I keep in a tin under the floor.",
+    "pastimes": [
+      "walking the wall at dusk to check the gate bolts himself",
+      "playing dice with Wat Fenner at the Bell and Bucket on his off evening",
+      "carving little wooden spears for Aelfric by the kitchen fire"
+    ],
+    "calling": "I keep the north gate and its book, and I'd have it no other way than quiet and straight."
   },
   "Mildgyth Grey": {
     "narrative": "I was a guard's daughter before I was a guard's wife, and I know what a mess needs: fire, salt, and someone up before the men. I cook for the gate guards with Sigrid Marsh, and I keep my own house and my own tongue. Edric is quiet and I let him be quiet; there are things in this house I do not ask after. Aelfric is the whole of my worry.",
@@ -156,7 +164,9 @@
     "goals": [
       "keep the guards' mess fed through the winter",
       "see Aelfric learn letters and a trade",
-      "keep my house out of the Reeve's and the Guild's quarrels"
+      "keep my house out of the Reeve's and the Guild's quarrels",
+      "learn to write well enough to keep her own household accounts",
+      "make a proper cloak for Aelfric before the cold sets in"
     ],
     "mood": "steady, quietly anxious",
     "traits": {
@@ -283,7 +293,13 @@
         "why": "I stood in the cold for others; my son will not."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "singing the old Hearth songs while she salts the mess pots",
+      "tending the herb pots on her windowsill",
+      "walking to the chapel on rest days to sit with Sister Elspeth"
+    ],
+    "calling": "I feed the guards before the sun and my own at night, and that is work worth doing well."
   },
   "Aelfric Grey": {
     "narrative": "I am seven and I know every guard at the north gate by name. I like the spears and the counting and the big carts that come in from the woods. When I grow up I want to stand the gate like my father, and I want a dog.",
@@ -294,7 +310,9 @@
     ],
     "goals": [
       "be a guard when I am big",
-      "learn all the guards' names and the carters' too"
+      "learn all the guards' names and the carters' too",
+      "learn every guard's name and every carter's too",
+      "get a dog of his own"
     ],
     "mood": "curious and busy",
     "traits": {
@@ -354,6 +372,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "playing at guards with Bram Fenner on the gate steps",
+      "chasing the carters' dogs round the square",
+      "watching the smith at his forge when his mother lets him"
+    ],
+    "calling": "When I am big I will stand the gate like my father and count the carts."
   }
 }

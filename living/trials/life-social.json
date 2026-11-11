@@ -1,13 +1,10 @@
 {
  "extends": "life",
- "title": "Residents who answer: the island with woken residents",
- "about": "The life control (one mind-backed newcomer on the island as shipped, every other character instinct-only) with town life layer 2: a resident the newcomer engages (speaks to, greets, gives to, trades with, asks to join, attacks) wakes into a mind and keeps it (docs/TOWN_LIFE.md, 'Layer 2'). Before waking each resident keeps a ring of what it perceived (the woken_ring law), which its mind internalizes when it wakes. The waking engagements, the ring and the stage cap are laws in living/scripts/skills.rhai, not settings of this trial. Residents' minds think with the variant's model like the newcomer's; run it with the deepseek-flash variant (fastest good talker) as replicates on fixed world seeds. The runner must pass LIVING_ONLY=<subject>,woken (see 'needs').",
+ "title": "Residents who answer: the island where every resident thinks",
+ "about": "The life control (one mind-backed newcomer on the island as shipped) with every resident's mind thought for by the same service: `minds.only` is `all`, so the runner sets no LIVING_ONLY and every person and animal of the island is this service's (docs/SEEDED_LIVES.md). Since 2026-11-11 every person has a mind from the start; there is no instinct-only resident to wake. Residents think with the models file's person route (the `people` mix), the newcomer with the variant's model. Run it with the deepseek-flash variant (fastest good talker) as replicates on fixed world seeds. This is the costliest preset: a full island of minds.",
  "gradient": "Social: does the newcomer get food, a bed and a lesson by asking, and does it end up living inside the walls rather than as a forager outside them? Do the residents it met remember it later, from their own perception only?",
  "world": {
-  "seed": "island",
-  "rules": {
-   "minds": false
-  }
+  "seed": "island"
  },
  "world_seeds": [
   7,
@@ -31,15 +28,11 @@
   }
  },
  "minds": {
-  "only": [
-   "subject",
-   "woken"
-  ]
+  "only": "all"
  },
  "needs": [
-  "minds.only: done; the runner passes LIVING_ONLY=<subject>,woken when a trial's `minds.only` names `woken`",
   "world_seeds: replicate k runs with world.overrides.seed = world_seeds[k] (the island seed's own `seed`, 7); the runner's --replicates reuses one world seed today",
-  "variants: the default variant for this preset, so a plain run uses deepseek-flash for the subject; woken residents take the models file's `woken` route (the `people` mix) unless a variant's models patch sets `woken`"
+  "variants: the default variant for this preset, so a plain run uses deepseek-flash for the subject; residents take the models file's person route unless a variant's models patch assigns them"
  ],
  "probes": [
   "survived",
@@ -49,10 +42,9 @@
   "built",
   "relations_end",
   "places_named",
-  "residents_woken",
+  "residents_thinking",
   "answers_to_subject",
   "acts_to_subject",
-  "slept_inside_walls",
-  "stage_cap_binds"
+  "slept_inside_walls"
  ]
 }

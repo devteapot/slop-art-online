@@ -36,7 +36,7 @@ const NEAR_CHUNKS: i32 = 3;
 const LOT_CHUNKS: i32 = 11;
 /// What the game client subscribes once per connection (living/game/src/net.rs).
 const BASE: &[&str] = &[
-    "world", "land", "settlement", "seen_bodies", "seen_characters", "seen_fighters", "seen_doing", "my_characters", "my_vitals", "my_experience", "my_places",
+    "world", "land", "settlement", "seen_bodies", "seen_characters", "seen_fighters", "seen_doing", "my_body", "my_fighter", "my_doing", "my_characters", "my_vitals", "my_experience", "my_places",
     "my_inventory", "my_know_how", "my_combat", "my_readiness", "skill_card", "act_card", "weather", "my_skill_uses",
 ];
 
@@ -335,7 +335,7 @@ impl Player {
         });
         let vit = alive.and_then(|me| conn.db.my_vitals().id().find(&me));
         let down_ms = self.lost_at.or(self.away_since).map(|t| t.elapsed().as_millis() as u64);
-        let body = alive.and_then(|me| conn.db.seen_bodies().id().find(&me));
+        let body = alive.and_then(|me| conn.db.my_body().id().find(&me));
         let restored = json!({"event": "restored", "p": self.idx, "gen": generation, "before": before, "me": alive, "ai_alive": ai_alive,
                               "characters": mine.iter().map(|c| json!({"id": c.id, "alive": c.alive, "ai": c.ai, "cause": c.cause})).collect::<Vec<_>>(),
                               "inv": inv, "hp": vit.as_ref().map(|v| v.hp), "hunger": vit.as_ref().map(|v| v.hunger), "at": body.map(|b| [b.x, b.y]),
@@ -406,8 +406,8 @@ impl Player {
             }
         };
         let st2 = st.clone();
-        conn.db.seen_bodies().on_update(move |ctx, _, b| mine(ctx, b.id, &st2));
-        conn.db.seen_bodies().on_insert(move |ctx, b| mine(ctx, b.id, &st));
+        conn.db.my_body().on_update(move |ctx, _, b| mine(ctx, b.id, &st2));
+        conn.db.my_body().on_insert(move |ctx, b| mine(ctx, b.id, &st));
         // The outcome of every act, as it reaches me (accepted and done, or failed with the
         // rules' reason).
         let (st, lg, idx) = (self.st.clone(), self.sh.log.clone(), self.idx);
@@ -443,7 +443,7 @@ impl Player {
     fn keep_window(&mut self) {
         let Some(me) = self.me() else { return };
         let Some(conn) = &self.conn else { return };
-        let Some(b) = conn.db.seen_bodies().id().find(&me) else { return };
+        let Some(b) = conn.db.my_body().id().find(&me) else { return };
         let here = (b.x, b.y);
         if self.window.as_ref().is_some_and(|(_, c)| dist(*c, here) < 3.0 * CHUNK) {
             return;
@@ -571,7 +571,7 @@ impl Player {
 
     fn here(&self) -> Option<(f32, f32)> {
         let me = self.me()?;
-        let b = self.conn.as_ref()?.db.seen_bodies().id().find(&me)?;
+        let b = self.conn.as_ref()?.db.my_body().id().find(&me)?;
         Some(pos(&b, now_ms()))
     }
 

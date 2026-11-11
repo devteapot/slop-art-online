@@ -88,6 +88,9 @@ What one resident starts with. Every item is a world fact written once, at world
 | Whose name they know | kin and one's own community; **`acquaintance` rows** for each authored relation across communities unless the sheet says `knows_name: false` | perception (names in percepts), minds (`known_as`) |
 | A short past | sheet `memories` (in `background`) | the mind, installed as formative memories |
 | Stances, wants and fears | sheet `stances`, `values`, `goals`, `mood` | the mind |
+| Pastimes and the work they love | sheet `pastimes`, `calling` → `persona` | the mind's prompts |
+| Their daily rhythm | `residents[].rhythm` (or drawn) → `rhythm` | graphs (`bedtime`, `evening`), the new day, the mind's prompts |
+| Appetite and hardiness | genes (`appetite`, `hardiness`), drawn per person | the needs law |
 | A secret | the seed file only (`LIVING_SEED`); never a table | the character's own prompts |
 | The situations they are in | **inside each person's sheet, from their side**; the situation records stay in the authoring files (`cast/*.json`) | developer audit only |
 
@@ -130,12 +133,12 @@ Graphs are weighed again while a walk goes on (movement stays reactive), so each
 
 ## How it reaches play
 
-- **Instinct-only residents** (the island's `rules.minds = false`) act on their seeded routines and relations through the existing rules:
+- **Every resident has a mind from the start** (since 2026-11-11; before, the island's `rules.minds = false` kept residents instinct-only until someone engaged them). Its body acts on its seeded routines and relations through the existing rules while its mind thinks:
   - **Relations are rows.** World creation writes every sheet relation into `relation` (`seed::settle_authored`), so starting graphs can read them: the common ways now wave at a friend in sight away from home (chance 0.03 a check), stare at an enemy close by (`face`), and nod to a friend first in the evening. An outsider threatened while outnumbered and with no friend near yields (`stay safe`).
-  - **Places are rows:** work, square, inn and evening places as before, plus the places the author gave a person (`residents[].places`): a carrier's far market and the stages of the way, an outlaw's spot on the road.
+  - **Places are rows:** work, square, inn and evening places as before, plus the places the author gave a person (`residents[].places`): a carrier's far market and the stages of the way, an outlaw's spot on the road. They are **given** (`place.given`): a mind's projection never drops them, since the starting ways walk to them.
   - **Goods are stores and packs:** the seed's stores per settlement, a kit per occupation, a carrier's first load.
-- **Woken residents** (town life layer 2) keep all of that and gain a mind. Their authored sheet is installed into memory by the mind's existing path ([authored worlds](AUTHORED_WORLDS.md)): the narrative, relations as `FEELS`, stances as `JUDGES`, memories as formative `[before all this]` memories, and the secret in their own prompts only. The `prior` ring is internalized as layer 2 designs.
-- **Cost stays at authoring time.** Sheets are written once, by a model, before the world exists. A resident nobody engages costs no model call. Installing a sheet at waking costs no model call ([AUTHORED_WORLDS](AUTHORED_WORLDS.md#sheet)).
+- **The mind starts from its facts and its sheet.** At the mind service's start (`living/mind/src/mind/facts.rs`), a resident's world facts (household, family, settlement, every place with the lot it stands at) go into its memory marked `world`, then its authored sheet is installed by the existing path ([authored worlds](AUTHORED_WORLDS.md)): the narrative, relations as `FEELS`, stances as `JUDGES`, memories as formative `[before all this]` memories, and the secret in its own prompts only. A resident without a sheet gets one identity call written from the same facts.
+- **Authoring cost stays at authoring time.** Sheets are written once, by a model, before the world exists. Installing a sheet costs no model call ([AUTHORED_WORLDS](AUTHORED_WORLDS.md#sheet)). Living costs model calls for every resident; see [every person a mind](#every-person-a-mind).
 
 ### The seam with town life layer 2
 
@@ -370,6 +373,107 @@ What the tensions need that the rules do not have yet. Each is a general rule, w
 7. **Exile and outlawry.** Being declared an outlaw is words on a gate; community membership has `leave` but no expulsion.
 8. **Watching a road.** Day sight is 11 m. A watch on the stone road 20–30 m from where walkers pass never sees them, and walkers cut between road points. An ambush needs either a narrow place (a ford, a bridge, a gate) or a sense that reaches further than sight (hearing footsteps, a lookout's skill). Found in the lab: the outlaws threatened the outsider who came to their steading, not the carrier who walked past.
 9. **Markets fill up.** A storage holds 120 things. Farmers store berries all day and nothing takes goods out but eating and carriers, so a market store fills and then refuses everyone, carriers included. A market that sells to strangers, spoilage of stored food, or a second store per market would each be a rule or a seed choice.
+
+## Every person a mind
+
+Decided by the owner on 2026-11-11 after the first play-test, where the residents felt like NPCs: every person is a full LLM mind from the start. The woken residents (instinct-only until someone engaged them; `woken`, `prior`, the `wakes`/`woken_ring`/`woken_stage` laws) were a token-saving idea for test fixtures and could be used by accident, so they are gone, and so is the seed rule `rules.minds = false` ([town life, layer 2](TOWN_LIFE.md#layer-2-residents-who-answer)). Animals keep their cheap minds (asked only near people). Trials that run one mind in a scripted world keep using the mind service's `LIVING_ONLY`.
+
+**What each resident's mind starts from.** At the service's start (`mind/facts.rs`): its world facts (household, family, settlement, every given place with its lot) marked `world`, then its sheet as written (`authored`), or one identity call from the facts for a resident without a sheet. Given places (`place.given`: work, square, inn, evening, a known way's stages) are world facts a mind's projection never drops, for every resident. A new character's first deliberation is not held back by the thinking throttle (its starting graph is not a thought).
+
+**Level of detail and caps at island scale** (311 characters: 277 people, 34 animals). The woken residents' stage cap (6 per settlement) went with them. What remains:
+
+- `LIVING_LOD` is off by default. The shipped models file routes people through the `people` mix, which chooses by stage, so attention is tracked: with no player anywhere every person is off stage and deliberates with the off-stage model (GLM 5.3 Flash), talks with DeepSeek V4.1 Flash.
+- The thinking throttle (`think_min_s`, 20 real seconds for people) and reflection (`reflect_s`, a deliberation after 240–360 quiet real seconds) are per person; consolidation waits at least `consolidate_min_s` (90 s) between integrations.
+- **The binding cap at island scale is the mind service's `LIVING_CONCURRENCY` (default 64).** The scheduler keeps a quarter of it for interactive calls, so 48 routine and background calls are in flight at most. At 5–11 s a call that admits about 400 calls a minute, while the island asked for more: in the first 12 real minutes on the Spark, routine calls (think, deliberate) waited 19 s at the median and 55 s at p95 before they were sent (a reason waited up to two game hours for its decision). With `LIVING_CONCURRENCY=192` (the default since this change) the same world's routine calls wait 0 s at the median, 10.4 s at p95 and 45 s at most over two hours (the p95 comes from minutes of 650–765 calls). The per-profile rate (`requests_per_minute`, adaptive from 600 to the provider's 1,200) never bound; Mistral answered 1.7 % of GLM Flash calls at about 350 a minute with 429 "not enough capacity".
+- `LIVING_LLM_PER_MIN` is 0 (no global cap) unless set.
+
+**Expected calls per person per game hour, from the code** (no player, level of detail off; a game hour is 30 real seconds): a deliberation is two calls (think, then deliberate). Non-urgent deliberations are at most one per 20 real seconds, 1.5 a game hour (3 calls); reflection guarantees at least one per 8–12 quiet game hours; a new day adds one a game day; plans that finish, failures, feelings (restless, lonely, a child longed for) and bodily alarms ask in between. Consolidation is at most one per 90 real seconds (0.33 a game hour), when what was lived is salient enough. Talk turns answer lines addressed to the person. The ceiling is about 3.5 calls per person per game hour plus talk; what minds actually ask is measured below.
+
+**The authority's cost.** Every resident's percepts are now experiences its mind reads: on the Spark, 297 experience rows a second against 0.2 on main's instinct-only island (`bench.py`, 120 s windows, both at 59.9 ticks a second). Tick work rose from 63 to 124 ms a second (slot evaluation 31 → 65, wakes 12.5 → 40.9); p50 1.34 → 2.47 ms, p99 3.3 → 7.4 ms, max 4.2 → 11.2 ms, none over 16.7 ms. The experience window stays bounded (400 per character, about 110,000 rows for the island).
+
+## Measured on the Spark
+
+**Setup.** The island (seed 7, 2048 m, 277 people and 34 animals at the start) on the DGX Spark, two arms side by side for 125 real minutes each (10.4 game days, one winter: days 7–8 of the 8-day year), own containers (`slop-lives-*`), nobody playing. **lives-2** (`efcd489` with the new-day fix `45d4ac6`): every person a mind, the models file as shipped (the `people` mix: GLM 5.3 Flash to think, deliberate, consolidate and reorganize off stage, DeepSeek V4.1 Flash to talk), `LIVING_CONCURRENCY=192`, no `LIVING_ONLY`, no level of detail. **Control**: `main` at `445db09`, residents instinct-only (nobody engages them, so nobody wakes; no mind service). Both sampled every 10 real seconds by `living/tools/lives_lab.py`. Evidence: `.local/living/lives-2/spark/` on the Mac (`l2/report.md`, `main/report.md`, journals, mind logs, bench).
+
+Two earlier lives-2 starts were stopped and are kept: at the default concurrency 64 (12 minutes; deliberations queued up to a minute, above) and with the new-day spam (16 minutes; `45d4ac6`).
+
+| | Control (main, instinct-only) | lives-2 (every person a mind) |
+|---|---:|---:|
+| Starvation deaths | 6 | 0 |
+| Cold deaths | 0 | 0 |
+| Killed by wolves / old age | 2 / 3 | 0 / 3 |
+| Births | 0 | 61 |
+| Hunger, median of people (days 2–7) | 57–61 | 20–22 |
+| People over 50 hunger (days 2–7; days 8–11) | 72–85 %; 70–97 % | ≤ 1 %; 5–14 % |
+| Activity changed between two samples (20 game minutes): median / p95 / max | 18 % / 62 % / 100 % | 28 % / 41 % / 75 % |
+| Doing the most common activity, p95 of samples | 97.5 % | 63.5 % |
+| Shelter entry after 16:00 on dry days: IQR | 0.7–4.7 h | 3.4–4.3 h |
+| Most people sheltering in one 30 minutes (dry days; rainy days) | 23–46 %; 87–100 % | 11–13 %; 25–37 % |
+| Speech lines per person per game day (speakers) | 0 (0) | 1.3 (274) |
+| Awake time by what the body does: walking / resting / work / idle / gestures / eating and getting food | 19 / 37 / 18 / 16 / 10 / 1.2 % | 33 / 29 / 20 / 10 / 7 / 1.7 % |
+
+- **Lockstep is gone.** Each day people go in over four hours instead of within one half hour; at most three quarters of people change what they do in any 20 game minutes (all of them, in the control, at 22:00 and 23:00 when the shared evening ended), and the most common activity never takes more than two thirds of the town. Minds change what they do more often one by one (median 28 % against 18 % per sample), not together.
+- **Survival is secondary, until the babies.** Of 8,890 plans the minds made, 3.5 % were only about food or warmth; 82.5 % involved other people and 75 % work (by their words: `lives_lab.py`, "plans"). Nobody starved or froze; the control lost six to hunger. But the minds chose to have children: 61 births in ten game days (the drive "You long for a child" is the second most common feeling), with a one-game-day gestation. After the winter's no-growth days, with sixty new mouths, the town stores were bare by day 10 and many minds' days turned to finding berries for crying babies (`timelines-l2-day10.md`). Hunger rose from day 8 (p90 41 → 54). The birth rate, not the needs law, is now what pulls survival back to the centre.
+- **What a day looks like.** The ten sampled people's day 10, with their plans, is in `timelines-l2-day10.md`: Aldric Marrow keeps the ledger at his post from 07:12 and plans the town's reckoning at the inn; Jem Coombe rises at 06:44 to walk the hives his father has just given him; Godric Wade gathers berries and gives them out to the foundlings he promised to feed; Sella Mackerel rises at 04:37 and is in bed by 19:30.
+
+**Cost and load** (lives-2, journal over the sampled window): 51,202 calls, **$71.23** ($73.02 with the ten minutes the mind ran on after sampling). $0.123 per person per real hour, $0.025 per person per game day, 0.74 calls per person per game hour (1.49 per real minute for people; the code's ceiling is about 3.5 a game hour). By purpose: deliberate $26.0, consolidate $20.7, think $15.6, reorganize $6.5, talk $2.4. Calls per minute: median 388, p95 666, max 765 (the provider's limit is about 1,333); tokens per minute: median 3.6 M, p95 6.5 M, max 7.7 M (limit about 10.7 M). 66 calls (0.13 %) came back 429 "not enough capacity". Why minds were asked to think (each request may name several reasons): their new day 27.6 %, a finished plan 19.4 %, a quiet moment (reflection) 18.6 %, feelings 12.9 % (mostly longing for a child), the freezing alarm on winter and rainy nights 8.2 %.
+
+**Recommendation for the call budget.** Full minds suit the island: about $34 a real hour, at 50–60 % of the provider's limits at peaks (p95 minutes). They will not scale as they are: the 2,000-character target (about 1,600 people) would need about 2,400 calls and 23 M tokens a minute at the median, past both limits. In order:
+
+1. **A level of detail in game time.** The shipped off-stage gap (`LIVING_LOD_THINK_S` 600 s) is 20 game hours, which would make people nobody watches think once a day. Replaying this journal with nobody on stage (`mind_load.py`): a 180 s gap (6 game hours; prompt 45 s, consolidation 270 s, talk 60 s) cuts calls by 53 %, 90 s by 39 %, 600 s by 74 %. Recommended: `LIVING_LOD=1` with 180 s off stage, unchanged on stage, for worlds above about 400 people.
+2. **Fewer routine reasons.** The new day and reflection are nearly half of all reasons; a reflection that falls within a few game hours of the new day adds little. Consolidation is 29 % of the cost: `consolidate_min_s` 90 → 300 s would roughly halve it.
+3. **Concurrency.** Keep `LIVING_CONCURRENCY` at 192 for the island (about 120 calls in flight at the measured 17.7 s mean latency); scale it with the number of minds.
+4. **Births.** Before longer runs: a longer gestation, or a weaker longing for a child, as Rhai laws (`gestation_days`, the broody drive in `brain.rs`); otherwise each winter turns every mind back to food.
+
+**Authority cost** is above, in "Every person a mind" (tick work 63 → 124 ms a second).
+
+**Spend for this work:** the island's wants fill $0.07 (DeepSeek V4.1 Flash, 92 calls); the Spark runs $4.12 (concurrency 64), $9.39 (new-day spam) and $73.02 (the measured arm): **$86.60** in all, at the prices in `living/tools/trials.py`.
+
+## Survival made secondary
+
+The owner's first play-test (2026-11-11): survival was too hard and too central. The worlds start with a setup, not from nothing, so getting by should take a small share of a person's day and leave the rest to their life. The numbers are Rhai laws (`living/scripts/skills.rhai`: `rates`, `body_state`, `freezing`, `meal`) and seed data (the island's `ways.top` food desire and its "find food and eat" routine).
+
+**Game time.** A game day is 12 real minutes (`DEFAULT_DAY_MS`); a game hour is 30 real seconds. Rates below are per real minute (per game day in brackets).
+
+| Target | Before | After |
+|---|---|---|
+| A healthy adult wants a meal two or three times a game day | hunger +5/min (60/day); the food desire won over work at hunger ≈ 60 and lost again a few points lower, so people nibbled one item at a time near "hungry" all day | hunger +4/min (48/day) × the body's `appetite` gene; the island's food desire (`base -0.2, hunger 3.6`) wins over work at about 25; a meal (`eat`, `qty` 4) eats as many items as bring hunger to about 5 (`meal(a)`): about 20 hunger a meal, **2.4 meals a game day** |
+| A full game day hungry before it becomes dangerous | "hungry" from 55; starving at 100 came 0.75 game days later; starving took 6 health a minute (dead in about 1.4 game days) | "hungry" from 50, starving at 100: **1.04 game days** later; starving takes 4 a minute (25 minutes, about two game days, to kill a healthy body). From the last meal to death is about four game days |
+| Ordinary nights are uncomfortable outside, not harmful | a night outside without fire, shelter or a cloak took 2 health a minute (5 in winter), and the "You are freezing" alarm asked every outdoor mind to deliberate as night fell | an ordinary cold night tires (−1.5 energy a minute ÷ `hardiness`) and takes no health; the body still looks and feels cold |
+| Only winter nights or storms hurt | — | `freezing(a)`: a winter night takes 3 health a minute, a night in the rain 1.5 (both ÷ `hardiness`), without a fire, shelter or warm cloak; the freezing alarm follows the health it takes, so it no longer fires on ordinary nights |
+
+**Stores and food from the world.** Nothing spawns food: berries regrow on bushes (1.2 a minute), fish at fishing spots (1.4), and farmers, fishers and hunters bring them in by their starting ways; town stores and households start with the seed's stores and kits. At the new rates a person eats about 4 berries' worth a game day instead of 5. Whether that is enough for normal life is measured, not assumed: starvation and cold deaths on the Spark, below.
+
+**Changed with it.** The rules tests that pin the needs law (`rules/src/script.rs`: rates by activity and night, infant appearance against cold damage, the parameter law against the whole computation, food and injury appearance; `floors.rs`, where a frozen floor now overrides `freezing` too) and verify-core's `needs` and `infant` scenes (a cloak or shelter removes the cold's tiring; a summer night does not hurt).
+
+## No lockstep
+
+At the play-test, everyone looked for shelter at the same moment when night fell. Nothing scripted it, but every cause was shared by everyone at once:
+
+1. **The dawn broadcast.** `tick.rs` asked every person to deliberate at 06:00 ("Dawn of day N. A new day."), a scheduled event and an urgent reason that skipped the thinking throttle: 277 deliberations in one burst every game day.
+2. **The world's clock in every starting graph.** Every resident had the same top-level desires, weighted by the world's `night` and `day` flags (sleep `night 0.6`, home `night 0.5`, work `day 0.5`), and the same evening routine (`hour` 17.5–22). At 20:00 every weight flipped for everyone in the same tick.
+3. **The cold law and its alarm.** At nightfall every body outside without fire or shelter began to lose health in the same tick, and the "You are freezing" alarm asked every outdoor mind to deliberate at once.
+4. **Identical thresholds.** The same weights everywhere meant the same hunger at which everyone turned to food, the same pitch at which rain sent everyone in.
+
+What replaced them (general rules and seeded data; no role types, no scripts):
+
+- **A rhythm per person** (`rhythm` table, private; `seed::drawn_rhythm`): when they rise (about 06:00 ± 0.8 h, 04:00–09:00), when they go to bed (about 16 ± 1 waking hours later, 19:30–02:30) and how many hours before bed are their evening (1.5–4.5). A seed may give a resident's (`residents[].rhythm`: `rises`, `sleeps` (past 24 for after midnight), `evening_hours`); whatever it leaves out is drawn from the person's id alone, so the world's random stream and its generation digests do not change. Newborns get one at birth.
+- **Graphs read one's own day.** New weights and conditions `bedtime` and `evening` (`rules/src/graph.rs`; `common::day_phase`): the body's own hours, not the world's. The island's and the repertoire's starting desires use them: sleep `bedtime 1.2`, home `bedtime 0.6`, work `base 0.7, bedtime -0.9, evening -0.4`, and the evening routine runs in one's own evening. `night` and `hour` stay for darkness and the clock. Minds' prompts list them.
+- **Evening habits.** `town_life.evening` may name `home` (an evening in) and `work` (working late) beside the inn and the square; the island alternates inn, home, square, work by household.
+- **Desires weighed a little differently by each person.** At seeding, a founder's starting desires are varied the way a child's are varied from its parent's (`genes::vary_ways`, drawn from the person's id): weights ±8 % typical, occasionally more. Rain sends most people in, not all (`rain 1.0` against work's 0.7).
+- **Tolerance as genes.** `appetite` (how fast hunger grows) and `hardiness` (what cold and wet take) are constitution genes, ±12 % typical, inherited like the others; the needs law reads them (`appetite_gene`, `hardiness_gene`). One can tell one's own: "always hungry", "quick to feel the cold".
+- **A new day at one's own rising.** The dawn broadcast is gone. A person's new day begins within three hours of its own `rise_h`, once a game day: a "A new day begins for you" feeling and a deliberation request, which goes through the thinking throttle like any other (not urgent).
+- **What minds see.** A person's prompt says when they usually rise and go to bed and how long their evening is (`daily_life` in `mind.rs`).
+
+## Wants beyond survival
+
+Every seeded person should have wants the mind sees and pursues: ambitions, people they care about, pastimes and a trade they like. Before this, the island's 277 sheets carried values, goals and relations, but their goals were mostly the world's tensions (the gate-due, debts, quarrels) and nothing said what anyone enjoyed. The persona the prompts show (`persona_text`) carried narrative, values, goals, traits and mood, and nothing of one's work or days.
+
+- **Seed format.** A sheet may say `pastimes` (2–3 things they enjoy for their own sake) and `calling` (the work they love, or long for instead). Both go into the persona when the sheet is installed. A model-written identity (`identity_system`, a resident without a sheet, `facts.rs`) and a consolidation's identity rewrite may write them too; an identity that leaves them out keeps the ones it had.
+- **Persona.** `persona.pastimes` and `persona.calling` (authority table and `PersonaIn`; bindings regenerated). Prompts show "You enjoy: …" and "The work you love: …", and the world's facts about one's daily life: "Your work: <occupation> in <town>" and one's rhythm.
+- **Generator.** `author_world.py`'s sheet prompt asks for goals that mix ambitions, care for particular people and wants of their own beside the situations, and for pastimes and a calling; `check_sheet` keeps them.
+- **Filled for the island.** `living/tools/fill_wants.py island` asks a model, one household at a time, for each member's pastimes, calling and one or two goals of their own, from the sheet as it stands, and writes them into the sheets and the compiled seed. 277 of 277 residents; DeepSeek V4.1 Flash, 92 calls, 356,480 prompt tokens (273,408 cached), 36,821 completion, logged in `authoring-log.jsonl` (purpose `wants`). Examples: Aldric Marrow, the Reeve, plays dice with old Wat Fenner at the inn and wants to teach Maud the full ledger; Wenna Marrow spins on her mother's old wheel and would have "a loom of my own and cloth that folk buy for its weave, not for my name"; Fennel Underbank, a child, wants to walk the pedlar's road like Thistle.
+- **The format stays general** for the new small city: `pastimes`, `calling`, `rhythm` and the evening habits are seed fields any world may use; nothing in the engine knows a pastime.
 
 ## Open questions for the user
 

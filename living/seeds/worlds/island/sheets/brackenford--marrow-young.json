@@ -11,7 +11,9 @@
       "bring the child safely to birth",
       "make the Marrow strip feed the household well",
       "outlast the town's talk",
-      "mend something with my mother before the baby comes"
+      "mend something with my mother before the baby comes",
+      "learn to weave a fine winter cloth well enough to sell at the square on its own merit",
+      "keep a small garden of her own herbs by the door for the child and the house"
     ],
     "mood": "guarded, tired, quietly stubborn",
     "traits": {
@@ -167,7 +169,13 @@
         "why": "Everything else can wait; this one thing cannot."
       }
     ],
-    "secret": "I have written a letter to Hester Crane and burned it twice, and I keep the third unsent in the loom-chest. I want to know what she is like, and I am ashamed of wanting it."
+    "secret": "I have written a letter to Hester Crane and burned it twice, and I keep the third unsent in the loom-chest. I want to know what she is like, and I am ashamed of wanting it.",
+    "pastimes": [
+      "walking the Marrow strip at dusk, checking the rows and pulling a weed or two on the way",
+      "spinning yarn on her mother's old wheel, the one thing Aldith let her take",
+      "sitting with Joan Hobson over a cup of something warm, listening to her talk of births"
+    ],
+    "calling": "I would have a loom of my own and cloth that folk buy for its weave, not for my name or my shame."
   },
   "Tobin Marrow": {
     "narrative": "I am the Reeve's son and captain of the gate guards, and I broke a promise to a Kettlebridge foundry's daughter because I would not marry where I did not love. The town has not let me forget it and Kettlebridge has not either. My father is old and has named no heir, and the square is split between him and Mercy Abbot over the due that pays my men. I will not see the guards unpaid, and I will not hear my wife slighted.",
@@ -181,7 +189,9 @@
       "keep the gate-due so the guards are paid",
       "clear the Coldwell outlaws from the stone road",
       "see Wenna brought to bed safely",
-      "settle what comes after my father, in time"
+      "settle what comes after my father, in time",
+      "train a younger guard up to keep the watch as he does, so the gate is not all on him",
+      "own a good horse of his own, bought with his own marks"
     ],
     "mood": "proud, harried, quick to defend",
     "traits": {
@@ -364,6 +374,12 @@
         "why": "The guards answer to me, and a captain who cannot pay them is no captain."
       }
     ],
-    "secret": "I have begun to wonder whether my father will ever name me after him, and whether Mercy Abbot will be Reeve before I am; I have said this to no one, not even Wenna."
+    "secret": "I have begun to wonder whether my father will ever name me after him, and whether Mercy Abbot will be Reeve before I am; I have said this to no one, not even Wenna.",
+    "pastimes": [
+      "walking the gate road at first light with Wat Fenner, checking the ruts and the wolf sign",
+      "throwing dice at the inn when the watch is done, though he loses more than he wins",
+      "riding out to the Coldwell woods edge to look at the fields he means to see cleared"
+    ],
+    "calling": "I am a captain of the gate and I would keep the road clear and my men paid; that is work worth doing, and I do it well."
   }
 }

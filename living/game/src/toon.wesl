@@ -6,7 +6,7 @@
 
 import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
-    pbr_functions::alpha_discard,
+    pbr_functions::{alpha_discard, visibility_range_dither},
     mesh_functions,
 };
 import living_game::toon_light::{
@@ -205,6 +205,8 @@ fn fragment(
     in: VertexOutput,
     @builtin(front_facing) is_front: bool,
 ) -> FragmentOutput {
+@if(VISIBILITY_RANGE_DITHER)
+    visibility_range_dither(in.position, in.visibility_range_dither);
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     pbr_input.material.base_color = alpha_discard(
         pbr_input.material.flags,

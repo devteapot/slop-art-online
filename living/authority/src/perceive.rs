@@ -12,13 +12,8 @@ const WINDOW: usize = 400;
 
 pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) {
     // Only minds and human players consume percepts. Infants have no mind yet to form
-    // memories. An instinct-only resident keeps a small ring of them for the mind it may get
-    // (`woken`); other instinct-only creatures have no reader.
-    if !observer.alive || observer.stage == 0 {
-        return;
-    }
-    if crate::woken::instinct_only(ctx, observer) {
-        crate::woken::remember(ctx, observer, now, kind, subject, object, at, &text, salience);
+    // memories; a benchmark crowd's bodies (`common::instinct_only`) have no reader.
+    if !observer.alive || observer.stage == 0 || common::instinct_only(ctx, observer) {
         return;
     }
     let row = ctx.db.experience().insert(Experience {
@@ -35,6 +30,10 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
         salience,
     });
     common::count(|k| k.percepts += 1);
+    // A player's line reaches its client at the character's next frame (`frame.rs`).
+    if crate::combat::human(ctx, observer.id).is_some() {
+        crate::frame::line(ctx, &row);
+    }
     // Bound the per-character window (checked periodically, not on every insert).
     if row.id % 32 == 0 {
         let mut ids: Vec<u64> = ctx.db.experience().observer().filter(observer.id).map(|p| p.id).collect();
@@ -59,15 +58,13 @@ pub fn people_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64, exclu
         .collect()
 }
 
-/// Minds (people and animals) within `r` of `at`, and, while the rules keep rings,
-/// instinct-only people past infancy, who keep what they perceive for the mind they may get
-/// (`woken`).
+/// Minds (people and animals) and players within `r` of `at`.
 pub fn minds_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64, exclude: &[u32]) -> Vec<(Character, f32)> {
     common::creatures_near(ctx, at, r, now)
         .into_iter()
         .filter(|c| !exclude.contains(&c.id))
         .filter_map(|c| ctx.db.character().id().find(c.id).map(|ch| (ch, c.dist)))
-        .filter(|(ch, _)| !crate::woken::instinct_only(ctx, ch) || (crate::woken::resident(ctx, ch) && crate::woken::rings_kept(ctx)))
+        .filter(|(ch, _)| !common::instinct_only(ctx, ch))
         .collect()
 }
 
@@ -84,8 +81,14 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
         if !crate::perception::in_sight(&map, eye, at, d, common::sight_for(ctx, c.id, &w, now)) {
             continue;
         }
-        let a = if template.starts_with("{a}") { common::label_cap(ctx, &c, subject) } else { common::label_for(ctx, &c, subject) };
-        let text = template.replacen("{a}", &a, 1).replace("{a}", &common::label_for(ctx, &c, subject)).replace("{b}", &common::label_for(ctx, &c, object));
+        // How this onlooker refers to the two (each projected once; the template's first `{a}`
+        // capitalized when it begins the sentence).
+        let ids: Vec<u32> = if template.contains("{b}") { vec![subject, object] } else { vec![subject] };
+        let mut named = crate::perception::labels(ctx, &c, &ids, now).into_iter();
+        let a = named.next().unwrap_or_default();
+        let b = named.next().unwrap_or_default();
+        let first = if template.starts_with("{a}") { common::capitalized(&a) } else { a.clone() };
+        let text = template.replacen("{a}", &first, 1).replace("{a}", &a).replace("{b}", &b);
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
         percept(ctx, &c, now, kind, subject, object, at, text, sal);
@@ -222,7 +225,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
             percept(ctx, &c, now, "signal", baby.id, 0, at, text, if c.kind == "person" { 0.8 } else { 0.64 });
         }
     }
-    if !common::CRY_PROMPTS_CARERS {
+    if !common::laws(ctx).cry_prompts_carers {
         // The cry is only a percept (above): no mind is made to think about it, and
         // whether a culture attends to its infants is left to the minds themselves.
         if old.as_ref() != Some(&cry) {
@@ -252,8 +255,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     Ok("made a baby crying".into())
 }
 
-/// `decided`: the words were chosen (a player's line, a mind's line), not a graph's `say` leaf.
-pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, decided: bool, now: u64) -> Result<(), String> {
+pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) -> Result<(), String> {
     let text = text.trim();
     if text.is_empty() {
         return Ok(());
@@ -283,32 +285,29 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, decided: b
         let when = if ago_s < 5 { "just now".to_string() } else { format!("{ago_s} s ago") };
         percept(ctx, &me, now, "repeat", speaker, to, at, format!("You said almost the same thing {when}: “{said}”."), 0.3);
     }
-    // Animals hear a voice, not words.
-    for (c, _) in minds_near(ctx, at, common::laws(ctx).hearing, now, &[speaker]).into_iter().filter(|(c, _)| &*c.kind != "person") {
+    // Each listener hears as far as its own senses reach (gathered within the farthest anyone
+    // hears). Animals hear a voice, not words.
+    let w = common::world(ctx);
+    let hears = |id: u32, d: f32| d <= common::hearing_for(ctx, id, &w, now);
+    for (c, _) in minds_near(ctx, at, common::widest_hearing(ctx), now, &[speaker]).into_iter().filter(|(c, d)| &*c.kind != "person" && hears(c.id, *d)) {
         let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
         percept(ctx, &c, now, "signal", speaker, 0, at, format!("You hear a person's voice, {dir}."), 0.25);
     }
-    let hearers = people_near(ctx, at, common::laws(ctx).hearing, now, &[speaker]);
+    let hearers: Vec<(Character, f32)> = people_near(ctx, at, common::widest_hearing(ctx), now, &[speaker]).into_iter().filter(|(c, d)| hears(c.id, *d)).collect();
     // Silence is information: calling someone out of earshot (far away, or dead) gets no answer.
     if to != 0 && !hearers.iter().any(|(c, _)| c.id == to) {
         let who = common::label_for(ctx, &me, to);
         percept(ctx, &me, now, "silence", to, speaker, at, format!("No answer from {who}; they don't seem to be within earshot."), 0.35);
     }
-    let close = hearers.iter().filter(|(_, d)| *d <= 6.0).count();
+    let address = common::laws(ctx).address_m;
+    let close = hearers.iter().filter(|(_, d)| *d <= address).count();
     // Saying one's own name tells it to everyone who hears (an introduction).
     let introduces = mentions(&text, &me.name);
     for (c, d) in hearers {
         if introduces {
             crate::perception::introduce(ctx, c.id, speaker, now);
         }
-        let addressed = to == c.id || (to == 0 && (close == 1 && d <= 6.0 || mentions(&text, &c.name)));
-        // Spoken to by someone with a mind: an instinct-only resident wakes before it hears it.
-        let c = if addressed {
-            crate::woken::engage(ctx, c.id, speaker, "speech", decided, now);
-            ctx.db.character().id().find(c.id).unwrap_or(c)
-        } else {
-            c
-        };
+        let addressed = to == c.id || (to == 0 && (close == 1 && d <= address || mentions(&text, &c.name)));
         let who = common::label_cap(ctx, &c, speaker);
         let heard = if to == c.id {
             format!("{who} said to you: “{}”", text)
@@ -373,7 +372,7 @@ fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool) 
         return false;
     }
     // Minds of other species think less often; being attacked is always worth a thought.
-    let urgent = urgent || reason.contains("attacking you") || reason.starts_with("The fight with") || reason.starts_with("Dawn of day");
+    let urgent = urgent || reason.contains("attacking you") || reason.starts_with("The fight with");
     // Away from people an animal lives by its instincts: its mind is for encounters
     // (and for being attacked). Keeps thinking where the world is being lived and watched.
     if c.kind != "person" && !urgent {
@@ -491,11 +490,13 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     for o in ctx.db.bond_offer().to().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
         asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
     }
-    for o in ctx.db.trade_offer().iter().filter(|o| o.to == id && now.saturating_sub(o.at_ms) <= 180_000) {
+    let laws = common::laws(ctx);
+    let (trade_ms, join_ms) = ((laws.trade_window_s * 1000.0) as u64, (laws.join_window_s * 1000.0) as u64);
+    for o in ctx.db.trade_offer().iter().filter(|o| o.to == id && now.saturating_sub(o.at_ms) <= trade_ms) {
         asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange)", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
-        for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= 300_000) {
+        for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= join_ms) {
             asked.push(json!({"from": r.asker, "name": common::label_for(ctx, &me, r.asker), "asks": "to join your community (welcome them to let them in)", "when": ago(r.at_ms)}));
         }
     }
@@ -506,7 +507,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     for o in ctx.db.bond_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
     }
-    for o in ctx.db.trade_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {
+    for o in ctx.db.trade_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= trade_ms) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if !mine.is_empty() {

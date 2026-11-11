@@ -101,9 +101,10 @@ Rules:
 - Stances: 3-6 beliefs they act on, as snake_case keys with a value from 0 to 1 (how strongly held) and a reason.
 - Traits (0-100): caution, sociability, empathy, curiosity, ambition, introspection, temper, nurture. Vary them: not everyone is kind or calm.
 - Offices, trades, standing and money are part of who people are: an office holder knows their duties and rights and how others see them; masters, apprentices and hired hands know who they work for and what they are paid; people know roughly how many marks they have and what things cost. Other people know who holds which office.
-- Babies and small children: a short simple narrative (a baby's is sensation), a few relations to family, one or two memories at most, no stances.
+- A life is more than its troubles: goals mix ambitions, care for particular people and things they want for themselves, not only the quarrels and debts of the situations. Pastimes: 2-3 things they enjoy doing for their own sake (a song, a game, carving, fishing at dusk, a walk to a place they love, visiting someone). Calling: one line on the work they love, or the work they long for instead of their own.
+- Babies and small children: a short simple narrative (a baby's is sensation), a few relations to family, one or two memories at most, no stances; a small child's pastimes are play.
 
-Reply with ONE JSON object: {"sheets": {"<name>": {"narrative": "first person, 2-5 sentences", "values": [...], "goals": [...], "mood": "...", "traits": {...}, "relations": [{"name": "...", "trust": 0, "affinity": 0, "label": "...", "note": "..."}], "memories": [{"gist": "...", "salience": 0.5, "about": ["..."]}], "stances": [{"key": "...", "value": 0.8, "why": "..."}], "secret": "... or empty"}}}"""
+Reply with ONE JSON object: {"sheets": {"<name>": {"narrative": "first person, 2-5 sentences", "values": [...], "goals": [...], "pastimes": [...], "calling": "...", "mood": "...", "traits": {...}, "relations": [{"name": "...", "trust": 0, "affinity": 0, "label": "...", "note": "..."}], "memories": [{"gist": "...", "salience": 0.5, "about": ["..."]}], "stances": [{"key": "...", "value": 0.8, "why": "..."}], "secret": "... or empty"}}}"""
 
 
 def draft_household(world_dir, cast, bible, s, h, profile):
@@ -137,6 +138,10 @@ def check_sheet(name, sheet, names, notes):
         notes.append(f"{name}: no narrative")
     for k in ["values", "goals"]:
         out[k] = [str(x) for x in sheet.get(k, []) if str(x).strip()][:8]
+    out["pastimes"] = [str(x)[:120] for x in sheet.get("pastimes", []) if str(x).strip()][:4]
+    calling = str(sheet.get("calling", "") or "").strip()
+    if calling:
+        out["calling"] = calling[:200]
     out["mood"] = str(sheet.get("mood", "settled"))
     out["traits"] = {t: round(clamp(sheet.get("traits", {}).get(t), 0, 100, 50)) for t in TRAITS}
     rels, seen = [], set()

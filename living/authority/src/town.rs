@@ -150,6 +150,7 @@ pub fn shown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activ
     let indoors = sc.shows().get(&a.skill).is_some_and(|s| s.look == "rest")
         && ctx.db.character().id().find(a.id).zip(ctx.db.body().id().find(a.id)).is_some_and(|(c, b)| (c.home_x != 0.0 || c.home_y != 0.0) && common::dist(common::pos(&b, now), (c.home_x, c.home_y)) <= INDOORS_M);
     let row = Doing { id: a.id, code, target: if a.target.class == 3 { a.target.id as u32 } else { 0 }, x, y, since_ms: now, until_ms: a.ends_ms, indoors };
+    crate::frame::did(a.id);
     if ctx.db.doing().id().find(a.id).is_some() {
         ctx.db.doing().id().update(row);
     } else {
@@ -160,6 +161,7 @@ pub fn shown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activ
 /// A shown skill ended (finished, broken off, or its doer died).
 pub fn unshown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32, skill: &str) {
     if sc.shows().code(skill) != 0 {
+        crate::frame::did(id);
         ctx.db.doing().id().delete(id);
     }
 }
@@ -261,7 +263,8 @@ pub struct SeedTownLife {
     /// Occupation -> the kinds its workplace may be (as above); spread over the matching lots.
     #[serde(default)]
     pub work: std::collections::BTreeMap<String, Vec<String>>,
-    /// Places some households go in the evening (alternating by household), e.g. inn, square.
+    /// Places some households go in the evening (alternating by household), e.g. inn, square,
+    /// `work` (working late) or `home` (an evening in).
     #[serde(default)]
     pub evening: Vec<String>,
     /// Places spread over their spots like workplaces (each resident the nearest of the least
@@ -368,7 +371,7 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
         let own: Vec<crate::town::SeedPlace> = seeded[si].and_then(|t| t.residents.iter().find(|r| r.name == c.name)).map(|r| r.places.clone()).unwrap_or_default();
         let mine = |name: &str| own.iter().any(|p| p.name == name);
         let put = |name: &str, at: (f32, f32)| {
-            ctx.db.place().insert(Place { id: 0, actor: id, name: name.into(), x: at.0, y: at.1 });
+            ctx.db.place().insert(Place { id: 0, actor: id, name: name.into(), x: at.0, y: at.1, given: true });
         };
         for p in &own {
             if let [a, b] = p.between.as_slice() {
@@ -427,8 +430,12 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
                 households.push(hk);
                 households.len() - 1
             });
+            // `home` keeps the evening at home; any other name is one of the places just given
+            // (`inn`, `square`, `work`: working late).
             let name = &life.evening[n % life.evening.len()];
-            if let Some(p) = ctx.db.place().actor().filter(id).find(|p| p.name == *name) {
+            if name == "home" {
+                put("evening", home);
+            } else if let Some(p) = ctx.db.place().actor().filter(id).find(|p| p.name == *name) {
                 put("evening", (p.x, p.y));
             }
         }
@@ -475,7 +482,7 @@ pub fn host(ctx: &ReducerContext, me: u32, a: &Activity, at: (f32, f32), until_h
             ctx.db.place().id().update(p);
         }
         None => {
-            ctx.db.place().insert(Place { id: 0, actor: guest, name: "lodging".into(), x: house.x, y: house.y });
+            ctx.db.place().insert(Place { id: 0, actor: guest, name: "lodging".into(), x: house.x, y: house.y, given: true });
         }
     }
     let when = format!("{:02}:00", until_hour.floor() as u32);

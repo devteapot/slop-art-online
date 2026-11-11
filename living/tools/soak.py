@@ -412,7 +412,7 @@ class Mind(threading.Thread):
 
 TABLES = ["character", "body", "vitals", "activity", "experience", "chronicle", "skill_use", "combat_seen", "missile", "fighter", "perceived", "projected", "inventory",
           "resource_node", "structure", "mind_state", "brain", "wake", "doing", "presence", "connection", "acquaintance", "reveal", "readiness", "deliberation", "thought",
-          "woken", "prior", "prior_head", "persona", "belief", "relation", "judgment", "place", "know_how", "artifact", "trade_offer", "routine", "routine_stat", "act_queue", "guest", "judged"]
+          "persona", "belief", "relation", "judgment", "place", "know_how", "artifact", "trade_offer", "routine", "routine_stat", "act_queue", "guest", "judged"]
 
 
 class Sampler(threading.Thread):

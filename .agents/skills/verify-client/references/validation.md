@@ -1,5 +1,15 @@
 # Client protocol validation
 
+## 2026-11-11 every person a mind (lives-2, dev-box)
+
+On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
+
+- `run.py` (`client-l2c4-031533`, scoped build): 30 of 30. Private table visibility: 63 tables, `rhythm` refused to anonymous clients and to the player; `woken`, `prior` and `prior_head` are gone. The reducer matrix first failed 10 `mind_update` calls (`client-l2c3-030713`): the driver's `PersonaIn` lacked `pastimes` and `calling`; fixed in `drive.py`.
+
+## 2026-11-11 laws-2 (dev-box)
+
+Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. `run.py` 30 PASS (`client-j1`). `world_law` is in `PRIVATE`. The first run (`client-l6`) stopped at the inventory check before the list had the table; `client-l6c` failed one check, "presence counts each open connection" (1 → 2 → 0 instead of 1): presence code is unchanged here, and the rerun passed.
+
 ## 2026-11-10 client feel (Mac)
 
 Branch `fix-client-feel` (from `6c8d1002`; client-only changes, authority, rules and scripts identical to `origin/main`), shared container (2.14.1), `scoped`: 30 PASS, exit 0 (`client-feel-1110-231833/`, archived under `.local/living/fix-client-feel/`). The game client was driven headless and windowed on scratch island world `verify-feel-1` with the new `key:`, `mouse:` and `chat:` script steps and a TCP proxy that cuts the connection (features/game-client.md): no bodies are drawn while offline, a notice shows, and the client resubscribes and sends the held intent again after reconnecting.
@@ -14,6 +24,14 @@ Branch `rules-2` (`eaee6b0`), own container `sao-rules2-stdb` (2.14.1, port 3342
 
 `record`, `record_party` and `record_clock` are refused to anonymous clients and players; `my_records` is in the view inventory, and verify-player `deal.py` proves its rows.
 
+## 2026-11-10 frames: per-viewer copies behind the views (dev-box)
+
+Own scratch container `scale-verify` (image `v2.14.1`, port 3427) named by `LIVING_STDB_CONTAINER` and `LIVING_STDB_URL` (no name shim: `run.py` and `drive.py` now take any local server the harness names); worktree `~/dev/slop-scale`, branch `scale-1` from `1693f3e` with the frames change (docs/PERCEPTION.md, "Frames": the private `motion_seen`, `fighter_seen`, `doing_seen` and `line_seen` tables, `projected.by_viewer_body`); bindings regenerated.
+
+- `client-scale-scoped-011217` (`run.py`, scoped default): 30 of 30. Private table visibility: 62 tables. Reducer permission matrix: 194 calls, 0 mismatches.
+- `client-scale-open-011435` (`LIVING_PERCEPTION=open`): 30 PASS and the known XFAIL (anonymous `experience` in the open build).
+- After merging main `fe6ec66` (megacity-1, soak-1): `client-scale-merge-scoped-091456` 30 of 30; private table visibility 63 tables; permission matrix 206 calls, 0 mismatches. The run before it stopped at the reducer inventory: megacity's `create_floor` (admin only, now in `ADMIN`) and `genesis_step` (scheduled only, now in `SCHEDULED` with `tick` and `housekeeping`) were not listed on main either.
+- The two runs before stopped at the driver's inventories: the four new private tables, and `judged` (table) and `mind_judged` (reducer) from the harness merge, which the driver did not list. Both inventories now name them; `mind_judged` is called with one judgment for the caller's own character and refused for others'.
 ## 2026-11-10 `guest`, and harness-1's `judged` and `mind_judged` (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).

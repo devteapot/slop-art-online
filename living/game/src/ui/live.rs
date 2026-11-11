@@ -32,7 +32,7 @@ use crate::world::Scene;
 use bevy::prelude::*;
 use living_bindings::*;
 use spacetimedb_sdk::Table;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// The character I last played, to notice its death.
 #[derive(Default)]
@@ -43,6 +43,9 @@ pub struct Last {
     /// the same update as the death itself, so the death screen names my killer and the
     /// witnesses from this, as my character saw them, not from the authority's cause text.
     labels: HashMap<u32, String>,
+    /// Speech I heard, by experience id: `my_experience` holds only my newest lines (the
+    /// authority's window, `frame::LINES_SHOWN`), so the log keeps what it has received.
+    heard: BTreeMap<u64, Experience>,
     /// The connection has been live: a later loss is shown.
     was_live: bool,
 }
@@ -151,12 +154,19 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     // Exact where I perceive it exactly (my look at them, an appraisal), else the band.
     let band = |id: u32| match chars.get(&id).filter(|c| c.hp >= 0.0 && c.max_hp > 0.0) {
         Some(c) => Some((c.hp / c.max_hp).clamp(0.0, 1.0)),
-        None => conn.db.seen_fighters().id().find(&id).filter(|f| f.band <= 4).map(|f| living_rules::combat::band_fraction(f.band)),
+        None => crate::net::find_fighter(conn, id).filter(|f| f.band <= 4).map(|f| living_rules::combat::band_fraction(f.band)),
     };
-    let busy = |id: u32| conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
+    let busy = |id: u32| crate::net::find_fighter(conn, id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
 
     // What I heard.
-    let mut heard: Vec<Experience> = me.map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech").collect()).unwrap_or_default();
+    last.heard.retain(|_, e| Some(e.observer) == me);
+    if let Some(id) = me {
+        last.heard.extend(conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech").map(|e| (e.id, e)));
+    }
+    while last.heard.len() > 200 {
+        last.heard.pop_first();
+    }
+    let mut heard: Vec<Experience> = last.heard.values().cloned().collect();
     heard.sort_by_key(|e| e.at_ms);
     let talking: Vec<u32> = heard.iter().filter(|e| now_ms - (e.at_ms as f64) < 8_000.0).map(|e| e.subject).collect();
     let name_of = |id: u32| chars.get(&id).map_or_else(|| "Someone".to_string(), |c| c.label.clone());
@@ -255,7 +265,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         (Some(id), Some(m)) => {
             let inv = |item: &str| conn.db.my_inventory().iter().filter(|r| r.owner == id as u64 && r.item == item).map(|r| r.qty).sum::<u32>();
             let knows = |t: &str| conn.db.my_know_how().iter().any(|k| k.actor == id && k.technique == t);
-            let me_f = conn.db.seen_fighters().id().find(&id);
+            let me_f = crate::net::find_fighter(conn, id);
             let energy = m.energy;
             live_bar(&cards, |card| {
                 // A held guard: raised now (my fighter row says so) or my key is down.

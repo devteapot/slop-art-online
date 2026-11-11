@@ -11,7 +11,9 @@
       "see Marta Hale's boy through the cough",
       "bring Ysolde back to the chapel before winter",
       "keep the chapel's store of salves from running dry",
-      "persuade the Reeve to soften the gate-due"
+      "persuade the Reeve to soften the gate-due",
+      "train Alys to set a poultice and read a fever as well as she does herself",
+      "keep the chapel's calendar and feast days written out fair for whoever comes after her"
     ],
     "mood": "steady, tired, quietly stubborn",
     "traits": {
@@ -232,7 +234,13 @@
         "why": "They lost their fields to a ledger, not to wickedness."
       }
     ],
-    "secret": "I have written to Ysolde asking her to come back to the chapel before winter, and offered to speak to the Reeve about a pardon for her leaving; the letter is under my herb ledger and no one knows."
+    "secret": "I have written to Ysolde asking her to come back to the chapel before winter, and offered to speak to the Reeve about a pardon for her leaving; the letter is under my herb ledger and no one knows.",
+    "pastimes": [
+      "sitting by the common fire of an evening, mending the chapel's linen and listening to whoever comes in",
+      "walking the herb garden at first light with her hand on the plants, naming them under her breath",
+      "taking a cup of something warm at the chapel door with Agnes Fenner and hearing the town's gossip"
+    ],
+    "calling": "I keep the common fire and the calendar, and I heal whoever comes to the door, outlaw or Reeve's man, without asking first which they are."
   },
   "Sister Alys": {
     "narrative": "I am the youngest sister here and I keep the herb garden and the salves, and I know the names of every plant in it in three tongues. Sister Elspeth taught me to set a poultice before I was twenty. But I have read the town ledger's copy of the Coldwell taking, and I cannot see how a debt turns into a field, and I have not said so aloud. I keep my doubts where I keep the seeds: in a box, labelled, and not for the Reeve's eyes.",
@@ -245,7 +253,9 @@
     "goals": [
       "bring the herb garden through the frost",
       "keep the chapel's salve store full for winter",
-      "find the courage to say what she thinks of the Coldwell taking"
+      "find the courage to say what she thinks of the Coldwell taking",
+      "grow a plant she has only read of, and get it to take in the garden",
+      "make a salve of her own devising good enough to be asked for by name"
     ],
     "mood": "careful, watchful, a little restless",
     "traits": {
@@ -402,7 +412,13 @@
         "why": "Whatever else the town argues about, the sick are ours to tend."
       }
     ],
-    "secret": "I doubt the Reeve's right to the Coldwell fields, and I have said so to no one, not even Elspeth."
+    "secret": "I doubt the Reeve's right to the Coldwell fields, and I have said so to no one, not even Elspeth.",
+    "pastimes": [
+      "tending the herb garden, weeding and labelling the beds in three tongues",
+      "pressing and drying plants between the pages of the chapel's old books",
+      "walking the meadow edge beyond the walls to see what grows wild and what is coming into flower"
+    ],
+    "calling": "I grow and make the chapel's salves, and I would know every plant on this island and what it is good for before I am done."
   },
   "Sister Perrin": {
     "narrative": "I keep the common fire and the calendar of feast days, and I cook for the chapel and for whoever comes to the door hungry. I am not the eldest and not the cleverest, but I know which saint's day falls when and I know the fire's moods. I hear the town's quarrels at the door and I ladle out the pot and say little. The fire has not gone out in my keeping and it will not.",
@@ -415,7 +431,9 @@
     "goals": [
       "keep the common fire through the winter",
       "keep the feast days straight so the town does not lose its year",
-      "see the chapel's pot never empty at the door"
+      "see the chapel's pot never empty at the door",
+      "learn to bake the honey cakes the way the old sisters made them, before the last of them is forgotten",
+      "keep the chapel's pot never empty through a whole winter"
     ],
     "mood": "placid, warm, unbothered",
     "traits": {
@@ -534,6 +552,12 @@
         "why": "I ladle the pot and hold my tongue; the Reeve and the Guild can argue their own argument."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "baking the feast-day bread and keeping the calendar of saints' days in her own hand",
+      "sitting at the chapel door with the pot, ladling for whoever comes and hearing their news",
+      "singing the old feast songs while she works the kitchen, whether or not anyone is listening"
+    ],
+    "calling": "I keep the common fire and cook for the chapel and for whoever comes to the door hungry, and that is the work I love."
   }
 }

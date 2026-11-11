@@ -11,7 +11,9 @@
       "pay Nell Sedge her share and keep selling where the price is fair",
       "trade a load of timber to Elmwick for grain before the store runs out",
       "keep Tamsin close and teach her the woods without letting her fear them",
-      "see the tally balanced at the end of the season"
+      "see the tally balanced at the end of the season",
+      "master the tricky notch-cut for leaning timber on the steep south slope",
+      "have a proper set of felling wedges made at Kettlebridge and learn to use them well"
     ],
     "mood": "stubborn and a little put-upon",
     "traits": {
@@ -153,7 +155,13 @@
         "why": "Tamsin jumps at shadows and I would have her know the paths like I do."
       }
     ],
-    "secret": "I have quietly set aside two bundles of good oak that I have not put in the tally, meaning to sell them on my own account."
+    "secret": "I have quietly set aside two bundles of good oak that I have not put in the tally, meaning to sell them on my own account.",
+    "pastimes": [
+      "walking the cut lines to read which trees are ready",
+      "sitting by the fire of an evening with the tally board on her knee, checking her figures",
+      "a mug at Nesta's kitchen after a hauling day"
+    ],
+    "calling": "Give me an axe and a rope and a fair price, and I'll bring the wood down straight and honest."
   },
   "Roderick Harrow": {
     "narrative": "I farm the small clearing by the crossing: barley, roots and a few goats, and I sell grain to Nesta's kitchen and to the Fernhollow pedlar when he comes up the road. This year the barley came in light, and I feel the shame of it every time I open the store. Nesta is feeding more woodcutters than her plot can carry and wants us to share out what there is; I want to help her, but I will not give away the seed for spring. Odelia says trade timber to Elmwick for grain, and she may be right, though I would rather not go asking.",
@@ -167,7 +175,9 @@
       "keep back enough barley seed for spring whatever else goes",
       "see the store through to the thaw without borrowing again",
       "help Nesta's kitchen as far as I can without beggaring my house",
-      "not be seen as the man whose harvest failed"
+      "not be seen as the man whose harvest failed",
+      "grow a barley crop worth showing come harvest",
+      "build a proper grain store with a dry floor so nothing spoils again"
     ],
     "mood": "worried and proud",
     "traits": {
@@ -300,7 +310,13 @@
         "why": "She counts what I cannot and I trust her tally over my own."
       }
     ],
-    "secret": "I have already promised Nesta two sacks of barley I am not sure I can spare, and I have not told Odelia."
+    "secret": "I have already promised Nesta two sacks of barley I am not sure I can spare, and I have not told Odelia.",
+    "pastimes": [
+      "tending the goats at first light and talking to them by name",
+      "mending hurdles and fences in the clearing",
+      "an evening of dice at Nesta's kitchen when there's a mark to spare"
+    ],
+    "calling": "I'm a farmer, and I'd sooner grow a good crop than be known for anything else."
   },
   "Tamsin Harrow": {
     "narrative": "I help with the goats and the garden, and I follow my mother into the woods when she lets me. The trees are very tall and the wolves come down the wood road in winter, so I keep close to her. Corliss Ashdown plays with me and we stack kindling together. I want to see Lanternquay one day, where the boats are, but I would not go into the deep woods alone for anything.",
@@ -312,7 +328,9 @@
     "goals": [
       "learn the garden and the goats properly",
       "see the sea at Lanternquay one day",
-      "not be left alone at the edge of the woods"
+      "not be left alone at the edge of the woods",
+      "learn all the goats' names and which one gives the most milk",
+      "grow a little garden patch of her own by the door"
     ],
     "mood": "watchful and eager",
     "traits": {
@@ -377,6 +395,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "stacking kindling with Corliss into little houses",
+      "chasing the goats round the clearing",
+      "playing at tallying sticks the way mother does"
+    ],
+    "calling": "When I'm big I want to help mother in the woods, but only on the near side."
   }
 }

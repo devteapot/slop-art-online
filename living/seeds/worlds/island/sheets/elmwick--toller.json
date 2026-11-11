@@ -12,7 +12,9 @@
       "keep the Toller acres in good heart",
       "see Goda married to a man with land of his own",
       "avoid open quarrel with Hob Garrow",
-      "settle the Lakemead matter quietly if it can be done"
+      "settle the Lakemead matter quietly if it can be done",
+      "breed the flock up so the wool clip pays better at market",
+      "build a proper stone byre before another hard winter"
     ],
     "mood": "uneasy, cautious, quietly stubborn",
     "traits": {
@@ -150,7 +152,13 @@
         "why": "A man is judged by his fences and his fleeces, not his words."
       }
     ],
-    "secret": "I have quietly asked around Brackenford for a tenant farmer's place for Goda and Wulf, thinking to keep her close, and I have not told Sibley."
+    "secret": "I have quietly asked around Brackenford for a tenant farmer's place for Goda and Wulf, thinking to keep her close, and I have not told Sibley.",
+    "pastimes": [
+      "walking his fence lines at dusk, checking the sheep and the stream",
+      "sitting by the hearth after supper with a cup and the old stories of his father's day",
+      "mending hurdles and tools in the barn when the day's work is done"
+    ],
+    "calling": "I was born to these acres, and I mean to leave them in better heart than I found them."
   },
   "Sibley Toller": {
     "narrative": "I keep the dairy and the vegetable plot, and I tend the sick of Elmwick with Leofgifu Garrow. I have seen the winter cough before, and young Thea Wray has it now. My Goda is courting Wulf Rowan, and I like the lad, but Edric has his doubts. I do not cross my husband, but I can soften him.",
@@ -165,7 +173,9 @@
       "treat Thea Wray's cough without offending Rowan Wray",
       "see Goda happily matched",
       "keep the dairy and the plot in good order",
-      "help Edric see sense about the courtship"
+      "help Edric see sense about the courtship",
+      "learn a better remedy for the winter cough before it takes hold again",
+      "see her dairy cheese spoken well of at Brackenford market"
     ],
     "mood": "concerned, warm, quietly determined",
     "traits": {
@@ -301,7 +311,13 @@
         "why": "The winter cough took two old men and a babe; I will not see it take Thea."
       }
     ],
-    "secret": "I have been giving Rowan Wray a little of my own cough syrup, telling her it is only a strengthening tea, because I fear her stream herbs are not enough."
+    "secret": "I have been giving Rowan Wray a little of my own cough syrup, telling her it is only a strengthening tea, because I fear her stream herbs are not enough.",
+    "pastimes": [
+      "tending her vegetable plot and drying herbs for the winter",
+      "sitting with Leofgifu over a posset, trading gossip and remedies",
+      "walking to the stream to watch the water and be out of the house a while"
+    ],
+    "calling": "I keep the dairy and I mend the sick, and I would not trade either for lighter work."
   },
   "Goda Toller": {
     "narrative": "I work the fields with my father and keep the sheep, but I want a strip of my own. The Lakemead is the best chance for it, and I am tired of my father's caution. Wulf Rowan is courting me, and I am fond of him, but my father has doubts. I have not told him how serious it has become.",
@@ -316,7 +332,9 @@
       "win a strip of land, perhaps the Lakemead",
       "marry Wulf Rowan",
       "prove to my father that I can make my own way",
-      "see the meadow returned to Elmwick"
+      "see the meadow returned to Elmwick",
+      "save enough marks of her own to put toward a strip of land",
+      "learn to keep accounts and hold her own at a market stall"
     ],
     "mood": "restless, hopeful, frustrated",
     "traits": {
@@ -447,7 +465,13 @@
         "why": "It was Elmwick's common before it was let, and I would farm it if it were won back."
       }
     ],
-    "secret": "I have already promised Wulf that I will marry him, and we have spoken of going to Brackenford to seek a tenant's place, but I have not told my father."
+    "secret": "I have already promised Wulf that I will marry him, and we have spoken of going to Brackenford to seek a tenant's place, but I have not told my father.",
+    "pastimes": [
+      "walking the sheep up to the high pasture and sitting with them through the afternoon",
+      "meeting Wulf at the stream when the day's work is done",
+      "practising with her father's old sickle on the rough ground, learning to swing it clean"
+    ],
+    "calling": "I want a strip of my own to work, and I would work it better than any man who thinks it his by right."
   },
   "Hreod Toller": {
     "narrative": "I was raised in the Toller house after my parents died, and I work alongside my uncle with the sheep and the harvest. I play with Cerdic Garrow when there is time. I am not old enough to be troubled by the Lakemead quarrel, but I hear the men talk and I wonder what it would be like to have a strip of my own one day.",
@@ -461,7 +485,9 @@
       "do well by my uncle and aunt",
       "learn the sheep and the harvest",
       "play with Cerdic when the work is done",
-      "one day have a strip of my own"
+      "one day have a strip of my own",
+      "learn every sheep in the flock by name before the lambing",
+      "carve a whole set of wooden sheep for Cerdic and himself to play with"
     ],
     "mood": "cheerful, eager, a little uncertain",
     "traits": {
@@ -560,6 +586,12 @@
         "why": "There is time enough for work, and Cerdic is my friend."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "playing at sheep and wolves with Cerdic Garrow in the meadows",
+      "helping his uncle drive the flock and learning the dogs' names and whistles",
+      "carving little sheep and dogs from offcut wood in the barn"
+    ],
+    "calling": "I want to be a shepherd like my uncle, and one day have a flock that answers to my whistle."
   }
 }

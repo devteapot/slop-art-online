@@ -11,7 +11,9 @@
       "keep the north channel for my traps",
       "see the debt to Rook Tarn settled",
       "protect my daughter from a match I distrust",
-      "keep the salt pans working through winter"
+      "keep the salt pans working through winter",
+      "learn to read the weather off the western sky better than any neighbour",
+      "see the salt pans pass to someone who will keep them working"
     ],
     "mood": "stubborn and watchful",
     "traits": {
@@ -148,7 +150,13 @@
         "why": "They stole from me once; they'll do it again if they can."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending and tarring the boat on the shore at low tide",
+      "setting and checking his traps in the north channel",
+      "sitting at the pans at dusk watching the salt form"
+    ],
+    "calling": "I fish the west shore and work the salt pans my father left me, and that is the work I want and mean to keep."
   },
   "Ebba Tarn": {
     "narrative": "I work the salt pans and keep the goats and the herb plot, and I've set bones and dosed coughs for half the saltings. The Brines come to me when the cough takes them, and I treat them the same as anyone. I've no quarrel with Marra, but I'll not cross my husband in front of them. The winter store worries me, and the wolves come closer each year.",
@@ -162,7 +170,9 @@
       "keep the salt pans and goats through winter",
       "see Nessa happy without breaking the household",
       "keep the herb plot and the medicines stocked",
-      "avoid open quarrel with the Brines"
+      "avoid open quarrel with the Brines",
+      "grow a fuller herb plot and learn a cure she does not yet know",
+      "see Nessa settled happily in a house of her own"
     ],
     "mood": "weary but steady",
     "traits": {
@@ -294,7 +304,13 @@
         "why": "I told Grim to leave Nessa and Tarn alone; they'll sort it themselves."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the herb plot and drying herbs for the winter shelf",
+      "sitting with a neighbour over a cup and swapping cures",
+      "walking the shore at dusk to see the goats home"
+    ],
+    "calling": "I set bones and dose coughs for the saltings, and I would have my medicines better stocked and my hands surer at it."
   },
   "Nessa Tarn": {
     "narrative": "I help my mother with the pans and the goats and my father with the boat, and I'm a fair hand with a spear. I like Tarn Brine, and I'm angry with my father for using the debt as a gate. I meet Tarn on the shore when I can, but I'm afraid of the deep water beyond the shore and I dream of seeing Lanternquay and the tide lanterns.",
@@ -308,7 +324,9 @@
       "see Tarn Brine without my father's leave",
       "visit Lanternquay and see the tide lanterns",
       "keep the goats and pans well",
-      "learn to spear fish better"
+      "learn to spear fish better",
+      "become a truly good hand with the spear",
+      "see Lanternquay and its tide lanterns with her own eyes"
     ],
     "mood": "restless and hopeful",
     "traits": {
@@ -423,6 +441,12 @@
         "why": "The sea beyond the shore is dark and cold, and I've heard stories."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "spear-fishing in the shallows at low tide",
+      "walking the shore to meet Tarn Brine when she can slip away",
+      "sitting up on the dunes watching the lights far down the coast"
+    ],
+    "calling": "I work the pans and goats and the boat with my family, but the work I long for is out on the water with a spear, and one day on a bigger water than this shore."
   }
 }

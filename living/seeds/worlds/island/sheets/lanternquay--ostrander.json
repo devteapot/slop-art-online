@@ -11,7 +11,9 @@
       "keep Kai's secret and keep him alive",
       "see the tide lanterns lit at dusk every night",
       "keep the stall earning through the winter",
-      "hear word of Kai again without the Warden hearing it first"
+      "hear word of Kai again without the Warden hearing it first",
+      "to keep the stall's pot full and its marks counted through the cold months without borrowing",
+      "to learn one more thing about Kai, quietly, from someone who owes her a favour"
     ],
     "mood": "quietly braced, grieving and watchful",
     "traits": {
@@ -166,6 +168,12 @@
         "why": "I lost neighbours to the Surge; the wall matters more than a new stall front, whatever the rebuilders say."
       }
     ],
-    "secret": "Kai sent word that he is alive and living with the outlaws at Coldwell; Ilse has told no one, and knows Wick Brine saw the letter and has kept quiet."
+    "secret": "Kai sent word that he is alive and living with the outlaws at Coldwell; Ilse has told no one, and knows Wick Brine saw the letter and has kept quiet.",
+    "pastimes": [
+      "ladling out bowls at her own stall before the dawn boats come in, tasting the broth and adjusting it",
+      "walking the quay at dusk to light her tide lantern, pausing at the ones that mark neighbours she lost",
+      "sitting with Wick Brine over a late bowl, trading harbour gossip and old names"
+    ],
+    "calling": "I feed the quay at dawn and light it at dusk — the noodles and the lanterns are the same work, keeping people from going hungry or going unremembered."
   }
 }

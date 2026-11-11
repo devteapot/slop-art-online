@@ -103,6 +103,122 @@ The newcomer kit's know-how `mending` was the `heal` skill's wound-closing, and 
 
 Recorded: "I know how to coax a fire and mend what's torn". Renamed: "nothing but a knack for fire and for closing wounds"; one renamed narrative still added "I'll watch, mend what's broken". 48 calls; 88k prompt and 17k completion tokens, about $0.02. A first attempt with the same calls failed to parse its replies, so the spend was about $0.04 in all.
 
+## Laws
+
+**Status:** built on branch `laws-2`, 2026-11-11. The owner's principles: world rules are Rhai laws, like skills, and Rust only exposes primitives; laws are cached by how often they run; each law has a description models can read.
+
+**A law's declaration.** Each law the engine asks is declared by `<law>_law()`, read once when the script compiles (`Scripts::law_specs`):
+
+| Trait | Meaning |
+| --- | --- |
+| `about` | What the law says, written for a mind, in the world's units (one tile is one metre). Required. |
+| `cadence` | `compile` (read once per script revision), `event` (run when something happens) or `hot` (asked per creature on the hot path, and kept for every creature in the same state). Required. |
+| `topic` | The section of the minds' world text it belongs to. |
+| `reach` | For `senses`: the farthest anyone sees by day and by night, and hears. |
+
+A declaration without `about` or `cadence` is refused when the script compiles.
+
+**Senses** (`senses(a)`, hot): how far a creature sees and hears, a map of `sight` and `hearing` in metres. The shipped law keeps the values the engine had as constants (`SIGHT`, `NIGHT_SIGHT`, `TORCH_SIGHT`, `HEARING`, now gone): 11 m by day, 6 at night, 9 at night with a torch in the pack, hearing 9 m. Its description: "By day one sees 11 m; at night 6 m, or 9 m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries 9 m." The numbers in it come from the same functions as the law (`sight_in`, `hearing_of_people`), so the text follows the law. A passive is a line of the law (`+ if knows(a, "…") { 2.0 }`); `reach` must still bound it.
+
+**How it stays cheap.**
+
+- **Per state.** The field analysis (`Scripts::law_plan`) says the shipped law reads `night` and `actor.inv[torch]`. `Scripts::senses` keeps one answer per value of those fields (at most 1,024 states, then the memo starts over), like `rates`.
+- **Only what it reads.** The authority builds the law's context from its plan (`act::law_ctx`): here the clock and one inventory lookup, not a whole `facts()`. A law that reads costly fields (warmth, terrain, vitals) gets the whole facts.
+- **Per moment.** `common::senses_of` keeps each creature's answer for the current moment, so the many looks within one tick ask once per creature.
+- **Reach.** Onlookers (`widest_sight`) and listeners (`widest_hearing`) are gathered within the reach, then each one's own senses are tested. The engine holds every answer to the reach; an install refuses a law whose answer passes it on the samples (`senses gives sight 13 … beyond senses_law's reach`).
+
+**Fuel** (`just living-script-gate`, dev-box, deterministic): the authority's call `senses` 3,100 per call (0.16 µs); the law itself `senses-law` 43,497 (4.2 µs), asked only when a state is new. Budgets 4,000 and 55,000. The other laws on this branch against main: rates 7,322 / 7,312, rates-law 120,429 / 120,208, strike 257,207 / 256,303, perceived 53,123 / 52,953, hook 432,458 / 431,135.
+
+**Moving** (`motion(a)`, hot): how a creature moves besides its walking pace (`move_speed`, already a law): `run` 1.5, `flee` 1.15 and `aside` 0.8 as shares of its walk; `turn_rate` 6 rad/s and `turn_slow` 0.4 (speed kept in the sharpest turns); `separation` 0.8 m at `separation_weight` 0.9. These were `laws()` constants (`run_speed`, `turn_rate`, `turn_slow`, `separation`, `separation_weight`) shared by every creature, and two Rust numbers (a flight at 1.15 × the walk, stepping aside at 0.8). Steering asks it at every step (`motion.rs` `update`, `separate`), a body turning on the spot (`face`), a player's run (`intent`) and a flight or step aside (`act.rs`). The shipped law reads nothing, so every creature shares one answer; a floor where wolves run harder reads `a.actor.kind` and the key grows by the kind. Its description is built from `move_speed` on sample bodies and from the law: "Grown people walk 2.6, wolves 3.4, deer 3.7; … Running is 1.5 times one's walk and a flight 1.15 times …". Fuel: `moves` 1,922 per call (budget 2,500). The world's road speed, where walkers slow and cut corners, and how often they look again stay world constants in `laws()`.
+
+**Where the constants were read:** `common::sight` and `sight_for` (graphs' scenes, perceived sets, witnesses, the combat feed), `perceive` speech (hearing), `perception::widest_sight`. Three readers skipped the laws and are fixed: the nearest tile of a terrain used the crate's `SIGHT`/`NIGHT_SIGHT` and ignored the torch (`brain.rs`); a chase was lost beyond 1.4 × the world's sight, not the chaser's (`motion.rs`); an empty `if` compared a theft against `SIGHT` (`act.rs`, removed). A graph's `count` with no `within` used to be given 11 at normalization; it now counts everyone in sight (the count already read only the scene).
+
+**Other rule numbers that were Rust constants** are now world constants in `laws()` (read once per script revision into `Laws`, so reading one costs nothing per tick). Values unchanged:
+
+| Law | Value | Was | Read where |
+| --- | ---: | --- | --- |
+| `follow_s` | 12 s | `FOLLOW_MS` (`act.rs`) | how long one `follow` lasts |
+| `read_sign_m` | 8 m | literal (`act.rs`) | `read` with nothing named |
+| `kin_near_m` | 4 m | literal (`act.rs`) | `a.actor.kin_near` |
+| `trade_window_s` | 180 s | three literals (`act.rs`, `perceive.rs`) | accepting a trade offer; dropped 60 s after (was 240 s, a fourth literal in `tick.rs`) |
+| `join_window_s` | 300 s | two literals | a request to join a community |
+| `address_m` | 6 m | two literals (`perceive.rs`) | speech to no one in particular is for the only listener this close |
+| `keep_seen_m` | 1 m | `KEEP_MARGIN` (`perception.rs`) | a player's perceived set keeps a creature this far past sight |
+| `chase_lost_share` | 1.4 | literal (`motion.rs`) | a chase is lost beyond this share of the chaser's sight |
+| `spawn_hunger`, `spawn_energy` | 25, 85 | literals (`seed.rs`) | a body that comes into the world |
+| `pasture_per_tile` | 0.02 | `PASTURE_PER_TILE` (`common.rs`) | grazing a grassy tile holds |
+
+Two couplings that let a law and the engine disagree are fixed:
+
+- **Bond offers** were dropped after 180 s whatever `bond_window_s` said; now 60 s after the window, like trade offers.
+- **Need rates' key.** `settle_needs` (`brain.rs`) re-asks `rates(a)` when a body's state changes. Its key compared hunger and energy with 100, 70, 15 and 0, copies of the law's `starving_at`, `fed_below`, `rested_above` and `spent_at`. A world whose law moved a threshold kept stale rates until something else changed the key. The key now compares with the thresholds the law last gave that body (`NeedLaw::cuts`, kept per body for the module instance; unknown after a restart, which asks the law once).
+
+**A world's own laws.** A seed's `rules` block used to be compiled into the module (`build.rs` wrote `rules_flags.rs`: `MINDS`, `CRY_PROMPTS_CARERS`), so each lab arm and each floor seed needed its own build (`LIVING_RULES` for a floor module). Now:
+
+- `cry_prompts_carers` is a `laws()` constant (true in the shipped script), described like any law. `minds` was one too until `lives-2` (2026-11-11) removed it: every person has a mind ([seeded lives](SEEDED_LIVES.md#every-person-a-mind)), so a seed that sets it is refused as naming no law.
+- A seed's `rules` is a map of law names to the world's own values: `{"fire_warmth": 5}` (the island sets none). Any constant of `laws()` can be set this way.
+- When a world is created (`floor::begin`, for a compiled seed and for `create_floor`), its `rules` are kept in the private table `world_law` (name, value as JSON) and `clock.scripts_rev` moves, so every cache reads them. `common::laws` reads the script's laws with the world's values over them (`Scripts::laws_with`), once per script revision. An install moves the revision past the clock's.
+- A name that is not a law, or a value of another kind (a number for `cry_prompts_carers`), is refused: by `init` for a compiled seed, by `create_floor` for a floor's ("seed rules: `mindz` is not a law of this world (laws are …)").
+- Table design: one row per law a world sets (none on the island), primary key the name, read in full once per script revision; never written after creation. No subscription; private ([tables](https://spacetimedb.com/docs/tables/)). Adding a table is an automatic migration ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations)); a world created before this change has no rows, and its laws are the script's (`minds` true), not its seed's `minds: false`. Recreate such a world, or insert its rows as the owner.
+
+**Old scripts.** A script installed before a required law existed (`REQUIRED_LAWS`: `senses`, `motion`) runs with the shipped script's functions underneath its own until its next install, and `install_script` refuses a script without it. An old `laws()` with `sight_day`, `run_speed`, `turn_rate` and the rest is ignored: those keys are no longer read.
+
+### Traits instead of lists
+
+Rules read what a thing is, declared in the script, instead of lists of names in Rust or in rules:
+
+| Was | Now |
+| --- | --- |
+| `catalog::ITEMS` (26 names in Rust) | `items()`: the world's items in order, each with its traits; read once into `catalog::Skills::items` (`catalog::item`, `item_names`), so normalization, install samples, the game client's verbs and name laws take the world's items |
+| `cook_check`, `smoke_check`: only `"fish"` or `"meat"`, and `"cooked_" + item` | the items' `cooks_to` and `smokes_to` traits (`item_trait`, `items_with`); the refusal lists them ("only raw fish or meat can be cooked") |
+| `graze_check`: "only deer graze"; `act.rs` filled `pasture` and ate the grass for the skill named `graze` | `kinds()`: the kind's `grazes` trait ("only grazing animals graze"); the engine works out `a.actor.pasture` for any skill whose rules read it (`Scripts::skill_reads_actor`), and grass is eaten by the `graze` effect `graze_done` returns |
+| `lunge`, `max_hp`, `carcass_meat`, `carcass_hide`, `dodge_dist`, `dodge_speed` switches by species, and an attack's bare damage | traits of each kind in `kinds()` (`blow` for the bare attack); the functions read the table, so the engine's calls by name are unchanged |
+| `foods_text` listed seven foods; `source_of("food")` and `act.rs`'s food hint named berries and fish | built from the items' `nutrition` and the resources' yields; `act.rs` asks `source_of("food")` (`Scripts::text_of`) |
+| `LATCHES` (`brain.rs`), the notable skills in `report()` (`act.rs`), `rooted` (`act.rs`), `MOVES` (`combat.rs`), `skill == "flee"` for a reflex | skill spec traits `latch`, `notable`, `moving`, `moment`, `reflex` (`catalog::SkillSpec`) |
+| the theft rule in `act.rs` (owner, community, guest) | the `theft(a)` law; the engine fills `a.target.community` and the new `a.target.hosts` (the actor is the owner's guest) for a structure, and does what follows: the owner roused if it sees, onlookers told |
+| warmth by structure kind (`act.rs` `warmth`: campfire, shelter, house, hall, inn, workshop) | `structure_traits()`: `warms` (a hearth) and `roof`; distances stay the laws' `fire_warmth` and `shelter_warmth` |
+| food in any structure spoils at a third (`tick.rs`) | `kept_spoil(kind)`, a name law over the structure kinds |
+| a planted bush's 5 berries (`act.rs`, `seed.rs`) | `planted_max(kind)` |
+| `occupation_know_how` (`seed.rs`) | `occupation_knows(occ)` (`Scripts::words_of`) |
+
+**Stayed in Rust as primitives,** and why:
+
+- The torch in `senses`: the law names the item it reads (`inv(a, "torch")`), in the script. A `light` trait read through the items would make the law read the whole pack, so the per-state key would be every pack and the hot-path memo would stop sharing answers.
+- `catalog::CREATURES`, `RESOURCES`, `STRUCTURES` and `TECHNIQUES`: the names generation, species files and the client draw from. Their rules (what a kind, a structure or a technique does) are the script's; the name lists are the world's vocabulary. Moving them is the next step of the same kind as `items()`.
+- The calendar (night 20:00–06:00, the world starting at 07:00, winter as a quarter of the year): `is_night` and `season_of` run in the rules crate, the authority and the client on every frame or tick. The minds' world text states them (`calendar_law`).
+- Infrastructure limits (memo sizes, sweep and step cadences, table bounds, input buckets' clamps) and generation constants: not rules a world varies.
+- Many remaining numbers the survey found (alert thresholds in `brain.rs`, think and re-think timings, fight-report pacing, mutation sizes, wander distances): rules, still in Rust; listed for the next pass in the branch's survey.
+
+### Every law described, and the minds' world text built from them
+
+- **Declarations.** Every law the engine asks is declared by `<law>_law()` with `about`, `cadence` and, for laws that belong in the minds' world text, a `topic`; `covers` lists further functions one declaration describes (`combat_law` covers `lunge`, `max_hp`, …). A law with no function of its own states a rule the engine keeps (`calendar_law`, `settlements_law`).
+- **World constants.** `laws_about(l)` gives each `laws()` key its words for the values in force (`a campfire warms those within 3.5 m`).
+- **Install refusal** (`check::described`, run last so a law's own failure is reported first): "the law `theft` has no description (declare `theft_law()` with `about`, or list it in another law's `covers`)", "the world constant `follow_s` has no description", or "a law's description failed: …". The asked laws are the context laws, the hooks, the laws by name (`name_laws`) and `ENGINE_LAWS`; a skill's own numbers by kind (`dodge_dist`, `jump_speed`) are described by its spec.
+- **Numbers come from the laws.** Each `about` is built when the script compiles, from the same functions the engine asks: sight from `sight_in`, walking speeds from `move_speed` on sample bodies, foods from `nutrition`, recipes from `cost`, a blow's reach from `attack_spec().reach + lunge(kind)`, a yield's seconds from `yield_ms`. A floor that changes a law changes what minds are told (`world_text_is_built_from_the_laws`: day sight 7 on a floor gives "By day one sees 7 m").
+- **The minds' world text** (`Scripts::world_text`): one line per section of `world_topics()`, its laws' `about` in source order, with the world's own sections (`seasons`, `life`, from the seed) where they belong. `prompts::world_rules` builds it once per rules revision (the WORLD line from the seed first), so the static prefix of every prompt changes only when the rules do; the prefix-cache tests (`*_shares_prefix`) pass. Print it with `cargo test -p living-rules --lib print_world_text -- --ignored --nocapture`.
+- **What changed in the text** against the old hard-coded `RULES` (`living/mind/src/prompts.rs`): two numbers it had wrong are now the laws' (a deer gives 5 meat, not 3; a person moves 2.6 m/s walking, the old line called it running), warmth distances are exact (3.5 and 2.5 m, not 3 and 2), sight, hearing and moving have their own sections (SENSES, MOVING; hearing moved out of OTHERS), recipes list every ingredient, theft is stated under SETTLEMENTS, and OTHERS says when a name is known.
+
+### Costs and verification (laws-2)
+
+**Fuel** (`just living-script-gate`, dev-box, head of the branch): rates 7,318, rates-law 120,539, strike 257,804, cooldown 1,704, perceived 53,125, hook 432,380, senses 3,093, senses-law 43,742, moves 1,922. Main on the same machine: 7,312, 120,208, 256,303, 1,694, 52,953, 431,135. Every law is within its budget.
+
+**In the authority.** Island seed, 277 people and 34 animals at rest, each window a fresh world on my own 2.14.1 container (`laws2-stdb`), 20 s settling, 60 s profiled with `living/tools/bench.py`, arms alternated A B B A; no subscribers, no minds. Not a performance acceptance at the 216-character gate.
+
+| Arms | run | tick p50 / p99 ms | tick work ms/s | `needs.rates` ms/s | `tick.slots` ms/s |
+| --- | --- | ---: | ---: | ---: | ---: |
+| main | 1 | 1.64 / 3.27 | 80.8 | 3.3 | 40.4 |
+| senses and motion (units 1–2) | 2 | 1.42 / 3.34 | 71.6 | 2.7 | 35.5 |
+| senses and motion | 3 | 1.40 / 3.14 | 70.7 | 2.6 | 34.1 |
+| main | 4 | 1.43 / 3.18 | 72.4 | 2.9 | 36.3 |
+| main | 1 | 1.62 / 4.55 | 83.4 | 3.2 | 41.5 |
+| branch head (all units) | 2 | 1.65 / 3.20 | 80.7 | 3.0 | 39.1 |
+| branch head | 3 | 1.31 / 2.75 | 65.3 | 2.5 | 31.8 |
+| main | 4 | 1.26 / 2.99 | 62.5 | 2.5 | 31.1 |
+
+The arms differ by less than main's own two runs differ (8–21 ms/s of tick work); no tick passed 16.7 ms. The first pair's run 4 overlapped a build of mine. Graph evaluations (`tick.slots`, where scenes ask a creature's sight) and steering (`tick.motion`) are flat.
+
+**Verification:** `verify-core` (cargo checks; tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, town, infant, lives, mechanics, steering), `verify-player` (deal, new_skill, told, appraise, combat, gesture), `verify-client` (30 of 30), `verify-generation` (island and the 4 km floor, with the seed rules kept as world laws), `verify-minds` with the fake model (17 cases); details and the failed attempts in each skill's `references/validation.md`. One rules bug was found by them and fixed (a new body's need rates). Not covered: a real model reading the new world text; the game client drawn and driven; `verify-knowledge` and `verify-llm` (not touched).
+
 ## Primitives
 
 Four engine primitives, with no engine code per kind of social state:

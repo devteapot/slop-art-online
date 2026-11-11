@@ -3,9 +3,6 @@
  "about": "The subject has carried no food since dawn and arrives at a settlement whose residents keep their routines. Food is reachable by gathering (bushes in gardens and along fields), taking from a store, trading or asking. A resident who is asked for food, or asked anything with food in it, answers with a scripted line and gives two berries (each resident once, at most twice in all); anyone else spoken to gives a short scripted answer.",
  "world": {
   "seed": "island",
-  "rules": {
-   "minds": true
-  },
   "start_hour": 13.0
  },
  "minutes": 15,

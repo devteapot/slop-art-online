@@ -10,7 +10,9 @@
     "goals": [
       "Get the gate-due off his timber",
       "Keep steady work from Gideon Fenwick's yard",
-      "Put by enough marks to see the children fed through winter"
+      "Put by enough marks to see the children fed through winter",
+      "Master a dovetail joint clean enough that Gideon Fenwick stops checking his corners",
+      "Build a proper strongbox for Sabina's marks with his own hands"
     ],
     "mood": "grumbling but steady",
     "traits": {
@@ -149,7 +151,13 @@
         "why": "Talk is cheap and the yard is full of it; I'd rather be at the bench."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "planing a board smooth just to feel the grain run true",
+      "sitting at the yard gate with a mug at the end of the day, swapping news with Silas Pike when he's in town",
+      "mending the house shutters and door-frame on a rest day, square and true"
+    ],
+    "calling": "I make crates and shutter-boards for the works, and I make them square; it's honest work and I'd not trade it."
   },
   "Sabina Marsh": {
     "narrative": "I buy and sell worked iron and clay at the square, and I keep the household's marks in a locked box because Tobiah would lend them to any carter with a hard story. I know what a thing is worth and what a person will pay, and I don't confuse the two. The stall fee to Mabel Fenwick is owed and I'll pay it, but not before I've counted what's left.",
@@ -162,7 +170,9 @@
     "goals": [
       "Pay off the stall fee to Mabel Fenwick",
       "Build up the locked box against a hard winter",
-      "See Nella learn her letters well enough to keep books"
+      "See Nella learn her letters well enough to keep books",
+      "Keep a book of her own bargains, good enough that Hester Crane would not be ashamed to read it",
+      "See the stall through a whole year without borrowing a mark"
     ],
     "mood": "watchful and counting",
     "traits": {
@@ -289,7 +299,13 @@
         "why": "Mabel's fee will be paid, but on my counting, not hers."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the square of a market morning, pricing what's on the stalls before she buys a thing",
+      "sitting with Lottie Fenwick over a pot of tea when the stalls are packed away",
+      "keeping the household accounts in her own hand, neat in a ruled book"
+    ],
+    "calling": "I buy and sell worked iron and clay, and I know what a thing is worth — that's the work I love."
   },
   "Nella Marsh": {
     "narrative": "I count the crates in the yard and I know my letters, which is more than most girls my age. Barnaby Quill teaches me from the psalter and says I'm quick. I want to keep books like Hester Crane one day, and I don't see why I shouldn't.",
@@ -300,7 +316,9 @@
     ],
     "goals": [
       "Learn more letters from Barnaby Quill",
-      "Count every crate in the yard without a mistake"
+      "Count every crate in the yard without a mistake",
+      "Learn the whole psalter by heart from Barnaby Quill",
+      "Write her own name and her mother's in a fair hand"
     ],
     "mood": "proud and curious",
     "traits": {
@@ -390,7 +408,13 @@
         "why": "Ewan needs me and Mother needs the marks counted. I'll not let them down."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "reading the psalter aloud to Ewan until he stops covering his ears",
+      "counting crates in the yard in chalk tallies on the wall",
+      "playing at shop with Lottie Fenwick, one buying and one selling"
+    ],
+    "calling": "I want to keep books like Hester Crane — figures that come out right at the end of the day."
   },
   "Ewan Marsh": {
     "narrative": "The clock is loud and it makes me jump. I like the sawdust and the smell of the wood, and I follow Nella about the yard. When the bell goes I put my hands over my ears.",
@@ -399,7 +423,9 @@
       "Nella"
     ],
     "goals": [
-      "Not be afraid of the clock"
+      "Not be afraid of the clock",
+      "Stand under the clock tower without putting his hands over his ears",
+      "Have a little wooden horse his father cuts for him"
     ],
     "mood": "timid and clinging",
     "traits": {
@@ -452,6 +478,12 @@
       }
     ],
     "stances": [],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "pushing sawdust into little hills and knocking them down",
+      "following Nella about the yard, holding the hem of her skirt",
+      "being carried on his father's shoulders to see over the gate"
+    ],
+    "calling": "When I'm big I'll make things at the bench like Father, but not near the clock."
   }
 }

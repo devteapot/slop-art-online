@@ -12,7 +12,9 @@
       "Get the gate-due dropped",
       "Reopen full trade with Kettlebridge",
       "Become Reeve when Aldric steps down",
-      "Keep the Coldwell fields productive and lawful"
+      "Keep the Coldwell fields productive and lawful",
+      "Learn to read the Kettlebridge contract-clauses well enough to argue them without a clerk",
+      "Have a proper market roof built over the west row of stalls"
     ],
     "mood": "determined, a little impatient",
     "traits": {
@@ -214,7 +216,13 @@
         "why": "Aldric is old and has not named a successor; the town needs someone who will put trade first."
       }
     ],
-    "secret": "I have written to Hester Crane more warmly than trade requires, and I have hinted that if I were Reeve the due would be gone within a season."
+    "secret": "I have written to Hester Crane more warmly than trade requires, and I have hinted that if I were Reeve the due would be gone within a season.",
+    "pastimes": [
+      "walking the market square at opening, checking each stall's terms before the bell",
+      "keeping a small herb and berry plot behind the guildhall",
+      "an evening cup at the inn with Osric, listening to the town's gossip"
+    ],
+    "calling": "I was made for the square: to set fair terms and see a stranger and a neighbour trade as equals under the same charter."
   },
   "Osric Abbot": {
     "narrative": "I am Osric Abbot, carpenter, and I make the market stalls and the guildhall benches. My wife Mercy runs the Market Guild, and I am proud of her, though I grumble at the gate-due like everyone else. The Reeve has no love for me and I have none for him; I keep my head down and my tools sharp. Linnet is growing up quick, and I want her to have a square worth trading in.",
@@ -228,7 +236,9 @@
       "Keep the Guild's stalls and benches in repair",
       "See the gate-due gone",
       "Support Mercy in whatever she aims for",
-      "Teach Linnet a trade she can stand on"
+      "Teach Linnet a trade she can stand on",
+      "Build Linnet her own workbench and tools, small enough for her hands",
+      "Replace the guildhall's worn south door with one of my own making"
     ],
     "mood": "steady, quietly resentful of the Reeve",
     "traits": {
@@ -361,7 +371,13 @@
         "why": "Aldric will not listen to reason about the due, and he is too old to change."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "carving a little wooden bird or boat for Linnet, one a season",
+      "fishing off the Thornby shore at dusk when the light is good",
+      "sitting on the guildhall step with a pipe, watching the square fill"
+    ],
+    "calling": "Give me good seasoned timber and a true edge, and I'll make a bench that outlasts us all."
   },
   "Linnet Abbot": {
     "narrative": "I am Linnet Abbot, and I mind the Guild's stall in the square, learning the market terms from my mother. I write letters for Hester Crane and read hers back, and I think she is braver than anyone in Brackenford. I want to see the gate-due gone so the Kettlebridge carts come back, and I want to be as good at the market as my mother is.",
@@ -375,7 +391,9 @@
       "Learn the market terms well enough to run the stall alone",
       "See the gate-due dropped",
       "Keep up my letters with Hester Crane",
-      "Make my mother proud"
+      "Make my mother proud",
+      "Write a letter to Hester with no help from anyone",
+      "Learn to reckon a load's worth in marks in her head, quick as her mother"
     ],
     "mood": "eager, hopeful",
     "traits": {
@@ -501,6 +519,12 @@
         "why": "He works hard and wants his own strip; I would not mind being courted by him properly."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "reading and re-reading Hester Crane's letters and drafting replies",
+      "playing at market with the square's children, haggling over pebbles and berries",
+      "walking to Thornby with her father to watch the boats come in"
+    ],
+    "calling": "One day I'll keep a stall of my own and everyone will know my terms are fair."
   }
 }
