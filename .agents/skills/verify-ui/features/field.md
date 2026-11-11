@@ -28,7 +28,7 @@ While the world's `fov_on` law is on, what a character sees depends on where its
 
 ## Driving it with drive.py
 
-Preconditions: baseline, plus six residents (`residents(run, 6)`) placed round the player: one each way at 4.5 m, one at 1.4 m and one 8 m to the south-east.
+Preconditions: baseline, plus six residents (`residents(run, 6)`) placed round the player: north and south at 4.5 m, east and west at 5.5 m (past side vision's 3.7 m and its 1 m keep margin), one at 1.4 m and one 8 m to the south-east.
 
 - **Scenario:** `check.py --run $R field`. It sets `fov_on` false first, as admin.
 - **Client flags:**

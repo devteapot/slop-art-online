@@ -403,10 +403,11 @@ def texel(meta, pix, x, y):
 
 
 # The looks the scenario faces (live script `look:DEG`: 0 north, clockwise) and where the
-# residents stand round the player (dx, dy metres; +y south): one each way at 4.5 m, one at
-# 1.4 m (the near ring), one 8 m to the south-east.
+# residents stand round the player (dx, dy metres; +y south): north and south at 4.5 m, east
+# and west at 5.5 m (past side vision's reach and its keep metre, so at a look along the other
+# axis they are clearly unseen), one at 1.4 m (the near ring), one 8 m to the south-east.
 FOV_LOOKS = [0, 90, 180, 270]
-FOV_PLACES = [(0.0, -4.5), (4.5, 0.0), (0.0, 4.5), (-4.5, 0.0), (1.0, -1.0), (5.7, 5.7)]
+FOV_PLACES = [(0.0, -4.5), (5.5, 0.0), (0.0, 4.5), (-5.5, 0.0), (1.0, -1.0), (5.7, 5.7)]
 LIT = 100.0   # a light on someone (`glow`) the client can't know: a comparison it could flip is left out
 
 
