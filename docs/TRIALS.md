@@ -286,6 +286,21 @@ How these lives went (`life_story.py l6`): within the first hour every goal list
 
 **`l7`:** because island lives now end within two hours, the "player playing the game" view comes from the valley (`life-valley`, stage3-village, arrival at the map centre), 3 × 6 hours, started 04:17. Iteration 10 tests the island failure directly.
 
+### Baseline on main cb5214b7 (`b6`, `b6b`, `s12`, `s12b`, `l7`, 2026-11-11)
+
+**Scripted trials (`b6`, then `b6b`).** All 24 runs survived ($0.78). Two trials no longer staged their scene: since lives-2 the island trials' picked Elmwick resident brings its seeded home, family and places, and its mind walked home ("walk back north to the Elmwick square before dark"): in the wolves trial it walked 315 m in the two minutes after the pack's release and never fought (b5: 4 of 4 struck a wolf); in the theft trial no owner perceived the theft (b5: 2 of 4). The island trials (wolves, theft, hungry, teacher) now spawn a newcomer as their subject (trials-1 5ae9937); rerun as `b6b` (4 trials × 4, $0.59): all survived; theft perceived 2/4 and the thief spoken to 3/4; the cloak learned 3/4 and made 3/4; food received 1/4 in hungry. In the wolves trial the pack now reaches the newcomer but no wolf attacked (lowest health 94–100): the wolves' instincts changed with lives-2, and again with wolves-1 (e6b7e698). `b6` with b6b's four trials is the scripted reference for cb5214b7; wolves-valley and hungry-village from `b6` (all survived; struck a wolf 0/4, received food 3/4).
+
+**Social preset, every person a mind (`s12`, `s12b`).** `minds.only: "all"`, glm-flash, 192 concurrent calls, capped at 60 minutes for cost. Two runner fixes were needed first: the runaway watchdog's call-rate rule (60 a minute, for one mind) stopped both runs after 30 s, and its failure rules stopped them at minute 10 and in the first minute on the provider's 429 "not enough capacity" (about 1% of 3,000 calls); for `minds.only: "all"` worlds the rate rule is off unless a budget sets one, and failures count only as a share of the calls (half; 40% for the same failure). The aborted attempts cost $9.77 (kept under `aborted/`).
+
+| Seed | Minds thinking | Tokens | Cost | Asks (heard) | Talk turns island-wide | What reached the newcomer |
+| --- | --- | --- | --- | --- | --- | --- |
+| 7 | 311 | 214M | $30.79 | 17 (6) | 1,962 | lodging ("takes you in as their guest until 07:00: a bed in their house"), 2 fish |
+| 11 | 310 | 198M | $28.53 | 20 (11) | 1,857 | nothing |
+
+About $29–31 an hour for an island of minds (lives-2 measured about $34), $0.05 per resident-hour. The first lodging and the first fish given to a newcomer in any social run came here, where the residents think.
+
+**Valley lives (`l7`, main 445db098, `life-valley` × 3, 6 hours).** The valley seed compresses lives: all three subjects died of old age at minute 328.5, having lived full lives. Learned 8 techniques each (2 from someone, once); built 7–10 things beyond fires and shelters; taught 1, 5 and 17 times; 6–26 trades and gifts; wrote 0–24 tablets; 13–15 people; 197–279 lines; $0.18–0.19 an hour. Even so only 2–10% of their plans were about something other than food or warmth (`life_share.py l7`): they lived by working for food.
+
 ### Tokens and cost
 
 | Batch | Calls | Tokens | Cost |
