@@ -224,9 +224,38 @@ The earlier reading was that two or more people stood within 6 m, so the line ad
 
 `gf5` repeated it after `talk-1` was merged: crowded greetings were answered 0 of 3 (control), 3 of 3 (`nearest` + `concurrent`, median 1.7 s) and 2 of 3 (`facing`), with 3, 1 and 7 false replies. `facing` also addresses residents' own lines to whoever they face, which tripled talk turns and gave the most false replies. The fake's words are canned, so this proves the mechanics, not the quality of the answers.
 
-> **Placeholder: paid greeting batches `gr1a` / `gr1b`.** Results to come from the coordinator: per arm, crowded and addressed lines answered, latency, false replies, talk turns and cost per hour, and whether the answers read as interactive. Until then the recommendation for room lines rests on the fake runs above.
+**Paid greeting batches `gr1a`/`gr1b`/`gr1c` and `gr2`** (2026-11-11; full result in [Greeting batches gr1/gr2](TRIALS.md#greeting-batches-gr1gr2-2026-11-11)):
+- The setup: the hamlet with 11 thinking residents on the `people` mix (talk on deepseek-flash, the rest mostly glm-flash), a scripted stranger, and 25 minutes per run.
+- gr1 ran every arm with the mind queue at `LIVING_CONCURRENCY=4`, so its latencies are **queue-limited**.
+- gr2 reran control and `nearest` + `concurrent` at 64 (no queue wait): **the latency for play**.
+- Seven gr1 instances failed at publish and are left out.
+- An answer counts only when the [resident inspector](TRIALS.md#resident-inspector) attributes it to that very line. Its verdicts were re-sampled at 0 of 60 wrong (95% interval 0–6%). That sample does not cover stamina, the off-stage hold or the greet modes' unlogged reasons.
 
-**Recommendation** (pending `gr1`): ship `nearest` + `concurrent` as the default for room lines. Keep facing as a tie-break between equally near hearers only, so residents do not answer every line said in their direction. With the client's new room key (section 8), room lines from players become common, so this rule decides how the town feels to a newcomer.
+| Arm | Crowded greetings answered | Latency median / p90 | Addressed lines answered (questions; statements) | False replies / min | Lines answered by 2+ | USD per world-hour |
+| --- | ---: | --- | --- | ---: | ---: | ---: |
+| control, gr1 | 3/24 | 7.0 / 64.1 s (queue) | 9/10; 6/10 | 0.010 | 0 | 1.82 |
+| `nearest`, gr1 | 17/24 | 3.0 / 57.0 s (queue) | 10/11; 9/11 | 0.020 | 0 | 1.74 |
+| `nearest` + `concurrent`, gr1 | 17/24 | 3.0 / 5.4 s (queue) | 10/10; 9/10 | 0.010 | 0 | 1.64 |
+| `curious`, gr1 | 15/24 | 1.7 / 9.0 s (queue) | 9/9; 8/9 | 0.010 | 0 | 1.92 |
+| `facing`, gr1 (5 runs) | 17/30 | 1.7 / 3.4 s (queue) | 12/12; 13/14 | 0.024 | 5 | 1.77 |
+| `concurrent` only, gr1 | 1/24 | 1.5 s (one) | 11/11; 5/9 | 0.020 | 0 | 1.78 |
+| **control, gr2** | **2/24** | 3.4 / 3.8 s | 8/8; 5/11 | 0.111 | 1 | 2.16 |
+| **`nearest` + `concurrent`, gr2** | **19/24** | **1.7 / 3.0 s** | 9/10; 11/11 | 0.040 | 0 | 1.88 |
+
+**What it shows.**
+1. **The shipped rule ignores a stranger's greeting to a group.** The hearers do not know or care about the speaker.
+2. **`nearest` + `concurrent` answers about four greetings in five, within 2 s at play concurrency, and gr2 agrees with gr1.** Addressed statements are answered too, because a stranger's addressed line skips the remark draw.
+3. **Parking matters when the queue is saturated.** `nearest` with parking on `wait` had a p90 of 57 s.
+4. **The false replies come from the shipped "cares" path,** mostly family members answering a relative's line to the group. `nearest` + `concurrent` never drew a resident into another resident's line, and it added no false replies against control.
+5. **Only `facing` piled on.** Two residents answered one line, twice, and the player's greetings were answered twice 3 times. It also faced whoever stood in the walking direction: the nearest mind in only 2 of 17 answers.
+6. **The guarded proxy-tuned score gives no support for any arm.** It is PROXY and circular. In gr1 it sits at 4.07–4.21. In gr2 `nearest` + `concurrent` scored 4.33 against 4.10 and is reported `LOST`, because talk that led to something fell (0.61 against 0.66; 0.10 against 0.14 above the placebo).
+7. **The answers read as interactive.** "Good day to you too. Come in out of the morning — there's bread still warm and I've a pot on. What brings you up this way?" came at 1.7 s. A promised meal was given (6 and then 12 berries).
+8. **They also show what a silent stranger draws.** The player never gives a name or answers, so residents ask its name again and again. One pressed: "Traveller — you've had my bread twice and my question three times. Sun's going down; give your name and your road now, or walk on before dark."
+9. **Later greetings to a group that has already spoken with the stranger are often unanswered:** 5 of 24 in gr2.
+
+**Recommendation** (confirmed by `gr1` and `gr2`): ship `nearest` + `concurrent` as the default for room lines. It answered 19 of 24 crowded greetings at play concurrency, against 2 of 24, with a median of 1.7 s and a p90 of 3.0 s. The false-reply cost is none measured above control (0.040 against 0.111 a minute in gr2; 0.010 against 0.010 in gr1), with no pile-ons. It costs one small loss on the proxy score's outcome guard.
+
+Do not turn on `facing` for players yet. As built, it addresses residents' lines too, and that made the only choruses. It needs dev-box's `human_face` on main, and a client that turns the look toward the person under the cursor (or the camera's direction) when a line goes to the room, in both control schemes. In "travel" the body faces where it walked. Facing should then apply to players' lines only, or serve as a tie-break between equally near hearers. With the client's new room key (section 8), room lines from players become common, so this rule decides how the town feels to a newcomer.
 
 **One answerer across mind services** (gap 9): `claimed` lives in one service's memory. While one service thinks for a world it is exact. If minds are split across services, the claim needs a shared record. Proposed: the first talk reply to a room line names the line's `audience` id, and the authority refuses a second reply that names the same id ("someone already answered").
 
@@ -398,7 +427,7 @@ The RLS page (`/docs/rls`) returned an empty body, so the "unimplemented" status
 
 Only choices that change how the game plays.
 
-**The owner's answers (2026-11-11): all six accepted as recommended.** In the owner's words: "Go with the as recommended settings, and we can iterate from there. This will not be the final game anyway, so it's just to see how properly defined environments play out." Choice 3 stands unless the paid greeting batches (`gr1a`/`gr1b`) contradict it. Detailed design and tuning choices below this level are decided by the lab, recorded here, and reported.
+**The owner's answers (2026-11-11): all six accepted as recommended.** In the owner's words: "Go with the as recommended settings, and we can iterate from there. This will not be the final game anyway, so it's just to see how properly defined environments play out." Choice 3 stands unless the paid greeting batches contradict it; they did not (`gr1a`–`gr1c`, `gr2`; §5). Detailed design and tuning choices below this level are decided by the lab, recorded here, and reported.
 
 | # | Answer |
 | --- | --- |
@@ -411,7 +440,7 @@ Only choices that change how the game plays.
 
 1. **Whisper range, and whether onlookers see a whisper happen.** Recommended: 1.5 m. Onlookers within 6 m who see the speaker learn "X whispers something to Y", without the words. Seeing people lean together is real, and it gives whispers social weight. The alternative is a silent whisper that nobody notices.
 2. **Whether calling out costs anything.** Recommended: no energy. Its costs are loudness (everyone within 30 m hears it, and so do animals, which can startle deer or draw wolves), lines of at most 80 characters, and 6 s between calls. A shout is cheap but public.
-3. **Who answers a line to the room.** Recommended (pending `gr1a`/`gr1b`): the nearest hearer within 6 m who is free to talk, with lines heard during a deliberation answered alongside it (`nearest` + `concurrent`), and facing only as a tie-break. A room line gets one answer, so a crowd does not reply in chorus. Alternatives: only those who care (today: strangers are ignored), or curiosity (by chance).
+3. **Who answers a line to the room.** Recommended (confirmed by `gr1`/`gr2`, §5): the nearest hearer within 6 m who is free to talk, with lines heard during a deliberation answered alongside it (`nearest` + `concurrent`), and facing only as a tie-break. A room line gets one answer, so a crowd does not reply in chorus. Alternatives: only those who care (today: strangers are ignored), or curiosity (by chance).
 4. **How names are learned.** Recommended: from self-introduction (built), and from words addressed to someone you perceive that contain that person's name ("Bram, the cart's here" teaches "Bram" to those who hear it in full and see whom it was for). Never from closeness, and never from noticing a whisper. The stricter choice is self-introduction only: then a newcomer must ask each person's name.
 5. **Whether walls muffle speech.** Recommended: yes, later, as a law (a wall or shut door between halves the carry, a whisper does not pass). This makes talking through a door and eavesdropping at one real. Today sound ignores walls.
 6. **Skill-granted channels.** Recommended: mindspeech and signing are techniques like any other. They are taught or read from a tablet, never discovered by `experiment`, and belong to a floor whose seed adds them, not to Cullet's first version. The receiver answers in kind only if it knows the technique too.
@@ -423,7 +452,7 @@ Each item is a law, a skill spec or a primitive, with the verification surface i
 | # | What | Kind | Surfaces |
 | --- | --- | --- | --- |
 | 1 | Client: an empty cursor speaks to the room (`to` = 0); Tab gains an "everyone" stop; the box labels the room and "others nearby hear". | Client only | Game client (owner play-test; no UI skill yet); `verify-player` unchanged |
-| 2 | Merge `exp-greet` and make the `gr1` winner the default: law `speech_audience` on, `LIVING_GREET` and `LIVING_PARK` defaults. | Law and mind switches | `verify-minds` (greet, alongside), `verify-core` (scene audience), `verify-client` (audience private) |
+| 2 | Merge `exp-greet` and make the `gr1`/`gr2` winner (`nearest` + `concurrent`) the default: law `speech_audience` on, `LIVING_GREET` and `LIVING_PARK` defaults. | Law and mind switches | `verify-minds` (greet, alongside), `verify-core` (scene audience), `verify-client` (audience private) |
 | 3 | `introduced` experience row when a name is news. | Primitive (one row in `speak`) | `verify-core` (speech scene), `verify-knowledge` (names), `verify-minds` (consolidation anchors the name) |
 | 4 | `heard` table and `my_heard` view (hearers the speaker perceives). | Primitive and view | `verify-client` (scoped to the caller, refused to others), `verify-player`, `verify-minds` |
 | 5 | Ways of speaking: `<way>_speech()` specs, `<way>_check`, `speak(…, way)`, `human_speak`, `mind_say` and graph `say` with a way, the public `speech_card` table (fields in section 8), ways in the world text. Shipped `say` identical to today. Then the laptop builds the chips. | Primitive and script | `verify-core`, `verify-player`, `verify-client`, `verify-minds`, `verify-llm` (reply JSON) |
