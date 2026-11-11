@@ -5,6 +5,27 @@
 
 **2026-11-11, branch `verify-ui-items` (two gives, one counted).** The items check read the receiver's berries before the drive, while the resident was still free, and read 2 → 3 for two gives. Through the player reducers on `verify-ui-give-1111-2049` (`601d1f68`), the items scene's placement and timing: both gives landed about 1 s after each was sent (receiver 2 → 3 → 4), each with the outcome "gave 1 berries to a stranger" and a `gift` experience. 43 free residents changed their berries within 45 s. The check now proves the gives by the player's act outcomes and the receiver's `gift` experiences since the drive began. `check.py items` on `verify-ui-items-1111-2059` (`25c1fb92` plus this change): **10 passed, 0 failed**, twice. Not rerun: the other scenarios (only the items check changed).
 
+**2026-11-11, branch `fov-client` (facing sight in the client; sight-look's looks merged, memory the default).**
+- **Setup:** world `verify-ui-fov2-1111-203842` (`$V launch --seed island`, `doctor` all ok), from fov-client merged with main `abfe577f`. Release client from the branch, private `CARGO_TARGET_DIR`, through `build-slot`. Clear theme.
+- **The new `field` scenario:**
+  - First version, on `verify-ui-fov-1111-202206`: 23/23.
+  - On the merged build: 26/26 with looks sent while walking (the authority held the walk at 30°).
+  - With `FACE_WHILE_MOVING` off and the generic law path: **27/27** (`checks-field-final.json`).
+- **The other scenarios:**
+  - windows 14/14, talk 14/14, items 9/9, themes 6/6, turns 14/14 (`checks-part1.json`, `checks-part2.json`).
+  - pick 1/7 on the pass where it ran after the field scenario, then **7/7** (`checks-part3.json`) once the player was put back at the arrival spot. The cause: after the field scenario walked the player north, `place_at` put both of pick's residents on one tile (authority rows: #2 and #3 both at 419.5, 217.5). The Spark is fixing `place_at`.
+- **Found while making the field case:**
+  - Owner SQL returns an identity as `["0x…"]`, so a perceived query on the raw value matched nothing.
+  - Residents within the keep margins (side vision's 3.7 m plus 1 m, the near ring's 3 m plus 1 m) can't be compared. `place_at` puts people on tile centres, so they are now placed clear of those margins.
+  - The field reaches on past the radius along the focal angle, for the soft band. The comparison takes what the screen shows (the field within the radius).
+- **Also run:** verify-player `gesture.py` 10/10 and `face.py` 10/11 twice (the authority's walking bend on main is flaky, -1.02 then -0.02 rad against -0.52; sent to dev-box's look-2). A `play.py` scene with `"law_toggle": true` (`verify-fovplay-*`, no minds, a scratch session lock): the token file was mode 600 and deleted at teardown, F5 switched `fov_on` both ways, and no JWT was in the session directory.
+- **Evidence:** `/Users/carlid/dev/slop-art-online/.local/living/fov-client/evidence/`.
+- **Not covered:**
+  - a real window and trackpad;
+  - the walk-speed row with the law present (`walk_base` isn't on main yet);
+  - the other themes with the field;
+  - night (all runs were by day).
+
 **2026-11-11, branch `cursor-pan` (the owner after Cullet walk 1: a pan carried the cursor off with the view).** World `verify-ui-cp-1111-1853` (`$V launch --run ui-cp-1111-1853 --seed island`, `doctor` all ok); release client from the branch, private `CARGO_TARGET_DIR`, through `build-slot`. New scenario `turns` (a pan, a pinch either way, a left drag, the cursor at 0.72,0.62): on the client before the fix (`75d02927`, the dump's new cursor fields only) **5 passed, 9 failed**: the cursor moved 124–192 px on screen while its ground point stayed within 4 cm. After the fix **14 passed, 0 failed**: the cursor moved 0.0 px and the ground under it 5.4–7.9 m. Full run, Clear: windows, talk, items, themes and turns, **57 passed, 0 failed**. Night (windows, talk, items, turns): **51 passed, 0 failed**; Linen and Walnut were stopped part-way to merge main for the play-test. Evidence: `.local/living/verify/ui-cp-1111-1853/ui/` (`turns-before/`, `turns-after/`, `checks-<theme>.json`). After merging main at `b004e6e7` (talk-pick, ground-1, edges-1), a fresh world `verify-ui-cp2-1111-1951` from the merge: turns and pick **21 passed, 0 failed** (`.local/living/verify/ui-cp2-1111-1951/ui/turns-after-merge/`). Not driven: an align (its code is unchanged), a real trackpad's events.
 
 **2026-11-11, branch `layout-1` (Cullet's plan redrawn).** The `support` spots moved with the plan: the Ladder Wynd's first flight is at land x 458 (was 410), the Marver's terrace at x 584 (was 568), and the wall under the fourth spot is `wall_002` (was `wall_005`). `drive.py` now sends the client to `LIVING_STDB_URL` when it is set (it had `:3300` written in, so a worker's own server was never reached and the client waited 240 s without joining). `verify-ui-l1-1111-195353` from `$V launch --seed cullet` on the worker's own container (`layout1-stdb`, port 3324), scoped, no mind service: `check.py support` 7 of 7; the client's regenerated land matched the authority's digests. The other scenarios were not rerun.

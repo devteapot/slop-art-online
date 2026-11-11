@@ -19,6 +19,13 @@
   (`{"wait": 600}`) when the plan reaches `sync:scene`. `--sync NAME=...` makes admin calls when
   the plan reaches `sync:NAME`; `{me}` is the player's id and `(expr)` a Python expression of
   mx, my (the player's position) and me. Admin calls set scenes only; they are not player acts.
+- A `--sync` call `sql|QUERY` instead snapshots the authority (owner SQL through verify.py) at
+  that moment: the rows and the wall time go into scene.json under "snaps" by NAME. `{me}` is
+  the player's character id and `{ident}` its identity (hex).
+- `--admin-link` gives the client the world admin's token in a private file
+  (LIVING_GAME_ADMIN_TOKEN_FILE, `.local/living/verify/RUN/private/`, mode 600, deleted when the
+  drive ends), as the play launcher does for a scene with `"law_toggle": true`: the client's
+  second, admin-only connection switches facing sight (`set_world_law("fov_on", …)`, F5).
 - `--expect REGEX` (repeatable) must match client.log, else the run fails (exit 1).
 
 Exit code: the client's, or 1 when an expectation fails or the client never joined.
@@ -27,6 +34,7 @@ import argparse, json, os, re, subprocess, sys, time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
 STDB = os.path.join(ROOT, "living/tools/stdb")
+V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
 
 
 def stdb(*args):
@@ -38,6 +46,23 @@ def stdb(*args):
 def call(db, reducer, *args):
     code, out = stdb("call", "-s", "local", db, reducer, *args)
     return {"reducer": reducer, "args": [str(a) for a in args], "code": code, "out": out[-400:]}
+
+
+def sql(run, q):
+    r = subprocess.run([sys.executable, V, "sql", "--run", run, q], capture_output=True, text=True)
+    i = r.stdout.find("[")
+    try:
+        return json.loads(r.stdout[i:]) if i >= 0 else []
+    except ValueError:
+        return []
+
+
+def admin_token():
+    _, out = stdb("login", "show", "--token")
+    for line in out.splitlines():
+        if "auth token" in line and " is " in line:
+            return line.rsplit(" is ", 1)[1].strip()
+    sys.exit("could not read the admin token from `spacetime login show --token`")
 
 
 def body(db, cid):
@@ -58,6 +83,7 @@ def main():
     ap.add_argument("--player", default="Verifier")
     ap.add_argument("--token", help="another player's token file (default: the run's ui/player.token)")
     ap.add_argument("--expect", action="append", default=[])
+    ap.add_argument("--admin-link", action="store_true")
     ap.add_argument("--timeout", type=float, default=600)
     a = ap.parse_args()
     db = f"verify-{a.run}"
@@ -82,12 +108,33 @@ def main():
     env = dict(os.environ, LIVING_SERVER=os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300"), LIVING_DB=db, LIVING_GAME_NAME=a.player, LIVING_GAME_TOKEN=token,
                LIVING_GAME_LIVE=out, LIVING_GAME_LIVE_PLAN=a.plan, LIVING_GAME_SIZE=a.size,
                LIVING_GAME_SETTINGS=os.path.join(out, "settings.json"), RUST_LOG=os.environ.get("RUST_LOG", "info,wgpu=warn,naga=warn"))
+    secret = None
+    if a.admin_link:
+        d = os.path.join(ROOT, ".local/living/verify", a.run, "private")
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        os.chmod(d, 0o700)
+        secret = os.path.join(d, f"admin-{os.getpid()}.token")
+        if os.path.exists(secret):
+            os.remove(secret)
+        fd = os.open(secret, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(admin_token())
+        env["LIVING_GAME_ADMIN_TOKEN_FILE"] = secret
+    try:
+        run_client(a, db, out, client, env, places, syncs)
+    finally:
+        if secret and os.path.exists(secret):
+            os.remove(secret)
+            print("admin token file deleted", flush=True)
+
+
+def run_client(a, db, out, client, env, places, syncs):
     log_path = os.path.join(out, "client.log")
     log = open(log_path, "w")
     p = subprocess.Popen([client], env=env, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT)
     print(f"client pid {p.pid}; evidence {out}", flush=True)
-    scene = {"world": db, "plan": a.plan, "places": places, "calls": [], "client": client}
-    me, placed, t0 = None, False, time.time()
+    scene = {"world": db, "plan": a.plan, "places": places, "calls": [], "snaps": {}, "client": client, "admin_link": a.admin_link}
+    me, placed, t0, ident = None, False, time.time(), None
     while p.poll() is None:
         if time.time() - t0 > a.timeout:
             print(f"timeout after {a.timeout} s: stopping the client (pid {p.pid})", flush=True)
@@ -113,6 +160,15 @@ def main():
                 at = body(db, me)
                 sub = lambda s: str(eval(s[1:-1], {"mx": at[0], "my": at[1], "me": me})) if s.startswith("(") else s.replace("{me}", str(me))
                 for c in calls:
+                    if c[0] == "sql":
+                        if ident is None:
+                            rows = sql(a.run, f"SELECT controller FROM character WHERE id = {me}")
+                            ident = rows[0]["controller"] if rows else ""
+                            ident = str(ident[0] if isinstance(ident, list) and ident else ident)
+                            ident = ident[2:] if ident.startswith("0x") else ident
+                        q = "|".join(c[1:]).replace("{me}", str(me)).replace("{ident}", ident)
+                        scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": int(time.time() * 1000), "rows": sql(a.run, q)})
+                        continue
                     scene["calls"].append(call(db, c[0], *[sub(x) for x in c[1:]]))
                 time.sleep(0.5)
                 open(os.path.join(out, f"{name}.go"), "w").close()

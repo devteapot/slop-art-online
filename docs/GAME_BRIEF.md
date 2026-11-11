@@ -903,6 +903,30 @@ How it works (`sightfield.rs`, `sightedge.rs`, `edges.wesl`, `post.rs`):
 - Terrain edits are known only within the client's `terrain_chunk` window: 7 × 7 chunks, re-centred as you walk, so at least about 24 m round you. Edits made since world creation farther out, within a 48 m sight, are not in the field.
 - No settings menu; that comes with the interface redesign.
 
+**Looks (branch `sight-look`, 2026-11-11; merged with `fov-client`).** After play-test 3 the owner liked the idea but not the grey. There are five other ways to draw "not seen now". Since `fov-client`, `memory` is the default; the owner hadn't picked one, and it was the comparison's recommendation. The others, grey included, are chosen in Settings › Play › Unseen ground, which the settings file keeps, or with `LIVING_SIGHT_LOOK`. They are not in F2's cycle. The five are:
+- `wash`: a faded watercolour with a dry-brush edge;
+- `lantern`: sight as light, with darkness beyond;
+- `shadows`: sight shadows cast from the eye in the toon shadow's hue;
+- `hatch`: pencil hatching on toned paper;
+- `memory`: seen ground drains to a pencil sketch over 10 s, and someone who leaves sight stays 3 s as a faint figure where they were last seen.
+
+All five are in the same finishing pass, from the same sight field. `memory` adds a texture of when each texel was last seen within the radius, and `live.rs` holds the departed body for its figure. No frame cost was measurable against grey (paired switches, shared GPU). The comparison page is `.local/living/sight-look/index.html` in the main checkout.
+
+**Facing sight (`fov-client`, 2026-11-11).** While the world's `fov_on` law is on ([perception](PERCEPTION.md#the-field-of-view-seventh-change)), what I see depends on where my body faces, and the screen shows the same rule.
+- **The field:** `senses(a)` gives a `field`. The sight field (`sightfield.rs`) tests each texel with the rules' `sight::reach` at its angle off `body.heading`, as well as the clear line. The heading is read with `steer::pose` from my own motion row, so the field follows the authority's facing, never a local guess. It is worked out again on a 2° turn.
+  - The three zones show in whichever look is chosen: full sight within ±70°, a third of it out to ±110°, and 3 m all round (2 m in the dark).
+  - Off (as shipped), the field is exactly what it was.
+  - People who leave the field fade as they leave it, by the same angle test with its margins.
+- **The readout:** each change shows two notes for a few seconds: "Facing sight on" (or off) and the five values (focal, side, side share, near, margin). Settings › Play › Facing sight shows them for as long as it is on, as "Facing sight: on/off".
+- **A law switch's cost:** `set_world_law` installs the script again, and the client recompiles it on the frame: 16.6, 32.0 and 23.6 ms over three switches (`verbs.rs` logs each), so a one- or two-frame hitch at 60 fps. That is accepted for a dev switch. Moving it off the frame needs `Scripts` to be `Send`.
+- **The switch:** F5, or the switch in Settings › Play. `set_world_law` is admin only, and the player's identity gets no admin rights. A play scene that opts in (`"law_toggle": true`) has its launcher give the client the world admin's token in a private file. The client opens a second connection with it, for that one call and only to a `verify-*` world. Elsewhere the line is read-only.
+- **The walk speed:** the same path (`facing::set_law`) sets the world's walk law (`facing::WALK_LAW`, the Spark's `walk_base`). Settings › Play › Walk speed offers 2.6, 3.0 or 3.4 m/s, and shows the value read-only without the link.
+- **The look:** `human_face(dx, dy)` (`controls::look`).
+  - Facing the cursor, the cursor's direction is sent while standing. While a direction is held the look is released (`FACE_WHILE_MOVING`, off until look-2 makes a look turn only the facing): on main a look bends the walk itself, which play-test 5 felt as drift.
+  - Facing where you walk, a look is sent only while a move is aimed, then released.
+- **Heard, not seen:** each `heard_sounds` row is a soft, fading mark on the ground that compass way, at its band's rough distance (near, close, far), keyed by its per-viewer key (`heardmark.rs`). Visual only.
+- **Verified:** `verify-ui` `field` ([its recipe](../.agents/skills/verify-ui/features/field.md)).
+
 ## Talking and tapping (2026-11-11)
 
 Branch `talk-1`, after play-test 2. In that session the residents answered every line within 3–28 s, yet the owner found them "not interactive". Evidence is in `.local/living/talk-1/` (git-ignored). Client only: no table, reducer, view, subscription, rule or mind change. The client calls the existing `human_say(text, to)` with `to` set, and reads `silence` rows from the existing `my_experience` view. No SpacetimeDB feature is used in a new way, so no new documentation was consulted.
