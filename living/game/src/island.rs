@@ -82,6 +82,24 @@ struct Item {
     native: bool,
     /// A person: recipe seed, folk and style preset (`characters::Recipe::random_in`).
     person: Option<(u64, &'static str, String)>,
+    /// A plain box (width, height, depth) instead of a model: a lot or a planned settlement's
+    /// stair tread or retaining wall whose model is not on disk ([`GreyBox`]).
+    size: Option<Vec3>,
+}
+
+/// A plain box standing for a model not on disk yet (a hand-authored settlement before its
+/// kit, docs/AUTHORED_PLANS.md): its footprint × its height, in one pale stone grey. The mesh
+/// and material are added by [`grey_boxes`]; the entity's scale is the box's size.
+#[derive(Component)]
+pub struct GreyBox;
+
+/// Give new grey boxes the shared unit cube and grey toon material.
+pub fn grey_boxes(mut commands: Commands, q: Query<Entity, (With<GreyBox>, Without<Mesh3d>)>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>, mut toons: ResMut<Assets<crate::style::Toon>>, style: Res<crate::style::Style>, mut unit: Local<Option<Handle<Mesh>>>) {
+    for e in &q {
+        let mesh = unit.get_or_insert_with(|| meshes.add(Cuboid::new(1.0, 1.0, 1.0))).clone();
+        let mat = palette.color(&mut toons, &style, [168, 168, 172], false);
+        commands.entity(e).insert((Mesh3d(mesh), MeshMaterial3d(mat)));
+    }
 }
 
 /// How a land's open country is drawn: the temperate island's meadows and forests, or dry
@@ -143,30 +161,48 @@ pub struct Island {
     flights: HashMap<(i32, i32), Vec<Flight>>,
 }
 
-/// A flight of stairs as `buildings.py`'s `prop_stairs` makes it: [`TREADS`] treads rising
-/// [`RISE`] m over [`RUN`] m from its front (down the stairs, at the lower terrace's floor) to its
-/// back, [`TREAD_W`] m wide.
+/// A flight of stairs: `treads` treads rising `rise` m over `run` m from its front (down the
+/// stairs, at the lower level's floor) to its back, `width` m wide. A modelled flight is
+/// `buildings.py`'s `prop_stairs` ([`TREADS`] treads rising [`RISE`] m over [`RUN`] m, [`TREAD_W`]
+/// m wide, inside its footprint); a flight without a model (a planned settlement's, drawn as grey
+/// treads) takes its footprint from the prop and its rise from the ground at its head.
 #[derive(Clone, Copy)]
 struct Flight {
     centre: Vec2,
     down: Vec2,
     floor: f32,
+    run: f32,
+    width: f32,
+    rise: f32,
+    treads: f32,
 }
 
 const TREADS: f32 = 17.0;
 const RISE: f32 = 3.0;
 const RUN: f32 = 5.0;
 const TREAD_W: f32 = 2.4;
+/// A tread's rise on a flight without a model (SMALL_CITY: steps of 0.18 m).
+const TREAD_RISE: f32 = 0.18;
 const FLIGHT_CELL: f32 = 16.0;
 
 impl Flight {
+    fn of(land: &Land, pr: &living_rules::settle::Prop) -> Self {
+        let (centre, down) = (Vec2::new(pr.centre.0, pr.centre.1), Vec2::new(pr.front.0, pr.front.1).normalize_or(Vec2::X));
+        if pr.model_file.is_some() {
+            return Self { centre, down, floor: pr.floor_m, run: RUN, width: TREAD_W, rise: RISE, treads: TREADS };
+        }
+        let head = centre - down * (pr.depth_m * 0.5 - 0.05);
+        let rise = (land.height(head.x, head.y) - pr.floor_m).max(0.1);
+        Self { centre, down, floor: pr.floor_m, run: pr.depth_m, width: pr.width_m, rise, treads: (rise / TREAD_RISE).round().max(1.0) }
+    }
+
     /// The tread top under a point, if it is on this flight.
     fn tread(&self, p: Vec2) -> Option<f32> {
         let d = p - self.centre;
         let side = Vec2::new(-self.down.y, self.down.x);
-        // From the front edge (u = 0) up to the back (u = RUN).
-        let u = RUN * 0.5 - d.dot(self.down);
-        (d.dot(side).abs() <= TREAD_W * 0.5 && (0.0..RUN).contains(&u)).then(|| self.floor + ((u * TREADS / RUN).floor() + 1.0) * RISE / TREADS)
+        // From the front edge (u = 0) up to the back (u = run).
+        let u = self.run * 0.5 - d.dot(self.down);
+        (d.dot(side).abs() <= self.width * 0.5 && (0.0..self.run).contains(&u)).then(|| self.floor + ((u * self.treads / self.run).floor() + 1.0) * self.rise / self.treads)
     }
 }
 
@@ -250,6 +286,10 @@ impl Island {
             let kind = lot.model_file.as_deref().and_then(living_rules::settle::asset_kind).unwrap_or(kind);
             let files = crate::envs::assets_for(env, kind);
             if files.is_empty() {
+                // No model of its kind on disk (a planned settlement before its kit): a box.
+                if lot.height_m > 0.0 {
+                    put(Item { kind: kind.to_string(), at: Vec2::new(lot.centre.0, lot.centre.1), yaw: lot.yaw, height: lot.height_m, k: li, floor: Some(lot.floor_m), size: Some(Vec3::new(lot.width_m, lot.height_m, lot.depth_m)), ..default() });
+                }
                 continue;
             }
             let slot = envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == kind));
@@ -267,15 +307,38 @@ impl Island {
                 floor: Some(lot.floor_m),
                 native: true,
                 person: None,
+                size: None,
             });
         }
         // Street props, stairs and retaining walls: derived from the layout on both sides, not
         // stored by the authority, so connected mode places them too.
         for (pi, pr) in land.props.iter().enumerate() {
-            let env = living_rules::settle::env_of(&land.settlements[pr.settlement as usize].style);
+            // A prop's model names its folder, as a lot's does; else its settlement's style.
+            let env = pr.model_file.as_deref().and_then(|f| f.split('/').next()).filter(|e| !e.is_empty()).unwrap_or(living_rules::settle::env_of(&land.settlements[pr.settlement as usize].style));
             let files = crate::envs::assets_for(env, pr.kind.id());
             let exact = pr.model_file.as_ref().map(|f| format!("envs/{f}")).filter(|f| files.contains(f));
-            let Some(file) = exact.or_else(|| (!files.is_empty()).then(|| pick(&files, pi, 17))) else { continue };
+            let Some(file) = exact.or_else(|| (!files.is_empty()).then(|| pick(&files, pi, 17))) else {
+                // A planned settlement's stairs and retaining walls without models: grey
+                // treads and walls, so the grey city can be walked and read.
+                use living_rules::settle::PropKind;
+                if pr.model_file.is_none() && land.settlements[pr.settlement as usize].planned {
+                    let (c, f) = (Vec2::new(pr.centre.0, pr.centre.1), Vec2::new(pr.front.0, pr.front.1).normalize_or(Vec2::X));
+                    match pr.kind {
+                        PropKind::Stairs => {
+                            let fl = Flight::of(&land, pr);
+                            let step = fl.run / fl.treads;
+                            for i in 0..fl.treads as usize {
+                                let at = c + f * (fl.run * 0.5 - (i as f32 + 0.5) * step);
+                                let h = (i as f32 + 1.0) * fl.rise / fl.treads;
+                                put(Item { kind: "stairs".into(), at, yaw: pr.yaw, height: h, k: pi * 64 + i, floor: Some(pr.floor_m), size: Some(Vec3::new(fl.width, h, step)), ..default() });
+                            }
+                        }
+                        PropKind::RetainingWall => put(Item { kind: "retaining_wall".into(), at: c, yaw: pr.yaw, height: pr.height_m, k: pi, floor: Some(pr.floor_m), size: Some(Vec3::new(pr.width_m, pr.height_m, pr.depth_m)), ..default() }),
+                        _ => {}
+                    }
+                }
+                continue;
+            };
             put(Item { kind: pr.kind.id().to_string(), file, at: Vec2::new(pr.centre.0, pr.centre.1), yaw: pr.yaw, height: pr.height_m, k: pi, floor: Some(pr.floor_m), native: true, ..default() });
         }
         for (si, st) in land.settlements.iter().enumerate() {
@@ -326,9 +389,9 @@ impl Island {
         }
         let mut flights: HashMap<(i32, i32), Vec<Flight>> = HashMap::new();
         for pr in land.props.iter().filter(|p| p.kind == living_rules::settle::PropKind::Stairs) {
-            let f = Flight { centre: Vec2::new(pr.centre.0, pr.centre.1), down: Vec2::new(pr.front.0, pr.front.1).normalize_or(Vec2::X), floor: pr.floor_m };
+            let f = Flight::of(&land, pr);
             // Every cell the flight's footprint touches.
-            let r = RUN.max(TREAD_W) * 0.5 + 0.5;
+            let r = f.run.max(f.width) * 0.5 + 0.5;
             let (lo, hi) = ((f.centre - r) / FLIGHT_CELL, (f.centre + r) / FLIGHT_CELL);
             for cx in lo.x.floor() as i32..=hi.x.floor() as i32 {
                 for cz in lo.y.floor() as i32..=hi.y.floor() as i32 {
@@ -346,12 +409,22 @@ impl Island {
         let Some(kind) = lot.kind.model() else { return Vec::new() };
         // The row's model names its folder (`steampunk_city/clocktower/...`): a town in its own
         // style uses its own assets.
-        let env = lot.model.split('/').next().filter(|_| !lot.model.is_empty()).unwrap_or(lot.site.env());
+        let env = lot.model.split('/').next().filter(|_| !lot.model.is_empty()).unwrap_or(lot.env);
         let kind = living_rules::settle::asset_kind(&lot.model).unwrap_or(kind);
         let files = crate::envs::assets_for(env, kind);
         let exact = Some(format!("envs/{}", lot.model)).filter(|f| !lot.model.is_empty() && files.contains(f));
         if exact.is_none() && files.is_empty() {
-            return Vec::new();
+            // No model of its kind on disk (a planned settlement before its kit): a box of its
+            // footprint and height.
+            if lot.height_m <= 0.0 {
+                return Vec::new();
+            }
+            let it = Item { kind: kind.to_string(), at: lot.at, yaw: lot.yaw, height: lot.height_m, k: lot.id as usize, floor: Some(lot.floor_m), size: Some(Vec3::new(lot.width_m, lot.height_m, lot.depth_m)), ..default() };
+            let es = spawn_item(commands, assets, &self.land, &it);
+            if let Some(&root) = es.first() {
+                commands.entity(root).insert(crate::envs::Solid);
+            }
+            return es;
         }
         if exact.is_none() && !lot.model.is_empty() {
             warn!("lot {}: model {} is not on disk; using another {kind}", lot.id, lot.model);
@@ -359,7 +432,7 @@ impl Island {
         let slot = self.envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == kind));
         let height = if exact.is_some() { lot.height_m } else { slot.map_or(6.0, |s| s.height[1]) };
         let file = exact.unwrap_or_else(|| files[(hash(lot.id, 11) * files.len() as f32) as usize % files.len()].clone());
-        let it = Item { kind: kind.to_string(), file, at: lot.at, yaw: lot.yaw, height, glow: slot.and_then(|s| s.glow), k: lot.id as usize, floor: Some(lot.floor_m), native: true, person: None };
+        let it = Item { kind: kind.to_string(), file, at: lot.at, yaw: lot.yaw, height, glow: slot.and_then(|s| s.glow), k: lot.id as usize, floor: Some(lot.floor_m), native: true, person: None, size: None };
         let es = spawn_item(commands, assets, &self.land, &it);
         if let Some(&root) = es.first() {
             commands.entity(root).insert(crate::envs::Solid);
@@ -499,8 +572,15 @@ pub struct LotRow {
     pub yaw: f32,
     pub floor_m: f32,
     pub height_m: f32,
+    /// Its footprint: along the front and front to back (the `lot` row's), for a box when no
+    /// model is on disk.
+    pub width_m: f32,
+    pub depth_m: f32,
     /// Path under `assets/envs/`, empty when the planner had no exact model.
     pub model: String,
+    /// The environment of its settlement's style (`living_rules::settle::env_of`), for lots
+    /// without a model path.
+    pub env: &'static str,
 }
 
 /// A settlement kind from its id (`settlement.kind`).
@@ -767,6 +847,9 @@ fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate) -> (Mesh, Option<M
 
 /// The scene file a thing spawns from (a person's: its recipe's animated base).
 fn scene_of(assets: &AssetServer, it: &Item) -> Handle<WorldAsset> {
+    if it.size.is_some() {
+        return Handle::default();
+    }
     let file = match &it.person {
         Some((seed, folk, style)) => crate::lookdev::animated(&crate::characters::Recipe::random_in(*seed, folk, style).base),
         None => it.file.clone(),
@@ -790,6 +873,14 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
         let e = crate::characters::spawn(commands, assets, &recipe, at, it.yaw);
         commands.entity(e).insert(EnvPart);
         return vec![e];
+    }
+    if let Some(size) = it.size {
+        let c = at + Vec3::Y * size.y * 0.5;
+        let mut e = commands.spawn((EnvPart, GreyBox, Transform::from_translation(c).with_rotation(Quat::from_rotation_y(it.yaw)).with_scale(size)));
+        if it.height >= 3.0 {
+            e.insert((Occluder { height: it.height }, crate::fade::Fade::shown()));
+        }
+        return vec![e.id()];
     }
     let vrm = it.file.contains("vroid-");
     let model = Model { vrm, file: it.file.clone(), height: if it.native { 0.0 } else { it.height }, ground_y: y, glow: it.glow };
@@ -946,7 +1037,7 @@ fn spawn_queued(commands: &mut Commands, assets: &AssetServer, island: &mut Isla
             queue.push(q);
             break;
         }
-        if !ready(assets, &q.scene) {
+        if q.item.size.is_none() && !ready(assets, &q.scene) {
             waiting.push(q);
             continue;
         }

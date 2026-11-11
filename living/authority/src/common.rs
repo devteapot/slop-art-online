@@ -357,7 +357,8 @@ pub fn scripts(ctx: &ReducerContext) -> Rc<Scripts> {
             }
         }
         let src = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).unwrap_or_default();
-        let mut sc = Scripts::new(&src).expect("installed skills script compiles");
+        // Laws written per game hour run on this world's day (its seed's `day_minutes`).
+        let mut sc = Scripts::with_day(&src, world(ctx).day_ms).expect("installed skills script compiles");
         crate::codes::apply(ctx, &mut sc);
         // Graph normalization and validation take the world's skills from its script.
         living_rules::catalog::set_skills(sc.skills().clone());
@@ -465,8 +466,15 @@ pub fn hour(w: &World, now: u64) -> f32 {
     living_rules::hour_of(now, w.epoch_ms, w.day_ms)
 }
 
-pub fn night(w: &World, now: u64) -> bool {
-    living_rules::is_night(hour(w, now))
+/// Whether it is night now: the script's `daylight` law below one half (read per game minute
+/// and kept for the script revision, so this costs a lookup).
+pub fn night(ctx: &ReducerContext, w: &World, now: u64) -> bool {
+    scripts(ctx).is_night(hour(w, now))
+}
+
+/// How dark it is now, 0 (day) to 1 (night), in the steps laws see (`SkillCtx::dark`).
+pub fn dark(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
+    scripts(ctx).dark(hour(w, now))
 }
 
 /// Draws in [0, 1) that depend only on a character and a purpose (splitmix64), so drawing a
@@ -495,7 +503,7 @@ pub fn day_phase(ctx: &ReducerContext, id: u32, hour: f32) -> (bool, bool) {
             let evening = h >= r.bed_h - r.evening_h && h < r.bed_h;
             (bedtime, evening)
         }
-        None => (living_rules::is_night(hour), (18.0..22.0).contains(&hour)),
+        None => (scripts(ctx).is_night(hour), (18.0..22.0).contains(&hour)),
     }
 }
 
@@ -530,7 +538,7 @@ pub fn age_days(c: &Character, w: &World, now: u64) -> f32 {
 /// The farthest anyone sees now (the `senses` law's reach by day or by night): onlookers are
 /// gathered within it before each one's own sight is tested.
 pub fn widest_sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
-    scripts(ctx).reach().sight(night(w, now))
+    scripts(ctx).reach().seen(dark(ctx, w, now))
 }
 
 /// The farthest anyone hears.
@@ -762,6 +770,7 @@ pub fn hearing_for(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
 struct Hot {
     senses: Option<living_rules::script::Senses>,
     moves: Option<living_rules::script::Moves>,
+    glow: Option<f32>,
 }
 
 thread_local! {
@@ -802,8 +811,48 @@ pub fn senses_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> living_r
         sc.senses(c).unwrap_or_else(|e| {
             log::warn!("senses for {id}: {e}");
             let r = sc.reach();
-            living_rules::script::Senses { sight: r.sight(c.night), hearing: r.hearing }
+            living_rules::script::Senses { sight: r.sight(c.dark), hearing: r.hearing }
         })
+    })
+}
+
+/// How far a creature is seen from now by a light on it (the `glow` law: a carried light, standing
+/// in lamplight; 0 when the script has none, which costs nothing).
+pub fn glow_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
+    if scripts(ctx).reach().glow <= 0.0 {
+        return 0.0;
+    }
+    hot(ctx, id, w, now, "glow", |h| &mut h.glow, |sc, c| {
+        sc.glow(c).unwrap_or_else(|e| {
+            log::warn!("glow for {id}: {e}");
+            0.0
+        })
+    })
+}
+
+/// How far an observer with sight `sight` sees creature `target`: its sight, or farther when a
+/// light shows the target (`glow_of`).
+pub fn sight_to(ctx: &ReducerContext, sight: f32, target: u32, w: &World, now: u64) -> f32 {
+    sight.max(glow_of(ctx, target, w, now))
+}
+
+/// The radius to gather creatures an observer with sight `sight` may see: its sight, widened to
+/// the farthest glow when the script has one.
+pub fn gather_radius(ctx: &ReducerContext, sight: f32) -> f32 {
+    sight.max(scripts(ctx).reach().glow)
+}
+
+/// Whether a spot is in lamplight: within the `lights` radius of a structure that gives light
+/// (`structure_traits()`); false at once when no kind gives light.
+pub fn lit_at(ctx: &ReducerContext, at: (f32, f32)) -> bool {
+    let sc = scripts(ctx);
+    let widest = sc.widest_light();
+    if widest <= 0.0 {
+        return false;
+    }
+    structures_near(ctx, at, widest).into_iter().any(|(s, d)| {
+        let l = sc.structure(&s.kind).lights;
+        l > 0.0 && d <= l
     })
 }
 

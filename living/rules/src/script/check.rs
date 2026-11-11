@@ -93,7 +93,7 @@ fn describe(c: &SkillCtx) -> String {
 /// The functions the engine calls with a context: `<skill>_check`, `_duration`, `_done`, `_hit`,
 /// `_missile`, and the need laws.
 pub const SKILL_PARTS: [&str; 5] = ["_check", "_duration", "_done", "_hit", "_missile"];
-pub const CTX_LAWS: [&str; 6] = ["rates", "body_state", "move_speed", "senses", "motion", "theft"];
+pub const CTX_LAWS: [&str; 7] = ["rates", "body_state", "move_speed", "senses", "motion", "theft", "glow"];
 
 pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     if let Some(f) = s.borrowed.first() {
@@ -104,7 +104,7 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 7] = ["perceived_of", "record_text", "items", "structure_traits", "occupation_knows", "source_of", "carcass"];
+pub const ENGINE_LAWS: [&str; 8] = ["perceived_of", "record_text", "items", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.
@@ -142,6 +142,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     }
     let count = Rc::new(Cell::new(0u64));
     let mut engine = super::engine_with(limits);
+    super::register_day(&mut engine, s.hour_ms);
     let c2 = count.clone();
     engine.on_progress(move |n| {
         c2.set(n);
@@ -156,6 +157,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     described(s)?;
     record_texts(&mut p)?;
     regard(&mut p)?;
+    daylight(&mut p)?;
     Ok(p.report)
 }
 
@@ -219,10 +221,10 @@ fn needs(p: &mut Probe) -> Result<(), String> {
             if warm {
                 (a.near_fire, a.near_shelter) = (true, true);
             }
-            let c = SkillCtx { actor: a, night, raining, season: season.into(), hour: if night { 23.0 } else { 12.0 }, ..Default::default() };
+            let c = SkillCtx { actor: a, night, dark: if night { 1.0 } else { 0.0 }, raining, season: season.into(), hour: if night { 23.0 } else { 12.0 }, ..Default::default() };
             if s.has("rates") {
                 let d = p.ctx("rates", &c)?;
-                super::NeedLaw::from_dynamic(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                super::NeedLaw::from_dynamic(d, s.hour_ms).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
             }
             if s.has("body_state") {
                 let d = p.ctx("body_state", &c)?;
@@ -234,17 +236,29 @@ fn needs(p: &mut Probe) -> Result<(), String> {
             }
             let d = p.ctx("motion", &c)?;
             super::decode_moves(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
-            // Senses, with and without a torch in the pack: within the law's own reach.
-            for torch in [false, true] {
+            // Senses and glow, with and without a torch in the pack, in lamplight or not, and in
+            // twilight: within the law's own reach.
+            for (torch, lit, twilight) in [(false, false, false), (true, false, false), (false, true, false), (false, false, true), (true, true, true)] {
                 let mut c = c.clone();
                 if torch {
                     c.actor.inv.push(("torch".into(), 1));
                 }
+                c.actor.lit = lit;
+                if twilight {
+                    c.dark = 0.5;
+                }
                 let d = p.ctx("senses", &c)?;
                 let reach = s.reach();
-                let wide = super::decode_senses(d.clone(), &super::Reach { day: f32::MAX, night: f32::MAX, hearing: f32::MAX }, c.night).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
-                if wide.sight > reach.sight(c.night) || wide.hearing > reach.hearing {
-                    return Err(format!("install refused: senses gives sight {} and hearing {} {}, beyond senses_law's reach ({} by {}, hearing {}): raise the reach with the law", wide.sight, wide.hearing, describe(&c), reach.sight(c.night), if c.night { "night" } else { "day" }, reach.hearing));
+                let wide = super::decode_senses(d.clone(), &super::Reach { day: f32::MAX, night: f32::MAX, hearing: f32::MAX, glow: f32::MAX }, c.dark).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                if wide.sight > reach.sight(c.dark) || wide.hearing > reach.hearing {
+                    return Err(format!("install refused: senses gives sight {} and hearing {} {}, beyond senses_law's reach ({} by {}, hearing {}): raise the reach with the law", wide.sight, wide.hearing, describe(&c), reach.sight(c.dark), if c.dark >= 1.0 { "night" } else if c.dark <= 0.0 { "day" } else { "twilight" }, reach.hearing));
+                }
+                if s.has("glow") {
+                    let d = p.ctx("glow", &c)?;
+                    let g = super::decode_glow(d, &super::Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: f32::MAX }).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                    if g > reach.glow {
+                        return Err(format!("install refused: glow gives {g} m {}, beyond senses_law's reach.glow ({} m): raise the reach with the law", describe(&c), reach.glow));
+                    }
                 }
             }
         }
@@ -400,9 +414,26 @@ fn regard(p: &mut Probe) -> Result<(), String> {
     }
     for (observer, target) in [("person", "person"), ("wolf", "wolf"), ("wolf", "person"), ("person", "deer")] {
         for (known, revealed, own, night) in [(false, false, false, false), (true, false, false, true), (false, true, false, false), (true, true, true, false)] {
-            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "wound_tending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night };
+            let dist = if night { 30 } else { 4 };
+            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "wound_tending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night, dist };
             let d = p.raw("perceived_of", (super::regard_map(&r),), &|| format!("for a {observer} looking at a {target}"))?;
             super::decode_regard(d, &r).map_err(|e| format!("install refused: {e} (a {observer} looking at a {target})"))?;
+        }
+    }
+    Ok(())
+}
+
+/// How light it is, at every half hour of the day: a number from 0 to 1.
+fn daylight(p: &mut Probe) -> Result<(), String> {
+    if !p.s.has("daylight") {
+        return Ok(());
+    }
+    for half in 0..48 {
+        let h = half as f64 / 2.0;
+        let d = p.raw("daylight", (h,), &|| format!("at hour {h}"))?;
+        match super::number(&d) {
+            Some(v) if (0.0..=1.0).contains(&v) => {},
+            _ => return Err(format!("install refused: `daylight({h})` must return a number from 0 (night) to 1 (day), got {d}")),
         }
     }
     Ok(())

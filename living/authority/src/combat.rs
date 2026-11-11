@@ -135,7 +135,7 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
         }
         let Some(viewer) = human(ctx, c.id) else { continue };
         // The onlooker's own sight, and a clear sight line to where it happened.
-        if !crate::perception::in_sight(&map, c.pos, ev.at, c.dist, common::sight_for(ctx, c.id, &w, now)) {
+        if !crate::perception::in_sight(&map, c.pos, ev.at, c.dist, common::sight_to(ctx, common::sight_for(ctx, c.id, &w, now), ev.actor, &w, now)) {
             continue;
         }
         told.push(c.id);
@@ -545,7 +545,7 @@ pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64
         let r = crate::perception::widest_sight(ctx, &w, now);
         let map = common::map(ctx);
         for c in common::creatures_near(ctx, at, r, now) {
-            if c.id == id || !crate::perception::in_sight(&map, c.pos, at, c.dist, common::sight_for(ctx, c.id, &w, now)) {
+            if c.id == id || !crate::perception::in_sight(&map, c.pos, at, c.dist, common::sight_to(ctx, common::sight_for(ctx, c.id, &w, now), id, &w, now)) {
                 continue;
             }
             show_to(ctx, id, now, Seen { kind: seen::WITNESS, actor: c.id, target: id, at: c.pos, ..Default::default() });

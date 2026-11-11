@@ -1,14 +1,16 @@
 {
   "run": "hamlet",
   "seed": 3,
+  "day_minutes": 48,
+  "laws_file": "worlds/cullet/laws.rhai",
   "map": {
     "kind": "realm",
     "w": 96,
     "h": 96
   },
   "year_days": 4,
-  "life_pace": 0.1428,
-  "setting": "A small valley with a river, a mill town and a fishing village a short walk apart, twelve people in all. Berry bushes grow wild and in the planted fields, fish run at the river mouth and the marsh, and there is no game left worth hunting. People live about seventy years here, but the years pass very fast: a child grows up in a couple of hours of the sun's turning, and the old do not last the day out.",
+  "life_pace": 0.0357,
+  "setting": "A small valley with a river, a mill town and a fishing village a short walk apart, twelve people in all. Berry bushes grow wild and in the planted fields, fish run at the river mouth and the marsh, and there is no game left worth hunting. People live about seventy years here, but the years pass very fast: a child is grown in two days and a half, and a whole life is ten days.",
   "animals": {
     "deer": 0,
     "wolf": 0

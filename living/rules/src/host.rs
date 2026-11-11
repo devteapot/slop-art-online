@@ -20,7 +20,11 @@ pub fn blocks(kind: LotKind) -> bool {
 
 /// The style margin round a settlement's models (lots are the model's footprint plus this).
 pub fn margin_of(land: &Land, p: &LandParams, lot: &Lot) -> f32 {
-    land.settlements.get(lot.settlement as usize).and_then(|s| p.settlements.style_for(s.kind, &s.style)).map_or(0.0, |s| s.margin_m)
+    // A planned settlement's lots are its models' footprints exactly.
+    match land.settlements.get(lot.settlement as usize) {
+        Some(s) if s.planned => 0.0,
+        s => s.and_then(|s| p.settlements.style_for(s.kind, &s.style)).map_or(0.0, |s| s.margin_m),
+    }
 }
 
 /// Tiles under a lot's model footprint: tiles whose centre lies inside the lot shrunk by the
@@ -395,6 +399,33 @@ mod tests {
         let (m, _) = hosted_map(&l, &p);
         let d = digests(&l, &m);
         println!("digests seed 7 2048: tiles {:016x} heights {:016x} layout {:016x}", d.tiles, d.heights, d.layout);
+    }
+
+    /// The island (seed 7 at 2048 m, `seeds/island.json`) and the megacity floor at 2048 m
+    /// (`seeds/floor-megacity.json`, as verify-generation's `floor-megacity-2k`) keep their
+    /// digests: a change that should leave existing lands alone (a seed field they do not use,
+    /// such as an empty `plans`) must not move a tile, a height or a lot. A change that is meant
+    /// to change them updates these values in the same commit, and says so.
+    #[test]
+    fn pinned_digests_hold() {
+        let island: serde_json::Value = serde_json::from_str(include_str!("../../seeds/island.json")).unwrap();
+        let mega: serde_json::Value = serde_json::from_str(include_str!("../../seeds/floor-megacity.json")).unwrap();
+        let params = |v: &serde_json::Value| -> LandParams { if v["map"]["params"].is_null() { LandParams::default() } else { serde_json::from_value(v["map"]["params"].clone()).unwrap() } };
+        let cases = [
+            ("island", island["seed"].as_u64().unwrap(), island["map"]["size"].as_u64().unwrap() as u32, params(&island), (0x9b403da95bba9407u64, 0x0d2f77752781845c, 0x8ff57472b004a13f)),
+            ("floor-megacity-2k", mega["seed"].as_u64().unwrap(), 2048, params(&mega), (0xdb59549c884bf8b8, 0xc06f16f3dcac1290, 0x0c6b3f2c51f13129)),
+        ];
+        let mut bad = Vec::new();
+        for (name, seed, size, p, want) in cases {
+            let l = land::generate(seed, size, &p);
+            let (m, _) = hosted_map(&l, &p);
+            let d = digests(&l, &m);
+            eprintln!("{name}: tiles {:016x} heights {:016x} layout {:016x}", d.tiles, d.heights, d.layout);
+            if (d.tiles, d.heights, d.layout) != want {
+                bad.push(format!("{name}: tiles {:016x} heights {:016x} layout {:016x}, pinned {:016x} {:016x} {:016x}", d.tiles, d.heights, d.layout, want.0, want.1, want.2));
+            }
+        }
+        assert!(bad.is_empty(), "digests moved: {bad:?}");
     }
 
     #[test]

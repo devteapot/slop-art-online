@@ -110,21 +110,49 @@ pub fn create_floor(ctx: &ReducerContext, seed_json: String) -> Result<(), Strin
         return Err("this floor already has its seed".into());
     }
     let s: Seed = serde_json::from_str(&seed_json).map_err(|e| format!("seed: {e}"))?;
-    check_rules(ctx, &s)?;
+    let laws = check(&s)?;
     if let Some(m) = s.map.as_ref().filter(|m| m.kind == "land") {
         crate::island::params_of(m)?;
     }
     ctx.db.floor_seed().insert(FloorSeed { id: 0, json: seed_json.clone() });
     seed::set_active(&seed_json);
-    begin(ctx, &s, common::now_ms(ctx));
-    Ok(())
+    begin(ctx, &s, laws, common::now_ms(ctx))
 }
 
-/// A seed's `rules` are the world's own values of the script's laws: each must name a law and
-/// have its kind (a number, or true or false).
-fn check_rules(ctx: &ReducerContext, s: &Seed) -> Result<(), String> {
+/// What a seed says of its world's rules, checked before anything is written: its day length,
+/// its laws overlay (composed over the shipped script, compiled and run on the install samples:
+/// returned when it has one), and its `rules`, the world's own values of the script's laws, each
+/// naming a law and of its kind (a number, or true or false).
+pub fn check(s: &Seed) -> Result<Option<String>, String> {
+    let day_ms = s.day_ms()?;
+    let laws = s.script()?;
+    let sc = living_rules::script::Scripts::with_day(laws.as_deref().unwrap_or(seed::SKILLS), day_ms).map_err(|e| format!("seed laws: {e}"))?;
+    if laws.is_some() {
+        sc.validate().map_err(|e| format!("seed laws: {e}"))?;
+    }
     let over: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-    common::scripts(ctx).laws_with(&over).map(|_| ()).map_err(|e| format!("seed rules: {e}"))
+    sc.laws_with(&over).map_err(|e| format!("seed rules: {e}"))?;
+    Ok(laws)
+}
+
+/// The world's day from its seed (`day_minutes`): the world row's `day_ms`, and the script
+/// revision moved so every cache reads laws for that day.
+fn set_day(ctx: &ReducerContext, s: &Seed) -> Result<(), String> {
+    let day_ms = s.day_ms()?;
+    let mut w = common::world(ctx);
+    if w.day_ms == day_ms {
+        return Ok(());
+    }
+    w.day_ms = day_ms;
+    ctx.db.world().id().update(w);
+    common::invalidate_world();
+    common::invalidate_calendar();
+    let mut k = common::clock(ctx);
+    k.scripts_rev += 1;
+    ctx.db.clock().id().update(k);
+    common::invalidate_scripts_rev();
+    log::info!("the world's day lasts {} real minutes", day_ms as f64 / 60_000.0);
+    Ok(())
 }
 
 /// Keep the seed's `rules` as the world's own laws (`world_law`) and have every cache read them.
@@ -142,18 +170,26 @@ fn world_laws(ctx: &ReducerContext, s: &Seed) {
     common::invalidate_scripts_rev();
 }
 
-/// Create the world from the active seed: in this call, or by scheduling the first step.
-pub fn begin(ctx: &ReducerContext, s: &Seed, now: u64) {
+/// Create the world from the active seed: in this call, or by scheduling the first step. First
+/// its rules: its day, its laws overlay (installed as `install_script` installs a script) and its
+/// own values of laws. `laws` is what [`check`] returned for this seed.
+pub fn begin(ctx: &ReducerContext, s: &Seed, laws: Option<String>, now: u64) -> Result<(), String> {
+    set_day(ctx, s)?;
+    if let Some(source) = laws {
+        crate::install_source(ctx, source)?;
+        log::info!("the seed's laws are installed over the shipped script");
+    }
     world_laws(ctx, s);
     let staged = s.map.as_ref().filter(|m| m.kind == "land").and_then(|m| crate::island::params_of(m).ok()).is_some_and(|(size, _)| size > INLINE_MAX_M);
     if !staged {
         seed::seed(ctx, now);
         crate::start_ticking(ctx);
-        return;
+        return Ok(());
     }
     log::info!("world creation is staged: a land too big for one reducer call");
     ctx.db.genesis().insert(Genesis { id: 0, step: 0, steps: 0, label: "starting".into(), generated: 0, chunks: 0, lots: 0, resource_rows: 0, restarts: 0, started_ms: now, updated_ms: now, done: false });
     schedule(ctx);
+    Ok(())
 }
 
 fn schedule(ctx: &ReducerContext) {
@@ -259,7 +295,7 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
             label = "hosting: buildings into the tiles, digests".into();
             let _t = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.host");
             let land = w.gen.take().expect("generated land").into_land();
-            let h = crate::island::host(s.seed, m, &land, &params);
+            let h = crate::island::host(s.seed, m, &land, &params)?;
             drop(land);
             w.chunk_ids = h.map.chunks().collect();
             w.hosted = Some(h);

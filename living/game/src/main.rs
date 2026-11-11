@@ -40,6 +40,7 @@ mod probe;
 mod route;
 mod sight;
 mod sightedge;
+mod sightfield;
 mod sky;
 mod style;
 mod terrain;
@@ -136,7 +137,7 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
             .add_systems(
                 Update,
-                (envs::hdr, envs::keys, envs::switch, island::stream, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway).chain(),
+                (envs::hdr, envs::keys, envs::switch, island::stream, island::grey_boxes, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway).chain(),
             );
     } else {
         // A frame's order (phase.rs): net, mirror, input, flush, present, camera.
@@ -159,6 +160,7 @@ fn main() {
         app.add_plugins(verbs::VerbsPlugin);
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
+        app.add_plugins(sightfield::SightFieldPlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }

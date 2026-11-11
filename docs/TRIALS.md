@@ -22,7 +22,7 @@ A trial is a JSON file in [`living/trials/`](../living/trials/). Fields:
 | `timeline` | Steps. `"at": "prepare"` runs right after publishing, `"at": "start"` at the start hour before the mind starts, `"at": <minutes>` during the run, and `"when": {…}` on a trigger. An entry is one step or has `steps`, each with an optional `after` (seconds). |
 | `probes` | Probes the trial is about (all probes are computed for every trial). |
 | `minds` | Who the mind service thinks for. Default: the subject (`LIVING_ONLY`). `"only": "all"`: every person and animal. With `"max": N` as well, at most N at a time: those already thinking who are alive, then the earliest-born of the rest past infancy. A death frees a place, and a newborn takes one when it becomes a child. The runner restarts the mind with the new `LIVING_ONLY` when someone joins the set, at most every 2 minutes (a `reslot` event; planned restarts do not count toward the runaway watchdog's restarts). A death alone only drops the dead from the set. |
-| `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. |
+| `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. A world seed with its own laws (`laws`/`laws_file`) has them composed over the file first (`compose_laws`, as `floors::compose` does at creation), and the runner checks its composition against the world's. |
 | `census_s` | Every so many seconds, every character of the world goes to `census.jsonl`: stage, alive, cause and time of death, parents, position, hunger, activity, and who the mind thinks for. This is meant for small worlds (four whole-table reads per census). |
 | `life.stop_on_death` | `false`: a life run goes on to its duration after the subject dies, and the mind keeps running (default `true`: it stops 20 s after the death). |
 
@@ -402,9 +402,9 @@ Batches: `l6` (main 445db098, island presets, 6 h planned), `l7` (valley, 6 h), 
 
 ## The hamlet: a small world where everyone thinks (2026-11-11)
 
-Branch `exp-hamlet-births`. Status: **built and proved with fake minds only** (`hm0`, below). No paid run has been made on it.
+Branch `exp-hamlet-births`. Status: **built and proved with fake minds only** (`hm2` on Cullet's day and laws, `hm0` and `hm1` before them on the 12-minute day; below). No paid run has been made on it.
 
-The seed [`hamlet`](../living/seeds/hamlet.json) is [`authored-test`](../living/seeds/authored-test.json) with five more residents, larger stores, the fishing spots and berry bushes each settlement promises (`resources`), and no animals. It keeps that seed's 96 × 96 realm map, its sheets and its pace (`year_days` 4, `life_pace` 0.1428). Twelve people live in four households in two settlements a short walk apart. Each settlement has houses, a store on its square, planted berry fields and its own fishing water. Nothing is restocked during a run. Ids are the seeding order. Each person's death of old age is fixed by their id (`Life::deathline`), so the death times below come from `births_report.py`.
+The seed [`hamlet`](../living/seeds/hamlet.json) is [`authored-test`](../living/seeds/authored-test.json) with five more residents, larger stores, the fishing spots and berry bushes each settlement promises (`resources`), and no animals. It keeps that seed's 96 × 96 realm map and its sheets. Since main brought a seed's own day and laws (`rules-1`, [Cullet's rules](CULLET_RULES.md)) it has Cullet's day (`day_minutes` 48) and Cullet's laws (`laws_file` `worlds/cullet/laws.rhai`). Its pace is `year_days` 4 and `life_pace` 0.0357, a quarter of `authored-test`'s 0.1428, so that a life still lasts 8 real hours on the four-times-longer day. Twelve people live in four households in two settlements a short walk apart. Each settlement has houses, a store on its square, planted berry fields and its own fishing water. Nothing is restocked during a run. Ids are the seeding order. Each person's death of old age is fixed by their id (`Life::deathline`), so the death times below come from `births_report.py`.
 
 | Id | Who | Age | Household | Stage at start | Thinks in `hamlet` | Dies of old age at |
 | ---: | --- | ---: | --- | --- | --- | ---: |
@@ -421,12 +421,12 @@ The seed [`hamlet`](../living/seeds/hamlet.json) is [`authored-test`](../living/
 | 11 | Sefa Reed, Wenna's daughter (the subject) | 19 | reed | adult | yes | 337 min |
 | 12 | Lio Reed, Wenna's son | 10 | reed | child | yes | 377 min |
 
-Food is plentiful. Within 24 m of the two squares there are 31 and 22 berry bushes, wild and planted, and 2 and 7 fishing spots (verify-generation, `generation-hamlet-20261111-141545`). A bush holds 5 berries and regrows 1.2 a minute outside winter (`regrow`). A person eats about 1.2 hunger a real minute awake, about 0.1 berries. The stores hold 16 berries, 10 cooked fish, 6 fish and 10 wood between them, and everyone carries a few berries or fish. Winter, when nothing regrows, is one game day in four (12 real minutes of every 48).
+Food is plentiful. Within 24 m of the two squares there are 31 and 22 berry bushes, wild and planted, and 2 and 7 fishing spots (verify-generation, `generation-hamlet-20261111-141545`). A bush holds 5 berries and regrows 1.2 a minute outside winter (`regrow`). A person gets about 1.2 hunger a real minute awake (Cullet's 2.4 a game hour), about 0.1 berries' worth. The stores hold 16 berries, 10 cooked fish, 6 fish and 10 wood between them, and everyone carries a few berries or fish. Winter, when nothing regrows, is one game day in four: 48 real minutes of every 192.
 
 The tensions are in the sheets and none is scripted. Oren's debt to Teodor and the secret of the sold seed grain come from `authored-test`. Teodor has no apprentice, and Mara wants a house of her own rather than his trade. Brisk and Cal are rivals. Sefa wants to leave her mother's house.
 
 - **Minds.** `hamlet` thinks for every person past infancy, at most 12 at a time (`minds.max`, above): 11 at the start, 12 once Tobin is a child. In a stable population every person thinks. If the hamlet grows past 12 people old enough to think, the youngest live on their seeded ways until a death frees a place. Each time someone joins the thinking set, the runner restarts the mind service (at most every 2 minutes), which breaks off model calls and conversations in progress for all of them. A death alone does not restart it. `hamlet-solo` thinks only for the subject (`LIVING_ONLY` = 11). The other eleven run their behaviour graphs, as the island's residents do in a scripted trial, and graph adults do not conceive. Both runs go on to their full duration after the subject's death (`life.stop_on_death` false). The solo run then has no mind at all and costs nothing more.
-- **Cullet's law values.** Sight is a law (`sight_in` in `skills.rhai`), so the trials set Cullet's distances through `skills_patch`: 48 m by day, 14 m in the dark, and 20 m with a torch (docs/SMALL_CITY.md, decision 6). The day length cannot be set. `World.day_ms` comes from `living_rules::DEFAULT_DAY_MS` (12 minutes) in `init`, and no seed field or reducer sets it (SMALL_CITY.md section 4 already notes that the seed needs a field for it). The hamlet therefore runs on the default 12-minute day, not Cullet's 48 minutes.
+- **Cullet's day and laws.** The seed sets them, and the world composes the overlay when it is created. Cullet's laws give needs per game hour, so 48 hunger a game day is the same 1.2 a real minute awake as before. They also give eased dusk and dawn, and Cullet's senses: sight 48 m by day and 14 m in the dark, 20 m with a torch, someone in lamplight seen from 28 m, names within 24 m, and speech carrying 12 m. Night is 20:00–06:00, 20 real minutes of the 48. The runner installs the skills file after publishing, and installing the bare file would drop the overlay. So the runner composes the seed's `laws`/`laws_file` over that file first, the way `floors::compose` does (`trials.compose_laws`), then applies any `skills_patch`. Before installing it compares its composition with the one the world made at creation and logs `seed laws composed as the world composed them: True` (an `error` event otherwise). The hamlet's earlier sight `skills_patch` is gone.
 - **What the runner records** besides the subject's samples: `census.jsonl` every 30 s (every character's stage, life and death, parents, position, hunger and activity, and the thinkers), hourly snapshots, and every resident's journal.
 
 ```bash
@@ -436,7 +436,21 @@ python3 living/tools/births_report.py hm0
 python3 living/tools/trials.py clean --batch hm0
 ```
 
-### Fake proof (`hm0`)
+### Fake proof
+
+`hm2` (after merging main fd2030c, which carries rules-1): 2026-11-11 15:08–15:19, fake model, 10 minutes, one replicate of each of the five trials on Cullet's day and laws. Modules: `trial-hamlet-5a897620` (hamlet, solo, provided), `-94c40654` (spaced), `-48fa2f46` (longing). The world rows read `day_ms` 2880000, `life_pace` 0.0357 and `year_days` 4. The longing world had its `world_law` rows (120, 4). In all five runs `actions.log` says `seed laws composed as the world composed them: True`. The provided run installed `seed laws,conceive_food,conceive_roof`. The host's load was 26–28, from other builds and `l9`.
+
+| Run | Minds thinking | Model calls (by purpose) | Calls per real minute per mind (run / minutes 5–10) | Tick p99, minute 1–2 | Ticks over 16.7 ms |
+| --- | --- | --- | --- | --- | ---: |
+| `hamlet` | 11, and 12 from t = 484 s (`reslot`: Tobin) | 201 (consolidate 85, think 53, deliberate 53, talk 10) | 1.80 / 1.82 | 0.92 ms | 0 |
+| `hamlet-spaced` | the same (t = 484 s) | 195 | 1.74 / 1.67 | 0.92 ms | 0 |
+| `hamlet-provided` | the same (t = 482 s) | 198 | 1.77 / 1.83 | 1.00 ms | 0 |
+| `hamlet-longing` | the same (t = 487 s) | 200 | 1.79 / 1.83 | 0.87 ms | 0 |
+| `hamlet-solo` | 1 (Sefa Reed #11) | 7 | 0.70 / 0.4 | 0.86 ms | 0 |
+
+Mind processes used 67–81 MB resident. No one died or was born in 10 minutes. Teodor's death is due at minute 49, the same real time as before: the life was kept at 8 real hours. Fake minds made more calls on Cullet's day (1.8 a minute per mind against 1.1–1.5 on the 12-minute day). The fake model answers at once, so this is the mind's cadence, not a price.
+
+Before rules-1 (the 12-minute day, `life_pace` 0.1428, the same lives in real time, sight by `skills_patch`):
 
 `hm0`: 2026-11-11 14:13–14:24, fake model, 10 minutes, one replicate of each, module `trial-hamlet-c43ae3e5` built from this branch's working tree. The trial service also carried batch `l9` and other builds (load 14–21).
 
@@ -447,7 +461,7 @@ python3 living/tools/trials.py clean --batch hm0
 
 Mind processes used 33–69 MB resident. What else the run showed:
 
-- The cast picked Sefa Reed (#11, the youngest adult) as the subject, the sight patch was installed (`patched sight` in `actions.log`), and each run wrote 21 census rows.
+- The cast picked Sefa Reed (#11, the youngest adult) as the subject, the sight patch of that version was installed (`patched sight` in `actions.log`), and each run wrote 21 census rows.
 - The population stayed 12 → 12. No one was due to die in 10 minutes; Teodor's death is due at 49.
 - Fake replies carry no acts, so the act shares are empty. 42 plans were classed, none about food or children.
 - Tobin was within 4 m of a grown person in 60% of his census rows while an infant. 10% of grown persons' rows had him that near.
@@ -468,24 +482,24 @@ The owner's working target is an experiment, not a change to the defaults: over 
 
 ### The arithmetic
 
-The person life table (`species.json`): `years` 70; infant until 0.03 of a lifespan, child until 0.23, elder from 0.85; death of old age at each person's own point between `old_age` 0.87 and 1.0, spread evenly by id; `gestation` 0.011; `interbirth` 0.03 (after a birth both parents are raising the child, `rearing`, and neither can conceive); `litter` 1. Only adults (0.23 to 0.85) may conceive (`conceive_check`). A game day is 12 real minutes on every seed.
+The person life table (`species.json`): `years` 70; infant until 0.03 of a lifespan, child until 0.23, elder from 0.85; death of old age at each person's own point between `old_age` 0.87 and 1.0, spread evenly by id; `gestation` 0.011; `interbirth` 0.03 (after a birth both parents are raising the child, `rearing`, and neither can conceive); `litter` 1. Only adults (0.23 to 0.85) may conceive (`conceive_check`). A game day is 48 real minutes in the hamlet (`day_minutes`) and 12 on the island.
 
 A lifespan in game days is L = years × `year_days` × `life_pace`.
 
-| | Hamlet (`year_days` 4, `life_pace` 0.1428) | Island (`year_days` 8, `life_pace` 1) |
+| | Hamlet (`day_minutes` 48, `year_days` 4, `life_pace` 0.0357) | Island (12-minute day, `year_days` 8, `life_pace` 1) |
 | --- | --- | --- |
-| Lifespan L | 70 × 4 × 0.1428 = 40.0 game days = 480 real min = **8.0 h** | 70 × 8 × 1 = 560 game days = **112 h** |
-| A year of age | 0.571 game days = 6.9 real min | 8 game days = 96 real min |
+| Lifespan L | 70 × 4 × 0.0357 = 10.0 game days × 48 min = 480 real min = **8.0 h** | 70 × 8 × 1 = 560 game days = **112 h** |
+| A year of age | 0.143 game days = 6.9 real min | 8 game days = 96 real min |
 | Infant, child, adult from | 0–14 min, to 1.84 h, then adult | 0–3.4 h, to 25.8 h, then adult |
 | Elder from (0.85 L) | 6.8 h | 95 h |
-| Death of old age (0.87 to 1.0 L, mean 0.935 L) | 6.96 to 8.0 h, mean 37.4 game days = 7.48 h | 97 to 112 h, mean 524 game days = 105 h |
-| Gestation (0.011 L) | 0.44 game days = 5.3 min | 6.2 game days = 74 min |
-| Raising after a birth (0.03 L) | 1.2 game days = 14 min | 16.8 game days = 3.4 h |
+| Death of old age (0.87 to 1.0 L, mean 0.935 L) | 6.96 to 8.0 h, mean 9.35 game days = 7.48 h | 97 to 112 h, mean 524 game days = 105 h |
+| Gestation (0.011 L) | 0.11 game days = 5.3 min | 6.2 game days = 74 min |
+| Raising after a birth (0.03 L) | 0.3 game days = 14 min | 16.8 game days = 3.4 h |
 | Shortest time between one couple's births (0.041 L) | 19.7 min | 4.6 h |
 
 **Births a stationary population needs.** If no one dies before old age, a population of N stays stationary when b = N / (mean age at death) = N / (0.935 L) births a game day. In a stationary population a share (0.85 − 0.23) / 0.935 = 0.66 are adults. Each couple then needs 2 children over its 0.62 L of adult life, one per 0.31 L.
 
-- **Hamlet, N = 12:** 12 / 37.4 = 0.32 births a game day, **3.2 per 10 game days** (2 real hours). Over a 6-hour run (30 game days, 0.75 L) that is 12 × 0.75 / 0.935 = **9.6 births**. Per adult, 0.4 per 10 game days. Per couple, 0.8 per 10 game days, if every adult is in a couple.
+- **Hamlet, N = 12:** 12 / 9.35 = 1.28 births a game day, **12.8 per 10 game days** (8 real hours), so 3.2 per 2 real hours. Over a 6-hour run (7.5 game days, 0.75 L) that is 12 × 0.75 / 0.935 = **9.6 births**. Per adult, 1.6 per 10 game days. Per couple, 3.2 per 10 game days (one per 0.31 L, 2.5 real hours), if every adult is in a couple. Everything in real time is as it was on the 12-minute day, because the lifespan in real time was kept. Only the count of game days per life changed, from 40 to 10.
 - **Island, N ≈ 311 (everyone thinking, `s12`):** 311 / 524 = 0.59 a game day, **5.9 per 10 game days**. 61 is about ten times that. That count was the first wave: no one is raising young at the start, so every willing couple conceives at once.
 - **Today's ceiling:** an eager couple, conceiving at each first chance, can have a child every 0.041 L, so 1 + (0.62 − 0.011) / 0.041 ≈ 16 children over an adult life. That is 8 times replacement. Only the minds' choices hold births down today.
 
@@ -498,8 +512,8 @@ Each arm is general law or data. None names the hamlet or touches what minds may
 | Arm (trial) | Values | What a body can do | What it should give |
 | --- | --- | --- | --- |
 | Control (`hamlet`) | shipped: `interbirth` 0.03, `conceive_food` 0, `conceive_roof` false, `longing_after_min` 20, `longing_food` 0 | today's rules | the births minds choose today |
-| **Spaced** (`hamlet-spaced`) | `species.person.life.interbirth` **0.15** (world.overrides.species, merged over species.json at build) | after a birth both parents raise the child for 0.15 L (6 game days, 72 real min here; 84 game days, 16.8 h on the island) | an eager couple has at most one child per 0.161 L: 1.55 per 10 game days here, twice the 0.8 a couple needs when every adult is paired. That is replacement when about half the adults are paired, as at the hamlet's start (4 of 8). 0.30 would be replacement with everyone paired (one per 0.311 L), but with the hamlet's two couples that caps births well under the 9 deaths. |
-| **Provided** (`hamlet-provided`) | `conceive_food` **8**, `conceive_roof` **true** (skills_patch of `skills.rhai`) | to start a family the two must carry 8 portions of food between them, and the asker must stand under a shelter or in a house | births depend on a surplus put by, so more mouths sharing the same bushes and fishing spots make a surplus harder to gather. With the hamlet's plenty (above), the gate costs effort and timing (gathering and keeping 8 rather than eating them) rather than scarcity, so its density dependence is weak there. It would bind harder in a leaner world. 8 berries are 96 hunger: about 11 game days of an infant's hunger (8.6 a day) or 3 of a pair's (14.4 a day each). |
+| **Spaced** (`hamlet-spaced`) | `species.person.life.interbirth` **0.15** (world.overrides.species, merged over species.json at build) | after a birth both parents raise the child for 0.15 L (1.5 game days, 72 real min here; 84 game days, 16.8 h on the island) | an eager couple has at most one child per 0.161 L (77 real min): 6.2 per 10 game days here, twice the 3.2 a couple needs when every adult is paired. That is replacement when about half the adults are paired, as at the hamlet's start (4 of 8). 0.30 would be replacement with everyone paired (one per 0.311 L), but with the hamlet's two couples that caps births well under the 9 deaths. |
+| **Provided** (`hamlet-provided`) | `conceive_food` **8**, `conceive_roof` **true** (skills_patch of `skills.rhai`) | to start a family the two must carry 8 portions of food between them, and the asker must stand under a shelter or in a house | births depend on a surplus put by, so more mouths sharing the same bushes and fishing spots make a surplus harder to gather. With the hamlet's plenty (above), the gate costs effort and timing (gathering and keeping 8 rather than eating them) rather than scarcity, so its density dependence is weak there. It would bind harder in a leaner world. 8 berries are 96 hunger. Under Cullet's laws that is one game day of a pair's hunger (48 a day each), or 3.3 game days (2.7 real hours) of an infant's (29 a day). |
 | **Later longing** (`hamlet-longing`) | `longing_after_min` **120**, `longing_food` **4** (world.rules) | unchanged; anyone may still choose to conceive | the felt drive ("You long for a child…", the alert that asks a mind to think) comes 120 min × (1 − nurture/120) after one's own birth or youngest child's: 70 min at nurture 50, 35 at 85, and only while carrying 4 food. Once due, it comes back each dawn as today (it goes off at night; iteration 3). On the hamlet's pace that is about 0.15 L, the spaced arm's interval. It tests whether the drive is what drives births, without changing any rule of the body. |
 
 The fact the rules needed and Rhai could not see was the longing drive's timing and condition, which were Rust constants. They are now laws (`longing_after_min`, `longing_food`, typed in `Laws`, settable by a seed's `rules`). `conceive_check` reads only what the actor's context already had (`near_shelter`, `inv`, the target's `inv`), so no new actor field was added.
@@ -518,7 +532,7 @@ python3 living/tools/trials.py run --batch hb1 hamlet hamlet-spaced hamlet-provi
     --replicates 3 --sample-s 5 --stagger 15
 ```
 
-An estimate, not a measurement. It uses the coordinator's island figure of about $0.10 per thinking person per hour on glm-flash. Nothing has been measured on the hamlet. 48 m sight puts more people in each scene, and that may raise it.
+An estimate, not a measurement. It uses the coordinator's island figure of about $0.10 per thinking person per hour on glm-flash. Nothing has been measured on the hamlet. Two things may raise it: 48 m sight puts more people in each scene, and fake minds called about 1.8 times a minute per mind on Cullet's day against 1.1–1.5 on the 12-minute day.
 
 | Arms | Runs | Thinking at most | Person-hours | Estimate |
 | --- | ---: | --- | ---: | ---: |
@@ -533,7 +547,7 @@ These are upper bounds. Fewer think when deaths outrun births, and only the cap 
 ### Not covered
 
 - No real model has run on the hamlet. Fake minds do not conceive, so fake runs show the plumbing (minds, census, restarts) and nothing about births.
-- The day length is the default 12 minutes, not Cullet's 48 (no seed field).
+- Cullet's laws were written for Cullet's town (lamplight, hearths, coats). The hamlet's houses and campfires are what the authored-test layout gives: no lamps and no coats in the stores.
 - The arms' values are derived from the arithmetic, not tuned. How often a pair actually carries 8 food, so whether the provided arm's gate binds, is not known until real minds run.
 - The `family_laws` scene proves each law's gate on a scratch world. It does not prove what minds do with them.
 

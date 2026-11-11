@@ -189,6 +189,28 @@ def journal_file(name):
     return "".join(c if c.isalnum() else "_" for c in name) + ".jsonl"
 
 
+DEF = re.compile(r"^(\s*)(private\s+)?fn\s+([A-Za-z0-9_]+)(\s*\()", re.M)
+
+
+def compose_laws(base, overlay):
+    """`living_rules::floors::compose` in Python: each function the overlay defines replaces the
+    base's (`fn NAME(` at the start of a base line becomes `fn base_NAME(`), and the overlay is
+    appended. The authority composes a seed's `laws`/`laws_file` when the world is created; the
+    runner installs the skills file after publishing, so it composes the same overlay first."""
+    names = {m.group(3) for m in DEF.finditer(overlay)}
+    renamed = DEF.sub(lambda m: f"{m.group(1)}{m.group(2) or ''}fn base_{m.group(3)}{m.group(4)}" if m.group(3) in names else m.group(0), base)
+    return renamed + ("" if renamed.endswith("\n") else "\n") + "\n// ---- floor overlay ----\n" + overlay
+
+
+def seed_laws(seed):
+    """A seed's laws overlay: `laws`, or the file `laws_file` names under living/seeds."""
+    if str(seed.get("laws") or "").strip():
+        return seed["laws"]
+    if seed.get("laws_file"):
+        return (ROOT / "living/seeds" / seed["laws_file"]).read_text()
+    return ""
+
+
 def patch_skills(text, trial, variant):
     """A skills file with the trial's `skills_patch`, then the variant's, applied: each entry is
     name -> [old, new], a law value changed in place. An old text that does not occur exactly
@@ -537,7 +559,19 @@ class Instance:
         skills = ROOT / self.shared["variants"][self.variant].get("skills", "living/scripts/skills.rhai")
         # The trial's and then the variant's `skills_patch` change law values in that file
         # (name -> [old text, new text]; each old text must occur exactly once).
-        source, patched = patch_skills(skills.read_text(), self.trial, self.shared["variants"][self.variant])
+        # A seed's own laws (`laws`/`laws_file`, docs/CULLET_RULES.md) are composed over it first, as
+        # the authority did at creation: installing the bare file would drop them.
+        overlay = seed_laws(world_seed(worlds_of(self.trial)[world_key(self.trial, self.rep)])[2])
+        base = compose_laws(skills.read_text(), overlay) if overlay else skills.read_text()
+        if overlay and not self.shared["variants"][self.variant].get("skills"):
+            # The world's own composition, from its creation, is the check on this one.
+            made = next(iter(self.rows("SELECT * FROM script WHERE name = 'skills'")), {}).get("source")
+            self.log(f"seed laws composed as the world composed them: {made == base}")
+            if made != base:
+                self.emit("events", {"t": self.t(), "error": "the runner's composition of the seed's laws differs from the world's"})
+        source, patched = patch_skills(base, self.trial, self.shared["variants"][self.variant])
+        if overlay:
+            patched = ["seed laws"] + patched
         code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
         if code != 200:
             raise RuntimeError(f"install_script {code}: {body[:300]}")

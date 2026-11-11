@@ -4,6 +4,18 @@
 
 Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`; its port is published on `0.0.0.0`, which `verify.py` now accepts as local), private target dirs. `generation.py --feature worlds --seeds hamlet,authored-test` (`generation-hamlet-20261111-141545`): `hamlet` 59 of 59 checks (both settlements' 8 and 4 authored residents, sheets, parents, memberships, promised fishing spots and berry bushes, no animals), `authored-test` 40 of 40, original seeds unchanged. `--seeds` now accepts any tracked seed. The first attempt stopped at launch: the harness refused the trial service's `0.0.0.0` port binding.
 
+After merging main `fd2030c` (rules-1), with the hamlet on Cullet's day (`day_minutes` 48) and laws (`laws_file` `worlds/cullet/laws.rhai`), `life_pace` 0.0357: `generation-hamlet-20261111-150942`, `hamlet` 61 of 61 and `authored-test` 42 of 42, original seeds unchanged.
+
+## 2026-11-11 rules-1: a seed's own day and laws (dev-box)
+
+Branch `rules-1`, own container `rules1-stdb` (2.14.1, port 3312). `generation-rules1-135536 --feature worlds --seeds cullet-laws,cullet-laws-floor`: `cullet-laws` (compiled, `laws_file` read in by `build.rs`) 41 of 41 and `cullet-laws-floor` (`create_floor` with the seed from `seed_text.py`; refusals of an unread laws file, broken laws and a zero day) 46 of 46; cleanups and original seeds pass. The other seeds were not rerun with the new day and script checks.
+
+## 2026-11-11 plan-1: hand-authored plans (dev-box)
+
+Branch `plan-1` (from `6593f725`), own container `plan1-stdb` (2.14.1, port 3311, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. A maintain pass of this skill ran with it (new [plans](../features/plans.md) feature; drift fixed in seeded-world, floors, seed-guards, authored-worlds, repeatability and SKILL.md).
+- `generation-plan1b-20261111-135743` (`--feature worlds --seeds island,plan-test,floor-megacity-2k,floor-megacity-4k`): island 975, plan-test 67, floor-megacity-2k 73 and floor-megacity-4k 87 checks pass; `land` digests equal `floor_preview`'s on all four; original seeds unchanged. plan-test's `check_plans`: one `cullet` settlement, 9 lots in plan order with their kinds, sizes, models, heights and level floors, walkable doors, households `hollis` and `wren` owning and living at `house_a` and `house_d`, the Tally Hall's sign at lot `hall`, the `hall` and `inn` places at their lots. The 4 km floor: `create_floor refuses a plan whose stair disagrees with its levels` ("rises 3 m"); staged creation 142 steps in 43.1 s with other runs on the server.
+- `generation-plan1w-20261111-140418` (the other worlds and a second `realm`): realm 26, valley 38, authored-test 40, aske-coast 282, stage3-village 22, realm 26; repeatability passes. `generation-plan1a-20261111-140418`: authored aske-coast and island compile offline. `generation-plan1g-20261111-140418`: the six `seed::tests`, the malformed seed refused.
+- An earlier attempt (`generation-plan1-20261111-134705`) failed plan-test's generic town-life checks ("workers have a workplace", "residents start on the seed's own ways") because the seed had no `town_life.work` or `ways`; the seed gained both. "Original seeds unchanged" failed there because `living/seeds/cullet.json` was written during the run.
 
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 

@@ -4,6 +4,16 @@
 
 Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`. New scene `family_laws` (`core-family-20261111-142152`, stage1-acts): 9 of 9. Its first attempt (`core-hamlet-20261111-141837-family-laws`) passed the conceive checks and then failed for two scene bugs. One was a `str.format` on the script. The other came after it was fixed (`core-family-20261111-141949`): the empty-handed adult dropped its food only after the law was installed, so it had felt the longing for a moment with food in hand. The scene now empties hands first. `lifecycle` 6 of 6 (`core-hamlet-20261111-141837-lifecycle`). Baseline `core-hamlet-20261111-141837`: tick, needs, food, refusal, seize, sight, senses and moves pass (42 checks). `cargo_checks.py`: rules (the new `laws_with` longing values, `longing_wait_ms` equal to the old `20 − nurture/6`, and the `deathline` values `births_report.py` ports), authority 12, mind 82 and viewer sync 5 pass. `just living-check` exits 0. Not run: skirmish, dealings, town, lives, infant (about 2 h; cry routing is untouched), mechanics, steering, wildlife.
 
+After merging main `fd2030c` (rules-1: a seed's day and laws; only the night call in `brain.rs` conflicted): `family_laws` 9 of 9 (`core-family-20261111-150942`), `lifecycle` 6 of 6 (`core-life-20261111-151946`), `just living-check` exits 0 (rules 145), authority lib tests 12 of 12.
+
+## 2026-11-11 rules-1: a world's own day and laws (dev-box)
+
+Branch `rules-1`, own container `rules1-stdb` (2.14.1, port 3312), private `CARGO_TARGET_DIR`, no minds. Baseline `core-rules1-base` (default seed): cargo checks (rules 138, authority 12, mind 82, viewer sync 5) and tick, needs, food, refusal, seize, sight, senses, moves: 45 of 45. New `laws` scene on `cullet-laws` (`core-rules1-cullet`): day and rates, 48 m by day, names within 24 m pass; the first night attempt saw nothing (`laws-attempt3.txt`: the HTTP player had been taken over by the world's minds after `takeover_s`), fixed by a player call before each snapshot; the night rerun passed (14 m, a torch at 44 m, lamplight at 21 m, no cold harm). Two earlier attempts failed on the scene itself (a regex for `sight_in`'s `_` arm; no 54-tile east-west line on the 96 m map, replaced by `open_ray`).
+
+## 2026-11-11 plan-1 (dev-box)
+
+Branch `plan-1` (hand-authored plans, docs/AUTHORED_PLANS.md; it adds `lot:<id>` place kinds in `town::seat` and seed `homes`, unused by the island), own container `plan1-stdb` (2.14.1, port 3311), private `CARGO_TARGET_DIR`. `town.py` `core-plan1-town-20261111-135920` on the island: 22 of 23; the failure is the recorded flake "a resident faces someone who comes up behind them" (Cuth Marrow, player stopped 1.6 tiles away). Not run: the baseline scenes, skirmish, dealings, lives, infant, lifecycle, wildlife.
+
 
 ## 2026-11-11 lives-2 after merging laws-2 (dev-box)
 

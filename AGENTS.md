@@ -32,6 +32,7 @@ Spatial subscriptions are not permission boundaries by themselves: enforce perce
 - Preserve exact causal evidence, actual model exchanges, scoped privacy and original failed outcomes. A seed does not make fresh inference deterministic. Reported model explanations are not hidden chain-of-thought or proof of causation.
 - Keep rules authoritative in the living authority and expressed in its shared rules and skill scripts; Bevy handles presentation/input. External inference belongs in the mind service (`living/mind`), never in reducers. Do not create a second approximate simulator for experiments.
 - Retain shared logic when replacing storage boundaries. Generated bindings in `living/bindings` are regenerated via `just living-generate`, not hand-edited.
+- Build tools we own. When a capability matters to the game, such as characters, animation, models, textures or measurement, start from the best existing tool or asset, then bring it inside: our own scripts and parameters, judged in the game's renderer, so results can be regenerated and varied. The clip library and the Blender generators were made this way. Do not leave an outside application or a manual step on the path of routine work.
 
 ## Validation and resource discipline
 
