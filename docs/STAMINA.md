@@ -20,6 +20,59 @@ Built 2026-11-11 on the Spark (branch `stamina-1`) from the approved [proposal](
 - **Graphs.** A `{"stamina": {"below": 30}}` condition reads breath, like `energy`.
 - **Unchanged.** `look_walk_deg` is untouched (dev-box's look-2 owns it).
 
+## Merge note: law values, old → new
+
+Every law this branch adds or changes, with the value on main before it (or "new") and after it. A world reverts any **law** by name on a running world: `set_world_law("<name>", "<value>")`. Some rows say "not a law". Those are a function or a number inside `pools(a)`/`motion(a)`, and a world changes them with a script overlay (a seed's `laws_file`), not `set_world_law`.
+
+| Law | Old (main) | New | Units, notes |
+|---|---|---|---|
+| `run_share` | new (a person's run was `motion(a).run` 1.5) | 1.65 | share of the walk; 1.5 restores the old run speed (the run now costs breath either way) |
+| `run_top` | new (no cap) | 4.6 | m/s; the fastest a road takes a body (a body faster on its own keeps its speed); 50 is effectively no cap |
+| `walk_base` | new (2.6 hard-coded in `move_speed`) | 2.6 | m/s, a grown person's walk; Settings choices 3.0 and 3.4 |
+| `tired_pace` | new (×0.6 hard-coded) | 0.8 | share of the walk below energy 10 (island); 0.6 restores it. Cullet's ×0.8 below 35 is unchanged (its overlay) |
+| `wolf_run` | new (1.5, shared by all animals) | 1.5 | share of a wolf's walk (3.4 m/s → 5.1) |
+| `deer_run` | new (1.5) | 1.5 | share of a deer's walk (3.7 → 5.55) |
+| `charge` | new | true for wolves | **not a law**: a `motion(a)` field (a wolf's approach to a blow runs) |
+| `slowed` / `slow_words` | new | "exhausted, so you walk slower" (Cullet: also "tired, …") | **not a law**: words, a script function |
+| run start / resume | new | 30 | breath; `stamina_resume` (a run starts, or starts again after running out, with at least this) |
+| `stamina_max` | new | 100 | breath points (deer ×1.2: **not a law**, in `pools(a)`) |
+| `stamina_regen` | new | 25 | breath a second (elders ×0.7, exhausted ×0.5: **not laws**, in `pools(a)`) |
+| `stamina_delay_s` | new | 1 | s after the last spend before the refill starts |
+| `stamina_run` | new (running was free) | 4 | breath a second while running; 0 makes running free again |
+| `stamina_guard` | new (a held guard took energy: −6 a game hour × 0.3) | 4 | breath a second while a guard is held |
+| `stamina_tires` | new | 0.02 | energy per point of breath spent |
+| tiredness cap | new | full from energy 35, 50% at 0 | **not a law**: `rested_at` and `spent_share` in `pools(a)` |
+| `focus_max` | new | 100 | focus points (shown as "Mana") |
+| `focus_regen` | new | 3 | focus a second |
+| `focus_delay_s` | new | 2 | s after the last use |
+| `cost_strike` | 2 energy | 20 | breath |
+| `cost_bowshot` | 1.5 energy | 6 | breath |
+| `cost_dodge` | 4 energy (refused below 5) | 20 | breath |
+| `cost_jump` | 2 energy | 10 | breath |
+| `cost_block` | 1 energy (+ the held drain above) | 5 | breath, at the release |
+| `cost_attack` | 1.5 energy | 20 | breath (a graph's or an animal's blow, a wolf's bite) |
+| `cost_throw` | 2 energy | 10 | breath |
+| `cost_shoot` | 1 energy | 6 | breath |
+| `cost_threaten` | 0.5 energy | 3 | breath |
+| `cost_firebolt` | 12 energy | 30 | focus |
+| `cost_heal` | 15 energy | 35 | focus |
+| `dmg_strike` | 10 | 5 | health, before strength, skill and armor |
+| `dmg_strike_spear` | 15 | 8 | health |
+| `dmg_spear` | 18 | 9 | health (a person's attack with a spear) |
+| `dmg_bowshot` | 14 | 7 | health |
+| `dmg_firebolt` | 24 | 12 | health |
+| `dmg_throw` | 24 | 12 | health |
+| `dmg_shoot` | 16 | 8 | health |
+| `blow_person` | 7 | 4 | health, a bare blow |
+| `blow_wolf` | 13 | 7 | health, a wolf's bite |
+| `blow_deer` | 4 | 2 | health |
+| `hp_person` | 100 (in `kinds()`) | 100 | health; read when a body comes into the world |
+| `hp_wolf` | 55 | 80 | health; living wolves keep their `max_hp` until they die |
+| `hp_deer` | 40 | 22 | health; the same |
+
+- **Costs are no longer energy.** Old costs were energy. The new ones are breath (or focus), and combat no longer spends energy except the `stamina_tires` spillover. So setting a cost back to its old number restores the number, not the energy cost.
+- **Unchanged.** `look_walk_deg` is untouched (look-2 owns it).
+
 ## Every number is a world law
 
 `laws()` holds these, so `set_world_law` changes them on a running world (each has its words in `laws_about`):
