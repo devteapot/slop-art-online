@@ -102,11 +102,11 @@ The plan rides in `land.params` and the existing rows; no table, column, reducer
 
 ## The game client
 
-- A lot whose model is not on disk, and that has no model of its kind in its environment, is drawn as a plain grey box of its footprint and `height_m` (`island::GreyBox`). The client fills the box from the `lot` row's `width_m` and `depth_m`.
+- A planned settlement's lot draws its own model (`model`) when it is on disk. Otherwise it is a plain grey box of its footprint and `height_m` (`island::GreyBox`, from the `lot` row's `width_m` and `depth_m`), or, for an open lot of no height (Cullet's Fish Steps, slip, Cone yard, Marver's terrace, graveyard and root plots), a 2.5 cm slab of its footprint in a darker stone. It never borrows another model of its kind, so a missing or empty `envs/<style>/` folder simply leaves the grey city (`island::lot_item`, since `view-1`). Lots of generated settlements still sample their kind's models.
 - A planned settlement's stairs and retaining walls without models are grey treads (0.18 m each) and grey walls.
 - A flight's tread heights come from the prop: a modelled flight is `buildings.py`'s `prop_stairs` (17 treads over 3 m by 5 m, as before); a flight without a model takes its width and run from the prop and its rise from the ground at its head.
 - A lot without a model path uses its settlement's style's environment (`settle::env_of`, which now knows `cullet`), not its site kind's.
-- The mood is the environment whose `world` names the `land` row's seed and size, else the first world environment (as before). `envs/cullet.json` is Cullet's mood: fog 180 to 600 m on a clear day, `world` seed 3 at 1024 m. The camera still sets the fog distance it draws from its own draw radius (`camera.rs` `follow`), so the long view is not on screen yet; that belongs to the client's owner.
+- The mood is the environment whose `world` names the `land` row's seed and size, else the first world environment (as before). `envs/cullet.json` is Cullet's mood: fog 180 to 600 m on a clear day, `world` seed 83 at 1024 m. Since `view-1` the camera fogs by the mood, and landmarks (`landmark: true`) are drawn out to its `fog_end` ([game brief](GAME_BRIEF.md#view-distance-and-the-grey-city-2026-11-11)).
 
 ## Cullet's plan
 
