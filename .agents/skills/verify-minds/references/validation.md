@@ -1,5 +1,14 @@
 # Internal mind validation
 
+## 2026-11-11 conversation switches (exp-greet, Spark)
+
+Branch `exp-greet` (main 90f6fac with `exp-hamlet-births` merged), worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake model only. Batches `l9` and `pf2` ran on the same service.
+
+- New cases `greet` (`LIVING_GREET` off, nearest, facing over the `audience` table) and `alongside` (`LIVING_PARK=concurrent`: a fresh line taken alongside the think step, a late line released at the decision, a deliberation's words withheld from someone already answered). Final run on the merged tree `minds-greetfinal-20261111-153934`: `conversation`, `parked`, `greet` and `alongside` pass. `conversation` and `parked` are the default-behaviour regression.
+- Earlier attempts and what they taught (evidence kept). In `minds-greet-20261111-145055` and `minds-greet2-…`, `greet` failed on its own test. A restarted service replays speech under 30 s old, so the next arm answered the previous arm's line, and the chronicle query had no order. The residents also drifted out of the facing cone before the line (0.73 rad). The case now lets each line age out, sorts by id, re-places everyone before the facing line, and checks the answers against the rule's own reading of the `audience` row. `alongside` failed twice on setup: think prompts do not carry the request marker, and the warm-up think used up a delayed rule. It passed in `minds-greet4-…`.
+- Unit tests (`cargo test -p living-mind talk`): `greet_off_is_the_old_rule` (every combination of a line's facts decides as before under `off`), `greet_modes_draw_in_one_stranger_and_not_the_hostile`, `the_faced_hearer_is_the_one_straight_ahead`, `a_line_gets_its_turn_alongside_only_when_the_deliberation_cannot_answer_it`, `switches_default_off_and_refuse_typos`.
+- Not run here: the rest of the suite (roundtrip, acts, consolidation, prune, reject, only, reconnect, lod, takeover, sight, resident, animals, night, jev, rethink, dealings). This change does not touch their paths: the switches are off by default and only conversation code reads them.
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.

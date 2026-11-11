@@ -31,10 +31,10 @@ python3 living/tools/trials.py clean --batch dry1
 
 ## The greeting trial and runner switches (2026-11-11)
 
-- `greet` (living/trials/greet.json; docs/TRIALS.md, "The greeting trial") has a scripted human player (`Player.greet_session`) that joins with its own identity and plays through `join`, `human_act` (`goto` with `{"at": [x, y]}`) and `human_say`, in cycles. Every reducer call is in `human.jsonl`, and each line is a `human_line` event with the residents within 12 m. `record.speech`, `record.talk` and `record.audience` write `speech.jsonl` (every line), `talk.jsonl` (every talk turn) and `audience.jsonl`. `living/tools/greet_report.py BATCH` reads them.
-- `run --fake-script FILE` passes a rules file to the fake server: `living/trials/fake/latency.json` gives think 5 s, compile 4 s, talk 1.5 s and consolidate 2 s, so that `LIVING_PARK` timing shows in a fake run.
-- A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) keeps them. The runner skips its post-publish `install_script` (logged "the seed's own laws … stay installed"), and refuses a `skills_patch` on such a seed.
-- From a git worktree the runner copies each module into the container's `/wasm` mount under a tagged name (`served_name`: `<module>-wt<hash of the checkout path>`). It never overwrites another checkout's module. Remove the tagged `.wasm` files from the mount when done.
+- `greet` (living/trials/greet.json; docs/TRIALS.md, "The greeting trial") has a scripted human player (`Player.greet_session`) that joins with its own identity and plays through `join`, `human_act` (`goto` with `{"at": [x, y]}`), `human_move` (a step into the group, and a stand-still call every 10 s that keeps its presence) and `human_say`, in cycles. Every reducer call is in `human.jsonl`, and each line is a `human_line` event with the residents within 12 m. `record.speech`, `record.talk` and `record.audience` write `speech.jsonl` (every line), `talk.jsonl` (every talk turn) and `audience.jsonl`. `living/tools/greet_report.py BATCH` reads them.
+- `run --fake --fake-script FILE` passes a rules file to the fake server (only with `--fake`): `living/trials/fake/latency.json` gives think 5 s, compile 4 s, talk 1.5 s and consolidate 2 s, so that `LIVING_PARK` timing shows in a fake run.
+- A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) keeps them unless the variant names a `skills` file. The runner skips its post-publish `install_script` (logged "the seed's own laws … stay installed") and refuses a `skills_patch` on such a seed. A variant's `skills` file still installs over the seed's laws.
+- When the container's `/wasm` mount is another checkout's (this one is a git worktree), `trials.py build` copies each module into that mount under a tagged name (`served_name`: `<module>-wt<hash of the checkout path>`), and `run` publishes that name. It never overwrites another checkout's module. Remove the tagged `.wasm` files from the mount when done.
 
 ## Paid tier
 

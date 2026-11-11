@@ -10,10 +10,11 @@ whom it answered and the line heard), `audience.jsonl` (who heard each line, how
 off the speaker's facing) and the journal (tokens):
 
 - per kind of the player's line (`unaddressed`: to no one; `addressed`: `to` the nearest resident
-  within 9 m): lines, how many had two or more residents within the address distance (6 m) when
+  within earshot, 12 m): lines, how many had two or more residents within the address distance (6 m) when
   said (the owner's case: the authority then marks no one addressed), `answered` (a resident
   spoke to the player, `to` = the player, within ANSWER_S of the line and before the player's
-  next line), `answered_5s`, answer latency median and p90 (s), and who answered: `by_nearest`
+  next line; or a talk turn answering that very line spoke, since the chronicle merges a line
+  repeated word for word into its earlier row), `answered_5s`, answer latency median and p90 (s), and who answered: `by_nearest`
   (the resident nearest the player when it spoke), `by_addressed` (the one the line was for),
   `by_turn` (the answer came from a conversation turn rather than a deliberation);
 - `false_replies`: conversation turns that answered a resident's line meant for someone else,
@@ -108,6 +109,13 @@ def run(d):
             nxt = min([m["at_ms"] for m in mine if m["at_ms"] > r["at_ms"]] or [r["at_ms"] + ANSWER_S * 1000])
             until = min(nxt, r["at_ms"] + ANSWER_S * 1000)
             ans = next((s for s in speech if s["a"] != P and s["b"] == P and r["at_ms"] < s["at_ms"] <= until), None)
+            # A talk turn that answered this very line (the chronicle merges a line repeated word
+            # for word into its earlier row, "(×n)", so a repeated answer has no new speech row).
+            turn = next((t for t in talk if t["actor"] != P and r["at_ms"] < t["at_ms"] <= until and "says nothing" not in t.get("summary", "")
+                         and json.loads(t.get("detail") or "{}").get("with") == P and json.loads(t.get("detail") or "{}").get("heard") == l["text"]), None)
+            if turn and (not ans or turn["at_ms"] < ans["at_ms"]):
+                said = json.loads(turn.get("detail") or "{}").get("reply") or {}
+                ans = {"a": turn["actor"], "at_ms": turn["at_ms"], "text": "“" + str(said.get("say") if isinstance(said, dict) else "") + "”"}
             hs = aud.get((P, r["at_ms"]))
             near = [(h["d"], h["id"]) for h in hs] if hs is not None else [(n[0], n[1]) for n in l.get("near", [])]
             near.sort()

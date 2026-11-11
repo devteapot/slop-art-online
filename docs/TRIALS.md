@@ -25,6 +25,8 @@ A trial is a JSON file in [`living/trials/`](../living/trials/). Fields:
 | `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. |
 | `census_s` | Every so many seconds, every character of the world goes to `census.jsonl`: stage, alive, cause and time of death, parents, position, hunger, activity, and who the mind thinks for. This is meant for small worlds (four whole-table reads per census). |
 | `life.stop_on_death` | `false`: a life run goes on to its duration after the subject dies, and the mind keeps running (default `true`: it stops 20 s after the death). |
+| `human` | A scripted human player for a `subject.join` trial (`Player` in trials.py): `minutes`, and `script: greet` for the greeting trial (`wait_s`, `listen_s`, `earshot_m`, `greetings`, `addressed`; [the greeting trial](#the-greeting-trial-2026-11-11)). Without `script` it plays the takeover session. |
+| `record` | Small-world evidence: `speech` (every line said, `speech.jsonl`), `talk` (every conversation turn, `talk.jsonl`), `audience` (the `audience` rows where the world keeps them, `audience.jsonl`). |
 
 Steps (`do`): `place` (`to`: an anchor), `graph` (a graph, `instinct:<name>` from `instincts.json`, or `original`: the graph the character had before the trial changed it), `items`, `know`, `say` (`text`, `to`), `act` (`act` or `acts`: `do` nodes), `structure`, `background`, `kill`, `clear_routines`, `clear_items`, `call` (any admin reducer), `note`.
 
@@ -63,6 +65,12 @@ python3 living/tools/trial_evidence.py b4 --quotes 2      # per instance: death,
 python3 living/tools/trial_evidence.py b1 b4 --table      # one row per trial x variant with spread
 python3 living/tools/trials.py down                      # stop the containers (kept)
 ```
+
+Three runner behaviours since 2026-11-11 (branch `exp-greet`):
+
+- `run --fake --fake-script FILE` gives the fake server a rules file. `living/trials/fake/latency.json` sets model latencies near the real ones and open-ended talk replies.
+- A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) keeps them: the runner does not install the plain `skills.rhai` after publishing (that would drop them; docs/CULLET_RULES.md), and refuses a `skills_patch` on such a seed.
+- Run from a git worktree, `build` copies each module into the container's `/wasm` mount (another checkout's) under a tagged name, `<module>-wt<hash>` (`served_name`), and `run` publishes that name, so a worktree never overwrites another checkout's modules. Remove the tagged files from the mount when done.
 
 Each instance is a database `verify-trial-<batch>-<trial>-<variant>-r<k>` on the trial service and one `living-mind` process. Its evidence directory, `.local/living/trials/<batch>/<trial>-<variant>-r<k>/`, holds:
 
@@ -536,6 +544,93 @@ These are upper bounds. Fewer think when deaths outrun births, and only the cap 
 - The day length is the default 12 minutes, not Cullet's 48 (no seed field).
 - The arms' values are derived from the arithmetic, not tuned. How often a pair actually carries 8 food, so whether the provided arm's gate binds, is not known until real minds run.
 - The `family_laws` scene proves each law's gate on a scratch world. It does not prove what minds do with them.
+
+## The greeting trial (2026-11-11)
+
+Branch `exp-greet`. Status: **built and proved with fake minds only** (`gf4`, `gf5`, below). No paid run has been made.
+
+**What it is for.** The owner played 7 minutes in a town of 17 minds and found that "people didn't seem very interactive when talking to them". The session journals showed two causes. A newcomer's "hi" to no one, with two or more people within 6 m, drew no conversation turn, because nobody cared about a stranger. A line could also wait out a whole deliberation whose prompt was built 0.6 s before it: 12.7 s from 1 m away. The conversation switches `LIVING_GREET` and `LIVING_PARK` (docs/LIVING_CORE.md, Conversations; both off by default) address these. This trial measures them as the owner met them.
+
+**The world.** [`greet`](../living/trials/greet.json) is the hamlet (12 people in four households, everyone past infancy thought for, at most 12 at a time; [the hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11)) under Cullet's laws: the seed's `day_minutes` 48 and `laws_file` `worlds/cullet/laws.rhai`, so speech carries 12 m and sight 48 m by day. It is meant to carry over to Cullet, where the owner will play. The world keeps who heard each line (`rules.speech_audience`) in every arm, so arms differ only in the mind's environment.
+
+**The player.** A scripted human (`Player.greet_session` in trials.py) joins with its own identity and plays only through `join`, `human_act` and `human_say`. It plays in cycles of about six minutes:
+
+1. It walks to the densest group of residents, re-chosen every 15 s, with a `goto` act to the group's centre (`{"at": [x, y]}`, as click-to-walk does), until two residents are within 5 m. A short step toward them then turns it to face into the group.
+2. It says a greeting to no one ("Hello there!", "Good day to you all.", …).
+3. After 50 s it says a line addressed (`to`) to the nearest resident within earshot, 12 m: the game client's rule (`talk-1`) when no one is under the cursor.
+4. After another 50 s it stands among them saying nothing for 150 s, while residents talk among themselves.
+
+Its lines name nobody, and it never says its own name, so it stays a stranger to those it has not met. It calls at least every 10 s, so its character is never taken over during the run.
+
+**What is recorded** besides the usual evidence: `record.speech` writes every line said in the world (`speech.jsonl`), `record.talk` every conversation turn with the line it answered (`talk.jsonl`), and `record.audience` the `audience` rows (`audience.jsonl`). Each line of the player is a `human_line` event with the residents within 12 m and their distances. All of these are small-world options: one indexed read each per sample.
+
+**Measures** ([`greet_report.py`](../living/tools/greet_report.py), read-only, no model calls). For the player's unaddressed and addressed lines separately:
+
+- `crowded`: lines said with two or more residents within 6 m. These are the owner's case: the authority then marks no one addressed.
+- `answered`: a resident spoke to the player within 60 s and before its next line, or a talk turn answering that very line spoke. The second form is needed because the chronicle merges a repeated line into its earlier row. Also `answered_5s`, the latency median and p90, and who answered: `by_nearest`, `by_addressed`, and `by_turn` (a conversation turn rather than a deliberation).
+- `false_replies`: talk turns that answered a resident's line meant for someone else, meaning addressed to another, or said to no one while its speaker was in an exchange with another (a line between them within 60 s before). `listen_false` counts those within the player's listening windows. `overheard_turns` counts all turns on residents' lines said to no one.
+- Cost: residents' talk turns per minute, talk tokens and all tokens per minute, and estimated dollars per hour.
+
+```bash
+python3 living/tools/trials.py build greet
+python3 living/tools/trials.py run --batch gf4 greet --variants greet-control,greet-nearest,greet-curious,greet-facing,park-concurrent,greet-nearest-concurrent \
+    --replicates 1 --minutes 15 --fake --fake-script living/trials/fake/latency.json --parallel 6 --stagger 15
+python3 living/tools/greet_report.py gf4 --examples 3
+python3 living/tools/trials.py clean --batch gf4
+```
+
+Variants: `greet-control` (`LIVING_GREET=off`, `LIVING_PARK=wait`), `greet-nearest`, `greet-curious`, `greet-facing`, `park-concurrent` (greet off), `greet-nearest-concurrent` and `greet-facing-concurrent`. All think with `default`.
+
+### Fake proof (`gf4`)
+
+`gf4`: 2026-11-11 15:21–15:37, fake model with `living/trials/fake/latency.json`, 15 minutes, one run per arm. The script delays think 5 s, compile 4 s, talk 1.5 s and consolidate 2 s, as in the owner's journals. Its talk replies leave the exchange open: the fake's default reply settles every exchange at its first turn, which silenced each later line from the same stranger in `gf3`. The trial service also carried batches `l9` and `pf2` (load about 35 on 20 cores).
+
+The fake's words are canned, so these numbers prove the mechanics, not what minds say. Each arm had four lines of each kind, and every unaddressed line was crowded.
+
+| Arm | Unaddressed answered | Latency med / p90 (s) | Addressed answered | Latency med / p90 (s) | False replies | Talk turns/min | Model calls/min |
+| --- | ---: | --- | ---: | --- | ---: | ---: | ---: |
+| `greet-control` | 0 of 4 | – | 3 of 4 | 2.3 / 4.3 | 2 | 2.6 | 27.9 |
+| `greet-nearest` | 4 of 4 | 1.6 / 3.0 | 4 of 4 | 2.5 / 4.3 | 2 | 4.1 | 22.1 |
+| `greet-curious` | 1 of 4 | 1.5 / 1.5 | 2 of 3 | 2.2 / 2.6 | 0 | 2.0 | 26.9 |
+| `greet-facing` | 3 of 4 | 1.7 / 3.0 | 3 of 4 | 4.3 / 12.7 | 3 | 6.3 | 24.3 |
+| `park-concurrent` | 0 of 4 | – | 3 of 4 | 2.6 / 4.3 | 1 | 3.4 | 21.4 |
+| `greet-nearest-concurrent` | 4 of 4 | 2.3 / 3.6 | 3 of 4 | 2.6 / 4.3 | 2 | 2.9 | 19.7 |
+
+What the fake run shows:
+
+- Under the shipped rules no crowded greeting was answered (0 of 4). Under `nearest` all were (4 of 4), by the nearest resident free to talk, 1.5–3 s later.
+- `facing` answers whoever the player faces. It also addresses residents' own lines to whoever they face, which tripled the talk turns (6.3 a minute against 2.6) and gave the most false replies.
+- `curious` draws in a stranger's listener by chance, and the first drawn takes the turn. One of four greetings drew someone.
+- The addressed line that went unanswered under the shipped rules was a remark that asked nothing. It lost the remark draw that the switches skip for strangers.
+- The addressed p90 of 12.7 s under `facing` (parked) is a line parked while the addressee deliberated, as in the owner's session.
+- False replies are mostly a child answering a parent's line said while the parent was in an exchange with someone else (Pim answering Ilsa). The shipped rule does this too: family cares.
+- Model calls per minute vary between arms with how often the fake's plans finish. Talk turns are 2–6 of 20–28 calls a minute.
+
+`gf5` (2026-11-11 15:40–15:53, 12 minutes; control, nearest+concurrent, facing) repeats the proof on the branch after merging main's `talk-1` (the client's addressed speech). Crowded greetings were answered 0 of 3 (control), 3 of 3 (nearest+concurrent, median 1.7 s) and 2 of 3 (facing); addressed lines 2 of 3, 3 of 3 and 2 of 3; false replies 3, 1 and 7.
+
+### The paid batch, planned
+
+```bash
+cd <a checkout of exp-greet with .env (MISTRAL_API_KEY, CARLID_NPC_API_KEY)>; . ~/slop-sysroot/env.sh
+export CARGO_TARGET_DIR=$HOME/slop-greet-target
+python3 living/tools/trials.py build greet
+python3 living/tools/trials.py run --batch gr1 greet \
+    --variants greet-control,greet-nearest,greet-curious,greet-facing,park-concurrent,greet-nearest-concurrent \
+    --replicates 4 --parallel 8 --sample-s 5 --stagger 15
+python3 living/tools/greet_report.py gr1 --examples 3
+python3 living/tools/trials.py clean --batch gr1
+```
+
+The planned design is six arms × 4 replicates × 25 minutes, with 11 minds thinking (12 once Tobin is a child). It is not a full factorial: `LIVING_PARK` is crossed only with the control and with `nearest`.
+
+The cost is an estimate, not a measurement. It uses the island figure of about $0.10 per thinking person per hour on glm-flash ([births](#planned-batch-and-its-cost)). A run is about 12 × 25/60 = 5 person-hours, about $0.50, so the batch is about 120 person-hours, $12–15. The upper end allows for the switches' extra talk turns (at most 4 more a minute, about 1–2k tokens each) and for 48 m sight putting more people in each scene. At `--parallel 8`, three waves take about 85 minutes, about $9–11 an hour.
+
+### Not covered
+
+- No real model has answered a greeting here. Whether residents' answers read as interactive to the owner is for the paid batch and the owner's own play.
+- A single fake run per arm gives no spread.
+- `verify-client` was not run for the new private `audience` table. Its scripts assume the shared server on 3300, which this machine leaves to other work. Privacy was checked through `verify-player`: a player's SQL is refused the table.
+- The game client's cursor addressing is emulated only by its fallback, the nearest person in earshot.
 
 ## Fast iterations
 
