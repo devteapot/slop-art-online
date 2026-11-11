@@ -12,7 +12,8 @@ source, run, window and life_feel columns per excerpt id), the EXCERPTS (default
 .local/living/feel/excerpts.json; the blind text the rating page shows) and the RATINGS: a file
 {"synthetic"?, "rater", "ratings": {eid: {"score": 1..5, "reason", "at"}}} or a dump of the rating
 page's "ratings" collection (a list, or {"documents"|"docs"|"items": [...]}, of {"id", "data"},
-{"path": "ratings/<eid>", "data"} or flat {"id", "score", "reason"} documents). Documents whose id is
+{"path": "ratings/<eid>", "data"} or flat {"id", "score", "reason"} documents), or the directory an
+ArtifactData list with out_dir writes (one <eid>.json per document, searched recursively). Documents whose id is
 not an excerpt of the key (a "meta" document) are counted and printed, never joined; a score that is
 null, not a whole number or outside 1..5 is counted as skipped, by name.
 
@@ -241,12 +242,23 @@ def parse_score(v, integer=True):
 def load_ratings(path):
     """Normalise a ratings file or a collection dump. None when missing, empty or not JSON."""
     p = Path(path)
-    if not p.is_file() or not p.read_text().strip():
+    if p.is_dir():  # an ArtifactData read with out_dir: <dir>[/ratings]/<excerpt id>.json, one document each
+        files = sorted(p.rglob("*.json"))
+        if not files:
+            return None
+        data = []
+        for f in files:
+            try:
+                data.append({"id": f.stem, "data": json.loads(f.read_text())})
+            except json.JSONDecodeError:
+                data.append({"id": f.stem, "data": {}})
+    elif not p.is_file() or not p.read_text().strip():
         return None
-    try:
-        data = json.loads(p.read_text())
-    except json.JSONDecodeError:
-        return None
+    else:
+        try:
+            data = json.loads(p.read_text())
+        except json.JSONDecodeError:
+            return None
     out = {"synthetic": "synthetic" in p.name.lower(), "rater": None, "ratings": {}, "skipped": [], "docs": 0}
     entries, docs = [], []
     if isinstance(data, dict):

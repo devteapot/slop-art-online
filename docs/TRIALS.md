@@ -413,7 +413,7 @@ python3 living/tools/feel_tune.py judge --ratings .local/living/feel/ratings.jso
 python3 living/tools/feel_tune.py judge --ratings .local/living/feel/ratings.json --run --env-file ~/dev/slop-trials-e6/.env --base-url https://api.mistral.ai/v1   # paid; only with the owner's ratings
 ```
 
-A rebuild draws new excerpt ids, so do not rebuild while ratings for the published page are still coming in. Keep the key that matches the page. The excerpts cover 10 real minutes and the owner rates lives as they read, so a window-level column can agree with the owner while the whole-run column does not, or the reverse. The report gives both.
+The first page (2026-11-11, 22 excerpts) is the claude.ai Artifact `https://claude.ai/artifact/MyiNwW9QmdXt1m91H4b5xX`, and its key is `.local/living/feel/excerpts_key.json` in the `tool-feel-tune` worktree on the Spark. It leaves out the `greet-nearest` (gr1a) and `park-concurrent` (gr1b) arms, whose runs failed at publish (`--skip`, default). They rerun as `gr1c`, which `build --quota gr1c=N` adds to a later page. To collect ratings, save an ArtifactData `list` of collection `ratings` with `out_dir` and pass that directory as `--ratings`. A rebuild draws new excerpt ids, so do not rebuild while ratings for the published page are still coming in. Keep the key that matches the page. The excerpts cover 10 real minutes and the owner rates lives as they read, so a window-level column can agree with the owner while the whole-run column does not, or the reverse. The report gives both.
 
 ## Fast iterations
 

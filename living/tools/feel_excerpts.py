@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Blind excerpts of lives for the owner to rate (docs/TRIALS.md, "Owner-tuned player score").
 
-  feel_excerpts.py build [--source LABEL=DIR ...] [--quota LABEL=N ...] [--window 10] [--seed 1]
-                         [--out .local/living/feel]
+  feel_excerpts.py build [--source LABEL=DIR ...] [--quota LABEL=N ...] [--skip LABEL:VARIANT ...]
+                         [--window 10] [--seed 1] [--out .local/living/feel]
   feel_excerpts.py show [--out DIR] [--key]   print the blind excerpts as the page shows them
                                                (--key adds each one's source: not for the rater)
 
@@ -79,9 +79,13 @@ SOURCES = {
     "s12": [T / "slop-trials-cb/.local/living/trials/s12", T / "slop-trials-cb/.local/living/trials/s12b"],
     "gr1a": [T / "slop-runs-greet/.local/living/trials/gr1a"],
     "gr1b": [T / "slop-runs-greet/.local/living/trials/gr1b"],
+    # The greet-nearest and park-concurrent reruns (from 2026-11-11 18:00); add with --quota gr1c=N.
+    "gr1c": [T / "slop-runs-greet/.local/living/trials/gr1c"],
 }
-QUOTA = {"l6": 2, "l7": 2, "l8": 2, "l9": 2, "pf2": 4, "s11": 2, "s12": 2, "gr1a": 3, "gr1b": 3}
-ALL_MINDS = {"s11", "s12", "gr1a", "gr1b"}
+QUOTA = {"l6": 2, "l7": 2, "l8": 2, "l9": 2, "pf2": 4, "s11": 2, "s12": 2, "gr1a": 3, "gr1b": 3, "gr1c": 0}
+ALL_MINDS = {"s11", "s12", "gr1a", "gr1b", "gr1c"}
+# Arms left out by default: in gr1a/gr1b these runs failed at publish (trial-server fd limit) and rerun as gr1c.
+SKIP = {("gr1a", "greet-nearest"), ("gr1b", "park-concurrent")}
 MAX_LINES = 12
 QUOTE = 150
 WINDOWS_PER_LIFE = 6
@@ -755,6 +759,7 @@ def build(a):
         k, v = q.split("=", 1)
         quota[k] = int(v)
     labels = [k for k in sources if quota.get(k, 0) > 0]
+    skip = set(SKIP) if not a.skip else {tuple(x.split(":", 1)) for x in a.skip if x != "none"}
     w_ms = int(a.window * 60000)
     cands = []
     tmp = Path(tempfile.mkdtemp(prefix="feel-"))
@@ -766,7 +771,7 @@ def build(a):
             for d in sources[label]:
                 if not d.is_dir():
                     print(f"{label}: {d} missing; skipped", file=sys.stderr)
-            lives = lives_of(label, dirs, rng)
+            lives = [l for l in lives_of(label, dirs, rng) if (label, l.variant) not in skip]
             k = WINDOWS_PER_LIFE if all(l.kind == "subject" for l in lives) else 2
             n0 = len(cands)
             for life in lives:
@@ -838,6 +843,7 @@ def build(a):
         "feel0_columns": {"positive": POS_FEEL, "negative": NEG_FEEL}, "candidates": len(cands),
         "candidate_feel0": {"min": f0[0], "q25": f0[len(f0) // 4], "median": f0[len(f0) // 2], "q75": f0[3 * len(f0) // 4], "max": f0[-1]} if f0 else None,
         "sources": {k: [str(p) for p in v] for k, v in sources.items() if k in labels}, "quota": {k: quota[k] for k in labels},
+        "skipped_arms": sorted(f"{l}:{v}" for l, v in skip),
         "excerpts": key}, indent=1, ensure_ascii=False))
     print(f"{len(blind)} excerpts from {len(cands)} candidate windows -> {out}/excerpts.json (blind), {out}/excerpts_key.json (private)")
     if f0:
@@ -868,6 +874,7 @@ def main():
     b = sub.add_parser("build")
     b.add_argument("--source", action="append", help="LABEL=DIR[,DIR...] batch directories (read-only); adds or replaces a default")
     b.add_argument("--quota", action="append", help="LABEL=N excerpts from that source (0 leaves it out)")
+    b.add_argument("--skip", action="append", help="LABEL:VARIANT arm to leave out (replaces the default list; 'none' leaves out nothing)")
     b.add_argument("--window", type=float, default=10.0, help="real minutes per excerpt")
     b.add_argument("--seed", type=int, default=1)
     b.add_argument("--out", default=str(OUT))
