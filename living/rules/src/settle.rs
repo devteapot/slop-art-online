@@ -39,7 +39,7 @@ mod plan;
 mod terrace;
 
 pub use metro::{District, MetroParams};
-pub use plan::{stranded_doors, validate as validate_plan, validate_all as validate_plans, Facing, Laid, LaidLot, LevelSpec, LotSpec, PlanSpec, ResourceSpec, SpotSpec, SquareSpec, StairSpec, StreetSpec};
+pub use plan::{stranded_doors, validate as validate_plan, validate_all as validate_plans, Facing, Laid, LaidLot, LaidResource, LaidStructure, LevelSpec, LotSpec, PlanSpec, ResourceSpec, SpotSpec, StructureSpec, SquareSpec, StairSpec, StreetSpec};
 pub(crate) use plan::{covers as plan_covers, resolve as resolve_plan, site as plan_site, stamp_macro as stamp_plans, Resolved as PlanResolved};
 
 pub(crate) use terrace::Terrace;
@@ -861,6 +861,65 @@ pub struct ModelFootprint {
     pub corner: i8,
     #[serde(default)]
     pub tris: u32,
+    /// Share of the footprint's area that is solid at eye height ([`EYE_BAND_M`]), measured
+    /// from the mesh by `buildings.py` (`eye_cells`). None: not measured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eye_solid: Option<f32>,
+    /// What the model hides at eye height, per [`EYE_CELL_M`] square of its footprint: how much
+    /// of the view through it is blocked in [`EYE_BAND_M`], looking along either of the model's
+    /// axes, measured from its mesh by `buildings.py` (`eye_cells`, `eye_rle`): the number of
+    /// columns, a colon, then runs of a count and a level (`a` none ... `k` all, at least that
+    /// many tenths), row-major from the front row (the model's front, glTF +Z), column 0 at the
+    /// model's -X. Decoded by [`ModelFootprint::eye`]; read by `host::hosted_map`. None: not
+    /// measured (the height rule applies).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eye_cells: Option<String>,
+}
+
+/// The band above a model's floor that `eye_cells` measures (metres): where a standing person's
+/// eye and head are. A land whose eye height (`land::Sight::eye_m`) lies outside it uses the
+/// height rule alone, since the cells say nothing about other heights.
+pub const EYE_BAND_M: (f32, f32) = (1.2, 1.8);
+/// The side of an `eye_cells` square (metres): finer than a tile, so every square lands on the
+/// tile it lies in, whatever a lot's position and facing.
+pub const EYE_CELL_M: f32 = 0.5;
+
+/// A model's `eye_cells`, decoded.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EyeCells {
+    pub cols: usize,
+    pub rows: usize,
+    /// Row-major from the front row; each 0..=10, tenths of the view blocked.
+    pub levels: Vec<u8>,
+}
+
+impl EyeCells {
+    /// The centre of square (`col`, `row`) in the model's own frame (metres; x along glTF +X,
+    /// y toward the model's back: glTF -Z, Blender +Y), the model centred on its footprint.
+    pub fn centre(&self, col: usize, row: usize) -> V2 {
+        ((col as f32 + 0.5 - self.cols as f32 * 0.5) * EYE_CELL_M, (row as f32 + 0.5 - self.rows as f32 * 0.5) * EYE_CELL_M)
+    }
+}
+
+impl ModelFootprint {
+    /// Its `eye_cells`, decoded; None when not measured or malformed.
+    pub fn eye(&self) -> Option<EyeCells> {
+        let (cols, runs) = self.eye_cells.as_deref()?.split_once(':')?;
+        let cols: usize = cols.parse().ok().filter(|&c| c > 0)?;
+        let mut levels = Vec::new();
+        let mut n = 0usize;
+        for ch in runs.chars() {
+            match ch {
+                '0'..='9' => n = n * 10 + ch as usize - '0' as usize,
+                'a'..='k' if n > 0 => {
+                    levels.extend(std::iter::repeat(ch as u8 - b'a').take(n));
+                    n = 0;
+                }
+                _ => return None,
+            }
+        }
+        (n == 0 && !levels.is_empty() && levels.len() % cols == 0).then(|| EyeCells { cols, rows: levels.len() / cols, levels })
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

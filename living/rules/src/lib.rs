@@ -16,6 +16,7 @@ pub mod nav;
 pub mod city;
 pub mod genes;
 pub mod life;
+pub mod rhythm;
 pub mod realm;
 pub mod records;
 pub mod normalize;
@@ -23,6 +24,7 @@ pub mod normalize;
 pub mod floors;
 #[cfg(feature = "scripting")]
 pub mod cullet_check;
+mod rates_check;
 #[cfg(feature = "scripting")]
 pub mod script;
 pub mod social;

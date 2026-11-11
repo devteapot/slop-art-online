@@ -80,11 +80,11 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_heard']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'my_heard']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_heard']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
@@ -646,6 +646,8 @@ class Run:
                     # Lived by the person, or by the world's minds while the person was away.
                     and all(e['controller'].lower().removeprefix('0x') in (v['identity'].lower().removeprefix('0x'), admin_identity) for e in p['my_experience'])
                     and set(p['my_places']) <= mine and set(p['my_inventory']) <= mine and set(p['my_know_how']) <= mine
+                    # Offers to or from my character; incoming exactly when addressed to me.
+                    and all((o['to'] in mine) == o['incoming'] and (o['from'] in mine or o['to'] in mine) for o in p['my_offers'])
                     # Who heard my lines: only my own lines (docs/COMMUNICATION.md §6).
                     and {h['speaker'] for h in p['my_heard']} <= mine)
         anonymous = own['anonymous']['final']['perception']
@@ -693,6 +695,7 @@ class Run:
         self.check('seen_characters is the projection: no controller, home or parents; a stranger by label',
                    code == 200 and theirs and not {'controller', 'ai', 'home_x', 'home_y', 'parent_a', 'parent_b', 'cause'} & set(cols)
                    and theirs['name'] == '' and theirs['label'] and theirs['hp'] < 0, 'seen-characters.json', f"columns {cols}; other {theirs and theirs['label']}")
+        self.offers(identities, admin_token, me, other, t1, t2)
         far = scene('beyond-sight', spots['open'][0], spots['far'])
         gone = lambda s, a, b: not any(b in s[a][t] for t in SEEN)
         self.check('beyond sight: no body, character, fighter or doing row', gone(far, me, other) and gone(far, other, me), 'sight.json',
@@ -700,6 +703,29 @@ class Run:
         hidden = scene('behind-wall', *spots['wall'])
         self.check('behind a wall or rock: no body, character, fighter or doing row', gone(hidden, me, other) and gone(hidden, other, me), 'sight.json',
                    f"{abs(spots['wall'][1][0] - spots['wall'][0][0]) + abs(spots['wall'][1][1] - spots['wall'][0][1]):.0f} tiles apart across tiles {spots['wall_tiles']}")
+
+    def offers(self, identities, admin_token, me, other, t1, t2):
+        """`my_offers`: an offer reaches its addressee (incoming) and its maker (outgoing) and
+        no one else; anonymous receives none; `trade_offer` itself stays private."""
+        self.call('admin-grant', admin_token, 'grant_items', [me, 'berries', 2])
+        self.call('player-1', t1, 'human_act', [json.dumps({'do': 'offer', 'target': {'id': other}, 'item': 'berries', 'qty': 1, 'want': 'wood', 'want_qty': 1})])
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not [r for r in self.sql_admin('SELECT * FROM trade_offer') if r['from'] == me and r['to'] == other]:
+            time.sleep(0.5)
+        got = {}
+        for label, token, _ in identities:
+            got[label] = self.probe('offers-' + label, ['SELECT * FROM my_offers'], token, seconds=1)
+        got['anonymous'] = self.probe('offers-anonymous', ['SELECT * FROM my_offers'])
+        rows = {l: v['final']['perception']['my_offers'] if v['status'] == 'applied' else None for l, v in got.items()}
+        write(self.directory / 'offers.json', rows)
+        key = lambda o: (o['from'], o['to'], o['incoming'], o['give_item'], o['want_item'])
+        mine = [key(o) for o in rows['player-1'] or []]
+        theirs = [key(o) for o in rows['player-2'] or []]
+        self.check('my_offers: the maker reads its offer as outgoing, the addressee as incoming, no one else any',
+                   mine == [(me, other, False, 'berries', 'wood')] and theirs == [(me, other, True, 'berries', 'wood')]
+                   and rows['anonymous-connected'] == [] and rows['anonymous'] == []
+                   and all(o['until_ms'] > 0 for o in rows['player-1'] + rows['player-2']),
+                   'offers.json', f"player-1 {mine}, player-2 {theirs}, ClientAnon {rows['anonymous-connected']}, anonymous {rows['anonymous']}")
 
     def sql_admin(self, q):
         code, body = V.http(f"/v1/database/{self.state['db']}/sql", q, V.admin_token(), raw=True)
@@ -735,17 +761,25 @@ class Run:
             t.start()
             return t
 
-        one = hold('presence-one', 8)
-        time.sleep(3.0)
+        def settle(n, secs=15.0):
+            # A probe's hold counts from its own start, and starting one takes seconds on a busy
+            # host: wait for the count rather than for a fixed time (it stays wrong only if
+            # presence is wrong).
+            deadline = time.monotonic() + secs
+            while time.monotonic() < deadline and row()['connections'] != n:
+                time.sleep(0.25)
+
+        one = hold('presence-one', 30)
+        settle(1)
         r1, _ = step('one connection')
-        two = hold('presence-two', 3)
-        time.sleep(2.0)
+        two = hold('presence-two', 6)
+        settle(2)
         r2, _ = step('two connections')
-        two.join(timeout=20)
-        time.sleep(0.5)
+        two.join(timeout=30)
+        settle(1)
         r3, _ = step('one closed')
-        one.join(timeout=20)
-        time.sleep(0.5)
+        one.join(timeout=40)
+        settle(0)
         r4, c4 = step('both closed')
         self.check('presence counts each open connection of the person', r1['present'] and r1['connections'] == 1 and r2['connections'] == 2 and r3['present'] and r3['connections'] == 1,
                    'presence.json', f"{r1['connections']} → {r2['connections']} → {r3['connections']}")

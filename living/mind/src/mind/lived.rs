@@ -340,7 +340,7 @@ impl Minds {
             experiences: meaningful.iter().map(|e| format!("{}{}", self.exp_line(e, &fmt, true), self.lived_where(e))).collect(),
             dealings: self.dealings(actor),
         };
-        let msgs = vec![Msg { role: "system", content: prompts::internalize_system() }, Msg { role: "user", content: prompts::consolidate_user(&ctx) }];
+        let msgs = vec![Msg { role: "system", content: prompts::internalize_system() }, Msg { role: "user", content: prompts::consolidate_user(&ctx, "") }];
         let known = meaningful.iter().map(|e| e.id).collect();
         Ok(Prepared { actor, name: c.name.clone(), upto, batch, known, msgs, reason })
     }

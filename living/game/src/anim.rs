@@ -21,7 +21,8 @@
 //! added over a walk would turn the arms twice.
 //!
 //! **Locomotion.** [`gait::Gaits::blend`] gives up to two gaits and their weights from the drawn
-//! speed. All gait clips are paused and set to the same normalised phase every frame, which
+//! speed; travelling off where the legs face ([`Motion::travel`]), [`gait::Gaits::blend_toward`]
+//! gives up to four: two directions' takes, each its walk and run. All gait clips are paused and set to the same normalised phase every frame, which
 //! advances at `speed / (stride × cycle metres)`; their markers start at the same footfall, so
 //! no foot mixes with its opposite. A body steps whenever it moves (above [`STEP_ON`], down to
 //! [`STEP_OFF`]): at a slow walk's rate its feet still keep still, where standing would glide.
@@ -109,11 +110,15 @@ pub struct Motion {
     /// The gait holds its stride where it is (in a jump's flight: legs that kept cycling ran in
     /// the air).
     pub freeze: bool,
+    /// Where the body travels from where its legs face (radians, the game's sense: positive to
+    /// the right, ±π behind). Off the forward, the file's directional takes play when it has
+    /// them on both sides ([`gait::Gaits::blend_toward`]; `live.rs` asks only then).
+    pub travel: f32,
 }
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, pace: 1.0, freeze: false }
+        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, pace: 1.0, freeze: false, travel: 0.0 }
     }
 }
 
@@ -365,7 +370,7 @@ fn build(
             moving: 0.0,
             starting: false,
             settle: None,
-            blend: gait::Blend { parts: [(0, 1.0), (0, 0.0)], n: 1, cycle_m: 1.0 },
+            blend: gait::Blend::one(0, 1.0),
             stands: vec![(stand, 1.0)],
             onces: vec![],
             spent: None,
@@ -562,10 +567,14 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
     // under it, so its first frames don't show a sprint while it fades in.
     // My own body is drawn ahead of the display clock that times one-shots, so its dash can
     // move before its clip starts: asked for is enough.
-    let covered = want.is_some_and(|x| !set.upper.contains_key(x.clip));
+    // A moving jump's take lets the gait step on under it (`Action::gait`).
+    let covered = want.is_some_and(|x| !set.upper.contains_key(x.clip) && !x.gait);
     let stepping = !covered && if a.moving > 0.0 && a.settle.is_none() { m.speed > STEP_OFF } else { m.speed > STEP_ON };
     let moving = if stepping {
-        let b = set.gaits.blend(m.speed / m.pace.max(0.5), m.stride, |i| set.gait_len(i));
+        let pace = m.speed / m.pace.max(0.5);
+        let len = |i| set.gait_len(i);
+        let b = if m.travel.abs() > 1e-3 { set.gaits.blend_toward(pace, m.stride, m.travel, len) } else { None }.unwrap_or_else(|| set.gaits.blend(pace, m.stride, len));
+        let rate = m.speed / (m.stride.max(0.05) * b.cycle_m.max(0.05));
         if a.moving <= 0.0 {
             // From standing: the leading gait's right mid-stance (its pose nearest standing: the
             // planted foot under the hips, the other one stepping off).
@@ -576,7 +585,7 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
         }
         a.settle = None;
         a.blend = b;
-        a.rate = m.speed / (m.stride.max(0.05) * b.cycle_m.max(0.05));
+        a.rate = rate;
         if !m.freeze {
             a.phase += a.rate * dt;
         }
@@ -649,7 +658,7 @@ mod tests {
             moving: 0.0,
             starting: false,
             settle: None,
-            blend: gait::Blend { parts: [(0, 1.0), (0, 0.0)], n: 1, cycle_m: 1.0 },
+            blend: gait::Blend::one(0, 1.0),
             stands: vec![("idle", 1.0)],
             onces: vec![],
             spent: None,

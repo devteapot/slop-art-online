@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items weapon settings (default: all)
+  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes support (default: all but support)
+  LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
 then checks the game UI's dumps (`dump:` steps: open windows, anchors, rectangles, the box and
@@ -35,7 +36,12 @@ def residents(run, n=2):
     return [r["id"] for r in rows[:n]]
 
 
+THEME = os.environ.get("LIVING_GAME_THEME", "")
+
+
 def drive(run, name, plan, places=(), syncs=()):
+    # A run per theme keeps its own evidence (`LIVING_GAME_THEME=night check.py …`).
+    name = f"{name}-{THEME}" if THEME else name
     cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "420"]
     for p in places:
         cmd += ["--place", p]
@@ -119,8 +125,8 @@ def talk(run, c):
             "point:{A};wait:0.4;shot:04_hover;key:Enter:tap;wait:0.6;shot:05_to_them;dump:05;type:Hello there, good morning.;enter;wait:1.2;shot:06_said;dump:06;"
             "key:Enter:tap;wait:0.4;tab;wait:0.4;dump:07a;tab;wait:0.4;dump:07b;tab;wait:0.4;dump:07c;shot:07_tab;key:Escape:tap;wait:0.4;dump:08;"
             "key:KeyL:tap;wait:0.4;click:@log:tab:1;wait:0.4;shot:09_people;click:@log:person:0;wait:0.6;shot:10_window;dump:10;"
-            "click:@person:intro;wait:0.4;shot:11_intro;dump:11;quit").replace("{A}", str(a))
-    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-2.6:-1.4"])
+            "menu:f@id:{A};wait:0.5;click:@acts:0:window;wait:0.5;click:@person:more;wait:0.5;shot:11_more;click:@acts:0:introduce;wait:0.5;shot:11_intro;dump:11;quit").replace("{A}", str(a))
+    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-1.0:3.2"])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["02", "03", "05", "06", "07a", "07b", "07c", "08", "10", "11"]}
     L = log(out)
@@ -138,8 +144,7 @@ def talk(run, c):
     c.check(s, "Esc closes the box and its window", d["08"] and wins(d["08"]) == [] and not d["08"]["typing"], str(wins(d["08"])))
     c.check(s, "Log › People lists them; a click opens a person's window", d["10"] and any(w.startswith("Person") for w, _ in wins(d["10"])), str(wins(d["10"])))
     t11 = (d["11"] or {}).get("typing") or {}
-    w10 = [w for w, _ in wins(d["10"]) if w.startswith("Person")]
-    c.check(s, "Introduce yourself: an editable line to them", t11.get("words", "").startswith("I'm Verifier") and w10 and t11.get("to") == int(w10[0][6:]), json.dumps(t11))
+    c.check(s, "their window › More… › Introduce yourself: an editable line to them", t11.get("words", "").startswith("I'm Verifier") and t11.get("to") == a and t11.get("window") == f"Person{a}", json.dumps(t11))
     rows = sql(run, f"SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = {a}")
     c.check(s, "the authority's said row has to = the addressee", any("Hello there, good morning." in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
     rows0 = sql(run, "SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = 0")
@@ -154,7 +159,7 @@ def items(run, c):
             "click:@pack:berries;wait:0.5;shot:02_item_acts;dump:03;key:Escape:tap;wait:0.3;slide:@pack:berries>@win:Person{A}:head:0.8;wait:2;shot:03_dropped;dump:04;"
             "menu:f@id:{A};wait:0.5;shot:04_hold_f;dump:05;click:@acts:0:give;wait:0.5;shot:05_give_sub;dump:06;click:@acts:1:berries;wait:2;shot:06_given;quit").replace("{A}", str(a))
     # The newcomer's berries may be gone from earlier runs: the scene grants four (admin).
-    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-2.6:-1.4"], syncs=['kit=grant_items|{me}|"berries"|4'])
+    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-1.0:3.2"], syncs=['kit=grant_items|{me}|"berries"|4'])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06"]}
     c.check(s, "hold-F list › Their window opens their window", d["01"] and (f"Person{a}", "Left") in wins(d["01"]), str(wins(d["01"])))
@@ -171,7 +176,77 @@ def items(run, c):
     c.check(s, "the authority moved 2 berries to them", after - before == 2, f"{before} -> {after}")
 
 
-SCENARIOS = {"windows": windows, "talk": talk, "items": items}
+def themes(run, c):
+    s = "themes"
+    plan = ("ready;wait:2;key:KeyL:tap;wait:0.3;key:KeyI:tap;wait:0.5;dump:01;shot:01_first;key:F4:tap;wait:0.8;shot:02_next;dump:02;key:F4:tap;wait:0.8;shot:03_next;dump:03;key:F4:tap;wait:0.8;shot:04_next;dump:04;"
+            "click:@menu;wait:0.3;click:@menu:Settings;wait:0.6;click:@settings:theme:linen;wait:0.8;shot:05_linen;dump:05;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05"]}
+    names = [((d[k] or {}).get("extra") or {}).get("theme") for k in ["01", "02", "03", "04"]]
+    order = ["clear", "night", "linen", "walnut"]
+    first = names[0]
+    want = [order[(order.index(first) + i) % 4] for i in range(4)] if first in order else []
+    c.check(s, "F4 cycles the themes in order", names == want, str(names))
+    c.check(s, "each change is named on screen", len(re.findall(r"ui: Theme: \w+  ·  F4 changes it", log(out))) >= 3)
+    c.check(s, "windows stay where they were through a change", all(sorted(wins(d[k])) == [("Log", "Left"), ("Pack", "Right")] for k in ["01", "02", "03", "04"]), str([wins(d[k]) for k in ["01", "02", "03", "04"]]))
+    c.check(s, "Settings › Play › Look sets it", ((d["05"] or {}).get("extra") or {}).get("theme") == "linen")
+    st = os.path.join(out, "settings.json")
+    saved = json.load(open(st)).get("theme") if os.path.exists(st) else None
+    c.check(s, "the settings file keeps it", saved == "linen", str(saved))
+
+
+# Where the support scenario stands the player on Cullet (land metres) and what holds it up there:
+# a kit fixture's file (part of its path) and whether it is tall enough to be an occluder, so the
+# camera's fade (`envs::cutaway`) considers it at all.
+SUPPORTS = [
+    ("stairs", 410.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True),
+    ("terrace", 568.0, 720.8, "marver_terrace/", False),
+    ("quay", 450.0, 782.6, "quay/", False),
+    # At the upper level's edge above a retaining wall: the drop's tiles keep you 1-1.5 m from
+    # it, so it is beside you, never under you; it may fade when it stands between the camera
+    # and you, as anything that hides you does.
+    ("wall", 440.0, 751.6, "retaining_wall/wall_005", False),
+]
+
+
+def support(run, c):
+    """What I stand on or step onto never fades (the owner's Cullet walk: the flight dithered away
+    while climbing it). Needs a Cullet world (`--seed cullet`) and the cutaway's debug log."""
+    s = "support"
+    plan = "ready;wait:3"
+    for name, *_ in SUPPORTS:
+        plan += f";sync:{name};wait:6;shot:{name};dump:{name}"
+    plan += ";quit"
+    syncs = [f"{name}=place_at|{{me}}|{x}|{y}" for name, x, y, *_ in SUPPORTS]
+    old = os.environ.get("RUST_LOG")
+    os.environ["RUST_LOG"] = "info,wgpu=warn,naga=warn,living_game::envs=debug"
+    try:
+        out, code, text = drive(run, s, plan, syncs=syncs)
+    finally:
+        if old is None:
+            os.environ.pop("RUST_LOG")
+        else:
+            os.environ["RUST_LOG"] = old
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    L = log(out)
+    # The log in stretches, one per spot: from its sync step to the next.
+    parts = re.split(r"live script: sync:(\w+)", L)
+    seg = {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
+    for name, x, y, part, occluder in SUPPORTS:
+        t = seg.get(name, "")
+        held = set(re.findall(r"cutaway: (\S+) holds me up", t))
+        faded = re.findall(r"cutaway: (\S+) fades to", t)
+        mine = [f for f in held if part in f]
+        if occluder:
+            c.check(s, f"{name}: the cutaway finds what holds me up ({part})", bool(mine), f"held {sorted(held)}")
+        # What held me up there, and the spot's own support, never fades there.
+        bad = [f for f in faded if f in held or (not occluder and part in f)]
+        c.check(s, f"{name}: nothing under or beside my feet fades", t != "" and not bad, f"faded {bad}" if t else "no log for this spot")
+    c.check(s, "photographs of each spot", all(os.path.exists(os.path.join(out, f"{n}.png")) for n, *_ in SUPPORTS))
+
+
+SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "support": support}
 
 
 def main():
@@ -182,7 +257,8 @@ def main():
     if not f"verify-{a.run}".startswith("verify-ui-"):
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
-    for name in a.scenarios or list(SCENARIOS):
+    # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
+    for name in a.scenarios or [k for k in SCENARIOS if k != "support"]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)

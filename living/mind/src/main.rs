@@ -52,6 +52,12 @@ async fn main() -> Result<()> {
     let root = root();
     load_env(&root.join(".env"));
     load_env(&root.join(".local/living/neo4j.env"));
+    // How people's prompts frame the model (prompts.rs `Frame`); a value that is neither frame
+    // stops the service rather than running an experiment under the wrong one.
+    let frame = prompts::Frame::parse(std::env::var("LIVING_FRAME").ok().as_deref()).map_err(anyhow::Error::msg)?;
+    if frame != prompts::Frame::Character {
+        log::info!("prompt frame: {} (LIVING_FRAME)", frame.name());
+    }
     if std::env::args().nth(1).as_deref() == Some("rethink-replay") {
         return mind::rethink::replay_main(&root, std::env::args().skip(2).collect()).await;
     }

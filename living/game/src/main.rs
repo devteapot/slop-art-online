@@ -22,6 +22,7 @@ mod daylight;
 mod demo;
 mod envs;
 mod gait;
+mod ground;
 mod ik;
 mod twist;
 mod fade;
@@ -45,6 +46,7 @@ mod sight;
 mod sightedge;
 mod sightfield;
 mod sky;
+mod takes;
 mod talk;
 mod style;
 mod terrain;
@@ -56,6 +58,7 @@ mod view;
 mod water;
 mod weather;
 mod world;
+mod record;
 
 use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
@@ -108,6 +111,7 @@ fn main() {
         .init_non_send::<world::Scene>()
         .init_resource::<world::Palette>()
         .init_resource::<world::Draw>()
+        .init_resource::<lookdev::NightGlows>()
         .init_resource::<sight::Sight>()
         .init_resource::<bodies::MySize>()
         .init_resource::<camera::Cam>()
@@ -146,6 +150,10 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
             .add_systems(
                 Update,
+                (lookdev::night_glow, envs::solid_if_large).after(lookdev::fit),
+            )
+            .add_systems(
+                Update,
                 (envs::hdr, envs::keys, envs::switch, island::stream, island::grey_boxes, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway, envs::reach).chain(),
             );
     } else {
@@ -172,6 +180,8 @@ fn main() {
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
         app.add_plugins(sightfield::SightFieldPlugin);
+        // A record of the session for the play report, when LIVING_GAME_RECORD names a directory.
+        app.add_plugins(record::RecordPlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }

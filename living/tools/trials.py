@@ -40,6 +40,10 @@ import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ooc  # noqa: E402
+from journal_io import restore  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 TRIALS = ROOT / "living/trials"
 OUT = ROOT / ".local/living/trials"
@@ -61,6 +65,8 @@ TOTAL_CAP = int(os.environ["TRIALS_TOTAL_TOKENS"]) if os.environ.get("TRIALS_TOT
 FAKE = ROOT / ".agents/skills/verify-llm/scripts/fake_llm.py"
 FOOD = {"berries", "meat", "fish", "cooked_meat", "cooked_fish", "smoked_meat", "smoked_fish", "bread"}
 SAMPLE_S = 2.0
+# How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
+PLAYER_FRAME_HEAD = "You are an AI playing the person described under # Who you are"
 # Estimated USD per million tokens: (input, output, cached input), for the report only, not an
 # invoice. Mistral's model pages, read 2026-11-09 (docs.mistral.ai/models/...): DeepSeek V4.1
 # Flash 0.30 / 1.20 / 0.007; GLM 5.3 Flash 0.15 / 0.50 / 0.03; Ministral 3 3B, 8B and 14B
@@ -326,14 +332,38 @@ def build(a):
     print("built:", TARGET / "release/living-mind", *[OUT / "wasm" / f"{n}.wasm" for n in seeds])
 
 
+def wasm_mount():
+    """The host directory the trial container serves as /wasm (read-only inside it). It is this
+    checkout's `OUT/wasm` when this checkout started the container; from another checkout (a git
+    worktree) it is the starting checkout's, and modules go there under this checkout's name."""
+    r = sh("docker", "inspect", CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}', check=False)
+    src = r.stdout.strip() if r.returncode == 0 else ""
+    return Path(src) if src else OUT / "wasm"
+
+
+def served_name(name):
+    """A module's name under the container's /wasm: as built, or, when the mount is another
+    checkout's, with this checkout's tag, so a worktree never overwrites or reuses a module
+    another checkout's batches run (`trial-island-<hash>-wt<tag>`)."""
+    if wasm_mount().resolve() == (OUT / "wasm").resolve():
+        return name
+    return f"{name}-wt{hashlib.sha256(str(ROOT).encode()).hexdigest()[:6]}"
+
+
 def build_module(name, rel):
     # One target dir for every trial world: a seed change rebuilds only the authority crate.
     env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET / "trials-wasm"), LIVING_SEED=rel)
     sh("cargo", "build", "--manifest-path", ROOT / "living/Cargo.toml", "-p", "living-authority",
        "--target", "wasm32-unknown-unknown", "--release", env=env, timeout=3600)
     out = OUT / "wasm" / f"{name}.wasm"
+    out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(TARGET / "trials-wasm/wasm32-unknown-unknown/release/living_authority.wasm", out)
     os.chmod(out, 0o644)
+    served = served_name(name)
+    if served != name:
+        shutil.copyfile(out, wasm_mount() / f"{served}.wasm")
+        os.chmod(wasm_mount() / f"{served}.wasm", 0o644)
+        print(f"module {name} served to the container as /wasm/{served}.wasm")
 
 
 # ---- one trial instance ----------------------------------------------------------------
@@ -552,6 +582,7 @@ class Instance:
         tag = self.shared["variants"][self.variant].get("wasm_tag")
         if tag:
             wasm = f"{wasm}-{tag}"
+        wasm = served_name(wasm)
         sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
         self.published = True
         self.save()
@@ -1522,7 +1553,7 @@ def summarize(d, trial, extra):
     for f in sorted(jdir.glob("*.jsonl")) if jdir.exists() else []:
         for n, line in enumerate(f.read_text().splitlines(), 1):
             try:
-                r = json.loads(line)
+                r = restore(json.loads(line), f.parent)
                 r["_ref"] = f"{d.name}/journal/{f.name}:{n}"
                 j.append(r)
             except ValueError:
@@ -1586,9 +1617,33 @@ def summarize(d, trial, extra):
                 per_day[day]["tokens"] += r.get("tokens") or 0
         s["by_game_day"] = {k: dict(v) for k, v in sorted(per_day.items())}
     s["memories_remembered"] = remembered
+    frame_probes(s, S, chron, j)
     s["exchanges"] = [{"ref": r["_ref"], "purpose": r.get("purpose"), "model": r.get("model"), "tokens": r.get("tokens"),
                        "reply": excerpt(r.get("reply"))} for r in j if r.get("purpose") in ("deliberate", "think", "talk")][:40]
     return s
+
+
+def frame_probes(s, S, chron, j):
+    """The player-frame experiment's probes. `prompt_frame`: per purpose, how many of the
+    subject's recorded requests opened with the player frame, of all its requests ("player
+    3/3"; "character" when none did). `out_of_character`: lines the subject spoke or wrote that
+    step outside the world (ooc.py), and the same count over its replies' private fields."""
+    sub_name = (s.get("subject") or "").split("#")[0]
+    mine = [r for r in j if sub_name and r.get("_ref", "").split("/journal/")[-1].startswith(sub_name + ".jsonl")]
+    framed, total = Counter(), Counter()
+    for r in mine:
+        msgs = (r.get("request") or {}).get("messages") or []
+        system = next((m.get("content") for m in msgs if isinstance(m, dict) and m.get("role") == "system"), None)
+        if not isinstance(system, str):
+            continue
+        total[r.get("purpose")] += 1
+        framed[r.get("purpose")] += system.startswith(PLAYER_FRAME_HEAD)
+    s["prompt_frame"] = {p: f"{'player' if framed[p] else 'character'} {framed[p]}/{n}" for p, n in sorted(total.items(), key=lambda x: str(x[0]))}
+    spoken = [re.sub(r"^[^“]*“|”$", "", c.get("text", "")) for c in chron if c.get("a") == S and c.get("kind") in ("speech", "write")]
+    private = [x for r in mine for x in ooc.private_texts(parse_reply(r.get("reply")))]
+    s["out_of_character"] = {"spoken": ooc.scan(spoken), "private": ooc.scan(private)}
+    s["ooc_lines"] = s["out_of_character"]["spoken"]["flagged"]
+    s["ooc_private"] = s["out_of_character"]["private"]["flagged"]
 
 
 def social(s, d, S, chron, exps, samples, j, extra):
@@ -1722,7 +1777,7 @@ def shared_for(trials, a, bdir):
     for t in trials:
         for key, w in worlds_of(t).items():
             name, rel, _ = world_seed(w)
-            if not (OUT / "wasm" / f"{name}.wasm").exists():
+            if not (wasm_mount() / f"{served_name(name)}.wasm").exists():
                 sys.exit(f"module for {key} ({name}) is not built: run `trials.py build {t['name']}`")
             shared["wasm"][key], shared["seed_rel"][key] = name, rel
     if not (TARGET / "release/living-mind").exists():
@@ -2014,7 +2069,7 @@ def spread(vals):
 
 ROWS = ["subject", "stopped_by", "minutes_run", "game_days", "tokens_per_game_day", "survived", "died_min", "hp_min", "hunger_start", "hunger_max", "hunger_end",
         "first_eat_min", "food_gained", "skills", "min_dist", "fled_m", "lines_said", "said_to", "talk_turns", "graph_revisions",
-        "refusals", "learned", "built", "relations_end", "judgments_end", "memories_remembered", "calls", "tokens"]
+        "refusals", "learned", "built", "relations_end", "judgments_end", "memories_remembered", "prompt_frame", "ooc_lines", "ooc_private", "calls", "tokens"]
 
 
 def report(a):

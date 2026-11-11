@@ -22,7 +22,7 @@ Enter talks to the person under the cursor (the owner's rule, 2026-11-11), and w
 
 ## Driving it with drive.py
 
-Preconditions: baseline; two residents placed 2 m from the player with `--place ID:-2.5:2.0 --place ID:-2.6:-1.4 (the arrival point is in a market stall; the other side is blocked from sight)` (held still).
+Preconditions: baseline; two residents placed 2 m from the player with `--place ID:-2.5:2.0 --place ID:-1.0:3.2 (the arrival point is in a market stall; the other side is blocked from sight)` (held still).
 
 - **The room.** `cursor:0.5,0.12;key:Enter:tap` → dump `typing.to` null, `typing.window == Log`, `typing.label == "To the room"`. `type:Good morning, all.;enter` → log `say: "…" to no one in particular`; after 11 s the log has `talk: room note "Heard by N — no one took it up…"`.
 - **A person.** `point:<ID>;key:Enter:tap` (the cursor on them) → `typing.window == Person<ID>`, `typing.label` "To a …" (looks, no name). `type:Hello there.;enter` → log `say: "Hello there." to #<ID>`; owner SQL `SELECT kind, object, text FROM experience WHERE kind = 'said'` has the line with `object` = the addressee (and the room's with 0).

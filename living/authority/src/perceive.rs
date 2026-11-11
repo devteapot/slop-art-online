@@ -334,9 +334,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     {
         let w = common::world(ctx);
-        let life = common::life_of(&me.kind);
+        let life = common::life_of(ctx, &me.kind);
         let years = life.years_old(common::age_days(&me, &w, now), common::pace(&w));
-        you.insert("age".into(), json!(format!("{:.0} years ({})", years.floor(), common::stage_of(&me, &w, now).name())));
+        you.insert("age".into(), json!(format!("{:.0} years ({})", years.floor(), common::stage_of(ctx, &me, &w, now).name())));
     }
     // What one knows of one's own body and skill (inborn and practised).
     let body = living_rules::genes::notable(&common::genes_of(ctx, id));
@@ -397,8 +397,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
     }
     let laws = common::laws(ctx);
-    let (trade_ms, join_ms) = ((laws.trade_window_s * 1000.0) as u64, (laws.join_window_s * 1000.0) as u64);
-    for o in ctx.db.trade_offer().iter().filter(|o| o.to == id && now.saturating_sub(o.at_ms) <= trade_ms) {
+    let join_ms = (laws.join_window_s * 1000.0) as u64;
+    for o in ctx.db.trade_offer().to().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
         asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange)", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
@@ -413,7 +413,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     for o in ctx.db.bond_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
     }
-    for o in ctx.db.trade_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= trade_ms) {
+    for o in ctx.db.trade_offer().from().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if !mine.is_empty() {
@@ -583,7 +583,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut terrain = JMap::new();
     let (tx, ty) = (at.0.floor() as i32, at.1.floor() as i32);
     let ri = r as i32;
-    for kind in [living_rules::map::Terrain::Water, living_rules::map::Terrain::Forest, living_rules::map::Terrain::Rock, living_rules::map::Terrain::Road, living_rules::map::Terrain::Wall, living_rules::map::Terrain::Drop] {
+    use living_rules::map::Terrain;
+    for kind in [Terrain::Water, Terrain::Forest, Terrain::Rock, Terrain::Road, Terrain::Wall, Terrain::Drop, Terrain::Low] {
         let mut best: Option<(f32, (f32, f32))> = None;
         for dy in -ri..=ri {
             for dx in -ri..=ri {
@@ -597,7 +598,14 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
         }
         if let Some((d, p)) = best {
-            terrain.insert(kind.name().into(), json!(format!("{} {:.0}", direction(at, p), d)));
+            // A class whose name does not say what it does is told in words, with how it meets
+            // the foot and the eye ("south 5, a drop to ground at another level (...): you can
+            // see past it but not walk through it").
+            let said = match kind.words() {
+                Some(w) => format!("{} {:.0}, {w}: {}", direction(at, p), d, kind.passage()),
+                None => format!("{} {:.0}", direction(at, p), d),
+            };
+            terrain.insert(kind.name().into(), json!(said));
         }
     }
 
