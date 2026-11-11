@@ -585,7 +585,7 @@ Pass 2 found that the cost of 64 different people was not triangles but material
 - **One material for each kind, shared by everyone.** The strand texture is one file that every person's file names. A town's face atlases are tiles on shared pages, 16 people a page (`share.py`). The game makes one material for each distinct content, and a picture named by path is one picture, so 64 people now bring 12 materials where they brought 195: cloth, skin, face lines, hair, and a face-skin and an eye material for each of four pages.
 - **Six meshes a person where there were 12 to 14,** joined by shading kind (`person.py`, `join_kinds`).
 - **A far model** from the same parameters, 5,300 to 6,700 triangles in three meshes and three materials (`person.py --lod far`).
-- **Clips are not shared yet.** The game takes a body's clips from its own file, so that needs the client ([what the client needs](#what-the-client-needs)).
+- **Clips are not shared yet.** The game takes a body's clips from its own file, so that needs the client ([what the client needs](#what-the-client-needs)). Since crowd-1 the client shares them ([the client since crowd-1](#the-client-since-crowd-1-2026-11-11)).
 
 **What was run.** The 64 residents of Cullet's cast (`town.py --town living/seeds/cullet.json`), each a different file, in the game's own crowd in the open `meadow` environment at the default game camera (22 m, 28° down), every one playing `idle`; headless, uncapped, 1600×900, `LIVING_GAME_PERF=frames,diag`, 24 s a run. Three sets of the same 64 people from the same parameters: pass 2's generator (main at `1d71e6c2`), pass 3's full models, and pass 3's far models. The crowd stands 25 to 40 m from the camera, all of it beyond 10 m, so the far models are what a client that switches by distance would draw there. Each of four rounds ran empty, VRoid, pass 2, pass 3, far, far, pass 3, pass 2, so the three sets were always measured next to each other. One game binary for all (this branch's, built from `1d71e6c2`).
 
@@ -612,9 +612,11 @@ Pass 2 found that the cost of 64 different people was not triangles but material
 - **Memory fell, roughly.** Peak process memory over the empty scene's is about 46 MiB a person for pass 2's files, 25 MiB for pass 3's and 8 MiB for the far models. The peak moves with load too (the empty scene's ran from 2,539 to 3,788 MiB), so these are sizes, not measurements to the megabyte.
 - **This does not establish the 60 FPS target either way.** That needs a quiet machine, Cullet's buildings and lamps, the town running, a player moving and minds running. The performance contract's rules apply to any claim beyond these counts.
 
-**What the clips cost.** Every file carries its own copy of every clip. The town above was baked with two (`idle`, `walk`). The same 64 far models with the 29 clips this machine's library holds take 4,098 MiB of process memory at their peak against 3,164 MiB with two (3,780 to 4,318 against 2,943 to 3,683; higher in 4 of 4 runs measured next to each other): about 15 MiB a person, or about 553 KiB for each clip a person carries. On disk a far model grows from 0.46 MB to 2.84 MB. The whole library is 67 entries, so 64 people carrying it would hold roughly 2 GB of clip copies. One shared copy needs the client (below).
+**What the clips cost.** Every file carries its own copy of every clip. The town above was baked with two (`idle`, `walk`). The same 64 far models with the 29 clips this machine's library holds take 4,098 MiB of process memory at their peak against 3,164 MiB with two (3,780 to 4,318 against 2,943 to 3,683; higher in 4 of 4 runs measured next to each other): about 15 MiB a person, or about 553 KiB for each clip a person carries. On disk a far model grows from 0.46 MB to 2.84 MB. The whole library is 67 entries, so 64 people carrying it would hold roughly 2 GB of clip copies. One shared copy needs the client (below; done in crowd-1).
 
 ### What the client needs
+
+As written for pass 3. All three are done in the client since crowd-1 ([below](#the-client-since-crowd-1-2026-11-11)).
 
 The generator's files load in today's client unchanged. Three things need a change in `living/game`, which the laptop coordinator owns. Nothing in `living/game` was edited in this pass.
 
@@ -639,6 +641,80 @@ The generator's files load in today's client unchanged. Three things need a chan
 - The change: let a model take its clips from a shared clip file. `build` loads that file's `Gltf` in place of `model.file`'s and keys `Sets` by the clip file, so everyone shares one set of `AnimationClip`s and one graph. Clips bind to bones by name path (`AnimationTargetId`), which matches across generated people. `rig`'s `clips` flag and `gait::of` (the `.clips.json` beside the file) must read the clip file too. The hips' translation needs no new scaling for generated people, since their rest skeletons are equal.
 - How a model names its clip file: by convention (`lookdev/anim/own-clips.glb` for every `own-*` base), or a `clips` entry in the recipe.
 - The generator's side is then one bake of the library on a standard figure and files without animations, a small change to `gen_person.sh` when the client is ready. A file without clips falls back to the procedural walk today, so it cannot be done first.
+
+### The client since crowd-1 (2026-11-11)
+
+**What the client does now:**
+
+- **Shared face maps** (`lookdev.rs` `convert`). A face without `<file>.face.png` takes the map its material's extras name (`face_map`). A page's faces are one `Face` material, with the swept shadow edge. A type's own map beside its file (`lookdev/types/<type>.face.png`) works the same way.
+- **The far switch** (`lookdev.rs` `far_models`).
+  - A character whose file has `Far*` mesh nodes shows them beyond `LIVING_GAME_FAR` metres (default 10, for a 1.75 m person, in proportion to height, as the spring bones' distance is). It shows its full meshes again once it is `LIVING_GAME_FAR_BAND` nearer (default 1.5 m), so a person at the edge doesn't flicker.
+  - The choice is made when the scene's meshes appear, before the model is first shown, so the two never draw together.
+  - Meshes that join a character later join its lists and take the side it shows: an outfit piece, a style's mesh named `Far*`, a scene rebuilt in place.
+  - Hidden meshes draw in no view: no shadow, no outline. Animation and springs run on the one skeleton whichever shows.
+  - There is no crossfade (`VisibilityRange`'s dither was not tried).
+- **Clips once** (`anim.rs` `clip_file`, `bind`; `characters.rs` `shape`).
+  - `own-*` files and anything under `lookdev/types/` take their clips from `lookdev/anim/own-clips.glb` when it exists (`LIVING_GAME_SHARED_CLIPS=0` plays a file's own). `Sets` is keyed by the clip file, so every generated person shares one graph.
+  - A file without clips gets no `AnimationPlayer` from Bevy's loader. `bind` adds the player, and on every node below it its name-path target, from the node named as the clip file's scene root (`Armature`). It does this again after a scene rebuild.
+  - **The height in `walk`'s timing needs no change in `animate.py`.** Gaits play at a shared phase whose rate is `speed / (stride × metres a cycle)`, so a clip's duration cancels out. Only the metres matter, and the sidecar gives them for the baked figure scaled to 1.75 m. `shape` therefore measures `Character::stride` against the clip file's figure, through `lookdev::figure_height`: the span of the GLB's accessor bounds, `Far*` meshes left out. On three of Cullet's people that gives each person's own cycle metres to three decimals (walk 1.409, 1.420 and 1.398 m, shared against own).
+- **Generator side, made for this:**
+  - `town.py --lod both` pages both-files: their full atlases on `<town>-lod-<n>` and their far pictures on `<town>-lod-far-<n>` (`share.py pages --which near|far`).
+  - `share.py clips` removes a file's own clips and sidecar.
+  - The shared clip file is one preset baked with the library: `ONLY=present LOD=near gen_person.sh clips=man`, the `man` figure, 1.837 m. Which figure should be the standard is the generator's call.
+  - A `gen_person.sh` switch that bakes no clips is the step still to take; `share.py clips` stands in for it.
+
+**What was measured.**
+- **The machine:** the laptop, an Apple M4 Pro (14 cores, 48 GB), with other workers building throughout (load average 15.7 to 21.9).
+- **The people:** the same 64 of Cullet's cast as above (`town.py --town living/seeds/cullet.json`: same names, seeds and ages as the dev-box's set). They were baked here with main's `animate.py` and the 30 library entries this machine holds (`ONLY=present`, 29 clips), and put on shared pages. Two sets:
+  - *before*: the full files, each with its own clips, drawn by main at `4447b2fb`;
+  - *after*: the both-files with their own clips removed, drawn by crowd-1, with the shared clip file.
+- **The scene:** the meadow at the default game camera, 1600×900, uncapped, 30 s a run, `LIVING_GAME_PERF=frames,diag`. The runs went empty, before, after, after, before, empty, twice. Evidence: `.local/living/crowd-1/`.
+
+| At the game camera, 1600×900, uncapped, M4 Pro | Empty meadow | 64 of Cullet, before | 64 of Cullet, after |
+|---|---|---|---|
+| Rounds | 4 | 4 | 4 |
+| Frame time, mean: median (least to most) | 8.6 ms (6.45 to 9.49) | 12.3 ms (9.6 to 13.19) | 9.1 ms (7.69 to 14.91) |
+| People showing the far model | – | – (no switch) | 64 of 64 |
+| Meshes drawn in the camera's view, people only | 18 | 402 | 210 |
+| Materials on people in view | 17 | 29 | 20 |
+| Triangles in the camera's view, people only | 31k | 2,078k | 388k |
+| Animation clips loaded (curves); graphs | 130 (6,890); 1 | 1,986 (105,258); 65 | 159 (8,427); 2 |
+| Clip data, on disk | – | 2.47 MiB a person, 158 MiB for 64 | 5.2 MiB once (the shared file, meshes included) |
+
+The two VRoid bases' 65 clips each are part of every run's clip count. The clip rows come from the client's `assets:` line (`perf.rs`). The before set's clip counts were taken with crowd-1 and `LIVING_GAME_SHARED_CLIPS=0`, which loads the files the same way.
+
+**What is firm, and what is not:**
+
+- **Firm: the counts.** Meshes 402 to 210, materials 29 to 20 and triangles 2,078k to 388k: exactly the dev-box's far-model figures, now reached by switching. Clips 1,986 in 65 graphs become 159 in 2. They don't depend on load.
+- **Not firm: the frame time.** The after set was faster in 3 of 4 runs measured next to each other (median 9.1 ms against 12.3). The other workers' load moved runs by up to twice.
+- **Not measured: the process memory.** On macOS, resident size and `footprint`'s graphics memory moved by gigabytes with the other workers' memory pressure: the empty scene's RSS ran from 1,354 to 2,938 MiB and its graphics memory from 154 to 2,400 MiB. The dev-box's figure of about 15 MiB a person for the clips stands as the RSS estimate.
+- **Found on the way.** For 64 people, morph targets are 339 MiB of the 487 MiB of mesh data in the main world (about 5 MiB a person, the face's 15 targets). The face pages are kept CPU-side too: about 500 MiB of image data. Both are candidates for the type format and for dropping main-world copies.
+
+**Foot slide with shared clips.** Three of Cullet's people walked as you on flat ground (`LIVING_GAME_AUTOWALK`, a 0 → 4.5 → 0 m/s ramp over 14 s, about 70 s). Each was measured three ways: main's client, crowd-1 with each file's own clips, and crowd-1 with the shared clips on the stripped both-file. `foot_slide.py --bins 0.5` gives the supporting foot's median slide as a share of the body's speed:
+
+| Person | Height | Walking (0.5–2.5 m/s): main / own clips / shared | Running (2.5–4.5 m/s): main / own / shared |
+|---|---|---|---|
+| wick-marl (5) | 1.03 m | 0.057 / 0.056 / 0.061 | 0.084 / 0.093 / 0.094 |
+| tamsin-hollin | 1.66 m | 0.022 / 0.021 / 0.023 | 0.036 / 0.039 / 0.038 |
+| imre-sarro | 1.87 m | 0.024 / 0.022 / 0.023 | 0.034 / 0.030 / 0.036 |
+
+The shared clips are within the spread of the other two arms for all three heights. A child slides about two and a half times as much as an adult, with any of the three, which is a separate matter (the clips are an adult's at a child's proportions).
+
+**Look-dev stills** (`.local/living/crowd-1/stills/`, the asset view). The same four people were shown by main's client and by crowd-1, crowd-1 with the far model forced off, forced on, and by distance.
+- **Faces:** paged faces shade with the swept edge where main's shaded them as skin, with a diagonal blotch.
+- **The swap:** at the switching distance the far model keeps the silhouette, the proportions and the colours. Fine detail goes: the stripes of a knit, a child's curls, the face's depth. It is visible if you look for it on patterned clothes and invisible on plain ones.
+
+**Not covered:**
+- a crowd that walks, or a camera crossing 10 m while it records, beyond the unit test of the band;
+- shadows' cost per cascade with the far model;
+- the island and Cullet scenes;
+- a connected world;
+- frame time on a quiet machine;
+- the dev-box's GPU.
+
+`.agents/skills/verify-ui/features/crowd.md` is the recipe to check it again.
+
+**Seen in every run, before as after:** a few crowd members' scenes are rebuilt after they are shaped (`scene was rebuilt; its proportions and outfit are lost`, 0 to 6 of 64 a run). crowd-1 rebinds their clips, but their proportions are lost, as before. Not fixed here.
 
 ### Pass 2's measurement (2026-11-11)
 

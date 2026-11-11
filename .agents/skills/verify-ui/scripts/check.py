@@ -394,12 +394,16 @@ def pick(run, c):
     c.check(s, "a tap on the one in front talks to them (combat's target is the same pick)", t4.get("to") == a, json.dumps(t4))
     rows = sql(run, f"SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = {a}")
     c.check(s, "the authority's said row has to = the one in front", any(line in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
+    # Both asked for one spot: `place_at` keeps bodies on free tiles (fix-place-free), so the
+    # second lands on a neighbouring one and their outlines overlap on screen. The pick holds one
+    # every frame: the nearest the camera of those whose outline holds the cursor, by the
+    # client's own test (`holds` in the dump; exact ties are pick.rs's unit test).
     st = [dump(out, f"05{k}") or {} for k in "abc"]
     unders = [x.get("under") for x in st]
     def front(x):
-        both = [b_ for b_ in (x.get("seen") or []) if b_["id"] in (a, b)]
-        return min(both, key=lambda b_: (b_["depth"], b_["id"]))["id"] if len(both) == 2 else None
-    c.check(s, "two bodies stacked on one spot: the same one every frame, the nearer the camera", len(set(unders)) == 1 and unders[0] in (a, b) and all(front(x) == unders[0] for x in st), f"under {unders}, front by depth {[front(x) for x in st]}")
+        held = [b_ for b_ in (x.get("seen") or []) if b_.get("holds")]
+        return min(held, key=lambda b_: (b_["depth"], b_["id"]))["id"] if held else None
+    c.check(s, "two bodies asked onto one spot, overlapping on screen: the same one every frame, the nearest the camera under the cursor", len(set(unders)) == 1 and unders[0] in (a, b) and all(front(x) == unders[0] for x in st), f"under {unders}, front of those under the cursor {[front(x) for x in st]}")
 
 
 def bar(run, c):

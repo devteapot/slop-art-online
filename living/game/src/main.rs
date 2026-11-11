@@ -97,7 +97,7 @@ fn main() {
     }
     app.add_systems(PostUpdate, perf::apply.before(post::update));
     perf::diagnostics(&mut app);
-    app.add_systems(Update, lookdev::character_shadows);
+    app.insert_resource(lookdev::FarModels::from_env()).add_systems(Update, (lookdev::character_shadows, lookdev::far_models));
     app.insert_resource(ClearColor(camera::SKY))
         .add_plugins(style::StylePlugin)
         .add_plugins(post::PostPlugin)
