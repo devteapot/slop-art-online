@@ -5,6 +5,23 @@
     { "name": "vivi", "base": "lookdev/vroid-Vivi.glb", "height": 1.75 },
     { "name": "shino", "base": "lookdev/vroid-Sendagaya_Shino.glb", "height": 1.75 },
     { "name": "cullet-man", "base": "lookdev/own-man.glb", "height": 1.8 },
+    { "name": "cullet-elder", "base": "lookdev/own-elder.glb", "height": 1.72, "proportions": { "build": 0.93, "shoulders": 0.95, "neck": 0.95 } },
+    { "name": "cullet-woman", "base": "lookdev/own-woman.glb", "height": 1.66, "proportions": { "shoulders": 0.9, "build": 0.95, "hands": 0.88, "feet": 0.9, "neck": 0.92 } },
+    { "name": "cullet-lad", "base": "lookdev/own-youth.glb", "height": 1.7, "proportions": { "build": 0.92, "shoulders": 0.94 } },
+    {
+      "name": "cullet-boy",
+      "base": "lookdev/own-youth.glb",
+      "height": 1.24,
+      "proportions": { "legs": 0.82, "arms": 0.86, "torso": 0.9, "neck": 0.75, "head": 1.32, "shoulders": 0.84, "build": 0.94, "hands": 1.0, "feet": 1.0 },
+      "colors": { "hair": "#8a5a30", "top": "#7a8fa6" }
+    },
+    {
+      "name": "cullet-heavy",
+      "base": "lookdev/own-man.glb",
+      "height": 1.88,
+      "proportions": { "build": 1.22, "shoulders": 1.08, "hips": 1.08, "hands": 1.1, "neck": 0.9, "head": 0.97 },
+      "colors": { "hair": "#7a3a1c", "skin": "#c08460", "eyes": "#4a3020", "top": "#c8c4b4", "accent": "#3a4350" }
+    },
     {
       "name": "smith",
       "base": "lookdev/vroid-Sendagaya_Shino.glb",
