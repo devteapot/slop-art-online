@@ -632,6 +632,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `walk:DEG:S[:run]`: hold a direction (0 = north, 90 = east) through `human_move`;
 ///   `hold:DEG[:run]` holds it and goes straight on to the next step (a skill or a gesture
 ///   while walking), until `stop`;
+/// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
+///   (a headless run has no cursor);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
 ///   (photographing small things up close);
@@ -770,6 +772,10 @@ fn script(
         }
         "yaw" => {
             cam.set_yaw(arg.parse().unwrap_or(0.0));
+            true
+        }
+        "look" => {
+            input.scripted_look = arg.parse::<f32>().ok().map(|deg| Vec2::new(deg.to_radians().sin(), -deg.to_radians().cos()));
             true
         }
         "view" => {
